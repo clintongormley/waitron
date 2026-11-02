@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
+  devices,
   kitchenStations,
   locations,
   passItemMarks,
@@ -18,7 +19,7 @@ import { seedNode } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { loginWithPin, persons } from "@waitron/identity";
+import { endSession, loginWithPin, persons } from "@waitron/identity";
 import type { DeviceKitchenScreen, ScreenSlot } from "@waitron/module";
 import type { PassBoard } from "./pass-card.js";
 import { routeProductTo } from "./testing/zone-offers.js";
@@ -1029,6 +1030,95 @@ describe("A773 pass release: route", () => {
         code: "management.request_invalid",
         params: { field: "ticketItemIds" },
       },
+    );
+  });
+
+  /**
+   * Sends the release with a body held back until `between` has committed: the route has passed
+   * its checks before the transaction once it starts reading the body.
+   */
+  async function releaseAfter(
+    f: ReleaseFixture,
+    cookie: string,
+    body: unknown,
+    between: () => Promise<unknown>,
+  ): Promise<Response> {
+    let reading!: () => void;
+    const started = new Promise<void>((resolve) => {
+      reading = resolve;
+    });
+    let send!: () => void;
+    const sent = new Promise<void>((resolve) => {
+      send = resolve;
+    });
+    const stream = new ReadableStream<Uint8Array>(
+      {
+        async pull(controller) {
+          reading();
+          await sent;
+          controller.enqueue(new TextEncoder().encode(JSON.stringify(body)));
+          controller.close();
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const answer = Promise.resolve(
+      f.app.request("/api/device/pass-screen/release", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: stream,
+        duplex: "half",
+      } as RequestInit),
+    );
+    const first = await Promise.race([
+      started.then(() => "reading"),
+      answer.then(() => "answered"),
+    ]);
+    expect(first, "the route answered before reading the body").toBe("reading");
+    await between();
+    send();
+    return answer;
+  }
+
+  it("refuses a display revoked after its proof was checked, writing nothing", async () => {
+    const f = await releaseFixture();
+    const display = await kdsOn(f, await f.savedProfile(FULL));
+    await requested(f);
+    const ask = askOf((await card(f.app, display.cookie))[0]!);
+    await refused(
+      f,
+      () =>
+        releaseAfter(f, display.cookie, ask, () =>
+          inTx(f.v, (tx) =>
+            tx.update(devices).set({ active: false }).where(eq(devices.id, display.id)),
+          ),
+        ),
+      401,
+      { code: "device.unauthorized" },
+    );
+  });
+
+  it("refuses a till pass signed out after its session was checked, writing nothing", async () => {
+    const f = await releaseFixture();
+    const [profile] = await inTx(f.v, (tx) =>
+      tx
+        .insert(deviceProfiles)
+        .values({ name: "Till pass profile", formFactor: "till", capabilities: FULL })
+        .returning({ id: deviceProfiles.id }),
+    );
+    const till = await f.device("Till pass", profile!.id, { kitchenScreen: EVERY_PASS });
+    const [person] = await inTx(f.v, (tx) => tx.select({ id: persons.id }).from(persons).limit(1));
+    const { token } = await inTx(f.v, (tx) =>
+      loginWithPin(tx, { deviceId: till.id, personId: person!.id, pin: "1234" }),
+    );
+    const signedIn = `${till.cookie}; ${SESSION_COOKIE}=${token}`;
+    await requested(f);
+    const ask = askOf((await card(f.app, signedIn))[0]!);
+    await refused(
+      f,
+      () => releaseAfter(f, signedIn, ask, () => inTx(f.v, (tx) => endSession(tx, token))),
+      401,
+      { code: "session.required" },
     );
   });
 });

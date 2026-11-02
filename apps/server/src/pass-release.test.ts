@@ -56,6 +56,7 @@ import { createPrinter } from "@waitron/printing";
 import type { KitchenAllergyBlock } from "@waitron/module";
 import { inTx, seat, setupPartyVenue } from "./testing/party-venue.js";
 import { readBillEditState } from "./bill-editing.js";
+import { recallToDraft } from "./draft-recall.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { withStationDishes } from "./station-closing.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
@@ -1308,4 +1309,290 @@ describe("A773 pass release: paper", () => {
       pass: [ticket(tabNumber, "2.000"), ticket(billNumber, "1.000")],
     });
   });
+});
+
+/** A promise that resolves when `open()` is called, to hold a transaction open at an exact point
+ *  rather than for a duration. */
+function gate(): { passed: Promise<void>; open: () => void } {
+  let open!: () => void;
+  const passed = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { passed, open };
+}
+
+/**
+ * Runs `first` and parks its transaction uncommitted, starts `second`, shows it has not run, then
+ * lets `first` commit. The 20 ms pause is real, not a microtask turn, to give the second
+ * transaction every chance to run; nothing waits on it for an order.
+ */
+async function race<A, B>(
+  first: (tx: Transaction) => Promise<A>,
+  second: (tx: Transaction) => Promise<B>,
+): Promise<[PromiseSettledResult<A>, PromiseSettledResult<B>]> {
+  const parked = gate();
+  const go = gate();
+  let secondStarted = false;
+  const one = withTransaction(db, async (tx) => {
+    const value = await first(tx);
+    parked.open();
+    await go.passed;
+    return value;
+  });
+  await Promise.race([parked.passed, one.then(undefined, () => undefined)]);
+  const two = withTransaction(db, (tx) => {
+    secondStarted = true;
+    return second(tx);
+  });
+  const settled = Promise.allSettled([one, two]);
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(secondStarted, "the second transaction started while the first was still open").toBe(
+      false,
+    );
+  } finally {
+    go.open();
+  }
+  return settled;
+}
+
+const refusedWith = (code: string) => ({
+  status: "rejected",
+  reason: expect.objectContaining({ code }),
+});
+const fulfilled = { status: "fulfilled" };
+
+/** A kitchen display whose pass shows `stationIds`, and its profile. */
+async function passWithProfile(venue: AnyVenue, name: string, stationIds: string[]) {
+  const [profile] = await withTransaction(db, (tx) =>
+    tx
+      .insert(deviceProfiles)
+      .values({ name: `${name} profile`, formFactor: "kds", capabilities: ALL_PASS })
+      .returning({ id: deviceProfiles.id }),
+  );
+  const joined = await enrolDeviceForTest(db, venue.cfg, {
+    name,
+    profileId: profile!.id,
+    kitchenScreen: { kind: "pass", stationIds, zoneIds: null },
+  });
+  return {
+    profileId: profile!.id,
+    by: { deviceId: joined.deviceId, personId: null } satisfies PassActor,
+  };
+}
+
+const GRILL_FIRE = "Grill\nSplit extras\n1\n13:00\nGROUP 1\n1.000 x BURG\n";
+
+const releasedRow = <T extends object>(row: T) => ({ ...row, firedAt: AT, queuedAt: AT });
+
+describe("A773 pass release: races", () => {
+  for (const order of ["first", "second"] as const)
+    it(`lets one of two Fires of the same card win, the ${order} submitted committing first`, async () => {
+      const f = await hotAndCold();
+      const [card] = await toFire(f.venue, f.hot);
+      const asks = [askOf(card!), askOf(card!)];
+      const [winner, loser] = order === "first" ? asks : [asks[1]!, asks[0]!];
+      const before = await rows([f.burger, f.salad]);
+      const start = await printed(f.venue);
+      const outcome = await race(
+        (tx) => releasePassItems(tx, f.venue.cfg, f.hot, winner),
+        (tx) => releasePassItems(tx, f.venue.cfg, f.hot, loser),
+      );
+      expect(outcome).toMatchObject([fulfilled, refusedWith("ticket.pass_context_changed")]);
+      expect(await rows([f.burger, f.salad])).toEqual(
+        before.map((row) => (row.id === f.burger ? releasedRow(row) : row)),
+      );
+      expect(gained(start, await printed(f.venue))).toEqual({
+        ...nothing,
+        grill: [GRILL_FIRE],
+        pass: [GRILL_FIRE],
+      });
+    });
+
+  for (const order of ["hot", "cold"] as const)
+    it(`releases a hot and a cold pass's disjoint parts of one card, the ${order} pass committing first`, async () => {
+      const f = await hotAndCold();
+      const coldPrinter = await withTransaction(db, async (tx) => {
+        const printer = await createPrinter(tx, {
+          name: "Cold paper",
+          transport: "cloud_poll",
+          pollId: randomUUID(),
+        });
+        await attachPrinterToStation(tx, {
+          locationId: f.venue.cfg.locationId,
+          stationId: f.cold,
+          printerId: printer.id,
+        });
+        return printer.id;
+      });
+      const [hotCard] = await toFire(f.venue, f.hot);
+      const [coldCard] = await toFire(f.venue, f.coldPass);
+      const hot = (tx: Transaction) => releasePassItems(tx, f.venue.cfg, f.hot, askOf(hotCard!));
+      const cold = (tx: Transaction) =>
+        releasePassItems(tx, f.venue.cfg, f.coldPass, askOf(coldCard!));
+      const before = await rows([f.burger, f.salad]);
+      const start = await printed(f.venue);
+      const outcome = order === "hot" ? await race(hot, cold) : await race(cold, hot);
+      expect(outcome).toMatchObject([fulfilled, fulfilled]);
+      expect(await rows([f.burger, f.salad])).toEqual(before.map(releasedRow));
+      expect(gained(start, await printed(f.venue))).toEqual({
+        ...nothing,
+        grill: [GRILL_FIRE],
+        pass: [GRILL_FIRE],
+      });
+      expect(await printedAt(coldPrinter)).toEqual([
+        "Cold\nSplit extras\n1\n13:00\nGROUP 1\n1.000 x CHED\n",
+      ]);
+    });
+
+  /** A Requested burger at Grill; a kitchen display's pass that shows Grill (and Fryer, both
+   *  waiting for the pass), or a signed-in till's pass that shows every station; and its card. */
+  async function burgerCard(withFryer = false, onTill = false) {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    const placed = await requestedBurger(venue);
+    const shown = [venue.stations.grill, ...(withFryer ? [venue.stations.fryer] : [])];
+    await withTransaction(db, (tx) => setStationsWaitForPass(tx, true, shown));
+    const pass = onTill
+      ? await signedInTillPass(venue, "Till pass")
+      : await passWithProfile(venue, "Hot pass", shown);
+    const card = await cardOf(venue, pass.by, placed.groupId);
+    expect(card.releaseTicketItemIds).toEqual([placed.item]);
+    const fire = (tx: Transaction) => releasePassItems(tx, venue.cfg, pass.by, askOf(card));
+    return {
+      venue,
+      placed,
+      pass,
+      fire,
+      before: await rows([placed.item]),
+      start: await printed(venue),
+    };
+  }
+
+  for (const order of ["recall", "release"] as const)
+    it(`settles a Fire against a draft recall of its dish, the ${order} committing first`, async () => {
+      const f = await burgerCard();
+      const expected = await withTransaction(db, async (tx) => ({
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevisionOf(tx, f.venue.party.partyId),
+        expectedEdit: await readBillEditState(tx, f.venue.party.tabId),
+      }));
+      const recall = (tx: Transaction) =>
+        recallToDraft(tx, f.venue.cfg, f.venue.party.partyId, f.placed.line, expected);
+      const outcome = order === "recall" ? await race(recall, f.fire) : await race(f.fire, recall);
+      const recalled = "*** RECALLED ***\nGrill\nSplit extras\n1\n13:00\n1.000 x BURG\n";
+      expect(outcome).toMatchObject(
+        order === "recall"
+          ? [fulfilled, refusedWith("ticket.pass_context_changed")]
+          : [fulfilled, fulfilled],
+      );
+      expect(await rows([f.placed.item])).toEqual([]);
+      const paper = order === "recall" ? [] : [GRILL_FIRE, recalled];
+      expect(gained(f.start, await printed(f.venue))).toEqual({
+        ...nothing,
+        grill: paper,
+        pass: paper,
+      });
+    });
+
+  for (const order of ["move", "release"] as const)
+    it(`settles a Fire against a move between two of its stations, the ${order} committing first`, async () => {
+      const f = await burgerCard(true);
+      const move = (tx: Transaction) =>
+        moveDishesToStation(
+          tx,
+          f.venue.cfg,
+          f.venue.party.tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [f.placed.line],
+            stationId: f.venue.stations.fryer,
+          },
+          mover(f.venue),
+        );
+      const outcome = order === "move" ? await race(move, f.fire) : await race(f.fire, move);
+      expect(outcome).toMatchObject(
+        order === "move"
+          ? [fulfilled, refusedWith("ticket.pass_context_changed")]
+          : [fulfilled, fulfilled],
+      );
+      const atFryer = { stationId: f.venue.stations.fryer, stationChosenAt: AT };
+      expect(await rows([f.placed.item])).toEqual(
+        f.before.map((row) =>
+          order === "move" ? { ...row, ...atFryer } : { ...releasedRow(row), ...atFryer },
+        ),
+      );
+      const moved = "*** MOVED TO FRYER ***\nGrill\nSplit extras\n1\n13:00\n1.000 x BURG\n";
+      const fromGrill = "Fryer\nSplit extras\n1\n13:00\nFrom Grill\nGROUP 1\n1.000 x BURG\n";
+      expect(gained(f.start, await printed(f.venue))).toEqual(
+        order === "move"
+          ? nothing
+          : {
+              ...nothing,
+              grill: [GRILL_FIRE, moved],
+              fryer: [fromGrill],
+              pass: [GRILL_FIRE, moved, fromGrill],
+            },
+      );
+    });
+
+  const narrowings = {
+    /** The profile's pass no longer offers Grill, which the device's pass screen showed. */
+    screen: {
+      code: "ticket.pass_context_changed",
+      narrow: (tx: Transaction, venue: Venue, profileId: string) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+          pass: { stationIds: [venue.stations.fryer], zoneIds: null },
+        }),
+    },
+    /** The till profile serves only another department's zone (a display's profile has no
+     *  service zones to narrow). */
+    zones: {
+      code: "service_zone.not_allowed",
+      narrow: async (tx: Transaction, venue: Venue, profileId: string) => {
+        const deli = await createDepartment(tx, venue.cfg, { name: "Deli", orderStart: "counter" });
+        const zone = await createServiceZone(tx, venue.cfg, {
+          name: "Deli counter",
+          departmentId: deli.id,
+        });
+        await setProfileServiceAccess(tx, venue.cfg, profileId, {
+          departmentId: deli.id,
+          allowedZoneIds: null,
+          startingZoneId: zone.id,
+        });
+      },
+    },
+  } as const;
+
+  for (const [kind, narrowing] of Object.entries(narrowings))
+    for (const order of ["narrowing", "release"] as const)
+      it(`settles a Fire against its pass's ${kind} narrowed after the card was read, the ${order} committing first`, async () => {
+        const f = await burgerCard(true, kind === "zones");
+        const narrow = async (tx: Transaction): Promise<unknown> =>
+          narrowing.narrow(tx, f.venue, f.pass.profileId);
+        const outcome =
+          order === "narrowing" ? await race(narrow, f.fire) : await race(f.fire, narrow);
+        expect(outcome).toMatchObject(
+          order === "narrowing" ? [fulfilled, refusedWith(narrowing.code)] : [fulfilled, fulfilled],
+        );
+        expect(await rows([f.placed.item])).toEqual(
+          order === "narrowing" ? f.before : f.before.map(releasedRow),
+        );
+        expect(gained(f.start, await printed(f.venue))).toEqual(
+          order === "narrowing" ? nothing : { ...nothing, grill: [GRILL_FIRE], pass: [GRILL_FIRE] },
+        );
+        const screen = (
+          await withTransaction(db, (tx) =>
+            VENUE_SERVICE.readDeviceKitchenScreens(tx, f.venue.cfg, f.pass.by.deviceId),
+          )
+        ).find((candidate) => candidate.kind === "pass")!;
+        expect(screen.available).toBe(true);
+        const shows = (stationId: string) =>
+          screen.stations.find((slot) => slot.id === stationId)?.available;
+        expect([shows(f.venue.stations.grill), shows(f.venue.stations.fryer)]).toEqual([
+          kind === "zones",
+          true,
+        ]);
+      });
 });
