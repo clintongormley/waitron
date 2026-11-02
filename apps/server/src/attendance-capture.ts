@@ -14,7 +14,7 @@ import type { ActivityKind, AttendanceFact, AttendanceSource } from "@waitron/wo
 
 export type AttendanceRecorder = (
   tx: Transaction,
-  fact: Omit<AttendanceFact, "locationId"> & {
+  fact: AttendanceFact & {
     outcome: "pending" | "qualified" | "refused";
     locationId?: string;
   },
@@ -93,7 +93,6 @@ export const recordAttendanceFact: AttendanceRecorder = async (tx, fact) => {
     } else {
       const clock = await readVenueClock(tx);
       await enqueueAttendanceDay(tx, {
-        locationId: await venueLocationId(tx),
         businessDay: existing.businessDay,
         ...businessDayBounds(clock, existing.businessDay),
       });
@@ -117,7 +116,6 @@ export const recordAttendanceFact: AttendanceRecorder = async (tx, fact) => {
   });
   const [savedDay] = await tx
     .select({
-      locationId: attendanceDayWork.locationId,
       businessDay: attendanceDayWork.businessDay,
       startAt: attendanceDayWork.startAt,
       endAt: attendanceDayWork.endAt,
@@ -127,7 +125,6 @@ export const recordAttendanceFact: AttendanceRecorder = async (tx, fact) => {
   await enqueueAttendanceDay(
     tx,
     savedDay ?? {
-      locationId: venue,
       businessDay,
       ...businessDayBounds(clock, businessDay),
     },

@@ -5,13 +5,11 @@ export type AttendanceFact = Readonly<{
   source: AttendanceSource;
   key: string;
   personId: string;
-  locationId?: string;
   kind: ActivityKind;
   at: string;
   offsetMinutes: number;
 }>;
 export type AttendanceDay = Readonly<{
-  locationId?: string;
   businessDay: string;
   startAt: string;
   endAt: string;
@@ -31,7 +29,6 @@ export type AttendanceQuestion = Readonly<{
 export type PlannedAttendanceShift = Readonly<{
   id: string;
   personId: string;
-  locationId?: string;
   startsAt: string;
   endsAt: string;
   rosterVersionId: string;

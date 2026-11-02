@@ -141,10 +141,9 @@ async function state() {
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
-async function factsAt(locationId: string = v.cfg.locationId) {
+async function factsAt() {
   return run((tx) =>
     readAttendanceFacts(tx, {
-      locationId,
       businessDay: "2026-01-05",
       startAt: "2026-01-05T00:00:00Z",
       endAt: "2026-01-06T00:00:00Z",

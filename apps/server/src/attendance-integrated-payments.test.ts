@@ -109,7 +109,6 @@ async function paymentFacts() {
   return withTransaction(suite.db, async (tx) =>
     (
       await readAttendanceFacts(tx, {
-        locationId: v.cfg.locationId,
         businessDay: "2026-01-05",
         startAt: "2026-01-05T04:00:00.000Z",
         endAt: "2026-01-06T04:00:00.000Z",

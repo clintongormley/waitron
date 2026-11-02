@@ -581,7 +581,6 @@ it.each(["retained", "removed"] as const)(
         {
           personId: fixture.personId,
           day: {
-            locationId: location!.id,
             businessDay: "2026-01-05",
             startAt: "2026-01-05T00:00:00Z",
             endAt: "2026-01-06T00:00:00Z",

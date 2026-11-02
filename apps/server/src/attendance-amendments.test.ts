@@ -135,7 +135,6 @@ async function expectFact(id: string, kind: "order_placed" | "order_cancelled", 
   ).toEqual([[v.cfg.locationId, "2026-01-05", 1]]);
   const facts = await run((tx) =>
     readAttendanceFacts(tx, {
-      locationId: v.cfg.locationId,
       businessDay: "2026-01-05",
       startAt: "2026-01-05T03:00:00.000Z",
       endAt: "2026-01-06T03:00:00.000Z",
@@ -146,7 +145,6 @@ async function expectFact(id: string, kind: "order_placed" | "order_cancelled", 
       source: "order",
       key: amendment.id,
       personId: actor,
-      locationId: v.cfg.locationId,
       kind: "order",
       at: "2026-01-05T16:40:00.000Z",
       offsetMinutes: 60,

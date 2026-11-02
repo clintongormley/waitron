@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
-  locations,
   newId,
   orderGroupEvents,
   orderGroups,
@@ -128,10 +127,9 @@ async function state() {
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
-async function factsAt(locationId: string = v.cfg.locationId) {
+async function factsAt() {
   return withTransaction(suite.db, (tx) =>
     readAttendanceFacts(tx, {
-      locationId,
       businessDay: "2026-01-05",
       startAt: "2026-01-05T00:00:00Z",
       endAt: "2026-01-06T00:00:00Z",
@@ -191,37 +189,6 @@ describe("group events derived from accepted commands", () => {
       });
       expect(await command(api(recordAttendanceFact), action, p)).toMatchObject({ status: 200 });
       expect(await state()).toEqual(saved);
-    },
-  );
-  it.each(["empty-move"] as const)(
-    "%s keeps all derived events in the original location after bills move",
-    async (action) => {
-      const p = await prepare();
-      expect(await command(api(recordAttendanceFact), action, p)).toMatchObject({ status: 200 });
-      const events = (await state()).events.filter((e) => e.actorId === v.operatorId);
-      const [other] = await suite.db
-        .insert(locations)
-        .values({
-          name: "Elsewhere",
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Restaurant",
-        })
-        .returning();
-      await suite.db
-        .update(workingOrders)
-        .set({ locationId: other!.id })
-        .where(eq(workingOrders.partyId, p.partyId));
-      expect(
-        (await factsAt())
-          .filter((f) => f.personId === v.operatorId && f.kind === "order")
-          .map((f) => [f.key, f.locationId, f.at])
-          .sort(),
-      ).toEqual(
-        events.map((e) => [`group:${e.id}`, v.cfg.locationId, "2026-01-05T16:40:00.000Z"]).sort(),
-      );
-      expect(
-        (await factsAt(other!.id)).filter((f) => f.personId === v.operatorId && f.kind === "order"),
-      ).toEqual([]);
     },
   );
   it.each(["empty-move"] as const)(

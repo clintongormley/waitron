@@ -29,7 +29,6 @@ const backend = new WorkforceBackend();
 const now = new Date("2026-01-08T12:00:00.000Z");
 let locationId: string, personId: string, shiftId: string, questionId: string;
 const day = () => ({
-  locationId,
   businessDay: "2026-01-05",
   startAt: "2026-01-05T04:00:00.000Z",
   endAt: "2026-01-06T04:00:00.000Z",

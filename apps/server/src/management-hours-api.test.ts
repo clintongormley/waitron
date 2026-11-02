@@ -325,7 +325,6 @@ it("own automatic acknowledgement preserves counted hours and appends worker att
       {
         personId: venue.personId,
         day: {
-          locationId: venue.cfg.locationId,
           businessDay: "2026-01-06",
           startAt: "2026-01-06T04:00:00Z",
           endAt: "2026-01-07T04:00:00Z",
@@ -528,7 +527,6 @@ it("another worker's actual target, question and proposal confer no own authorit
       {
         personId: other!.id,
         day: {
-          locationId: venue.cfg.locationId,
           businessDay: "2026-01-06",
           startAt: "2026-01-06T04:00:00Z",
           endAt: "2026-01-07T04:00:00Z",

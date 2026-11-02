@@ -93,7 +93,6 @@ export async function runAttendanceEmailPass(
     if (!candidate) return null;
     await reconcileAttendanceResponses(tx, candidate.person.id);
     const day = {
-      locationId: candidate.question.locationId,
       businessDay: candidate.question.businessDay,
       startAt: candidate.question.startAt,
       endAt: candidate.question.endAt,

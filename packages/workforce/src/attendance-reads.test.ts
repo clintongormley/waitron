@@ -102,7 +102,6 @@ function question(
       {
         personId: input.subject ?? personId,
         day: {
-          locationId: input.location ?? locationId,
           businessDay: date,
           startAt: `${date}T04:00:00Z`,
           endAt: end.toISOString(),

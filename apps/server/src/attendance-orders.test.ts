@@ -361,7 +361,6 @@ describe("accepted order attendance", () => {
     await abandonHeldOrder({ db: suite.db }, v.cfg, id);
     const facts = await run((tx) =>
       readAttendanceFacts(tx, {
-        locationId: v.cfg.locationId,
         businessDay: "2026-01-05",
         startAt: "2026-01-05T03:00:00.000Z",
         endAt: "2026-01-06T03:00:00.000Z",

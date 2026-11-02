@@ -95,10 +95,9 @@ const state = async () => ({
   facts: await suite.db.select().from(attendanceOperationFacts),
   days: await suite.db.select().from(attendanceDayWork),
 });
-async function factsAt(locationId: string = v.cfg.locationId) {
+async function factsAt() {
   return run((tx) =>
     readAttendanceFacts(tx, {
-      locationId,
       businessDay: "2026-01-05",
       startAt: "2026-01-05T00:00:00Z",
       endAt: "2026-01-06T00:00:00Z",
@@ -116,7 +115,7 @@ async function assertSnapshots(
   );
   for (const event of events)
     expect((await factsAt()).filter((f) => f.key === `event:${event.id}`)).toEqual([
-      expect.objectContaining({ personId: actor, locationId: v.cfg.locationId, at }),
+      expect.objectContaining({ personId: actor, at }),
     ]);
 }
 describe("natural draft-event attendance snapshots", () => {

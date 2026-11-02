@@ -162,7 +162,6 @@ describe("accepted group attendance snapshots", () => {
       expect(saved.days.map((r) => r.dirtyRevision)).toEqual([1]);
       const facts = await withTransaction(suite.db, (tx) =>
         readAttendanceFacts(tx, {
-          locationId: v.cfg.locationId,
           businessDay: "2026-01-05",
           startAt: "2026-01-05T00:00:00Z",
           endAt: "2026-01-06T00:00:00Z",

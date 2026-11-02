@@ -39,14 +39,8 @@ const suite = useVenueDb({
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const backend = new WorkforceBackend();
 let ana: string, bea: string, caro: string, diego: string;
-let locationId: string,
-  elsewhere: string,
-  nodeId: string,
-  deviceId: string,
-  orderId: string,
-  partyId: string;
+let locationId: string, nodeId: string, deviceId: string, orderId: string, partyId: string;
 const day = (): AttendanceDay => ({
-  locationId,
   businessDay: "2026-01-05",
   startAt: "2026-01-05T03:00:00.000Z",
   endAt: "2026-01-06T03:00:00.000Z",
@@ -90,26 +84,17 @@ const event = (at: string) => ({
 });
 beforeEach(async () => {
   await seedTenant(suite.db);
-  const places = await suite.db
+  const [place] = await suite.db
     .insert(locations)
-    .values([
-      {
-        name: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "04:00",
-        invoiceLocales: ["es"],
-        operationDescription: "Restaurant",
-      },
-      {
-        name: "Elsewhere",
-        timeZone: "UTC",
-        dayCutover: "04:00",
-        invoiceLocales: ["en"],
-        operationDescription: "Restaurant",
-      },
-    ])
+    .values({
+      name: "Madrid",
+      timeZone: "Europe/Madrid",
+      dayCutover: "04:00",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurant",
+    })
     .returning({ id: locations.id });
-  [locationId, elsewhere] = places.map((r) => r.id) as [string, string];
+  locationId = place!.id;
   nodeId = await seedNode(suite.db, brandLocationId(locationId));
   deviceId = (await seedDevice(suite.db, { locationId: brandLocationId(locationId) })).deviceId;
   const people = await suite.db
@@ -132,6 +117,16 @@ beforeEach(async () => {
 });
 
 describe("attendance source facts", () => {
+  it("reads the venue's facts for a day with no location", async () => {
+    const placed = await amendment("2026-01-05T12:00:00Z");
+    expect(
+      await facts({
+        businessDay: "2026-01-05",
+        startAt: "2026-01-05T03:00:00.000Z",
+        endAt: "2026-01-06T03:00:00.000Z",
+      }),
+    ).toMatchObject([{ source: "order", key: placed.id, personId: bea }]);
+  });
   it("attributes sign-in, unpaid orders and collection to their own actors and original instants", async () => {
     const session = await signIn(ana, "2026-01-05T08:00:00.987Z");
     const placed = await amendment("2026-01-05T12:00:00Z");
@@ -140,7 +135,6 @@ describe("attendance source facts", () => {
         source: "whole-payment",
         key: "collection",
         personId: caro,
-        locationId,
         kind: "payment",
         at: "2026-01-05T16:40:00Z",
         offsetMinutes: 0,
@@ -152,7 +146,6 @@ describe("attendance source facts", () => {
         source: "whole-payment",
         key: "collection",
         personId: diego,
-        locationId,
         kind: "payment",
         at: "2026-01-06T18:00:00Z",
         offsetMinutes: 0,
@@ -168,7 +161,6 @@ describe("attendance source facts", () => {
         source: "session",
         key: session,
         personId: ana,
-        locationId,
         kind: "sign-in",
         at: "2026-01-05T08:00:00.000Z",
         offsetMinutes: 60,
@@ -177,7 +169,6 @@ describe("attendance source facts", () => {
         source: "order",
         key: placed.id,
         personId: bea,
-        locationId,
         kind: "order",
         at: "2026-01-05T12:00:00.000Z",
         offsetMinutes: 60,
@@ -186,7 +177,6 @@ describe("attendance source facts", () => {
         source: "whole-payment",
         key: "collection",
         personId: caro,
-        locationId,
         kind: "payment",
         at: "2026-01-05T16:40:00.000Z",
         offsetMinutes: 60,
@@ -241,41 +231,11 @@ describe("attendance source facts", () => {
       [`group:${groupEvent}`, ana, "2026-01-05T15:00:00.000Z"],
     ]);
   });
-  it("includes the lower day boundary, excludes the upper boundary and another location", async () => {
+  it("includes the lower day boundary and excludes the upper boundary", async () => {
     const included = await signIn(ana, "2026-01-05T04:00:00+01:00");
     await signIn(ana, "2026-01-06T03:00:00Z");
     await signIn(ana, "2026-01-05T02:59:59Z");
-    await run((tx) =>
-      recordAttendanceFact(tx, {
-        source: "order",
-        key: "elsewhere",
-        personId: bea,
-        locationId: elsewhere,
-        kind: "order",
-        at: "2026-01-05T15:00:00Z",
-        offsetMinutes: 0,
-        outcome: "qualified",
-      }),
-    );
     expect((await facts()).map((f) => f.key)).toEqual([included]);
-  });
-  it("a captured session keeps its original location after a device moves", async () => {
-    const id = await signIn(ana, "2026-01-05T09:00:00Z");
-    await run((tx) =>
-      recordAttendanceFact(tx, {
-        source: "session",
-        key: id,
-        personId: ana,
-        locationId,
-        kind: "sign-in",
-        at: "2026-01-05T09:00:00Z",
-        offsetMinutes: 0,
-        outcome: "qualified",
-      }),
-    );
-    await suite.db.update(devices).set({ locationId: elsewhere }).where(eq(devices.id, deviceId));
-    expect((await facts()).map((f) => [f.key, f.locationId])).toEqual([[id, locationId]]);
-    expect(await facts({ ...day(), locationId: elsewhere })).toEqual([]);
   });
   it("ignores pending and refused actions and retains a qualifying payment after decline", async () => {
     const id = newId();
@@ -302,7 +262,6 @@ describe("attendance source facts", () => {
           source: "whole-payment",
           key: outcome,
           personId: ana,
-          locationId,
           kind: "payment",
           at: "2026-01-05T20:00:00Z",
           offsetMinutes: 0,
@@ -315,7 +274,6 @@ describe("attendance source facts", () => {
         source: "bill-payment",
         key: id,
         personId: caro,
-        locationId,
         kind: "payment",
         at: "2026-01-05T10:00:00.000Z",
         offsetMinutes: 60,
@@ -344,7 +302,6 @@ describe("attendance source facts", () => {
         source: "bill-payment",
         key: id,
         personId: caro,
-        locationId,
         kind: "payment",
         at: "2026-01-05T11:00:00Z",
         offsetMinutes: 0,
@@ -425,20 +382,6 @@ describe("attendance source facts", () => {
       ["break", ana, "2026-01-05T12:30:00.000Z"],
     ]);
   });
-  it("does not assign a location to a retained party event with conflicting bill locations", async () => {
-    await suite.db
-      .insert(workingOrders)
-      .values({ source: "dashboard", locationId: elsewhere, orderNumber: 2, partyId });
-    await suite.db.insert(orderGroupEvents).values({
-      partyId,
-      kind: "reordered",
-      actorId: ana,
-      detail: {},
-      createdAt: "2026-01-05T12:00:00Z",
-    });
-    expect(await facts()).toEqual([]);
-    expect(await facts({ ...day(), locationId: elsewhere })).toEqual([]);
-  });
   it.each([
     [
       "2026-03-29T01:30:00.000Z",
@@ -458,12 +401,11 @@ describe("attendance source facts", () => {
     "uses the venue offset at %s across DST",
     async (at, businessDay, startAt, endAt, offsetMinutes) => {
       const id = await signIn(ana, at);
-      expect(await facts({ locationId, businessDay, startAt, endAt })).toEqual([
+      expect(await facts({ businessDay, startAt, endAt })).toEqual([
         {
           source: "session",
           key: id,
           personId: ana,
-          locationId,
           kind: "sign-in",
           at,
           offsetMinutes,
@@ -505,7 +447,7 @@ describe("planned attendance shifts", () => {
     });
     return id;
   }
-  it("returns only current published same-location shifts by start-day, retaining split and spillover ends", async () => {
+  it("returns only current published shifts by start-day, retaining split and spillover ends", async () => {
     const published = await version("published");
     const first = await shift(published, "2026-01-05T03:00:00.000Z", "2026-01-05T11:00:00.000Z");
     const second = await shift(published, "2026-01-05T17:00:00.000Z", "2026-01-06T04:00:00.000Z");
@@ -518,17 +460,10 @@ describe("planned attendance shifts", () => {
     await shift(null, "2026-01-05T09:00:00.000Z", "2026-01-05T10:00:00.000Z");
     await shift(published, "2026-01-06T03:00:00.000Z", "2026-01-06T04:00:00.000Z");
     await shift(published, "2026-01-04T20:00:00.000Z", "2026-01-05T04:00:00.000Z");
-    await shift(
-      await version("published", elsewhere),
-      "2026-01-05T09:00:00.000Z",
-      "2026-01-05T10:00:00.000Z",
-      elsewhere,
-    );
     expect(await planned()).toEqual([
       {
         id: first,
         personId: ana,
-        locationId,
         startsAt: "2026-01-05T03:00:00.000Z",
         endsAt: "2026-01-05T11:00:00.000Z",
         rosterVersionId: published,
@@ -536,7 +471,6 @@ describe("planned attendance shifts", () => {
       {
         id: second,
         personId: ana,
-        locationId,
         startsAt: "2026-01-05T17:00:00.000Z",
         endsAt: "2026-01-06T04:00:00.000Z",
         rosterVersionId: published,

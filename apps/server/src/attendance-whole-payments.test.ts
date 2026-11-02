@@ -196,7 +196,6 @@ describe("accepted whole-order payment attendance", () => {
       if (issued) expect(after).toEqual(before);
       const facts = await withTransaction(suite.db, (tx) =>
         readAttendanceFacts(tx, {
-          locationId: v.cfg.locationId,
           businessDay: "2026-01-05",
           startAt: "2026-01-05T04:00:00.000Z",
           endAt: "2026-01-06T04:00:00.000Z",

@@ -72,7 +72,6 @@ export async function markAttendanceSourceChanged(
           .where(scope);
       } else {
         await enqueueAttendanceDay(tx, {
-          locationId,
           businessDay,
           ...businessDayBounds(clock, businessDay),
         });

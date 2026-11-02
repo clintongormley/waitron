@@ -85,7 +85,6 @@ function question(subject = personId, key = "rota:first") {
       {
         personId: subject,
         day: {
-          locationId,
           businessDay: "2026-01-05",
           startAt: "2026-01-05T04:00:00.000Z",
           endAt: "2026-01-06T04:00:00.000Z",
@@ -248,7 +247,6 @@ async function automaticQuestion() {
       {
         personId,
         day: {
-          locationId,
           businessDay: "2026-01-05",
           startAt: "2026-01-05T04:00:00.000Z",
           endAt: "2026-01-06T04:00:00.000Z",

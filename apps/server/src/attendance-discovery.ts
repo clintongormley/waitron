@@ -34,7 +34,6 @@ export async function reconcileAttendanceBeforeClock(
   const clock = await readLocationClock(tx, scope.locationId);
   const businessDay = businessDayAt(clock, new Date(start.eventAt));
   const day = {
-    locationId: scope.locationId,
     businessDay,
     ...businessDayBounds(clock, businessDay),
   };
@@ -236,7 +235,6 @@ async function dirtyDay(tx: Transaction, locationId: string, businessDay: string
   } else {
     const clock = await readLocationClock(tx, locationId);
     await enqueueAttendanceDay(tx, {
-      locationId,
       businessDay,
       ...businessDayBounds(clock, businessDay),
     });
@@ -568,7 +566,6 @@ export async function nextAttendanceDay(
   }
   if (!work) return null;
   const day = {
-    locationId: work.locationId,
     businessDay: work.businessDay,
     startAt: work.startAt,
     endAt: work.endAt,
