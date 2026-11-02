@@ -4,7 +4,6 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   deviceMadeHereStations,
   deviceProfiles,
-  devices,
   kitchenPrintJobLines,
   kitchenPrintJobs,
   printJobs,
@@ -15,6 +14,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { createProduct } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, updatePrinter } from "@waitron/printing";
@@ -610,19 +610,9 @@ describe("a printer shared by several stations, and dishes made at the till", ()
         .insert(deviceProfiles)
         .values({ name: "Fryer till", formFactor: "till", capabilities: [] })
         .returning({ id: deviceProfiles.id });
-      const [device] = await tx
-        .insert(devices)
-        .values({
-          locationId: cfg.locationId,
-          deviceProfileId: profile!.id,
-          label: "Fryer till",
-          tokenHash: `here-${randomUUID()}`,
-        })
-        .returning({ id: devices.id });
-      await tx
-        .insert(deviceMadeHereStations)
-        .values({ deviceId: device!.id, stationId: stations.fryer });
-      const orderId = await fireNewOrder(tx, { ...cfg, sendingDeviceId: device!.id }, [
+      const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Fryer till" });
+      await tx.insert(deviceMadeHereStations).values({ deviceId, stationId: stations.fryer });
+      const orderId = await fireNewOrder(tx, { ...cfg, sendingDeviceId: deviceId }, [
         {
           productId: products.burger,
           quantity: "1",

@@ -5,16 +5,16 @@ import {
   CORE_MIGRATIONS,
   invoiceDeliveries,
   invoiceSeries,
-  locations,
   pagePrinters,
   printAgents,
   printJobs,
   printers,
   tenants,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   createPrinter,
   endDeletedPrinterJobs,
@@ -25,7 +25,7 @@ import {
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
-import { jobOrigin, locationId as brandLocation, seriesId } from "@waitron/shared";
+import { jobOrigin, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import {
@@ -78,7 +78,7 @@ async function venue() {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
   const locationId = await location("Bar");
-  const nodeId = await seedNode(suite.db, brandLocation(locationId));
+  const nodeId = await seedNode(suite.db);
   const [agent] = await suite.db
     .insert(printAgents)
     .values({ locationId, name: "Back office agent", tokenHash: "scrypt$fixture" })
@@ -88,11 +88,12 @@ async function venue() {
 type Venue = Awaited<ReturnType<typeof venue>>;
 
 async function location(name: string): Promise<string> {
-  const [row] = await suite.db
-    .insert(locations)
-    .values({ name, invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
-    .returning({ id: locations.id });
-  return row!.id;
+  await seedVenue(suite.db, {
+    name,
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Sale on premises",
+  });
+  return venueLocationId(suite.db);
 }
 
 let hostCounter = 20;
@@ -1045,7 +1046,7 @@ describe("readInvoiceDeliveries", () => {
   it("reads several sales at once exactly as it reads each one", async () => {
     const v = await venue();
     const office = await pagePrinter(v.locationId);
-    const terraceNode = await seedNode(suite.db, brandLocation(v.locationId));
+    const terraceNode = await seedNode(suite.db);
     const failedA4 = await invoice(v.nodeId);
     await attempt(v, failedA4, "a4", "failed", office);
     const printed = await invoice(v.nodeId);

@@ -15,7 +15,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   createPrinter,
   enqueuePrintJob,
@@ -71,19 +71,14 @@ async function issue(full = true) {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
   const [existing] = await suite.db.select().from(locations);
-  const location =
-    existing ??
-    (
-      await suite.db
-        .insert(locations)
-        .values({
-          name: "Bar",
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Sale on premises",
-        })
-        .returning()
-    )[0]!;
-  const nodeId = await seedNode(suite.db, locationId(location!.id));
+  if (existing === undefined) {
+    await seedVenue(suite.db, {
+      name: "Bar",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Sale on premises",
+    });
+  }
+  const nodeId = await seedNode(suite.db);
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId, code: "F", purpose: full ? "full" : "standard" })

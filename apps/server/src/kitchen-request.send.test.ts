@@ -5,7 +5,6 @@ import {
   captureError,
   deviceMadeHereStations,
   deviceProfiles,
-  devices,
   orderGroups,
   parties,
   printJobs,
@@ -15,6 +14,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { createProduct, readContentLanguages } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -275,19 +275,9 @@ describe("A773 waiter request: send", () => {
         .insert(deviceProfiles)
         .values({ name: "Grill till", formFactor: "till", capabilities: [] })
         .returning({ id: deviceProfiles.id });
-      const [device] = await tx
-        .insert(devices)
-        .values({
-          locationId: venue.cfg.locationId,
-          deviceProfileId: profile!.id,
-          label: "Grill till",
-          tokenHash: `grill-${randomUUID()}`,
-        })
-        .returning({ id: devices.id });
-      await tx
-        .insert(deviceMadeHereStations)
-        .values({ deviceId: device!.id, stationId: venue.stations.grill });
-      await submitGroups(tx, { ...venue.cfg, sendingDeviceId: device!.id }, venue.party.partyId, {
+      const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Grill till" });
+      await tx.insert(deviceMadeHereStations).values({ deviceId, stationId: venue.stations.grill });
+      await submitGroups(tx, { ...venue.cfg, sendingDeviceId: deviceId }, venue.party.partyId, {
         submissionId: randomUUID(),
         expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
         operatorId: OPERATOR,

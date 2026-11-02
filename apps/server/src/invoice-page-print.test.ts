@@ -6,20 +6,20 @@ import {
   type A4HoldCode,
   invoiceDeliveries,
   invoiceSeries,
-  locations,
   pagePrinters,
   printAgents,
   printJobs,
   tenants,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { createPrinter, enqueuePrintJob } from "@waitron/printing";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
-import { jobOrigin, locationId as brandLocation, seriesId } from "@waitron/shared";
+import { jobOrigin, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import {
@@ -56,18 +56,19 @@ async function venue() {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
   const locationId = await location("Bar");
-  const nodeId = await seedNode(suite.db, brandLocation(locationId));
+  const nodeId = await seedNode(suite.db);
   const agentOne = await agent(locationId, "Back office agent");
   const agentTwo = await agent(locationId, "Re-paired agent");
   return { locationId, nodeId, agentOne, agentTwo };
 }
 
 async function location(name: string): Promise<string> {
-  const [row] = await suite.db
-    .insert(locations)
-    .values({ name, invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
-    .returning({ id: locations.id });
-  return row!.id;
+  await seedVenue(suite.db, {
+    name,
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Sale on premises",
+  });
+  return venueLocationId(suite.db);
 }
 
 async function agent(locationId: string, name: string): Promise<string> {
