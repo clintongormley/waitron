@@ -58,6 +58,7 @@ import {
   printerMappings,
 } from "./kitchen-print.js";
 import type { FiredItem, HoldCorrection, TicketState } from "./kitchen-print.js";
+import { initiatedItem } from "./kitchen-phase.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { trimQuantityForDisplay } from "./receipt-lines.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
@@ -1522,7 +1523,7 @@ async function readGroups(
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(and(eq(orderGroups.partyId, partyId), isNotNull(ticketItems.firedAt), ...scope))
+    .where(and(eq(orderGroups.partyId, partyId), initiatedItem(), ...scope))
     .groupBy(workingOrderLines.groupId);
   const readyGroups = new Set(
     kitchen

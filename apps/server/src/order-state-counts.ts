@@ -12,6 +12,7 @@ import {
 } from "@waitron/db";
 import { menuItems, productUnits, unitOwnerJoin, units } from "@waitron/catalogue";
 import { isRecalledDish } from "./draft-source.js";
+import { initiatedAt } from "./kitchen-phase.js";
 
 export interface OrderStateCounts {
   ordered: number;
@@ -22,7 +23,12 @@ export interface OrderStateCounts {
 }
 
 interface KitchenPart {
-  ticket: { madeHere: boolean; firedAt: string | null; state: string } | null;
+  ticket: {
+    madeHere: boolean;
+    requestedAt: string | null;
+    firedAt: string | null;
+    state: string;
+  } | null;
 }
 
 export interface CountedLine extends KitchenPart {
@@ -43,8 +49,8 @@ const ZERO: OrderStateCounts = { ordered: 0, unsent: 0, held: 0, waiting: 0, rea
  * One dish's counts. A dish sold by the unit (`takesExtras`'s rule: no hardware unit, no decimal
  * places, not a measure) counts its whole quantity; any other dish, or a fractional quantity,
  * counts as one; extras count nothing. The units left to serve take the first state that matches:
- * not sent, held (an extra's unfired kitchen part, or, unless the dish is made here, its own
- * unfired part or a held group), waiting, ready. A handed-over order has nothing left to serve.
+ * not sent, held (an extra's kitchen part neither requested nor fired, or, unless the dish is made
+ * here, its own such part or a held group), waiting, ready. A handed-over order has nothing left to serve.
  */
 export function dishCounts(
   dish: CountedLine,
@@ -68,9 +74,9 @@ export function dishCounts(
   if (dish.recalled || (dish.ticket === null && dish.groupState === null && dish.sentAt === null))
     counts.unsent = leftUnits;
   else if (
-    extras.some((extra) => extra.ticket !== null && extra.ticket.firedAt === null) ||
+    extras.some((extra) => extra.ticket !== null && initiatedAt(extra.ticket) === null) ||
     (dish.ticket?.madeHere !== true &&
-      (dish.groupState === "held" || (dish.ticket !== null && dish.ticket.firedAt === null)))
+      (dish.groupState === "held" || (dish.ticket !== null && initiatedAt(dish.ticket) === null)))
   )
     counts.held = leftUnits;
   else if (
@@ -78,7 +84,7 @@ export function dishCounts(
       ({ ticket }) =>
         ticket !== null &&
         !ticket.madeHere &&
-        ticket.firedAt !== null &&
+        initiatedAt(ticket) !== null &&
         (ticket.state === "queued" || ticket.state === "preparing"),
     )
   )
@@ -121,6 +127,7 @@ export async function readOrderStateCounts(
       groupState: orderGroups.state,
       ticketId: ticketItems.id,
       madeHere: ticketItems.madeHere,
+      requestedAt: ticketItems.requestedAt,
       firedAt: ticketItems.firedAt,
       ticketState: ticketItems.state,
     })
@@ -200,6 +207,7 @@ export async function readOrderStateCounts(
 function kitchenPart(line: {
   ticketId: string | null;
   madeHere: boolean | null;
+  requestedAt: string | null;
   firedAt: string | null;
   ticketState: string | null;
 }): KitchenPart {
@@ -207,6 +215,11 @@ function kitchenPart(line: {
     ticket:
       line.ticketId === null
         ? null
-        : { madeHere: line.madeHere === true, firedAt: line.firedAt, state: line.ticketState! },
+        : {
+            madeHere: line.madeHere === true,
+            requestedAt: line.requestedAt,
+            firedAt: line.firedAt,
+            state: line.ticketState!,
+          },
   };
 }
