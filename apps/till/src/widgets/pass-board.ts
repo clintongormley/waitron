@@ -45,6 +45,13 @@ const COLUMN_WORDS = {
   ready: "pass.column.ready",
 } as const;
 
+/** The pass's column names, for the Columns window. */
+export function passColumnNames(): Map<ColumnKey, string> {
+  return new Map(
+    Object.entries(COLUMN_WORDS).map(([key, word]) => [key as ColumnKey, t(word)] as const),
+  );
+}
+
 /** A pure view of a pass board: it reads nothing and acts by events. */
 @customElement("till-pass-board")
 export class TillPassBoard extends LitElement {
