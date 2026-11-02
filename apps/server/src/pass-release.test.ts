@@ -1409,7 +1409,10 @@ describe("A773 pass release: races", () => {
         (tx) => releasePassItems(tx, f.venue.cfg, f.hot, winner),
         (tx) => releasePassItems(tx, f.venue.cfg, f.hot, loser),
       );
-      expect(outcome).toMatchObject([fulfilled, refusedWith("ticket.pass_context_changed")]);
+      expect(outcome).toMatchObject([
+        { status: "fulfilled", value: { releasedTicketItemIds: [f.burger] } },
+        refusedWith("ticket.pass_context_changed"),
+      ]);
       expect(await rows([f.burger, f.salad])).toEqual(
         before.map((row) => (row.id === f.burger ? releasedRow(row) : row)),
       );
@@ -1444,7 +1447,13 @@ describe("A773 pass release: races", () => {
       const before = await rows([f.burger, f.salad]);
       const start = await printed(f.venue);
       const outcome = order === "hot" ? await race(hot, cold) : await race(cold, hot);
-      expect(outcome).toMatchObject([fulfilled, fulfilled]);
+      const [hotOutcome, coldOutcome] = [
+        { status: "fulfilled", value: { releasedTicketItemIds: [f.burger] } },
+        { status: "fulfilled", value: { releasedTicketItemIds: [f.salad] } },
+      ];
+      expect(outcome).toEqual(
+        order === "hot" ? [hotOutcome, coldOutcome] : [coldOutcome, hotOutcome],
+      );
       expect(await rows([f.burger, f.salad])).toEqual(before.map(releasedRow));
       expect(gained(start, await printed(f.venue))).toEqual({
         ...nothing,

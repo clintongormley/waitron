@@ -1534,35 +1534,45 @@ describe("A773 pass board", () => {
 });
 
 describe("A773 pass release", () => {
-  it("refuses a till pass's release of a party outside its profile's zones, writing nothing", async () => {
-    const device = await enrolDeviceForTest(suite.db, v.cfg, {
-      name: `Till pass ${randomUUID()}`,
-      profileId: restaurantProfile,
-      kitchenScreen: { kind: "pass", stationIds: null, zoneIds: null },
-    });
-    const deviceCookie = `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
-    const login = await app.request("/api/session", {
-      method: "POST",
-      headers: { "content-type": "application/json", cookie: deviceCookie },
-      body: JSON.stringify({ personId, pin: "5555" }),
-    });
-    expect(login.status).toBe(200);
-    const cookie = `${deviceCookie}; ${login.headers.get("set-cookie")!.split(";")[0]!}`;
-    const written = () =>
-      inTx(v, async (tx) => ({
-        items: await tx.select().from(ticketItems),
-        jobs: await tx.select().from(printJobs),
-      }));
-    const before = await written();
-    const answer = await send(cookie, "POST", "/api/device/pass-screen/release", {
-      submissionId: randomUUID(),
-      target: { kind: "group", partyId: f.deliParty, groupId: randomUUID() },
-      ticketItemIds: [randomUUID()],
-      expectedContext: "0".repeat(64),
-    });
-    expect(answer).toEqual(notAllowed(f.deliTables));
-    expect(await written()).toEqual(before);
-  });
+  it.each([
+    [
+      "a party",
+      (x: Fixtures) => ({ kind: "group", partyId: x.deliParty, groupId: randomUUID() }),
+      deliTableZone,
+    ],
+    ["a bill", (x: Fixtures) => ({ kind: "bill", workingOrderId: x.deliOrder }), deliOrderZone],
+  ] as const)(
+    "refuses a till pass's release of %s outside its profile's zones, writing nothing",
+    async (_name, target, zone) => {
+      const device = await enrolDeviceForTest(suite.db, v.cfg, {
+        name: `Till pass ${randomUUID()}`,
+        profileId: restaurantProfile,
+        kitchenScreen: { kind: "pass", stationIds: null, zoneIds: null },
+      });
+      const deviceCookie = `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+      const login = await app.request("/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: deviceCookie },
+        body: JSON.stringify({ personId, pin: "5555" }),
+      });
+      expect(login.status).toBe(200);
+      const cookie = `${deviceCookie}; ${login.headers.get("set-cookie")!.split(";")[0]!}`;
+      const written = () =>
+        inTx(v, async (tx) => ({
+          items: await tx.select().from(ticketItems),
+          jobs: await tx.select().from(printJobs),
+        }));
+      const before = await written();
+      const answer = await send(cookie, "POST", "/api/device/pass-screen/release", {
+        submissionId: randomUUID(),
+        target: target(f),
+        ticketItemIds: [randomUUID()],
+        expectedContext: "0".repeat(64),
+      });
+      expect(answer).toEqual(notAllowed(zone(f)));
+      expect(await written()).toEqual(before);
+    },
+  );
 });
 
 describe("a Restaurant profile on another department's zone", () => {
