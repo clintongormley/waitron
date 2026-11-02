@@ -158,7 +158,7 @@ async function aStationInViewWaits(tx: Transaction, scope: PassScope): Promise<b
   return found !== undefined;
 }
 
-/** A reader with no cooking write path (a monitor, a till's All stations) is named nothing to release. */
+/** Releasing needs a pass screen, so a monitor's and a till's All stations cards name nothing to release. */
 export function withoutRelease(board: PassBoard): PassBoard {
   const strip = (cards: PassBoard["toFire"]) =>
     cards.map((card) => ({ ...card, releaseTicketItemIds: [], releaseContext: null }));
