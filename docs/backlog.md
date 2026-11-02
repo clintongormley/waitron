@@ -413,8 +413,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   existing accounting writer with a server-owned operator origin. A separate synthetic release
   now submits the existing held ordinary cancellation after the explicitly selected current
   invoice version is accepted. It records the case decision and clears the held acknowledgement
-  without another fiscal record. Manual brake release and actual staff cancellation/refund
-  qualification remain unfinished; the release currently requires the same issuing chain.
+  without another fiscal record. The separately gated manual brake action now makes only the
+  first eligible held record due immediately and records a note on its holding case. Later
+  held records still wait for that answer to break the refusal run. Actual staff cancellation/refund
+  qualification remains unfinished; cancellation release currently requires the same issuing chain.
   The 2 November AEAT TEST run accepted an original and two successive S/N description corrections as `Correcto`; consultation matched
   the second correction's fingerprint. This one-identity probe does not enable production remedies.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
@@ -428,10 +430,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   that applies to every later record (one about the taxpayer's identity, say) opens one case per
   record in that reply before the repeated-code brake takes effect (`MAX_REGISTROS_POR_ENVIO`).
   [Detail](backlog/fiscal.md#still-open-after-w41s-3-1289-one-reply-can-open-up-to-1000-filing-cases)
-
-- **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records again).** — left open by W41s-3b (#1303).
-  A manual release remains Task 8.
-  [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **Re-examine the hold behind an unknown outcome once the asesor answers** — OPEN (waiting on the asesor; owner 2026-10-06).
   The decision is put to the asesor as [Q47](compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12) (S19 in the short list),

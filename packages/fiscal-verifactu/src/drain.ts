@@ -1005,6 +1005,34 @@ function brakeHeldHeads(environment: Entorno): SQL {
   `;
 }
 
+// Retry only the brake head: its answer must settle before followers can pass their own holds.
+export async function releaseBrakeHold(
+  tx: Transaction,
+  registroId: string,
+  caseId: string,
+  environment: Entorno,
+  now: Date,
+): Promise<boolean> {
+  const { rows } = await tx.execute<{ registro_id: string }>(sql`
+    update envios set estado = 'pendiente', proximo_intento_en = ${now.toISOString()}
+    where registro_id in (
+      select r.id from (${brakeHeldHeads(environment)}) heads
+      join registros_facturacion r on r.id = heads.id
+      join filing_cases c on c.registro_id = (
+        select preceding.id ${recordsBefore("r")}
+        order by preceding.secuencia desc limit 1
+      )
+      where r.id = ${registroId} and c.id = ${caseId}
+        and c.cause = 'fiscal.registro_rechazado'
+        and not ${cancelsRefusedOriginal("r")}
+    )
+    returning registro_id
+  `);
+  if (rows.length === 0) return false;
+  await deleteAck(tx, registroId);
+  return true;
+}
+
 /** The brake-held heads due a probe at `now`: the chain's last send is at least
  * `BRAKE_PROBE_INTERVAL_MS` ago, or further ahead than that, stamped before the clock stepped
  * back. */

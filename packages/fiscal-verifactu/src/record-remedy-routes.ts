@@ -14,6 +14,7 @@ import { applyCorrectedRecordFacts } from "./record-remedy-http.js";
 import { applyAbsentOriginalCancellation } from "./record-remedy-absent.js";
 import { releaseHeldCancellation } from "./record-remedy-held.js";
 import { applyCorrectiveInvoiceRequest } from "./record-remedy-corrective-http.js";
+import { releaseRecordBrake } from "./record-remedy-brake.js";
 
 // Legal enablement belongs to server policy; a client request cannot grant it.
 const ENABLED_REMEDIES: ReadonlySet<RemedyKind> = new Set();
@@ -84,6 +85,8 @@ export function mountRecordRemedies(
           );
         if (kind === "release-held-cancellation")
           return releaseHeldCancellation(tx, ctx.recordGeneration, token, enabledRemedies, body);
+        if (kind === "release-brake")
+          return releaseRecordBrake(tx, ctx.recordGeneration, token, enabledRemedies, body);
         throw new AppError("fiscal.remedy_disabled", { kind });
       });
       return c.json(result, 200);

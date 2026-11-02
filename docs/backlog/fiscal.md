@@ -492,8 +492,8 @@ Client-supplied enablement and operator fields cannot grant authority. No produc
 enabled. The HTTP adapter covers synthetic corrections to stored invoice facts for rejected records
 and records accepted with errors. The separately gated synthetic absent-original operation is
 described below. The separately gated corrective HTTP adapter is also described below. Resolution
-of existing held cancellations now has the synthetic path described below. Manual brake release
-and actual staff cancellation/refund qualification remain Task 8 work. The live second-correction
+of existing held cancellations and manual brake release now have the synthetic paths described
+below. Actual staff cancellation/refund qualification remains Task 8 work. The live second-correction
 prerequisite is recorded in the dated entry below.
 
 **2 November 2026, Task 8 synthetic corrective-invoice transaction.** The internal operation
@@ -523,8 +523,8 @@ than discarded. Core retains its accounting, whole-invoice, line-reference and s
 production/preproduction stamps, fractional quantities, whole-invoice credits, parallel retries,
 changed decisions, live write authority and clock refusals. These synthetic operations leave the
 earlier sale, fiscal records and payment/refund rows unchanged. The route's default policy remains
-empty. Existing held-record resolution, manual brake release and actual staff cancellation/refund
-integration remain unfinished; this HTTP milestone does not complete Task 8.
+empty. Existing held-record and manual brake release have separate synthetic paths below. Actual
+staff cancellation/refund integration remains unfinished; this HTTP milestone does not complete Task 8.
 
 **2 November 2026, Task 8 synthetic held-cancellation release.** A cancellation already set
 aside has its own immutable identity, so this operation submits that existing record. With a test
@@ -544,7 +544,7 @@ different resolution rolls the delivery and acknowledgement changes back.
 `record-remedy-held.test.ts` sends a correction through the real client to the fake tax service,
 releases the held cancellation, and then submits that same cancellation. Its fiscal rows, chain
 head and sales stay unchanged by the release. This synthetic exercise does not qualify the actual
-staff cancellation/refund path, other issuing chains, manual brake release or a production legal
+staff cancellation/refund path, other issuing chains or a production legal
 remedy. Those remain before whole-item review and publication.
 
 **2 November 2026, Task 8 synthetic absent-original cancellation.** An administrator explicitly
@@ -704,15 +704,22 @@ brake holds; a same-code refusal keeps them held. A record with its own filing c
 held record, an unresolved earlier send, a cancellation of a refused original or a different
 environment is not probed. The alert's “Since” stays at the time the run reached three
 same-code refusals, including after refused hourly retries (owner, 2026-10-12).
-Manual release remains Task 8.
 
-**Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
-again).** Task 8 as planned resolves records that have a case of their own; a record the brake holds
-has none. The owner also chose to keep the
-records added after a run's unanswered successor sent with its retry, as built. It was built so because when the retried record's answer is anything but a refusal with
-the run's code, the run is broken and nothing would explain such a hold: the
-`fiscal.refusals_repeated` alert would not show, and when that answer is not a refusal at all
-`heldRecords` would name no case for the held records.
+**2 November 2026, Task 8 synthetic manual brake release.** With a test policy explicitly
+allowing `release-brake`, you name the first held record, the holding refusal's case, your reason
+and an action key. The administrator action makes that record pending and due immediately. It
+uses the drainer's brake eligibility: three matching refusals immediately before it, no earlier
+held or unanswered record and no case of its own. An ordinary cancellation of a refused current
+invoice remains held. The action leaves the attempt count and previous send facts unchanged,
+clears the held acknowledgement and records a note in the same transaction.
+
+A note permits a retry; it does not resolve the original refusal. Later held records still wait
+until the released record's answer breaks the refusal run. Another refusal with the same code
+keeps them held. The request can be retried after submission without changing delivery again;
+current permissions, host identity, writable status and server policy are checked again. The
+public policy stays empty. `record-remedy-brake.test.ts` exercises these outcomes through the
+real client and fake tax service, including a rollback when the note cannot be stored. This
+synthetic path does not qualify actual staff refunds or enable a production remedy.
 
 A line AEAT moves away from
 its record's position is never applied, so that record stays unknown and is retried unless an
