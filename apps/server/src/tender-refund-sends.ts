@@ -199,7 +199,6 @@ async function recordOutcomeIn(
       source: "refund",
       key: refund.id,
       personId: refund.requestedBy,
-      locationId: refund.locationId,
       kind: "payment",
       at: refund.createdAt,
       offsetMinutes: 0,
@@ -213,11 +212,8 @@ export async function readStuckTenderRefund(
   tx: Transaction,
   db: Database,
   id: string,
-  locationId?: string,
 ): Promise<RefundRow> {
   const refund = await read(tx, id);
-  if (locationId !== undefined && refund.locationId !== locationId)
-    throw new AppError("tender.refund_not_found", { refundId: id });
   if (
     refund.state !== "pending" ||
     refund.method !== "card" ||

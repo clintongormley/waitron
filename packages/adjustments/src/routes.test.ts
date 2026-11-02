@@ -966,10 +966,24 @@ describe("adjustment report routes", () => {
     );
   });
 
-  it("answers a server fault when the module's location is not in the database", async () => {
+  // A1301: deleted with cfg in S18
+  it("reads the venue's clock whatever location the module names", async () => {
+    await db.insert(locations).values({
+      name: "Sala",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurante",
+      timeZone: "Europe/Madrid",
+      dayCutover: "05:00:00",
+    });
     const fx = await fixture();
     const response = await send(fx.app, "GET", `${REPORT}?${DAY}`, fx.cookie.manager);
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({ error: { code: "server.internal" } });
+    expect(response.status).toBe(200);
+  });
+
+  it("refuses with venue.not_found when the database holds no venue", async () => {
+    const fx = await fixture();
+    const response = await send(fx.app, "GET", `${REPORT}?${DAY}`, fx.cookie.manager);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: { code: "venue.not_found", params: {} } });
   });
 });

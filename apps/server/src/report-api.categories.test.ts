@@ -288,7 +288,7 @@ const suite = useVenueDb({
 
 function mountApp(venueLocale: "es-ES" | "en-GB" = "en-GB"): Hono {
   const app = new Hono();
-  mountReportApi(app, { db: suite.db, cfg: { nodeId, locationId }, venueLocale }, noopLog);
+  mountReportApi(app, { db: suite.db, cfg: { nodeId }, venueLocale }, noopLog);
   return app;
 }
 
@@ -451,7 +451,7 @@ describe("GET /management-api/reports/categories", () => {
 });
 
 describe("GET /management-api/reports/printers", () => {
-  it("lists this location's active printers by name, to a supervisor", async () => {
+  it("lists the active printers by name, to a supervisor", async () => {
     const res = await request("/management-api/reports/printers", { cookie: supervisorCookie });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([
@@ -537,53 +537,15 @@ describe("POST /management-api/reports/categories/print", () => {
     }
   });
 
-  // The second location lives only inside its case, and goes in a `finally`: every other case
-  // reads the one venue. A1301 S11c deletes the case with the check it proves.
-  let elsewhere: { locationId: string; printerId?: string } | undefined;
-  const elsewherePrinter = async (): Promise<string> => {
-    const [other] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Terrace",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    elsewhere = { locationId: other!.id };
-    const [row] = await suite.db
-      .insert(printers)
-      .values({
-        locationId: other!.id,
-        name: "Terrace",
-        transport: "network_tcp",
-        host: `10.0.0.${Math.floor(Math.random() * 200) + 2}`,
-        port: 9100,
-        paperWidth: "80mm",
-      })
-      .returning({ id: printers.id });
-    elsewhere.printerId = row!.id;
-    return row!.id;
-  };
-
   it.each([
     ["an inactive printer", () => Promise.resolve(inactivePrinter)],
-    ["another location's printer", elsewherePrinter],
     ["an unknown printer", () => Promise.resolve(randomUUID())],
   ])("404 printer.not_found for %s, enqueuing nothing", async (_case, printerId) => {
-    try {
-      const id = await printerId();
-      const res = await print({ from: DAY1, to: DAY1, mode: "current", printerId: id });
-      expect(res.status).toBe(404);
-      expect(await errorOf(res)).toMatchObject({ code: "printer.not_found", params: { id } });
-      expect(await jobsOn(id)).toEqual([]);
-    } finally {
-      if (elsewhere !== undefined) {
-        if (elsewhere.printerId !== undefined)
-          await suite.db.delete(printers).where(eq(printers.id, elsewhere.printerId));
-        await suite.db.delete(locations).where(eq(locations.id, elsewhere.locationId));
-        elsewhere = undefined;
-      }
-    }
+    const id = await printerId();
+    const res = await print({ from: DAY1, to: DAY1, mode: "current", printerId: id });
+    expect(res.status).toBe(404);
+    expect(await errorOf(res)).toMatchObject({ code: "printer.not_found", params: { id } });
+    expect(await jobsOn(id)).toEqual([]);
   });
 
   it("409 sale_classification.invalid enqueues nothing", async () => {

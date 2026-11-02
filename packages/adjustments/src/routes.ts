@@ -1,5 +1,5 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { withTransaction, type Transaction } from "@waitron/db";
+import { readVenueClock, withTransaction, type Transaction } from "@waitron/db";
 import {
   authorizeManager,
   personRole,
@@ -18,7 +18,7 @@ import {
   requireUuidParam,
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
-import { currentBusinessDay, readLocationClock } from "@waitron/reporting";
+import { currentBusinessDay } from "@waitron/reporting";
 import { AppError, compareDecimal, decimal, isUuid } from "@waitron/shared";
 import {
   createAdjustmentReason,
@@ -191,13 +191,12 @@ function oneDay(day: string): { from: string; to: string } {
   return { from: day, to: day };
 }
 
-/** The range on the clock of the module's location. */
+/** The range on the venue's clock. */
 async function reportInput(
   tx: Transaction,
-  locationId: string,
   asked: { from: string; to: string } | undefined,
 ): Promise<AdjustmentReportInput> {
-  const clock = await readLocationClock(tx, locationId);
+  const clock = await readVenueClock(tx);
   const range = asked ?? oneDay(currentBusinessDay(clock));
   return { fromBusinessDay: range.from, toBusinessDay: range.to, ...clock };
 }
@@ -221,7 +220,7 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const range = requireOptionalRange(c.req.query("from"), c.req.query("to"));
         const report = await gatedBy(VIEW_REPORTS, sessionId, async (tx) =>
-          computeAdjustmentReport(tx, await reportInput(tx, ctx.cfg.locationId, range)),
+          computeAdjustmentReport(tx, await reportInput(tx, range)),
         );
         return c.json(report);
       }),
@@ -237,7 +236,7 @@ export const ADJUSTMENTS_ROUTES: ModuleRoutes = {
         const after = requireCursor(c.req.query("after"));
         const page = await gatedBy(VIEW_REPORTS, sessionId, async (tx) =>
           listAdjustmentEntries(tx, {
-            ...(await reportInput(tx, ctx.cfg.locationId, range)),
+            ...(await reportInput(tx, range)),
             requester,
             reasonId,
             limit,

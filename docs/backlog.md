@@ -6533,11 +6533,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   network printer's job, new print jobs, printers, page printers and the demo printer take the
   venue's id, `@waitron/printing` no longer exports `PrintConfig` or `PrintAgentConfig`, and
   `@waitron/layouts`' printer types carry no location. It leaves location reads for their owners:
-  `attachPrinterToStation`'s scope in `print-api.ts` and the local `PrintConfig` type in
-  `station-printers.ts` (S11b), the `locationId` that `alert-sources.ts`' `stationOutputAlertSource`
-  still declares and no longer reads (S11; `boot.ts`' argument, S18), the station screens read's scope in `station-outputs-down.ts` and
-  `receipt-print.ts`'s `cfg` handed to `readPrintedDepartmentReceipt` (both S18, with the module
-  contract's scope). Until the schema
+  the station screens read's scope in `station-outputs-down.ts` and `receipt-print.ts`'s `cfg`
+  handed to `readPrintedDepartmentReceipt` (both S18, with the module contract's scope). Until the schema
   slices drop `print_jobs.location_id`, `enqueuePrintJob` takes the venue id as an optional
   `venueId`, so a sale, a kitchen send or a payment's slips read it once, and the demo printer's
   boot lookup keeps its venue condition for `printers_local_key_key`. The working-time slices have their

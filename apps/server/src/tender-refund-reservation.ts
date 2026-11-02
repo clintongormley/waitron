@@ -1,6 +1,13 @@
 import { and, eq, or } from "drizzle-orm";
 import { linkRefundToCancels, readCancelsForRefund } from "@waitron/adjustments";
-import { billPaymentRefunds, sales, tenderRefunds, tenders, type Transaction } from "@waitron/db";
+import {
+  billPaymentRefunds,
+  sales,
+  tenderRefunds,
+  tenders,
+  venueLocationId,
+  type Transaction,
+} from "@waitron/db";
 import { assertReversible, payments } from "@waitron/payments";
 import {
   AppError,
@@ -236,7 +243,7 @@ export async function reserveTenderRefund(
       source: cfg.origin.source,
       deviceId: cfg.origin.deviceId,
       nodeId: cfg.nodeId,
-      locationId: cfg.locationId,
+      locationId: await venueLocationId(tx),
       method: refundable.method as "cash" | "card",
       manual: refundable.manual,
       provider,

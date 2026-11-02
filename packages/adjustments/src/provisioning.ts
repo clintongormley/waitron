@@ -4,7 +4,7 @@ import {
   starterName,
   starterNames,
 } from "@waitron/country-packs";
-import { locations, tenants } from "@waitron/db";
+import { readVenue, tenants } from "@waitron/db";
 import type { PersonRoleValue } from "@waitron/identity";
 import type { ModuleProvisioning } from "@waitron/module";
 import { createAdjustmentReason, listAdjustmentReasons } from "./operations.js";
@@ -76,23 +76,19 @@ const STARTERS: readonly Starter[] = [
 export const ADJUSTMENTS_PROVISIONING: ModuleProvisioning = {
   seed: {
     summary: "Create the starter void and comp reasons",
-    async run(tx, node) {
+    async run(tx) {
       if ((await listAdjustmentReasons(tx)).length > 0) {
         return "reasons already present";
       }
-      const [venue] = await tx
-        .select({
-          country: tenants.country,
-          area: locations.province,
-          invoiceLocales: locations.invoiceLocales,
-        })
-        .from(locations)
-        .innerJoin(tenants, eq(tenants.id, 1))
-        .where(eq(locations.id, node.locationId));
+      const [tenant] = await tx
+        .select({ country: tenants.country })
+        .from(tenants)
+        .where(eq(tenants.id, 1));
+      const venue = await readVenue(tx);
       const { languages, staffLanguage } = resolveInstalledStarterLanguages({
-        country: venue?.country,
-        area: venue?.area,
-        receiptLocale: venue?.invoiceLocales[0],
+        country: tenant?.country,
+        area: venue.province,
+        receiptLocale: venue.invoiceLocales[0],
       });
       for (const { english, ...starter } of STARTERS) {
         await createAdjustmentReason(tx, {

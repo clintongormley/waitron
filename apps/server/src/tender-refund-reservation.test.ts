@@ -445,17 +445,6 @@ describe("settled-tender reservation inside the caller's transaction", () => {
     },
   );
 
-  it("refuses a sale in a different location", async () => {
-    const target = await paid();
-    await expect(
-      reserve(target.saleId, request(target.tenderId), {
-        ...cfg,
-        locationId: locationId(randomUUID()),
-      }),
-    ).rejects.toMatchObject({ code: "sale.not_found" });
-    expect(await rows()).toEqual([]);
-  });
-
   it.each([
     { appliedAmount: "10.01" },
     { appliedAmount: "5.00", tipAmount: "1.00" },

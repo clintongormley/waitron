@@ -1500,7 +1500,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
           .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
           .where(
             and(
-              eq(tenderRefunds.locationId, deps.cfg.locationId),
               eq(tenderRefunds.state, "pending"),
               eq(tenderRefunds.method, "card"),
               eq(tenderRefunds.manual, false),
@@ -1529,7 +1528,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       try {
         await gated(sessionId, async (tx) => {
           await refuseWhileClockBehind(tx);
-          await readStuckTenderRefund(tx, deps.db, id, deps.cfg.locationId);
+          await readStuckTenderRefund(tx, deps.db, id);
           release = claimTenderRefund(deps.db, id);
         });
         const held = release!;
@@ -1554,7 +1553,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       );
       const refund = await pinGated(sessionId, pin, async (tx, personId) => {
         await refuseWhileClockBehind(tx);
-        await readStuckTenderRefund(tx, deps.db, id, deps.cfg.locationId);
+        await readStuckTenderRefund(tx, deps.db, id);
         return attestTenderRefundIn(tx, refundDeps, id, outcome, { attestedBy: personId, note });
       });
       return c.json({ outcome: refund.state });

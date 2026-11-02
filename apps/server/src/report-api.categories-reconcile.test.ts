@@ -242,7 +242,7 @@ describe("the category report reconciles with the till's sales", () => {
       app,
       {
         db: suite.db,
-        cfg: { nodeId: cfg.nodeId, locationId: cfg.locationId },
+        cfg: { nodeId: cfg.nodeId },
         venueLocale: LOCALE,
       },
       noopLog,

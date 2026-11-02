@@ -67,7 +67,7 @@ export interface ReceiptPreviewResponse {
   preview: PrintJobPreview;
   /** The width drawn at. */
   paperWidth: PaperWidth;
-  /** The widths of the location's active devices' active receipt printers, narrowest first. */
+  /** The widths of the active devices' active receipt printers, narrowest first. */
   paperWidths: PaperWidth[];
   /** The blocks each part of the trim adds; `null` for one that prints nothing. */
   marks: Record<ReceiptPart, BlockRange | null>;
@@ -116,11 +116,11 @@ export function previewMarks(
 }
 
 /** The paper setting of each active device's resolved, switched-on receipt printer, by device name. */
-async function activeReceiptSettings(tx: Transaction, locationId: string): Promise<EscSetting[]> {
+async function activeReceiptSettings(tx: Transaction): Promise<EscSetting[]> {
   const active = await tx
     .select({ id: devices.id })
     .from(devices)
-    .where(and(eq(devices.locationId, locationId), eq(devices.active, true)))
+    .where(eq(devices.active, true))
     .orderBy(asc(devices.label), asc(devices.id));
   const resolvedBy = await resolveDevicePrinterIds(
     tx,
@@ -326,7 +326,7 @@ export function mountReceiptPreviewApi(
           locale,
           languages.receiptLanguage,
         );
-        const available = await activeReceiptSettings(tx, deps.cfg.locationId);
+        const available = await activeReceiptSettings(tx);
         const printer =
           askedWidth === undefined
             ? chooseSetting(available, undefined)

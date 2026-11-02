@@ -170,7 +170,7 @@ const suite = useVenueDb({
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountReportApi(app, { db: suite.db, cfg: { nodeId, locationId }, venueLocale: "es-ES" }, noopLog);
+  mountReportApi(app, { db: suite.db, cfg: { nodeId }, venueLocale: "es-ES" }, noopLog);
   return app;
 }
 
