@@ -1134,7 +1134,7 @@ jobs:
         timeout-minutes: 7
         run: |
           for attempt in 1 2 3; do
-            if timeout 120 pnpm --filter @waitron/server exec playwright install chromium; then
+            if timeout 120 pnpm --filter @waitron/server exec playwright install chromium --only-shell; then
               exit 0
             fi
           done

@@ -1975,6 +1975,15 @@ describe("the test shards", () => {
     }
   });
 
+  it("installs only Chromium's headless shell for the server's shards", () => {
+    const installs = job("test-server")
+      .body.filter((line) => line.includes("playwright install"))
+      .map((line) => line.trim());
+    expect(installs).toEqual([
+      "if timeout 120 pnpm --filter @waitron/server exec playwright install chromium --only-shell; then",
+    ]);
+  });
+
   it("were found, each with at least one filter", () => {
     expect(shards.length).toBeGreaterThan(1);
     for (const shard of shards) expect(shard.filters.length).toBeGreaterThan(0);
