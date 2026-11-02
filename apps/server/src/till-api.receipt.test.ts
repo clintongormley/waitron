@@ -60,6 +60,7 @@ import {
 } from "@waitron/venue-service";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
@@ -577,18 +578,10 @@ describe("GET /api/sales/:id (filed ticket recovery)", () => {
     expect(denied.status).toBe(401);
     expect(await denied.json()).toMatchObject({ error: { code: "session.required" } });
     const cookie = await login(app, cfg, operatorId);
-    const [unissued] = await withTransaction(suite.db, (tx) =>
-      tx
-        .insert(workingOrders)
-        .values({
-          source: "dashboard",
-          locationId: cfg.locationId,
-          nodeId: cfg.nodeId,
-          orderNumber: 1,
-        })
-        .returning(),
+    const unissued = await withTransaction(suite.db, (tx) =>
+      seedWorkingOrder(tx, { source: "dashboard", nodeId: cfg.nodeId, orderNumber: 1 }),
     );
-    for (const unknown of [id, "invalid", unissued!.id]) {
+    for (const unknown of [id, "invalid", unissued.id]) {
       const res = await app.request(`/api/sales/${unknown}`, { headers: { cookie } });
       expect(res.status).toBe(404);
       expect(res.headers.get("content-type")).toContain("application/json");

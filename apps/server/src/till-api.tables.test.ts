@@ -6,11 +6,11 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locations, withTransaction } from "@waitron/db";
+import { venueLocationId, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { setRoutingCell } from "@waitron/venue-service";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import {
@@ -59,19 +59,20 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
     await seedLegacySellingUnits(db);
     // invoice_locales is `es-ES` (full-tag, fiscal). The product is authored under the BARE `es` key;
     // `priceOrderLines` re-keys its descriptions to the location's `es-ES` before the tab
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
     // location's locales exactly.
-    const [loc] = await db
-      .insert(locations)
-      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
-      .returning({ id: locations.id });
-    await seedKitchenStation(db, { locationId: brandLocationId(loc!.id) });
+    await seedVenue(db, {
+      name: "Counter",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Retail",
+    });
+    const locationId = await venueLocationId(db);
+    await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
     // `openTab`/`addTabRound` create a working_orders row whose `node_id` FK requires a real row.
-    const nodeId = await seedNode(db, brandLocationId(loc!.id));
+    const nodeId = await seedNode(db);
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
@@ -106,7 +107,7 @@ const suite = useVenueDb({
       return { id: p.id, breadId: bread.id };
     });
     productId = product.id;
-    cfg = makeCfg(loc!.id, nodeId);
+    cfg = makeCfg(locationId, nodeId);
     const zone = await withTransaction(db, (tx) => createZone(tx, cfg, { name: "Terraza" }));
     seededZoneId = zone.id;
     const offers = await withTransaction(db, (tx) => offerProducts(tx, cfg, { zone: "tables" }));

@@ -16,12 +16,19 @@ import {
   stationPrinters,
   tenantReceipts,
   ticketItems,
+  venueLocationId,
   withTransaction,
   writeNodeMembership,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedKitchenStation,
+  seedNode,
+  seedTenant,
+  seedVenue,
+} from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   departments,
@@ -157,18 +164,20 @@ const suite = useVenueDb({
     // The products are authored under the BARE `es` key; `priceOrderLines` re-keys their
     // descriptions to the location's `es-ES` before the working-order-line insert fires
     // `check_locales`, which demands the keys match EXACTLY.
-    const [loc] = await db
-      .insert(locations)
-      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
-      .returning({ id: locations.id });
+    await seedVenue(db, {
+      name: "Counter",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Retail",
+    });
+    const venueId = await venueLocationId(db);
     // A default kitchen station so the place route's fire (placeOrder → fireLines) has a fallback.
     const defaultStationId = await seedKitchenStation(db, {
-      locationId: brandLocationId(loc!.id),
+      locationId: brandLocationId(venueId),
     });
     // A node the working-order routes need: `parkOrder`/`payWorkingOrder` write `working_orders.node_id`
     // (its FK `(node_id) → nodes(id)` requires a real row), and
     // `listHeldOrders` filters by it. `cfg.nodeId` names THIS row so every parked order is on-node.
-    const nodeId = await seedNode(db, brandLocationId(loc!.id));
+    const nodeId = await seedNode(db);
     // Ana's PIN is "5555"; anything else must not verify. Stored hashed via `hashPin`, never plain.
     const [person] = await db
       .insert(persons)
@@ -214,24 +223,24 @@ const suite = useVenueDb({
         const [department] = await tx
           .insert(departments)
           .values({
-            locationId: loc!.id,
+            locationId: venueId,
             name: "Restaurant",
             tradingName: "Restaurant",
           })
           .returning({ id: departments.id });
         const [zone] = await tx
           .insert(floorZones)
-          .values({ locationId: loc!.id, name: "Counter" })
+          .values({ locationId: venueId, name: "Counter" })
           .returning({ id: floorZones.id });
         await tx.execute(sql`
         insert into zone_service_policies
           (location_id, zone_id, department_id, is_counter_default)
-        values (${loc!.id}, ${zone!.id}, ${department!.id}, true)`);
+        values (${venueId}, ${zone!.id}, ${department!.id}, true)`);
         await tx.execute(sql`
         insert into department_sale_policies (department_id, order_start) values (${department!.id}, 'counter')`);
         await tx.execute(sql`
         insert into zone_sale_policies (zone_id, order_start) values (${zone!.id}, 'counter')`);
-        const venueScope = { locationId: brandLocationId(loc!.id) };
+        const venueScope = { locationId: brandLocationId(venueId) };
         await offerMenuThroughZone(tx, venueScope, zone!.id, cat.id, { makeDefault: true });
         const offer = await addProductToMenu(tx, {
           menuId: cat.id,
@@ -269,7 +278,7 @@ const suite = useVenueDb({
     counterZoneId = zoneId;
     aguaOfferId = offerId;
     hiddenAguaOfferId = hiddenOfferId;
-    cfg = makeCfg(loc!.id, nodeId);
+    cfg = makeCfg(venueId, nodeId);
     sessionDeviceId = await seedSessionDevice(db, cfg);
   },
 });
@@ -1145,10 +1154,7 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
   });
 
   it("an action the device's profile does not allow is still refused", async () => {
-    const { deviceId } = await seedDevice(suite.db, {
-      locationId: cfg.locationId,
-      capabilities: ["take-cash"],
-    });
+    const { deviceId } = await seedDevice(suite.db, { capabilities: ["take-cash"] });
     const token = await openSession(suite.db, deviceId);
     const db = stampRefused(new AppError("storage.disk_full", {}));
     const res = await guardApp(db, { action: "take-orders" }).request("/whoami", {

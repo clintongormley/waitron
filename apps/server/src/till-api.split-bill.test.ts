@@ -11,18 +11,18 @@ import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   kitchenStations,
-  locations,
   printJobs,
   ticketItems,
   partyTables,
   parties,
+  venueLocationId,
   withTransaction,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -73,20 +73,20 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
     await seedLegacySellingUnits(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
-      .returning({ id: locations.id });
+    await seedVenue(db, {
+      name: "Counter",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Retail",
+    });
     // `openTab` writes `working_orders.node_id`, whose FK requires a real row.
-    const nodeId = await seedNode(db, brandLocationId(loc!.id));
+    const nodeId = await seedNode(db);
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(loc!.id, nodeId);
+    cfg = makeCfg(await venueLocationId(db), nodeId);
     const product = await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
       const bebidas = await createCategory(tx, { name: "Bebidas" });

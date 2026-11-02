@@ -3,10 +3,10 @@ import { createZone } from "./testing/service-zone.js";
 
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locations, withTransaction } from "@waitron/db";
+import { venueLocationId, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
@@ -33,17 +33,13 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Barra",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    const locationId = loc!.id;
-    const nodeId = await seedNode(db, brandLocationId(locationId));
+    await seedVenue(db, {
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    const locationId = await venueLocationId(db);
+    const nodeId = await seedNode(db);
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })

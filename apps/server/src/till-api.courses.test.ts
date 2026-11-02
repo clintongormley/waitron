@@ -7,15 +7,15 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   ticketItems,
-  locations,
   parties,
   workingOrderLines,
   workingOrders,
+  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -63,25 +63,25 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
     await seedLegacySellingUnits(db);
     // invoice_locales is `es-ES` (full-tag, fiscal). The products are authored under the BARE `es`
     // key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the park/place
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
     // location's locales exactly.
-    const [loc] = await db
-      .insert(locations)
-      .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
-      .returning({ id: locations.id });
-    const locationId = brandLocationId(loc!.id);
+    await seedVenue(db, {
+      name: "Counter",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Retail",
+    });
+    const locationId = brandLocationId(await venueLocationId(db));
     await seedKitchenStation(db, { locationId });
-    const nodeId = await seedNode(db, locationId);
+    const nodeId = await seedNode(db);
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(loc!.id, nodeId);
+    cfg = makeCfg(locationId, nodeId);
 
     // Through the verbs rather than direct inserts, so the course FK and the active/assignment
     // filters are real.

@@ -3,10 +3,10 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, locations, printJobs, withTransaction } from "@waitron/db";
+import { deviceProfiles, printJobs, venueLocationId, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/catalogue";
@@ -41,26 +41,22 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
     await seedLegacySellingUnits(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Barra",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    const locationId = brandLocationId(loc!.id);
+    await seedVenue(db, {
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    const locationId = brandLocationId(await venueLocationId(db));
     // The default station serves an item no routing cell covers.
     stationId = await seedKitchenStation(db, { locationId });
-    const nodeId = await seedNode(db, locationId);
+    const nodeId = await seedNode(db);
     const [person] = await db
       .insert(persons)
       .values({ displayName: "Ana", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
     ana = { id: person!.id };
-    cfg = makeCfg(loc!.id, nodeId);
+    cfg = makeCfg(locationId, nodeId);
 
     // One sellable product no routing cell covers, routed to the default station.
     await withTransaction(db, async (tx) => {
