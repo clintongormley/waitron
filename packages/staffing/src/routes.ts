@@ -202,7 +202,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
           throw new AppError("management.request_invalid", { field: "week" });
         const week = body.week;
         return c.json(
-          await gatedBy("schedule.manage", sessionId, (tx) => changeRotaWeek(tx, ctx.cfg, week)),
+          await gatedBy("schedule.manage", sessionId, (tx) => changeRotaWeek(tx, week)),
         );
       }),
     );

@@ -149,17 +149,6 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
     });
   });
 
-  it("400s a POST /roster whose locationId names no location (management.request_invalid, never a 500)", async () => {
-    const res = await send(mountApp(), "POST", "/management-api/roster", {
-      body: { locationId: crypto.randomUUID(), period: "2026-12-07" },
-    });
-    expect(await refusal(res)).toEqual([
-      400,
-      "management.request_invalid",
-      { field: "locationId" },
-    ]);
-  });
-
   it("400s a malformed period on POST (management.request_invalid)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/roster", {
       body: { locationId, period: "not-a-date" },
@@ -258,15 +247,16 @@ describe("mountWorkforceApi — shift routes", () => {
   it("accepts and stores an overnight shift across the summer-time change", async () => {
     const app = mountApp();
     const versionId = await draftVersion("2026-03-23");
-    const body = {
+    const shift = {
       personId,
-      locationId,
       startsAt: "2026-03-28T21:00:00Z",
       startsOffsetMinutes: 60,
       endsAt: "2026-03-29T02:00:00Z",
       endsOffsetMinutes: 120,
     };
-    const added = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, { body });
+    const added = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
+      body: { ...shift, locationId },
+    });
     expect(added.status).toBe(201);
     const { shiftId } = (await added.json()) as { shiftId: string };
     const roster = await send(
@@ -278,7 +268,7 @@ describe("mountWorkforceApi — shift routes", () => {
     expect(((await roster.json()) as { shifts: unknown[] }).shifts).toContainEqual({
       id: shiftId,
       rosterVersionId: versionId,
-      ...body,
+      ...shift,
     });
   });
 
@@ -396,7 +386,7 @@ describe("mountWorkforceApi — shift routes", () => {
     });
   });
 
-  it.each([["personId"], ["locationId"]])(
+  it.each([["personId"]])(
     "400s an add whose %s names no row (management.request_invalid, never a 500)",
     async (field) => {
       const app = mountApp();

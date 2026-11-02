@@ -121,10 +121,10 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
   app.get("/management-api/roster", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const locationId = requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
+      requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
       const period = requirePeriod(c.req.query("period"), "period");
       const snapshot = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
-        backend.getRoster(tx, { locationId, period }),
+        backend.getRoster(tx, { period }),
       );
       return c.json(snapshot);
     }),
@@ -147,7 +147,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         const localShiftDate = sql<string>`date(${shifts.startsAt}, ${shifts.startsOffsetMinutes} || ' minutes')`;
         for (const offset of [-7, 0, 7]) {
           const week = dayAt(offset);
-          const roster = await backend.getRoster(tx, { locationId, period: week });
+          const roster = await backend.getRoster(tx, { period: week });
           const unattached = await tx
             .select()
             .from(shifts)
@@ -205,10 +205,10 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<{ locationId?: unknown; period?: unknown }>(c);
-      const locationId = requireBodyUuid(body.locationId, "locationId");
+      requireBodyUuid(body.locationId, "locationId");
       const period = requirePeriod(body.period, "period");
       const versionId = await gated(sessionId, SCHEDULE_PERMISSION, async (tx) => {
-        const id = await backend.createRosterVersion(tx, { locationId, period });
+        const id = await backend.createRosterVersion(tx, { period });
         await markAttendanceSourceChanged(tx, "rota", id);
         return id;
       });
@@ -222,7 +222,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const versionId = requireUuidParam(c.req.param("versionId"), "RosterVersionId");
       const body = await readJsonBody<Record<string, unknown>>(c);
       const personId = requireBodyUuid(body.personId, "personId");
-      const locationId = requireBodyUuid(body.locationId, "locationId");
+      requireBodyUuid(body.locationId, "locationId");
       const startsAt = requireTimestamp(body.startsAt, "startsAt");
       const endsAt = requireTimestamp(body.endsAt, "endsAt");
       const startsOffsetMinutes = requireOffsetMinutes(
@@ -234,7 +234,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
         const id = await backend.addShift(tx, {
           versionId,
           personId,
-          locationId,
           startsAt,
           startsOffsetMinutes,
           endsAt,
@@ -310,7 +309,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
           .from(rosterVersions)
           .where(
             and(
-              eq(rosterVersions.locationId, version.locationId),
               eq(rosterVersions.periodStart, version.periodStart),
               eq(rosterVersions.periodEnd, version.periodEnd),
               eq(rosterVersions.status, "published"),
@@ -396,18 +394,16 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
     }),
   );
 
-  // The location's planned-vs-actual comparison over a half-open [from, to) local window.
+  // The venue's planned-vs-actual comparison over a half-open [from, to) local window.
   app.get("/management-api/planned-vs-actual", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const locationId = requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
+      // Validated and ignored: the dashboard still sends it (A1301 S15).
+      requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
       const from = requirePeriod(c.req.query("from"), "from");
       const to = requirePeriod(c.req.query("to"), "to");
       const rows = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
-        backend.getPlannedVsActual(tx, {
-          locationId,
-          period: { start: from, end: to },
-        }),
+        backend.getPlannedVsActual(tx, { period: { start: from, end: to } }),
       );
       return c.json(rows);
     }),

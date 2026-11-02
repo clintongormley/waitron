@@ -63,7 +63,6 @@ type ShiftInput = {
 const api = staffing as unknown as {
   changeRotaWeek(
     t: Transaction,
-    c: Cfg,
     week: string,
   ): Promise<{ versionId: string; openSwaps: { swapId: string; fromShiftId: string }[] }>;
   readRotaWeek(t: Transaction, c: Cfg, week: string): Promise<RotaWeek>;
@@ -600,7 +599,7 @@ describe("changing a published rota week", () => {
       ]);
     });
     expect(api.changeRotaWeek).toBeTypeOf("function");
-    const result = await tx((t) => api.changeRotaWeek(t, v.cfg, "2026-11-30"));
+    const result = await tx((t) => api.changeRotaWeek(t, "2026-11-30"));
     const copied = await read(v),
       copyId = copied.shifts[0]!.shiftId;
     expect(copyId).not.toBe(shiftId);
@@ -637,16 +636,16 @@ describe("changing a published rota week", () => {
   it("does not create a draft for an invalid week, a missing published week or an existing draft", async () => {
     const v = await venue();
     expect(api.changeRotaWeek).toBeTypeOf("function");
-    await expect(tx((t) => api.changeRotaWeek(t, v.cfg, "2026-12-01"))).rejects.toMatchObject({
+    await expect(tx((t) => api.changeRotaWeek(t, "2026-12-01"))).rejects.toMatchObject({
       code: "staffing.invalid",
       params: { field: "week" },
     });
-    await expect(tx((t) => api.changeRotaWeek(t, v.cfg, "2026-11-30"))).rejects.toMatchObject({
+    await expect(tx((t) => api.changeRotaWeek(t, "2026-11-30"))).rejects.toMatchObject({
       code: "staffing.invalid",
       params: { field: "week" },
     });
     await add(v);
-    await expect(tx((t) => api.changeRotaWeek(t, v.cfg, "2026-11-30"))).rejects.toMatchObject({
+    await expect(tx((t) => api.changeRotaWeek(t, "2026-11-30"))).rejects.toMatchObject({
       code: "roster.draft_exists",
     });
   });
@@ -660,7 +659,7 @@ describe("copying an unassigned shift", () => {
     );
     const original = await rawShift(v, versionId, "2026-12-01T08:00:00Z", "2026-12-01T12:00:00Z");
     await tx((t) => backend.publishRoster(t, { versionId }));
-    await tx((t) => api.changeRotaWeek(t, v.cfg, "2026-11-30"));
+    await tx((t) => api.changeRotaWeek(t, "2026-11-30"));
     const copied = await read(v);
     expect(copied.shifts).toHaveLength(1);
     expect(copied.shifts[0]!.shiftId).not.toBe(original);

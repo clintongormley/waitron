@@ -152,9 +152,9 @@ it("freezes an already counted automatic end without a worker response or change
     confirmedByWorker: false,
     author: { kind: "automatic", personId: null },
   });
-  expect(
-    (await run((tx) => backend.getPlannedVsActual(tx, { locationId, period })))[0]!.workedMinutes,
-  ).toBe(480);
+  expect((await run((tx) => backend.getPlannedVsActual(tx, { period })))[0]!.workedMinutes).toBe(
+    480,
+  );
   expect(api.verifyChain(await api.readChain(suite.db, { nodeId }))).toEqual({
     ok: true,
   });

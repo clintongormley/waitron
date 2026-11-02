@@ -64,13 +64,10 @@ beforeEach(async () => {
     ])
     .returning({ id: persons.id });
   [personId, other] = workers.map((worker) => worker.id) as [string, string];
-  versionId = await run((tx) =>
-    backend.createRosterVersion(tx, { locationId, period: "2026-01-05" }),
-  );
+  versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-01-05" }));
   shiftId = await run((tx) =>
     backend.addShift(tx, {
       personId,
-      locationId,
       versionId,
       startsAt: "2026-01-05T09:00:00Z",
       endsAt: "2026-01-05T17:00:00Z",
@@ -85,12 +82,11 @@ describe("obsolete rota attendance obligations", () => {
   it("a different current shift cannot satisfy the deleted shift's obligation", async () => {
     await run((tx) => upsertAttendanceQuestion(tx, input(), now));
     const replacement = await run((tx) =>
-      backend.createRosterVersion(tx, { locationId, period: "2026-01-05" }),
+      backend.createRosterVersion(tx, { period: "2026-01-05" }),
     );
     await run((tx) =>
       backend.addShift(tx, {
         versionId: replacement,
-        locationId,
         personId,
         startsAt: "2026-01-05T09:00:00Z",
         endsAt: "2026-01-05T17:00:00Z",
@@ -108,13 +104,12 @@ describe("obsolete rota attendance obligations", () => {
     const id = await run((tx) => upsertAttendanceQuestion(tx, input(), now));
     const before = (await suite.db.select().from(attendanceQuestions))[0]!;
     const replacement = await run((tx) =>
-      backend.createRosterVersion(tx, { locationId, period: "2026-01-05" }),
+      backend.createRosterVersion(tx, { period: "2026-01-05" }),
     );
     await run((tx) =>
       backend.addShift(tx, {
         versionId: replacement,
         personId,
-        locationId,
         startsAt: "2026-01-05T09:00:00Z",
         endsAt: "2026-01-05T17:00:00Z",
         startsOffsetMinutes: 0,
@@ -171,52 +166,37 @@ describe("obsolete rota attendance obligations", () => {
       });
     },
   );
-  it.each([
-    "deleted",
-    "detached",
-    "draft",
-    "other-location",
-    "other-version-location",
-    "before-day",
-    "at-end",
-  ])("retires a question when its shift becomes %s", async (change) => {
-    await run((tx) => upsertAttendanceQuestion(tx, input(), now));
-    if (change === "deleted") await suite.db.delete(shifts).where(eq(shifts.id, shiftId));
-    else if (change === "detached")
-      await suite.db.update(shifts).set({ rosterVersionId: null }).where(eq(shifts.id, shiftId));
-    else if (change === "draft")
-      await suite.db
-        .update(rosterVersions)
-        .set({ status: "draft", publishedAt: null })
-        .where(eq(rosterVersions.id, versionId));
-    else if (change === "other-location")
-      await suite.db
-        .update(shifts)
-        .set({ locationId: await seedLocation(suite.db) })
-        .where(eq(shifts.id, shiftId));
-    else if (change === "other-version-location") {
-      const elsewhere = await seedLocation(suite.db);
-      const otherVersion = await run((tx) =>
-        backend.createRosterVersion(tx, { locationId: elsewhere, period: "2026-01-05" }),
-      );
-      await run((tx) => backend.publishRoster(tx, { versionId: otherVersion }));
-      await suite.db
-        .update(shifts)
-        .set({ rosterVersionId: otherVersion })
-        .where(eq(shifts.id, shiftId));
-    } else
-      await suite.db
-        .update(shifts)
-        .set({
-          startsAt:
-            change === "before-day" ? "2026-01-05T03:59:59.000Z" : "2026-01-06T04:00:00.000Z",
-          endsAt: "2026-01-06T10:00:00.000Z",
-        })
-        .where(eq(shifts.id, shiftId));
-    await run(retire);
-    expect(await own()).toEqual([]);
-    expect((await suite.db.select().from(attendanceMail))[0]!.status).toBe("cancelled");
-  });
+  it.each(["deleted", "detached", "draft", "other-location", "before-day", "at-end"])(
+    "retires a question when its shift becomes %s",
+    async (change) => {
+      await run((tx) => upsertAttendanceQuestion(tx, input(), now));
+      if (change === "deleted") await suite.db.delete(shifts).where(eq(shifts.id, shiftId));
+      else if (change === "detached")
+        await suite.db.update(shifts).set({ rosterVersionId: null }).where(eq(shifts.id, shiftId));
+      else if (change === "draft")
+        await suite.db
+          .update(rosterVersions)
+          .set({ status: "draft", publishedAt: null })
+          .where(eq(rosterVersions.id, versionId));
+      else if (change === "other-location")
+        await suite.db
+          .update(shifts)
+          .set({ locationId: await seedLocation(suite.db) })
+          .where(eq(shifts.id, shiftId));
+      else
+        await suite.db
+          .update(shifts)
+          .set({
+            startsAt:
+              change === "before-day" ? "2026-01-05T03:59:59.000Z" : "2026-01-06T04:00:00.000Z",
+            endsAt: "2026-01-06T10:00:00.000Z",
+          })
+          .where(eq(shifts.id, shiftId));
+      await run(retire);
+      expect(await own()).toEqual([]);
+      expect((await suite.db.select().from(attendanceMail))[0]!.status).toBe("cancelled");
+    },
+  );
   it("retains a current shift at the inclusive day start without consuming its reminder", async () => {
     await suite.db.update(shifts).set({ startsAt: day().startAt }).where(eq(shifts.id, shiftId));
     const id = await run((tx) => upsertAttendanceQuestion(tx, input(), now));

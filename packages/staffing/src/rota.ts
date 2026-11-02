@@ -229,7 +229,7 @@ function assignment(area: AreaRef, staffRoleId: string) {
 }
 export async function addRotaShift(
   tx: Transaction,
-  cfg: Cfg,
+  _cfg: Cfg,
   input: RotaShiftInput,
 ): Promise<string> {
   if (!isRotaWeek(input.week)) throw invalid("week");
@@ -241,13 +241,11 @@ export async function addRotaShift(
     throw invalid("businessDay");
   await assignmentTargets(tx, input.area, input.staffRoleId);
   const interval = await times(tx, input.businessDay, input.startsAt, input.endsAt);
-  const { version } = await backend.getRoster(tx, { ...cfg, period: input.week });
+  const { version } = await backend.getRoster(tx, { period: input.week });
   if (version && version.status !== "draft")
     throw new AppError("roster.not_draft", { rosterVersionId: version.id });
-  const versionId =
-    version?.id ?? (await backend.createRosterVersion(tx, { ...cfg, period: input.week }));
+  const versionId = version?.id ?? (await backend.createRosterVersion(tx, { period: input.week }));
   const shiftId = await backend.addShift(tx, {
-    ...cfg,
     ...interval,
     versionId,
     personId: input.personId,
@@ -268,30 +266,28 @@ async function writableShift(tx: Transaction, shiftId: string) {
 }
 async function unattachedWeek(
   tx: Transaction,
-  cfg: Cfg,
   row: Pick<typeof shifts.$inferSelect, "startsAt" | "startsOffsetMinutes">,
 ) {
   const localDate = new Date(Date.parse(row.startsAt) + row.startsOffsetMinutes * 60000)
     .toISOString()
     .slice(0, 10);
   const week = mondayOf(localDate);
-  const { version } = await backend.getRoster(tx, { ...cfg, period: week });
+  const { version } = await backend.getRoster(tx, { period: week });
   if (version?.status === "published")
     throw new AppError("roster.not_draft", { rosterVersionId: version.id });
   return { week, version };
 }
 export async function updateRotaShift(
   tx: Transaction,
-  cfg: Cfg,
+  _cfg: Cfg,
   shiftId: string,
   patch: RotaShiftPatch,
 ): Promise<void> {
   const row = await writableShift(tx, shiftId);
   if (Object.keys(patch).length === 0) return;
   if (row.rosterVersionId === null) {
-    const { week, version } = await unattachedWeek(tx, cfg, row);
-    const versionId =
-      version?.id ?? (await backend.createRosterVersion(tx, { ...cfg, period: week }));
+    const { week, version } = await unattachedWeek(tx, row);
+    const versionId = version?.id ?? (await backend.createRosterVersion(tx, { period: week }));
     await tx.update(shifts).set({ rosterVersionId: versionId }).where(eq(shifts.id, shiftId));
   }
   const [prior] = await tx
@@ -338,18 +334,17 @@ export async function updateRotaShift(
     });
   }
 }
-export async function removeRotaShift(tx: Transaction, cfg: Cfg, shiftId: string): Promise<void> {
+export async function removeRotaShift(tx: Transaction, _cfg: Cfg, shiftId: string): Promise<void> {
   const row = await writableShift(tx, shiftId);
-  if (row.rosterVersionId === null) await unattachedWeek(tx, cfg, row);
+  if (row.rosterVersionId === null) await unattachedWeek(tx, row);
   await backend.removeShift(tx, { shiftId });
 }
 
-export async function changeRotaWeek(tx: Transaction, cfg: Cfg, week: string) {
+export async function changeRotaWeek(tx: Transaction, week: string) {
   if (!isRotaWeek(week)) throw invalid("week");
-  const { version } = await backend.getRoster(tx, { ...cfg, period: week });
+  const { version } = await backend.getRoster(tx, { period: week });
   if (!version) throw invalid("week");
-  if (version.status === "draft")
-    throw new AppError("roster.draft_exists", { locationId: cfg.locationId });
+  if (version.status === "draft") throw new AppError("roster.draft_exists", {});
   const copied = await backend.copyPublishedToDraft(tx, { versionId: version.id });
   for (const [original, shiftId] of copied.shiftIds) {
     const [row] = await tx

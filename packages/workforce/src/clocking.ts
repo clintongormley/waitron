@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
-import { isUniqueViolation, newId, nowIso, type Transaction } from "@waitron/db";
+import { isUniqueViolation, newId, nowIso, venueLocationId, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
-import { assertLocationExists, assertPersonExists } from "./body-ids.js";
+import { assertPersonExists } from "./body-ids.js";
 import { appendToChain } from "./chain.js";
 import {
   requestCorrection,
@@ -92,7 +92,6 @@ export interface PublishRosterInput {
 }
 
 export interface CreateRosterVersionInput {
-  locationId: string;
   /** Any day (YYYY-MM-DD) of the week; normalized to that week's Monday, so any two days of one week
    * open the same draft. */
   period: string;
@@ -101,7 +100,6 @@ export interface CreateRosterVersionInput {
 /** Dates as 'YYYY-MM-DD' strings, `published_at` as a UTC ISO instant. */
 export interface RosterVersionRow {
   id: string;
-  locationId: string;
   periodStart: string;
   periodEnd: string;
   status: "draft" | "published" | "superseded";
@@ -112,7 +110,6 @@ export interface RosterVersionRow {
 export interface ShiftRow {
   id: string;
   personId: string;
-  locationId: string;
   startsAt: string;
   startsOffsetMinutes: number;
   endsAt: string;
@@ -130,8 +127,6 @@ export interface RosterSnapshot {
 export interface AddShiftInput {
   versionId: string;
   personId: string;
-  /** Should match the version's location; nothing here checks it. */
-  locationId: string;
   startsAt: string;
   startsOffsetMinutes: number;
   endsAt: string;
@@ -220,11 +215,8 @@ export class WorkforceBackend {
   }
 
   /** Planned = the currently-PUBLISHED roster version's shifts; actual = the projected work sessions. */
-  async getPlannedVsActual(
-    tx: Transaction,
-    query: { locationId: string; period: Period },
-  ): Promise<PlannedVsActual[]> {
-    const plannedShifts = await this.plannedShiftsInPeriod(tx, query.locationId, query.period);
+  async getPlannedVsActual(tx: Transaction, query: { period: Period }): Promise<PlannedVsActual[]> {
+    const plannedShifts = await this.plannedShiftsInPeriod(tx, query.period);
     const entries = await readRecordedEntries(tx, {});
     const sessions = projectWorkSessions(entries).filter(
       (s) => s.workDate >= query.period.start && s.workDate < query.period.end,
@@ -234,11 +226,7 @@ export class WorkforceBackend {
 
   /** Published-only is an owner decision (2026-08-15): a shift on a draft or superseded version, or
    * on none, must not manufacture phantom no-shows. */
-  private async plannedShiftsInPeriod(
-    tx: Transaction,
-    locationId: string,
-    period: Period,
-  ): Promise<PlannedShift[]> {
+  private async plannedShiftsInPeriod(tx: Transaction, period: Period): Promise<PlannedShift[]> {
     const { rows } = await tx.execute<{
       id: string;
       person_id: string;
@@ -252,8 +240,7 @@ export class WorkforceBackend {
       from shifts
       join roster_versions rv
         on rv.id = shifts.roster_version_id and rv.status = 'published'
-      where shifts.location_id = ${locationId}
-        and ${shiftLocalDate} >= ${period.start}
+      where ${shiftLocalDate} >= ${period.start}
         and ${shiftLocalDate} < ${period.end}`);
     return rows.map((r) => ({
       shiftId: r.id,
@@ -294,27 +281,20 @@ export class WorkforceBackend {
   }
 
   /**
-   * Throws `roster.draft_exists` when a draft for this (location, week) already exists: no unique
-   * index covers drafts, so this check-then-insert is the guard. Throws `management.request_invalid`
-   * for an unknown location.
+   * Throws `roster.draft_exists` when a draft for this week already exists: no unique index covers
+   * drafts, so this check-then-insert is the guard.
    */
   async createRosterVersion(tx: Transaction, input: CreateRosterVersionInput): Promise<string> {
-    await assertLocationExists(tx, input.locationId);
     const period = weekStartOf(input.period);
     const existing = await tx.execute<{ id: string }>(sql`
       select id from roster_versions
-      where location_id = ${input.locationId}
-        and period_start = ${period} and status = 'draft'
+      where period_start = ${period} and status = 'draft'
       limit 1`);
-    if (existing.rows.length > 0) {
-      throw new AppError("roster.draft_exists", {
-        locationId: input.locationId,
-      });
-    }
+    if (existing.rows.length > 0) throw new AppError("roster.draft_exists", {});
     // `id` and `created_at` by hand: their `$defaultFn`s run for a builder insert, not for raw SQL.
     const { rows } = await tx.execute<{ id: string }>(sql`
       insert into roster_versions (id, location_id, period_start, period_end, created_at)
-      values (${newId()}, ${input.locationId}, ${period}, date(${period}, '+6 days'), ${nowIso()})
+      values (${newId()}, ${await venueLocationId(tx)}, ${period}, date(${period}, '+6 days'), ${nowIso()})
       returning id`);
     return rows[0]!.id;
   }
@@ -332,20 +312,20 @@ export class WorkforceBackend {
       throw new AppError("roster.not_published", { rosterVersionId: source.id });
     }
     const { rows: drafts } = await tx.execute<{ id: string }>(sql`
-      select id from roster_versions where location_id=${source.locationId}
-        and period_start=${source.periodStart} and period_end=${source.periodEnd} and status='draft' limit 1`);
-    if (drafts.length > 0)
-      throw new AppError("roster.draft_exists", { locationId: source.locationId });
+      select id from roster_versions where period_start=${source.periodStart}
+        and period_end=${source.periodEnd} and status='draft' limit 1`);
+    if (drafts.length > 0) throw new AppError("roster.draft_exists", {});
+    const venue = await venueLocationId(tx);
     const versionId = newId();
     await tx.execute(sql`insert into roster_versions (id, location_id, period_start, period_end, created_at)
-      values (${versionId}, ${source.locationId}, ${source.periodStart}, ${source.periodEnd}, ${nowIso()})`);
+      values (${versionId}, ${venue}, ${source.periodStart}, ${source.periodEnd}, ${nowIso()})`);
     const originalShifts = await this.shiftsForVersion(tx, source.id);
     const shiftIds = new Map<string, string>();
     for (const shift of originalShifts) {
       const copyId = newId();
       await tx.execute(sql`insert into shifts (id, person_id, location_id, starts_at, starts_offset_minutes,
         ends_at, ends_offset_minutes, roster_version_id, created_at)
-        select ${copyId}, person_id, location_id, starts_at, starts_offset_minutes,
+        select ${copyId}, person_id, ${venue}, starts_at, starts_offset_minutes,
           ends_at, ends_offset_minutes, ${versionId}, created_at from shifts where id=${shift.id}`);
       shiftIds.set(shift.id, copyId);
     }
@@ -376,17 +356,12 @@ export class WorkforceBackend {
   }
 
   /** The week's DRAFT if there is one, else its PUBLISHED version. */
-  async getRoster(
-    tx: Transaction,
-    input: { locationId: string; period: string },
-  ): Promise<RosterSnapshot> {
+  async getRoster(tx: Transaction, input: { period: string }): Promise<RosterSnapshot> {
     const period = weekStartOf(input.period);
     const { rows } = await tx.execute<RosterVersionDbRow>(sql`
-      select id, location_id, period_start, period_end, status, published_at,
-        published_by_person_id
+      select id, period_start, period_end, status, published_at, published_by_person_id
       from roster_versions
-      where location_id = ${input.locationId}
-        and period_start = ${period} and status in ('draft', 'published')
+      where period_start = ${period} and status in ('draft', 'published')
       order by case when status = 'draft' then 0 else 1 end
       limit 1`);
     const row = rows[0];
@@ -398,8 +373,7 @@ export class WorkforceBackend {
   /** Throws `roster.not_found`. */
   async getRosterVersion(tx: Transaction, input: { versionId: string }): Promise<RosterVersionRow> {
     const { rows } = await tx.execute<RosterVersionDbRow>(sql`
-      select id, location_id, period_start, period_end, status, published_at,
-        published_by_person_id
+      select id, period_start, period_end, status, published_at, published_by_person_id
       from roster_versions
       where id = ${input.versionId}
       limit 1`);
@@ -414,8 +388,8 @@ export class WorkforceBackend {
 
   private async shiftsForVersion(tx: Transaction, versionId: string): Promise<ShiftRow[]> {
     const { rows } = await tx.execute<ShiftDbRow>(sql`
-      select id, person_id, location_id, starts_at, starts_offset_minutes, ends_at,
-        ends_offset_minutes, roster_version_id
+      select id, person_id, starts_at, starts_offset_minutes, ends_at, ends_offset_minutes,
+        roster_version_id
       from shifts
       where roster_version_id = ${versionId}
       order by starts_at`);
@@ -424,8 +398,7 @@ export class WorkforceBackend {
 
   /**
    * Refuses a malformed interval (`shift.invalid`), a missing version (`roster.not_found`) and a
-   * non-draft version (`roster.not_draft`), then an unknown person or location
-   * (`management.request_invalid`).
+   * non-draft version (`roster.not_draft`), then an unknown person (`management.request_invalid`).
    */
   async addShift(tx: Transaction, input: AddShiftInput): Promise<string> {
     const { startsAt, endsAt } = shiftInterval(input.startsAt, input.endsAt);
@@ -436,12 +409,11 @@ export class WorkforceBackend {
       });
     }
     await assertPersonExists(tx, input.personId, "personId");
-    await assertLocationExists(tx, input.locationId);
     // `id` and `created_at` by hand: their `$defaultFn`s run for a builder insert, not for raw SQL.
     const { rows } = await tx.execute<{ id: string }>(sql`
       insert into shifts (id, person_id, location_id, starts_at, starts_offset_minutes,
         ends_at, ends_offset_minutes, roster_version_id, created_at)
-      values (${newId()}, ${input.personId}, ${input.locationId},
+      values (${newId()}, ${input.personId}, ${await venueLocationId(tx)},
         ${startsAt}, ${input.startsOffsetMinutes}, ${endsAt}, ${input.endsOffsetMinutes},
         ${input.versionId}, ${nowIso()})
       returning id`);
@@ -477,7 +449,7 @@ export class WorkforceBackend {
   /** A shift with a null `roster_version_id` is editable: there is no published version to protect. */
   private async shiftForWrite(tx: Transaction, shiftId: string): Promise<ShiftRow> {
     const { rows } = await tx.execute<ShiftDbRow & { version_status: string | null }>(sql`
-      select s.id, s.person_id, s.location_id, s.starts_at, s.starts_offset_minutes, s.ends_at,
+      select s.id, s.person_id, s.starts_at, s.starts_offset_minutes, s.ends_at,
         s.ends_offset_minutes, s.roster_version_id, rv.status as version_status
       from shifts s
       left join roster_versions rv on rv.id = s.roster_version_id
@@ -492,9 +464,9 @@ export class WorkforceBackend {
   }
 
   /**
-   * Supersedes any incumbent published version for the same (location, exact period) FIRST, so it
-   * leaves `roster_versions_published_period_uq` before this one enters it; then publishes this
-   * version and attaches every unattached shift at its location whose LOCAL date falls in the period.
+   * Supersedes any incumbent published version for the same exact period FIRST, so it leaves
+   * `roster_versions_published_period_uq` before this one enters it; then publishes this version and
+   * attaches every unattached shift whose LOCAL date falls in the period.
    *
    * Throws `roster.not_found`, `roster.already_published` (a version is published once), and
    * `roster.period_already_published` when that unique index fires.
@@ -528,7 +500,6 @@ export class WorkforceBackend {
       set roster_version_id = rv.id
       from roster_versions rv
       where rv.id = ${input.versionId}
-        and shifts.location_id = rv.location_id
         and shifts.roster_version_id is null
         and ${shiftLocalDate} between rv.period_start and rv.period_end`);
     if (input.ruleset === undefined) return [];
@@ -571,7 +542,7 @@ export class WorkforceBackend {
   }
 
   /**
-   * Demotes any incumbent `published` version for the SAME (location, exact period) as the version
+   * Demotes any incumbent `published` version for the SAME exact period as the version
    * about to be published. `roster_versions_published_period_uq` is what guarantees one published
    * version per period, not this.
    */
@@ -580,8 +551,7 @@ export class WorkforceBackend {
       select prior.id
       from roster_versions prior
       join roster_versions target on target.id = ${versionId}
-      where prior.location_id = target.location_id
-        and prior.period_start = target.period_start
+      where prior.period_start = target.period_start
         and prior.period_end = target.period_end
         and prior.status = 'published'
         and prior.id <> ${versionId}`);
@@ -592,7 +562,6 @@ export class WorkforceBackend {
       set status = 'superseded'
       from roster_versions target
       where target.id = ${versionId}
-        and prior.location_id = target.location_id
         and prior.period_start = target.period_start
         and prior.period_end = target.period_end
         and prior.status = 'published'
@@ -694,7 +663,6 @@ function wholeSecondUtc(value: string): string | null {
 
 type RosterVersionDbRow = {
   id: string;
-  location_id: string;
   period_start: string;
   period_end: string;
   status: string;
@@ -706,7 +674,6 @@ type RosterVersionDbRow = {
 type ShiftDbRow = {
   id: string;
   person_id: string;
-  location_id: string;
   starts_at: string;
   starts_offset_minutes: number;
   ends_at: string;
@@ -717,7 +684,6 @@ type ShiftDbRow = {
 function mapRosterVersion(r: RosterVersionDbRow): RosterVersionRow {
   return {
     id: r.id,
-    locationId: r.location_id,
     periodStart: r.period_start,
     periodEnd: r.period_end,
     status: r.status as RosterVersionRow["status"],
@@ -730,7 +696,6 @@ function mapShift(r: ShiftDbRow): ShiftRow {
   return {
     id: r.id,
     personId: r.person_id,
-    locationId: r.location_id,
     startsAt: r.starts_at,
     startsOffsetMinutes: r.starts_offset_minutes,
     endsAt: r.ends_at,

@@ -98,7 +98,6 @@ describe("listShiftsForPerson", () => {
     expect(rows.map((r) => r.id)).toEqual([early, late]);
     expect(rows[0]).toEqual({
       id: early,
-      locationId,
       rosterVersionId: publishedVersionId,
       startsAt: "2026-01-05T09:00:00Z",
       startsOffsetMinutes: 0,

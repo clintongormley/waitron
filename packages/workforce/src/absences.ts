@@ -85,7 +85,6 @@ export interface PendingAbsenceRow {
   createdAt: string;
 }
 
-/** Not location-scoped: `absences` has no location. */
 export async function listPendingAbsences(tx: Transaction): Promise<PendingAbsenceRow[]> {
   const { rows } = await tx.execute<{
     id: string;

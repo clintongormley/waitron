@@ -34,11 +34,11 @@ declare module "@waitron/shared" {
     "roster.not_found": { rosterVersionId: string };
     /** The version is no longer a `draft`: a roster is published exactly once. */
     "roster.already_published": { rosterVersionId: string };
-    /** Another version is already `published` for the same (location, exact period) — the
+    /** Another version is already `published` for the same exact period — the
      * `roster_versions_published_period_uq` refusal, translated. */
     "roster.period_already_published": { rosterVersionId: string };
-    /** A draft already exists for this (location, week); the unique index covers only published rows. */
-    "roster.draft_exists": { locationId: string };
+    /** A draft already exists for this week; the unique index covers only published rows. */
+    "roster.draft_exists": Record<string, never>;
     /** A shift write named a roster version that is no longer a `draft`. */
     "roster.not_draft": { rosterVersionId: string };
     /** An endpoint is unparseable or falls outside the years 0000–9999 in UTC, or, cut to the whole

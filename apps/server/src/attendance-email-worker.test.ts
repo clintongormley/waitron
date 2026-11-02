@@ -112,12 +112,9 @@ async function seedMissing(date = "2026-01-05", open = false) {
   await process(date);
 }
 async function seedRota() {
-  const versionId = await run((tx) =>
-    backend.createRosterVersion(tx, { locationId, period: "2026-01-05" }),
-  );
+  const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-01-05" }));
   const shiftId = await run((tx) =>
     backend.addShift(tx, {
-      locationId,
       personId,
       versionId,
       startsAt: "2026-01-05T09:00:00Z",

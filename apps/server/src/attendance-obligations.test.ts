@@ -61,13 +61,10 @@ beforeEach(async () => {
     .values({ displayName: "Ana", pinHash: "scrypt$00$00", role: "staff" })
     .returning({ id: persons.id });
   personId = person!.id;
-  const versionId = await run((tx) =>
-    backend.createRosterVersion(tx, { locationId, period: "2026-01-05" }),
-  );
+  const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-01-05" }));
   shiftId = await run((tx) =>
     backend.addShift(tx, {
       versionId,
-      locationId,
       personId,
       startsAt: "2026-01-05T09:00:00Z",
       endsAt: "2026-01-05T17:00:00Z",
@@ -96,7 +93,7 @@ beforeEach(async () => {
 });
 async function replace() {
   await run(async (tx) => {
-    const id = await backend.createRosterVersion(tx, { locationId, period: "2026-01-05" });
+    const id = await backend.createRosterVersion(tx, { period: "2026-01-05" });
     await backend.publishRoster(tx, { versionId: id });
     await markAttendanceSourceChanged(tx, "shift", shiftId);
   });
