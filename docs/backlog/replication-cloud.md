@@ -16,8 +16,8 @@ The owner gave build authority on 2026-11-01. The
 and the A947 amendment is written (the dated A1018 block at the top of the
 [A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md)). Its
 [two owner questions](../superpowers/plans/2026-11-02-a1018-handover-build.md#questions-for-the-owner)
-stay open, built on their defaults: Q1, returned invoices count in modelo 303; Q2, the emergency
-takes the next free minute. Physical qualification on real boxes is the owner's
+stay open, built on their defaults, and gate only Slice 12b and Task 7.4b: Q1, returned invoices count in modelo 303; Q2, the emergency
+takes the next free minute. Physical runtime qualification on real boxes remains the owner's, after A947 3b/3c
 ([owner task](../superpowers/plans/2026-11-02-a1018-handover-build.md#owner-task-physical-qualification-on-real-boxes)).
 
 **Amended Cloud agreement published, 2026-10-23 (D133):**
@@ -392,6 +392,51 @@ that slice 3 has to restore:
   2026-08-26).
 - **Till UX for the timed-out card case** — retry, alternative tender, or wait.
 
+## A1205: more than one spare box at a venue, after go-live (owner, 2026-10-29)
+
+Today a venue
+has one main box and at most one spare: Litestream 0.5 streams a database to one place only, so
+the main box streams to a store on the spare and the spare passes it on to the bucket
+([A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), "The main box
+streams to an S3 store that runs on the spare box"). The owner's idea: a till box (A1203) is
+similar hardware, so it could also be a spare. Needs a design: how a second spare receives the
+stream, which spare takes over, and how alerts and the update order (A950) work with two.
+
+## A1171: the address forms need a provider from the Cloud address-lookup bridge
+
+Nothing hands
+`wt-address-lookup` a provider yet. Waitron Cloud's proposed design also asks for provider
+attribution beside the list, a confirm call at Save, an allowance message, a province inferred
+from a postcode shown for review, its own session token, and the provider's area codes turned
+into the pack's. When the search first shows, the guides that describe these forms gain a line: the
+till's full-invoice section in `table-service.md`, and the "Full invoices" entry's "Who receives
+it" ("Destinatarios" in es) and the invoice notice in `data-protection.md`, en and es, with the
+emailed notice in `apps/server/src/i18n/invoice-email-notice.ts`, since the provider then
+receives what staff type into the till's address search and which suggestion they pick. Left
+open by A1171.
+
+## A1185: a venue not yet connected sees no prices
+
+The Cloud services screen shows the plan
+and prices only once connected, because Cloud's "Venue billing display, version 1" answers a
+paired installation alone; whether Cloud publishes a price list anyone can read is an open owner
+question (2026-10-29). Until then the screen offers only "Create a Cloud
+account". Left open by A1185.
+
+## A1188. Someone at the venue can start the venue in the cloud when the box has died (owner, 2026-10-29)
+
+Part of A1018 and Cloud's P6. The tills learn the venue's cloud address and
+show the emergency link to an administrator when the box disappears. The locked copy Cloud
+restores after a valid emergency code offers only an administrator sign-in; a manager
+holding `node.promote`, signing in with password and authenticator code, makes A1018's
+declaration that the box is off, and only if the Cloud owner agreed in advance.
+[Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §7.
+Design approved 2026-10-29: administrators by default, and other roles once A1002 lets a venue
+give them the permission; printers and drawers wait for A1175's Android app, while card readers
+follow, being reached over the internet (owner, 2026-10-29).
+Building waits for A947's strip and Cloud's half:
+[A1188 design](../superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
+
 ## Decisions and deliberate limits
 
 **SQLite + Litestream replaces PostgreSQL** (owner decision 2026-09-16). The architecture is
@@ -449,6 +494,13 @@ on 2026-09-22: provisioning, cloud-only redundancy, trials, remote access, provi
 and cloud operations. See [documentation ownership](../cloud-ownership.md).
 
 ## A951. The box's lasting tunnel and public-certificate client
+
+Build approved;
+exact D560 G1 mapping accepted for isolated planning only.
+Full appliance/host acceptance, approval/provisioning/PP consumers, signed corpus
+and E's matching D136 routing record remain open. E's next execution step is
+**BLOCKED on G7 real-host evidence: Docker/bench with the owner, 3 November 2026**.
+Admission CLOSED; other scoped gates remain.
 
 All five cuts of the [plan](../superpowers/plans/2026-10-22-a951-connection.md)
 have owner build approval. Use its newest dated amendment and the

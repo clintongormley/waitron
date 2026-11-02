@@ -5762,28 +5762,19 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 ### Replication, failover and the cloud
 
-- **A1205: more than one spare box at a venue, after go-live (owner, 2026-10-29).** Today a venue
-  has one main box and at most one spare: Litestream 0.5 streams a database to one place only, so
-  the main box streams to a store on the spare and the spare passes it on to the bucket
-  ([A947 design](superpowers/specs/2026-10-21-a947-two-box-failover-design.md), "The main box
-  streams to an S3 store that runs on the spare box"). The owner's idea: a till box (A1203) is
-  similar hardware, so it could also be a spare. Needs a design: how a second spare receives the
-  stream, which spare takes over, and how alerts and the update order (A950) work with two.
+- **A1205: more than one spare box at a venue, after go-live (owner, 2026-10-29).** The owner's
+  idea: a till box (A1203) is similar hardware, so it could also be a spare. Needs a design: how a
+  second spare receives the stream, which spare takes over, and how alerts and the update order
+  (A950) work with two.
+  [Detail](backlog/replication-cloud.md#a1205-more-than-one-spare-box-at-a-venue-after-go-live-owner-2026-10-29)
 
 _Formerly _Afterwards_ and _Cloud connection integration_._ Detail: [backlog/replication-cloud.md](backlog/replication-cloud.md).
 
 Not in any track until the standalone primary is done.
 
 - **A1171: the address forms need a provider from the Cloud address-lookup bridge.** Nothing hands
-  `wt-address-lookup` a provider yet. Waitron Cloud's proposed design also asks for provider
-  attribution beside the list, a confirm call at Save, an allowance message, a province inferred
-  from a postcode shown for review, its own session token, and the provider's area codes turned
-  into the pack's. When the search first shows, the guides that describe these forms gain a line: the
-  till's full-invoice section in `table-service.md`, and the "Full invoices" entry's "Who receives
-  it" ("Destinatarios" in es) and the invoice notice in `data-protection.md`, en and es, with the
-  emailed notice in `apps/server/src/i18n/invoice-email-notice.ts`, since the provider then
-  receives what staff type into the till's address search and which suggestion they pick. Left
-  open by A1171.
+  `wt-address-lookup` a provider yet. Left open by A1171.
+  [Detail](backlog/replication-cloud.md#a1171-the-address-forms-need-a-provider-from-the-cloud-address-lookup-bridge)
 
 - **A1171: the dashboard's Venue card knows a province only by its code and main name.** The server's
   `provinces` list carries no other names, so a chosen address naming "Alicante" for
@@ -5791,33 +5782,19 @@ Not in any track until the standalone primary is done.
   Matters once a provider exists. Left open by A1171 parts 1–2 (#2191).
 
 - **A1018. Simple controlled and emergency handover, with Cloud only a placement.** M2 handles all AEAT communication after either takeover; returning M1 transfers fiscal originals/outcomes only.
-  The owner approved both Harbour Kitchen handovers and retained defaults on 24 October 2026, and
-  gave build authority on 1 November. The [build plan](superpowers/plans/2026-11-02-a1018-handover-build.md)
-  cuts the work into slices; its formats are [local-only, version 1](superpowers/plans/2026-11-02-a1018-handover-build.md#formats-local-only-version-1),
-  and the [A947 amendment](superpowers/specs/2026-10-21-a947-two-box-failover-design.md) is written.
+  The [build plan](superpowers/plans/2026-11-02-a1018-handover-build.md) cuts the work into slices.
   Its two owner questions (returned invoices in modelo 303; the emergency minute wait) stay open,
-  built on their defaults, and gate only Slice 12b and Task 7.4b. Physical runtime qualification on
-  real boxes remains the owner's, after A947 3b/3c ([owner task](superpowers/plans/2026-11-02-a1018-handover-build.md#owner-task-physical-qualification-on-real-boxes)).
+  built on their defaults, and gate only Slice 12b and Task 7.4b.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
-- **A1185: a venue not yet connected sees no prices.** The Cloud services screen shows the plan
-  and prices only once connected, because Cloud's "Venue billing display, version 1" answers a
-  paired installation alone; whether Cloud publishes a price list anyone can read is an open owner
-  question (2026-10-29). Until then the screen offers only "Create a Cloud
-  account". Left open by A1185.
+- **A1185: a venue not yet connected sees no prices.** Left open by A1185.
+  [Detail](backlog/replication-cloud.md#a1185-a-venue-not-yet-connected-sees-no-prices)
 
 - **A1188. Someone at the venue can start the venue in the cloud when the box has died (owner,
-  2026-10-29).** Part of A1018 and Cloud's P6. The tills learn the venue's cloud address and
-  show the emergency link to an administrator when the box disappears. The locked copy Cloud
-  restores after a valid emergency code offers only an administrator sign-in; a manager
-  holding `node.promote`, signing in with password and authenticator code, makes A1018's
-  declaration that the box is off, and only if the Cloud owner agreed in advance.
-  [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §7.
-  Design approved 2026-10-29: administrators by default, and other roles once A1002 lets a venue
-  give them the permission; printers and drawers wait for A1175's Android app, while card readers
-  follow, being reached over the internet (owner, 2026-10-29).
-  Building waits for A1018's build approval, A947's strip and Cloud's half:
+  2026-10-29).** Part of A1018 and Cloud's P6. Design approved 2026-10-29. Building waits for
+  A947's strip and Cloud's half:
   [A1188 design](superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
+  [Detail](backlog/replication-cloud.md#a1188-someone-at-the-venue-can-start-the-venue-in-the-cloud-when-the-box-has-died-owner-2026-10-29)
 
 - **The till's theme fetch does not follow a server move (A841 slice 3).** The till fetches
   `/api/theme` from the page's own address, not through `ServerRouter`; moved to another server, it
@@ -5840,9 +5817,8 @@ Not in any track until the standalone primary is done.
   `reconcileMembershipOnBoot` returns.**
   [Detail](backlog/replication-cloud.md#the-boot-time-fetch-is-given-only-the-url--and-boot-never-reads-the-superseded-that-reconcilemembershiponboot-returns)
 
-- **The tunnel's stand-in relay pairs with sockets that have already gone.** When a parked box
-  closes, it stays in `idle` until a client takes it, so the next client is paired with the dead
-  box and its bytes go nowhere. Only fix this if `@waitron/tunnel` outlives its planned retirement.
+- **The tunnel's stand-in relay pairs with sockets that have already gone.** Only fix this if
+  `@waitron/tunnel` outlives its planned retirement.
   [Detail](backlog/replication-cloud.md#the-tunnels-stand-in-relay-pairs-with-sockets-that-have-already-gone)
 
 **The on-prem mirror.** Read this section as requirements slices 3–5 must meet, not as work
@@ -5853,11 +5829,8 @@ outstanding on code that exists.
   ambient administrator. A usable release also needs qualified account-copy freshness.
   [Design](superpowers/specs/2026-10-26-a1111-mirror-personal-sign-in-design.md)
 
-- **A947. Go-live on two local boxes.** The owner approved the revised design; slice 4a landed as
-  [#1990](https://github.com/clintongormley/waitron/pull/1990) on 2026-10-24, and slice 3a
-  ([plan](superpowers/plans/2026-10-31-a947-3a-node-db.md)), which moves what a box remembers about
-  itself into its own `node.db`, as [#2371](https://github.com/clintongormley/waitron/pull/2371) on
-  2026-11-01. Slices 3b onwards are still open. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
+- **A947. Go-live on two local boxes.** The owner approved the revised design. Slices 3b onwards
+  are still open. [Detail](backlog/replication-cloud.md#a947-go-live-on-two-local-boxes)
 
 - **A1273: the shared key ring has no rotation path to the spare.** A spare gets the main box's
   ring only when it joins. For slices 3b and 3c.
@@ -5954,11 +5927,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   integration (2026-09-24; #638, #808).
 
 - **A951. The box's lasting tunnel and public-certificate client.** Build approved;
-  exact D560 G1 mapping accepted for isolated planning only.
-  Full appliance/host acceptance, approval/provisioning/PP consumers, signed corpus
-  and E's matching D136 routing record remain open. E's next execution step is
+  exact D560 G1 mapping accepted for isolated planning only. E's next execution step is
   **BLOCKED on G7 real-host evidence: Docker/bench with the owner, 3 November 2026**.
-  Admission CLOSED; other scoped gates remain.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side
