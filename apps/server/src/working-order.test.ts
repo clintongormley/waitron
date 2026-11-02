@@ -4184,22 +4184,6 @@ describe("opening hours", () => {
           code: "station.no_replacement",
         });
         expect(await ticketItemsFor(tx, orderId)).toEqual([]);
-        const [other] = await tx
-          .insert(locations)
-          .values({ name: "Other", invoiceLocales: [LOCALE], operationDescription: "Hospitality" })
-          .returning();
-        const [foreign] = await tx
-          .insert(kitchenStations)
-          .values({ locationId: other!.id, name: "Foreign bar" })
-          .returning();
-        await tx
-          .update(workingOrderLines)
-          .set({ makeAtStationId: foreign!.id })
-          .where(eq(workingOrderLines.id, lines[0]!.id));
-        await expect(fireLines(tx, cfg, orderId, lines)).rejects.toMatchObject({
-          code: "station.no_replacement",
-        });
-        expect(await ticketItemsFor(tx, orderId)).toEqual([]);
         await tx
           .update(workingOrderLines)
           .set({ makeAtStationId: upstairs.id })

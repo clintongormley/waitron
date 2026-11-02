@@ -184,13 +184,17 @@ async function replaceProfileKitchenScreens(
     .from(devices)
     .where(and(eq(devices.deviceProfileId, profileId), isNull(devices.deletedAt)))
     .orderBy(asc(devices.label), asc(devices.id));
-  const before = { formFactor, screens: await profileScreens(tx, profileId) };
+  const before =
+    onProfile.length === 0
+      ? undefined
+      : { formFactor, screens: await profileScreens(tx, profileId) };
 
   await tx
     .delete(deviceProfileKitchenScreens)
     .where(eq(deviceProfileKitchenScreens.deviceProfileId, profileId));
   for (const { kind, scope } of checked) await insertScreen(tx, profileId, kind, scope);
 
+  if (before === undefined) return [];
   const after = { formFactor, screens: await profileScreens(tx, profileId) };
   return narrowDevices(tx, onProfile, before, after);
 }
@@ -849,8 +853,7 @@ async function narrowDevices(
 
 /**
  * Narrows the device from its current profile to `profileId`, before a switch writes it, and gives
- * back what `profileId` allows again;
- * null when it loses nothing, or is unknown.
+ * back what `profileId` allows again; null when it loses nothing, or is unknown.
  */
 export async function narrowDeviceKitchenScreens(
   tx: Transaction,

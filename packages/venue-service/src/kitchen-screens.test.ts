@@ -2004,6 +2004,17 @@ describe("the statements a device's kitchen screens are read in", () => {
       );
     }
   });
+
+  it("saves a profile with no devices without reading any device's screens", async () => {
+    const venue = await seedVenue();
+    const statements = await statementsOf((tx) =>
+      setProfileKitchenScreens(tx, venue.cfg, venue.kds, { station: every }),
+    );
+    expect(statements.filter(from("device_kitchen_screen_removals"))).toEqual([]);
+    expect(statements.filter(from("device_kitchen_screens"))).toEqual([]);
+    const reads = statements.filter((query) => query.sql.startsWith("select"));
+    expect(reads.filter(from("device_profile_kitchen_screens"))).toHaveLength(1);
+  });
 });
 
 describe("a device's kitchen screens counted and removed", () => {
