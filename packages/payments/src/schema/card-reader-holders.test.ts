@@ -3,14 +3,13 @@ import {
   CORE_MIGRATIONS,
   captureError,
   deviceProfiles,
-  devices,
   isUniqueViolation,
-  locations,
   tenants,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
 import { freshNif } from "../../test/seed.js";
 import { cardReaderHolders } from "./card-reader-holders.js";
@@ -23,25 +22,19 @@ async function seed(db: Database) {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: freshNif(), legalName: "Test SL" })
     .onConflictDoNothing({ target: tenants.id });
-  const [location] = await db
-    .insert(locations)
-    .values({ name: "Counter", invoiceLocales: ["es"], operationDescription: "Hostelería" })
-    .returning({ id: locations.id });
+  await seedVenue(db, {
+    name: "Counter",
+    invoiceLocales: ["es"],
+    operationDescription: "Hostelería",
+  });
   const [profile] = await db
     .insert(deviceProfiles)
     .values({ name: "Profile", formFactor: "till" })
     .returning({ id: deviceProfiles.id });
-  const made = await db
-    .insert(devices)
-    .values(
-      ["Till A", "Till B"].map((label) => ({
-        locationId: location!.id,
-        deviceProfileId: profile!.id,
-        label,
-        tokenHash: "scrypt$00$00",
-      })),
-    )
-    .returning({ id: devices.id });
+  const made = [
+    await seedDevice(db, { profileId: profile!.id, label: "Till A" }),
+    await seedDevice(db, { profileId: profile!.id, label: "Till B" }),
+  ].map(({ deviceId }) => ({ id: deviceId }));
   const readers = await db
     .insert(cardReaders)
     .values(

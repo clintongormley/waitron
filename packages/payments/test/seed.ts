@@ -5,15 +5,19 @@ import {
   billPayments,
   invoiceSeries,
   locations,
-  nodes,
   sales,
   tenants,
   tenders,
+  venueLocationId,
   withTransaction,
-  workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedNode,
+  seedVenue,
+  seedWorkingOrder as seedOrder,
+} from "@waitron/db/testing/seed.js";
 import { cardReaderHolders } from "../src/schema/card-reader-holders.js";
 import { cardReaders } from "../src/schema/card-readers.js";
 import { paymentPolicy } from "../src/schema/payment-policy.js";
@@ -40,8 +44,8 @@ export function freshNif(): string {
 }
 
 /**
- * Seeds tenant → location → till device → node → open working_order and returns their
- * ids.
+ * Seeds the tenant, the venue (on first use), a node, a till device and an open working order,
+ * and returns their ids.
  *
  * Written through the table definitions rather than as raw SQL: `id` and `created_at` are
  * `$defaultFn` generators only the insert BUILDER runs, and `invoice_locales` is a list the
@@ -52,21 +56,18 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nif, legalName: "Test SL" })
     .onConflictDoNothing({ target: tenants.id });
-  const [location] = await db
-    .insert(locations)
-    .values({ name: "Counter", invoiceLocales: ["es"], operationDescription: "Retail" })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
-  const [node] = await db
-    .insert(nodes)
-    .values({ locationId, name: "Node 1" })
-    .returning({ id: nodes.id });
-  const { deviceId } = await seedDevice(db, { locationId });
-  const [wo] = await db
-    .insert(workingOrders)
-    .values({ source: "device", deviceId, locationId, orderNumber: 1 })
-    .returning({ id: workingOrders.id });
-  return { locationId, deviceId, nodeId: node!.id, workingOrderId: wo!.id };
+  const [venue] = await db.select({ id: locations.id }).from(locations).limit(1);
+  if (venue === undefined)
+    await seedVenue(db, {
+      name: "Counter",
+      invoiceLocales: ["es"],
+      operationDescription: "Retail",
+    });
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
+  const { deviceId } = await seedDevice(db);
+  const order = await seedOrder(db, { source: "device", deviceId });
+  return { locationId, deviceId, nodeId, workingOrderId: order.id };
 }
 
 const SEEDED_AT = new Date("2026-07-01T12:00:00Z").toISOString();

@@ -10,6 +10,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue as seedVenueRow, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import {
   addDecimal,
@@ -61,7 +62,6 @@ async function person(name: string, status?: "suspended"): Promise<string> {
   return row!.id;
 }
 
-let locationId: string;
 let orderNumber = 0;
 
 /** A bill opened from the dashboard at `openedAt`, at this test's location, made on first use. */
@@ -69,25 +69,19 @@ async function bill(
   opts: { openedAt?: string } = {},
 ): Promise<{ id: string; orderNumber: number }> {
   const [location] = await db.select({ id: locations.id }).from(locations);
-  if (location === undefined) {
-    [{ id: locationId }] = (await db
-      .insert(locations)
-      .values({ name: "Sala", invoiceLocales: ["es"], operationDescription: "Restaurante" })
-      .returning({ id: locations.id })) as [{ id: string }];
-  } else {
-    locationId = location.id;
-  }
+  if (location === undefined)
+    await seedVenueRow(db, {
+      name: "Sala",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurante",
+    });
   orderNumber += 1;
-  const [order] = await db
-    .insert(workingOrders)
-    .values({
-      source: "dashboard",
-      deviceId: null,
-      locationId,
-      orderNumber,
-      openedAt: opts.openedAt ?? EVENING,
-    })
-    .returning({ id: workingOrders.id });
+  const order = await seedWorkingOrder(db, {
+    source: "dashboard",
+    deviceId: null,
+    orderNumber,
+    openedAt: opts.openedAt ?? EVENING,
+  });
   return { id: order!.id, orderNumber };
 }
 

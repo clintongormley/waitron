@@ -1,10 +1,10 @@
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
-import { CORE_MIGRATIONS, locations, tenants, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, tenants, withTransaction, venueLocationId } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { createAdjustmentReason, listAdjustmentReasons } from "./operations.js";
@@ -31,11 +31,14 @@ async function provisionedNode({
 }) {
   await seedTenant(db);
   await db.update(tenants).set({ country }).where(eq(tenants.id, 1));
-  const [location] = await db
-    .insert(locations)
-    .values({ name: "Venue", province, invoiceLocales, operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
-  const locationId = brandLocationId(location!.id);
+  await seedVenue(db, {
+    name: "Venue",
+    province,
+    invoiceLocales,
+    operationDescription: "Hospitality",
+  });
+  const venueId = await venueLocationId(db);
+  const locationId = brandLocationId(venueId);
   return { locationId, nodeId: await seedNode(db, locationId) };
 }
 

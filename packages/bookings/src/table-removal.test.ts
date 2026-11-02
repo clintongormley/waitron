@@ -1,10 +1,17 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { floorTodayTables, floorZones, newId, nowIso, withTransaction } from "@waitron/db";
+import {
+  floorTodayTables,
+  floorZones,
+  newId,
+  nowIso,
+  venueLocationId,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import { getBooking } from "./bookings.js";
@@ -24,14 +31,13 @@ interface Venue {
 }
 
 async function setupVenue(timeZone = "Europe/Madrid"): Promise<Venue> {
-  await seedTenant(db);
-  // Raw SQL names `id` because it has no SQL default: drizzle's `$defaultFn` fills it for builder
-  // inserts only.
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (id, name, invoice_locales, operation_description, time_zone)
-    values (${newId()}, 'Front counter', '["es-ES"]', 'Restaurant service', ${timeZone})
-    returning id`);
-  return { locationId: brandLocationId(loc.rows[0]!.id) };
+  await seedVenue(db, {
+    name: "Front counter",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant service",
+    timeZone,
+  });
+  return { locationId: brandLocationId(await venueLocationId(db)) };
 }
 
 async function makeTable(v: Venue, label: string): Promise<string> {

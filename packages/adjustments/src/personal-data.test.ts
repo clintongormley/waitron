@@ -1,13 +1,7 @@
 import { randomUUID } from "node:crypto";
-import {
-  CORE_MIGRATIONS,
-  locations,
-  withTransaction,
-  workingOrders,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { jsonFile } from "@waitron/module";
 import { describe, expect, it } from "vitest";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
@@ -50,16 +44,14 @@ async function fileOf(personId: string): Promise<string> {
 }
 
 async function seedOrders(db: Database): Promise<Record<41 | 42 | 43, string>> {
-  const [location] = await db
-    .insert(locations)
-    .values({ name: "Dining room", invoiceLocales: ["es"], operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
+  await seedVenue(db, {
+    name: "Dining room",
+    invoiceLocales: ["es"],
+    operationDescription: "Hospitality",
+  });
   const orders = {} as Record<41 | 42 | 43, string>;
   for (const orderNumber of [41, 42, 43] as const) {
-    const [order] = await db
-      .insert(workingOrders)
-      .values({ source: "dashboard", deviceId: null, locationId: location!.id, orderNumber })
-      .returning({ id: workingOrders.id });
+    const order = await seedWorkingOrder(db, { source: "dashboard", deviceId: null, orderNumber });
     orders[orderNumber] = order!.id;
   }
   return orders;

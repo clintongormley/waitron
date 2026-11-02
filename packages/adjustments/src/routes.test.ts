@@ -4,14 +4,13 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  locations,
   withTransaction,
   workingOrderLines,
-  workingOrders,
   type Database,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue, seedWorkingOrder as seedOrder } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   IDENTITY_MIGRATIONS,
@@ -627,29 +626,23 @@ describe("adjustment report routes", () => {
   /** A venue in Madrid with one bill: a €20.00 line credited to the supervisor, who took €5.00
    * off it, and a guest's cancellation of a €4.00 item. */
   async function reportFixture(): Promise<ReportFixture> {
-    const [location] = await db
-      .insert(locations)
-      .values({
-        name: "Sala",
-        invoiceLocales: ["es"],
-        operationDescription: "Restaurante",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00:00",
-      })
-      .returning({ id: locations.id });
-    const fx = await fixture(location!.id);
+    await seedVenue(db, {
+      name: "Sala",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurante",
+      timeZone: "Europe/Madrid",
+      dayCutover: "05:00:00",
+    });
+    const venueId = await venueLocationId(db);
+    const fx = await fixture(venueId);
     const people = await db.select({ id: persons.id, role: persons.role }).from(persons);
     const idOf = (role: PersonRoleValue) => people.find((p) => p.role === role)!.id;
-    const [bill] = await db
-      .insert(workingOrders)
-      .values({
-        source: "dashboard",
-        deviceId: null,
-        locationId: location!.id,
-        orderNumber: 41,
-        openedAt: "2026-09-15T18:00:00.000Z",
-      })
-      .returning({ id: workingOrders.id });
+    const bill = await seedOrder(db, {
+      source: "dashboard",
+      deviceId: null,
+      orderNumber: 41,
+      openedAt: "2026-09-15T18:00:00.000Z",
+    });
     await db.insert(workingOrderLines).values({
       workingOrderId: bill!.id,
       lineNo: 1,

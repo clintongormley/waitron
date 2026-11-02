@@ -7,11 +7,12 @@ import {
   floorZones,
   newId,
   nowIso,
+  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import { BOOKINGS_FLOOR_ANNOTATIONS } from "./floor.js";
@@ -30,16 +31,14 @@ interface Venue {
 }
 
 async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
-  await seedTenant(db);
-  const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
-  // Raw SQL names `id` because it has no SQL default: drizzle's `$defaultFn` fills it for builder
-  // inserts only. `invoice_locales` is a JSON array stored as text.
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (id, name, invoice_locales, operation_description, time_zone)
-    values (${newId()}, 'Front counter', '["es-ES"]', 'Restaurant service', ${timeZone})
-    returning id`);
+  await seedVenue(db, {
+    name: "Front counter",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant service",
+    timeZone: opts.timeZone ?? DEFAULT_TIME_ZONE,
+  });
   return {
-    locationId: brandLocationId(loc.rows[0]!.id),
+    locationId: brandLocationId(await venueLocationId(db)),
   };
 }
 

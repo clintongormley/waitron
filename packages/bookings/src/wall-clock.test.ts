@@ -1,24 +1,25 @@
-import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { newId, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { venueWallClockAt } from "./wall-clock.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
 
 const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 
 let db: Database;
-beforeAll(async () => {
+beforeAll(() => {
   db = suite.db;
-  await seedTenant(db);
 });
 
 async function makeVenue(timeZone: string): Promise<void> {
-  await db.execute(sql`
-    insert into locations (id, name, invoice_locales, operation_description, time_zone)
-    values (${newId()}, 'Front counter', '["es-ES"]', 'Restaurant service', ${timeZone})`);
+  await seedVenue(db, {
+    name: "Front counter",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant service",
+    timeZone,
+  });
 }
 
 // 00:30 on 2026-09-16 in Madrid (CEST), 18:30 on 2026-09-15 in New York (EDT).
