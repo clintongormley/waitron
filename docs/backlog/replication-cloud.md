@@ -442,50 +442,50 @@ and cloud operations. See [documentation ownership](../cloud-ownership.md).
 ## A951. The box's lasting tunnel and public-certificate client
 
 All five cuts of the [plan](../superpowers/plans/2026-10-22-a951-connection.md)
-have owner build approval (23 October 2026). The [intake](../developers/cloud-connection.md#a951-build-intake)
-records exact artifact digests and path-scoped acceptances; do not ask again for
-generic build permission. Lane E owns the Waitron client/local boundary, G the
-Cloud contract and mapping, D deployment and D88.
+have owner build approval. Use its newest dated amendment and the
+[intake](../developers/cloud-connection.md#a951-build-intake) for exact pins,
+digests and scope. E/G accept D560's documented G1 host/custody mapping solely
+for isolated planning. Full appliance and host-amendment acceptance, executable
+consumers and a qualified runtime pair remain NONE.
 
-The [host/custody amendment](../superpowers/specs/2026-11-02-a951-host-custody-amendment.md),
-`waitron-a951-host-custody-v1` / `proposal-2026-11-02.1`, now supplies the proposed
-caller/service identities, Unix and TCP socket custody, failure/restart rules,
-exact-pin inventory and qualification matrix. Its full publication-artifact digest
-is recorded in the plan and intake. The reviewed proposal supplies no native build
-or host evidence.
+Keep the remaining work separate:
 
-Keep these remaining gates separate:
+- **G1, E/G:** implement and accept the named AP-establish/recover/reconnect
+  consumers, authenticated AP-channel/one-use ledger, REG/POL/PEER/KEY and
+  protected PP realization. Return the full revised appliance edition and complete
+  expanded signed-byte corpus; record both resulting full consumer pins before
+  affected integration. Preserve D132's bounds, complete 256-entry lifetime
+  history, four independent 64 KiB safety copies and one shared 256 KiB journal
+  with its emergency reserve inside the total. Shared admission heads remain
+  separate from helper replay and observation/custody progress. Stops win over
+  prepared commits and late opens. Intact reboot, damaged-state recovery and
+  reconnect after a local stop keep their separate authenticated requirements.
+- **G7 real host, E:** the next A951 execution step remains **BLOCKED on
+  Docker/bench with the owner on 3 November 2026**. Obtain populated exact
+  host/build/image/profile/unit/mount pins, GUARD16's complete bounded inventory,
+  protected-store/participant evidence and network/listener-custody measurements.
+  Qualify full-budget closure, crash/stop races and suspension separately.
+  Proposed native entries and scheduled experiments supply no runtime proof.
+- **G2:** obtain the actual A947 current-authority/freshness/withdrawal consumer
+  and accepted source-floor mapping, reconciled with the approved A1018 direction
+  and D88. Endpoint identity, a role boolean, lease or tunnel supplies no authority.
+- **G3/G4/G5:** retain unchanged opt-in test-only staff v1 and its client-policy
+  gate; separately agree public-upstream identity/issuer/trust/mTLS and
+  movement/replacement. Moves and replacement remain refused in this profile.
+- **G6:** record E's matching acceptance of Cloud D136's exact routing revision 2
+  before isolated shared-parser code. Diagnostic/export and flow-scoped A980/D101
+  processing, access, destinations and retention remain open, including staff
+  metadata. Local receipts grant no export permission.
 
-- **G1 mapping, Lane G after D462:** map appliance/helper safety, temporary versus
-  latched closures, complete trust history, reconnect consumption and intact-reboot
-  revalidation against the new amendment digest. Retain D132's bounds, signed-byte
-  corpus and real approval/provisioning-consumer requirements. Appliance acceptance
-  and real consumer pins remain open. The exact original helper profile is already
-  accepted solely for isolated T3 implementation; its bytes stay unchanged.
-- **G7 real host, Lane E:** the next A951 execution step is **BLOCKED on Docker/
-  bench with the owner on 3 November 2026**. Collect the exact kernel/runtime/
-  binaries/images/profiles/mount pins and actual network/listener-custody evidence.
-  Future native entries and kernel primitives remain unimplemented/unqualified;
-  neither the scheduled date nor source inspection is runtime evidence.
-- **G2:** obtain actual A947 current-authority, freshness and withdrawal consumers,
-  reconciled with the revised A1018/D88 direction. Endpoint identity, control lease,
-  tunnel and certificates supply no writer, clock, restore or fiscal authority.
-- **G3/G4/G5:** preserve staff CSR v1 opt-in/test-only restrictions; separately
-  agree upstream identity/issuer/mutual TLS and movement/replacement. No overlapping
-  candidate or replacement adapter follows from host custody.
-- **G6:** obtain full [routing revision 2](../superpowers/specs/2026-10-23-a951-routing-v1-revision2.md)
-  acceptance before shared-parser code; the exact empty manifest is already accepted
-  separately. Diagnostic/export and flow-scoped A980/D101 processing, access,
-  destination and retention remain open, including staff transport metadata.
-
-A951's design supplies reachability for one venue. It keeps staff TLS ending at
-the box and public HTTPS ending at Cloud with a separate authenticated encrypted upstream. Production
-customer manifests remain empty, real admission CLOSED and `.local` independent.
-Customer pages, routes, credentials, business operations and availability belong
-to A1013 bookings, A508 table QR, A509 collection and later A1012 delivery. No
-publication/pause controls, offsite acceptance queue or provider/fiscal operation
-are added by this amendment. Remaining host/device/origin evidence is path-scoped;
-a passing isolated fixture does not qualify another path or a runtime pair.
+A951 supplies reachability for one venue without a location parameter, schema or
+fixture. Keep staff TLS ending at the box, public HTTPS ending at Cloud with its
+independent authenticated upstream, the original 83-byte empty production
+manifest without final LF, admission CLOSED and `.local` independent.
+Customer pages, routes, credentials and business operations remain with A1013
+bookings, A508 table QR, A509 collection and later A1012 delivery. No live
+permission, production, provider, deployment, publication/pause, writer or fiscal
+change follows. New mapping/host vectors remain UNRUN until their exact consumers
+and host are exercised.
 
 ## A mirror keeps a renamed server's old chart (A917)
 
