@@ -10,8 +10,15 @@ as published at Waitron `2c13c7f55dd53a6a7b4d4423ccdc166df5af7397`: both Harbour
 Kitchen handovers (§§8–9) and the retained defaults (§§3, 5 and 7). M2 alone handles
 AEAT after either takeover; returning M1 transfers only fiscal originals and
 received AEAT outcomes.
-Keep the remaining work open: exact formats, compatible A947 amendments, separate
-build authority and physical runtime qualification.
+The owner gave build authority on 2026-11-01. The
+[build plan](../superpowers/plans/2026-11-02-a1018-handover-build.md) sets the formats as
+[local-only, version 1](../superpowers/plans/2026-11-02-a1018-handover-build.md#formats-local-only-version-1),
+and the A947 amendment is written (the dated A1018 block at the top of the
+[A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md)). Its
+[two owner questions](../superpowers/plans/2026-11-02-a1018-handover-build.md#questions-for-the-owner)
+stay open, built on their defaults: Q1, returned invoices count in modelo 303; Q2, the emergency
+takes the next free minute. Physical qualification on real boxes is the owner's
+([owner task](../superpowers/plans/2026-11-02-a1018-handover-build.md#owner-task-physical-qualification-on-real-boxes)).
 
 **Amended Cloud agreement published, 2026-10-23 (D133):**
 [Cloud #323](https://github.com/waitron-io/waitron-cloud/pull/323), signed
@@ -77,9 +84,9 @@ references are new M2-owned records. No automatic wipe precedes fiscal receipts,
 transferred totals, health and verified archive gates. A lost disk leaves an explicit unknown
 gap and the standing consultation/month-end follow-up, not invented fiscal originals or a
 claim that AEAT restores business data. Preserve A947 §7.1's receiver-files/sender-files-nothing
-direction and S2 full-state/replay controls. A947 §§6.3/7.1/7.2 and dependent slices still need
-explicit amendment for the checkpoints, fiscal-only scope of its broader ledger tail,
-business reconciliation and archive/deletion policy, not a reversal of emergency filing ownership.
+direction and S2 full-state/replay controls. The A947 amendment (2026-11-02) covers §§6.3, 6.4,
+7, 7.1, 7.2 and 11: the checkpoints, the fiscal-only tail, business reconciliation and the
+archive's deletion, not a reversal of emergency filing ownership.
 Cold restore stays an explicit fresh-chain/data-loss choice with its existing recovery
 source, operation, key and sole-recovery gates, no new hard-stop demand and no silent fallback.
 
@@ -88,9 +95,8 @@ in the Cloud repository.
 Four questions for Cloud were sent on 2026-11-02 to the campaign watcher for Cloud's lane G: the
 authentication bridge, the declaration's provider-resource field, a hosted M2 not in M1's chart,
 and Cloud's resource journal bound to the same operation. No local slice waits for the answer.
-Wire details, the node-local inventory, Cloud authorisation mapping, separately authorised
-implementation and joint behavioural/adverse controls remain open. Runtime checks are UNRUN
-for this docs task; no provider work is authorised.
+Wire formats for a Cloud placement, Cloud authorisation mapping and joint behavioural/adverse
+controls remain open; no provider work is authorised.
 
 ## A completed provision or adopt operation replayed on a later request still answers 200 without restarting and keeps the setup lock set
 
@@ -507,6 +513,8 @@ about itself is in its own `node.db`. The owner answered yes to both its questio
 the box's role is saved a moment after the switch's fiscal save, and a spare checks the main box's
 certificate fingerprint before it receives the venue's keys. Slices 3b onwards are still open;
 A1273 to A1285, A1295 and A1296 are the loose ends slice 3a left.
+A1018's simple handover amends §§6.3, 6.4, 7, 7.1, 7.2 and 11 (the dated A1018 block at the top
+of the [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md), 2026-11-02).
 
 The owner, 2026-10-21: "For go live I want one box with failover to another
 local box." The [design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md) re-cuts

@@ -475,8 +475,10 @@ the same column.
   a bank decline keeps its existing retry key. Automatic resolution has no person in its audit row.
   Collection ownership is process-local. The provider sweep runs in every node role; only sale
   recovery and bill completion check for primary. Before enabling a second venue node, restrict
-  provider cancellation to its collection owner or add coordination between nodes. Today's venue
-  has one node (CLAUDE.md §5); this is not a claim of protection across nodes.
+  provider cancellation to its collection owner or add coordination between nodes; the A1018 build
+  plan's [Slice 4b](../superpowers/plans/2026-11-02-a1018-handover-build.md#slice-4b--payment-collection-belongs-to-one-box-a764)
+  builds the collection owner. Today's venue has one node (CLAUDE.md §5); this is not a claim of
+  protection across nodes.
   [Implementation plan](../superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,
