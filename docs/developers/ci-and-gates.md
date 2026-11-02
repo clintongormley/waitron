@@ -638,7 +638,8 @@ That matters because `sales.ts` is db's single entry in `scripts/mutation-shard.
 — the list of files split into line ranges so one file's cost spreads across several parallel jobs
 instead of dominating one — and the reason recorded beside it is that it "alone ran 186min while
 every other N=10 shard finished <=90min". Each range of a split file runs in a shard of its own,
-and the packer spreads the other files over the remaining shards by their size in bytes.
+and the packer spreads the other files over the remaining shards by their estimated seconds (see
+"db's mutation shards are packed by estimated cost" below).
 
 `schema-conformance.ts` ran in db shard 4 on 2026-10-12 (`node scripts/mutation-shard.mjs db 4 10`
 listed it),
@@ -647,6 +648,70 @@ which took 558 s on run `38241392066`, not the longest db shard (shard 10, 732 s
 
 To see where the mutation half applies: `ls packages/*/stryker.config.json`, then read its `mutate`
 list.
+
+## db's mutation shards are packed by estimated cost
+
+`scripts/mutation-shard.mjs` packs `packages/db`'s whole files (every file but the `HEAVY_FILES`
+ranges) into the nightly `mutation-db` shards by `packages/db/mutation-costs.json`, a table of
+estimated mutation seconds per file. A file the table does not name is weighed by its bytes at the
+table's own seconds per byte. `ui`, `ui-core` and `shared` have no table and are still packed by
+bytes.
+
+**Why (A1309).** The nightly run 41392057587 (2026-11-02) failed: `mutation-db (10)` was cancelled
+by its 25-minute job limit at 390 of 391 mutants. Two things lay behind it.
+
+- **Bytes do not predict cost, and the byte split reshuffles every night.** The files of every
+  shard outside the three `sales.ts` ranges changed between each of the three nightly runs of 2026-10-31 to 2026-11-02 (41171151689, 41275572381,
+  41392057587), because the split follows the files' sizes, which changed between the nights' trees. The shard holding
+  `src/backup-evidence.ts` (13 KB, about 530 mutants) spent 1,042, 1,159 and 1,258 s mutating on
+  those nights, a 20- to 24-minute job.
+- **Mutants that change nothing, covered by the whole suite.** `useVenueDb`'s per-test reset in
+  `src/testing/venue-db.ts` was guarded by `resetPerTest && db !== undefined && resetPlan !==
+  undefined`, and the plan is only ever set when the other two hold, so most mutants of that
+  condition change nothing. Each one runs every test that touches a database (1,265 in the reports)
+  and on CI's runners ends at Stryker's per-mutant timeout: the three timeouts in that file on
+  2026-10-31 and 2026-11-01 were all on that line. A947 slice 3a (#2371) added the same condition
+  for `node.db`. Locally (`pnpm exec stryker run --mutate "src/testing/venue-db.ts:213-216"
+  --concurrency 6 --force` on `main` at cbbec7ff2b), the two lines made 18 mutants: 8 killed,
+  7 survived and 3 timed out, the ten that survived or timed out all of the no-effect kind. The
+  failed shard had six timeouts by its 64th mutant. Its report was never written, so which six is
+  not known.
+
+**The fix.** The reset now keeps each file's handle and plan together and checks only that, so
+every mutant of the check changes what a test sees. The same local run over the two new lines
+(`--mutate "src/testing/venue-db.ts:219-220"`) made 6 mutants, all killed, each after 18 to 276
+tests; its mutation phase took 24 s, against 3 min 27 s for the old lines.
+
+**The cost model.** A Stryker report records no time per mutant, so `scripts/mutation-costs.mjs`
+estimates a file's seconds from what the report does record: 0.694 s per tested mutant, plus
+0.084 s for each test file a mutant's covering tests live in, plus 82.2 s per timed-out mutant.
+Those charges are a least-squares fit of the mutation phase (from "Initial test run succeeded" to
+"MutationTestExecutor Done" in the job log) of the 29 db shards with a report on those three nights,
+against their reports: root-mean-square error 113 s. Fitted on two nights and checked on the third,
+the worst shard was off by 250 to 275 s. Replayed over those reports, the byte split at the
+2026-11-02 tree put 417 to 1,131 estimated seconds in each of the seven shards; the cost split puts
+about 720 in each. The failed shard's files estimated 764 s, so the model does not explain that
+shard on its own: the extra timeouts, which no report recorded, are the rest.
+
+**Refreshing the table.** When a db shard drifts towards its limit, or after a change like A1309's
+that removes timed-out mutants:
+
+```bash
+gh run download <nightly run> -p 'mutation-report-db-shard-*' -D <scratch dir>
+node scripts/mutation-costs.mjs db packages/db/mutation-costs.json <scratch dir>/*/mutation.json
+```
+
+Several runs can be given at once; each file takes its median. The table committed with A1309 came
+from the three runs above, so `src/testing/venue-db.ts` still carries its three old timeouts
+(about 246 s) until the next refresh.
+
+The job logs, the reports, the fit and the replay are in `/Users/clintongormley/waitron-campaign-b/a1309/`,
+outside the repository.
+
+**Limits.** The model is a fit over three nights, not a measurement of any one file. The guard in
+`scripts/mutation-shard.test.mjs` checks only that db's table exists and holds positive seconds for
+unsplit `src/` files, never that it is fresh. Nothing guards against another condition, in code
+that every test runs, that its own guard already implies.
 
 ## Fiscal coverage uses four file shards
 

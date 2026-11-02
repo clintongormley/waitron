@@ -405,12 +405,15 @@ decides whether the rule covers every agent, then the two docs follow.
 
 ## The shard layout was measured against an engine that is gone
 
-The shard counts and their sizing arguments were all measured against PGlite.
-`packages/db`'s ten mutation shards have since been timed on SQLite: 5m00s to 11m41s on run
-38206876422 and 2.9 to 12.2 minutes on run 38241392066 (shard 10 the longest both times), and
-`mutation.yml`'s comment above `mutation-db` says ten may now be more than the work needs. The count
-has not been re-cut from those times. No local command produces the numbers, so re-cutting it has
-to wait for a real run.
+The shard counts and their sizing arguments were all measured against PGlite. On SQLite, the
+nightly runs of 2026-10-31 to 2026-11-02 (41171151689, 41275572381, 41392057587) show
+`packages/db`'s three `src/schema/sales.ts` ranges, each in a shard of its own because of
+`HEAVY_FILES`, taking 29 to 164 s of mutation work, while the other seven shards took 270 to
+1,258 s. Since A1309 those seven are packed by estimated cost (about 720 s each, by the model in
+[ci-and-gates.md](../developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost)).
+**Next action:** drop `sales.ts` from `HEAVY_FILES.db` and let the cost table place it, so all ten
+shards share the work; check a nightly run afterwards. The `ui` and `ui-core` splits have not been
+re-measured.
 
 
 

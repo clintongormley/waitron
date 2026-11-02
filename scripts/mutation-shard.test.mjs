@@ -1,5 +1,13 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +16,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import {
   assignShards,
+  fileWeights,
   HEAVY_FILES,
   missingHeavyFiles,
   mutateFiles,
@@ -63,9 +72,9 @@ function fixturePackage(files, content = "export const x = 1;\n") {
   return dir;
 }
 
-const f = (path, size) => ({ path, size });
+const f = (path, weight) => ({ path, weight });
 const weightOf = (files) => (shard) =>
-  shard.reduce((sum, path) => sum + files.find((x) => x.path === path).size, 0);
+  shard.reduce((sum, path) => sum + files.find((x) => x.path === path).weight, 0);
 
 describe("assignShards", () => {
   it("places every file in exactly one shard", () => {
@@ -96,6 +105,38 @@ describe("assignShards", () => {
 
   it("puts every file in the one shard when totalShards is 1", () => {
     expect(assignShards([f("a", 1), f("b", 2)], 1)).toEqual([["a", "b"]]);
+  });
+});
+
+describe("fileWeights", () => {
+  const sized = (path, size) => ({ path, size });
+
+  it("weighs every file by its bytes when the package has no cost table", () => {
+    expect(fileWeights([sized("a", 600), sized("b", 20)], undefined)).toEqual([
+      f("a", 600),
+      f("b", 20),
+    ]);
+  });
+
+  it("weighs a file the table names by its seconds, whatever its bytes", () => {
+    expect(fileWeights([sized("a", 600), sized("b", 20)], { a: 3, b: 90 })).toEqual([
+      f("a", 3),
+      f("b", 90),
+    ]);
+  });
+
+  it("weighs a file the table does not name by its bytes at the named files' seconds per byte", () => {
+    // 50 + 150 seconds over 100 + 200 bytes: two thirds of a second per byte.
+    const weights = fileWeights([sized("a", 100), sized("b", 200), sized("c", 30)], {
+      a: 50,
+      b: 150,
+    });
+    expect(weights[2].path).toBe("c");
+    expect(weights[2].weight).toBeCloseTo(20);
+  });
+
+  it("falls back to bytes when the table names none of the files", () => {
+    expect(fileWeights([sized("a", 600)], { gone: 9 })).toEqual([f("a", 600)]);
   });
 });
 
@@ -346,6 +387,23 @@ describe("shardFiles", () => {
     expect(shards).toEqual([...ranges.map((range) => [range]), ["src/a.ts"], ["src/b.ts"]]);
   });
 
+  it("packs by the package's cost table, so a small costly file gets a shard to itself", () => {
+    const others = ["src/a.ts", "src/b.ts", "src/c.ts", "src/d.ts", "src/e.ts"];
+    const dir = dbFixture(others);
+    writeFileSync(
+      join(dir, "packages", "db", "mutation-costs.json"),
+      JSON.stringify({
+        "src/a.ts": 1,
+        "src/b.ts": 1,
+        "src/c.ts": 1,
+        "src/d.ts": 1,
+        "src/e.ts": 100,
+      }),
+    );
+    const shards = [4, 5, 6].map((shard) => shardFilesOf("db", shard, 6, dir));
+    expect(shards).toEqual([["src/e.ts"], ["src/a.ts", "src/c.ts"], ["src/b.ts", "src/d.ts"]]);
+  });
+
   it("refuses a shard count that cannot hold the heavy ranges plus the other files", () => {
     const dir = dbFixture(["src/a.ts"]);
     expect(() => shardFilesOf("db", 1, 3, dir)).toThrow(
@@ -418,6 +476,25 @@ for (const pkg of ["db", "ui", "ui-core"]) {
     });
   });
 }
+
+describe("db's committed cost table", () => {
+  const tablePath = join(packageDir("db"), "mutation-costs.json");
+
+  it("exists, so db's shards are packed by estimated seconds rather than bytes", () => {
+    expect(existsSync(tablePath)).toBe(true);
+  });
+
+  it("holds a positive number of seconds for src/-relative files, none of them split", () => {
+    const table = JSON.parse(readFileSync(tablePath, "utf8"));
+    const entries = Object.entries(table);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const [path, seconds] of entries) {
+      expect(path).toMatch(/^src\/.+\.ts$/);
+      expect(Object.hasOwn(HEAVY_FILES.db, path)).toBe(false);
+      expect(typeof seconds === "number" && seconds > 0).toBe(true);
+    }
+  });
+});
 
 describe("the CLI leaves out a db file whose only suite is in another vitest project", () => {
   it("never lists src/english-only.ts in any shard", () => {

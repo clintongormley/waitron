@@ -118,6 +118,10 @@ hook, or how tests are scheduled:
 - **`apps/server`'s shards are packed by the committed duration table, not Vitest's hash split.**
   Refresh it with `scripts/test-durations.mjs` when a shard drifts past 4 minutes. Guard:
   `scripts/vitest-duration-sequencer.test.mjs`, weaker than its name: checks packing, not a Vitest run or freshness.
+- **`mutation-db`'s whole files are packed by the committed `packages/db/mutation-costs.json`, not
+  by bytes.** Refresh it with `scripts/mutation-costs.mjs` from a nightly run's reports when a shard
+  nears its 25-minute limit. Guard: the cost-table cases in `scripts/mutation-shard.test.mjs`, weaker
+  than their name: existence and shape, not freshness. [Receipt](docs/developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).
 - **Every CI test job should finish in about 4 minutes** (owner, 2026-10-09 and 2026-10-11).
   Fix the cause, never cut a check. Guards, weaker than the rule: the reporter only warns;
   `scripts/ci-workflow.test.mjs` pins shard counts and 10-minute limits.
@@ -777,6 +781,9 @@ browser test** — most of these rules exist because a test passed while proving
   renders.** Open it and LOOK, in both themes and at phone width. `apps/server`'s string-rendered
   pages have no harness: write the rendered string to a file and open it with the workspace's
   playwright Chromium.
+- **Code every database test runs — `useVenueDb`'s hooks — never checks something already
+  guaranteed**: that check's mutants change nothing, so each runs the whole suite, and on CI's
+  runners they timed out. Nothing guards it. [Receipt](docs/developers/ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).
 - **In `packages/db`, import inside a case only to assert what a source module builds on load;
   otherwise import at the top.** Its Stryker config uses `ignoreStatic`; nothing guards this.
 - **`toMatchObject` checks only the keys you list**; a key you never list is never checked at all.

@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, matchesGlob, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url";
  * What is mutated comes from the package's own `stryker.config.json` `mutate` list, so a CI shard
  * and a local `pnpm --filter <package> mutation` measure the same files. The unit of a slice is
  * usually a whole file; HEAVY_FILES names the files cut into Stryker `file.ts:startLine-endLine`
- * ranges by `splitRanges`.
+ * ranges by `splitRanges`. The whole files are packed by `packages/<package>/mutation-costs.json`
+ * (built by `scripts/mutation-costs.mjs`) where the package has one, and by bytes where it has none.
  */
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -99,16 +100,21 @@ export function shardFiles(pkg, shard, total, root = REPO_ROOT) {
     );
 
   // Shards 1..ranges.length are the heavy files' ranges, files by path and ranges by line; the
-  // other files are packed by bytes into the shards after them.
+  // other files are packed by weight into the shards after them.
   const ranges = Object.keys(heavy)
     .sort()
     .flatMap((path) => {
       const lineCount = readFileSync(join(packageDir, path), "utf8").split("\n").length;
       return splitRanges(path, lineCount, heavy[path]);
     });
-  const others = paths
-    .filter((path) => !Object.hasOwn(heavy, path))
-    .map((path) => ({ path, size: statSync(join(packageDir, path)).size }));
+  const costsPath = join(packageDir, "mutation-costs.json");
+  const costs = existsSync(costsPath) ? JSON.parse(readFileSync(costsPath, "utf8")) : undefined;
+  const others = fileWeights(
+    paths
+      .filter((path) => !Object.hasOwn(heavy, path))
+      .map((path) => ({ path, size: statSync(join(packageDir, path)).size })),
+    costs,
+  );
   if (total < ranges.length || (total === ranges.length && others.length > 0))
     throw new Error(
       `${total} shards cannot hold the ${ranges.length} heavy ranges plus the other files — raise the shard count`,
@@ -141,17 +147,35 @@ export function splitRanges(path, lineCount, parts) {
 }
 
 /**
- * Greedy bin-packing by file size, a proxy for mutant count. Deterministic, because every CI shard
- * computes the whole split independently and takes only its own slice.
+ * Each `{ path, size }` as `{ path, weight }`: its seconds from `costs` where the table names it,
+ * otherwise its bytes at the named files' seconds per byte, and its bytes alone when `costs` is
+ * absent or names none of `files`. Bytes are only the fallback because they do not predict a file's
+ * cost (docs/developers/ci-and-gates.md, "db's mutation shards are packed by estimated cost").
+ */
+export function fileWeights(files, costs) {
+  const named = costs === undefined ? [] : files.filter((file) => Object.hasOwn(costs, file.path));
+  if (named.length === 0) return files.map(({ path, size }) => ({ path, weight: size }));
+  const secondsPerByte =
+    named.reduce((sum, file) => sum + costs[file.path], 0) /
+    named.reduce((sum, file) => sum + file.size, 0);
+  return files.map(({ path, size }) => ({
+    path,
+    weight: Object.hasOwn(costs, path) ? costs[path] : size * secondsPerByte,
+  }));
+}
+
+/**
+ * Greedy bin-packing by weight. Deterministic, because every CI shard computes the whole split
+ * independently and takes only its own slice.
  */
 export function assignShards(files, totalShards) {
   const shards = Array.from({ length: totalShards }, () => ({ paths: [], weight: 0 }));
 
-  const ordered = [...files].sort((a, b) => b.size - a.size || a.path.localeCompare(b.path));
+  const ordered = [...files].sort((a, b) => b.weight - a.weight || a.path.localeCompare(b.path));
   for (const file of ordered) {
     const lightest = shards.reduce((min, s) => (s.weight < min.weight ? s : min));
     lightest.paths.push(file.path);
-    lightest.weight += file.size;
+    lightest.weight += file.weight;
   }
 
   return shards.map((s) => s.paths.sort());

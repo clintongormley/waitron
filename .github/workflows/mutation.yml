@@ -398,22 +398,20 @@ jobs:
   #
   # The fix is parallelism, not a faster suite: mutation cost is mutants ÷ concurrency, and a matrix
   # gives each shard its OWN 2-vCPU runner. scripts/mutation-shard.mjs gives each range of a file it
-  # splits a shard of its own and bin-packs the other source files by size into the rest, one
-  # `--mutate` slice per shard; `strategy.job-total` feeds the COUNT to the script,
-  # so N is defined once — here in the matrix list — and the two cannot drift.
+  # splits a shard of its own and packs the other source files into the rest by their estimated
+  # seconds in packages/db/mutation-costs.json, one `--mutate` slice per shard;
+  # `strategy.job-total` feeds the COUNT to the script, so N is defined once — here in the matrix
+  # list — and the two cannot drift. Refreshing the table: docs/developers/ci-and-gates.md, "db's
+  # mutation shards are packed by estimated cost".
   #
   # TEN shards, not fewer, because the per-mutant cost is WILDLY uneven and clusters. Measured on run
   # 32380395996 (an N=6 attempt): shards ran 53min → 4h50. A surviving mutant in a widely-covered
   # file — the core-table schema (orders/tenants/sales/daily-closes/incidents), exercised by nearly
-  # every test — reruns a huge covering set, while a
-  # leaf-file mutant is cheap. Byte size is a rough proxy that at N=6 unluckily put orders+tenants in
-  # one shard (the 4h50 one). At N=10 each of sales.ts's three ranges runs alone and the other files
-  # share the remaining seven shards: printed with `node scripts/mutation-shard.mjs db <n> 10` on
-  # 2026-10-12, orders, tenants, daily-closes and incidents each share a shard with 13 or 14 others.
+  # every test — reruns a huge covering set, while a leaf-file mutant is cheap.
   #
-  # Each shard re-pays the ~7min dry run: Stryker maps per-test coverage over the WHOLE suite before
-  # it mutates anything, and that map cannot be shared across independent jobs. `fail-fast: false`
-  # so one shard's failure does not cancel the rest.
+  # Each shard re-pays the dry run (1m38s to 2m45s on the 2026-11-02 nightly's shards): Stryker maps
+  # per-test coverage over the WHOLE suite before it mutates anything, and that map cannot be shared
+  # across independent jobs. `fail-fast: false` so one shard's failure does not cancel the rest.
   #
   # No thresholds.break is configured HERE, and that is on purpose: a break in
   # packages/db/stryker.config.json would gate each SHARD's own slice, so a shard holding the
