@@ -672,17 +672,19 @@ passed while proving nothing.
 - **Locate the unfinished package before diagnosing a silent shard as database contention.** A
   Vitest test timer does not bound a browser whose event loop has stopped; use an outer deadline,
   and never a retry as proof of repair. Browser shards use the diagnostic deadline wrapper; guard:
-  `scripts/ci-workflow.test.mjs`, weaker than its name — reads text.
+  `scripts/ci-workflow.test.mjs`, weaker than its name — reads text, never runs the deadline.
 - **A recurrent stall needs a retained log and a snapshot of whatever it was waiting on.** Locate
   the stalled operation before assigning its cause to resource contention.
 - **On Vitest 4.1.12 a project's own `maxWorkers` wins, and the outer config's is only the fallback**.
   **A cap that must apply to every project still belongs on the outer config.** Guard:
-  `scripts/fiscal-test-budget.test.ts`, weaker than its name — it pins one arrangement.
+  `scripts/fiscal-test-budget.test.ts`, weaker than its name — it pins one arrangement, not how
+  Vitest resolves the limit.
 - **A package that pins one worker inside one of several projects numbers its `groupOrder`s from 1,
   never 0**: Vitest 4 runs a `groupOrder: 0` project that runs one isolated worker AFTER every other
   group. Guard: `scripts/bookings-test-budget.test.ts` — which pins bookings alone.
 - **A test's timeout must exceed the SUM of its waits plus untimed work.** Guard:
-  `scripts/spawn-timeout-budget.test.ts`, weaker than its name: text scan of `scripts/` only.
+  `scripts/spawn-timeout-budget.test.ts`, weaker than its name: text scan of `scripts/` only,
+  checks only the largest single wait.
 - **A `spawnSync` timeout must clear the child's own worst case, retries included.**
   Cut the wait (`WAITRON_SH_HEALTH_DELAY`), not retries. Nothing guards this generally.
 - **Stop a finished command's leftover workers on `exit`, not on its output pipes' `close`;
@@ -746,8 +748,9 @@ passed while proving nothing.
   `toBeInstanceOf(Error)`.
 - **`errors.ts` reachability is guarded once, in `scripts/errors-reachable.test.ts`**, weaker than
   its name — it reads text.
-- **Vitest 4 ships no default coverage excludes at all.** A config measuring nothing still exits 0
-  with the thresholds intact, so read the per-file table rather than the exit code.
+- **Vitest 4 ships no default coverage excludes at all.** `include`/`exclude` replace rather than
+  merge, and a config measuring nothing still exits 0 with the thresholds intact, so read the
+  per-file table rather than the exit code.
 - **A package config names its own source tree in `coverage.include`.** Guard:
   `scripts/coverage-thresholds.test.ts`, weaker than its name: looks for one exact string.
 - **Use `/* v8 ignore start */` … `/* v8 ignore stop */`, never `/* v8 ignore next */`.**
