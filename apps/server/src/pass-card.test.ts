@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { TicketState } from "./kitchen-print.js";
 import type { PassScope } from "./pass-board.js";
-import { buildPassBoard, type PassBoard, type PassCard, type PassRow } from "./pass-card.js";
+import {
+  buildPassBoard,
+  passCardRelease,
+  type PassBoard,
+  type PassCard,
+  type PassRow,
+  type PassTarget,
+} from "./pass-card.js";
 
 const grill = "station-grill";
 const cold = "station-cold";
@@ -10,6 +17,7 @@ const fryer = "station-fryer";
 const inside = "zone-inside";
 
 const HOT: PassScope = { stationIds: [grill], zoneIds: [inside] };
+const COLD: PassScope = { stationIds: [cold], zoneIds: [inside] };
 const EVERY: PassScope = { stationIds: null, zoneIds: null };
 
 const at = (hhmm: string) => `2026-11-02T${hhmm}:00.000Z`;
@@ -458,3 +466,111 @@ function caseSixRows(): PassRow[] {
     }),
   ];
 }
+
+const targetG: PassTarget = { kind: "group", partyId: party, groupId: "group-g" };
+const DIGEST = /^[0-9a-f]{64}$/;
+const contextOf = (rows: readonly PassRow[], scope: PassScope) =>
+  passCardRelease(targetG, rows, scope).context;
+const changed = (rows: PassRow[], id: string, change: Partial<PassRow>) =>
+  rows.map((r) => (r.item.id === id ? { ...r, ...change } : r));
+
+describe("A773 pass board: release set", () => {
+  it("1. offers only this pass's Requested ids", () => {
+    const hot = passCardRelease(targetG, caseOneRows(), HOT);
+    expect(hot.ticketItemIds).toEqual(["grill-1"]);
+    expect(hot.context).toEqual(expect.stringMatching(DIGEST));
+    expect(passCardRelease(targetG, caseOneRows(), COLD)).toEqual({
+      ticketItemIds: [],
+      context: null,
+    });
+    const card = buildPassBoard(caseOneRows(), HOT).toFire[0]!;
+    expect(card.releaseTicketItemIds).toEqual(["grill-1"]);
+    expect(card.releaseContext).toBe(hot.context);
+  });
+
+  it("2. changes the context with each candidate fact", () => {
+    const base = [row({ id: "grill-1", lineNo: 1 }), row({ id: "grill-2", lineNo: 2 })];
+    const digest = contextOf(base, EVERY);
+    expect(digest).toEqual(expect.stringMatching(DIGEST));
+    expect(contextOf(changed(base, "grill-1", { remaining: 500 }), EVERY)).not.toBe(digest);
+    expect(contextOf(changed(base, "grill-1", { stationId: cold }), EVERY)).not.toBe(digest);
+    expect(contextOf(changed(base, "grill-1", { zoneId: "zone-terrace" }), EVERY)).not.toBe(digest);
+    expect(contextOf(changed(base, "grill-1", { requestedAt: at("12:07") }), EVERY)).not.toBe(
+      digest,
+    );
+    expect(contextOf(changed(base, "grill-1", { passControlled: false }), EVERY)).not.toBe(digest);
+    const recalled = changed(base, "grill-1", { recalled: true });
+    expect(passCardRelease(targetG, recalled, EVERY).ticketItemIds).toEqual(["grill-2"]);
+    expect(contextOf(recalled, EVERY)).not.toBe(digest);
+  });
+
+  it("3. ignores everything but the candidates' facts", () => {
+    const base = [
+      ...changed(caseOneRows(), "bar-1", {
+        item: { ...caseOneRows()[2]!.item, state: "preparing" },
+      }),
+      row({ id: "cold-2", stationId: cold, lineNo: 3 }),
+      row({ id: "grill-2", lineNo: 4 }),
+    ];
+    const digest = contextOf(base, HOT);
+    expect(digest).toEqual(expect.stringMatching(DIGEST));
+    const barReady = changed(base, "bar-1", { item: { ...base[2]!.item, state: "ready" } });
+    expect(contextOf(barReady, HOT)).toBe(digest);
+    const coldFired = changed(base, "cold-2", {
+      firedAt: at("12:06"),
+      item: { ...base[3]!.item, firedAt: at("12:06") },
+    });
+    expect(contextOf(coldFired, HOT)).toBe(digest);
+    expect(contextOf(changed(base, "bar-1", { remaining: 250 }), HOT)).toBe(digest);
+    expect(contextOf(changed(base, "cold-2", { stationClosed: true }), HOT)).toBe(digest);
+    expect(contextOf([...base].reverse(), HOT)).toBe(digest);
+  });
+
+  it("4. offers nothing on a held card", () => {
+    const heldGroup = { ...groupG, state: "held" as const };
+    const burger = held({ id: "burger", group: heldGroup });
+    expect(passCardRelease(targetG, [burger], HOT)).toEqual({ ticketItemIds: [], context: null });
+    const fired = row({ id: "burger" });
+    const release = passCardRelease(targetG, [fired], HOT);
+    expect(release.ticketItemIds).toEqual(["burger"]);
+    expect(release.context).toEqual(expect.stringMatching(DIGEST));
+  });
+
+  it("5. keeps the hot and cold passes' contexts independent", () => {
+    const base = [
+      row({ id: "grill-1", lineNo: 1 }),
+      row({ id: "cold-1", stationId: cold, lineNo: 2 }),
+    ];
+    const hot = contextOf(base, HOT);
+    const coldContext = contextOf(base, COLD);
+    expect(hot).toEqual(expect.stringMatching(DIGEST));
+    expect(coldContext).toEqual(expect.stringMatching(DIGEST));
+    expect(contextOf(changed(base, "cold-1", { firedAt: at("12:06") }), HOT)).toBe(hot);
+    expect(contextOf(changed(base, "grill-1", { firedAt: at("12:06") }), COLD)).toBe(coldContext);
+  });
+
+  it("7. blocks the whole card while a dish candidate's station is closed (D51)", () => {
+    const open = [row({ id: "grill-1", lineNo: 1 }), row({ id: "grill-2", lineNo: 2 })];
+    const digest = contextOf(open, HOT);
+    expect(digest).toEqual(expect.stringMatching(DIGEST));
+    expect(
+      passCardRelease(targetG, changed(open, "grill-2", { stationClosed: true }), HOT),
+    ).toEqual({ ticketItemIds: [], context: null });
+    const reopened = changed(changed(open, "grill-2", { stationClosed: true }), "grill-2", {
+      stationClosed: false,
+    });
+    expect(passCardRelease(targetG, reopened, HOT)).toEqual({
+      ticketItemIds: ["grill-1", "grill-2"],
+      context: digest,
+    });
+
+    const chips = (stationClosed: boolean) => [
+      row({ id: "burger", lineNo: 1 }),
+      row({ id: "chips", stationId: fryer, extra: true, stationClosed, lineNo: 2 }),
+    ];
+    const withExtra = passCardRelease(targetG, chips(true), EVERY);
+    expect(withExtra.ticketItemIds).toEqual(["burger", "chips"]);
+    expect(withExtra.context).toEqual(expect.stringMatching(DIGEST));
+    expect(withExtra.context).toBe(contextOf(chips(false), EVERY));
+  });
+});

@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import type { OrderGroupRequestKind } from "@waitron/db";
 import { initiatedAt, kitchenPhase, type KitchenPhase } from "./kitchen-phase.js";
 import { passSees, type PassScope } from "./pass-board.js";
+import { canonicalJson } from "./parties.js";
 import type { ExpoItem } from "./working-order.js";
 
 export type PassTarget =
@@ -108,21 +110,56 @@ export function passCardKey(row: PassRow): string {
   return row.group === null ? `bill:${row.orderId}` : `group:${row.group.id}`;
 }
 
-/** B3.1b fills this from the card's visible Requested rows. */
+const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * This pass's candidates of one card, the visible Requested items its Fire releases, and the
+ * digest of their facts (D47). Nothing while a dish candidate sits at a closed station that
+ * nothing kept it at (D51); a split-off extra there stays a candidate, since nothing can move it.
+ */
 export function passCardRelease(
   target: PassTarget,
   cardRows: readonly PassRow[],
   scope: PassScope,
 ): { ticketItemIds: string[]; context: string | null } {
-  void target;
-  void cardRows;
-  void scope;
-  return { ticketItemIds: [], context: null };
+  const candidates = cardRows
+    .filter(
+      (row) =>
+        !row.recalled &&
+        row.remaining > 0 &&
+        passSees(scope, row) &&
+        kitchenPhase({
+          requestedAt: row.requestedAt,
+          firedAt: row.firedAt,
+          state: row.item.state,
+        }) === "requested",
+    )
+    .sort((a, b) => byText(a.item.id, b.item.id));
+  if (candidates.length === 0 || candidates.some((row) => row.stationClosed && !row.extra)) {
+    return { ticketItemIds: [], context: null };
+  }
+  const facts = candidates.map((row) => ({
+    id: row.item.id,
+    lineId: row.lineId,
+    orderId: row.orderId,
+    groupId: row.group?.id ?? null,
+    stationId: row.stationId,
+    zoneId: row.zoneId,
+    requestedAt: row.requestedAt,
+    firedAt: row.firedAt,
+    passControlled: row.passControlled,
+    remaining: row.remaining,
+    recalled: row.recalled,
+  }));
+  return {
+    ticketItemIds: candidates.map((row) => row.item.id),
+    context: createHash("sha256")
+      .update(canonicalJson({ target, candidates: facts }))
+      .digest("hex"),
+  };
 }
 
 type Column = "held" | "toFire" | "inProgress" | "ready";
-
-const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 function cardItem(row: PassRow, scope: PassScope): PassCardItem {
   const phase = kitchenPhase({

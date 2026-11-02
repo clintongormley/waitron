@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import {
   orderGroups,
   parties,
@@ -8,6 +8,7 @@ import {
   ticketItems,
   withTransaction,
   workingOrderLines,
+  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -26,6 +27,8 @@ import {
   type GroupRelease,
 } from "./order-groups.js";
 import { submitGroups } from "./testing/group-submit-fixture.js";
+import { addTabRound, sendLines, updateHeldOrder } from "./testing/order-writer-fixture.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import {
   fireNewOrder,
@@ -175,6 +178,44 @@ describe("A773 request kind", () => {
     expect(await kinds([submitted.groups[0]!.id])).toEqual({
       [submitted.groups[0]!.id]: "new_order",
     });
+  });
+
+  it("gives an edit's Fire now group added when the party's only group is held (D57)", async () => {
+    const submitted = await submit([{ release: "hold", lines: [burger()] }]);
+    const tabId = split.party.tabId;
+    // A dish the legacy tab Send fired outside any group is what lets the edit fire new work.
+    await inTx((tx) => addTabRound(tx, split.cfg, tabId, [burger()]));
+    const lines = await suite.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    const loose = lines.find((line) => line.groupId === null)!;
+    await inTx((tx) => sendLines(tx, split.cfg, tabId, [loose.lineNo]));
+    const groups = await suite.db
+      .select({ id: orderGroups.id, state: orderGroups.state })
+      .from(orderGroups)
+      .where(eq(orderGroups.partyId, split.party.partyId));
+    expect(groups).toEqual([{ id: submitted.groups[0]!.id, state: "held" }]);
+
+    const [order] = await suite.db
+      .select({ revision: workingOrders.revision })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, tabId));
+    await updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, split.cfg, tabId, {
+      operatorId: OPERATOR,
+      revision: order!.revision,
+      lines: [...lines.map((line) => ({ workingOrderLineId: line.id, ...burger() })), burger()],
+    });
+    const after = await suite.db
+      .select({ state: orderGroups.state, requestKind: orderGroups.requestKind })
+      .from(orderGroups)
+      .where(
+        and(
+          eq(orderGroups.partyId, split.party.partyId),
+          ne(orderGroups.id, submitted.groups[0]!.id),
+        ),
+      );
+    expect(after).toEqual([{ state: "fired", requestKind: "added" }]);
   });
 
   it("writes no group for a counter order", async () => {
