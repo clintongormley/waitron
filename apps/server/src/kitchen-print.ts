@@ -418,7 +418,6 @@ interface OrderHeader {
 /** Each order's number and table ({@link orderTableLabels}), keyed by order. */
 async function readOrderHeaders(
   tx: Transaction,
-
   orderIds: readonly string[],
 ): Promise<Map<string, OrderHeader>> {
   const orders = await tx

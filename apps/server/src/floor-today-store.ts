@@ -699,11 +699,12 @@ async function catchUpPass(
       .where(inArray(diningTables.id, shortRenamed));
   }
   const createdIds = new Map<Target, string>();
+  const venueId = plan.create.length === 0 ? null : await venueLocationId(tx);
   for (const target of plan.create) {
     const [created] = await tx
       .insert(diningTables)
       .values({
-        locationId: await venueLocationId(tx),
+        locationId: venueId!,
         zoneId,
         label: target.label,
         ...shortNameColumns(target.shortName),

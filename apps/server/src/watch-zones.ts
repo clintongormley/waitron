@@ -77,7 +77,6 @@ export async function partyWatchZones(
 
 async function activePartyZones(
   tx: Transaction,
-
   partyIds: readonly string[],
 ): Promise<Map<string, string | null>> {
   if (partyIds.length === 0) return new Map();

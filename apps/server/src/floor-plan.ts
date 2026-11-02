@@ -320,7 +320,6 @@ function checkParts(tables: ZonePlanSave["tables"]): void {
  */
 async function otherZonesTaken(
   tx: Transaction,
-
   zoneId: string,
 ): Promise<{ labels: Set<string>; shortNames: Map<string, string> }> {
   const masters = await tx

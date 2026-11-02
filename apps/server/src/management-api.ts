@@ -140,9 +140,9 @@ export interface ManagementApiDeps {
   db: Database;
   cfg: { nodeId: string };
   /**
-   * The venue config the zone, table, station and course routes use — the
-   * same value `mountTillApi` receives. Optional so harnesses that never reach those routes can omit
-   * it; a request that does reach one without it fails closed (`requireVenueCfg`).
+   * The venue config the zone, table, station and course routes use — the same value
+   * `mountTillApi` receives. Optional so harnesses that never reach those routes can omit it; a
+   * request that does reach one without it fails closed (`requireVenueCfg`).
    */
   venueCfg?: TradingContext;
   validateOperationDescription?: (description: string) => void;
