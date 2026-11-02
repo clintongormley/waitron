@@ -6439,6 +6439,14 @@ _Formerly parts of B9 and Track C._ Open work:
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
+- **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
+  2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
+  [design](superpowers/specs/2026-11-02-rationalisation/README.md) is written and builder-checked,
+  and **waits for the owner's approval before any work starts**. It proposes 242 tables → 148 in
+  eight migration sets instead of sixteen, one job runner, 111 product environment variables → 51,
+  and one state-folder layout. The owner chose that A760's squash runs first, merged into the eight
+  sets. If approved, it absorbs A1301's schema slices (S20–S28, S23's `venue_settings` included).
+
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
   2026-11-01, high priority; nothing new is built on locations meanwhile). The design is written and
   reviewed: its settings move to a new one-row `venue_settings` table, and the work is cut into
@@ -6509,7 +6517,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `insertTabRound` writes a round's lines in one statement; 1,089 waters passed and 1,188 were
   refused. [Detail](backlog/architecture.md#a-table-round-of-more-than-about-1100-dishes-is-refused-too-many-sql-variables)
 
-- **A760. Squash every migration set before go-live.**
+- **A760. Squash every migration set before go-live.** If A1308 is approved, the squash runs
+  first, merged into its eight sets (owner, 2026-11-02).
   [Detail](backlog/architecture.md#a760-squash-every-migration-set-before-go-live)
 
 - **A913's fix items: general code English only (owner's answers, 2026-10-20).** The audit
