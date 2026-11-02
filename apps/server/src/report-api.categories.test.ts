@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
-  locations,
   printers,
   printJobs,
   saleLines,

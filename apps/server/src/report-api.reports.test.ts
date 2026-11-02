@@ -9,7 +9,6 @@ import {
   sales,
   tenders,
   withTransaction,
-  venueLocationId,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -34,7 +33,6 @@ const noopLog: Logger = () => {};
 
 let deviceId: string;
 let nodeId: string;
-let locationId: string;
 let seriesId: string;
 let managerCookie: string;
 let supervisorCookie: string;
@@ -204,7 +202,6 @@ const suite = useVenueDb({
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
-    locationId = await venueLocationId(db);
     ({ deviceId } = await seedDevice(db, { label: "Bar 1" }));
     nodeId = await seedNode(db);
     const [series] = await db

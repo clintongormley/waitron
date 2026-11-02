@@ -16,7 +16,6 @@ import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   kitchenCourses,
-  locations,
   orderDraftEvents,
   orderDraftLines,
   orderDraftRecalledLines,
