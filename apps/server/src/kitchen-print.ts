@@ -16,6 +16,7 @@ import {
   parties,
   partyTables,
   workingOrderLines,
+  venueLocationId,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -789,6 +790,12 @@ function foldWholePortions(
   }));
 }
 
+/** Reads, at most once, the venue id a run of print jobs is filed under. */
+function venueOnce(tx: Transaction): () => Promise<string> {
+  let read: Promise<string> | undefined;
+  return () => (read ??= venueLocationId(tx));
+}
+
 /** Enqueue each job with its bill, station and line links. */
 async function enqueueKitchenJobs(
   tx: Transaction,
@@ -796,8 +803,11 @@ async function enqueueKitchenJobs(
   jobs: readonly KitchenJob[],
   reprint: boolean,
 ): Promise<void> {
+  const venue = venueOnce(tx);
   for (const job of jobs) {
-    const { jobId } = await enqueuePrintJob(tx, job.printerId, job.bytes);
+    const { jobId } = await enqueuePrintJob(tx, job.printerId, job.bytes, "document", {
+      venueLocationId: await venue(),
+    });
     await linkKitchenJob(tx, jobId, orderId, job.stationIds, reprint);
     await insertInChunks(
       tx,
@@ -1300,6 +1310,7 @@ async function printCorrectionSlips(
   }
 
   const at = new Date().toISOString();
+  const venue = venueOnce(tx);
 
   if (change.kind === "ORDER NOTE CHANGED") {
     // One slip per printer, routed and grouped as a kitchen ticket is.
@@ -1352,7 +1363,9 @@ async function printCorrectionSlips(
         route.printers[0]!,
       );
       for (const printer of route.printers) {
-        await enqueuePrintJob(tx, printer.printerId, bytes);
+        await enqueuePrintJob(tx, printer.printerId, bytes, "document", {
+          venueLocationId: await venue(),
+        });
       }
     }
     return;
@@ -1419,7 +1432,9 @@ async function printCorrectionSlips(
         group[0]!,
       );
       for (const printer of group) {
-        await enqueuePrintJob(tx, printer.printerId, bytes);
+        await enqueuePrintJob(tx, printer.printerId, bytes, "document", {
+          venueLocationId: await venue(),
+        });
       }
     }
   }
@@ -1764,6 +1779,7 @@ async function printMovedSlips(
   const stationIds = [...new Set(items.map((item) => item.stationId))];
   const at = new Date().toISOString();
 
+  const venue = venueOnce(tx);
   for (const stationId of stationIds) {
     const targets = byStation.get(stationId);
     if (targets === undefined) continue;
@@ -1806,7 +1822,11 @@ async function printMovedSlips(
         },
         group[0]!,
       );
-      for (const printer of group) await enqueuePrintJob(tx, printer.printerId, bytes);
+      for (const printer of group) {
+        await enqueuePrintJob(tx, printer.printerId, bytes, "document", {
+          venueLocationId: await venue(),
+        });
+      }
     }
   }
 }

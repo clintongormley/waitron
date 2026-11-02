@@ -804,6 +804,44 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
     expect(selectCalls).toBe(1);
   });
 
+  it("reads for a second printer of the station only that printer's own check", async () => {
+    // Each queued job checks its printer; the venue id the jobs are filed under is read once a send.
+    const { cfg, catalogueId } = await setupVenue();
+    const reads = await asApp(cfg, async (tx) => {
+      async function readsOfSend(name: string, printerCount: number): Promise<number> {
+        const station = await createStation(tx, cfg, { name });
+        for (let n = 0; n < printerCount; n += 1) {
+          await attachPrinterToStation(tx, {
+            locationId: cfg.locationId,
+            stationId: station.id,
+            printerId: await makePrinter(tx, `${name} ${n}`),
+          });
+        }
+        const dish = await makeProduct(tx, cfg, catalogueId, `${name} dish`, {
+          stationId: station.id,
+        });
+        const orderId = randomUUID();
+        await createOfferedOrder(tx, cfg, orderId, [line(dish)]);
+        const [lineRow] = await tx
+          .select({ id: workingOrderLines.id })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, orderId));
+        const before = (await printJobsFor(tx)).length;
+        const selectSpy = vi.spyOn(tx, "select");
+        await enqueueKitchenTickets(tx, cfg, orderId, [
+          { workingOrderLineId: lineRow!.id, stationId: station.id },
+        ]);
+        const calls = selectSpy.mock.calls.length;
+        selectSpy.mockRestore();
+        expect((await printJobsFor(tx)).length - before).toBe(printerCount);
+        return calls;
+      }
+      return { one: await readsOfSend("Grill", 1), two: await readsOfSend("Fryer", 2) };
+    });
+
+    expect(reads.two - reads.one).toBe(1);
+  });
+
   it("builds one kitchen ticket per distinct paper width and resolution among the printers", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const ids = await asApp(cfg, async (tx) => {

@@ -2,7 +2,7 @@
 import "./errors.js";
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { printJobs, printers, venueLocationId } from "@waitron/db";
+import { printJobs, printers, venueLocationId as readVenueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
@@ -10,7 +10,8 @@ import { PRINTER_DELETED } from "./printer-delete-jobs.js";
 /**
  * The whole of what a caller does to print: one read and one insert, with no socket and no wait on
  * hardware, so a slow, broken or absent printer can never delay the caller (CLAUDE.md §5).
- * `saleId` names the sale a receipt prints.
+ * `saleId` names the sale a receipt prints. A caller queuing several jobs reads `venueLocationId`
+ * once and passes it to each; without it the job reads it.
  */
 export async function enqueuePrintJob(
   tx: Transaction,
@@ -20,9 +21,15 @@ export async function enqueuePrintJob(
   {
     saleId = null,
     receiptCopy = null,
-  }: { saleId?: string | null; receiptCopy?: boolean | null } = {},
+    venueLocationId,
+  }: { saleId?: string | null; receiptCopy?: boolean | null; venueLocationId?: string } = {},
 ): Promise<{ jobId: string }> {
-  return insertPrintJob(tx, printerId, payload, kind, { resendOf: null, saleId, receiptCopy });
+  return insertPrintJob(tx, printerId, payload, kind, {
+    resendOf: null,
+    saleId,
+    receiptCopy,
+    venueLocationId,
+  });
 }
 
 async function insertPrintJob(
@@ -34,10 +41,12 @@ async function insertPrintJob(
     resendOf,
     saleId,
     receiptCopy,
+    venueLocationId,
   }: {
     resendOf: string | null;
     saleId: string | null;
     receiptCopy: boolean | null;
+    venueLocationId?: string;
   },
 ): Promise<{ jobId: string }> {
   // A deactivated or deleted printer is reported as `printer.not_found`, not a code of its own.
@@ -50,7 +59,7 @@ async function insertPrintJob(
   const [job] = await tx
     .insert(printJobs)
     .values({
-      locationId: await venueLocationId(tx),
+      locationId: venueLocationId ?? (await readVenueLocationId(tx)),
       printerId,
       payload,
       kind,

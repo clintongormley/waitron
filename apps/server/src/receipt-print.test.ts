@@ -705,7 +705,8 @@ it("a prepaid cash sale reads the device's printers once for its collection tick
   const receiptOnly = await readsOfSale(undefined);
 
   expect(await drawerOpensFor(cfg)).toHaveLength(2);
-  // The collection document also reads the saved frame language; the device-printer lookup stays cached.
+  // The collection document also reads the saved frame language; the device-printer lookup and the
+  // venue id its jobs are filed under are each read once per sale.
   expect(all - noDrawer).toBe(1);
   expect(noDrawer - receiptOnly).toBe(2);
 });

@@ -64,6 +64,24 @@ function spyOnNoSocketOpened() {
 }
 
 describe("enqueuePrintJob (never-block outbox)", () => {
+  it("files a job under the venue id its caller read once for several jobs, reading only the printer", async () => {
+    const cfg = await setup();
+    await withTransaction(suite.db, async (tx) => {
+      const p = await createPrinter(tx, { name: "Bar", transport: "usb", localKey: "SER-ONCE" });
+      const selects = vi.spyOn(suite.db, "select");
+      const { jobId } = await enqueuePrintJob(tx, p.id, new Uint8Array([1]), "document", {
+        venueLocationId: cfg.locationId,
+      });
+      expect(selects).toHaveBeenCalledTimes(1);
+      selects.mockRestore();
+      const [row] = await tx
+        .select({ locationId: printJobs.locationId })
+        .from(printJobs)
+        .where(eq(printJobs.id, jobId));
+      expect(row).toEqual({ locationId: cfg.locationId });
+    });
+  });
+
   it("enqueues a queued job with no socket I/O", async () => {
     await setup();
     await withTransaction(suite.db, async (tx) => {

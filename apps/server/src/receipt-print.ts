@@ -8,6 +8,7 @@ import {
   readTenant,
   sales,
   tenderRefunds,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { PRINTER_DELETED, canResendPrintJob, enqueuePrintJob, esc } from "@waitron/printing";
@@ -51,14 +52,23 @@ export interface DevicePrinter extends EscSetting {
  * The device's active printer for a role, `undefined` for none. One lookup reads the device's
  * printers once, on first use, so it must not outlive a change to the device's equipment.
  */
-export type PrinterLookup = (role: ProfilePrinterRole) => Promise<DevicePrinter | undefined>;
+/** One sale's printing reads the device's printers, and the venue id its jobs are filed under, once. */
+export type PrinterLookup = ((role: ProfilePrinterRole) => Promise<DevicePrinter | undefined>) & {
+  venueLocationId(): Promise<string>;
+};
 
 export function printerLookup(tx: Transaction, origin: Origin): PrinterLookup {
   let read: Promise<Map<ProfilePrinterRole, DevicePrinter>> | undefined;
-  return async (role) => {
-    read ??= readDevicePrinters(tx, origin);
-    return (await read).get(role);
-  };
+  let venue: Promise<string> | undefined;
+  return Object.assign(
+    async (role: ProfilePrinterRole) => {
+      read ??= readDevicePrinters(tx, origin);
+      return (await read).get(role);
+    },
+    {
+      venueLocationId: () => (venue ??= venueLocationId(tx)),
+    },
+  );
 }
 
 /**
@@ -289,7 +299,9 @@ export async function enqueueCollectionTicket(
   if (printer === undefined) return;
   const language = await readKitchenLanguage(tx);
   const bytes = formatOrderNumberSlip({ orderNumber, language }, printer);
-  await enqueuePrintJob(tx, printer.id, bytes, "document");
+  await enqueuePrintJob(tx, printer.id, bytes, "document", {
+    venueLocationId: await printers.venueLocationId(),
+  });
 }
 
 /**
@@ -519,6 +531,7 @@ export async function enqueueOriginalReceipt(
   const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, saleId, false, printers);
   if (resolved === undefined) return;
   const job = await enqueuePrintJob(tx, resolved.printer.id, resolved.receiptBytes, "document", {
+    venueLocationId: await printers.venueLocationId(),
     saleId,
     receiptCopy: false,
   });
@@ -544,7 +557,9 @@ async function enqueueBillDrawer(
     billPaymentId,
     ...(authorization ?? {}),
   });
-  await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer");
+  await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer", {
+    venueLocationId: await printers.venueLocationId(),
+  });
 }
 
 /**
@@ -660,5 +675,7 @@ export async function enqueueSaleDrawer(
     reason: method === "cash" ? "cash_sale" : "card_slip",
     saleId,
   });
-  await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer");
+  await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer", {
+    venueLocationId: await printers.venueLocationId(),
+  });
 }
