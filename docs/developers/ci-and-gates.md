@@ -2208,8 +2208,8 @@ started, so a child of npm that ignores the polite stop outlives the attempt and
 open. Measured on a GitHub ubuntu-26.04 runner, 2026-11-02, PR #2400's diagnostic workflow, with
 `timeout -k 1 1 bash -c "trap '' TERM; sleep 304; exit 0"` under `strace`: it sent SIGTERM to the
 group but SIGKILL only to the `bash`, and the `sleep` exited 0 afterwards; GNU timeout on 24.04
-sent SIGKILL to the group, and `gnutimeout -k 1 1` on 26.04 killed its group and left no `sleep`
-behind. The cause in the source: uucore 0.10.0, `src/uucore/src/lib/features/process/unix.rs:111-113`
+sent SIGKILL to the group, and `gnutimeout -k 1 1` on 26.04, in the same shape, sent SIGKILL to
+its own group (bash reported the `gnutimeout` itself killed) and left no `sleep` of its own running. The cause in the source: uucore 0.10.0, `src/uucore/src/lib/features/process/unix.rs:111-113`
 — `send_signal_group` first tries to ignore the signal itself, which fails for SIGKILL, so the
 group kill is never sent. The "prefers gnutimeout" case in `scripts/ci-setup-pnpm.test.mjs` checks
 the lookup order only, through a wrapper around whichever timeout the machine has.
