@@ -1133,7 +1133,7 @@ read each selected file's last collected/case/hook event and any unfinished
 Playwright API call, then reproduce that wait. A completed collection event
 separates a loaded module from an assigned file; a case-start event precedes its
 beforeEach hooks. These events do not name a pending application promise. A
-browser file that runs 60 seconds also gets `[file-progress] stack:` lines once a page shows it (see A1305
+browser file that reports no case or hook for 60 seconds past its time limits also gets `[file-progress] stack:` lines once a page shows it (see A1305
 below). Product behavior, test assertions, test deadlines
 and shard counts have not changed in this diagnostic slice.
 
@@ -1164,7 +1164,7 @@ with coverage). Reading the click's path
 no loop.
 
 On the next stall, read the `[file-progress] stack:` lines first
-([how they are taken](../developers/ci-and-gates.md#a-browser-file-that-runs-60-seconds-gets-a-stack-sample)).
+([how they are taken](../developers/ci-and-gates.md#a-browser-file-silent-past-its-time-limits-gets-a-stack-sample)).
 They show where the page's JavaScript was when paused, or that nothing paused and
 whether the page answered, or that no page showed the file. The earlier dashboard
 stall (A1230, above) left too little evidence to say whether it was the same.
