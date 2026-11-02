@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
@@ -177,6 +177,39 @@ describe("the Demo printer", () => {
     ).toEqual([]);
     const [job] = await suite.db.select({ status: printJobs.status }).from(printJobs);
     expect(job?.status).toBe("queued");
+  });
+
+  it("finds its printer on the venue and local-key index, not a scan", async () => {
+    await venue();
+    await configureDemoPrinter(suite.db, true);
+    const session = (
+      suite.db as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }
+    ).session;
+    const prepare = session.prepareQuery.bind(session);
+    const lookups: { sql: string; params: unknown[] }[] = [];
+    const spy = vi.spyOn(session, "prepareQuery").mockImplementation((...args) => {
+      const query = args[0] as { sql: string; params: unknown[] };
+      if (/^select .* from "printers" where .*"local_key"/.test(query.sql)) lookups.push(query);
+      return prepare(...args);
+    });
+    try {
+      await configureDemoPrinter(suite.db, true);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(lookups).toHaveLength(1);
+    const parts = lookups[0]!.sql.split("?");
+    const statement = sql.raw(`explain query plan ${parts[0]}`);
+    lookups[0]!.params.forEach((param, i) => {
+      statement.append(sql`${param}`);
+      statement.append(sql.raw(parts[i + 1]!));
+    });
+    const plan = await withTransaction(suite.db, (tx) => tx.execute<{ detail: string }>(statement));
+    expect(plan.rows.map((row) => row.detail)).toEqual([
+      expect.stringContaining(
+        "SEARCH printers USING INDEX printers_local_key_key (location_id=? AND local_key=?)",
+      ),
+    ]);
   });
 
   it("after its printer is deleted, a Demo boot adds a new one rather than bringing it back", async () => {

@@ -1,6 +1,13 @@
 import "./errors.js";
 import { and, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
-import { readTenant, sales, tenders, withTransaction, type Database } from "@waitron/db";
+import {
+  readTenant,
+  sales,
+  tenders,
+  venueLocationId,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { cardReaders, payments, type CardDetails } from "@waitron/payments";
 import { AppError, centsToDecimal, subtractDecimal } from "@waitron/shared";
 import { enqueuePrintJob } from "@waitron/printing";
@@ -65,6 +72,7 @@ export async function printSalePaymentSlip(
     if (taxpayer === null) return;
     /* v8 ignore stop */
     const order = await readReceiptOrder(tx, cfg, workingOrderId);
+    const venueId = await venueLocationId(tx);
     for (const payment of cards) {
       const card: CardDetails | null =
         payment.scheme === null || payment.last4 === null || payment.entryMode === null
@@ -90,7 +98,7 @@ export async function printSalePaymentSlip(
         invoiceLocale: sale.locale,
         printer: { paperWidth: printer.paperWidth, resolution: printer.resolution },
       });
-      await enqueuePrintJob(tx, printer.id, payload);
+      await enqueuePrintJob(tx, printer.id, payload, "document", { venueId });
     }
   });
 }

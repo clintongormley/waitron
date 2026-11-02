@@ -3169,7 +3169,21 @@ describe("the invoice at full payment", () => {
       expect(linked.map((row) => row.saleId)).toEqual([sale!.id, sale!.id]);
       const before = await inTx((tx) => tx.select({ id: printJobs.id }).from(printJobs));
 
-      await printSalePaymentSlip(suite.db, { ...venue.cfg, locale }, billId);
+      const selects = vi.spyOn(suite.db, "select");
+      try {
+        await printSalePaymentSlip(suite.db, { ...venue.cfg, locale }, billId);
+        // The venue's row, which the slips' print jobs are filed under, is read once for both slips.
+        expect(
+          selects.mock.calls.filter(
+            ([fields]) =>
+              fields !== undefined &&
+              "operationDescription" in fields &&
+              "fiscalTerritory" in fields,
+          ),
+        ).toHaveLength(1);
+      } finally {
+        selects.mockRestore();
+      }
 
       // In the order they were written: `rowid`, as `print_jobs` has no sequence of its own.
       const jobs = await inTx((tx) =>

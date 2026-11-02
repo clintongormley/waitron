@@ -70,7 +70,7 @@ describe("enqueuePrintJob (never-block outbox)", () => {
       const p = await createPrinter(tx, { name: "Bar", transport: "usb", localKey: "SER-ONCE" });
       const selects = vi.spyOn(suite.db, "select");
       const { jobId } = await enqueuePrintJob(tx, p.id, new Uint8Array([1]), "document", {
-        venueLocationId: cfg.locationId,
+        venueId: cfg.locationId,
       });
       expect(selects).toHaveBeenCalledTimes(1);
       selects.mockRestore();

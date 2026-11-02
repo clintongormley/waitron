@@ -806,7 +806,7 @@ async function enqueueKitchenJobs(
   const venue = venueOnce(tx);
   for (const job of jobs) {
     const { jobId } = await enqueuePrintJob(tx, job.printerId, job.bytes, "document", {
-      venueLocationId: await venue(),
+      venueId: await venue(),
     });
     await linkKitchenJob(tx, jobId, orderId, job.stationIds, reprint);
     await insertInChunks(
@@ -1364,7 +1364,7 @@ async function printCorrectionSlips(
       );
       for (const printer of route.printers) {
         await enqueuePrintJob(tx, printer.printerId, bytes, "document", {
-          venueLocationId: await venue(),
+          venueId: await venue(),
         });
       }
     }
@@ -1433,7 +1433,7 @@ async function printCorrectionSlips(
       );
       for (const printer of group) {
         await enqueuePrintJob(tx, printer.printerId, bytes, "document", {
-          venueLocationId: await venue(),
+          venueId: await venue(),
         });
       }
     }
@@ -1824,7 +1824,7 @@ async function printMovedSlips(
       );
       for (const printer of group) {
         await enqueuePrintJob(tx, printer.printerId, bytes, "document", {
-          venueLocationId: await venue(),
+          venueId: await venue(),
         });
       }
     }
