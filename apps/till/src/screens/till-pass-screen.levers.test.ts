@@ -257,6 +257,63 @@ describe("A773 pass screen: levers", () => {
     },
   );
 
+  it("on a kitchen display, keeps its board and re-boots nothing when the read after Ready is refused device.unauthorized", async () => {
+    const api = fakeApi({
+      getDevicePassBoard: vi.fn().mockRejectedValue(refused("device.unauthorized", 401)),
+    });
+    const el = await mountDisplay(api);
+    const reboot = vi.fn();
+    document.addEventListener("device-unauthorized", reboot);
+    try {
+      await press(el, '[data-ready="course-mains"]');
+      expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+      expect(reboot).not.toHaveBeenCalled();
+      expect(el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
+      expect(inBoard(el, '[data-card="bill:order-1"]')).not.toBeNull();
+    } finally {
+      document.removeEventListener("device-unauthorized", reboot);
+    }
+  });
+
+  it("on a till, a course Ready refused kitchen_screen.not_allowed shows its words, reads the board again and asks for no switch", async () => {
+    const api = fakeApi({
+      bumpCourseReady: vi.fn().mockRejectedValue({
+        ...refused("kitchen_screen.not_allowed", 403),
+        params: { screen: "pass" },
+      }),
+    });
+    const el = await mountTill(api);
+    const changed = vi.fn();
+    el.addEventListener("kitchen-screen-changed", changed);
+    const reads = api.getDevicePassBoard.mock.calls.length;
+    await press(el, '[data-ready="course-mains"]');
+    expect(api.bumpCourseReady).toHaveBeenCalledExactlyOnceWith("order-1", "course-mains");
+    expect(api.getDevicePassBoard).toHaveBeenCalledTimes(reads + 1);
+    expect(changed).not.toHaveBeenCalled();
+    expect(text(leverError(el))).toBe(`#1 T1: ${codeMessage("kitchen_screen.not_allowed")}`);
+  });
+
+  it("names a refused Ready's card by its order number alone when it has no table", async () => {
+    const untabled = passCard({
+      orders: [{ orderId: "order-6", orderNumber: 6, kitchenNote: null }],
+    });
+    const api = fakeApi({
+      getDevicePassBoard: vi
+        .fn()
+        .mockResolvedValue(deviceBoard(passBoard({ inProgress: [untabled] }))),
+      bumpDeviceCourseReady: vi
+        .fn()
+        .mockRejectedValue(refused("kitchen_screen.zone_not_allowed", 403)),
+    });
+    const el = await mount({
+      api,
+      deviceMode: true,
+      initialBoard: deviceBoard(passBoard({ inProgress: [untabled] })),
+    });
+    await press(el, '[data-ready="course-mains"]');
+    expect(text(leverError(el))).toBe(`#6: ${codeMessage("kitchen_screen.zone_not_allowed")}`);
+  });
+
   it("a till reprints each bill of a card", async () => {
     const api = fakeApi();
     const el = await mountTill(api);

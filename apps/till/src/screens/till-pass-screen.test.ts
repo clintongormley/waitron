@@ -1,6 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { kitchenScreenNoticeText } from "../kitchen-screen-notice.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { PASS_COLUMNS } from "../state/kitchen-columns.js";
@@ -13,7 +13,7 @@ import type {
   ResolvedKitchenScreen,
   TillApi,
 } from "../api/client.js";
-import { PASS_NOW, passBoard, passCard } from "../../test/pass-board-fixtures.js";
+import { PASS_NOW, passBoard, passCard, passItem } from "../../test/pass-board-fixtures.js";
 import type { TillPassScreen } from "./till-pass-screen.js";
 import "./till-pass-screen.js";
 import type { TillStationScreen } from "./till-station-screen.js";
@@ -161,6 +161,59 @@ describe("A773 pass screen", () => {
         await flush(el);
         expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
         expect(cardKeys(el)).toEqual(["bill:b"]);
+      }));
+
+    it("that does not run the pass draws its board with no Fire, Ready or Reprint", async () => {
+      const board = passBoard({
+        toFire: [
+          passCard({
+            key: "group:g-2",
+            target: { kind: "group", partyId: "p-1", groupId: "g-2" },
+            items: [passItem({ id: "f-a", phase: "requested", firedAt: null })],
+            releaseTicketItemIds: ["f-a"],
+            releaseContext: "ctx-1",
+          }),
+        ],
+        inProgress: [
+          passCard({
+            key: "group:g-1",
+            target: { kind: "group", partyId: "p-1", groupId: "g-1" },
+            party: { id: "p-1", revision: 7 },
+          }),
+          passCard(),
+        ],
+      });
+      const buttons = "[data-pass-fire], [data-group-ready], [data-ready], [data-reprint]";
+      const runs = await mount({ deviceMode: true, initialBoard: deviceBoard(board) });
+      expect(boardOf(runs)!.shadowRoot!.querySelectorAll(buttons).length).toBeGreaterThan(0);
+      runs.remove();
+      const el = await mount({
+        deviceMode: true,
+        runsPass: false,
+        initialBoard: deviceBoard(board),
+      });
+      expect(cardKeys(el)).toEqual(["group:g-2", "group:g-1", "bill:order-1"]);
+      expect(boardOf(el)!.shadowRoot!.querySelectorAll(buttons)).toHaveLength(0);
+    });
+
+    it("embedded in its card, adopts the board handed to it without a read, then refreshes its own pass board", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({ getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(boardB)) });
+        const el = await mount({
+          api,
+          embedded: true,
+          deviceMode: true,
+          initialBoard: deviceBoard(),
+        });
+        expect(boardOf(el)!.mode).toBe("pass");
+        expect(cardKeys(el)).toEqual(["bill:a"]);
+        expect(api.getDevicePassBoard).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+        expect(api.getExpoBoard).not.toHaveBeenCalled();
+        expect(api.getDeviceIdentity).not.toHaveBeenCalled();
       }));
   });
 
@@ -453,6 +506,20 @@ describe("A773 pass screen", () => {
         }),
       ));
 
+    it("as a pass monitor, re-boots when a refresh is refused device.unauthorized", () =>
+      listening((reboot) =>
+        withFakeTimers(async () => {
+          const api = fakeApi({
+            getDevicePassMonitorBoard: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+          });
+          await mount({ api, monitor: true, initialBoard: deviceBoard() });
+          expect(reboot).not.toHaveBeenCalled();
+          await vi.advanceTimersByTimeAsync(15_000);
+          expect(api.getDevicePassMonitorBoard).toHaveBeenCalledOnce();
+          expect(reboot).toHaveBeenCalledOnce();
+        }),
+      ));
+
     it("an embedded card whose refresh is refused device.unauthorized marks its board out of date and re-boots nothing", () =>
       listening((reboot) =>
         withFakeTimers(async () => {
@@ -536,6 +603,81 @@ describe("A773 pass screen", () => {
       expect(api.getDevicePassBoard).not.toHaveBeenCalled();
       expect(api.getExpoBoard).not.toHaveBeenCalled();
     });
+
+    it.each([
+      [
+        "en-GB",
+        "This station is no longer available: Freidora",
+        "This zone is no longer available: Terraza",
+      ],
+      [
+        "es-ES",
+        "Esta estación ya no está disponible: Freidora",
+        "Esta zona ya no está disponible: Terraza",
+      ],
+    ])(
+      "at a till following its pass, shows each station and zone a narrowing took (%s)",
+      async (locale, stationLine, zoneLine) => {
+        const previous = currentLocale();
+        setLocale(locale);
+        try {
+          const api = fakeApi({
+            getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+            getDevicePassBoard: vi.fn().mockResolvedValue(
+              deviceBoard(boardA, {
+                stations: [
+                  { id: "st-grill", name: "Parrilla", available: true },
+                  { id: "st-fryer", name: "Freidora", available: false },
+                ],
+                zones: [
+                  { id: "z-room", name: "Sala", available: true },
+                  { id: "z-terrace", name: "Terraza", available: false },
+                ],
+              }),
+            ),
+          });
+          const el = await mount({ api });
+          expect(lines(el)).toEqual([stationLine, zoneLine]);
+          expect(cardKeys(el)).toEqual(["bill:a"]);
+        } finally {
+          setLocale(previous);
+        }
+      },
+    );
+
+    it("shows the board again once a read gives it a station back", () =>
+      withFakeTimers(async () => {
+        const lost = deviceBoard(boardA, {
+          stations: [{ id: "st-2", name: "Freidora", available: false }],
+        });
+        const api = fakeApi({ getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(boardB)) });
+        const el = await mount({ api, deviceMode: true, initialBoard: lost });
+        expect(boardOf(el)).toBeNull();
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(lines(el)).toEqual([]);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+      }));
+
+    it("at a till on All stations, drops that board when a later choice read says a narrowing took the pass screen", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi();
+        api.getDeviceIdentity
+          .mockRejectedValueOnce({ code: "server.internal" })
+          .mockResolvedValue(identity([chosen("pass", false)]));
+        const el = await mount({ api });
+        expect(cardKeys(el)).toEqual(["bill:a"]);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(boardOf(el)).toBeNull();
+        expect(lines(el)).toEqual([
+          kitchenScreenNoticeText({ kind: "unavailable", screen: "pass" }),
+        ]);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(api.getExpoBoard).toHaveBeenCalledOnce();
+        expect(api.getDevicePassBoard).not.toHaveBeenCalled();
+      }));
   });
 
   describe("Columns", () => {
