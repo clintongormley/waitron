@@ -120,3 +120,27 @@ it("pendingWal leaves a committed row in venue.db-wal", async () => {
     await rm(aside, { recursive: true, force: true });
   }
 });
+
+// The two cases below run in order: a row the first writes must not reach the second's database.
+it("a row written into one test's held database stays in that test's own copy", async () => {
+  const f = await heldSetup({ recovery: false });
+  const venue = new DatabaseSync(join(f.roots.venueDir, "venue.db"));
+  try {
+    venue
+      .prepare("insert into adjustment_settings (id, updated_at) values (1, ?)")
+      .run(new Date().toISOString());
+    expect(venue.prepare("select count(*) as n from adjustment_settings").get()).toEqual({ n: 1 });
+  } finally {
+    venue.close();
+  }
+});
+
+it("the next test's held database is migrated and holds none of the previous test's rows", async () => {
+  const f = await heldSetup({ recovery: false });
+  const venue = new DatabaseSync(join(f.roots.venueDir, "venue.db"), { readOnly: true });
+  try {
+    expect(venue.prepare("select count(*) as n from adjustment_settings").get()).toEqual({ n: 0 });
+  } finally {
+    venue.close();
+  }
+});
