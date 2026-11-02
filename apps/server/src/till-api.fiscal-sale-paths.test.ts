@@ -2232,11 +2232,11 @@ describe("handheld sales and device capability gates", () => {
       body: JSON.stringify({ personId: operatorId, pin: "5555" }),
     });
     expect(login.status).toBe(200);
-    return login.headers.get("set-cookie")!.split(";")[0]!;
+    return `${login.headers.get("set-cookie")!.split(";")[0]!}; ${loginDeviceCookie}`;
   }
 
   it.each(["receipt", "reprint", "payment-slip"])(
-    "requires print-receipt of the session's device for handheld %s requests, with or without its device cookie",
+    "requires device proof and print-receipt of the session's device for handheld %s requests",
     async (action) => {
       const { cfg, available, operatorId } = await setupVenue();
       const each = available.find((p) => p.pricingUnit === "each")!;
@@ -2267,9 +2267,15 @@ describe("handheld sales and device capability gates", () => {
       });
       expect(refused.status).toBe(403);
       expect(await refused.json()).toMatchObject({ error: { code: "device.forbidden_action" } });
-      for (const cookie of [`${allowedSession}; ${allowedDevice}`, allowedSession]) {
+      for (const [cookie, status] of [
+        [allowedSession, 200],
+        [allowedSession.split(";")[0]!, 401],
+      ] as const) {
         const accepted = await app.request(route, { method: "POST", headers: { cookie } });
-        expect(accepted.status).toBe(200);
+        expect(accepted.status).toBe(status);
+        if (status === 401) {
+          expect(await accepted.json()).toMatchObject({ error: { code: "device.unauthorized" } });
+        }
       }
     },
   );
@@ -3355,7 +3361,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
-    const cookie = (await loginSession(app, cfg, operatorId)).split(";")[0]!;
+    const cookie = await loginSession(app, cfg, operatorId);
     // The operator signed in on `deviceCookie`'s device, with that cookie beside the session.
     const on = async (deviceCookie: string) =>
       `${(await loginSession(app, cfg, operatorId, deviceCookie)).split(";")[0]!}; ${deviceCookie}`;

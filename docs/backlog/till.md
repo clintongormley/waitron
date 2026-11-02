@@ -979,68 +979,12 @@ the bill-specific draft handles that race.
   — the draft now lives on the party, on the server and in `DraftSync`, so nothing is carried
   between tabs — and was not re-run against the new code.
 
-## Refuse a request from a device that is not enrolled
+## Till route-to-profile checks and printer identity
 
-A941's HTTP probe on `dc1772c4dd147e65ff2c46251b0dfe6d5f60a644` (2026-10-21) signed in
-through the real PIN route, then sent only the returned till-session cookie. A valid
-`POST /api/working-orders` created an order (`200`); the matching-device-cookie control also
-answered `200`. The session resolved to its enrolled device, not null. Across the probe's
-86 restricted-profile cases, the missing action still answered `403 device.forbidden_action`
-or `403 device.cash_not_allowed`. Anonymous and dashboard-password-only credentials were
-refused on the 123 mounted till/device action routes tested.
-
-`requireSession` reads the device through `sessions.device_id` and checks that it is active
-(`apps/server/src/till-session.ts:99`). PIN sign-in requires device proof
-(`apps/server/src/till-api.ts:1328`). The nullable helper's permissive branch is therefore a
-misleading explanation of the observed missing-cookie acceptance. The remaining A941 change
-is to require the device cookie on sensitive requests as the
-[2026-08-30 design](../superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)
-requires, while retaining the session device's profile checks. Preserve the dashboard's own
-`/management-api/orders/:id/reprint` and `/management-api/orders/:id/invoice-deliveries` routes,
-which accept a management session without a device cookie.
-
-The route probes used real mounted handlers over loopback HTTP and a migrated test venue;
-they did not boot an appliance or test physical payment and printing equipment. Most permitted
-requests deliberately used missing bodies or unknown ids to locate the next check, so those
-responses do not establish successful sales, refunds or printing. The specific order-creation
-control used a real offered item. The proposed `401 device.unauthorized` check failed with
-`200`. The probe and route table are retained with the local A941 campaign receipts.
-
-**Implementation checkpoint, 2026-11-01:** `requireSession` with an `action` also authenticates
-the request's enrolled device and checks it against the session's device. The HTTP cases in
-`apps/server/src/till-device-proof.test.ts` exercise missing, malformed, wrong-token and
-other-device cookies with a valid PIN session and order body. Each answers
-`401 device.unauthorized`; a matching device creates the order, and the session-only order list
-still answers. The profile-action and profile-zone fixtures now carry their enrolled device
-cookie alongside the session cookie, with their existing assertions preserved.
-
-**Further implementation checkpoint, 2026-11-01:** the payment, bill-refund and settled-tender
-refund routes now require matching request-device proof. So do receipt and payment-slip actions,
-sale, transaction and refund reprints, and manual drawer opening. The expanded HTTP suite drives
-real payments, refunds and queued printer/drawer jobs with matching-device controls. The existing
-profile-denied sale and drawer cases retain their refusal codes. A Disable injected when the bill
-payment body is read still reaches the existing `session.required` check without writing a payment.
-
-**Further implementation checkpoint, 2026-11-02:** original receipt retries, print and email
-invoice requests, switching to a receipt and retrying email require the matching device cookie.
-The new loopback HTTP cases in `till-api.deliveries.test.ts` first returned `200` without it,
-then returned `401 device.unauthorized`, preserving delivery and print rows; matching-device
-requests still queued their intended work. The mounted route audit includes paths created in loops.
-`till-device-proof.test.ts` names each shared action-session route explicitly and checks its missing
-proof refusal and admission with matching proof. Those admission checks reach the next route check;
-the existing route suites check successful business operations.
-
-Device proof checked after session resolution is passive: session resolution owns whether the
-request records activity. The existing passive-read cases in `line-cancel-api.test.ts`,
-`till-attendance-api.test.ts`, `till-hours-api.test.ts` and `department-transfer-api.test.ts`
-failed when this extra proof check refreshed the sighting and passed with passive proof. Seeded
-request fixtures keep their devices, profiles and sessions while adding verifiable device cookies.
-Complete the remaining credential fixtures, whole-branch review and current-head CI before
-publication. Keep the dashboard reprint and invoice-delivery routes available without a device cookie.
-
-Still separate: a maintained route-to-profile-action table with a guard that walks the routes,
-and printer identity (the design's sub-project C). Handheld actions follow the profile, not the
-old design's device-kind table: placing, collecting, cancelling, cash, the drawer, integrated
+Keep a maintained route-to-profile-action table with a guard that walks the routes. Printer
+identity remains sub-project C of the
+[device enrolment design](../superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md).
+Handheld actions follow the profile: placing, collecting, cancelling, cash, the drawer, integrated
 card payment and printing need their respective current profile actions.
 
 ## Malformed sale and cancellation bodies
@@ -1531,6 +1475,11 @@ while 4 and 5 needed moving, so Leave it here only makes it last until the next 
 whether those reads should follow today's map once a group is left.
 
 ## Decisions and deliberate limits
+
+- **Request-device proof on till actions (A941, device enrolment design).** Authenticate the enrolled
+  device and match it to the PIN session. Keep management order reprints and invoice delivery
+  available through their management session without a device cookie. Request-device proof is
+  passive; session resolution owns whether the request records activity.
 
 - **Splitting sent dishes (owner, 2026-09-26).** A partial split gives the moved row its own
   ticket item and reduces the original ticket quantity by that part. A dish the kitchen has

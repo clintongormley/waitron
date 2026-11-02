@@ -3158,12 +3158,10 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Location-consistency guard** — nothing enforces that a sale-capable device's own location
   (`devices.location_id`) is the box's configured location. Guard at enrol or first sale.
 
-- **Finish qualifying request-device proof on sensitive till routes (A941).** Shared action
-  sessions, payments, refunds, receipt retries, invoice delivery, reprints and drawer opening check
-  the enrolled device cookie against the session's device. Passive reads retain their activity
-  time. Complete the remaining credential fixtures, whole-branch review and CI; retain dashboard
-  routes and transaction-time profile restrictions.
-  [Detail](backlog/till.md#refuse-a-request-from-a-device-that-is-not-enrolled)
+- **Maintain a route-to-profile-action table and qualify printer identity.** The request-device
+  proof is in place; a guard that walks every route's profile action and the enrolment design's
+  printer-identity work remain separate.
+  [Detail](backlog/till.md#till-route-to-profile-checks-and-printer-identity).
 
 - **Malformed sale and cancellation bodies answer 500.** With an authenticated, permitted till,
   `POST /api/sales` with `{}` or `{"lines": []}`, and
