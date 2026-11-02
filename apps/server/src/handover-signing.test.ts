@@ -25,10 +25,12 @@ import {
   type Endorsement,
   type MembershipDocumentBody,
   type SignedMembershipDocument,
+  verifyMembershipDocument,
 } from "@waitron/membership";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { currentBinding, peerKeyOf, signAsThisBox } from "./handover-signing.js";
+import { readStoredTrustSet } from "./membership-trust.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
@@ -190,6 +192,82 @@ describe("signing and verifying handover envelopes between boxes", () => {
     const after = await peerKeyOf({ db, node: suite.node, ring: RING, nodeId: self });
     expect(after("main-box")).toBeUndefined();
     expect(after(self)).toBe(publicKeyOf(selfKey));
+  });
+
+  it("after a spare's retirement chart is held, a remaining box still verifies and the spare does not", async () => {
+    const { db, self, peer, other: spare } = await boxes();
+    const selfKey = await readNodeIdentityKey(suite.node, RING, self);
+    const peerKey = await readNodeIdentityKey(suite.node, RING, peer);
+    const spareKey = await readNodeIdentityKey(suite.node, RING, spare);
+    const endorsements = [
+      endorseKey(peer, publicKeyOf(peerKey), self, selfKey),
+      endorseKey(spare, publicKeyOf(spareKey), self, selfKey),
+    ];
+    const body = (
+      spareStanding: "sell-only" | "evicted",
+      term: number,
+    ): MembershipDocumentBody => ({
+      term,
+      nodes: [
+        { nodeId: self, contactUrl: "https://box-0", standing: "serving-primary" },
+        { nodeId: peer, contactUrl: "https://box-1", standing: "serving-secondary" },
+        { nodeId: spare, contactUrl: "https://box-2", standing: spareStanding },
+      ],
+    });
+    const sign = (b: MembershipDocumentBody, signer: string, key: string) => ({
+      body: b,
+      signerNodeId: signer,
+      signature: signDocumentBody(b, key),
+      endorsements,
+    });
+    const previous = sign(body("sell-only", 3), self, selfKey);
+    const retirement = sign(body("evicted", 4), spare, spareKey);
+    const fromPeer = await signAsThisBox({ node: suite.node, ring: RING, nodeId: peer }, "status", {
+      operationId: OP,
+    });
+    const fromSpare = await signAsThisBox(
+      { node: suite.node, ring: RING, nodeId: spare },
+      "status",
+      { operationId: OP },
+    );
+
+    await writeNodeMembership(db, previous);
+    const before = await peerKeyOf({ db, node: suite.node, ring: RING, nodeId: self });
+    expect(verifyEnvelope(fromPeer, "status", before).valid).toBe(true);
+    const trust = await readStoredTrustSet({ node: suite.node, ring: RING, nodeId: self });
+    expect(verifyMembershipDocument(retirement, trust, previous).valid).toBe(true);
+
+    await writeNodeMembership(db, retirement);
+    const after = await peerKeyOf({ db, node: suite.node, ring: RING, nodeId: self });
+    expect(verifyEnvelope(fromPeer, "status", after)).toEqual({
+      valid: true,
+      body: { operationId: OP },
+      signerNodeId: peer,
+    });
+    expect(verifyEnvelope(fromSpare, "status", after)).toEqual({
+      valid: false,
+      reason: "unknown_signer",
+    });
+  });
+
+  it("a box key the caller has already unsealed is used as given, never unsealed again", async () => {
+    const { db, self } = await boxes();
+    const selfKey = await readNodeIdentityKey(suite.node, RING, self);
+    const otherRing = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xf).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+    });
+    await expect(
+      peerKeyOf({ db, node: suite.node, ring: otherRing, nodeId: self }),
+    ).rejects.toMatchObject({ code: "credentials.decrypt_failed" });
+    const keyOf = await peerKeyOf({
+      db,
+      node: suite.node,
+      ring: otherRing,
+      nodeId: self,
+      privateKey: selfKey,
+    });
+    expect(keyOf(self)).toBe(publicKeyOf(selfKey));
   });
 
   it("a malformed stored chart vouches for nothing and still answers the stored keys", async () => {

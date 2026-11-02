@@ -1,9 +1,8 @@
-import { eq } from "drizzle-orm";
 import type { KeyRing } from "@waitron/credentials";
 import {
   readDeploymentEnvironment,
   readNodeMembership,
-  tenants,
+  readTenant,
   type Database,
   type NodeDatabase,
 } from "@waitron/db";
@@ -15,15 +14,9 @@ import {
   type HandoverScenario,
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
-import {
-  canonicalize,
-  endorsedKeyOf,
-  fencedOutNodeIds,
-  isMembershipDocument,
-  type CanonicalValue,
-} from "@waitron/membership";
+import { canonicalize, endorsedKeyOf, type CanonicalValue } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
-import { readStoredTrustSet } from "./membership-trust.js";
+import { readStoredTrustSet, type StoredTrustDeps } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
 import "./errors.js";
 
@@ -37,20 +30,14 @@ export async function signAsThisBox<B extends CanonicalValue>(
 }
 
 /**
- * The key this box stores for a node, or one the held chart's endorsements vouch for by the
+ * The key this box stores for a node, or one the held chart's endorsements vouch for, by the
  * membership package's rule (`endorsedKeyOf`); never the keys venue.db's `nodes` names.
  */
-export async function peerKeyOf(deps: {
-  db: Database;
-  node: NodeDatabase;
-  ring: KeyRing;
-  nodeId: string;
-}): Promise<(nodeId: string) => string | undefined> {
+export async function peerKeyOf(
+  deps: StoredTrustDeps & { db: Database },
+): Promise<(nodeId: string) => string | undefined> {
   const held = await readNodeMembership(deps.db);
-  const keyOf = endorsedKeyOf(held, await readStoredTrustSet(deps));
-  const removed = held !== null && isMembershipDocument(held) ? fencedOutNodeIds(held) : new Set();
-  // A box the held chart has removed never speaks in a handover, a pinned primary included.
-  return (nodeId) => (removed.has(nodeId) ? undefined : keyOf(nodeId));
+  return endorsedKeyOf(held, await readStoredTrustSet(deps));
 }
 
 /** The binding for a new operation: the taxpayer, the environment stamp and the held chart. */
@@ -61,15 +48,12 @@ export async function currentBinding(
   destinationNodeId: string,
   operationId: string,
 ): Promise<HandoverBinding> {
-  const [tenant] = await deps.db
-    .select({ country: tenants.country, taxId: tenants.taxId })
-    .from(tenants)
-    .where(eq(tenants.id, 1));
+  const tenant = await readTenant(deps.db);
   const environment = await readDeploymentEnvironment(deps.db);
   if (environment === null) throw new AppError("deployment.not_stamped", {});
   const held = await readNodeMembership(deps.db);
   // A fault in Waitron: a handover is started only on a set-up box that holds a chart.
-  if (tenant === undefined || held === null) throw new Error("no taxpayer or held chart to bind");
+  if (tenant === null || held === null) throw new Error("no taxpayer or held chart to bind");
   return {
     operationId,
     scenario,

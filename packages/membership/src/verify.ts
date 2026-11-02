@@ -140,15 +140,18 @@ export function verifyMembershipDocument(
 
 /**
  * The key that speaks for a node under the receiver's own held chart: `trustSet`'s, or one the
- * chart's endorsements vouch for by `resolveSignerKey`'s rule. Endorsements are read only from a held
- * chart that verifies against `trustSet`, which also caps how many there are.
+ * chart's endorsements vouch for by `resolveSignerKey`'s rule — never one for a node the held chart
+ * has removed (`fencedOutNodeIds`), a trust anchor included. Endorsements are read only from a
+ * well-formed held chart a key `trustSet` vouches for signed. That check skips the removal rule,
+ * because a retirement chart is signed by the node it removes.
  */
 export function endorsedKeyOf(
   held: SignedMembershipDocument | null,
   trustSet: TrustSet,
 ): (nodeId: string) => string | undefined {
   const keys = new Map(Object.entries(trustSet));
-  if (held !== null && verifyMembershipDocument(held, trustSet, held).valid) {
+  const wellFormed = held !== null && isMembershipDocument(held);
+  if (wellFormed && verifyDocumentSigner(held, trustSet).trusted) {
     // Only an endorsed id can gain a key, so resolving each of them once answers every lookup.
     for (const { nodeId } of held.endorsements) {
       if (keys.has(nodeId)) continue;
@@ -156,7 +159,8 @@ export function endorsedKeyOf(
       if (key !== null) keys.set(nodeId, key);
     }
   }
-  return (nodeId) => keys.get(nodeId);
+  const removed = wellFormed ? fencedOutNodeIds(held) : new Set<string>();
+  return (nodeId) => (removed.has(nodeId) ? undefined : keys.get(nodeId));
 }
 
 /**
