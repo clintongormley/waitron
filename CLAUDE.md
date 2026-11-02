@@ -88,15 +88,14 @@ and which keep the full gate: [ci-and-gates.md](docs/developers/ci-and-gates.md)
 where the rest of a gap could be closed solely by tests that assert nothing useful, and a gap is
 never closed by hiding code a test could reach — adding an exclude or an ignore comment over it, or
 moving it under `src/testing/`. Guard: `scripts/coverage-thresholds.test.ts`, weaker than its name —
-it reads each config's `thresholds` literal as TEXT and never reads an exclude or an ignore comment.
+it reads each config's `thresholds` literal as TEXT.
 More: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 **A mutation floor of 90 breaks the run in every mutation-tested package — `ui`, `ui-core`,
 `shared`, `fiscal`, `db` and `node-db`** (the owner's 90-everywhere decision of 2026-09-19). WHERE it bites
-differs — on a pull request, only in the nightly run, or only locally — and neither `fiscal`'s nor
-`db`'s floor is package-wide. Guard: `scripts/mutation-break-thresholds.test.mjs`, weaker than its
-name — it reads the workflow as TEXT for the sharded packages' bars (db, ui and ui-core). Which
-package bites where: [ci-and-gates.md](docs/developers/ci-and-gates.md).
+differs, and neither `fiscal`'s nor `db`'s floor is package-wide. Guard:
+`scripts/mutation-break-thresholds.test.mjs`, weaker than its name — it reads the workflow as TEXT
+for the sharded packages' bars. Which package bites where: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 Traps, each of which cost a round trip. The mechanism behind every one is in
 [ci-and-gates.md](docs/developers/ci-and-gates.md#root-detail-moved-on-2026-10-26) — read it before changing anything about CI, the
@@ -109,12 +108,10 @@ hook, or how tests are scheduled:
   LAST command's status. Use `&&` for dependent validation steps, or capture each status separately.
 - **CI's test jobs measure coverage, never plain `test`**: `test:coverage`, or `test:shard` with
   the package's `-merge` job enforcing the bar. Verify that package’s coverage or merge job on the
-  current head; run `pnpm --filter <pkg> test:coverage` locally when investigating a failure.
-  Vitest `--shard` splits by FILE COUNT (`apps/server` excepted: its shards are packed by duration),
-  so `N` must never exceed a package's test-file count.
-  Guard: the "run no more shards than the package has test files" case in
-  `scripts/ci-workflow.test.mjs`, weaker than its name — it counts files named `*.test.ts` under the
-  package, not what the package's Vitest config includes.
+  current head. Vitest `--shard` splits by FILE COUNT (`apps/server` excepted), so `N` must never
+  exceed a package's test-file count. Guard: the "run no more shards than the package has test
+  files" case in `scripts/ci-workflow.test.mjs`, weaker than its name — it counts files named
+  `*.test.ts`. [Receipt](docs/developers/ci-and-gates.md#root-receipts-moved-on-2026-11-02).
 - **`apps/server`'s shards are packed by the committed duration table, not Vitest's hash split.**
   Refresh it with `scripts/test-durations.mjs` when a shard drifts past 4 minutes. Guard:
   `scripts/vitest-duration-sequencer.test.mjs`, weaker than its name: checks packing, not a Vitest run or freshness.
@@ -135,7 +132,6 @@ hook, or how tests are scheduled:
   `packages` outputs before treating a green PR as evidence about the workspace. A main push
   reuses a same-repository PR's successful CI only after API verification of equal trees and
   complete successful job evidence, plus a full-green main run for the pushed commit's parent.
-  Main retains image smoke before publishing; its summary names both evidence runs. Otherwise normal CI runs.
   [Details and limits](docs/developers/ci-and-gates.md#main-can-reuse-an-identical-pull-request-tree).
 - **No front-end bundle is built by a pull request that changed no image input**, and wherever one
   is built nothing opens it, so a bundle that renders nothing passes anyway.
@@ -162,9 +158,8 @@ hook, or how tests are scheduled:
   name: reads text) and `scripts/ci-setup-pnpm.test.mjs`.
 - **On GitHub's ubuntu-26.04 runners `timeout` is uutils', not GNU's, and its `-k` forced kill
   reaches the command alone, never its children; a script that relies on `-k` to stop a process tree
-  looks for `gnutimeout` first.** Cost: root-guards failed on 26.04 runners when the ignored-stop
-  case hit its 30 s limit, main's own CI among them. Guards: the "prefers gnutimeout" and "kills an
-  attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
+  looks for `gnutimeout` first.** Cost: root-guards failed on 26.04 runners. Guards: the "prefers
+  gnutimeout" and "kills an attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
   rule: that script only; `scripts/ci-diff-paths.sh` never looks for `gnutimeout` (backlog).
   [Receipt](docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 - **Every `actions/setup-node` has two bounded attempts; only a failed first attempt runs the retry,
@@ -916,22 +911,21 @@ before treating an implementation as a rule violation.
   `wa-wt reset demo <name>` rebuilds it.
 - **Mock-ups and screenshots are never committed, and not copied to Drive** (owner, 2026-11-02):
   they stay in the working folder of whoever made them and are shown to the owner directly. Cost:
-  184 MiB of them in the tree when removed; A1306 rewrites the history. Guard:
+  184 MiB of them in the tree when removed. Guard:
   `scripts/no-mockups-in-docs.test.ts`, weaker than its name: reads tracked file names, not
   content. [Limits](docs/developers/workflow-guide.md#mock-ups-and-screenshots-are-never-committed).
 
 **Docs.** `docs/backlog.md` answers "what should I work on?" — read it before starting anything
-unprompted, and **update it in the same change that makes it stale** (the moment it goes stale most
-reliably is a MERGE). A change that finishes an entry DELETES it rather than marking it done, and
-each point it leaves open becomes its own short entry in the same area; an entry's long detail goes
+unprompted, and **update it in the same change that makes it stale**. A change that finishes an entry DELETES it
+rather than marking it done, and each point it leaves open becomes its own short entry in the same area; an entry's long detail goes
 in its area's file under `docs/backlog/`. A decision a comment or doc cites moves to its area's
 `## Decisions and deliberate limits` instead of being deleted, and entries there are never deleted
 for being finished. How: `docs/backlog.md` → _How to keep this file honest_.
 Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`,
-both committed deliberately because a plan doubles as an operator's runbook. Session handoffs in
-`docs/handoffs/` are gitignored — never open a PR for one. Historical docs record what was true when
-written: add a dated pointer rather than rewriting them. The legal track is separate, in
-`docs/compliance/action-plan.md`.
+both committed deliberately. Session handoffs in `docs/handoffs/` are gitignored — never open a PR
+for one. Historical docs record what was true when written: add a dated pointer rather than
+rewriting them. The legal track is separate, in `docs/compliance/action-plan.md`.
+[Receipt](docs/developers/workflow-guide.md#documentation-rules).
 
 ---
 
