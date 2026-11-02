@@ -133,7 +133,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
   app.get("/management-api/roster/breaches", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const locationId = requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
       const period = requirePeriod(c.req.query("period"), "period");
       const result = await gated(sessionId, SCHEDULE_PERMISSION, async (tx) => {
         const ruleset = await resolveWorkTimeRuleset(tx);
@@ -153,7 +152,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
             .from(shifts)
             .where(
               and(
-                eq(shifts.locationId, locationId),
                 isNull(shifts.rosterVersionId),
                 gte(localShiftDate, week),
                 lt(localShiftDate, dayAt(offset + 7)),

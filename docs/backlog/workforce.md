@@ -107,7 +107,7 @@ S2b (#1750, #1975). Print each value in the file's language.
 The warnings cases exercise the separate JavaScript filter's local dates. Add fixtures at
 the previous week's first local Monday and the next week's last local Sunday, where the SQL
 selection decides whether the neighboring week is represented for weekly rest. Retain the existing
-offset and location assertions; require the UTC-query mutation to fail. The route currently keeps
+offset assertions; require the UTC-query mutation to fail. The route currently keeps
 the offset-aware query. This is a test gap, not an observed wrong answer from that query.
 
 ## Roster browser-entry re-exports

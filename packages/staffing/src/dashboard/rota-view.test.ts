@@ -262,12 +262,7 @@ describe("the Rota by area", () => {
     );
     expect(request.mock.calls.slice(-2)).toEqual([
       ["/management-api/staffing/rota?week=2026-11-30", "GET", undefined, { passive: true }],
-      [
-        "/management-api/roster/breaches?locationId=location&period=2026-11-30",
-        "GET",
-        undefined,
-        { passive: true },
-      ],
+      ["/management-api/roster/breaches?period=2026-11-30", "GET", undefined, { passive: true }],
     ]);
   });
   it("shows published weeks without slot actions", async () => {

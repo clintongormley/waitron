@@ -92,8 +92,8 @@ async function mount(
   };
   let initialWarnings: Promise<void> | undefined;
   const watch = api.watchRotaWarnings.bind(api);
-  api.watchRotaWarnings = (q, l, w, apply) => {
-    const result = watch(q, l, w, apply);
+  api.watchRotaWarnings = (q, w, apply) => {
+    const result = watch(q, w, apply);
     if (w === A) initialWarnings = result;
     return result;
   };

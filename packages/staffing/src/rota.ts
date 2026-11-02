@@ -81,7 +81,6 @@ export async function readRotaWeek(tx: Transaction, cfg: Cfg, week: string): Pro
   const holds = (personId: string, staffRoleId: string) =>
     roles.some((r) => r.id === staffRoleId && r.holderIds.includes(personId));
   return {
-    locationId: cfg.locationId,
     timeZone: clock.timeZone,
     week,
     version: version

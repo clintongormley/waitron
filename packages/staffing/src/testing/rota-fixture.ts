@@ -32,7 +32,6 @@ export function rotaWeek(week = "2026-11-30"): RotaWeek {
     end: 660,
   });
   return {
-    locationId: "location",
     timeZone: "Europe/Madrid",
     week,
     version: { id: "draft", status: "draft", changedSincePublished: true },

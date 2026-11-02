@@ -294,12 +294,7 @@ describe("the Rota contribution", () => {
     await vi.waitFor(() =>
       expect(request.mock.calls.slice(-2)).toEqual([
         ["/management-api/staffing/rota?week=2026-12-07", "GET", undefined, { passive: true }],
-        [
-          "/management-api/roster/breaches?locationId=location&period=2026-12-07",
-          "GET",
-          undefined,
-          { passive: true },
-        ],
+        ["/management-api/roster/breaches?period=2026-12-07", "GET", undefined, { passive: true }],
       ]),
     );
   });

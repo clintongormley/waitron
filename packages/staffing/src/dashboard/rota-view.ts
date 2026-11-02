@@ -413,7 +413,7 @@ export class RotaView extends LitElement {
         }
         this.warnings = undefined;
         void this.api
-          .watchRotaWarnings(this.#warningQueries, read.locationId, week, (warnings) => {
+          .watchRotaWarnings(this.#warningQueries, week, (warnings) => {
             this.warnings = warnings;
             this.warningsError = "";
           })

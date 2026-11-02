@@ -804,13 +804,8 @@ describe("roster warnings while planning", () => {
       .returning();
     return row!.id;
   }
-  const read = (locationId: string, period = "2026-03-02", cookie = managerCookie) =>
-    send(
-      mountApp(),
-      "GET",
-      `/management-api/roster/breaches?locationId=${locationId}&period=${period}`,
-      { cookie },
-    );
+  const read = (period = "2026-03-02", cookie = managerCookie) =>
+    send(mountApp(), "GET", `/management-api/roster/breaches?period=${period}`, { cookie });
 
   it("uses preferred drafts and adjacent weeks, keeps boundary rest warnings and returns the resolved rules", async () => {
     const loc = await warningLocation();
@@ -841,7 +836,7 @@ describe("roster warnings while planning", () => {
     await planned(loc, "2026-03-03T09:00:00Z", "2026-03-03T13:00:00Z");
     const sunday = await planned(loc, "2026-03-08T22:00:00Z", "2026-03-09T00:00:00Z", draft);
     const nextMonday = await planned(loc, "2026-03-09T05:00:00Z", "2026-03-09T09:00:00Z", next);
-    const response = await read(loc, "2026-03-04");
+    const response = await read("2026-03-04");
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
       ruleset: unknown;
@@ -877,19 +872,17 @@ describe("roster warnings while planning", () => {
     ]);
   });
 
-  it("reads unattached shifts by their local calendar date and scopes them to this location", async () => {
+  it("reads unattached shifts by their local calendar date", async () => {
     const loc = await warningLocation();
     const included = await planned(loc, "2026-03-01T23:30:00Z", "2026-03-02T07:30:00Z", null, 60);
     const excluded = await planned(loc, "2026-03-08T23:30:00Z", "2026-03-09T07:30:00Z", null, 60);
-    const foreignLoc = await warningLocation();
-    const foreign = await planned(foreignLoc, "2026-03-02T08:00:00Z", "2026-03-02T20:00:00Z");
-    const response = await read(loc);
+    const response = await read();
     expect(response.status).toBe(200);
     const { breaches } = (await response.json()) as { breaches: Array<Record<string, unknown>> };
     expect(breaches.filter((b) => b.kind === "break_owed").map((b) => b.shiftId)).toEqual([
       included,
     ]);
-    expect(breaches.some((b) => b.shiftId === excluded || b.shiftId === foreign)).toBe(false);
+    expect(breaches.some((b) => b.shiftId === excluded)).toBe(false);
   });
 
   it("keeps day/week warnings in the requested week and omits the annual cap", async () => {
@@ -900,7 +893,7 @@ describe("roster warnings while planning", () => {
     });
     for (const day of ["2026-02-24", "2026-03-03", "2026-03-10"])
       await planned(loc, `${day}T09:00:00Z`, `${day}T13:00:00Z`);
-    const response = await read(loc);
+    const response = await read();
     expect(response.status).toBe(200);
     const { breaches } = (await response.json()) as { breaches: Array<Record<string, unknown>> };
     expect(breaches).toEqual([
@@ -934,7 +927,7 @@ describe("roster warnings while planning", () => {
         await planned(loc, `${date}T09:00:00Z`, `${date}T17:00:00Z`, null, 0, person);
       }
     await planned(loc, "2026-03-09T09:00:00Z", "2026-03-09T17:00:00Z");
-    const response = await read(loc);
+    const response = await read();
     expect(response.status).toBe(200);
     const { breaches } = (await response.json()) as { breaches: Array<Record<string, unknown>> };
     expect(breaches.filter((b) => b.kind === "weekly_rest_insufficient")).toEqual([
@@ -948,13 +941,34 @@ describe("roster warnings while planning", () => {
     ]);
   });
 
+  it("reads the venue's warnings with no locationId", async () => {
+    const loc = await warningLocation(true, { maxOrdinaryDailyMinutes: 60 });
+    await planned(loc, "2026-03-03T09:00:00Z", "2026-03-03T13:00:00Z");
+    const response = await send(
+      mountApp(),
+      "GET",
+      "/management-api/roster/breaches?period=2026-03-02",
+    );
+    expect(response.status).toBe(200);
+    const { breaches } = (await response.json()) as { breaches: Array<Record<string, unknown>> };
+    expect(breaches.filter((b) => b.kind === "exceeds_daily_max")).toEqual([
+      {
+        kind: "exceeds_daily_max",
+        personId,
+        workDate: "2026-03-03",
+        plannedMinutes: 240,
+        maxMinutes: 60,
+      },
+    ]);
+  });
+
   it("returns convenio.not_found when no labour rules row exists", async () => {
-    const loc = await warningLocation(false);
-    expect(await refusal(await read(loc))).toEqual([409, "convenio.not_found", {}]);
+    await warningLocation(false);
+    expect(await refusal(await read())).toEqual([409, "convenio.not_found", {}]);
   });
   it("refuses staff and unauthenticated reads", async () => {
-    const loc = await warningLocation();
-    const denied = await read(loc, "2026-03-02", staffCookie);
+    await warningLocation();
+    const denied = await read("2026-03-02", staffCookie);
     expect(denied.status).toBe(403);
     expect(await refusal(denied)).toEqual([
       403,
@@ -964,13 +978,13 @@ describe("roster warnings while planning", () => {
     const response = await send(
       mountApp(),
       "GET",
-      `/management-api/roster/breaches?locationId=${loc}&period=2026-03-02`,
+      "/management-api/roster/breaches?period=2026-03-02",
       { cookie: null },
     );
     expect(response.status).toBe(401);
   });
   it.each(["", "2026-02-30", "not-a-date"])("refuses the invalid period %s", async (period) => {
-    const loc = await warningLocation();
-    expect((await read(loc, period)).status).toBe(400);
+    await warningLocation();
+    expect((await read(period)).status).toBe(400);
   });
 });
