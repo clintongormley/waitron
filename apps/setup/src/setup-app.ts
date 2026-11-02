@@ -198,7 +198,6 @@ const TAXPAYER_FIELDS = [
   "rectificativeSeriesCode",
 ] as const;
 
-/** Configuration-only location keys must not enter the flat claim. */
 const CLAIM_VENUE_FIELDS = [
   "name",
   "fiscalTerritory",
@@ -2075,16 +2074,15 @@ export class SetupApp extends LitElement {
       );
       if (!this.isConnected || generation !== this.#rootGeneration || (owner && !owner.isConnected))
         return;
-      const { location: exportedFields, ...exported } = preview.venue;
-      const venueFields: Partial<VenueDraft> = Object.fromEntries(
-        CLAIM_VENUE_FIELDS.filter((key) => key in exportedFields).map((key) => [
-          key,
-          exportedFields[key],
-        ]),
+      const exported = preview.venue;
+      const venue: Partial<VenueDraft> = Object.fromEntries(
+        (["country", ...TAXPAYER_FIELDS, ...CLAIM_VENUE_FIELDS] as const)
+          .filter((key) => key in exported)
+          .map((key) => [key, exported[key]]),
       );
       this.draft = deepMerge(this.draft, {
         configurationImport: true,
-        venue: { ...exported, ...venueFields },
+        venue,
       }) as DeepPartial<ProvisionBody>;
       delete this.draft.newTaxpayer;
       this.#rootScope?.changed();

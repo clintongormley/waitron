@@ -412,10 +412,11 @@ called weaker than its name, the topic file lists what it does not see.
   seats. The boundary is the swappable SLOT, not "any module". Guard: `scripts/module-seams.test.ts`,
   weaker than its name (it reads text) — shrink its allowlist, never grow it.
   `@waitron/dashboard-modules` is the browser-side twin.
-- **A configuration bundle value that is not a setup field stays out of `venue`'s own keys; the
-  setup app copies `venue.location` by `VenueDraft`'s fields.** Cost: from #1752 to A980 S1a2 no
-  production box could be set up from an export. Guards: `apps/server/src/first-fiscal-setup.e2e.test.ts`
-  and `apps/setup/src/setup-app-first-fiscal.test.ts`, weaker than the rule: one export shape.
+- **A configuration bundle value that is not a setup field stays out of `venue`'s own keys** (the
+  default menu travels as the top-level `defaultCatalogueId`); the setup app copies the preview's
+  `venue` by `CLAIM_VENUE_FIELDS`. Cost: from #1752 to A980 S1a2 no production box could be set up
+  from an export. Guards: `apps/server/src/first-fiscal-setup.e2e.test.ts` and
+  `apps/setup/src/setup-app-first-fiscal.test.ts`, weaker than the rule: one export shape.
   [Limits](docs/developers/conventions-data.md#root-receipts-moved-on-2026-10-31).
 - **A test-only dependency closes a workspace dependency loop as surely as a runtime one.** A suite
   needing packages from both ends of a loop goes in a package nothing depends on. Guard:
@@ -559,8 +560,8 @@ called weaker than its name, the topic file lists what it does not see.
   tables and top-level writes into that set.** Guard: `scripts/module-graph-honesty.test.ts`,
   weaker than its name: text scan recognising fixed SQL shapes.
 - **A column of a transferred table that holds another row's id is a foreign key, a declared
-  `references` entry, a location column or left out of the export** (`locationColumns`, `omit`);
-  any other column the export carries arrives holding the exporting venue's id. Guard:
+  `references` entry or left out of the export** (`omit`); any other column the export carries
+  arrives holding the exporting venue's id. Guard:
   `scripts/id-columns-are-references.test.ts`, weaker than its name — it knows an id column only by
   a name ending `_id` or `_ids`.
 - **No new table enters the core migration set without a stated reason in the commit.** A domain

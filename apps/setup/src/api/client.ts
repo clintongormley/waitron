@@ -232,28 +232,7 @@ export interface RecoveryBackupPreview {
 }
 
 export interface ConfigurationPreview {
-  venue: Pick<
-    VenueDraft,
-    | "country"
-    | "taxId"
-    | "legalName"
-    | "taxpayerDomicile"
-    | "seriesCode"
-    | "fullSeriesCode"
-    | "rectificativeSeriesCode"
-  > & {
-    location: Omit<
-      VenueDraft,
-      | "country"
-      | "taxId"
-      | "legalName"
-      | "taxpayerDomicile"
-      | "seriesCode"
-      | "fullSeriesCode"
-      | "rectificativeSeriesCode"
-      | "admin"
-    > & { id: string };
-  };
+  venue: Omit<VenueDraft, "admin">;
   counts: Record<string, number>;
   reconnect: string[];
 }

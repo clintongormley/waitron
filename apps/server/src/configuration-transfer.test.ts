@@ -889,10 +889,10 @@ describe("configuration transfer database path", () => {
         await importConfigurationTables(tx, transferred, ALL_MODULES, versions);
       },
     });
-    const locationColumns = await targetSuite.db.execute<{ name: string }>(sql`
+    const venueTableColumns = await targetSuite.db.execute<{ name: string }>(sql`
       select name from pragma_table_info('locations')
     `);
-    expect(locationColumns.rows.map((column) => column.name)).not.toContain("order_flow");
+    expect(venueTableColumns.rows.map((column) => column.name)).not.toContain("order_flow");
     await withTransaction(targetSuite.db, async (tx) => {
       const [metadata] = transferred.tables.media_images!;
       const bytes = await readImageBytes(tx, metadata!.filename as string);

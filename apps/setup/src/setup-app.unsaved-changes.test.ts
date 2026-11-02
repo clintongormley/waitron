@@ -729,20 +729,17 @@ const importedConfiguration: ConfigurationPreview = {
     seriesCode: "F",
     fullSeriesCode: "C",
     rectificativeSeriesCode: "R",
-    location: {
-      id: "source-location",
-      name: "Prepared",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
-      fiscalTerritory: "ES-common",
-      addressLine1: "Calle 1",
-      addressLine2: null,
-      postalCode: "28001",
-      city: "Madrid",
-      province: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00",
-    },
+    name: "Prepared",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant",
+    fiscalTerritory: "ES-common",
+    addressLine1: "Calle 1",
+    addressLine2: null,
+    postalCode: "28001",
+    city: "Madrid",
+    province: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00",
   },
   counts: { products: 4 },
   reconnect: ["printers"],
@@ -771,7 +768,6 @@ describe("setup root lifecycle and import", () => {
     expect(stage).toHaveBeenCalledExactlyOnceWith(artifact, "import proof");
     expect(unload()).toBe(true);
     const importedVenue = { ...importedConfiguration.venue };
-    delete (importedVenue as Partial<typeof importedVenue>).location;
     expect((el as unknown as State).draft).toEqual({
       mode: "prepare",
       configurationImport: true,
@@ -1171,14 +1167,12 @@ function chooseTaxpayer(el: SetupApp, newTaxpayer: boolean) {
 describe("setup taxpayer choice", () => {
   it("New tax ID guards the page against unload when the staged root was clean", async () => {
     const { el } = await mount();
-    const { location, ...venue } = importedConfiguration.venue;
-    const stagedLocation: Partial<typeof location> = { ...location };
-    delete stagedLocation.id;
+    const venue = importedConfiguration.venue;
     Object.assign(el, {
       draft: {
         mode: "live",
         configurationImport: true,
-        venue: { ...venue, admin: initialAdmin, ...stagedLocation },
+        venue: { ...venue, admin: initialAdmin },
       },
       configurationPreview: importedConfiguration,
       screen: "configuration-preview",

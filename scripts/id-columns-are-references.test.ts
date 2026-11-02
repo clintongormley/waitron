@@ -12,11 +12,10 @@ import { scratchParent } from "./scratch-dir.mjs";
 /**
  * A configuration import gives every row whose `id` is text a new one and rewrites only `id`,
  * foreign-key columns and the columns a table declares in `references` (`importConfigurationTables`,
- * `apps/server/src/configuration-transfer.ts`); it overwrites `locationColumns` with the importing
- * venue's location, and the export leaves out `omit` columns. Any other column the export carries
- * that holds a row's id keeps the EXPORTING venue's id. This guard fails when a column of a
- * transferred table looks like it holds an id and is none of `id`, a foreign key, a `references`,
- * `locationColumns` or `omit` entry, or a column `NOT_REFERENCES` lists below.
+ * `apps/server/src/configuration-transfer.ts`), and the export leaves out `omit` columns. Any other
+ * column the export carries that holds a row's id keeps the EXPORTING venue's id. This guard fails
+ * when a column of a transferred table looks like it holds an id and is none of `id`, a foreign key,
+ * a `references` or `omit` entry, or a column `NOT_REFERENCES` lists below.
  *
  * Weaker than its name. It knows an id column only by its NAME — ending `_id` or `_ids` — so a
  * reference spelt otherwise (`parent`, `layout`) is invisible to it. It reads the schema a real
@@ -51,7 +50,6 @@ function unrewrittenIdColumns(
       "id",
       ...foreignKeys,
       ...(declaration.references ?? []),
-      ...(declaration.locationColumns ?? []),
       ...(declaration.omit ?? []),
     ]);
     for (const column of columns) {
@@ -99,7 +97,7 @@ function withoutReferences(table: string): ConfigurationTransferTable[] {
   );
 }
 
-describe("every id-holding column of a transferred table is rewritten, set to the location, or left out of the export", () => {
+describe("every id-holding column of a transferred table is rewritten or left out of the export", () => {
   it("finds none the import would carry across with the exporting venue's id", () => {
     expect(unrewrittenIdColumns(declarations, realSchema, NOT_REFERENCES)).toEqual([]);
   });

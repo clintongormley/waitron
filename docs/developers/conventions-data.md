@@ -1715,15 +1715,14 @@ reason; `configuration-transfer.test.ts` now pins format 9, and older files are 
 
 ### A configuration bundle value that is not a setup field stays out of the venue's own keys
 
-The setup app copies the setup preview's `venue`, moving only `CLAIM_VENUE_FIELDS` from its
-`location` into the flat claim (`VenueDraft`, `apps/setup/src/setup-app.ts`). The claim refuses any
-venue key it does not list
-(`exact(...)` in `apps/server/src/setup-first-fiscal-api.ts`). So a bundle value that is not a setup
-field lives outside `venue`'s own keys, as `privacyContact` does. `venue.location` already carries
-three such values, `id`, `fireControl` and `catalogueId` (`packages/provisioning/src/configuration-transfer.ts`),
-and they are safe only because the setup app filters the location. Cost: from #1752 to A980 S1a2
+The setup preview's `venue` holds the venue's setup fields alone, and the setup app copies it into
+the claim by `CLAIM_VENUE_FIELDS` and the taxpayer fields (`apps/setup/src/setup-app.ts`). The
+claim refuses any venue key it does not list (`exact(body.venue, …)` in
+`apps/server/src/setup-first-fiscal-api.ts`). So a bundle value that is not a setup field lives
+outside `venue`'s own keys, as `privacyContact` does; the default menu travels as the top-level
+`defaultCatalogueId` (`packages/provisioning/src/configuration-transfer.ts`). Cost: from #1752 to A980 S1a2
 every Live setup from an export on a production box was refused at the claim, because the setup app,
-which dropped only `id`, copied the other two into it (probes 2 to 4 of the
+which dropped only the location's `id`, copied its `fireControl` and `catalogueId` into it (probes 2 to 4 of the
 [S1a2 plan](../superpowers/plans/2026-10-26-a980-s1a2-export-privacy-contact.md#what-was-run-while-writing-this-plan));
 the tests that set up a production box from an export
 (`apps/server/src/first-fiscal-setup.e2e.test.ts`'s owned Live setup rows, and
@@ -1731,22 +1730,21 @@ the tests that set up a production box from an export
 `apps/server/test/owned-hour-setup.ts`) sent the claim a hand-written venue, never the preview's.
 
 Two guards, both weaker than the rule. The `claimFrom: "preview"` row in
-`apps/server/src/first-fiscal-setup.e2e.test.ts` sends the whole preview venue through a production
-claim, but cuts the location down by the test's own `request` keys, not by
-`VenueDraft`'s, so it would pass if the setup app copied `fireControl` again. Only
+`apps/server/src/first-fiscal-setup.e2e.test.ts` sends the preview's venue whole through a
+production claim, so it fails if the bundle's `venue` gains a key that is not a setup field.
 `apps/setup/src/setup-app-first-fiscal.test.ts`'s "claims a staged preview's venue with only the
-venue fields the claim accepts" catches that, against a stubbed server. Both cover one export
-shape. Nothing checks `CLAIM_VENUE_FIELDS` against the claim's own `exact(body.venue, …)` list:
+venue fields the claim accepts" fails if `CLAIM_VENUE_FIELDS` lets such a key through, against a
+stubbed server. Both cover one export shape. Nothing checks `CLAIM_VENUE_FIELDS` against the claim's own `exact(body.venue, …)` list:
 the compile-time check ties it to `VenueDraft` alone, a hand copy of the server's shape.
 
-## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
+## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry or left out of the export
 
 A configuration import gives every row whose `id` is text a new one, and rewrites a value to the new
 id only in a table's `id` column, its foreign-key columns, and the columns its module lists as
 `references` (`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`, which reads
-`pragma_foreign_key_list` for the keys). It overwrites the columns a table lists in
-`locationColumns` with the importing venue's location, and the export leaves out the columns a
-table lists in `omit`. Any other column the export carries that holds a row's id arrives holding
+`pragma_foreign_key_list` for the keys), and the export leaves out the columns a table lists in
+`omit`. Until `locations` is dropped, a column whose foreign key points at it is set to the
+importing venue's row (`venueLocationId`), whatever the export carried. Any other column the export carries that holds a row's id arrives holding
 the EXPORTING venue's id. Before W72a (#1230) the import replaced any text equal to a bundle id in every
 column, so a product named like an id arrived renamed; the narrowing is what makes this rule
 necessary. A reference the schema cannot give a foreign key goes in `references`, as
@@ -5642,12 +5640,11 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ### Configuration preview field guard
 
-- **A configuration bundle value that is not a setup field stays out of `venue`'s own keys; the
-  setup app copies `venue.location` by `VenueDraft`'s fields.** Cost: from #1752 to A980 S1a2 no
-  production box could be set up from an export. Guard: the preview row in
-  `apps/server/src/first-fiscal-setup.e2e.test.ts` and `apps/setup/src/setup-app-first-fiscal.test.ts`,
-  weaker than the rule: the e2e row cuts the location by its own keys, so only the setup-app case
-  catches a copied `fireControl`. [Detail](conventions-data.md#a-configuration-bundle-value-that-is-not-a-setup-field-stays-out-of-the-venues-own-keys).
+- **A configuration bundle value that is not a setup field stays out of `venue`'s own keys** (the
+  default menu travels as the top-level `defaultCatalogueId`); the setup app copies the preview's
+  `venue` by `CLAIM_VENUE_FIELDS`. Cost: from #1752 to A980 S1a2 no production box could be set up
+  from an export. Guards: `apps/server/src/first-fiscal-setup.e2e.test.ts` and
+  `apps/setup/src/setup-app-first-fiscal.test.ts`, weaker than the rule: one export shape. [Detail](conventions-data.md#a-configuration-bundle-value-that-is-not-a-setup-field-stays-out-of-the-venues-own-keys).
 
 ### Spare file release and recovery
 
