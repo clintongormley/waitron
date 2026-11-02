@@ -1,14 +1,17 @@
 import "./errors.js";
 import { and, eq, inArray } from "drizzle-orm";
+import { profileAllows } from "@waitron/layouts";
 import { AppError, isUuid } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, ticketItems } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { deviceBindingColumns, deviceProfileJoin } from "./device-session.js";
+import { captureKitchenActivity } from "./attendance-capture.js";
+import { deviceBindingColumns, deviceProfileJoin, toDeviceBinding } from "./device-session.js";
 import { requestedItem } from "./kitchen-phase.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readPassCardRows } from "./pass-board.js";
 import { passCardRelease, type PassTarget } from "./pass-card.js";
 import type { TradingContext } from "./trading-context.js";
+import { assertSubjectZones } from "./zone-access.js";
 import type { OrderAttendance } from "./working-order.js";
 
 export type PassActor =
@@ -33,19 +36,32 @@ export async function releasePassItems(
   cfg: TradingContext,
   by: PassActor,
   body: unknown,
-  _attendance?: OrderAttendance,
+  attendance?: OrderAttendance,
 ): Promise<PassReleaseResult> {
-  const [device] = await tx
+  const [row] = await tx
     .select(deviceBindingColumns)
     .from(devices)
     .innerJoin(deviceProfiles, deviceProfileJoin)
     .where(eq(devices.id, by.deviceId));
-  if (device === undefined) throw new AppError("device.unauthorized", {});
+  if (row === undefined) throw new AppError("device.unauthorized", {});
+  const device = toDeviceBinding(by.deviceId, row);
+  if (device.formFactor !== "kds" && by.personId === null)
+    throw new AppError("session.required", {});
+  for (const [allowed, action] of [
+    [profileAllows(device, "prepare-orders"), "prepare-orders"],
+    [device.capabilities.includes("run-the-pass"), "run-the-pass"],
+  ] as const)
+    if (!allowed) throw new AppError("device.forbidden_action", { action });
   const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, cfg, by.deviceId)).find(
     (candidate) => candidate.kind === "pass",
   );
   if (screen?.available !== true) throw new AppError("device.unauthorized", {});
   const ask = passReleaseAsk(body);
+  await assertSubjectZones(tx, cfg, device.deviceProfileId, [
+    ask.target.kind === "group"
+      ? { partyId: ask.target.partyId }
+      : { orderId: ask.target.workingOrderId },
+  ]);
 
   const offered = passCardRelease(
     ask.target,
@@ -66,8 +82,15 @@ export async function releasePassItems(
     .update(ticketItems)
     .set({ firedAt: at, queuedAt: at })
     .where(and(inArray(ticketItems.id, offered.ticketItemIds), requestedItem()))
-    .returning({ id: ticketItems.id });
+    .returning({ orderId: ticketItems.workingOrderId });
   if (released.length !== offered.ticketItemIds.length) throw stale();
+  await captureKitchenActivity(
+    tx,
+    attendance,
+    by.personId,
+    released.map((row) => row.orderId),
+    ask.submissionId,
+  );
   return { releasedTicketItemIds: offered.ticketItemIds };
 }
 

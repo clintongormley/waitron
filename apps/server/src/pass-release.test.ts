@@ -13,7 +13,20 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import type { DeviceKitchenScreen } from "@waitron/module";
+import {
+  createDepartment,
+  createServiceZone,
+  setProfileServiceAccess,
+} from "@waitron/venue-service";
+import { persons } from "@waitron/identity";
+import { attendanceOperationFacts } from "@waitron/workforce";
+import { recordAttendanceFact } from "./attendance-capture.js";
+import { moveDishes } from "./testing/bill-action-fixture.js";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
+import { openTillSession } from "./testing/session-device.js";
+import { systemClock } from "./till-backend.js";
 import {
   fireNewOrder,
   setupSplitExtrasVenue,
@@ -121,8 +134,12 @@ const askOf = (card: PassCard) => ({
   expectedContext: card.releaseContext,
 });
 
-const release = (venue: Venue, by: PassActor, body: unknown) =>
-  withTransaction(db, (tx) => releasePassItems(tx, venue.cfg, by, body));
+const release = (
+  venue: Venue,
+  by: PassActor,
+  body: unknown,
+  attendance?: Parameters<typeof releasePassItems>[4],
+) => withTransaction(db, (tx) => releasePassItems(tx, venue.cfg, by, body, attendance));
 
 async function rows(ids: string[]) {
   return withTransaction(db, (tx) =>
@@ -451,5 +468,214 @@ describe("A773 pass release: set and stamps", () => {
       ),
     );
     expect(await rows([f.burger])).toEqual(released);
+  });
+});
+
+const ALL_PASS: CapabilityFlag[] = ["act-as-kds", "prepare-orders", "run-the-pass"];
+const EVERY_PASS: DeviceKitchenScreen = { kind: "pass", stationIds: null, zoneIds: null };
+
+/** A pass device on a profile of `formFactor` with exactly `capabilities`. */
+async function profiledPass(
+  venue: Venue,
+  name: string,
+  formFactor: FormFactor,
+  capabilities: CapabilityFlag[],
+): Promise<{ deviceId: string; profileId: string }> {
+  const [profile] = await withTransaction(db, (tx) =>
+    tx
+      .insert(deviceProfiles)
+      .values({ name: `${name} profile`, formFactor, capabilities })
+      .returning({ id: deviceProfiles.id }),
+  );
+  const joined = await enrolDeviceForTest(db, venue.cfg, {
+    name,
+    profileId: profile!.id,
+    kitchenScreen: EVERY_PASS,
+  });
+  return { deviceId: joined.deviceId, profileId: profile!.id };
+}
+
+/** A till pass signed in as a new person. */
+async function signedInTillPass(venue: Venue, name: string) {
+  const made = await profiledPass(venue, name, "till", ALL_PASS);
+  const [person] = await withTransaction(db, (tx) =>
+    tx
+      .insert(persons)
+      .values({ displayName: `${name} cook`, pinHash: fixturePinHash("2468"), role: "staff" })
+      .returning({ id: persons.id }),
+  );
+  const personId = person!.id;
+  const sessionId = await openTillSession(db, { deviceId: made.deviceId, personId });
+  return { ...made, by: { deviceId: made.deviceId, personId, sessionId } satisfies PassActor };
+}
+
+/** Limits the profile's service to a department of its own, so the party's zone is not its. */
+async function serveElsewhere(venue: Venue, profileId: string): Promise<void> {
+  await withTransaction(db, async (tx) => {
+    const deli = await createDepartment(tx, venue.cfg, { name: "Deli", orderStart: "counter" });
+    const zone = await createServiceZone(tx, venue.cfg, {
+      name: "Deli counter",
+      departmentId: deli.id,
+    });
+    await setProfileServiceAccess(tx, venue.cfg, profileId, {
+      departmentId: deli.id,
+      allowedZoneIds: null,
+      startingZoneId: zone.id,
+    });
+  });
+}
+
+describe("A773 pass release: authority", () => {
+  it("refuses a profile without the action, the flag, a person or the party's zone, writing nothing", async () => {
+    const f = await hotAndCold();
+    const [hotCard] = await toFire(f.venue, f.hot);
+    const ask = askOf(hotCard!);
+    const watched = [f.burger, f.salad];
+    const noPrepare = await profiledPass(f.venue, "No prepare", "kds", [
+      "act-as-kds",
+      "run-the-pass",
+    ]);
+    const noFlag = await profiledPass(f.venue, "No flag", "kds", ["act-as-kds", "prepare-orders"]);
+    const nobody = await profiledPass(f.venue, "Nobody", "till", ALL_PASS);
+    const elsewhere = await signedInTillPass(f.venue, "Elsewhere");
+    await serveElsewhere(f.venue, elsewhere.profileId);
+
+    await refusedWhole(
+      release(f.venue, { deviceId: noPrepare.deviceId, personId: null }, ask),
+      "device.forbidden_action",
+      watched,
+      { action: "prepare-orders" },
+    );
+    await refusedWhole(
+      release(f.venue, { deviceId: noFlag.deviceId, personId: null }, ask),
+      "device.forbidden_action",
+      watched,
+      { action: "run-the-pass" },
+    );
+    await refusedWhole(
+      release(f.venue, { deviceId: nobody.deviceId, personId: null }, ask),
+      "session.required",
+      watched,
+    );
+    await refusedWhole(release(f.venue, elsewhere.by, ask), "service_zone.not_allowed", watched);
+  });
+
+  it("answers the authority before the ask's shape", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const body = { submissionId: randomUUID(), expectedPartyRevision: 0 };
+    const noPrepare = await profiledPass(venue, "No prepare", "kds", [
+      "act-as-kds",
+      "run-the-pass",
+    ]);
+    const noFlag = await profiledPass(venue, "No flag", "kds", ["act-as-kds", "prepare-orders"]);
+    const both = await profiledPass(venue, "Both", "kds", ALL_PASS);
+    await expect(
+      release(venue, { deviceId: noPrepare.deviceId, personId: null }, body),
+    ).rejects.toMatchObject({
+      code: "device.forbidden_action",
+      params: { action: "prepare-orders" },
+    });
+    await expect(
+      release(venue, { deviceId: noFlag.deviceId, personId: null }, body),
+    ).rejects.toMatchObject({
+      code: "device.forbidden_action",
+      params: { action: "run-the-pass" },
+    });
+    await expect(
+      release(venue, { deviceId: both.deviceId, personId: null }, body),
+    ).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "ticketItemIds" },
+    });
+  });
+
+  it("checks the party's zone after the ask's shape", async () => {
+    const f = await hotAndCold();
+    const [hotCard] = await toFire(f.venue, f.hot);
+    const ask = askOf(hotCard!);
+    const elsewhere = await signedInTillPass(f.venue, "Elsewhere");
+    await serveElsewhere(f.venue, elsewhere.profileId);
+    const malformed = {
+      ...ask,
+      target: { kind: "group", partyId: f.venue.party.partyId, groupId: "x" },
+    };
+    await refusedWhole(
+      release(f.venue, elsewhere.by, malformed),
+      "management.request_invalid",
+      [f.burger, f.salad],
+      { field: "target" },
+    );
+    await refusedWhole(release(f.venue, elsewhere.by, ask), "service_zone.not_allowed", [
+      f.burger,
+      f.salad,
+    ]);
+  });
+
+  /** One Fire now group whose two burgers sit on two bills, and its one card. */
+  async function burgersOnTwoBills() {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    const billId = await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [dish(venue, "burger"), dish(venue, "burger")], release: "fire" }],
+      });
+      const second = placed.groups[0]!.lineIds[1]!;
+      const [party] = await tx
+        .select({ revision: parties.revision })
+        .from(parties)
+        .where(eq(parties.id, venue.party.partyId));
+      return (
+        await moveDishes(tx, venue.cfg, venue.party.tabId, null, [second], {
+          partyId: venue.party.partyId,
+          expectedPartyRevision: party!.revision,
+          operatorId: OPERATOR,
+        })
+      ).billId;
+    });
+    return { venue, billId };
+  }
+
+  const attendance = () => ({ recorder: recordAttendanceFact, clock: systemClock() });
+  const factsOf = async (submissionId: string) =>
+    (await withTransaction(db, (tx) => tx.select().from(attendanceOperationFacts))).filter((fact) =>
+      fact.key.endsWith(`:${submissionId}`),
+    );
+
+  it("records the signed-in person's kitchen work once per released bill, and none when refused", async () => {
+    const { venue, billId } = await burgersOnTwoBills();
+    const till = await signedInTillPass(venue, "Till pass");
+    const [card] = await toFire(venue, till.by);
+    expect(card!.orders.map((order) => order.orderId).sort()).toEqual(
+      [venue.party.tabId, billId].sort(),
+    );
+
+    const refused = { ...askOf(card!), expectedContext: "0".repeat(64) };
+    await expect(release(venue, till.by, refused, attendance())).rejects.toMatchObject({
+      code: "ticket.pass_context_changed",
+    });
+    expect(await factsOf(refused.submissionId)).toEqual([]);
+
+    const ask = askOf(card!);
+    await release(venue, till.by, ask, attendance());
+    const facts = await factsOf(ask.submissionId);
+    expect(facts.map((fact) => [fact.key, fact.personId, fact.kind, fact.outcome]).sort()).toEqual(
+      [venue.party.tabId, billId]
+        .map((id) => [`service:${id}:${ask.submissionId}`, till.by.personId, "order", "qualifying"])
+        .sort(),
+    );
+  });
+
+  it("records no kitchen work for a kitchen display's release", async () => {
+    const { venue } = await burgersOnTwoBills();
+    const display = await profiledPass(venue, "Display pass", "kds", ALL_PASS);
+    const by: PassActor = { deviceId: display.deviceId, personId: null };
+    const [card] = await toFire(venue, by);
+    const ask = askOf(card!);
+    expect(await release(venue, by, ask, attendance())).toEqual({
+      releasedTicketItemIds: card!.releaseTicketItemIds,
+    });
+    expect(await factsOf(ask.submissionId)).toEqual([]);
   });
 });
