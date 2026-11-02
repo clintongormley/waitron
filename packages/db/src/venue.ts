@@ -78,23 +78,38 @@ function storedCutover(value: string): string {
 export async function readVenueClockAndPlace(
   tx: Transaction,
 ): Promise<{ clock: BusinessDayClock; place: VenuePlace }> {
-  const { id, venue } = await venueRow(tx);
-  const changes = await tx
+  const rows = await tx
     .select({
+      id: locations.id,
+      timeZone: locations.timeZone,
+      dayCutover: locations.dayCutover,
+      province: locations.province,
+      city: locations.city,
       effectiveBusinessDay: locationDayCutoverChanges.effectiveBusinessDay,
-      dayCutover: locationDayCutoverChanges.dayCutover,
+      changedCutover: locationDayCutoverChanges.dayCutover,
     })
-    .from(locationDayCutoverChanges)
-    .where(eq(locationDayCutoverChanges.locationId, id))
+    .from(locations)
+    .leftJoin(locationDayCutoverChanges, eq(locationDayCutoverChanges.locationId, locations.id))
     .orderBy(asc(locationDayCutoverChanges.effectiveBusinessDay));
+  const venue = rows[0];
+  if (venue === undefined) throw new AppError("venue.not_found", {});
+  if (rows.some((row) => row.id !== venue.id)) {
+    throw new AppError("provisioning.second_venue", {});
+  }
   return {
     clock: {
       timeZone: venue.timeZone,
       dayCutover: storedCutover(venue.dayCutover),
-      cutoverChanges: changes.map((change) => ({
-        effectiveBusinessDay: change.effectiveBusinessDay,
-        dayCutover: storedCutover(change.dayCutover),
-      })),
+      cutoverChanges: rows.flatMap((row) =>
+        row.effectiveBusinessDay === null
+          ? []
+          : [
+              {
+                effectiveBusinessDay: row.effectiveBusinessDay,
+                dayCutover: storedCutover(row.changedCutover!),
+              },
+            ],
+      ),
     },
     place: { province: venue.province, city: venue.city },
   };
