@@ -165,7 +165,7 @@ it("explicit Refresh and a date selection replace the current scoped read withou
   await vi.waitFor(() => expect(f.api.getHours.mock.calls.length).toBeGreaterThan(calls));
   screen(f.el)!.dispatchEvent(
     new CustomEvent("hours-select", {
-      detail: { locationId: "venue", selection: { kind: "month", date: "2026-02-01" } },
+      detail: { selection: { kind: "month", date: "2026-02-01" } },
       bubbles: true,
       composed: true,
     }),

@@ -55,7 +55,7 @@ function watch(el: AttendanceProposalDialog) {
 }
 
 describe("attendance correction time and reason", () => {
-  it("opens quiet, retains stored date/time/offset in a changed location zone and does not mutate input", async () => {
+  it("opens quiet, retains stored date/time/offset in a changed venue zone and does not mutate input", async () => {
     const initial = structuredClone([original]);
     const { el } = await mount({ initialChanges: initial, timeZone: "America/New_York" });
     expect((field(el, "attendanceDate0") as unknown as { value: string }).value).toBe("2026-10-14");
@@ -71,7 +71,7 @@ describe("attendance correction time and reason", () => {
     expect(initial).toEqual([original]);
   });
 
-  it("sends a changed time at the location offset rather than the browser offset", async () => {
+  it("sends a changed time at the venue offset rather than the browser offset", async () => {
     const { el } = await mount();
     const sent = watch(el);
     await fill(el, "attendanceTime0", "02:10");

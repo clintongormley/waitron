@@ -360,7 +360,6 @@ it("forbids another subject's target, manager actions, overrides and stale own r
       itemId: target,
       questionId: undefined,
       changes: undefined,
-      locationId: undefined,
       reason: undefined,
     },
     { ...(await command()), override: { personId: owner, pin: "1234" } },

@@ -524,7 +524,7 @@ it("refuses empty reader scopes rather than reading the venue", async () => {
   });
 });
 
-it("keeps recorded history scoped to the inbox subject even in a shared location", async () => {
+it("keeps recorded history scoped to the inbox subject even at a shared venue", async () => {
   const own = await shift();
   const ownRequest = await request(own.end);
   const foreign = await shift(other);
@@ -543,7 +543,7 @@ it("keeps recorded history scoped to the inbox subject even in a shared location
   expect(value.items.map((i) => i.id)).toEqual([ownRequest.entryIds[0]]);
   expect(value.items.every((i) => i.history.every((e) => e.personId === personId))).toBe(true);
 });
-it("selects calendar work dates from stored offsets after the location zone changes", async () => {
+it("selects calendar work dates from stored offsets after the venue's zone changes", async () => {
   await run((tx) =>
     backend.clockIn(tx, {
       nodeId,

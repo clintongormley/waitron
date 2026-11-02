@@ -26,7 +26,7 @@ function watch(el: HTMLElement, type: string): CustomEvent[] {
 }
 
 describe("attendance questions before work", () => {
-  it("shows the stored calendar time and offset, not the business day or current location zone", async () => {
+  it("shows the stored calendar time and offset, not the business day or the venue's current zone", async () => {
     const { el } = await mount();
     const time = el.shadowRoot!.querySelector("time")!;
     expect(time).not.toBeNull();
