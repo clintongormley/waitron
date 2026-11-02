@@ -852,8 +852,7 @@ malformed id is refused as `shared.invalid_id`.
 transaction with `readBusinessDayScheduleRevision`, the reader the delete's own check uses; the
 delete dialog sends it back as `expectedClockRevision`.
 
-A configuration transfer carries both tables under the importing venue's location
-(`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
+A configuration transfer carries both tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
 the field, a bundle the writer could not have stored: two special-day dates on one date; a
 special-day day row with a season or a weekday; paint off the quarter-hour or overlapping; paint at a time the clocks skip, a repeating date checked at its
 next occurrence from the venue's date of the bundle's `createdAt`; and a zone's Closed paint outside its department's hours on that date
@@ -1717,8 +1716,7 @@ format 10, and older files are refused as `setup.configuration_outdated`.
 
 ### A configuration bundle value that is not a setup field stays out of the venue's own keys
 
-The setup preview's `venue` holds the venue's setup fields alone, and the setup app copies into the
-claim only the preview's `country`, the taxpayer fields (`TAXPAYER_FIELDS`) and `CLAIM_VENUE_FIELDS`
+The setup app copies into the claim only the preview's `country`, the taxpayer fields (`TAXPAYER_FIELDS`) and `CLAIM_VENUE_FIELDS`
 (`apps/setup/src/setup-app.ts`). The claim refuses any venue key it does not list
 (`exact(body.venue, …)` in `apps/server/src/setup-first-fiscal-api.ts`). So a bundle value that is
 not a setup field lives outside `venue`'s own keys, as `privacyContact` does; the default menu
@@ -1771,7 +1769,7 @@ device profile, `retired_at`), or whose `leaveBehindWhenFalse` column holds fals
 (a deleted course or station, `active`). Archived products still travel: their `active` field
 has no leave-behind selector. The export then excludes every row of a transferred table whose foreign key names a
 row left behind, repeating until nothing more is left behind (`exportConfigurationTables`,
-`apps/server/src/configuration-transfer.ts`). It reads the keys from `pragma_foreign_key_list`,
+`packages/provisioning/src/configuration-transfer.ts`). It reads the keys from `pragma_foreign_key_list`,
 never the `references` lists, and follows only those between transferred tables that lead from a
 table declaring either selector to its children, and on to theirs. A key's parent table is
 matched ignoring the case of ASCII letters, as SQLite matches table names; a key that names no
@@ -5648,9 +5646,10 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 - **A configuration bundle value that is not a setup field stays out of `venue`'s own keys** (the
   default menu travels as the top-level `defaultCatalogueId`); the setup app copies the preview's
-  `venue` by `CLAIM_VENUE_FIELDS`. Cost: from #1752 to A980 S1a2 no production box could be set up
-  from an export. Guards: `apps/server/src/first-fiscal-setup.e2e.test.ts` and
-  `apps/setup/src/setup-app-first-fiscal.test.ts`, weaker than the rule: one export shape.
+  `venue` by `country`, `TAXPAYER_FIELDS` and `CLAIM_VENUE_FIELDS`. Cost: from #1752 to A980 S1a2
+  no production box could be set up from an export. Guards:
+  `apps/server/src/first-fiscal-setup.e2e.test.ts` and `apps/setup/src/setup-app-first-fiscal.test.ts`,
+  weaker than the rule: one export shape.
   [Detail](conventions-data.md#a-configuration-bundle-value-that-is-not-a-setup-field-stays-out-of-the-venues-own-keys).
 
 ### Spare file release and recovery

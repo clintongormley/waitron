@@ -1625,7 +1625,7 @@ describe("special days in a configuration bundle", () => {
     oneOffs.special_days![0]!.repeats_yearly = 0;
     oneOffs.special_day_dates![1]!.date = "2025-08-15";
     expect(() => validate(oneOffs, clock)).toThrowError(refusal("special_day_dates.date"));
-    // The import gives every location column the importing venue's location.
+    // The import sets every foreign key into `locations` to the importing venue's row.
     oneOffs.special_day_dates![1]!.location_id = "elsewhere";
     expect(() => validate(oneOffs, clock)).toThrowError(refusal("special_day_dates.date"));
     twice.special_day_dates![2]!.date = "2027-08-15";

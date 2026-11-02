@@ -243,7 +243,6 @@ it.each([
         ...(newTaxpayer ? { taxId: "B12345674", legalName: "New Olivo SL" } : {}),
       };
       if (claimFrom === "preview") {
-        // The whole preview venue.
         const preview = stagedBody.venue;
         expect(Object.keys(request)).toEqual(expect.arrayContaining(Object.keys(preview)));
         venue = { ...preview, admin: request.admin };

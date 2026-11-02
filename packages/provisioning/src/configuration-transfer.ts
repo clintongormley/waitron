@@ -634,8 +634,8 @@ export async function importConfigurationTables(
   const blobColumns = new Map<string, Set<string>>();
   // A name or other text may equal a bundle id, so only these columns are rewritten to new ids.
   const idColumns = new Map<string, Set<string>>();
-  // Interim: every foreign key into `locations` is filled with the importing venue's one row,
-  // whatever the bundle says.
+  // Every foreign key into `locations` is filled with the importing venue's one row, whatever the
+  // bundle says.
   const venueColumns = new Map<string, string[]>();
   for (const [declaration] of checked) {
     // The table-valued `pragma_table_info(?)` binds its argument, unlike the `pragma table_info`

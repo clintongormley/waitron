@@ -7572,7 +7572,7 @@ describe("dated business-day configuration transfer", () => {
     ]);
   });
 
-  it("keeps dated target history when prepared location metadata is applied", async () => {
+  it("keeps dated target history when the prepared venue is applied", async () => {
     const target = await applyVenue(planVenue(venue("B77112233"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -7589,9 +7589,8 @@ describe("dated business-day configuration transfer", () => {
     const model = await withTransaction(suite.db, (tx) =>
       readVenueDetails(tx, new Date("2026-11-05T12:00:00Z")),
     );
-    const prepared = { ...bundle.venue, dayCutover: "07:00:00", timeZone: "UTC" };
     await withTransaction(suite.db, (tx) =>
-      applyPreparedVenue(tx, { ...prepared, defaultCatalogueId: bundle.defaultCatalogueId }),
+      applyPreparedVenue(tx, { defaultCatalogueId: bundle.defaultCatalogueId }),
     );
     expect(
       await withTransaction(suite.db, (tx) =>
