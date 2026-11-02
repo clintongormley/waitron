@@ -188,7 +188,6 @@ export class TillPassScreen extends LitElement {
   /** A Fire out or unanswered, by card key; an unanswered one is resent unchanged (B3 D48). */
   readonly #asks = new Map<string, PassReleaseAsk>();
   @state() private leverError?: { code: string; card: string };
-  /** The refresh sentence, shown by the good read after a refused Fire and cleared by the next. */
   @state() private tableChanged = false;
   #tableChangedNext = false;
   /** Each board's layout, read from storage once and never again on a refresh. */
@@ -283,7 +282,10 @@ export class TillPassScreen extends LitElement {
    */
   async #reload(signal?: AbortSignal, probe = false): Promise<void> {
     const boardId = this.#boardId();
-    if (boardId === null) return;
+    if (boardId === null) {
+      this.#tableChangedNext = false;
+      return;
+    }
     const request = ++this.#request;
     try {
       const result: DevicePassBoard =
@@ -342,6 +344,7 @@ export class TillPassScreen extends LitElement {
     this.leverError = undefined;
     this.sending = new Set([...this.sending, key]);
     let reload = true;
+    let rechoose = false;
     try {
       await this.api.releaseDevicePass(ask);
       this.#asks.delete(key);
@@ -354,7 +357,8 @@ export class TillPassScreen extends LitElement {
         this.#asks.delete(key);
         if (this.#switched(error)) reload = false;
         else if (this.#isCurrent(boardId)) {
-          if (code === "ticket.pass_context_changed" || code === "party.not_open")
+          rechoose = code === "device.unauthorized" && this.#followsChoice();
+          if (code === "ticket.pass_context_changed" || code === "party.not_open" || rechoose)
             this.#tableChangedNext = true;
           else
             this.leverError = {
@@ -368,7 +372,7 @@ export class TillPassScreen extends LitElement {
       sending.delete(key);
       this.sending = sending;
     }
-    if (reload && this.#isCurrent(boardId)) await this.#reload();
+    if (reload && this.#isCurrent(boardId)) await (rechoose ? this.#loadChoice() : this.#reload());
   }
 
   /**

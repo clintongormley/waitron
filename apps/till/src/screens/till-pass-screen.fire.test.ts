@@ -1,6 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { codeMessage } from "../i18n/codes.js";
+import { kitchenScreenNoticeText } from "../kitchen-screen-notice.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillPassBoard } from "../widgets/pass-board.js";
@@ -261,6 +262,9 @@ describe("A773 pass screen: Fire", () => {
         const el = await mountOn(api);
         await pressFire(el);
         expect(leverError(el)!.textContent).toContain(codeMessage("device.forbidden_action"));
+        expect(leverError(el)!.textContent!.trim()).toBe(
+          `#1 T1: ${codeMessage("device.forbidden_action")}`,
+        );
         await refresh(el);
         await refresh(el);
         expect(leverError(el)!.textContent).toContain(codeMessage("device.forbidden_action"));
@@ -324,20 +328,168 @@ describe("A773 pass screen: Fire", () => {
       expect((switched.mock.calls[0]![0] as CustomEvent).detail).toEqual({ from: "pass" });
       expect(leverError(el)).toBeNull();
       expect(tableChanged(el)).toBeNull();
-    });
-
-    it(`on a till, a Fire refused ${code} shows its words and asks for nothing`, async () => {
-      const api = fakeApi({ releaseDevicePass: vi.fn().mockRejectedValue(refused(code, 403)) });
-      const el = await mountTill(api);
-      const switched = vi.fn();
-      document.addEventListener("kitchen-screen-changed", switched);
-      try {
-        await pressFire(el);
-      } finally {
-        document.removeEventListener("kitchen-screen-changed", switched);
-      }
-      expect(switched).not.toHaveBeenCalled();
-      expect(leverError(el)!.textContent).toContain(codeMessage(code));
+      expect(api.getDevicePassBoard).not.toHaveBeenCalled();
     });
   }
+
+  it("on a till, a Fire refused kitchen_screen.not_allowed shows its words and asks for nothing", async () => {
+    const code = "kitchen_screen.not_allowed";
+    const api = fakeApi({ releaseDevicePass: vi.fn().mockRejectedValue(refused(code, 403)) });
+    const el = await mountTill(api);
+    const switched = vi.fn();
+    document.addEventListener("kitchen-screen-changed", switched);
+    try {
+      await pressFire(el);
+    } finally {
+      document.removeEventListener("kitchen-screen-changed", switched);
+    }
+    expect(switched).not.toHaveBeenCalled();
+    expect(leverError(el)!.textContent).toContain(codeMessage(code));
+  });
+
+  it("on a till, a Fire refused device.unauthorized re-reads the device's choice, follows it and says the screen was refreshed", async () => {
+    const api = fakeApi({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValueOnce(identity("pass"))
+        .mockResolvedValue(identity(null)),
+      releaseDevicePass: vi.fn().mockRejectedValue(refused("device.unauthorized", 401)),
+    });
+    const el = await mountTill(api);
+    const switched = vi.fn();
+    document.addEventListener("kitchen-screen-changed", switched);
+    try {
+      await pressFire(el);
+    } finally {
+      document.removeEventListener("kitchen-screen-changed", switched);
+    }
+    expect(switched).not.toHaveBeenCalled();
+    expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+    expect(api.getExpoBoard).toHaveBeenCalledOnce();
+    expect(boardOf(el)!.mode).toBe("all_stations");
+    expect(tableChanged(el)!.textContent!.trim()).toBe(t("station.table_changed"));
+    expect(leverError(el)).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain(codeMessage("device.unauthorized"));
+  });
+
+  it("on a till whose pass screen a narrowing took, a Fire refused device.unauthorized shows the screen's line, and no sentence once it is back", () =>
+    withFakeTimers(async () => {
+      const gone = identity("pass");
+      gone.kitchenScreens = [{ ...gone.kitchenScreens[0]!, available: false }];
+      const api = fakeApi({
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValueOnce(identity("pass"))
+          .mockResolvedValueOnce(gone)
+          .mockResolvedValue(identity("pass")),
+        releaseDevicePass: vi.fn().mockRejectedValue(refused("device.unauthorized", 401)),
+      });
+      const el = await mountTill(api);
+      await pressFire(el);
+      expect(boardOf(el)).toBeNull();
+      expect(
+        [...el.shadowRoot!.querySelectorAll("[data-unavailable]")].map((line) =>
+          line.textContent!.trim(),
+        ),
+      ).toEqual([kitchenScreenNoticeText({ kind: "unavailable", screen: "pass" })]);
+      expect(el.shadowRoot!.textContent).not.toContain(codeMessage("device.unauthorized"));
+
+      await refresh(el);
+      expect(boardOf(el)).not.toBeNull();
+      expect(tableChanged(el)).toBeNull();
+    }));
+
+  for (const [answer, settle] of [
+    ["success", (fire: Fn) => fire.mockResolvedValueOnce({ releasedTicketItemIds: ["r-1"] })],
+    ["refusal", (fire: Fn) => fire.mockRejectedValueOnce(refused("device.forbidden_action", 403))],
+  ] as const) {
+    it(`sends a new submission id on the press after an answered Fire (${answer})`, async () => {
+      const fire = vi.fn();
+      settle(fire);
+      fire.mockResolvedValue({ releasedTicketItemIds: ["r-1"] });
+      const api = fakeApi({
+        releaseDevicePass: fire,
+        getDevicePassBoard: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+      });
+      const el = await mountDisplay(api);
+      await pressFire(el);
+      expect(fireButton(el)).not.toBeNull();
+      await pressFire(el);
+      const [first, second] = fire.mock.calls.map((call) => call[0] as PassReleaseAsk);
+      expect(fire).toHaveBeenCalledTimes(2);
+      expect(second!.submissionId).toMatch(UUID);
+      expect(second!.submissionId).not.toBe(first!.submissionId);
+    });
+  }
+
+  for (const [why, props, card] of [
+    ["a device that does not run the pass", { runsPass: false }, fireCard()],
+    ["a card with nothing to release", {}, fireCard({ releaseTicketItemIds: [] })],
+  ] as const) {
+    it(`sends nothing for a Fire event from ${why}`, async () => {
+      const api = fakeApi();
+      const el = await mount({
+        api,
+        deviceMode: true,
+        ...props,
+        initialBoard: deviceBoard(toFireBoard(card)),
+      });
+      boardOf(el)!.dispatchEvent(
+        new CustomEvent("pass-fire", {
+          detail: { key: "group:g-1" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await flush(el);
+      expect(api.releaseDevicePass).not.toHaveBeenCalled();
+    });
+  }
+
+  it("keeps a Fire's ask through a board read that lands while it is out, so a lost answer resends it unchanged", () =>
+    withFakeTimers(async () => {
+      const answer = deferred<PassReleaseResult>();
+      const api = fakeApi({
+        releaseDevicePass: vi
+          .fn()
+          .mockImplementationOnce(() => answer.promise)
+          .mockResolvedValue({ releasedTicketItemIds: [] }),
+        getDevicePassBoard: vi
+          .fn()
+          .mockResolvedValue(deviceBoard(toFireBoard(fireCard({ releaseContext: "ctx-2" })))),
+      });
+      const el = await mountDisplay(api);
+      await pressFire(el);
+      await refresh(el);
+      expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+      answer.reject(new TypeError("Failed to fetch"));
+      await flush(el);
+      await pressFire(el);
+      const [first, second] = api.releaseDevicePass.mock.calls.map(
+        (call) => call[0] as PassReleaseAsk,
+      );
+      expect(second).toEqual(first);
+    }));
+
+  it("on a till whose screen changed while a Fire was out, the answer shows no refusal and reads no board", () =>
+    withFakeTimers(async () => {
+      const answer = deferred<PassReleaseResult>();
+      const api = fakeApi({
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValueOnce(identity("pass"))
+          .mockResolvedValue(identity(null)),
+        releaseDevicePass: vi.fn(() => answer.promise),
+      });
+      const el = await mountTill(api);
+      await pressFire(el);
+      await refresh(el);
+      expect(boardOf(el)!.mode).toBe("all_stations");
+      expect(api.getExpoBoard).toHaveBeenCalledOnce();
+      answer.reject(refused("device.forbidden_action", 403));
+      await flush(el);
+      expect(leverError(el)).toBeNull();
+      expect(api.getExpoBoard).toHaveBeenCalledOnce();
+      expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+    }));
 });
