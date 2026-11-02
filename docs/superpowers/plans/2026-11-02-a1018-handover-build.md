@@ -32,6 +32,14 @@ defaults in §§3, 5 and 7). Read beside it: [A947 design](../specs/2026-10-21-a
 `node.db` holds). Build authority: the owner, 2026-11-01, "Yes, build it" (campaign queue, A1018).
 Revised after a fresh-context review on 2026-11-02; what changed is in the last section.
 
+> **For per-slice reviewers.** Two tables in this plan changed in every one of its six review
+> rounds: the start check's decision table (Task 3.4) and the crash-window table (Formats →
+> "Crash windows"). Each round found a new case where a box was left stuck or wrongly stopped. So
+> every slice that touches the start check, a handover operation's states, or a route behind the
+> read-only gate (Task 3.2's table) must re-walk **both** tables against its own code before it
+> lands: for each table row its change can reach, say which test covers it, and add a row where
+> the change creates a new step that writes both databases or waits on another box's answer.
+
 ---
 
 ## Words used in this plan
@@ -250,9 +258,14 @@ the owner.
    the card sweep runs in every role (`boot.ts:505-512`). Design §2 step 1 says no new filing or
    payment work starts once the restriction is on disk, and counts "background jobs … and module
    writers" in that. So the stepdown signals, inside the request and right after closing the gate,
-   and later awaits, the duties **named** in Task 2.4 — each one that files, sends to an outside service or device, or is a
-   module's own background writer — using the same stops `stopWork` makes at close
-   (`boot.ts:3400-3437`), moved into a named table both use. Signalling inside the request
+   the duties **named** in Task 2.4 — each one that files, moves money, sends to an outside service
+   or device, or is a module's own background writer — using the same stops `stopWork` makes at
+   close (`boot.ts:3400-3437`), moved into a named table both use; their waits stay in the close.
+   **Backups and Litestream are the exception:** they send to the bucket, but they are not filing,
+   payment or business work, and design §2 step 2 asks only that "backup/checkpoint writers" stop
+   "before taking the final snapshot" (`docs/superpowers/specs/2026-10-23-a1018-simple-handover-design.md:148`),
+   which is taken after the restart (Task 4.7). So they stop in their own place in the normal
+   close, as today — backups after the sending loop has finished, Litestream last (Task 2.3b). Signalling inside the request
    matters: a loop whose sleep ended between the answer and a later signal would start a new pass
    (`apps/server/src/loop.ts:54-56`). The rest of `stopWork` stays with the close, each with its
    reason recorded in that table. A loop checks its signal only between passes
@@ -545,6 +558,7 @@ same shape.
 | | the answer is lost | a repeat answers `activated` and takes no second name | 5.8; 7.4 |
 | M2 hands its chart to M1 (Tasks 5.10, 10.4) | the post is lost, or M1 is off | the return watch re-posts while M1 reports an older term | 10.4 "posts M2's chart…" |
 | Emergency declaration (Task 7.3): one node transaction (old controlled operation to `replaced` first, then the new one) | before or after the commit; the answer is lost | before: nothing recorded, the person presses again; after: the same operation id answers the stored declaration | 7.3; 7.5 |
+| | after the commit, the clocks then disagree, or the page is closed | the spare stays a mirror at `emergency_declared` and files nothing; the page, reopened on any device, finds the declaration and goes straight to the sign-in and clock check | 8.1 "opened on a second device…" |
 | Returning M1 learns it was superseded (Tasks 3.3, 3.4): restriction → restricted start | before the restriction | the next start asks again; M2's newer fencing chart gives `superseded` (rule 1) and the restriction is written; if M2 is silent, M1 waits (rule 5) | 3.4; 7.5 "M1 comes back while M2 is at `emergency_declared`…" |
 | Return batch (Tasks 10.3–10.7, 11.2): M1 writes the batch file and `return_pending` → answer → M2 applies in one `venue.db` transaction → `node.db` state → receipt | M1 restarts after the file; the answer is lost | the same request (same heads) is answered from the stored file, byte for byte | 10.3 "the same request twice…" |
 | | M2 restarts after the apply commit, before its `node.db` record | the watch asks again; the apply changes nothing the second time; the state is recorded | 10.6 "a crash after the apply commit…" |
@@ -1200,10 +1214,11 @@ gate and the restart used after promotion, `:3079-3092`). Test
    all seven aborts, in today's order (the close repeats them harmlessly), and the first call of
    these five closers' stops, marked `atStepdown`: `certificateDiagnosis?.stop()`,
    `menuActivation.stop()`, `boxEmails.stop()`, `demoPrinterLoop?.stop()` and `clockWatch.stop()`.
-   Calling a stop early is safe only where its first effect happens before its first `await` —
-   true of the clock watch, which sets `stopped` first (`apps/server/src/clock-watch.ts:461-462`);
-   for each of the other four the implementer reads its `stop()` and, where that is not so, adds a
-   synchronous flag the duty checks. After this, no loop starts a new pass (each loop checks its
+   Calling a stop early is safe only where its first effect happens before its first `await`. All
+   five set a `stopped` flag first: `fiscal-certificate-diagnosis-runner.ts:324-325`,
+   `menu-activation.ts:87-88`, `box-alert-email.ts:456-457`, `demo-printer.ts:227-228` and
+   `clock-watch.ts:461-462` (all under `apps/server/src/`, read on `61bfdfe405`); the test below
+   pins it, so a later change to any of them fails there. After this, no loop starts a new pass (each loop checks its
    signal before a pass, `apps/server/src/loop.ts:54-56`, and its sleep takes the signal, `:84`),
    and a pass already running stops at its next step (Tasks 2.4b, 2.4c). **Backups, Litestream
    and the tunnel are not touched here**: they stop in the close, in today's place — backups after
@@ -1222,7 +1237,8 @@ The closers left without `atStepdown` each carry a one-line `reason`: the loop w
 wait), the change subscription, the sealing of node commits and the sealed-state refresh, the
 append-only and free-space watches, the live events, the tunnel (it only carries requests, which
 the gate refuses), backups and Litestream (they stop in their place in the close). A closer found
-to send anything outside, move money or be a module's writer is marked `atStepdown` instead.
+to file, move money, send to an outside service or device other than the backup bucket, or be a
+module's writer is marked `atStepdown` instead. Backups and Litestream never are (decision 3).
 If anything after step 1 throws — closing the gate, signalling, or any later step — the restart
 is still scheduled, in a `finally`, so the box comes back restricted rather than selling with its
 gate half closed. `HANDOVER_ADMITTED_WORK_LIMIT_MS = 180_000`. `stepDown` never calls
@@ -1387,7 +1403,7 @@ start, the pending-adoption start (`boot.ts:1540-1579`) and the waiting start (T
 
 **Interfaces — Produces:** `POST /api/node/peer-status`, body a `query` envelope
 `{ nonce: string (16–64 chars), atMs: number, operationId?: string }` signed by the asking box;
-answer a `status` envelope signed by this box: `{ heldMembership: SignedMembershipDocument | null, restriction: { kind, successorNodeId, operationId } | null, openOperation: { operationId, role, scenario, state } | null, requestedOperation: { operationId, role, scenario, state } | null, nonce }`.
+answer a `status` envelope signed by this box: `{ heldMembership: SignedMembershipDocument | null, restriction: { kind, successorNodeId, operationId } | null, openOperation: { operationId, role, scenario, state, sourceNodeId, destinationNodeId } | null, requestedOperation: { operationId, role, scenario, state, sourceNodeId, destinationNodeId } | null, nonce }`.
 `requestedOperation` is the state of the operation the query names, **open or closed** — so a
 peer can see `abandoned` (Task 5.4), which `openOperation` never shows.
 Refusals: `handover.peer_unknown` (403) when the signer is not a key `peerKeyOf` knows or is
@@ -1482,7 +1498,12 @@ can make this box wait.
 **Four kinds of answer**, each asked with a timeout of `timeoutMs` (default 5 s):
 - **F — newer and fencing:** a verified chart newer than the held one in which this box is
   `sell-only` or `evicted` (`isFencedStanding`, `packages/membership/src/fence.ts:20-24`), **or** a
-  status whose restriction or operation names this box as source;
+  status whose `openOperation` has this box as `sourceNodeId` **and** is past the point where this
+  box could still be selling safely: an emergency operation at `emergency_declared` or later, or a
+  controlled one at `copy_accepted` or later. A controlled operation still at `prepared` is **not**
+  F: its source may not have stepped down, and it closes as `abandoned` once the source reports
+  that (Task 5.4) — counting it would restrict an M1 that only restarted before its stepdown, for
+  good, while M2 closed its side;
 - **N — newer, not fencing:** a verified chart newer than the held one in which this box still
   serves. It is persisted (`persistNodeMembershipIfNewer`, as Task 3.3 does) before the result,
   so the box starts with it;
@@ -1542,7 +1563,10 @@ Slice 3 lands before `handover_activations` exists, so Task 3.4 provides the rep
   rows without the activated operation waits"; "a destination whose operation is `activated` and
   still `return_pending` proceeds"; "a source operation left at `prepared` is moved to
   `abandoned`, and the box proceeds once its counted peer answers =" (rule 4; with that peer
-  silent it waits, rule 5); "a mirror runs no check"; **"a box in `activatedFrom` is
+  silent it waits, rule 5); **"a peer whose controlled operation naming this box as source is
+  still at `prepared` is not F: the box proceeds"** (round 6's case; control: the same peer at
+  `copy_accepted` gives `superseded`); "a peer at `emergency_declared` naming this box as source
+  is F"; "a mirror runs no check"; **"a box in `activatedFrom` is
   asked: if it answers with a newer chart that fences this box, the result is `superseded`"**
   (round 4's outside case: an old box's id can come back by a cold restore, which brings back its
   `trading.env`, `apps/server/src/state-secrets.ts:16-23`); "a box in `activatedFrom` that does
@@ -2281,9 +2305,14 @@ one route today is `POST /management-api/promote/preparation` (`apps/server/src/
 That route is refused while a handover is open (Task 5.2b) and cannot carry the relinquished fact
 (Task 5a.1b). So the handover has a route of its own.
 
-**Files:** `apps/server/src/handover-activation.ts` gains
-`POST /api/node/handover/:operationId/preparation`, body `{ moduleOperation, signIn, proposal }`,
-mounted on a mirror and added to `read-only-exemptions.ts` (Task 3.2's row). It refuses
+**Files:** Create `apps/server/src/handover-preparation.ts`, holding
+`POST /api/node/handover/:operationId/preparation` and `handoverPromotionContext` (Task 5.8's
+`handover-activation.ts`, created after it, imports both); add `personIdForLoginEmail` to
+`packages/identity/src/manager-login.ts` and its index. The route takes
+`{ moduleOperation, signIn: { email, password, totp? }, proposal }`, is mounted on a mirror and
+added to `read-only-exemptions.ts` (Task 3.2's row). It first calls `requireNodeOperationHttps`
+(TLS and a same-origin request, `apps/server/src/node-operation-https.ts`), as both promote routes
+do (`promote-api.ts:71,118`). It refuses
 `handover.step_out_of_order` unless the operation is at `filing_assumed` or `emergency_declared`,
 and `module.operation_invalid` unless the binding's action is `promote` and its target is this
 box. It builds the context with one function, `handoverPromotionContext(operation)`, from the
@@ -2292,22 +2321,39 @@ emergency: the same with `oldMachineRelinquished: false` — and never from the 
 check is the existing one (`promote-api.ts:91`). Tasks 5.8 and 7.4 use the same function for
 `withPromotion`. Test `apps/server/src/handover-preparation.test.ts`.
 
+**Sign-in by email, without revealing whether the account exists** (CLAUDE.md §3: unknown and
+wrong-secret accounts answer `password.invalid` "after the same hashing work"). The pages ask for
+an email, but `withAuthenticatedOperation`, which `invoke` uses, takes only a `personId`
+(`apps/server/src/operation-authentication.ts:102-110`) and does exactly one password hash itself,
+through `checkManagerPassword` by id (`:112-113`), which hashes against a dummy for a person it
+cannot find (`packages/identity/src/manager-login.ts:56-65`). So the identity package gains one
+export, `personIdForLoginEmail(db, email): Promise<string>`, beside the private `findPersonLogin`
+(`manager-login.ts:37`): it does **no** hashing, and answers the person's id, or a fresh random
+UUID when no active account has that email. `withAuthenticatedOperation` then does its one hash in
+both cases and refuses an unknown id with `password.invalid`, as it refuses a wrong password.
+
 - [ ] **Step 1: Write the failing tests.** "a controlled operation at `filing_assumed` gets a clock
   challenge and a comparison"; "a body that sets `oldMachineRelinquished` is ignored: the context
   comes from the record"; "an operation at `copy_accepted` is refused `handover.step_out_of_order`";
   "the browser on the box itself is refused as the second clock" (`same_machine`); "the route is
   reached through a mirror's read-only gate" (Task 3.2's exemption test gains the row); "after a
   prepare here, the activation with the same context is not refused `event_mismatch`" (control:
-  prepare with the other scenario's context, and it is).
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-preparation.test.ts src/read-only-exemptions.test.ts` — FAIL.
+  prepare with the other scenario's context, and it is); **"an unknown email and a wrong password
+  get the same answer, `password.invalid`, after the same number of password hashes — one"** (a
+  counting seam on the hash); "a plain-HTTP or cross-origin request is refused
+  `authorization.not_permitted`".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-preparation.test.ts src/read-only-exemptions.test.ts` and `pnpm --filter @waitron/identity exec vitest run src/manager-login.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** them — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a handover prepares its clock check and minute through its own route, with the context its record gives"`.
 
 #### Task 5.8: M2 activates
 
-**Files:** Create `apps/server/src/handover-activation.ts`; add the activate row to
-`read-only-exemptions.ts`. Test `apps/server/src/handover-activation.test.ts` (Review Focus 4).
+**Files:** Create `apps/server/src/handover-activation.ts` (importing Task 5.7b's
+`handoverPromotionContext`); add the activate row to `read-only-exemptions.ts`. Test
+`apps/server/src/handover-activation.test.ts` (Review Focus 4). The route first calls
+`requireNodeOperationHttps`, and turns the email into a person id with `personIdForLoginEmail`
+exactly as Task 5.7b does.
 
 **Interfaces — Produces:** `POST /api/node/handover/:operationId/activate` with
 `{ signIn: { email, password, totp? }, comparisonId }`: the person signs in against the placed copy
@@ -2343,8 +2389,9 @@ Task 5.8b.
   "activate before `filing_assumed` is refused `handover.step_out_of_order`"; "a person without
   `node.promote` in the placed copy is refused"; "on a mirror, the activation is not refused
   `node.read_only`"; "the `handover_activations` row commits with the chart, or neither does" (a
-  throw injected after `consume`: neither the chart nor the row is stored); "the prepare step and
-  the promotion receive the same context" (control: prepare without the field, and the promotion
+  throw injected after `consume`: neither the chart nor the row is stored); "an unknown email and
+  a wrong password get the same answer after one password hash each"; "a plain-HTTP or
+  cross-origin request is refused"; "the prepare step and the promotion receive the same context" (control: prepare without the field, and the promotion
   is refused `event_mismatch`).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-activation.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
@@ -2552,7 +2599,9 @@ migration), `packages/migrations/migrations.manifest.json` (the append-only tabl
 `apps/server/src/handover-emergency-preview.test.ts`.
 
 **Interfaces — Produces:** `GET /api/node/handover/emergency/preview` answers
-`{ source: { nodeId, name }, copy: { kind: "mirror-copy", lastChangeAtMs, integrity: "ok" | "damaged", chains: "ok" | "broken" }, chainSummaries: ChainSummary[], sourceAnswering: boolean }`.
+`{ source: { nodeId, name }, copy: { kind: "mirror-copy", lastChangeAtMs, integrity: "ok" | "damaged", chains: "ok" | "broken" }, chainSummaries: ChainSummary[], sourceAnswering: boolean, openEmergency: { operationId, state } | null }`.
+`openEmergency` is this box's open emergency operation, if it has one, so the page can resume it
+(Task 8.1).
 `integrity` is `PRAGMA integrity_check`; `chains` is every module's copy check (Task 4.1,
 `checkHandoverCopy`; for Veri*Factu, Task 4.3's whole-chain walk), run on the copy opened as a
 read-only `BackupQuery`; `chainSummaries` is Task 4.2's summary. `lastChangeAtMs` is the newest
@@ -2575,7 +2624,10 @@ is a signed peer query to the source (5 s). Reads only.
 add its row to `read-only-exemptions.ts`. Test `apps/server/src/handover-emergency-declare.test.ts`.
 
 **Interfaces — Produces:** body `{ operationId, signIn: { email, password, totp? }, statements, reason, locale }`.
-Refusals, each before anything is recorded: a credential failure `password.invalid`; no
+The route first calls `requireNodeOperationHttps` (as Task 5.7b), then signs the person in by
+email with `loginManager` (`packages/identity/src/manager-login.ts:130-144`), which already does
+the same hashing work for an unknown account (a dummy hash, `:88-89`), and ends the session in
+the same step. Refusals, each before anything is recorded: a credential failure `password.invalid`; no
 `node.promote` → `authorization.not_permitted` (what `authorizeManager` throws,
 `packages/identity/src/manager-login.ts:172`); a statement not `true` → `handover.request_invalid`
 naming it; `reason` empty or over 500 characters; the source still answers a signed query →
@@ -2592,7 +2644,8 @@ order, Formats), and the declaration's `replaces` names it; with anything later 
 - [ ] **Step 1: Write the failing tests.** One per refusal (each asserting no node.db row); "a
   valid declaration records it before answering"; "the same operation and inputs answer the stored
   declaration"; "replacement from `prepared` moves the old operation to `replaced`; refused from
-  `copy_accepted`"; "the reason is never in a log line" (capture the logger).
+  `copy_accepted`"; "an unknown email and a wrong password get the same answer after the same
+  hashing work"; "a plain-HTTP or cross-origin request is refused"; "the reason is never in a log line" (capture the logger).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-emergency-declare.test.ts src/read-only-exemptions.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** them — PASS; then from the root `pnpm exec vitest run scripts/personal-log-params.test.ts scripts/errors-reachable.test.ts`.
@@ -2690,7 +2743,10 @@ and your bills, cash and stock will disagree. {M2} may be missing {M1}'s latest 
 records will return later; the business difference will need reconciliation."; the three
 statements (required checkboxes); the reason (required, up to 500 characters); the sign-in
 (email, password, then code), with one line "Passkeys are not offered here yet."; then two
-actions in order. **Record the declaration**, disabled until every required field passes, sends
+actions in order. **On load, the page reads the preview's `openEmergency`: when the spare already
+holds an operation at `emergency_declared`, it shows that declaration's reason and time, skips
+the declaration, and goes straight to the sign-in and the clock check** — from any device, so a
+person whose first device's clock disagreed can carry on from a phone. Otherwise: **Record the declaration**, disabled until every required field passes, sends
 Task 7.3's request. Once it is recorded, the page compares clocks through
 `POST /api/node/handover/:operationId/preparation` (Task 5.7b needs the operation at
 `emergency_declared`), and **Start the venue on this box** is enabled once the clocks pass. A
@@ -2704,7 +2760,10 @@ Choose a backup instead." with the backup choice once Slice 14 lands; a role ref
 - [ ] **Step 1: Write the failing tests.** The warning and statements in both languages;
   **Record the declaration** disabled until all required pass; the clock comparison starts only
   after the declaration is recorded, and **Start the venue on this box** is enabled only once it
-  passes; each refusal's sentence and choices; the reason over
+  passes; **"opened on a second device while the spare holds a declaration at
+  `emergency_declared`, the page skips the declaration and offers the sign-in and the clock
+  check"** (control: without the resume, the form is blank and a second declaration is refused
+  `handover.operation_in_progress`); each refusal's sentence and choices; the reason over
   500 characters marked inline; axe both themes, 390 px.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/setup exec vitest run src/screens/handover-screen.emergency.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
@@ -3530,4 +3589,22 @@ changes.
 | 4 (smaller) Litestream's stop started inside the request | the same reading | Applied by the same change: Litestream is never stopped before the close, so it never stops while the sending loop may still store an answer |
 | 5 the start-check rules contradicted their tests | read the rules against each Task 3.4 test; `rebuild-first-start.ts:120-139` (a restore writes a new term and rewrites only its own address) and `fence.ts:20-24` | Applied. Task 3.4 now states the rule as one decision table (counted or asked-only peer × F, N, =, S) and five combination rules in order; an M2 whose only peer is its old M1 proceeds whether M1 is silent or answers older (rule 3); a newer chart that does not fence this box is held, and counts as an answer only from a counted peer. Every Task 3.4 test was checked against the table — one, "a source left at `prepared`… proceeds", needed its peer's answer stated — and a test was added per cell. The crash-table rows that rely on the start check now name the rule they use; the M1-at-`prepared` row no longer says "sells" unconditionally |
 | Drain point: exit with `return` before the first send | read `drain.ts:385-386` (`upsertFlujo` after the loop) | Applied in Task 2.4b, with a test whose control (`break`) moves AEAT's stored next send time later |
+
+---
+
+## Review round 6: what changed
+
+A tight check of revision `c3250b64ea` (`/Users/clintongormley/waitron-campaign/a1018/review-6.md`),
+the last before the plan lands. Each finding was checked on `61bfdfe405` before acting; none was
+rejected. Owner questions and the slice table are unchanged. A "For per-slice reviewers" note now
+sits at the top of the plan.
+
+| Finding | Checked by | What changed |
+| --- | --- | --- |
+| Smaller: the HTTPS and same-origin check | read `node-operation-https.ts` (TLS socket, same origin), `promote-api.ts:71,118` (both promote routes call it; the review's `:89` is off by a few lines, the point holds) | Applied to Tasks 5.7b, 5.8 and 7.3, each with a refusal test |
+| Smaller: an email never becomes a person, so every sign-in on the new routes is refused | read `operation-authentication.ts:102-113` (takes only a `personId`, hashes once itself), `manager-login.ts:37` (`findPersonLogin` is private), `:56-65` and `:86-96` (unknown accounts hash a dummy) | Applied under CLAUDE.md §3's login-refusal rule. Task 5.7b adds `personIdForLoginEmail`, which does no hashing and answers a fresh random id for an unknown email, so `withAuthenticatedOperation`'s one hash happens either way; Tasks 5.7b and 5.8 use it, with a test that an unknown email and a wrong password get the same answer after one hash each. Task 7.3 signs in with `loginManager` by email, which already does the dummy hash |
+| Smaller: Task 5.7b added to a file Task 5.8 creates | read the plan's order | Applied: Task 5.7b creates `handover-preparation.ts`; Task 5.8's `handover-activation.ts` imports from it |
+| 2 a declaration recorded before a failed clock check had no way back | read the states table, Task 8.1 and Task 1.4's one-open index | Applied as suggested: the preview reports `openEmergency`, and the page resumes an open `emergency_declared` operation from any device, straight to the sign-in and clock check; a new crash-table row and a test whose control shows the blank form refused |
+| 3 rule F counted a controlled operation still at `prepared` | read Task 3.1's status (no source field) against the M1-restarts-before-stepdown crash row | Applied. Task 3.1's status gains `sourceNodeId` and `destinationNodeId`; F counts an operation naming this box as source only at `emergency_declared` or later, or controlled at `copy_accepted` or later; tests for the `prepared` case (proceeds) and its control (`copy_accepted` supersedes) |
+| 5 decision 3 and Task 2.4 would stop backups and Litestream early | read the five early stops (`fiscal-certificate-diagnosis-runner.ts:324-325`, `menu-activation.ts:87-88`, `box-alert-email.ts:456-457`, `demo-printer.ts:227-228`, `clock-watch.ts:461-462`: each sets `stopped` before its first `await`) and design §2 step 2 (`2026-10-23-a1018-simple-handover-design.md:148`) | Applied. Decision 3 and Task 2.4's last sentence exempt backups and Litestream, citing design §2 step 2: they stop before the final snapshot, which is taken after the restart, in their own place in the normal close. Task 2.4 now cites all five early stops instead of asking the implementer to check four |
 
