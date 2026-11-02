@@ -146,7 +146,7 @@ export async function reconcile(
 
   // One database holds one taxpayer, but a rename leaves rows carrying different names; the
   // cabecera takes the first row's, in no stated order.
-  const authority = await fetchAuthority(client, cabeceraFor(rows[0]!), normalizedPeriod);
+  const authority = await fetchAuthority(client, cabeceraFor(rows[0]!), normalizedPeriod, rows);
 
   // T2
   const detectedAt = deps.clock.now().instant;
@@ -280,20 +280,16 @@ function cabeceraFor(row: PeriodRow): Cabecera {
   return { ObligadoEmision: { NombreRazon: row.nombre_razon_emisor, NIF: row.id_emisor_factura } };
 }
 
-/**
- * Pages the whole period consulta into `RefExterna → Reported`. A record with no `RefExterna`
- * is one we cannot attribute to any of our registros (e.g. filed for this obligado by another
- * software system), so it is skipped.
- *
- * Throws on "more pages" without a `ClavePaginacion` rather than stopping: an under-paged map would
- * make records on the unreached pages read as absent and raise false `noTrace` incidents.
- */
+/** An incomplete period lookup cannot establish that an accepted record is missing. */
 async function fetchAuthority(
   client: VerifactuClient,
   cabecera: Cabecera,
   period: { year: string; month: string },
+  rows: readonly PeriodRow[],
 ): Promise<Map<string, Reported>> {
+  const expected = new Map(rows.map((row) => [row.id, row]));
   const authority = new Map<string, Reported>();
+  const visited = new Set<string>();
   let clave: ConsultaFiltro["ClavePaginacion"];
   do {
     const resp = await client.consultar(cabecera, {
@@ -304,6 +300,15 @@ async function fetchAuthority(
     for (const r of resp.registros) {
       const ref = (r.DatosRegistroFacturacion as { RefExterna?: string }).RefExterna;
       if (ref !== undefined) {
+        const row = expected.get(ref);
+        if (
+          row !== undefined &&
+          (r.IDFactura.IDEmisorFactura !== row.id_emisor_factura ||
+            r.IDFactura.NumSerieFactura !== row.num_serie_factura ||
+            r.IDFactura.FechaExpedicionFactura !== row.fecha_expedicion_factura)
+        ) {
+          throw new Error("consulta identity does not match stored record");
+        }
         authority.set(ref, {
           estado: r.EstadoRegistro,
           codigo: r.CodigoErrorRegistro ?? null,
@@ -315,6 +320,15 @@ async function fetchAuthority(
       if (resp.ClavePaginacion === undefined) {
         throw new Error("consulta returned IndicadorPaginacion=S without a ClavePaginacion");
       }
+      const key = JSON.stringify([
+        resp.ClavePaginacion.IDEmisorFactura,
+        resp.ClavePaginacion.NumSerieFactura,
+        resp.ClavePaginacion.FechaExpedicionFactura,
+      ]);
+      if (visited.has(key)) {
+        throw new Error("consulta repeated a ClavePaginacion");
+      }
+      visited.add(key);
       clave = resp.ClavePaginacion;
     } else {
       clave = undefined;

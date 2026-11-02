@@ -379,11 +379,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   behavioral assertions and protected-file scope intact.
   [Detail](backlog/fiscal.md#protected-write-path-test-policy-quotation).
 
-- **W41s. Fiscal prevention and offline recovery** — filing investigation, outside evidence and
-  fencing, and the complete old-backup/new-hardware exercise remain queued. Task 8's synthetic
-  correction and held-record actions keep disputed production remedies disabled pending
-  Q35/Q37/Q38/Q40 or a case-specific owner decision. A held cancellation from another issuing
-  chain has no qualified release here.
+- **W41s. Fiscal prevention and offline recovery** — filing investigation, startup/daily
+  reconciliation, optional device-held invoice evidence, signed witnesses and fencing, and the
+  complete old-backup/new-hardware exercise remain queued. Task 8's synthetic correction and
+  held-record actions keep disputed production remedies disabled pending Q35/Q37/Q38/Q40 or a
+  case-specific owner decision. A held cancellation from another issuing chain has no qualified
+  release here.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
