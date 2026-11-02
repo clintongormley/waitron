@@ -891,9 +891,7 @@ Open:
   stayed in `apps/server/src/parties.ts`, while `partySurvivors` is in
   `packages/db/src/party-table-labels.ts`. Left by
   #906's review: no case pins what a correction slip prints for a counter order delivered
-  to a table; and a database built on purpose with a delivery table in another location now
-  names the order by its own label — no product path creates that state, and whether every
-  existing venue database is free of it was not checked.
+  to a table.
 - **Task 9 (#874, dishes arriving in a party get a kitchen group).** P16 is kept (owner,
   2026-10-17; recorded in kitchen.md's Decisions). Left by C78's review: the earliest fire
   time is picked by comparing the stored times as text, right only while every writer stores the
@@ -2527,8 +2525,7 @@ separate backlog entries. A803 owns its pass/station presentation tail.
   (`apps/server/src/order-places.ts`, used by MOVED slips) reads a counter order whose delivery
   table was released as the counter, a known edge A650 Part 1 deferred and has not yet put to
   the owner, while `orderTableLabels` (`packages/db/src/party-table-labels.ts`, used by
-  tickets and correction slips) names it by its kept `delivery_table_label`; only `orderTableLabels` limits the tables it reads to the venue's
-  location. Once the edge is decided, one reader in `packages/db`. Left open by A650 Part 1.
+  tickets and correction slips) names it by its kept `delivery_table_label`. Once the edge is decided, one reader in `packages/db`. Left open by A650 Part 1.
 
 ## A666. A floor join that moves tables together is sent once without seats
 

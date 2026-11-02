@@ -135,7 +135,6 @@ export async function moveChangedRooms(
   return moved;
 }
 
-/** The zones of `tableIds`. */
 export async function zonesOf(
   tx: Transaction,
   _cfg: TradingContext,

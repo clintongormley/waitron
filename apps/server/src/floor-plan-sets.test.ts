@@ -247,7 +247,7 @@ describe("the floor plan sets port", () => {
     expect(await statementsToCopy(3)).toBe(await statementsToCopy(1));
   });
 
-  it("refuses a copy from or to a set the location does not hold", async () => {
+  it("refuses a copy from or to a set that does not exist", async () => {
     const d = await department();
     const unknown = randomUUID();
     for (const [from, to] of [

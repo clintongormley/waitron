@@ -87,7 +87,7 @@ export async function leaveMergesRestoring(
   await leaveMerges(tx, tableIds);
 }
 
-/** Every member of `tableId`'s merge by table id, `tableId` included, or [] when it is in none. Reads by id alone: the caller checks the venue first. */
+/** Every member of `tableId`'s merge by table id, `tableId` included, or [] when it is in none. */
 export async function mergeMembers(tx: Transaction, tableId: string): Promise<string[]> {
   const own = tx
     .select({ joinId: floorTodayJoinTables.joinId })

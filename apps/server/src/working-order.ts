@@ -5189,9 +5189,9 @@ export interface HeldOrder {
 /** List the venue's open bills, a party's bill and lineless ones included. */
 export async function listHeldOrders(
   deps: WorkingOrderDeps,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
   _cfg: TradingContext,
 ): Promise<HeldOrderSummary[]> {
-  void _cfg;
   return withTransaction(deps.db, async (tx) => {
     const rows = await tx
       .select({

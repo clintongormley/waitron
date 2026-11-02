@@ -325,7 +325,6 @@ async function otherZonesTaken(
   const masters = await tx
     .select({ label: floorPlanTables.label, shortName: floorPlanTables.shortName })
     .from(floorPlanTables)
-    .innerJoin(floorZones, eq(floorZones.id, floorPlanTables.zoneId))
     .where(ne(floorPlanTables.zoneId, zoneId));
   const live = await tx
     .select({ label: diningTables.label, shortName: diningTables.shortName })

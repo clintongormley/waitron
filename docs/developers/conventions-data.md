@@ -2129,7 +2129,7 @@ A table's or a joined table's name for today is `floor_today_tables.name`, a gro
 `floor_today_joins.name`; null means the saved name. `POST /api/tables/:id/today/name` writes it
 (`nameToday`, `apps/server/src/floor-today-name.ts`); a table in a group names the group. A name is
 refused `table.label_taken` when, compared after `normalize("NFC")` and `toLowerCase()` in
-JavaScript (`sameName`), it is the saved name of another table of the location or the today's name
+JavaScript (`sameName`), it is the saved name of another table or the today's name
 of another group or of another table on the map, spare or taken off; a group's own tables count as
 other tables. A reset clears a table's name when it puts the table back (`todayColumns` and the
 parts it takes back in `catchUpPass`, Reset table, and Split tables… putting a joined table back). A

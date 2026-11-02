@@ -130,7 +130,7 @@ export async function refuseInJoinedTable(
   if (first !== undefined) throw new AppError("table.in_joined_table", { tableId: first });
 }
 
-/** Any of the tables taken off today, the first in the caller's order named; a table with no today's row never is. Reads by id alone. */
+/** Any of the tables taken off today, the first in the caller's order named; a table with no today's row never is. */
 export async function refuseTakenOff(tx: Transaction, tableIds: readonly string[]): Promise<void> {
   const rows = await tx
     .select({ tableId: floorTodayTables.tableId })
