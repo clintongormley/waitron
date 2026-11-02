@@ -78,6 +78,12 @@ interface ResetPlan {
   creates: readonly string[];
 }
 
+/** A file's handle and the plan that empties it. */
+interface FileReset {
+  readonly file: Database;
+  readonly plan: ResetPlan;
+}
+
 /**
  * Every table some migration created, in name order, the engine's own bookkeeping and the journals
  * aside — the migration state has to outlive the data.
@@ -185,8 +191,8 @@ export function useVenueDb(options: VenueDbOptions): VenueDb {
   let store: VenueDatabase | undefined;
   let db: Database | undefined;
   let node: NodeDatabase | undefined;
-  let resetPlan: ResetPlan | undefined;
-  let nodeResetPlan: ResetPlan | undefined;
+  let venueReset: FileReset | undefined;
+  let nodeReset: FileReset | undefined;
   const resetPerTest = options.resetPerTest ?? true;
 
   // The directory and the store are each assigned the instant they exist, BEFORE migrations or
@@ -204,16 +210,14 @@ export function useVenueDb(options: VenueDbOptions): VenueDb {
     // After setup so a fake backend's tables are in the delete set; the plan records only names and
     // trigger text, so setup's own seeded rows do not affect it.
     if (resetPerTest) {
-      resetPlan = buildResetPlan(db);
-      nodeResetPlan = buildResetPlan(node);
+      venueReset = { file: db, plan: buildResetPlan(db) };
+      nodeReset = { file: node, plan: buildResetPlan(node) };
     }
   }, options.timeoutMs ?? DEFAULT_SETUP_TIMEOUT_MS);
 
   afterEach(async () => {
-    if (resetPerTest && db !== undefined && resetPlan !== undefined)
-      await applyReset(db, resetPlan);
-    if (resetPerTest && node !== undefined && nodeResetPlan !== undefined)
-      await applyReset(node, nodeResetPlan);
+    if (venueReset !== undefined) await applyReset(venueReset.file, venueReset.plan);
+    if (nodeReset !== undefined) await applyReset(nodeReset.file, nodeReset.plan);
     // A file of synchronous database work otherwise gives the loop no timer turn, so the venue
     // watchdog kills this worker as frozen once the file outlasts `WATCHDOG_KILL_MS`.
     await new Promise((resolve) => realSetTimeout(resolve, 0));
