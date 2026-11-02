@@ -74,7 +74,6 @@ async function mount(modules: string[], permissions: string[], role = "superviso
       if (path.includes("/me/attendance/day?"))
         return Response.json({
           personId: "boss",
-          locationId: "venue",
           date: "2026-01-05",
           timeZone: "Europe/Madrid",
           revision: "day-r",
@@ -82,7 +81,7 @@ async function mount(modules: string[], permissions: string[], role = "superviso
           items: [],
         });
       if (path.includes("/attendance/hours?")) return Response.json(managerHours());
-      if (path.endsWith("/queue")) return Response.json({ locationId: "shop", items: [] });
+      if (path.endsWith("/queue")) return Response.json({ items: [] });
       throw new Error(path);
     },
   });

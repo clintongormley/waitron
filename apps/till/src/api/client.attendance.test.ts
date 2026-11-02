@@ -6,7 +6,6 @@ describe("attendance client", () => {
     const original = {
       entryId: "automatic",
       personId: "ana",
-      locationId: "venue",
       nodeId: "node",
       entryKind: "out" as const,
       eventAt: "2026-10-15T00:15:00Z",

@@ -285,9 +285,6 @@ it.each(
     expect.objectContaining({ code: "management.request_invalid" }),
   );
 });
-it("manager queue takes no query", () => {
-  expect(request).not.toHaveProperty("parseAttendanceLocationQuery");
-});
 
 it.each(single([null, [], "", "not-a-uuid"]))(
   "requires a manager proposal subject %#",

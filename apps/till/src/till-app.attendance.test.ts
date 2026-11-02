@@ -453,7 +453,6 @@ describe("till correction editors and manager PIN", () => {
       f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
       f.api.getAttendanceDay.mockImplementation(async (date) => ({
         personId: "p1",
-        locationId: "venue",
         date,
         revision: "day-revision",
         timeZone: "Europe/Madrid",
@@ -507,7 +506,6 @@ describe("till correction editors and manager PIN", () => {
     f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
     f.api.getAttendanceDay.mockImplementation(async (date) => ({
       personId: "p1",
-      locationId: "venue",
       date,
       revision: "revision",
       timeZone: "Europe/Madrid",
@@ -567,7 +565,6 @@ it("a lost PIN approval is recovered from the day and retried with the same comm
   f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
   f.api.getAttendanceDay.mockImplementation(async (date) => ({
     personId: "p1",
-    locationId: "venue",
     date,
     revision: "revision",
     timeZone: "Europe/Madrid",
@@ -615,7 +612,6 @@ it("a recorded day's retime keeps its target and recovers a lost reply through t
   f.api.getAttendanceInbox.mockResolvedValue(empty());
   f.api.getAttendanceDay.mockImplementation(async (date) => ({
     personId: "p1",
-    locationId: "venue",
     date,
     revision: "day-revision",
     timeZone: "Europe/Madrid",
@@ -771,7 +767,6 @@ it("closing during an approver read retires that opening and does not block a re
   f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
   f.api.getAttendanceDay.mockImplementation(async (date) => ({
     personId: "p1",
-    locationId: "venue",
     date,
     revision: "revision",
     timeZone: "Europe/Madrid",

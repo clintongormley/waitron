@@ -113,13 +113,11 @@ export async function mountManagerHours(
         const args = new URL(path, location.origin).searchParams;
         return Response.json({
           ...data.hours,
-          locationId: "shop",
           people: data.hours.people.map((person) => ({
             ...person,
             hours: {
               ...person.hours,
               period: data.hours.period,
-              locationId: "shop",
             },
           })),
           selection: {
