@@ -8,6 +8,7 @@ import {
   kitchenStations,
   parties,
   printJobs,
+  serviceCommands,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -44,7 +45,17 @@ import { createStation } from "./kitchen.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readPassCardRows, readScopedPassBoard } from "./pass-board.js";
 import { passCardRelease, type PassCard } from "./pass-card.js";
-import { fireOrderLines, markServed, routingOnce } from "./working-order.js";
+import {
+  fireOrderLines,
+  markServed,
+  routingOnce,
+  unmarkServed,
+  updateOrderLine,
+  type OrderLinePatch,
+} from "./working-order.js";
+import { cancelItem } from "./line-cancel.js";
+import { readCancellationContext } from "./line-cancel-context.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { passReleaseAsk, releasePassItems, type PassActor } from "./pass-release.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setStationPrinting } from "./testing/station-printing.js";
@@ -1595,4 +1606,245 @@ describe("A773 pass release: races", () => {
           true,
         ]);
       });
+
+  const burgers = (quantity: string) => `Grill\nSplit extras\n1\n13:00\n${quantity} x BURG\n`;
+
+  /** Two burgers in one round of the bill, waiting at Grill outside any group, and their card. */
+  async function twoBurgersCard() {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    const placed = await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...dish(venue, "burger"), quantity: "2" },
+      ]);
+      const [line] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.productId, venue.products.burger));
+      return { line: line!.id, item: await ticketItemOf(tx, line!.id) };
+    });
+    const pass = await passWithProfile(venue, "Hot pass", [venue.stations.grill]);
+    const card = async () => {
+      const cards = await toFire(venue, pass.by);
+      expect(cards.map((one) => one.releaseTicketItemIds)).toEqual([[placed.item]]);
+      return cards[0]!;
+    };
+    const first = await card();
+    return {
+      venue,
+      placed,
+      pass,
+      card,
+      fire: (tx: Transaction) => releasePassItems(tx, venue.cfg, pass.by, askOf(first)),
+      before: await rows([placed.item]),
+      start: await printed(venue),
+    };
+  }
+
+  const serveCommand = async (tx: Transaction, venue: Venue) => ({
+    operatorId: OPERATOR,
+    submissionId: randomUUID(),
+    expectedPartyRevision: await partyRevisionOf(tx, venue.party.partyId),
+  });
+  const serveOne =
+    (venue: Venue, lineId: string, undo = false) =>
+    async (tx: Transaction) =>
+      (undo ? unmarkServed : markServed)(
+        tx,
+        venue.cfg,
+        venue.party.partyId,
+        [{ lineId, quantity: "1" }],
+        await serveCommand(tx, venue),
+      );
+
+  for (const order of ["serve", "release"] as const)
+    it(`settles a Fire against a partial serve of its dish, the ${order} committing first`, async () => {
+      const f = await twoBurgersCard();
+      const serve = serveOne(f.venue, f.placed.line);
+      const outcome = order === "serve" ? await race(serve, f.fire) : await race(f.fire, serve);
+      expect(outcome).toMatchObject(
+        order === "serve"
+          ? [fulfilled, refusedWith("ticket.pass_context_changed")]
+          : [fulfilled, fulfilled],
+      );
+      if (order === "serve") {
+        expect(await rows([f.placed.item])).toEqual(f.before);
+        expect(gained(f.start, await printed(f.venue))).toEqual(nothing);
+        await release(f.venue, f.pass.by, askOf(await f.card()));
+      }
+      expect(await rows([f.placed.item])).toEqual(f.before.map(releasedRow));
+      const paper = [burgers(order === "serve" ? "1.000" : "2.000")];
+      expect(gained(f.start, await printed(f.venue))).toEqual({
+        ...nothing,
+        grill: paper,
+        pass: paper,
+      });
+    });
+
+  it("refuses a Fire whose card an undone serve changed again, and prints the restored quantity", async () => {
+    const f = await twoBurgersCard();
+    await withTransaction(db, serveOne(f.venue, f.placed.line));
+    const served = await f.card();
+    const fire = (tx: Transaction) => releasePassItems(tx, f.venue.cfg, f.pass.by, askOf(served));
+    expect(await race(serveOne(f.venue, f.placed.line, true), fire)).toMatchObject([
+      fulfilled,
+      refusedWith("ticket.pass_context_changed"),
+    ]);
+    expect(await rows([f.placed.item])).toEqual(f.before);
+    expect(gained(f.start, await printed(f.venue))).toEqual(nothing);
+    const restored = await f.card();
+    expect(restored.releaseContext).not.toBe(served.releaseContext);
+    await release(f.venue, f.pass.by, askOf(restored));
+    expect(await rows([f.placed.item])).toEqual(f.before.map(releasedRow));
+    expect(gained(f.start, await printed(f.venue))).toEqual({
+      ...nothing,
+      grill: [burgers("2.000")],
+      pass: [burgers("2.000")],
+    });
+  });
+
+  for (const order of ["cancel", "release"] as const)
+    it(`settles a Fire against a cancel of its dish, the ${order} committing first`, async () => {
+      const f = await burgerCard();
+      const ask = await withTransaction(db, async (tx) => {
+        const [bill] = await tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, f.venue.party.tabId));
+        return {
+          admission: testTradingAdmission(),
+          quantity: "1",
+          outcome: "remove_charge" as const,
+          expectedEdit: await readBillEditState(tx, f.venue.party.tabId),
+          expectedPartyRevision: await partyRevisionOf(tx, f.venue.party.partyId),
+          expectedBillRevision: bill!.revision,
+          expectedContext: await readCancellationContext(tx, f.venue.party.partyId, f.placed.line),
+          submissionId: randomUUID(),
+        };
+      });
+      const cancel = (tx: Transaction) =>
+        cancelItem(tx, f.venue.cfg, f.venue.party.partyId, f.placed.line, ask, OPERATOR);
+      const outcome = order === "cancel" ? await race(cancel, f.fire) : await race(f.fire, cancel);
+      expect(outcome).toMatchObject(
+        order === "cancel"
+          ? [fulfilled, refusedWith("ticket.pass_context_changed")]
+          : [fulfilled, refusedWith("tab.cancel_context_changed")],
+      );
+      expect(await rows([f.placed.item])).toEqual(
+        order === "cancel" ? [] : f.before.map(releasedRow),
+      );
+      expect(gained(f.start, await printed(f.venue))).toEqual(
+        order === "cancel" ? nothing : { ...nothing, grill: [GRILL_FIRE], pass: [GRILL_FIRE] },
+      );
+    });
+
+  it("rolls the whole Fire back when its ticket cannot be queued, and the same Fire then prints once", async () => {
+    const f = await burgerCard();
+    const ask = askOf(await cardOf(f.venue, f.pass.by, f.placed.groupId));
+    const commands = () =>
+      withTransaction(db, (tx) =>
+        tx.select().from(serviceCommands).where(eq(serviceCommands.submissionId, ask.submissionId)),
+      );
+    await withTransaction(db, (tx) =>
+      tx.run(
+        sql`create trigger probe_fail before insert on print_jobs begin select raise(abort, 'probe'); end`,
+      ),
+    );
+    try {
+      await expect(release(f.venue, f.pass.by, ask)).rejects.toThrow("probe");
+    } finally {
+      await withTransaction(db, (tx) => tx.run(sql`drop trigger probe_fail`));
+    }
+    expect(await rows([f.placed.item])).toEqual(f.before);
+    expect(await commands()).toEqual([]);
+    expect(gained(f.start, await printed(f.venue))).toEqual(nothing);
+    expect(await release(f.venue, f.pass.by, ask)).toEqual({
+      releasedTicketItemIds: [f.placed.item],
+    });
+    expect(await rows([f.placed.item])).toEqual(f.before.map(releasedRow));
+    expect(await commands()).toHaveLength(1);
+    expect(gained(f.start, await printed(f.venue))).toEqual({
+      ...nothing,
+      grill: [GRILL_FIRE],
+      pass: [GRILL_FIRE],
+    });
+  });
+
+  /** A waiter's edit of one line, made from the bill's edit state and revision read before. */
+  async function pendingEdit(venue: Venue, lineId: string, patch: OrderLinePatch) {
+    const read = await withTransaction(db, async (tx) => {
+      const [bill] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, venue.party.tabId));
+      const [line] = await tx
+        .select({ lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, lineId));
+      return {
+        revision: bill!.revision,
+        lineNo: line!.lineNo,
+        expectedEdit: await readBillEditState(tx, venue.party.tabId),
+      };
+    });
+    return (tx: Transaction) =>
+      updateOrderLine(tx, venue.cfg, venue.party.tabId, read.lineNo, patch, read.revision, {
+        operatorId: OPERATOR,
+        expectedEdit: read.expectedEdit,
+        admission: testTradingAdmission(),
+      });
+  }
+
+  /** A burger waiting at Grill, and a water on the same bill outside its group. */
+  async function burgerAndWater() {
+    const f = await burgerCard();
+    const water = await withTransaction(db, async (tx) => {
+      await addTabRound(tx, f.venue.cfg, f.venue.party.tabId, [
+        { menuItemId: f.venue.tables.offerFor(f.venue.products.water), quantity: "1" },
+      ]);
+      const [line] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.productId, f.venue.products.water));
+      return line!.id;
+    });
+    const card = await cardOf(f.venue, f.pass.by, f.placed.groupId);
+    const fire = (tx: Transaction) => releasePassItems(tx, f.venue.cfg, f.pass.by, askOf(card));
+    return { ...f, water, fire, start: await printed(f.venue) };
+  }
+
+  it("lets a waiter's edit read before a Fire commit after it", async () => {
+    const f = await burgerAndWater();
+    const edit = await pendingEdit(f.venue, f.water, { quantity: "2" });
+    expect(await race(f.fire, edit)).toMatchObject([fulfilled, fulfilled]);
+    expect(await rows([f.placed.item])).toEqual(f.before.map(releasedRow));
+    const [water] = await withTransaction(db, (tx) =>
+      tx
+        .select({ quantity: workingOrderLines.quantity })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, f.water)),
+    );
+    expect(water!.quantity).toBe(2000);
+    expect(gained(f.start, await printed(f.venue))).toEqual({
+      ...nothing,
+      grill: [GRILL_FIRE],
+      pass: [GRILL_FIRE],
+    });
+  });
+
+  for (const touched of [false, true])
+    it(`settles a waiter's edit committed before a Fire that ${touched ? "touched" : "left"} its dish`, async () => {
+      const f = await burgerAndWater();
+      const edit = touched
+        ? await pendingEdit(f.venue, f.placed.line, { quantity: "2" })
+        : await pendingEdit(f.venue, f.water, { quantity: "2" });
+      expect(await race(edit, f.fire)).toMatchObject(
+        touched ? [fulfilled, refusedWith("ticket.pass_context_changed")] : [fulfilled, fulfilled],
+      );
+      expect(await rows([f.placed.item])).toEqual(touched ? f.before : f.before.map(releasedRow));
+      expect(gained(f.start, await printed(f.venue))).toEqual(
+        touched ? nothing : { ...nothing, grill: [GRILL_FIRE], pass: [GRILL_FIRE] },
+      );
+    });
 });
