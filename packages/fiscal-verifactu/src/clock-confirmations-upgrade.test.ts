@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { captureError, triggerRaised, withTransaction } from "@waitron/db";
 import { applyMigrationSet, useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedPendingEnvios } from "../test/drain-fixtures.js";
+import { seedPreReplacementEnvio } from "../test/pre-replacement-fixture.js";
 import { FISCAL_MIGRATIONS } from "./migrations.js";
 import { clockChecks } from "./schema/clock-checks.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
@@ -63,7 +63,7 @@ async function confirmationIndexes() {
 }
 
 it("keeps every confirmation and both append-only triggers across the staff migration", async () => {
-  const { nodeId, registroIds } = await seedPendingEnvios(suite.db, { count: 1 });
+  const { nodeId, registroIds } = await seedPreReplacementEnvio(suite.db);
   const [check] = await withTransaction(suite.db, (tx) =>
     tx
       .insert(clockChecks)

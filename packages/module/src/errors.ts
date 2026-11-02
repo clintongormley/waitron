@@ -3,6 +3,7 @@ import "@waitron/shared";
 
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "node.read_only": Record<string, never>;
     "module.operation_invalid": { module: string };
     /** `reason` is our own English description; it names at most an override's key, a module's
      * name or a file name a module declares in code, never a value from the file. */

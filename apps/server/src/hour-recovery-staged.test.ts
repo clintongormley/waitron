@@ -15,9 +15,11 @@ import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
+import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { invoiceSeries } from "@waitron/db";
+import { FISCAL_MIGRATIONS } from "@waitron/fiscal-verifactu/src/migrations.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import * as restore from "./restore.js";
@@ -64,10 +66,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-history-reader.js", async (original)
   };
 });
 
-/**
- * A backup taken by the release before fiscal-verifactu's 0009 (two added columns). Each later
- * migration is undone first, newest first, or drizzle's `max(created_at)` watermark skips 0009.
- */
+/** The backup's schema and journal both end at fiscal-verifactu's 0008. */
 async function olderBackup() {
   const manifest = await buildManifest({
     db: suite.db,
@@ -76,38 +75,37 @@ async function olderBackup() {
     environment: "preproduction",
     now: new Date(),
   });
+  const journal = JSON.parse(
+    await readFile(join(FISCAL_MIGRATIONS.migrationsFolder, "meta/_journal.json"), "utf8"),
+  ) as { entries: { idx: number; tag: string; when: number }[] };
+  const through = journal.entries.find((entry) => entry.tag === "0008_envio_confirmado_index");
+  if (through === undefined)
+    throw new Error("Missing fiscal migration 0008 in the fixture journal");
   const database = join(root, "older-backup.db");
   await suite.db.archiveTo(database);
   const raw = new DatabaseSync(database);
+  raw.exec(`
+    ALTER TABLE registros_facturacion DROP COLUMN sin_registro_previo;
+    ALTER TABLE registros_facturacion DROP COLUMN rechazo_previo;
+    ALTER TABLE registros_facturacion DROP COLUMN subsanacion;
+  `);
+  raw.exec(`
+    DROP INDEX registros_corrects_registro_uq;
+    DROP INDEX registros_identidad_uq;
+    ALTER TABLE registros_facturacion DROP COLUMN corrects_registro_id;
+    CREATE UNIQUE INDEX registros_identidad_uq ON registros_facturacion
+      (id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_registro);
+  `);
   raw.exec("DROP TABLE fiscal_conflict_evidence");
-  raw.exec(
-    "DELETE FROM __drizzle_migrations_fiscal WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations_fiscal)",
-  );
-  manifest.modules["fiscal-verifactu"] = manifest.modules["fiscal-verifactu"]! - 1;
-  // 0012 rebuilds clock_confirmations with the same columns; the next step drops the table.
-  raw.exec(
-    "DELETE FROM __drizzle_migrations_fiscal WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations_fiscal)",
-  );
-  manifest.modules["fiscal-verifactu"] = manifest.modules["fiscal-verifactu"]! - 1;
   raw.exec("DROP TABLE clock_confirmations");
   raw.exec("DROP TABLE clock_checks");
-  raw.exec(
-    "DELETE FROM __drizzle_migrations_fiscal WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations_fiscal)",
-  );
-  manifest.modules["fiscal-verifactu"] = manifest.modules["fiscal-verifactu"]! - 1;
   raw.exec("DROP INDEX registros_generado_idx");
   raw.exec("DROP TABLE clock_stop_restarts");
-  raw.exec(
-    "DELETE FROM __drizzle_migrations_fiscal WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations_fiscal)",
-  );
-  manifest.modules["fiscal-verifactu"] = manifest.modules["fiscal-verifactu"]! - 1;
   raw.exec("ALTER TABLE envio_flujo DROP COLUMN technical_incident_token");
   raw.exec("ALTER TABLE envios DROP COLUMN technical_incidence");
-  raw.exec(
-    "DELETE FROM __drizzle_migrations_fiscal WHERE created_at = (SELECT max(created_at) FROM __drizzle_migrations_fiscal)",
-  );
+  raw.prepare("DELETE FROM __drizzle_migrations_fiscal WHERE created_at > ?").run(through.when);
   raw.close();
-  manifest.modules["fiscal-verifactu"] = manifest.modules["fiscal-verifactu"]! - 1;
+  manifest.modules["fiscal-verifactu"] = through.idx + 1;
   const dump = await readFile(database);
   const artifact = encryptArtifact(
     packArchive([
@@ -234,6 +232,32 @@ const missing = {
 };
 
 describe("a staged backup for the restore's clock requests", () => {
+  it("keeps the backup through migration 0008 when another release is recorded", async () => {
+    await suite.db.execute(sql`
+      insert into __drizzle_migrations_fiscal (hash, created_at)
+      values ('synthetic-later-release', 1893456000000)
+    `);
+    try {
+      await olderBackup();
+      const raw = new DatabaseSync(join(root, "older-backup.db"), { readOnly: true });
+      try {
+        expect(
+          raw
+            .prepare(
+              "select count(*) as count, max(created_at) as latest from __drizzle_migrations_fiscal",
+            )
+            .get(),
+        ).toEqual({ count: 9, latest: 1792358085639 });
+      } finally {
+        raw.close();
+      }
+    } finally {
+      await suite.db.execute(sql`
+        delete from __drizzle_migrations_fiscal where hash = 'synthetic-later-release'
+      `);
+    }
+  });
+
   it("checks a backup from an older release once and takes the name through small JSON requests", async () => {
     const h = await stagedHost(true);
     vi.mocked(restore.validateArtifact).mockClear();

@@ -22,7 +22,7 @@ import type {
   TrustedClock,
   VatBreakdownLine,
 } from "@waitron/fiscal";
-import { authorize, type AuthzInput } from "@waitron/identity";
+import { authorize, authorizeManager, type AuthzInput } from "@waitron/identity";
 import { insertSale } from "./insert-sale.js";
 import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
@@ -72,7 +72,7 @@ export interface RecordCorrectionInput {
   wholeInvoice?: boolean;
   /** Checked by `recordCorrection` itself against permission `sale.rectify`; the authorizer is
    * recorded on `sales.authorized_by`. */
-  authz: AuthzInput;
+  authz: AuthzInput | { managementSessionId: string };
   clock: TrustedClock;
 }
 
@@ -168,11 +168,17 @@ export async function recordCorrection(
     });
   }
 
-  const authorization = await authorize(tx, {
-    sessionId: input.authz.sessionId,
-    permission: "sale.rectify",
-    override: input.authz.override,
-  });
+  const authorization =
+    "managementSessionId" in input.authz
+      ? await authorizeManager(tx, {
+          managementSessionId: input.authz.managementSessionId,
+          permission: "sale.rectify",
+        })
+      : await authorize(tx, {
+          sessionId: input.authz.sessionId,
+          permission: "sale.rectify",
+          override: input.authz.override,
+        });
 
   requireSupportedCorrection(original.counterpartyTaxId, input.correctsSaleId);
 

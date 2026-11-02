@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, index, text, uniqueIndex, type AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import {
   count,
   day,
@@ -27,6 +27,9 @@ export const registrosFacturacion = table(
   "registros_facturacion",
   {
     id: id("id").primaryKey().$defaultFn(newId),
+    correctsRegistroId: id("corrects_registro_id").references(
+      (): AnySQLiteColumn => registrosFacturacion.id,
+    ),
     // Where the sale came from: informational only and never hashed. The chain key is `node_id`.
     source: saleSourceColumn("source").notNull(),
     /* v8 ignore start */
@@ -64,6 +67,9 @@ export const registrosFacturacion = table(
     nombreRazonEmisor: label("nombre_razon_emisor").notNull(),
     // Null on an anulación — RegistroAnulacion carries no TipoFactura at all.
     tipoFactura: label("tipo_factura"),
+    subsanacion: label("subsanacion"),
+    rechazoPrevio: label("rechazo_previo"),
+    sinRegistroPrevio: label("sin_registro_previo"),
     // AEAT's rectificativa and substitution blocks, copied from the RegistroAlta when present. Not
     // huella inputs, so `json` is safe; a hashed field would need `text`.
     tipoRectificativa: label("tipo_rectificativa"),
@@ -113,15 +119,11 @@ export const registrosFacturacion = table(
     // THE backstop against two writers claiming one chain position. Keyed on the node: two tills
     // of one node share one sequence. See chain.node-rekey.concurrency.test.ts.
     uniqueIndex("registros_tenant_node_secuencia_uq").on(t.nodeId, t.secuencia),
-    // AEAT record identity is IDEmisorFactura + NumSerieFactura + FechaExpedicionFactura, and a
-    // duplicate returns error 3000. `tipo_registro` joins the key because an alta and its
-    // anulación legitimately share the triple.
-    uniqueIndex("registros_identidad_uq").on(
-      t.idEmisorFactura,
-      t.numSerieFactura,
-      t.fechaExpedicionFactura,
-      t.tipoRegistro,
-    ),
+    uniqueIndex("registros_corrects_registro_uq").on(t.correctsRegistroId),
+    // Originals retain their unique identity; each correction names the version it replaces.
+    uniqueIndex("registros_identidad_uq")
+      .on(t.idEmisorFactura, t.numSerieFactura, t.fechaExpedicionFactura, t.tipoRegistro)
+      .where(sql`${t.correctsRegistroId} is null`),
     index("registros_sale_idx").on(t.saleId),
     index("registros_node_secuencia_idx").on(t.nodeId, t.secuencia),
     index("registros_generado_idx").on(t.fechaHoraHusoGenRegistro),

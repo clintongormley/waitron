@@ -289,6 +289,14 @@ export const ALERT_MESSAGES: Readonly<
     en: "Invoice action refused: fingerprint check failed.",
     es: "Operación de factura rechazada: ha fallado la comprobación de la huella.",
   },
+  "fiscal.record_already_corrected": {
+    en: "This invoice record already has a correction. Review that correction before submitting another.",
+    es: "Este registro de facturación ya tiene una subsanación. Revísala antes de enviar otra.",
+  },
+  "fiscal.remedy_invalid": {
+    en: "The correction was refused because its invoice reference or correction flag is invalid. Check the selected invoice and correction details.",
+    es: "La subsanación se ha rechazado porque la referencia de la factura o la marca de subsanación no es válida. Comprueba la factura seleccionada y los datos de la subsanación.",
+  },
   "fiscal.record_flagged": {
     en: "An invoice record has a problem the tax agency (AEAT) accepts, though it may flag it. Contact support.",
     es: "Un registro de facturación tiene un problema que la AEAT acepta, aunque puede señalarlo. Contacta con soporte.",

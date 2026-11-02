@@ -103,6 +103,17 @@ function press(app: Hono, cookie?: string) {
 
 const FUTURE = () => new Date(Date.now() + 60 * 60_000).toISOString();
 
+it("mounts the administrator remedy boundary even on a host without a submission loop", async () => {
+  const { app } = mount({ drain: false });
+  const res = await app.request("/management-api/fiscal-records/remedy", {
+    method: "POST",
+    headers: { cookie: manager.cookie, "content-type": "application/json" },
+    body: JSON.stringify({ kind: "record-correction" }),
+  });
+  expect(res.status).toBe(403);
+  expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+});
+
 /** Three waiting records whose waits end an hour after the real clock: the route reads the wall
  * clock, and the fixture's own wait is long past. */
 async function seedWaiting(): Promise<string[]> {

@@ -141,6 +141,26 @@ for (const locale of ["en", "es"] as const) {
           ...columns.map((name) => ({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 })),
         );
       }
+      const records = expected[phase].tables.registros_facturacion!;
+      for (const name of [
+        "corrects_registro_id",
+        "subsanacion",
+        "rechazo_previo",
+        "sin_registro_previo",
+      ]) {
+        records.columns.push({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 });
+        for (const row of Object.values(records.rows)) row[name] = null;
+      }
+      records.foreignKeys.push({
+        id: 4,
+        seq: 0,
+        table: "registros_facturacion",
+        from: "corrects_registro_id",
+        to: "id",
+        on_update: "NO ACTION",
+        on_delete: "NO ACTION",
+        match: "NONE",
+      });
       const parties = expected[phase].tables.parties!;
       parties.columns = parties.columns.filter((column) => column.name !== "main_bill_id");
       parties.foreignKeys = parties.foreignKeys.filter((key) => key.from !== "main_bill_id");

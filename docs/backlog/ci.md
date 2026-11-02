@@ -1173,6 +1173,16 @@ whether the page answered, or that no page showed the file, or that a time limit
 began too close to the deadline for its limit to pass gets no `stack:` line. The earlier dashboard
 stall (A1230, above) left too little evidence to say whether it was the same.
 
+**1 November 2026, another unfinished browser file.** Main run `41338680756` on
+`b0aa3502d761d8d327b00c32e0d43c498bdaf024`, job `124944000948` (`test-dashboard (4)`),
+reached its 360-second command deadline with only
+`src/screens/device-profiles-screen.clock.test.ts` unfinished. Its missing coverage blob
+then failed upload. The full log, including the last browser calls and process snapshot, is
+retained in Lane F's `receipts/w41s8-payload-20261101/a1304-main-dashboard4.log`.
+No assertion failure was reported; whether this shares the earlier stall's cause is unverified.
+A1305 owns that investigation in Lane B. Keep the failed run; a passing retry would not establish
+the cause or a repair.
+
 ## A1252: remaining server job time after the held-setup split
 
 **Coordination, 1 November at 12:45:** the watcher closed A1252 after its split and three

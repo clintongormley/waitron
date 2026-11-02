@@ -563,6 +563,12 @@ an independently consumable allocation. It invokes Task 4 only after the conflic
 
 ## Task 8: corrective operations and held-record resolution
 
+**Dated prerequisite, 2 November 2026:** the owner-authorised AEAT TEST run accepted an original
+and two successive S/N description corrections under the same invoice identity. Final consultation
+matched the second correction's fingerprint. The [captured records and masked SOAP](../specs/2026-11-02-aeat-double-correction-evidence.json)
+record the replies and limits. This completes the live second-correction prerequisite, not the
+remaining implementation checks below or production-enablement gates.
+
 **Create:** `packages/fiscal-verifactu/src/record-remedy.ts`, `record-remedy.test.ts`.
 **Modify:** `backend.ts`, `chain.ts`, `filing-cases.ts`, schema only where required to retain
 the complete new record, and module-exposed management operations; server `cancel-credit.ts`.

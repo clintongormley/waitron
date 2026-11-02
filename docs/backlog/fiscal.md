@@ -424,8 +424,251 @@ file's edit scope is authorised. The live procedure is documented in
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
-Corrective-record resolution, filing investigation, outside evidence and fencing for the other
-tasks, and the complete old-backup/new-hardware operational exercise remain queued. Earlier
+Filing investigation, outside evidence and fencing for the other tasks, and the complete
+old-backup/new-hardware operational exercise remain queued. The latest Task 8 qualification is
+below; earlier dated implementation checkpoints retain their historical scope.
+
+### Task 8 staff refund and held-cancellation qualification, 2 November 2026
+
+`apps/server/src/fiscal-remedy.staff-refund.test.ts` uses a real provisioned venue and the
+core sale and void writers. It returns 12.10 in cash through the till's refund route before
+voiding the invoice; the refund route deliberately refuses an already voided invoice. The
+filing queue sets the ordinary cancellation aside after the original's definitive rejection.
+An explicitly enabled synthetic correction is accepted by the real client and fake tax service;
+the administrator then releases the same cancellation. Concurrent release and reordered retries
+return the saved decision. A refund retry returns the original completed refund. The checks compare
+all sale, line, tender, settlement, void, refund, drawer, print-job and series rows, plus the
+immutable fiscal rows and chain head after release and filing.
+
+The other cases retain those accounting effects while refusing record-producing remedies for
+unknown outcomes, conflicting invoice identities and an already generated ordinary cancellation.
+An accepted correction from another issuing chain does not release the old chain's cancellation.
+That boundary remains a refusal, not a qualified cross-chain remedy. The original rejection in
+these cases is synthetic stored evidence; they do not send a real refund or establish a legal
+remedy. The public permitted-remedy set stays empty. The completed implementation still needs the
+owner's fiscal review before landing and separate legal authority before production enablement.
+
+The whole-branch review reproduced a dependency cycle when a correction was appended behind an
+ordinary cancellation still waiting to be sent: the cancellation waited for that correction's
+answer, while the correction waited behind the cancellation. The action now refuses unless any
+existing ordinary cancellation is already held for resolution. It also refuses completed,
+failed or unknown cancellation states and a synthetic held absent-original cancellation. Once
+the queue has actually held the ordinary cancellation, the same decision can be submitted again,
+accepted and followed by its explicit release. No queue-order rule was weakened.
+
+For a definitively rejected delivery, the correction action requires a matching non-null rejection
+code on the case and delivery; it refuses code 3000 in either admissible outcome. This aligns the
+rejected-record boundary with the sibling remedies. The duplicate-code probe used synthetic
+stored evidence: the pinned library's reducer returned duplicate outcomes for the tested 3000
+reply variants, not a plain rejection. No claim that normal filing generated that inconsistent
+state is made. Accepted-with-errors acknowledgement preservation retains its existing behavior.
+
+The staff suite also exercises the built-in empty policy for all five actions in both deployment
+modes. The policy is a permitted-action set shared by those modes; a future enablement decision
+must account for that scope. The two Claude reviews' findings and deliberate refusal choice are
+recorded in the pull request; a passing synthetic tax-service response supplies no legal authority.
+
+**1 November 2026, Task 8 storage decision (owner).** A correction keeps the invoice's issuer,
+number and issue date. Its nullable `corrects_registro_id` names the version it replaces;
+a unique index permits one replacement per version, and the invoice-identity index applies
+only to originals. This permits successive corrections without updating earlier records.
+The generated storage migration adds the column and replaces indexes; it does not rebuild
+the table. Its populated-predecessor test compares every venue data row before and after the
+upgrade, allowing only the new null link, then checks update and delete refusals on the original.
+Correction payload persistence, administrator-only remedy operations, held-case
+resolution and the real AEAT second-correction proof remain part of Task 8 before publication.
+Disputed production remedies stay disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision.
+
+**1 November 2026, Task 8 receipt replay check.** The receipt lookup explicitly selects the
+original issued alta by its empty correction link. `record-version-receipt.test.ts` stores
+three versions with different issuer names, VAT and totals, then compares the replay with the
+original receipt under both ordinary and reversed unordered-query traversal. Before that
+filter, the reversed traversal returned the second correction's figures. This check covers
+receipt replay, not the remaining current-version filing and remedy decisions.
+
+**1 November 2026, Task 8 marker and append checks.** `Subsanacion`, `RechazoPrevio`
+and `SinRegistroPrevio` have nullable stored columns. The payload round-trip cases compare the
+built and rebuilt records and their XML markers, including explicit `N` and omitted fields.
+The append cases exercise successive correction links after an unrelated sale, retain older
+rows and recompute the new fingerprints. A competing replacement receives
+`fiscal.record_already_corrected`; a missing target, different invoice, sale or node, an
+anulación target or an absent correction flag receives `fiscal.remedy_invalid`.
+The generated marker migration adds columns without rebuilding the table. These checks do
+not implement administrator remedy actions, select the current version for filing, resolve held
+cases or prove acceptance by AEAT. Those remain Task 8 work before publication.
+
+**1 November 2026, Task 8 cancellation and consultation checks.** The cancellation queries use
+the alta with no replacement. `drain.record-versions.test.ts` exercises two corrections: older
+refusals do not set aside a cancellation after the current version is accepted; an unknown
+current outcome keeps the cancellation and its later records unsent; a refused current version
+sets the cancellation aside. A held cancellation is not set aside using an older refusal while
+the current version is unknown. Every case compares the immutable record rows before and after.
+
+`reconcile.record-versions.test.ts` exercises a consultation reporting only the second
+correction's reference. Earlier delivery rows and acknowledgements stay unchanged; the current
+version still receives lost-acknowledgement recovery or no-trace resubmission. The reconciliation
+write transaction rechecks which versions remain current after the network request; a correction
+appended during that request prevents a stale resubmission of its predecessor. These tests use
+the library's fake authority; live second-correction acceptance, the administrator action boundary
+and held-case resolution remain unfinished.
+
+**1 November 2026, Task 8 payload and backend version admission.** The row converter refuses
+optional library fields without stored counterparts rather than silently discarding them, including
+explicit `N` flags. It also refuses caller-supplied `RefExterna`: the drainer assigns the stored row
+id when submitting. Credit-note and substitution admission use the unreplaced version's invoice
+type; a correction from F2 to F1 therefore refuses the existing R5/F3 paths, while a correction to
+F2 permits them. Void identity and origin come from the issued original, while its chain pointer
+uses the current head. These are synthetic storage and backend checks; no new remedy is enabled.
+
+**1 November 2026, Task 8 administrator action boundary.** The fiscal module grants
+`fiscal.remedy` to administrators only. `applyRecordCorrection` checks the live management
+session and the caller's server policy before creating a correction and its case-resolution event
+in one transaction. A retry with the same decision returns the saved record and event; changed
+facts under that action key are refused. Its checks include the target node and environment on
+replay. The synthetic cases retain original record and delivery rows, exercise two successive
+version cases and report a malformed predecessor without rewriting it.
+
+The public `POST /management-api/fiscal-records/remedy` route refuses every remedy kind.
+Client-supplied enablement and operator fields cannot grant authority. No production action is
+enabled. The HTTP adapter covers synthetic corrections to stored invoice facts for rejected records
+and records accepted with errors. The separately gated synthetic absent-original operation is
+described below. The separately gated corrective HTTP adapter is also described below. Resolution
+of existing held cancellations and manual brake release now have the synthetic paths described
+below. Actual staff cancellation/refund qualification remains Task 8 work. The live second-correction
+prerequisite is recorded in the dated entry below.
+
+**2 November 2026, Task 8 synthetic corrective-invoice transaction.** The internal operation
+uses the existing core correction writer, which now accepts a management session and still checks
+`sale.rectify`. The remedy operation separately checks the live administrator's `fiscal.remedy`
+permission and its server policy. It requires a current alta with a matching rejection or
+accepted-with-errors case and delivery evidence; unknown outcomes, duplicate conflicts and an
+already generated cancellation are refused. It binds the original sale and issuing node from the
+selected record and host, then writes the corrective sale, its numbered R5, delivery and case event
+in one transaction. The earlier sale, fiscal rows and tenders remain unchanged in these tests.
+Retries compare the complete decision and return the saved sale, record and event without another
+number or payment. A failed resolution rolls the accounting and number allocation back.
+
+`record-remedy-corrective.test.ts` exercises this internal transaction with real accounting and
+fiscal writers. No new production remedy is enabled.
+
+**2 November 2026, Task 8 synthetic corrective HTTP boundary.** With a test policy explicitly
+allowing `corrective-invoice`, the management route passes validated signed line facts to that
+transaction. The host supplies the node, deployment environment and clock; the action uses
+`operator_script` origin and the authenticated administrator. Client claims for those values are
+refused. The wire input accepts the series, total, operation description, whole-invoice flag and
+lines with number, name, language descriptions, quantity, unit price, VAT rate and base, plus
+optional gross amount, product id and original-line id. Other line metadata is refused rather
+than discarded. Core retains its accounting, whole-invoice, line-reference and series checks.
+
+`record-remedy-corrective-http.test.ts` exercises the real route and writers, including distinct
+production/preproduction stamps, fractional quantities, whole-invoice credits, parallel retries,
+changed decisions, live write authority and clock refusals. These synthetic operations leave the
+earlier sale, fiscal records and payment/refund rows unchanged. The route's default policy remains
+empty. Existing held-record and manual brake release have separate synthetic paths below. Actual
+staff cancellation/refund integration remains unfinished; this HTTP milestone does not complete Task 8.
+
+**2 November 2026, Task 8 synthetic held-cancellation release.** A cancellation already set
+aside has its own immutable identity, so this operation submits that existing record. With a test
+policy allowing `release-held-cancellation`, you name the held cancellation, its case and the
+accepted current invoice version. The operation requires the same sale, invoice identity, node,
+environment and issuing chain, an ordinary cancellation still set aside, and its matching
+`fiscal.anulacion_retenida` case. A pending, unknown, rejected, accepted-with-errors or superseded
+invoice version is refused. Production policy remains empty.
+
+The delivery becomes pending and due at the action's clock reading, its held acknowledgement is
+deleted, and a resolution event records the signed-in administrator and complete decision in one
+transaction. The event names no new remedy record. Changed decisions or another administrator
+cannot reuse the action key. A retry returns the saved release even after submission; it still
+checks the current administrator, server policy, writable host, node and environment. An earlier
+different resolution rolls the delivery and acknowledgement changes back.
+
+`record-remedy-held.test.ts` sends a correction through the real client to the fake tax service,
+releases the held cancellation, and then submits that same cancellation. Its fiscal rows, chain
+head and sales stay unchanged by the release. This synthetic exercise does not qualify the actual
+staff cancellation/refund path, other issuing chains or a production legal
+remedy. Those remain before whole-item review and publication.
+
+**2 November 2026, Task 8 synthetic absent-original cancellation.** An administrator explicitly
+selects the operation for a current rejected alta with matching case evidence. Unknown outcomes,
+duplicate conflicts, a different case, an existing cancellation and a superseded version are
+refused. The new immutable cancellation keeps the invoice identity and issued origin, carries
+`SinRegistroPrevio=S` and joins the current chain head. Its delivery and resolution event commit
+together. A retry compares the complete decision and returns its saved result without another
+append. These checks leave sales and earlier fiscal rows unchanged; they do not qualify a staff
+refund or resolve an already generated unsuitable cancellation.
+
+The filing loop distinguishes this stored absent-original operation from an ordinary cancellation
+of a rejected original. Synthetic filing tests send the former and retain the ordinary hold.
+The production enabled set stays empty. This is an engineering path under the plan's synthetic
+gate, not an adviser answer or a new live AEAT receipt. Historical descriptions of ordinary
+cancellation holds below retain their original scope.
+
+**2 November 2026, Task 8 live second-correction prerequisite.** Verifactu
+[#150](https://github.com/waitron-io/verifactu/pull/150) adds the manual `double-correction`
+probe. Its single authorised [AEAT TEST run](https://github.com/waitron-io/verifactu/actions/runs/41370629637)
+submitted an original alta and two description corrections under invoice
+`CI/20261102/41370629637-DOUBLE`, dated `02-11-2026`, on one synthetic installation.
+All three batch and line replies were `Correcto`, without an error code. Each correction kept
+that identity, used `Subsanacion=S` and `RechazoPrevio=N`, and linked to the preceding version.
+The final consultation returned one `Correcto` record with the second correction's description,
+fingerprint and link to the first correction.
+
+The [dated evidence](../superpowers/specs/2026-11-02-aeat-double-correction-evidence.json)
+retains the records, parsed replies and request/reply SOAP after identity masking. You can use
+this as the Task 8 storage design's live prerequisite for two successive corrections. It does
+not settle which invoice errors legally permit that remedy or enable production policy.
+Rejected originals, changed money or tax, actual staff refunds and held-record resolution remain
+outside this run; the remaining Task 8 workflows still need implementation and qualification.
+
+| Source, checked 2 November 2026 | Exact words | Observation |
+| --- | --- | --- |
+| [AEAT TEST run 41370629637](https://github.com/waitron-io/verifactu/actions/runs/41370629637), three submission replies | `EstadoEnvio: "Correcto"`, `EstadoRegistro: "Correcto"` | The original and both S/N description corrections received those states. |
+| Same run, final consultation | `ResultadoConsulta: "ConDatos"`, `EstadoRegistro: "Correcto"` | One record carried fingerprint `BB7FFF9845DDB687E31FA5404A273EE186F9D3FAF6FC8EC7B8A04E00ECF2F3F1` and description `Double correction probe: secondCorrection`. |
+
+**2 November 2026, Task 8 corrected-fact requests.** The synthetic HTTP adapter accepts partial
+corrections to the stored description, issuer name, invoice type, recipients, tax breakdown, total
+and tax amounts, corrective/substitution references and correction amounts. Omitted fields keep
+the selected version's facts; explicit null removes optional recipients or correction fields from
+the new version. The invoice's issuer tax number, number and issue date remain unchanged. Reference
+calendar dates survive a change in generation offset. Amounts must be exact decimal strings;
+nested unknown fields and malformed choices are refused before the record builder, which still
+validates the complete record. The saved decision includes all supplied facts and the prior outcome,
+so changing a fact on retry refuses while object key order does not matter. Tests compare original
+records, deliveries and sale rows. These are synthetic record corrections, not new accounting or
+refund operations; all production remedies remain disabled.
+
+**2 November 2026, Task 8 explicit accepted-with-errors description decisions.** With a synthetic
+server policy, `priorOutcome: "accepted-with-errors"` requires both an accepted-with-errors delivery
+and that cause on the selected filing case. The correction retains `Subsanacion=S` and
+`RechazoPrevio=N`; the rejected path retains S/X. Omitting the selection means rejected, so omitted
+and explicit rejected decisions share one saved result. A changed selection under a saved action
+key is refused. Retries after a later delivery outcome and clock change preserve the saved result.
+The tests compare earlier records, deliveries and case facts, including two successive synthetic
+accepted-with-errors corrections. These are local engineering checks, not AEAT acceptance or a
+decision that a particular invoice error permits this remedy. Production policies remain empty.
+
+| Source, checked 2 November 2026 | Exact words | Scope |
+| --- | --- | --- |
+| [AEAT service description v1.0.3, §9.1.2, p.56](https://sede.agenciatributaria.gob.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Veri-Factu_Descripcion_SWeb.pdf) | “No informar <RechazoPrevio> o informarlo con valor N” | The ordinary correction operation uses S with an absent or N prior-rejection marker. The section covers accepted records, including acceptance with errors, when another invoicing remedy is not required. This does not settle the adviser's open questions. |
+
+**1 November 2026, Task 8 synthetic HTTP description correction.** With an explicit server-side
+test policy, the route appends a correction and resolves its case. It accepts a description, case
+and record references, reason and action key; it refuses unknown fields, including client claims
+about policy, operator, node, deployment, software identity or generation time. Boot supplies
+record-generation facts through the module route context. Its write check reads the current mode,
+primary role and fence and requires trading admission; the adapter binds the clock to the stored
+issue zone inside the write transaction. The invoice identity, amounts, tax breakdown, recipient
+and corrective/substitution fields come from the selected immutable record. Tests preserve these
+fields across a summer-to-winter offset change and retain the original invoice calendar day.
+
+The saved decision excludes server generation facts, so a retry after the clock advances returns
+the committed record and event. A changed description under that action key is refused; a changed
+original delivery outcome after commit does not generate another correction. Two successive
+rejected versions are exercised through HTTP with the earlier records and case facts retained.
+These are synthetic checks, not AEAT acceptance or legal enablement. The production policy
+remains empty; every disputed production action is refused.
+
+ Earlier
 Task 7 automatic-switch requirements below are historical; the 1 November decision supersedes them.
 
 **2026-10-12, a conflict no longer holds its chain (owner).** A record AEAT refuses as a duplicate
@@ -502,15 +745,22 @@ brake holds; a same-code refusal keeps them held. A record with its own filing c
 held record, an unresolved earlier send, a cancellation of a refused original or a different
 environment is not probed. The alert's “Since” stays at the time the run reached three
 same-code refusals, including after refused hourly retries (owner, 2026-10-12).
-Manual release remains Task 8.
 
-**Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records
-again).** Task 8 as planned resolves records that have a case of their own; a record the brake holds
-has none. The owner also chose to keep the
-records added after a run's unanswered successor sent with its retry, as built. It was built so because when the retried record's answer is anything but a refusal with
-the run's code, the run is broken and nothing would explain such a hold: the
-`fiscal.refusals_repeated` alert would not show, and when that answer is not a refusal at all
-`heldRecords` would name no case for the held records.
+**2 November 2026, Task 8 synthetic manual brake release.** With a test policy explicitly
+allowing `release-brake`, you name the first held record, the holding refusal's case, your reason
+and an action key. The administrator action makes that record pending and due immediately. It
+uses the drainer's brake eligibility: three matching refusals immediately before it, no earlier
+held or unanswered record and no case of its own. An ordinary cancellation of a refused current
+invoice remains held. The action leaves the attempt count and previous send facts unchanged,
+clears the held acknowledgement and records a note in the same transaction.
+
+A note permits a retry; it does not resolve the original refusal. Later held records still wait
+until the released record's answer breaks the refusal run. Another refusal with the same code
+keeps them held. The request can be retried after submission without changing delivery again;
+current permissions, host identity, writable status and server policy are checked again. The
+public policy stays empty. `record-remedy-brake.test.ts` exercises these outcomes through the
+real client and fake tax service, including a rollback when the note cannot be stored. This
+synthetic path does not qualify actual staff refunds or enable a production remedy.
 
 A line AEAT moves away from
 its record's position is never applied, so that record stays unknown and is retried unless an

@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { IssuanceRefusal, recordIncident } from "@waitron/core";
 import { AppError } from "@waitron/shared";
 import type { NodeId, SaleId, SaleOrigin } from "@waitron/shared";
-import { isUniqueViolation, type Transaction } from "@waitron/db";
+import { constraintTarget, isUniqueViolation, type Transaction } from "@waitron/db";
 import type {
   AltaInput,
   AnulacionInput,
@@ -57,6 +57,7 @@ const REFUSED_WARNINGS: ReadonlySet<ValidationCode> = new Set([
 export type PendingRegistro =
   | {
       tipo: "alta";
+      correctsRegistroId?: string;
       saleId: SaleId;
       origin: SaleOrigin;
       entorno: Entorno;
@@ -211,9 +212,40 @@ async function attemptAppend(
     ...(registro.tipo === "anulacion" ? { nombreRazonEmisor: registro.nombreRazonEmisor } : {}),
   });
 
+  if (registro.tipo === "alta" && registro.correctsRegistroId !== undefined) {
+    const [target] = await tx
+      .select({
+        nodeId: registrosFacturacion.nodeId,
+        saleId: registrosFacturacion.saleId,
+        tipoRegistro: registrosFacturacion.tipoRegistro,
+        idEmisorFactura: registrosFacturacion.idEmisorFactura,
+        numSerieFactura: registrosFacturacion.numSerieFactura,
+        fechaExpedicionFactura: registrosFacturacion.fechaExpedicionFactura,
+      })
+      .from(registrosFacturacion)
+      .where(eq(registrosFacturacion.id, registro.correctsRegistroId));
+    if (
+      target === undefined ||
+      target.nodeId !== nodeId ||
+      target.saleId !== registro.saleId ||
+      target.tipoRegistro !== "alta" ||
+      target.idEmisorFactura !== row.idEmisorFactura ||
+      target.numSerieFactura !== row.numSerieFactura ||
+      target.fechaExpedicionFactura !== row.fechaExpedicionFactura ||
+      row.subsanacion !== "S"
+    ) {
+      throw new AppError("fiscal.remedy_invalid", { registroId: registro.correctsRegistroId });
+    }
+  }
+
   const [inserted] = await tx
     .insert(registrosFacturacion)
-    .values(row)
+    .values({
+      ...row,
+      ...(registro.tipo === "alta" && registro.correctsRegistroId !== undefined
+        ? { correctsRegistroId: registro.correctsRegistroId }
+        : {}),
+    })
     .returning({ id: registrosFacturacion.id });
   /* v8 ignore start */
   if (inserted === undefined) {
@@ -288,6 +320,18 @@ export async function appendToChain(
       return await tx.transaction((nested) => attemptAppend(nested, nodeId, registro, sif));
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
+      const target = constraintTarget(error);
+      if (
+        registro.tipo === "alta" &&
+        registro.correctsRegistroId !== undefined &&
+        target?.table === "registros_facturacion" &&
+        target.columns.length === 1 &&
+        target.columns[0] === "corrects_registro_id"
+      ) {
+        throw new AppError("fiscal.record_already_corrected", {
+          registroId: registro.correctsRegistroId,
+        });
+      }
     }
   }
   throw new AppError("chain.append_contention", { nodeId, attempts: MAX_APPEND_ATTEMPTS });

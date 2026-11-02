@@ -17,7 +17,6 @@ export type FilingCaseEvent = typeof filingCaseEvents.$inferSelect;
 export type FilingCaseEventKind = FilingCaseEvent["kind"];
 
 export interface FilingCaseReport extends FilingCase {
-  /** The original record's CURRENT `envios.estado`; a case action never changes it. */
   estado: string | null;
   status: "open" | "resolved";
   events: FilingCaseEvent[];

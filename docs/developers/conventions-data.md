@@ -5706,3 +5706,17 @@ provisioning and recovery tests retain legitimate controls as well as the padded
 The admission check is not a universal audit of every timezone consumer or boot duty. The boot
 suite names the duties it observes. Raw readers beyond these exercised paths remain outside that
 receipt. Commands, red/green logs and full review are in Lane E `receipts/a696-resume-20261101/`.
+
+
+## A replacement cannot wait on the record that waits for it
+
+When admitting a replacement record, trace both directions of the filing dependencies. W41s-8's
+1b980095 review reproduced this order: original invoice, unsent cancellation, correction. Selecting
+the current invoice version made the cancellation wait for the correction's answer; preserving
+queue order made the correction wait behind that cancellation. Repeated passes sent nothing.
+
+The correction action now refuses while an existing cancellation is waiting, completed, failed or
+unknown. An ordinary cancellation already set aside by the drainer can be corrected and explicitly
+released afterwards. The refusal and that later accepting path run together in
+`apps/server/src/fiscal-remedy.staff-refund.test.ts`, including preservation of the actual cash
+refund. Those cases cover this action's admission boundary, not every future queue dependency.

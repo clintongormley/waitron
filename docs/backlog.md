@@ -384,9 +384,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   behavioral assertions and protected-file scope intact.
   [Detail](backlog/fiscal.md#protected-write-path-test-policy-quotation).
 
-- **W41s. Fiscal prevention and offline recovery** — corrective-record resolution, filing
-  investigation, outside evidence and fencing for the remaining tasks, and the complete
-  old-backup/new-hardware exercise remain queued.
+- **W41s. Fiscal prevention and offline recovery** — filing investigation, outside evidence and
+  fencing, and the complete old-backup/new-hardware exercise remain queued. Task 8's synthetic
+  correction and held-record actions keep disputed production remedies disabled pending
+  Q35/Q37/Q38/Q40 or a case-specific owner decision. A held cancellation from another issuing
+  chain has no qualified release here.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
@@ -398,10 +400,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   that applies to every later record (one about the taxpayer's identity, say) opens one case per
   record in that reply before the repeated-code brake takes effect (`MAX_REGISTROS_POR_ENVIO`).
   [Detail](backlog/fiscal.md#still-open-after-w41s-3-1289-one-reply-can-open-up-to-1000-filing-cases)
-
-- **Follow-up (W41s Task 8, held-record resolution): release a brake hold (send the held records again).** — left open by W41s-3b (#1303).
-  A manual release remains Task 8.
-  [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04)
 
 - **Re-examine the hold behind an unknown outcome once the asesor answers** — OPEN (waiting on the asesor; owner 2026-10-06).
   The decision is put to the asesor as [Q47](compliance/asesor-questions.md#q47-keeping-a-chains-later-records-unsent-added-2026-10-12) (S19 in the short list),
@@ -6181,6 +6179,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **A1230 residual: dashboard shard 1's blocked operation is unknown.**
   Retain the next failing log's selected-file case/hook events and Playwright API log;
   use them to locate the pending operation before changing test or product behavior.
+  A1305 owns the later shard-4 deadline with `device-profiles-screen.clock.test.ts` unfinished;
+  its cause is also unconfirmed and its complete log is retained.
   [Detail](backlog/ci.md#a1230-dashboard-shard-1s-blocked-operation-is-unknown).
 
 - **A1305 residual: the dashboard page blocked during a click, and what blocked it is unknown.**

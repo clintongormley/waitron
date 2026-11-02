@@ -374,6 +374,7 @@ export class VerifactuBackend implements FiscalBackend {
       select *
       from registros_facturacion
       where sale_id = ${saleId} and tipo_registro = 'alta'
+        and corrects_registro_id is null
       limit 1
     `);
     const raw = rows[0];
@@ -411,6 +412,7 @@ export class VerifactuBackend implements FiscalBackend {
         fecha_expedicion_factura
       from registros_facturacion
       where sale_id = ${saleId} and tipo_registro = 'alta'
+        and corrects_registro_id is null
       limit 1
     `);
     const original = rows[0];
@@ -469,17 +471,6 @@ export class VerifactuBackend implements FiscalBackend {
     };
   }
 
-  /**
-   * Records a rectificativa (credit note) for a prior sale — a hybrid of `recordSale` (it assembles
-   * an `AltaInput` from the corrective's OWN `sale`: its new number, its negative total and
-   * breakdown) and `recordVoid` (it reads the ORIGINAL alta registro to point at). A rectificativa
-   * is an alta, NOT an anulación: it takes the next `secuencia`, hashes its own huella over the same
-   * eight fields (`TipoFactura = R5` and the negative `ImporteTotal`/`CuotaTotal` flow in), and gets
-   * its own `pendiente` sidecar.
-   *
-   * `entorno` travels BESIDE `input` in the `PendingRegistro`, never inside it, so our own metadata
-   * never reaches `computeHuella`.
-   */
   async recordCorrection(
     tx: Transaction,
     sale: SaleForFiscalRecord,
@@ -490,14 +481,16 @@ export class VerifactuBackend implements FiscalBackend {
       select id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura
       from registros_facturacion
       where sale_id = ${correction.correctsSaleId} and tipo_registro = 'alta'
+        and not exists (
+          select 1 from registros_facturacion replacement
+          where replacement.corrects_registro_id = registros_facturacion.id
+        )
       limit 1
     `);
     const original = rows[0];
     if (original === undefined) {
       throw new AppError("fiscal.sale_not_recorded", { saleId: correction.correctsSaleId });
     }
-    // Only a simplified F2 is corrected (→ R5). Rectifying an F1 is an R1, deferred until B2B F1
-    // issuance lands, so refuse rather than file a mis-typed record that cannot be repaired.
     if (original.tipo_factura !== "F2") {
       throw new AppError("fiscal.correction_unsupported", {
         saleId: correction.correctsSaleId,
@@ -617,6 +610,10 @@ export class VerifactuBackend implements FiscalBackend {
         select id_emisor_factura, num_serie_factura, fecha_expedicion_factura, tipo_factura
         from registros_facturacion
         where sale_id = ${substitutedSaleId} and tipo_registro = 'alta'
+          and not exists (
+            select 1 from registros_facturacion replacement
+            where replacement.corrects_registro_id = registros_facturacion.id
+          )
         limit 1
       `);
       const original = rows[0];
