@@ -1,6 +1,6 @@
 // Side-effect import: registers the `station.*`/`course.*` codes this file throws (errors.ts).
 import "./errors.js";
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   AppError,
   DEFAULT_READY_WARNING_AFTER_MINUTES,
@@ -13,6 +13,7 @@ import {
   products,
   kitchenStations,
   nextStationColour,
+  venueLocationId,
 } from "@waitron/db";
 import type { BumpMode, ChangesAfterSending, StationColour, TicketGrouping } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
@@ -51,19 +52,18 @@ export interface Station {
 }
 
 /**
- * Assert `stationId` names a LIVE station of this venue — present, `active`, and in
- * `cfg.locationId`; otherwise `station.not_found`. The foreign keys to a station enforce existence
- * only, so this read is what rejects a retired or another venue's station.
+ * Assert `stationId` names a LIVE station of this venue — present and `active`; otherwise
+ * `station.not_found`. The foreign keys to a station enforce existence only, so this read is what
+ * rejects a retired station.
  */
 export async function requireLiveStation(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   stationId: string,
 ): Promise<void> {
   const { rows } = await tx.execute<{ active: boolean | null }>(
     sql`select (select ${kitchenStations.active} from ${kitchenStations}
-      where ${kitchenStations.id} = ${stationId}
-        and ${kitchenStations.locationId} = ${cfg.locationId}) as active`,
+      where ${kitchenStations.id} = ${stationId}) as active`,
   );
   if (!rows[0]!.active) {
     throw new AppError("station.not_found", { stationId });
@@ -72,20 +72,18 @@ export async function requireLiveStation(
 
 /**
  * Clear the venue's current default station. A new default is always clear-then-set, because
- * `kitchen_stations_default_key` allows only one default per location.
+ * `kitchen_stations_default_key` allows only one default.
  */
-async function clearDefault(tx: Transaction, cfg: TradingContext): Promise<void> {
+async function clearDefault(tx: Transaction): Promise<void> {
   await tx
     .update(kitchenStations)
     .set({ isDefault: false })
-    .where(
-      and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.isDefault, true)),
-    );
+    .where(eq(kitchenStations.isDefault, true));
 }
 
 export async function createStation(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   input: {
     name: string;
     isDefault?: boolean;
@@ -97,18 +95,17 @@ export async function createStation(
   const thresholds = input.thresholds ?? {};
   assertStationTiming(thresholds, DEFAULT_STATION_THRESHOLDS, { name: input.name });
   if (input.isDefault) {
-    await clearDefault(tx, cfg);
+    await clearDefault(tx);
   }
   try {
     const [row] = await tx
       .insert(kitchenStations)
       .values({
-        locationId: cfg.locationId,
+        locationId: await venueLocationId(tx),
         name: input.name,
         isDefault: input.isDefault ?? false,
         printMovedSlips: true,
-        colour:
-          input.colour === undefined ? await nextStationColour(tx, cfg.locationId) : input.colour,
+        colour: input.colour === undefined ? await nextStationColour(tx) : input.colour,
         warmAfterMinutes:
           thresholds.warmAfterMinutes ?? DEFAULT_STATION_THRESHOLDS.warmAfterMinutes,
         overdueAfterMinutes:
@@ -120,7 +117,7 @@ export async function createStation(
       })
       .returning({ id: kitchenStations.id });
     if (input.printerIds !== undefined) {
-      await replaceStationPrinters(tx, cfg, row!.id, input.printerIds);
+      await replaceStationPrinters(tx, row!.id, input.printerIds);
     }
     return { id: row!.id };
   } catch (error) {
@@ -131,7 +128,11 @@ export async function createStation(
   }
 }
 
-export async function listStations(tx: Transaction, cfg: TradingContext): Promise<Station[]> {
+export async function listStations(
+  tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: TradingContext,
+): Promise<Station[]> {
   const stations = await tx
     .select({
       id: kitchenStations.id,
@@ -151,7 +152,7 @@ export async function listStations(tx: Transaction, cfg: TradingContext): Promis
       readyWarningAfterMinutes: kitchenStations.readyWarningAfterMinutes,
     })
     .from(kitchenStations)
-    .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
+    .where(eq(kitchenStations.active, true))
     .orderBy(kitchenStations.name, kitchenStations.id);
   return stations
     .map((station) => ({ ...station, printMovedSlips: station.printMovedSlips ?? true }))
@@ -216,7 +217,7 @@ export async function updateStation(
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
     })
     .from(kitchenStations)
-    .where(and(eq(kitchenStations.id, id), eq(kitchenStations.locationId, cfg.locationId)));
+    .where(eq(kitchenStations.id, id));
   if (station === undefined) throw new AppError("station.not_found", { stationId: id });
   if (Object.keys(timingPatch).length > 0) {
     assertStationTiming(timingPatch, station, { id, name: station.name });
@@ -232,7 +233,7 @@ export async function updateStation(
     }
     throw error;
   }
-  if (printerIds !== undefined) await replaceStationPrinters(tx, cfg, id, printerIds);
+  if (printerIds !== undefined) await replaceStationPrinters(tx, id, printerIds);
 }
 
 export async function setDefaultStation(
@@ -241,7 +242,7 @@ export async function setDefaultStation(
   id: string,
 ): Promise<void> {
   await requireLiveStation(tx, cfg, id);
-  await clearDefault(tx, cfg);
+  await clearDefault(tx);
   await tx.update(kitchenStations).set({ isDefault: true }).where(eq(kitchenStations.id, id));
 }
 
@@ -257,18 +258,17 @@ export interface Course {
 }
 
 /**
- * Assert `courseId` names a LIVE course of this venue — present, `active`, and in
- * `cfg.locationId`; otherwise `course.not_found`.
+ * Assert `courseId` names a LIVE course of this venue — present and `active`; otherwise
+ * `course.not_found`.
  */
 export async function requireLiveCourse(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   courseId: string,
 ): Promise<void> {
   const { rows } = await tx.execute<{ active: boolean | null }>(
     sql`select (select ${kitchenCourses.active} from ${kitchenCourses}
-      where ${kitchenCourses.id} = ${courseId}
-        and ${kitchenCourses.locationId} = ${cfg.locationId}) as active`,
+      where ${kitchenCourses.id} = ${courseId}) as active`,
   );
   if (!rows[0]!.active) {
     throw new AppError("course.not_found", { courseId });
@@ -283,30 +283,29 @@ export async function requireLiveCourse(
  */
 export async function requireCourse(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   courseId: string,
 ): Promise<void> {
   const { rows } = await tx.execute<{ active: boolean | null }>(
     sql`select (select ${kitchenCourses.active} from ${kitchenCourses}
-      where ${kitchenCourses.id} = ${courseId}
-        and ${kitchenCourses.locationId} = ${cfg.locationId}) as active`,
+      where ${kitchenCourses.id} = ${courseId}) as active`,
   );
   if (rows[0]!.active === null) {
     throw new AppError("course.not_found", { courseId });
   }
 }
 
-/** Create a kitchen course in `cfg.locationId`. A duplicate live `(location, name)` is `course.name_taken`. */
+/** Create a kitchen course. A duplicate live name is `course.name_taken`. */
 export async function createCourse(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   input: { name: string; displayOrder?: number; heldUntilFired?: boolean },
 ): Promise<{ id: string }> {
   try {
     const [row] = await tx
       .insert(kitchenCourses)
       .values({
-        locationId: cfg.locationId,
+        locationId: await venueLocationId(tx),
         name: input.name,
         displayOrder: input.displayOrder ?? 0,
         heldUntilFired: input.heldUntilFired ?? true,
@@ -322,7 +321,11 @@ export async function createCourse(
 }
 
 /** Active courses in firing order: lowest `display_order` first, then `name`. */
-export async function listCourses(tx: Transaction, cfg: TradingContext): Promise<Course[]> {
+export async function listCourses(
+  tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: TradingContext,
+): Promise<Course[]> {
   return tx
     .select({
       id: kitchenCourses.id,
@@ -332,7 +335,7 @@ export async function listCourses(tx: Transaction, cfg: TradingContext): Promise
       heldUntilFired: kitchenCourses.heldUntilFired,
     })
     .from(kitchenCourses)
-    .where(and(eq(kitchenCourses.locationId, cfg.locationId), eq(kitchenCourses.active, true)))
+    .where(eq(kitchenCourses.active, true))
     .orderBy(kitchenCourses.displayOrder, kitchenCourses.name);
 }
 
@@ -390,7 +393,7 @@ export async function updateCourse(
     updated = await tx
       .update(kitchenCourses)
       .set(set)
-      .where(and(eq(kitchenCourses.id, id), eq(kitchenCourses.locationId, cfg.locationId)))
+      .where(eq(kitchenCourses.id, id))
       .returning({ id: kitchenCourses.id });
   } catch (error) {
     if (isUniqueViolation(error)) {

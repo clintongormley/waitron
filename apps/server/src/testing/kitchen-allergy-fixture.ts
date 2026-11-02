@@ -85,7 +85,6 @@ export async function kitchenFixture(db: Database) {
       pollId: randomUUID(),
     });
     await attachPrinterToStation(tx, {
-      locationId: v.cfg.locationId,
       stationId: ticket!.stationId,
       printerId: printer.id,
     });

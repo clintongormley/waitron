@@ -222,7 +222,7 @@ async function setupVenue(): Promise<Venue> {
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
     });
-    await attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId });
+    await attachPrinterToStation(tx, { stationId, printerId });
     return {
       cfg,
       productId,
@@ -4517,7 +4517,6 @@ describe("advance HOLD tickets (Task 6)", () => {
           pollId: `poll-${randomUUID()}`,
         });
         await attachPrinterToStation(tx, {
-          locationId: v.cfg.locationId,
           stationId: v.stationId,
           printerId: printer.id,
         });
@@ -5169,7 +5168,6 @@ describe("advance HOLD tickets (Task 6)", () => {
           pollId: `poll-${randomUUID()}`,
         });
         await attachPrinterToStation(tx, {
-          locationId: v.cfg.locationId,
           stationId: barId,
           printerId: printer.id,
         });
@@ -5323,7 +5321,6 @@ describe("advance HOLD tickets (Task 6)", () => {
             pollId: `poll-${randomUUID()}`,
           });
           await attachPrinterToStation(tx, {
-            locationId: v.cfg.locationId,
             stationId: barId,
             printerId: printer.id,
           });
@@ -5847,7 +5844,6 @@ describe("Fire now on one held dish", () => {
         { kind: "station", stationId: extraStation },
       );
       await attachPrinterToStation(tx, {
-        locationId: v.cfg.locationId,
         stationId: extraStation,
         printerId: v.printerId,
       });

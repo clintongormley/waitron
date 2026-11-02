@@ -2650,7 +2650,6 @@ async function kitchenPrinter(cfg: DeviceRequestConfig): Promise<string> {
       pollId: `poll-${randomUUID()}`,
     });
     await attachPrinterToStation(tx, {
-      locationId: cfg.locationId,
       stationId: station,
       printerId: id,
     });
@@ -3057,7 +3056,6 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
         pollId: `poll-${randomUUID()}`,
       });
       await attachPrinterToStation(tx, {
-        locationId: cfg.locationId,
         stationId: station,
         printerId,
       });
@@ -3188,7 +3186,6 @@ describe("coursing editing verbs — recallLines racing selected line release", 
           pollId: `poll-${randomUUID()}`,
         });
         await attachPrinterToStation(tx, {
-          locationId: cfg.locationId,
           stationId: station,
           printerId,
         });

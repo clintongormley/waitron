@@ -5,7 +5,6 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   kitchenCourses,
-  locations,
   products,
   orderDraftLines,
   workingOrderLines,
@@ -233,7 +232,7 @@ describe("permanent course deletion", () => {
     },
   );
 
-  it("refuses unknown and wrong-location impact/delete/empty edits without changing rows", async () => {
+  it("refuses unknown impact/delete/empty edits without changing rows", async () => {
     const v = await setupPartyVenue(suite.db);
     const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Scoped" }));
     await inTx(v, (tx) =>
@@ -242,20 +241,11 @@ describe("permanent course deletion", () => {
         .set({ courseId: id })
         .where(eq(products.id, v.productId("Flan"))),
     );
-    const [other] = await inTx(v, (tx) =>
-      tx
-        .insert(locations)
-        .values({ name: "Other", invoiceLocales: ["es-ES"], operationDescription: "Bar" })
-        .returning({ id: locations.id }),
-    );
     const beforeProducts = await inTx(v, (tx) => tx.select().from(products).orderBy(products.id));
     const beforeCourses = await inTx(v, (tx) =>
       tx.select().from(kitchenCourses).orderBy(kitchenCourses.id),
     );
-    for (const [cfg, target] of [
-      [v.cfg, randomUUID()],
-      [{ ...v.cfg, locationId: other!.id as typeof v.cfg.locationId }, id],
-    ] as const) {
+    for (const [cfg, target] of [[v.cfg, randomUUID()]] as const) {
       for (const action of [readCourseDeleteImpact, deleteCourse])
         await expect(inTx(v, (tx) => action(tx, cfg, target))).rejects.toMatchObject({
           code: "course.not_found",

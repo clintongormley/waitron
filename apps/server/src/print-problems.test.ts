@@ -148,12 +148,10 @@ async function setupVenue(): Promise<Venue> {
     const barPrinterId = await printer("Bar printer");
     const receiptPrinter = await printer("Receipt printer");
     await attachPrinterToStation(tx, {
-      locationId: cfg.locationId,
       stationId: kitchenStationId,
       printerId: kitchenPrinterId,
     });
     await attachPrinterToStation(tx, {
-      locationId: cfg.locationId,
       stationId: barStationId,
       printerId: barPrinterId,
     });
@@ -1290,11 +1288,10 @@ describe("a printing problem a Reprint would print nothing for", () => {
     expect(await problemsOf(table4.partyId)).toMatchObject([{ stationId: v.kitchenStationId }]);
 
     await inTx((tx) =>
-      detachPrinterFromStation(
-        tx,
-        { locationId: v.cfg.locationId },
-        { stationId: v.kitchenStationId, printerId: v.kitchenPrinterId },
-      ),
+      detachPrinterFromStation(tx, {
+        stationId: v.kitchenStationId,
+        printerId: v.kitchenPrinterId,
+      }),
     );
 
     expect(await problemsOf(table4.partyId)).toEqual([]);
@@ -1636,12 +1633,10 @@ describe("a printing problem on a printer two stations share (A366)", () => {
         pollId: `poll-${randomUUID()}`,
       });
       await attachPrinterToStation(tx, {
-        locationId: v.cfg.locationId,
         stationId: v.kitchenStationId,
         printerId: id,
       });
       await attachPrinterToStation(tx, {
-        locationId: v.cfg.locationId,
         stationId: v.barStationId,
         printerId: id,
       });

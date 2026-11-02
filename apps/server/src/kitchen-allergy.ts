@@ -84,7 +84,7 @@ async function readAsServedAllergens(
 
 export async function resolveKitchenAllergyBlocks(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   ticketItemIds: readonly string[],
 ): Promise<ReadonlyMap<string, KitchenAllergyBlock | null>> {
   if (ticketItemIds.length === 0) return new Map();
@@ -101,7 +101,6 @@ export async function resolveKitchenAllergyBlocks(
     .where(
       and(
         inArray(ticketItems.id, [...ticketItemIds]),
-        eq(workingOrders.locationId, cfg.locationId),
         isNotNull(workingOrders.partyId),
         eq(ticketItems.madeHere, false),
       ),
@@ -240,7 +239,7 @@ export async function refreshKitchenAllergyClashes(
   const [order] = await tx
     .select({ partyId: workingOrders.partyId })
     .from(workingOrders)
-    .where(and(eq(workingOrders.id, orderId), eq(workingOrders.locationId, cfg.locationId)));
+    .where(eq(workingOrders.id, orderId));
   if (order?.partyId == null) return;
   await enqueueKitchenAllergyUpdates(
     tx,
@@ -323,7 +322,6 @@ async function enqueueKitchenAllergyUpdates(
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
     .where(
       and(
-        eq(workingOrders.locationId, cfg.locationId),
         inArray(workingOrders.partyId, family),
         or(
           inArray(workingOrderLines.id, changes.workingLineIds),
@@ -462,12 +460,7 @@ export async function notifyKitchenAllergyDestination(
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(
-      and(
-        inArray(ticketItems.id, [...ticketItemIds]),
-        eq(workingOrders.locationId, cfg.locationId),
-      ),
-    );
+    .where(and(inArray(ticketItems.id, [...ticketItemIds])));
   const copies = await VENUE_SERVICE.readTicketAllergies(
     tx,
     rows.map((row) => row.id),

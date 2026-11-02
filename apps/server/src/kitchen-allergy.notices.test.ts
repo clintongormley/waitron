@@ -27,9 +27,6 @@ import {
   updateProduct,
 } from "@waitron/catalogue";
 import type { AllergyGuestInput, AllergyPatch, KitchenAllergyBlock } from "@waitron/module";
-import { locationId as brandLocationId } from "@waitron/shared";
-import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
-import { applyPartyAllergyPatch, allergyTargets, readPartyAllergyView } from "./party-allergy.js";
 import { mountTillApi } from "./till-api.js";
 import { readBillEditState } from "./bill-editing.js";
 import { createStation } from "./kitchen.js";
@@ -115,7 +112,7 @@ async function printer() {
       transport: "cloud_poll",
       pollId: randomUUID(),
     });
-    await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId, printerId: p.id });
+    await attachPrinterToStation(tx, { stationId, printerId: p.id });
     return p;
   });
 }
@@ -596,27 +593,6 @@ describe("A669 notices", () => {
       originalBlock: original,
       currentBlock: { ...original, note: "Fresh tools" },
     });
-  });
-  it("another location cannot update the copy or receive its correction", async () => {
-    const p = await sent();
-    const copy = await copies(p);
-    await inTx(v, async (tx) => {
-      const view = await readPartyAllergyView(tx, v.cfg, p.partyId);
-      const changes = await applyPartyAllergyPatch(
-        tx,
-        p.partyId,
-        patch(p, { note: "Fresh tools" }),
-        OPERATOR,
-        allergyTargets(view),
-      );
-      await enqueueKitchenAllergyChanges(
-        tx,
-        { ...v.cfg, locationId: brandLocationId(randomUUID()) },
-        changes,
-      );
-    });
-    expect(await copies(p)).toEqual(copy);
-    expect(await notices()).toEqual([]);
   });
   it.each(["groups", "draft", "release", "move"] as const)(
     "%s HTTP caller corrects an older dish before its new output",

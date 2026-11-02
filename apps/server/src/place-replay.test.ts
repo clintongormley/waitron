@@ -39,7 +39,6 @@ beforeEach(async () => {
     const station = await createStation(tx, venue.cfg, { name: "Kitchen", isDefault: true });
     const [printer] = await tx.select({ id: printers.id }).from(printers).limit(1);
     await attachPrinterToStation(tx, {
-      locationId: venue.cfg.locationId,
       stationId: station.id,
       printerId: printer!.id,
     });

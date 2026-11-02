@@ -20,7 +20,6 @@ import {
   orderDrafts,
   orderDraftLines,
   orderDraftEvents,
-  locations,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedWorkingOrder } from "@waitron/db/testing/seed.js";
@@ -401,7 +400,7 @@ describe("permanent station deletion", () => {
       () => inTx(v, (tx) => deleteStation(tx, v.cfg, id)),
       () => inTx(v, (tx) => updateStation(tx, v.cfg, id, {})),
       () => inTx(v, (tx) => setDefaultStation(tx, v.cfg, id)),
-      () => inTx(v, (tx) => listStationPrinters(tx, v.cfg, { stationId: id })),
+      () => inTx(v, (tx) => listStationPrinters(tx, { stationId: id })),
     ])
       await expect(action()).rejects.toMatchObject({
         code: "station.not_found",
@@ -409,32 +408,18 @@ describe("permanent station deletion", () => {
       });
     await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Delete me" }));
   });
-  it("removes module settings without changing other stations, dates or locations", async () => {
+  it("removes module settings without changing other stations or dates", async () => {
     const { v, id } = await fixture();
     const otherId = (await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Surviving station" })))
       .id;
-    const [elsewhere] = await inTx(v, (tx) =>
-      tx
-        .insert(locations)
-        .values({
-          name: "Elsewhere settings",
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Dining",
-        })
-        .returning(),
-    );
-    const [foreign] = await inTx(v, (tx) =>
-      tx.insert(kitchenStations).values({ locationId: elsewhere!.id, name: "Foreign" }).returning(),
-    );
     const ownedCell = randomUUID(),
-      survivingCell = randomUUID(),
-      foreignCell = randomUUID();
+      survivingCell = randomUUID();
     await inTx(v, async (tx) => {
       await tx.execute(
-        sql`insert into routing_cells (id,location_id,no_category,station_id,product_id) values (${ownedCell},${v.cfg.locationId},1,${id},null), (${survivingCell},${v.cfg.locationId},0,${otherId},${v.productId("Flan")}), (${foreignCell},${elsewhere!.id},1,${foreign!.id},null)`,
+        sql`insert into routing_cells (id,location_id,no_category,station_id,product_id) values (${ownedCell},${v.cfg.locationId},1,${id},null), (${survivingCell},${v.cfg.locationId},0,${otherId},${v.productId("Flan")})`,
       );
       await tx.execute(
-        sql`insert into station_day_states (id,station_id,business_day,open,sends_to_station_id) values (${randomUUID()},${id},'2026-10-09',0,null), (${randomUUID()},${id},'2026-10-10',0,null), (${randomUUID()},${otherId},'2026-10-10',0,${id}), (${randomUUID()},${foreign!.id},'2026-10-10',1,null)`,
+        sql`insert into station_day_states (id,station_id,business_day,open,sends_to_station_id) values (${randomUUID()},${id},'2026-10-09',0,null), (${randomUUID()},${id},'2026-10-10',0,null), (${randomUUID()},${otherId},'2026-10-10',0,${id})`,
       );
     });
     const before = await snapshot(v);
@@ -675,18 +660,11 @@ describe("permanent station deletion", () => {
     ).rejects.toThrow("injected after deletion");
     expect(await snapshot(v)).toEqual(before);
   });
-  it("refuses unknown and wrong-location ids", async () => {
-    const { v, id } = await fixture();
-    const [other] = await inTx(v, (tx) =>
-      tx
-        .insert(locations)
-        .values({ name: "Elsewhere", invoiceLocales: ["es-ES"], operationDescription: "Dining" })
-        .returning(),
-    );
-    const cfg = { ...v.cfg, locationId: other!.id as typeof v.cfg.locationId };
-    for (const target of [id, randomUUID()])
+  it("refuses unknown ids", async () => {
+    const { v } = await fixture();
+    for (const target of [randomUUID()])
       for (const read of [readStationDeleteImpact, deleteStation])
-        await expect(inTx(v, (tx) => read(tx, cfg, target))).rejects.toMatchObject({
+        await expect(inTx(v, (tx) => read(tx, v.cfg, target))).rejects.toMatchObject({
           code: "station.not_found",
           params: { stationId: target },
         });
@@ -712,7 +690,7 @@ describe("A773 no dispatch state", () => {
         ticketQuantity,
       });
       const before = await snapshot(v);
-      expect(await inTx(v, (tx) => openDishCount(tx, v.cfg.locationId, id))).toBe(count);
+      expect(await inTx(v, (tx) => openDishCount(tx, id))).toBe(count);
       const rest = (await inTx(v, (tx) => readRestOfOrder(tx, [order.id]))).get(order.id)!;
       expect(rest.map((row) => row.quantity)).toEqual(quantity === null ? [] : [quantity]);
       expect(await snapshot(v)).toEqual(before);

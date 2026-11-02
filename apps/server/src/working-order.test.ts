@@ -3051,7 +3051,6 @@ async function attachedPrinter(
     pollId: `poll-${randomUUID()}`,
   });
   await attachPrinterToStation(tx, {
-    locationId: cfg.locationId,
     stationId: created.id,
     printerId,
   });

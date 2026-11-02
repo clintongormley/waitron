@@ -917,7 +917,6 @@ export async function enqueueOrderKitchenNoteChange(
     .where(
       and(
         inArray(ticketItems.workingOrderId, [...orderIds]),
-        eq(workingOrders.locationId, cfg.locationId),
         ne(workingOrders.status, "abandoned"),
         isNull(workingOrders.collectedAt),
         eq(ticketItems.madeHere, false),

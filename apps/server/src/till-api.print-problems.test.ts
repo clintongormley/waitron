@@ -38,7 +38,6 @@ useVenueDb({
         pollId: `poll-${randomUUID()}`,
       });
       await attachPrinterToStation(tx, {
-        locationId: venue.cfg.locationId,
         stationId: station!.id,
         printerId,
       });

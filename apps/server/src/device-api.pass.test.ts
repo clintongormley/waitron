@@ -679,7 +679,6 @@ describe("A773 pass release: route", () => {
         pollId: randomUUID(),
       });
       await attachPrinterToStation(tx, {
-        locationId: f.v.cfg.locationId,
         stationId: f.grill,
         printerId: printer.id,
       });

@@ -372,7 +372,6 @@ async function kitchenPrinter(v: PartyVenue): Promise<string> {
       pollId: `poll-${randomUUID()}`,
     });
     await attachPrinterToStation(tx, {
-      locationId: v.cfg.locationId,
       stationId: station!.id,
       printerId: id,
     });
@@ -552,7 +551,6 @@ async function stationWithPrinter(v: PartyVenue, name: string, dishes: string[])
       pollId: `poll-${randomUUID()}`,
     });
     await attachPrinterToStation(tx, {
-      locationId: v.cfg.locationId,
       stationId: station.id,
       printerId: id,
     });

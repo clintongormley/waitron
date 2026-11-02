@@ -6,7 +6,6 @@ import { and, eq, sql } from "drizzle-orm";
 import {
   deviceMadeHereStations,
   kitchenStations,
-  locations,
   printJobs,
   printers,
   products,
@@ -27,7 +26,6 @@ import {
 import { createPrinter } from "@waitron/printing";
 import { setRoutingCell } from "@waitron/venue-service";
 import type { AllergyGuestInput, AllergyPatch, KitchenAllergyBlock } from "@waitron/module";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { readBillEditState } from "./bill-editing.js";
 import {
   submitGroups,
@@ -185,7 +183,6 @@ async function printer() {
       pollId: randomUUID(),
     });
     await attachPrinterToStation(tx, {
-      locationId: v.cfg.locationId,
       stationId,
       printerId: result.id,
     });
@@ -474,7 +471,6 @@ describe("A669 capture", () => {
             pollId: randomUUID(),
           });
           await attachPrinterToStation(tx, {
-            locationId: v.cfg.locationId,
             stationId: extra.stationId,
             printerId: result.id,
           });
@@ -1003,28 +999,15 @@ describe("A669 capture", () => {
     expect(slip).toContain(guest.note);
   });
 
-  it("leaves absent tickets and another location's work untouched", async () => {
+  it("leaves absent tickets untouched", async () => {
     const p = await party();
     const ask = await command(p, "hold");
     await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));
     const rows = copies(p.tabId);
-    const [other] = await v.db
-      .insert(locations)
-      .values({
-        name: "Other room",
-        invoiceLocales: ["en"],
-        operationDescription: "Restaurant",
-      })
-      .returning();
     const { freezeKitchenAllergies, freezeKitchenAllergyItems } =
       await import("./kitchen-allergy.js");
     await inTx(v, (tx) => freezeKitchenAllergies(tx, v.cfg, []));
     await inTx(v, (tx) => freezeKitchenAllergies(tx, v.cfg, [randomUUID()]));
-    await inTx(v, (tx) =>
-      freezeKitchenAllergies(tx, { ...v.cfg, locationId: brandLocationId(other!.id) }, [
-        rows[0]!.id,
-      ]),
-    );
     await inTx(v, (tx) =>
       freezeKitchenAllergyItems(tx, v.cfg, p.tabId, [
         {

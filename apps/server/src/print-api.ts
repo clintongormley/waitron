@@ -1529,9 +1529,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const stationId = requireUuidParam(c.req.param("sid"), "StationId");
       const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
-      await gated(sessionId, (tx) =>
-        attachPrinterToStation(tx, { locationId: deps.cfg.locationId, stationId, printerId }),
-      );
+      await gated(sessionId, (tx) => attachPrinterToStation(tx, { stationId, printerId }));
       return c.body(null, 204);
     }),
   );
@@ -1541,9 +1539,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const stationId = requireUuidParam(c.req.param("sid"), "StationId");
       const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
-      await gated(sessionId, (tx) =>
-        detachPrinterFromStation(tx, deps.cfg, { stationId, printerId }),
-      );
+      await gated(sessionId, (tx) => detachPrinterFromStation(tx, { stationId, printerId }));
       return c.body(null, 204);
     }),
   );
@@ -1561,7 +1557,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         throw new AppError("management.request_invalid", { field: "printerIds" });
       }
       const printerIds = body.printerIds.map((id) => requireUuidParam(id as string, "PrinterId"));
-      await gated(sessionId, (tx) => replaceStationPrinters(tx, deps.cfg, stationId, printerIds));
+      await gated(sessionId, (tx) => replaceStationPrinters(tx, stationId, printerIds));
       return c.body(null, 204);
     }),
   );
@@ -1570,7 +1566,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const stationId = requireUuidParam(c.req.param("sid"), "StationId");
-      const rows = await gated(sessionId, (tx) => listStationPrinters(tx, deps.cfg, { stationId }));
+      const rows = await gated(sessionId, (tx) => listStationPrinters(tx, { stationId }));
       return c.json(rows);
     }),
   );
@@ -1579,7 +1575,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const printerId = requireUuidParam(c.req.param("pid"), "PrinterId");
-      const rows = await gated(sessionId, (tx) => listStationPrinters(tx, deps.cfg, { printerId }));
+      const rows = await gated(sessionId, (tx) => listStationPrinters(tx, { printerId }));
       return c.json(rows);
     }),
   );

@@ -40,13 +40,7 @@ async function courseDeleteRules(
   const [target] = await tx
     .select({ id: kitchenCourses.id, name: kitchenCourses.name })
     .from(kitchenCourses)
-    .where(
-      and(
-        eq(kitchenCourses.id, id),
-        eq(kitchenCourses.locationId, cfg.locationId),
-        eq(kitchenCourses.active, true),
-      ),
-    );
+    .where(and(eq(kitchenCourses.id, id), eq(kitchenCourses.active, true)));
   if (!target) throw new AppError("course.not_found", { courseId: id });
   // A product default or a service step alone retains the row too, though deletion clears both.
   const retained = (await coursesInUse(tx, [id])).has(id);

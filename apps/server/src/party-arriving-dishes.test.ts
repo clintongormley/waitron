@@ -888,7 +888,6 @@ describe("an arriving held group's advance HOLD ticket", () => {
           pollId: `poll-${randomUUID()}`,
         });
         await attachPrinterToStation(tx, {
-          locationId: v.cfg.locationId,
           stationId: station.id,
           printerId: id,
         });
@@ -1081,7 +1080,6 @@ describe("A773 requested lifecycle: arrival", () => {
       });
       for (const stationId of active)
         await attachPrinterToStation(tx, {
-          locationId: v.cfg.locationId,
           stationId,
           printerId: id,
         });
@@ -1100,7 +1098,7 @@ describe("A773 requested lifecycle: arrival", () => {
         await setStationsWaitForPass(tx, false, stationIds);
         await setStationPrinting(tx, { printHeldWork: false });
         for (const stationId of active)
-          await detachPrinterFromStation(tx, v.cfg, { stationId, printerId });
+          await detachPrinterFromStation(tx, { stationId, printerId });
       });
     }
   }

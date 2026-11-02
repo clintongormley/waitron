@@ -14,9 +14,6 @@ import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 
-interface PrintConfig {
-  locationId: string;
-}
 import type { TradingContext } from "./trading-context.js";
 import { createStation } from "./kitchen.js";
 import { eq } from "drizzle-orm";
@@ -54,10 +51,6 @@ async function setupVenue(): Promise<TradingContext> {
   };
 }
 
-function printCfg(cfg: TradingContext): PrintConfig {
-  return { locationId: cfg.locationId };
-}
-
 function asApp<T>(cfg: TradingContext, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
@@ -82,17 +75,13 @@ describe("station→printer mapping verbs", () => {
     const s1 = await station(cfg, "Main kitchen");
     const p1 = await printer(cfg, "Kitchen");
 
-    await asApp(cfg, (tx) =>
-      attachPrinterToStation(tx, { locationId: cfg.locationId, stationId: s1, printerId: p1 }),
-    );
-    expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg)))).toEqual([
+    await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: s1, printerId: p1 }));
+    expect(await asApp(cfg, (tx) => listStationPrinters(tx))).toEqual([
       { stationId: s1, printerId: p1 },
     ]);
 
-    await asApp(cfg, (tx) =>
-      attachPrinterToStation(tx, { locationId: cfg.locationId, stationId: s1, printerId: p1 }),
-    );
-    expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg)))).toEqual([
+    await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: s1, printerId: p1 }));
+    expect(await asApp(cfg, (tx) => listStationPrinters(tx))).toEqual([
       { stationId: s1, printerId: p1 },
     ]);
   });
@@ -101,19 +90,13 @@ describe("station→printer mapping verbs", () => {
     const cfg = await setupVenue();
     const s1 = await station(cfg, "Main kitchen");
     const p1 = await printer(cfg, "Kitchen");
-    await asApp(cfg, (tx) =>
-      attachPrinterToStation(tx, { locationId: cfg.locationId, stationId: s1, printerId: p1 }),
-    );
+    await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: s1, printerId: p1 }));
 
-    await asApp(cfg, (tx) =>
-      detachPrinterFromStation(tx, printCfg(cfg), { stationId: s1, printerId: p1 }),
-    );
-    expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg)))).toEqual([]);
+    await asApp(cfg, (tx) => detachPrinterFromStation(tx, { stationId: s1, printerId: p1 }));
+    expect(await asApp(cfg, (tx) => listStationPrinters(tx))).toEqual([]);
 
-    await asApp(cfg, (tx) =>
-      detachPrinterFromStation(tx, printCfg(cfg), { stationId: s1, printerId: p1 }),
-    );
-    expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg)))).toEqual([]);
+    await asApp(cfg, (tx) => detachPrinterFromStation(tx, { stationId: s1, printerId: p1 }));
+    expect(await asApp(cfg, (tx) => listStationPrinters(tx))).toEqual([]);
   });
 
   it("rejects an attach to a station that is not live (station.not_found)", async () => {
@@ -123,7 +106,6 @@ describe("station→printer mapping verbs", () => {
     await expect(
       asApp(cfg, (tx) =>
         attachPrinterToStation(tx, {
-          locationId: cfg.locationId,
           stationId: missing,
           printerId: p1,
         }),
@@ -138,7 +120,6 @@ describe("station→printer mapping verbs", () => {
     await expect(
       asApp(cfg, (tx) =>
         attachPrinterToStation(tx, {
-          locationId: cfg.locationId,
           stationId: s1,
           printerId: missing,
         }),
@@ -158,27 +139,21 @@ describe("station→printer mapping verbs", () => {
       [s1, p2],
       [s2, p1],
     ] as const) {
-      await asApp(cfg, (tx) =>
-        attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId }),
-      );
+      await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId, printerId }));
     }
 
-    const all = await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg)));
+    const all = await asApp(cfg, (tx) => listStationPrinters(tx));
     expect(all).toHaveLength(3);
     expect(all).toContainEqual({ stationId: s1, printerId: p1 });
     expect(all).toContainEqual({ stationId: s1, printerId: p2 });
     expect(all).toContainEqual({ stationId: s2, printerId: p1 });
 
-    const byStation = await asApp(cfg, (tx) =>
-      listStationPrinters(tx, printCfg(cfg), { stationId: s1 }),
-    );
+    const byStation = await asApp(cfg, (tx) => listStationPrinters(tx, { stationId: s1 }));
     expect(byStation).toHaveLength(2);
     expect(byStation).toContainEqual({ stationId: s1, printerId: p1 });
     expect(byStation).toContainEqual({ stationId: s1, printerId: p2 });
 
-    const byPrinter = await asApp(cfg, (tx) =>
-      listStationPrinters(tx, printCfg(cfg), { printerId: p1 }),
-    );
+    const byPrinter = await asApp(cfg, (tx) => listStationPrinters(tx, { printerId: p1 }));
     expect(byPrinter).toHaveLength(2);
     expect(byPrinter).toContainEqual({ stationId: s1, printerId: p1 });
     expect(byPrinter).toContainEqual({ stationId: s2, printerId: p1 });
@@ -192,9 +167,7 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
     const gone = await printer(cfg, "Gone");
     const kept = await printer(cfg, "Kept");
     for (const printerId of [gone, kept]) {
-      await asApp(cfg, (tx) =>
-        attachPrinterToStation(tx, { locationId: cfg.locationId, stationId: s1, printerId }),
-      );
+      await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId: s1, printerId }));
     }
     return { cfg, s1, gone, kept };
   }
@@ -210,11 +183,10 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
 
     for (const run of [
       (tx: Transaction): Promise<unknown> =>
-        attachPrinterToStation(tx, { locationId: cfg.locationId, stationId: s2, printerId: gone }),
-      (tx: Transaction) =>
-        detachPrinterFromStation(tx, printCfg(cfg), { stationId: s1, printerId: gone }),
-      (tx: Transaction) => listStationPrinters(tx, printCfg(cfg), { printerId: gone }),
-      (tx: Transaction) => replaceStationPrinters(tx, printCfg(cfg), s2, [gone]),
+        attachPrinterToStation(tx, { stationId: s2, printerId: gone }),
+      (tx: Transaction) => detachPrinterFromStation(tx, { stationId: s1, printerId: gone }),
+      (tx: Transaction) => listStationPrinters(tx, { printerId: gone }),
+      (tx: Transaction) => replaceStationPrinters(tx, s2, [gone]),
     ]) {
       await expect(asApp(cfg, run)).rejects.toMatchObject({
         code: "printer.not_found",
@@ -236,7 +208,7 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
     const before = await allLinks();
 
     await expect(
-      asApp(cfg, (tx) => replaceStationPrinters(tx, printCfg(cfg), s1, [gone, kept, fresh])),
+      asApp(cfg, (tx) => replaceStationPrinters(tx, s1, [gone, kept, fresh])),
     ).rejects.toMatchObject({ code: "printer.not_found", params: { id: gone } });
     expect(await allLinks()).toEqual(before);
   });
@@ -245,9 +217,9 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
     const { cfg, s1, gone, kept } = await venueWithLinks();
     await asApp(cfg, (tx) => deletePrinter(tx, gone));
 
-    await asApp(cfg, (tx) => replaceStationPrinters(tx, printCfg(cfg), s1, []));
+    await asApp(cfg, (tx) => replaceStationPrinters(tx, s1, []));
     expect(await allLinks()).toEqual([]);
-    await asApp(cfg, (tx) => replaceStationPrinters(tx, printCfg(cfg), s1, [kept]));
+    await asApp(cfg, (tx) => replaceStationPrinters(tx, s1, [kept]));
     expect(await allLinks()).toEqual([{ stationId: s1, printerId: kept }]);
   });
 
@@ -255,14 +227,12 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
     const { cfg, s1, gone, kept } = await venueWithLinks();
     await asApp(cfg, (tx) => updatePrinter(tx, gone, { active: false }));
 
-    expect(
-      await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg), { printerId: gone })),
-    ).toEqual([{ stationId: s1, printerId: gone }]);
-    await asApp(cfg, (tx) => replaceStationPrinters(tx, printCfg(cfg), s1, [gone, kept]));
+    expect(await asApp(cfg, (tx) => listStationPrinters(tx, { printerId: gone }))).toEqual([
+      { stationId: s1, printerId: gone },
+    ]);
+    await asApp(cfg, (tx) => replaceStationPrinters(tx, s1, [gone, kept]));
     expect(await allLinks()).toContainEqual({ stationId: s1, printerId: gone });
-    await asApp(cfg, (tx) =>
-      detachPrinterFromStation(tx, printCfg(cfg), { stationId: s1, printerId: gone }),
-    );
+    await asApp(cfg, (tx) => detachPrinterFromStation(tx, { stationId: s1, printerId: gone }));
     expect(await allLinks()).toEqual([{ stationId: s1, printerId: kept }]);
   });
 });
@@ -271,21 +241,16 @@ it("configuration printer lists hide removed stations", async () => {
   const cfg = await setupVenue();
   const stationId = await station(cfg, "Removed mapping");
   const printerId = await printer(cfg, "Removed mapping printer");
-  await asApp(cfg, (tx) =>
-    attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId }),
-  );
+  await asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId, printerId }));
   await asApp(cfg, (tx) =>
     tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, stationId)),
   );
-  expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg)))).toEqual([]);
+  expect(await asApp(cfg, (tx) => listStationPrinters(tx))).toEqual([]);
   for (const action of [
-    () => asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg), { stationId })),
-    () =>
-      asApp(cfg, (tx) =>
-        attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId }),
-      ),
-    () => asApp(cfg, (tx) => detachPrinterFromStation(tx, printCfg(cfg), { stationId, printerId })),
-    () => asApp(cfg, (tx) => replaceStationPrinters(tx, printCfg(cfg), stationId, [])),
+    () => asApp(cfg, (tx) => listStationPrinters(tx, { stationId })),
+    () => asApp(cfg, (tx) => attachPrinterToStation(tx, { stationId, printerId })),
+    () => asApp(cfg, (tx) => detachPrinterFromStation(tx, { stationId, printerId })),
+    () => asApp(cfg, (tx) => replaceStationPrinters(tx, stationId, [])),
   ])
     await expect(action()).rejects.toMatchObject({
       code: "station.not_found",

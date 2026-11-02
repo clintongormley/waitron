@@ -23,19 +23,13 @@ export interface DeadEndAnswer {
 
 export async function requireMakeAtStation(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   stationId: string,
 ): Promise<void> {
   const [station] = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.id, stationId),
-        eq(kitchenStations.locationId, cfg.locationId),
-        eq(kitchenStations.active, true),
-      ),
-    );
+    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
   if (station === undefined) throw new AppError("route.station_inactive", { stationId });
 }
 

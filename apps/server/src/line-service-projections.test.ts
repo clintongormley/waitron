@@ -367,7 +367,6 @@ describe("charged cancellation read projections", () => {
       await attachPrinterToStation(tx, {
         stationId: extraStationId,
         printerId: venue.printerId,
-        locationId: venue.cfg.locationId,
       });
       await tx
         .update(orderGroups)

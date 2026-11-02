@@ -370,7 +370,6 @@ export async function provisionAdjustmentVenue(
       pollId: `poll-${randomUUID()}`,
     });
     await attachPrinterToStation(tx, {
-      locationId: cfg.locationId,
       stationId: station!.id,
       printerId: printer.id,
     });

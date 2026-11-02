@@ -7,10 +7,6 @@ import { kitchenStations, printers, stationPrinters } from "@waitron/db";
 import type { SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 
-interface PrintConfig {
-  locationId: string;
-}
-
 // The station → printer mapping verbs. The `printer.manage` gate is applied at the route, not here.
 
 export interface StationPrinter {
@@ -25,18 +21,12 @@ export interface StationPrinter {
  */
 export async function attachPrinterToStation(
   tx: Transaction,
-  { stationId, printerId, locationId }: StationPrinter & Pick<PrintConfig, "locationId">,
+  { stationId, printerId }: StationPrinter,
 ): Promise<void> {
   const [live] = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.id, stationId),
-        eq(kitchenStations.active, true),
-        eq(kitchenStations.locationId, locationId),
-      ),
-    );
+    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
   if (live === undefined) throw new AppError("station.not_found", { stationId });
 
   const [printer] = await tx
@@ -50,10 +40,9 @@ export async function attachPrinterToStation(
 
 export async function detachPrinterFromStation(
   tx: Transaction,
-  cfg: PrintConfig,
   { stationId, printerId }: StationPrinter,
 ): Promise<void> {
-  await requireStation(tx, cfg, stationId);
+  await requireStation(tx, stationId);
   await refuseDeletedPrinters(tx, [printerId]);
   await removeMapping(tx, { stationId, printerId });
 }
@@ -66,16 +55,15 @@ async function removeMapping(tx: Transaction, { stationId, printerId }: StationP
 
 export async function replaceStationPrinters(
   tx: Transaction,
-  cfg: PrintConfig,
   stationId: string,
   printerIds: readonly string[],
 ): Promise<void> {
-  await requireStation(tx, cfg, stationId);
+  await requireStation(tx, stationId);
   await refuseDeletedPrinters(tx, printerIds);
-  const current = await listStationPrinters(tx, cfg, { stationId });
+  const current = await listStationPrinters(tx, { stationId });
   for (const printerId of printerIds) {
     if (!current.some((row) => row.printerId === printerId)) {
-      await attachPrinterToStation(tx, { stationId, printerId, locationId: cfg.locationId });
+      await attachPrinterToStation(tx, { stationId, printerId });
     }
   }
   for (const row of current) {
@@ -85,15 +73,11 @@ export async function replaceStationPrinters(
 
 export async function listStationPrinters(
   tx: Transaction,
-  cfg: PrintConfig,
   filter?: { stationId?: string; printerId?: string },
 ): Promise<StationPrinter[]> {
-  if (filter?.stationId !== undefined) await requireStation(tx, cfg, filter.stationId);
+  if (filter?.stationId !== undefined) await requireStation(tx, filter.stationId);
   if (filter?.printerId !== undefined) await refuseDeletedPrinters(tx, [filter.printerId]);
-  const conditions: SQL[] = [
-    eq(kitchenStations.locationId, cfg.locationId),
-    eq(kitchenStations.active, true),
-  ];
+  const conditions: SQL[] = [eq(kitchenStations.active, true)];
   if (filter?.stationId !== undefined) {
     conditions.push(eq(stationPrinters.stationId, filter.stationId));
   }
@@ -108,16 +92,10 @@ export async function listStationPrinters(
     .orderBy(stationPrinters.stationId, stationPrinters.printerId);
 }
 
-async function requireStation(tx: Transaction, cfg: PrintConfig, stationId: string): Promise<void> {
+async function requireStation(tx: Transaction, stationId: string): Promise<void> {
   const [row] = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.id, stationId),
-        eq(kitchenStations.locationId, cfg.locationId),
-        eq(kitchenStations.active, true),
-      ),
-    );
+    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
   if (!row) throw new AppError("station.not_found", { stationId });
 }

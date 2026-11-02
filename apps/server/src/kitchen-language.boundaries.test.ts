@@ -70,7 +70,6 @@ describe("A964 language boundaries", () => {
           pollId: randomUUID(),
         });
         await attachPrinterToStation(tx, {
-          locationId: v.cfg.locationId,
           stationId: station!.id,
           printerId: printer.id,
         });

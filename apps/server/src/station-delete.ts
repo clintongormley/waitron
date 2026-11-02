@@ -42,13 +42,7 @@ async function stationDeleteRules(tx: Transaction, cfg: TradingContext, id: stri
       isDefault: kitchenStations.isDefault,
     })
     .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.id, id),
-        eq(kitchenStations.locationId, cfg.locationId),
-        eq(kitchenStations.active, true),
-      ),
-    );
+    .where(and(eq(kitchenStations.id, id), eq(kitchenStations.active, true)));
   if (!station) throw new AppError("station.not_found", { stationId: id });
   const target = { id: station.id, name: station.name };
   const settings = await readStationDeleteSettings(tx, cfg, id);
@@ -67,7 +61,6 @@ async function stationDeleteRules(tx: Transaction, cfg: TradingContext, id: stri
     .where(
       and(
         eq(ticketItems.stationId, id),
-        eq(workingOrders.locationId, cfg.locationId),
         eq(ticketItems.madeHere, false),
         isNull(workingOrders.collectedAt),
         ne(workingOrders.status, "abandoned"),
@@ -86,7 +79,6 @@ async function stationDeleteRules(tx: Transaction, cfg: TradingContext, id: stri
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(
       and(
-        eq(workingOrders.locationId, cfg.locationId),
         eq(workingOrders.status, "open"),
         eq(workingOrderLines.makeAtStationId, id),
         isNull(workingOrderLines.sentAt),
@@ -100,7 +92,7 @@ async function stationDeleteRules(tx: Transaction, cfg: TradingContext, id: stri
     .innerJoin(parties, eq(parties.id, orderDrafts.partyId))
     .where(
       and(
-        sql`exists (select 1 from working_orders draft_order where draft_order.party_id = ${parties.id} and draft_order.location_id = ${cfg.locationId})`,
+        sql`exists (select 1 from working_orders draft_order where draft_order.party_id = ${parties.id})`,
         eq(orderDrafts.state, "open"),
         eq(orderDraftLines.makeAtStationId, id),
       ),

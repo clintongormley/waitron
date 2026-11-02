@@ -94,12 +94,10 @@ useVenueDb({
         })
       ).id;
       await attachPrinterToStation(tx, {
-        locationId: venue.cfg.locationId,
         stationId: bar,
         printerId: barPrinter,
       });
       await attachPrinterToStation(tx, {
-        locationId: venue.cfg.locationId,
         stationId: grill,
         printerId: grillPrinter,
       });
@@ -184,7 +182,6 @@ async function stationPrinter(tx: Transaction, name: string, stationIds: readonl
   await tx.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, id));
   for (const stationId of stationIds)
     await attachPrinterToStation(tx, {
-      locationId: venue.cfg.locationId,
       stationId,
       printerId: id,
     });
@@ -196,11 +193,7 @@ async function detachStationPrinters(listed: readonly (readonly [string, readonl
   await inTx(venue, async (tx) => {
     for (const [printerId, stationIds] of listed)
       for (const stationId of stationIds)
-        await detachPrinterFromStation(
-          tx,
-          { locationId: venue.cfg.locationId },
-          { stationId, printerId },
-        );
+        await detachPrinterFromStation(tx, { stationId, printerId });
   });
 }
 
@@ -934,7 +927,6 @@ describe("release", () => {
       });
       for (const stationId of [bar, grill])
         await attachPrinterToStation(tx, {
-          locationId: venue.cfg.locationId,
           stationId,
           printerId: printer.id,
         });
@@ -1013,11 +1005,7 @@ describe("release", () => {
       vi.useRealTimers();
       await inTx(venue, async (tx) => {
         for (const stationId of [bar, grill])
-          await detachPrinterFromStation(
-            tx,
-            { locationId: venue.cfg.locationId },
-            { stationId, printerId: passPrinter },
-          );
+          await detachPrinterFromStation(tx, { stationId, printerId: passPrinter });
         await clearRoutingCell(tx, venue.cfg, cell);
       });
     }
@@ -2942,7 +2930,6 @@ describe("moveDishesToStation", () => {
         pollId: randomUUID(),
       });
       await attachPrinterToStation(tx, {
-        locationId: split.cfg.locationId,
         stationId: station.id,
         printerId: printer.id,
       });
@@ -3060,7 +3047,6 @@ describe("moveDishesToStation", () => {
         pollId: randomUUID(),
       });
       await attachPrinterToStation(tx, {
-        locationId: venue.cfg.locationId,
         stationId: station.id,
         printerId: printer.id,
       });
@@ -3127,7 +3113,6 @@ describe("moveDishesToStation", () => {
           })
         ).id;
         await attachPrinterToStation(tx, {
-          locationId: venue.cfg.locationId,
           stationId: kitchen,
           printerId: kitchenPrinter,
         });
@@ -3147,11 +3132,7 @@ describe("moveDishesToStation", () => {
         await inTx(venue, async (tx) => {
           for (const cell of cells) await clearRoutingCell(tx, venue.cfg, cell);
           await setStationPrinting(tx, { printHeldWork: barBefore!.printHeldWork }, [bar]);
-          await detachPrinterFromStation(
-            tx,
-            { locationId: venue.cfg.locationId },
-            { stationId: kitchen, printerId: kitchenPrinter },
-          );
+          await detachPrinterFromStation(tx, { stationId: kitchen, printerId: kitchenPrinter });
           await tx
             .update(kitchenStations)
             .set({ active: false, isDefault: false })

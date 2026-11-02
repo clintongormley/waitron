@@ -39,17 +39,13 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
-async function stationPrinter(
-  tx: Transaction,
-  locationId: string,
-  stationId: string,
-): Promise<string> {
+async function stationPrinter(tx: Transaction, stationId: string): Promise<string> {
   const { id } = await createPrinter(tx, {
     name: `Printer ${randomUUID()}`,
     transport: "cloud_poll",
     pollId: randomUUID(),
   });
-  await attachPrinterToStation(tx, { locationId, stationId, printerId: id });
+  await attachPrinterToStation(tx, { stationId, printerId: id });
   return id;
 }
 
@@ -103,7 +99,7 @@ describe("device made-here stations", () => {
       const bar = await createStation(tx, venue.cfg, { name: "Bar" });
       const downstairs = await createStation(tx, venue.cfg, { name: "Downstairs bar" });
       await routeProductTo(tx, venue.cfg, venue.cafeId, bar.id);
-      const downstairsPrinter = await stationPrinter(tx, venue.cfg.locationId, downstairs.id);
+      const downstairsPrinter = await stationPrinter(tx, downstairs.id);
       const deviceId = await deviceAt(tx, venue.cfg.locationId, bar.id);
       await setStationToday(tx, venue.cfg, bar.id, "closed", new Date(), downstairs.id);
       const orderId = randomUUID();
@@ -127,8 +123,8 @@ describe("device made-here stations", () => {
     await withTransaction(suite.db, async (tx) => {
       const grill = await createStation(tx, venue.cfg, { name: "Grill" });
       await routeProductTo(tx, venue.cfg, venue.aguaId, grill.id);
-      const barPrinter = await stationPrinter(tx, venue.cfg.locationId, venue.defaultStationId);
-      const grillPrinter = await stationPrinter(tx, venue.cfg.locationId, grill.id);
+      const barPrinter = await stationPrinter(tx, venue.defaultStationId);
+      const grillPrinter = await stationPrinter(tx, grill.id);
       const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
       const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
       const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
@@ -241,8 +237,8 @@ describe("device made-here stations", () => {
     await withTransaction(suite.db, async (tx) => {
       const grill = await createStation(tx, venue.cfg, { name: "Grill" });
       await routeProductTo(tx, venue.cfg, venue.aguaId, grill.id);
-      const barPrinter = await stationPrinter(tx, venue.cfg.locationId, venue.defaultStationId);
-      const grillPrinter = await stationPrinter(tx, venue.cfg.locationId, grill.id);
+      const barPrinter = await stationPrinter(tx, venue.defaultStationId);
+      const grillPrinter = await stationPrinter(tx, grill.id);
       const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
@@ -277,7 +273,7 @@ describe("device made-here stations", () => {
     await withTransaction(suite.db, async (tx) => {
       const downstairs = await createStation(tx, venue.cfg, { name: "Downstairs bar" });
       await routeProductTo(tx, venue.cfg, venue.cafeId, downstairs.id);
-      const printer = await stationPrinter(tx, venue.cfg.locationId, downstairs.id);
+      const printer = await stationPrinter(tx, downstairs.id);
       const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
@@ -297,7 +293,7 @@ describe("device made-here stations", () => {
   it("keeps an earlier dish decision and rejects one kept for a different station", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const printer = await stationPrinter(tx, venue.cfg.locationId, venue.defaultStationId);
+      const printer = await stationPrinter(tx, venue.defaultStationId);
       const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
@@ -329,7 +325,7 @@ describe("device made-here stations", () => {
   it("applies a kept made-here decision even when the sending device lists nothing", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const printer = await stationPrinter(tx, venue.cfg.locationId, venue.defaultStationId);
+      const printer = await stationPrinter(tx, venue.defaultStationId);
       const [profile] = await tx
         .insert(deviceProfiles)
         .values({ name: "Other till", formFactor: "till", capabilities: [] })
@@ -363,7 +359,7 @@ describe("device made-here stations", () => {
   it("prints an unkept Bar item sent by a different device whose list is empty", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const printer = await stationPrinter(tx, venue.cfg.locationId, venue.defaultStationId);
+      const printer = await stationPrinter(tx, venue.defaultStationId);
       const barDeviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
       const [profile] = await tx
         .insert(deviceProfiles)
@@ -397,7 +393,7 @@ describe("device made-here stations", () => {
   it("prints a station item when there is no sending device", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const printer = await stationPrinter(tx, venue.cfg.locationId, venue.defaultStationId);
+      const printer = await stationPrinter(tx, venue.defaultStationId);
       const orderId = randomUUID();
       await createOpenOrder(tx, venue.cfg, orderId, [], null);
       const line = await rawLine(tx, orderId, venue.cafeId, 1);
@@ -418,8 +414,8 @@ describe("device made-here stations", () => {
     await withTransaction(suite.db, async (tx) => {
       const grill = await createStation(tx, venue.cfg, { name: "Grill" });
       await routeProductTo(tx, venue.cfg, venue.aguaId, grill.id);
-      const barPrinter = await stationPrinter(tx, venue.cfg.locationId, venue.defaultStationId);
-      const grillPrinter = await stationPrinter(tx, venue.cfg.locationId, grill.id);
+      const barPrinter = await stationPrinter(tx, venue.defaultStationId);
+      const grillPrinter = await stationPrinter(tx, grill.id);
       const first = await createCourse(tx, venue.cfg, { name: "First", displayOrder: 1 });
       const second = await createCourse(tx, venue.cfg, { name: "Second", displayOrder: 2 });
       const deviceId = await deviceAt(tx, venue.cfg.locationId, venue.defaultStationId);
@@ -585,7 +581,7 @@ describe("device made-here stations", () => {
     });
   });
 
-  it("refuses switched-off and foreign-location stations with station.not_found", async () => {
+  it("refuses switched-off stations with station.not_found", async () => {
     const venue = await setupVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const [profile] = await tx
@@ -609,15 +605,6 @@ describe("device made-here stations", () => {
       await expect(setMadeHereStations(tx, venue.cfg, device!.id, [off.id])).rejects.toMatchObject({
         code: "station.not_found",
       });
-      expect(await readMadeHereStations(tx, device!.id)).toEqual(new Set([venue.defaultStationId]));
-      await expect(
-        setMadeHereStations(
-          tx,
-          { ...venue.cfg, locationId: randomUUID() as typeof venue.cfg.locationId },
-          device!.id,
-          [venue.defaultStationId],
-        ),
-      ).rejects.toMatchObject({ code: "station.not_found" });
       expect(await readMadeHereStations(tx, device!.id)).toEqual(new Set([venue.defaultStationId]));
     });
   });

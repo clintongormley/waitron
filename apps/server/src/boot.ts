@@ -2693,7 +2693,6 @@ async function bootServer(
     contentSuggestionsAlertSource(),
     invoiceDeliveryAlertSource({ testPages }),
     stationOutputAlertSource({
-      locationId: tradingContext.locationId,
       stationStates: (tx, at) =>
         VENUE_SERVICE.stationStates(tx, { locationId: tradingContext.locationId }, at),
     }),

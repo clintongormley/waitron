@@ -2049,7 +2049,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
             pollId: randomUUID(),
           })
         ).id;
-        await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId, printerId });
+        await attachPrinterToStation(tx, { stationId, printerId });
         return { stationId, printerId };
       };
       const upstairs = await stationWithPrinter("Upstairs bar");

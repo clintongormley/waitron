@@ -84,7 +84,6 @@ export async function setupSplitExtrasVenue() {
       });
       printers[station] = printer.id;
       await attachPrinterToStation(tx, {
-        locationId: cfg.locationId,
         stationId: stations[station],
         printerId: printer.id,
       });
@@ -97,7 +96,6 @@ export async function setupSplitExtrasVenue() {
     printers.pass = pass.id;
     for (const stationId of [stations.grill, stations.fryer])
       await attachPrinterToStation(tx, {
-        locationId: cfg.locationId,
         stationId,
         printerId: pass.id,
       });

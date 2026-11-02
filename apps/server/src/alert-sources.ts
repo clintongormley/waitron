@@ -673,7 +673,6 @@ export function invoiceDeliveryAlertSource(deps: {
 }
 
 export function stationOutputAlertSource(deps: {
-  locationId: string;
   stationStates: (
     tx: Transaction,
     at: Date,

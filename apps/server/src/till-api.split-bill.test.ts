@@ -235,7 +235,7 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
       });
-      await attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId: id });
+      await attachPrinterToStation(tx, { stationId, printerId: id });
       return id;
     });
     await withTransaction(suite.db, (tx) =>

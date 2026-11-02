@@ -69,7 +69,7 @@ async function printer(paperWidth: "58mm" | "80mm" = "80mm") {
       pollId: randomUUID(),
       paperWidth,
     });
-    await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId, printerId: p.id });
+    await attachPrinterToStation(tx, { stationId, printerId: p.id });
     return p.id;
   });
 }
@@ -289,7 +289,6 @@ describe("saved kitchen note corrections", () => {
         if (!withPrinter) return { id, printerId: null };
         const p = await createPrinter(tx, { name, transport: "cloud_poll", pollId: randomUUID() });
         await attachPrinterToStation(tx, {
-          locationId: v.cfg.locationId,
           stationId: id,
           printerId: p.id,
         });
@@ -546,7 +545,7 @@ it("A807 prints one slip per printer for stations that share one", async () => {
     const station = async (name: string, dish: string, printerId: string) => {
       const { id } = await createStation(tx, v.cfg, { name });
       await routeProductTo(tx, v.cfg, v.productId(dish), id);
-      await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId: id, printerId });
+      await attachPrinterToStation(tx, { stationId: id, printerId });
       return id;
     };
     return {

@@ -158,30 +158,46 @@ describe("kitchen-station config", () => {
     ]);
   });
 
-  it.each(["inactive", "another location"] as const)(
-    "A725 does not reserve colours used by %s stations",
-    async (scope) => {
-      const cfg = await setupVenue();
-      await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Kitchen", colour: "red" }));
-      if (scope === "inactive") {
-        const old = await asApp(cfg, (tx) =>
-          createStation(tx, cfg, { name: "Old bar", colour: "orange" }),
-        );
-        await asApp(cfg, (tx) =>
-          tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, old.id)),
-        );
-      } else {
-        const other = await setupVenue();
-        await asApp(other, (tx) =>
-          createStation(tx, other, { name: "Other bar", colour: "orange" }),
-        );
-      }
-      const created = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Bar" }));
-      expect(
-        (await listStations(db, cfg)).find((station) => station.id === created.id)!.colour,
-      ).toBe("orange");
-    },
-  );
+  it("A725 does not reserve colours used by inactive stations", async () => {
+    const cfg = await setupVenue();
+    await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Kitchen", colour: "red" }));
+    const old = await asApp(cfg, (tx) =>
+      createStation(tx, cfg, { name: "Old bar", colour: "orange" }),
+    );
+    await asApp(cfg, (tx) =>
+      tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, old.id)),
+    );
+    const created = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Bar" }));
+    expect((await listStations(db, cfg)).find((station) => station.id === created.id)!.colour).toBe(
+      "orange",
+    );
+  });
+
+  // A1301: deleted with cfg in S18
+  it("creates, lists and edits the venue's stations whatever location the scope names", async () => {
+    const cfg = await setupVenue();
+    const elsewhere = { ...cfg, locationId: brandLocationId(randomUUID()) };
+    await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Kitchen", colour: "red" }));
+    const { id } = await asApp(cfg, (tx) =>
+      createStation(tx, elsewhere, { name: "Bar", isDefault: true }),
+    );
+    await asApp(cfg, (tx) => updateStation(tx, elsewhere, id, { name: "Cocktail bar" }));
+    const [row] = await db
+      .select({ locationId: kitchenStations.locationId })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.id, id));
+    expect(row!.locationId).toBe(cfg.locationId);
+    expect(
+      (await listStations(db, elsewhere)).map(({ name, colour, isDefault }) => ({
+        name,
+        colour,
+        isDefault,
+      })),
+    ).toEqual([
+      { name: "Cocktail bar", colour: "orange", isDefault: true },
+      { name: "Kitchen", colour: "red", isDefault: false },
+    ]);
+  });
 
   it("A725 reuses red when every station colour is occupied", async () => {
     const cfg = await setupVenue();
@@ -450,10 +466,17 @@ describe("kitchen-station config", () => {
 
   it("createStation preserves a foreign-key error and updateStation names an invalid effective threshold", async () => {
     const cfg = await setupVenue();
-    const badCfg: TradingContext = { ...cfg, locationId: brandLocationId(randomUUID()) };
-    const createErr = await asApp(cfg, (tx) => createStation(tx, badCfg, { name: "Big" })).catch(
-      (e: unknown) => e,
-    );
+    await db.execute(sql`
+      create trigger kitchen_stations_refuse_insert before insert on kitchen_stations
+      begin select raise(abort, 'station insert refused'); end`);
+    let createErr: unknown;
+    try {
+      createErr = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Big" })).catch(
+        (e: unknown) => e,
+      );
+    } finally {
+      await db.execute(sql`drop trigger kitchen_stations_refuse_insert`);
+    }
     expect(createErr).toBeInstanceOf(Error);
     expect(createErr).not.toBeInstanceOf(AppError);
 
@@ -756,32 +779,36 @@ describe("kitchen-course config", () => {
     });
   });
 
-  it("refuses to edit another venue's course with course.not_found, changing nothing", async () => {
+  // A1301: deleted with cfg in S18
+  it("creates, lists and edits the venue's courses whatever location the scope names", async () => {
     const cfg = await setupVenue();
+    const elsewhere = { ...cfg, locationId: brandLocationId(randomUUID()) };
     const { id } = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Desserts", displayOrder: 3 }),
+      createCourse(tx, elsewhere, { name: "Desserts", displayOrder: 3 }),
     );
-    await asApp(cfg, (tx) =>
-      tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, id)),
-    );
-    const other = await setupVenue();
-    const foreignCfg: TradingContext = { ...cfg, locationId: other.locationId };
-    await expect(
-      asApp(cfg, (tx) => updateCourse(tx, foreignCfg, id, { name: "Taken over" })),
-    ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: id } });
-    expect(
-      await asApp(cfg, (tx) => tx.select().from(kitchenCourses).where(eq(kitchenCourses.id, id))),
-    ).toMatchObject([{ id, name: "Desserts", active: false }]);
+    await asApp(cfg, (tx) => updateCourse(tx, elsewhere, id, { name: "Sweets" }));
+    const [row] = await db
+      .select({ locationId: kitchenCourses.locationId })
+      .from(kitchenCourses)
+      .where(eq(kitchenCourses.id, id));
+    expect(row!.locationId).toBe(cfg.locationId);
+    expect((await listCourses(db, elsewhere)).map(({ name }) => name)).toEqual(["Sweets"]);
   });
 
   it("createCourse rethrows a NON-unique DB error raw, not as course.name_taken", async () => {
-    // A location id naming no row fails the location foreign key, not the name unique. The
-    // `updateCourse` half is the last suite in this file.
+    // The `updateCourse` half is the last suite in this file.
     const cfg = await setupVenue();
-    const badCfg: TradingContext = { ...cfg, locationId: brandLocationId(randomUUID()) };
-    const createErr = await asApp(cfg, (tx) => createCourse(tx, badCfg, { name: "Big" })).catch(
-      (e: unknown) => e,
-    );
+    await db.execute(sql`
+      create trigger kitchen_courses_refuse_insert before insert on kitchen_courses
+      begin select raise(abort, 'course insert refused'); end`);
+    let createErr: unknown;
+    try {
+      createErr = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Big" })).catch(
+        (e: unknown) => e,
+      );
+    } finally {
+      await db.execute(sql`drop trigger kitchen_courses_refuse_insert`);
+    }
     expect(createErr).toBeInstanceOf(Error);
     expect(createErr).not.toBeInstanceOf(AppError);
   });
@@ -869,19 +896,13 @@ describe("moveCourse", () => {
     expect(await storedOrders([a!, b!, c!, d!])).toEqual([0, 5, 5, 20]);
   });
 
-  it("refuses an unknown id, or another venue's course, with course.not_found", async () => {
+  it("refuses an unknown id with course.not_found", async () => {
     const cfg = await setupVenue();
     await fourCourses(cfg);
     const missing = randomUUID();
     await expect(asApp(cfg, (tx) => moveCourse(tx, cfg, missing, 0))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: missing },
-    });
-    const other = await setupVenue();
-    const [elsewhere] = await fourCourses(other);
-    await expect(asApp(cfg, (tx) => moveCourse(tx, cfg, elsewhere!, 0))).rejects.toMatchObject({
-      code: "course.not_found",
-      params: { courseId: elsewhere },
     });
   });
 });
