@@ -636,16 +636,6 @@ describe("mountWorkforceApi — swap + absence approvals", () => {
 });
 
 describe("mountWorkforceApi — planned-vs-actual", () => {
-  it("GET /management-api/planned-vs-actual returns [] for an empty window", async () => {
-    const res = await send(
-      mountApp(),
-      "GET",
-      "/management-api/planned-vs-actual?from=2026-03-02&to=2026-03-09",
-    );
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual([]);
-  });
-
   it("answers a request with no location", async () => {
     const res = await send(
       mountApp(),

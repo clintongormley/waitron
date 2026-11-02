@@ -28,8 +28,6 @@ export class PlannedActualScreen extends LitElement {
       }
       .pickers {
         display: flex;
-      }
-      .picker {
         margin-bottom: var(--wt-space-4);
       }
       table {
@@ -69,6 +67,7 @@ export class PlannedActualScreen extends LitElement {
 
   @state() private weekMonday = mondayOf(today());
   @state() private rows: PlannedVsActualRow[] = [];
+  @state() private rowsLoaded = false;
   @state() private errorKey: string | null = null;
   #names = new Map<string, string>();
 
@@ -98,6 +97,7 @@ export class PlannedActualScreen extends LitElement {
       [this.weekMonday, weekEnd(this.weekMonday)],
       (value) => {
         this.rows = value;
+        this.rowsLoaded = true;
       },
     );
   }
@@ -146,7 +146,6 @@ export class PlannedActualScreen extends LitElement {
     return html`
       <div class="pickers">
         <wt-input
-          class="picker"
           type="date"
           data-test="week-picker"
           name="week"
@@ -157,7 +156,9 @@ export class PlannedActualScreen extends LitElement {
       </div>
       ${
         this.rows.length === 0
-          ? html`<p class="muted" data-test="empty">${t("planned.empty")}</p>`
+          ? this.rowsLoaded
+            ? html`<p class="muted" data-test="empty">${t("planned.empty")}</p>`
+            : nothing
           : html`<table>
               <thead>
                 <tr>

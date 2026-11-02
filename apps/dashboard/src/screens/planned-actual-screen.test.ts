@@ -90,6 +90,45 @@ describe("planned-actual-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=empty]")).not.toBeNull();
   });
 
+  it("shows no empty prompt while the opening rows read is still pending", async () => {
+    const api = stubApi({ getPlannedVsActual: vi.fn(() => new Promise<never>(() => {})) });
+    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
+      api,
+    });
+    await flush(el);
+    expect(api.getPlannedVsActual).toHaveBeenCalledTimes(1);
+    expect(el.shadowRoot!.querySelector("[data-test=week-picker]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=empty]")).toBeNull();
+  });
+
+  it("shows the error banner and no empty prompt when the opening rows read fails, and the empty prompt once a read answers with no rows", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        getPlannedVsActual: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "connection.failed" })
+          .mockResolvedValue([]),
+      }),
+      { liveData },
+    );
+    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
+      api,
+    });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=error]")?.textContent?.trim()).toBe(
+        codeMessage("connection.failed"),
+      ),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=week-picker]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=empty]")).toBeNull();
+    liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=empty]")).not.toBeNull(),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=error]")).toBeNull();
+  });
+
   it("shows the error banner when a load rejects", async () => {
     const api = stubApi({
       getPlannedVsActual: vi.fn().mockRejectedValue({ code: "convenio.not_found" }),
@@ -209,6 +248,7 @@ describe("planned-actual-screen week field", () => {
   });
 
   it("keeps the week field at its own width on a wide screen", async () => {
+    const [width, height] = [window.innerWidth, window.innerHeight];
     await page.viewport(1280, 800);
     try {
       const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
@@ -218,7 +258,7 @@ describe("planned-actual-screen week field", () => {
       const week = el.shadowRoot!.querySelector("wt-input[data-test=week-picker]")!;
       expect(week.getBoundingClientRect().width).toBeLessThan(el.getBoundingClientRect().width / 2);
     } finally {
-      await page.viewport(window.innerWidth, window.innerHeight);
+      await page.viewport(width, height);
     }
   });
 });
@@ -242,6 +282,7 @@ describe("planned-actual-screen — recovery after the server answers again", ()
       api,
     });
     await vi.waitFor(() => expect(errorText(el)).toBe(codeMessage("connection.failed")));
+    expect(el.shadowRoot!.querySelector("[data-test=empty]")).toBeNull();
     liveData.refresh();
     await vi.waitFor(() => expect(errorText(el)).toBeUndefined());
     expect(el.shadowRoot!.textContent).toContain("240");
