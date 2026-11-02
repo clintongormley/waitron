@@ -5791,8 +5791,11 @@ Not in any track until the standalone primary is done.
   Matters once a provider exists. Left open by A1171 parts 1–2 (#2191).
 
 - **A1018. Simple controlled and emergency handover, with Cloud only a placement.** M2 handles all AEAT communication after either takeover; returning M1 transfers fiscal originals/outcomes only.
-  The owner approved both Harbour Kitchen handovers and retained defaults on 24 October 2026.
-  Exact formats, compatible A947 amendments, separate build authority and physical runtime qualification remain open.
+  The owner approved both Harbour Kitchen handovers and retained defaults on 24 October 2026, and
+  gave build authority on 1 November. The [build plan](superpowers/plans/2026-11-02-a1018-handover-build.md)
+  sets local-only version-1 formats and the A947 amendments, and cuts the work into slices; its two
+  owner questions (returned invoices in modelo 303; the emergency minute wait) gate only Slice 12b and
+  Task 7.4b. Physical runtime qualification on real boxes remains the owner's, after A947 3b/3c.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
 - **A1185: a venue not yet connected sees no prices.** The Cloud services screen shows the plan
