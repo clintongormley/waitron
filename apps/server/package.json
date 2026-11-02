@@ -49,6 +49,7 @@
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
     "@waitron/fiscal-verifactu": "workspace:*",
+    "@waitron/handover": "workspace:*",
     "@waitron/identity": "workspace:*",
     "@waitron/layouts": "workspace:*",
     "@waitron/media": "workspace:*",

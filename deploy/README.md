@@ -15,7 +15,8 @@ lock files is held a `-journal` appears beside it, and a crash can leave that be
 lock files holds data; do not delete them, because a process that finds one missing takes a new
 lock beside the one still held.
 `venue.db` is the venue's data; `node.db` is what this box remembers about itself (its role, its
-signing key, its recovery-key check, and on a spare the main box's address and key). Only `venue.db`
+signing key, its recovery-key check, its handover records, and on a spare the main box's address
+and key). Only `venue.db`
 streams to a bucket; a backup file carries both.
 There is no database server in the app's path, no connection string and no database password.
 

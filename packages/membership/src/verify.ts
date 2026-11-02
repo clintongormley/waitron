@@ -139,6 +139,31 @@ export function verifyMembershipDocument(
 }
 
 /**
+ * The key that speaks for a node under the receiver's own held chart: `trustSet`'s, or one the
+ * chart's endorsements vouch for by `resolveSignerKey`'s rule — never one for a node a well-formed
+ * held chart has removed (`fencedOutNodeIds`), a trust anchor included. Endorsements are read only from a
+ * well-formed held chart a key `trustSet` vouches for signed. That check skips the removal rule,
+ * because a retirement chart is signed by the node it removes.
+ */
+export function endorsedKeyOf(
+  held: SignedMembershipDocument | null,
+  trustSet: TrustSet,
+): (nodeId: string) => string | undefined {
+  const keys = new Map(Object.entries(trustSet));
+  const wellFormed = held !== null && isMembershipDocument(held);
+  if (wellFormed && verifyDocumentSigner(held, trustSet).trusted) {
+    // Only an endorsed id can gain a key, so resolving each of them once answers every lookup.
+    for (const { nodeId } of held.endorsements) {
+      if (keys.has(nodeId)) continue;
+      const key = resolveSignerKey(nodeId, held.endorsements, trustSet, held);
+      if (key !== null) keys.set(nodeId, key);
+    }
+  }
+  const removed = wellFormed ? fencedOutNodeIds(held) : new Set<string>();
+  return (nodeId) => (removed.has(nodeId) ? undefined : keys.get(nodeId));
+}
+
+/**
  * Whether a key `trustSet` vouches for signed this document, whatever else is wrong with its shape:
  * `verifyMembershipDocument` answers `malformed` before it looks at the signer, which cannot tell a
  * malformed chart this box signed from one a stranger did. A document too broken to name a signer

@@ -11,6 +11,7 @@ import { NODE_CLASSIFICATION, NODE_MIGRATIONS, setRecoveryKeyTx } from "@waitron
 import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
 import { generateNodeKeyPair } from "@waitron/membership";
 import {
+  NODE_INDEXES,
   NODE_ROWS_A_FIRST_SETUP_WRITES,
   assertStartAgainAllowedOnDisk,
   deleteMarkedAttempt,
@@ -147,13 +148,32 @@ it.each<[string, string, string]>([
     "create index node_mode_extra on node_mode(updated_at)",
     "node.db holds a table",
   ],
+  [
+    "an index of its own on a handover table",
+    "create index node_handover_extra on node_handover_events(kind)",
+    "node.db holds a table",
+  ],
+  [
+    "the handover index's name on another table",
+    "drop index node_handover_one_open_uq; create unique index node_handover_one_open_uq on node_mode(node_id)",
+    "node.db holds a table",
+  ],
+  [
+    "the node set's tables without its handover index",
+    "drop index node_handover_one_open_uq",
+    "node.db lacks the node set's tables or indexes",
+  ],
   ["a view", "create view v as select 1", "node.db holds a table"],
   [
     "a trigger",
     "create trigger tr after insert on node_mode begin select 1; end",
     "node.db holds a table",
   ],
-  ["only part of the node set", "drop table node_primary_key", "node.db lacks the node tables"],
+  [
+    "only part of the node set",
+    "drop table node_primary_key",
+    "node.db lacks the node set's tables or indexes",
+  ],
   [
     "another table in place of one of the node set's",
     "drop table node_primary_key; create table t(x)",
@@ -167,7 +187,7 @@ it.each<[string, string, string]>([
   [
     "the node set's tables without its journal",
     "drop table __drizzle_migrations_node",
-    "node.db lacks the node tables",
+    "node.db lacks the node set's tables or indexes",
   ],
   [
     "a mirror link",
@@ -183,6 +203,22 @@ it.each<[string, string, string]>([
     "a main box's key",
     `insert into node_primary_key values ('${NODE_ID}', '${randomUUID()}', 'key', '2026-10-31T00:00:00.000Z')`,
     "node.db holds a row: node_primary_key",
+  ],
+  [
+    "a handover operation",
+    `insert into node_handover_operations values ('${NODE_ID}', '${randomUUID()}', 'source', 'controlled',
+       '${NODE_ID}', '${randomUUID()}', 'b', 'f', 'prepared', null, '2026-10-31T00:00:00.000Z', '2026-10-31T00:00:00.000Z')`,
+    "node.db holds a row: node_handover_operations",
+  ],
+  [
+    "a handover event",
+    `insert into node_handover_events values ('${randomUUID()}', '${NODE_ID}', null, 'k', '{}', null, '2026-10-31T00:00:00.000Z')`,
+    "node.db holds a row: node_handover_events",
+  ],
+  [
+    "a handover restriction",
+    `insert into node_handover_restriction values ('${NODE_ID}', null, 'superseded', '${randomUUID()}', 1, '2026-10-31T00:00:00.000Z')`,
+    "node.db holds a row: node_handover_restriction",
   ],
   [
     "two recovery-key checks",
@@ -244,4 +280,21 @@ it("every node.db table has a decision on how many rows a first setup may leave 
   expect(Object.keys(NODE_ROWS_A_FIRST_SETUP_WRITES).sort()).toEqual(
     NODE_CLASSIFICATION.map((table) => table.table).sort(),
   );
+});
+
+it("the node set's indexes Start again accepts are exactly the ones its migrations create", async () => {
+  const roots = await attemptWithMigratedNode();
+  const node = new DatabaseSync(join(roots.venueDir, "node.db"), { readOnly: true });
+  try {
+    const created = node
+      .prepare(
+        "select name, tbl_name as \"table\" from sqlite_schema where type = 'index' and name not like 'sqlite\\_%' escape '\\' order by name",
+      )
+      .all()
+      .map((row) => ({ ...row }));
+    expect(created.length).toBeGreaterThan(0);
+    expect([...NODE_INDEXES].sort((a, b) => a.name.localeCompare(b.name))).toEqual(created);
+  } finally {
+    node.close();
+  }
 });

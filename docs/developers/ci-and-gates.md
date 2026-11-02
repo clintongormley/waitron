@@ -394,9 +394,9 @@ file into a package where its coverage would count.
 
 A mutation run makes one small change to a source file at a time and reruns the tests; a change
 nothing notices is behaviour no test is checking. `thresholds.break` turns that score into a gate.
-Three packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
+Four packages carry `"thresholds": { "high": 95, "low": 90, "break": 90 }` —
 `packages/shared` since July 2026, `packages/fiscal` under the owner's 2026-09-19 decision that
-the target is 90 everywhere, and `packages/node-db` from its first commit. `packages/db`, `packages/ui` and `packages/ui-core` carry no `break` in
+the target is 90 everywhere, and `packages/node-db` and `packages/handover` from their first commits. `packages/db`, `packages/ui` and `packages/ui-core` carry no `break` in
 their own configs, deliberately: CI splits each run into shards (ten for db, thirty for ui, four for
 ui-core), each passed its own `--mutate` list, so a `thresholds.break` there would gate one slice
 rather than the package. Their bars live in the `mutation-db-aggregate`, `mutation-ui-aggregate`
@@ -415,6 +415,7 @@ Where each failure arrives differs, which is the part a session gets wrong:
 | `fiscal` | nothing in CI | only a local `pnpm --filter @waitron/fiscal mutation` |
 | `db` | the sharded `mutation-db` matrix plus `mutation-db-aggregate`, both in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand, on the merged score of the ten shards — a single shard's own slice is never gated, and a LOCAL `pnpm --filter @waitron/db mutation` prints a score and gates nothing |
 | `node-db` | the unsharded `mutation-node-db` job in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand; a LOCAL `pnpm --filter @waitron/node-db mutation` fails below 90 too, because the bar is in its own config |
+| `handover` | the unsharded `mutation-handover` job in `.github/workflows/mutation.yml` | the nightly run, or one dispatched by hand; a LOCAL `pnpm --filter @waitron/handover mutation` fails below 90 too, because the bar is in its own config |
 
 Five hedges worth carrying. `packages/node-db`'s score is taken over the mutants its config's
 `ignoreStatic` keeps: a local `pnpm --filter @waitron/node-db exec stryker run --force` on
@@ -508,9 +509,9 @@ checks that it preserves the local mutation list and floor while disabling incre
 
 ### Mutation testing runs nightly at 05:00 UTC
 
-Nightly rather than Mondays only (owner, 2026-10-12). A run is 47 jobs (ui's 30 shards, db's 10,
-ui-core's 4, and the three aggregates; 43 before ui-core was sharded on 2026-10-20, with ui-core one
-job and two aggregates), and the account never ran more than 20 jobs at once from 6 to 12
+Nightly rather than Mondays only (owner, 2026-10-12). A run is a sharded matrix each for ui, db
+and ui-core, one aggregate job per matrix, and one unsharded job each for node-db and handover
+(`.github/workflows/mutation.yml`). The figures below were measured on 6–12 October, when a run was 43 jobs: ui's 30 shards, db's 10, ui-core as one job, and two aggregates. The account never ran more than 20 jobs at once from 6 to 12
 October except for one instant that read 21 (every job that held a runner, from
 `gh api 'repos/clintongormley/waitron/actions/runs?created=<day>&per_page=100' --paginate` and
 `gh api repos/clintongormley/waitron/actions/runs/<id>/jobs?per_page=100&filter=all --paginate`, a
@@ -2061,6 +2062,7 @@ the `mutation-shared` row below records the earlier unsharded job.
 | mutation.yml       | mutation-db (matrix shards)       | 8.8 (since the SQLite switch); 12.2 (run 38241392066) | 25    |
 | mutation.yml       | mutation-db-aggregate             | 0.3                            | 5     |
 | mutation.yml       | mutation-node-db                  | not yet measured in CI; the Stryker run took 8 seconds locally | 10    |
+| mutation.yml       | mutation-handover                 | not yet measured in CI; the Stryker run took 3 seconds locally | 10    |
 | stripe-sandbox.yml | stripe-sandbox                    | 0.7                            | 5     |
 | codeql.yml         | analyze (matrix of four languages) | 24.0 (javascript-typescript)  | 50    |
 

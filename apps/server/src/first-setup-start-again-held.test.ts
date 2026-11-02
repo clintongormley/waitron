@@ -90,7 +90,7 @@ function nodeHoldings(f: Pick<Held, "roots">) {
   try {
     const names = node
       .prepare(
-        "select name from sqlite_schema where name not like 'sqlite\\_%' escape '\\' order by name",
+        "select name from sqlite_schema where type = 'table' and name not like 'sqlite\\_%' escape '\\' order by name",
       )
       .all()
       .map((row) => (row as { name: string }).name);
@@ -108,7 +108,10 @@ function nodeHoldings(f: Pick<Held, "roots">) {
 it("in the held state, Start again deletes a node.db holding the node set's tables and the attempt's recovery-key check and signing key", async () => {
   const f = await heldSetup({ recovery: false });
   expect(nodeHoldings(f)).toEqual({
-    __drizzle_migrations_node: 1,
+    __drizzle_migrations_node: 2,
+    node_handover_events: 0,
+    node_handover_operations: 0,
+    node_handover_restriction: 0,
     node_mirror_link: 0,
     node_mode: 0,
     node_primary_key: 0,

@@ -16,8 +16,9 @@ The owner gave build authority on 2026-11-01. The
 and the A947 amendment is written (the dated A1018 block at the top of the
 [A947 design](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md)). Its
 [two owner questions](../superpowers/plans/2026-11-02-a1018-handover-build.md#questions-for-the-owner)
-stay open, built on their defaults, and gate only Slice 12b and Task 7.4b: Q1, returned invoices count in modelo 303; Q2, the emergency
-takes the next free minute. Physical runtime qualification on real boxes remains the owner's, after A947 3b/3c
+were answered (a) by the owner on 2026-11-02: Q1, returned invoices count in modelo 303 (Slice
+12b, pending the venue's tax adviser); Q2, the emergency takes the next free minute. Physical runtime
+qualification on real boxes remains the owner's, after A947 3b/3c
 ([owner task](../superpowers/plans/2026-11-02-a1018-handover-build.md#owner-task-physical-qualification-on-real-boxes)).
 
 **Amended Cloud agreement published, 2026-10-23 (D133):**
@@ -306,7 +307,7 @@ every later venue (the owner's answer to the A947 design's question 4). Slices 3
 canonicalisation, verification, trust), node enrolment and its rate limiting
 (`apps/server/src/node-enrol-api.ts`, `enrol-rate-limit.ts`), node retirement, and the
 `ledger` / `state` / `local` classification — which no longer chooses a database file: every table
-was put in `venue.db` (#548), and since A947 slice 3a only a box's own five tables are in `node.db`. Read the residuals below as requirements for what failover is
+was put in `venue.db` (#548), and since A947 slice 3a only a box's own tables are in `node.db`. Read the residuals below as requirements for what failover is
 rebuilt INTO, not as descriptions of code that exists today. A standby holds its full dormant
 identity from JOIN and promotion never mints a chain.
 

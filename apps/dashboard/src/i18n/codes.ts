@@ -1311,6 +1311,28 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The list of servers was being changed at the same moment. Try again.",
     es: "La lista de servidores se estaba cambiando en ese mismo momento. Vuelve a intentarlo.",
   },
+  "handover.request_invalid": {
+    en: "The request to hand the work over to another server was not valid, so nothing was changed. Start the handover again.",
+    es: "La solicitud para pasar el trabajo a otro servidor no era válida, así que no se ha cambiado nada. Vuelve a empezar el cambio de servidor.",
+  },
+  "handover.step_out_of_order": {
+    en: "The handover is at a different stage, so this step cannot be taken now. Refresh the page to see where it stands.",
+    es: "El cambio de servidor está en otra fase, así que este paso no se puede dar ahora. Actualiza la página para ver en qué punto está.",
+  },
+  "handover.operation_conflict": {
+    en: "This handover was already started with different details, so nothing was changed. Start a new handover.",
+    es: "Este cambio de servidor ya se empezó con otros datos, así que no se ha cambiado nada. Empieza un cambio de servidor nuevo.",
+  },
+  "handover.operation_in_progress": {
+    en: "Nothing was started, because this server is already in the middle of another handover. Finish that handover, or abandon it, and then start this one again.",
+    es: "No se ha empezado nada, porque este servidor ya está en medio de otro cambio de servidor. Termina ese cambio de servidor, o abandónalo, y luego vuelve a empezar este.",
+  },
+  // A fault in Waitron: a box records one restriction, a repeat carries the same values, and nothing
+  // rewrites one.
+  "handover.restriction_conflict": {
+    en: "This server has already recorded that it handed over its work, with different details, so the record was not changed. This is a fault in Waitron.",
+    es: "Este servidor ya registró que pasó su trabajo a otro, con otros datos, así que el registro no se ha cambiado. Es un fallo de Waitron.",
+  },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",
     es: "Este aviso ya no existe. Actualiza la lista.",

@@ -324,6 +324,7 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/fiscal-none",
   "@waitron/recovery-pack",
   "@waitron/node-db",
+  "@waitron/handover",
 ];
 
 /**

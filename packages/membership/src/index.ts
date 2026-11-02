@@ -22,6 +22,7 @@ export { generateNodeKeyPair, signBytes, verifyBytes } from "./crypto.js";
 export { endorseKey, verifyEndorsement } from "./endorsement.js";
 
 export {
+  endorsedKeyOf,
   isMembershipDocument,
   signDocumentBody,
   verifyDocumentSigner,

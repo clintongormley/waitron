@@ -122,6 +122,7 @@ describe("configuration", () => {
       "fiscal-none",
       "recovery-pack",
       "node-db",
+      "handover",
       "provisioning",
       "ui",
       "dashboard-kit",

@@ -207,6 +207,9 @@ importers:
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../../packages/fiscal-verifactu
+      '@waitron/handover':
+        specifier: workspace:*
+        version: link:../../packages/handover
       '@waitron/identity':
         specifier: workspace:*
         version: link:../../packages/identity
@@ -1283,6 +1286,34 @@ importers:
         specifier: ^4.1.12
         version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
+  packages/handover:
+    dependencies:
+      '@waitron/membership':
+        specifier: workspace:*
+        version: link:../membership
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
+    devDependencies:
+      '@stryker-mutator/core':
+        specifier: ^10.1.1
+        version: 10.1.1(@types/node@26.6.6)
+      '@stryker-mutator/vitest-runner':
+        specifier: ^10.1.1
+        version: 10.1.1(@stryker-mutator/core@10.1.1(@types/node@26.6.6))(vitest@4.1.12)
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
+      '@vitest/coverage-v8':
+        specifier: ^4.1.12
+        version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
+      typescript:
+        specifier: ^7.0.0
+        version: 7.0.2
+      vitest:
+        specifier: ^4.1.12
+        version: 4.1.12(@types/node@26.6.6)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/identity:
     dependencies:
       '@simplewebauthn/server':
@@ -1537,6 +1568,9 @@ importers:
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@waitron/sync-enrolment':
         specifier: workspace:*
         version: link:../sync-enrolment

@@ -9,7 +9,7 @@ describeSchemaConformance({
   subjectName: "node",
   subject: NODE_MIGRATIONS,
   declarations: barrel,
-  // False: `node_mode`'s two role columns are plain `label()`s narrowed by `$type`; their named
-  // checks hold the values, and `../schema.test.ts` writes through one of them.
-  declaresClosedVocabularies: false,
+  // The handover tables' role, scenario, state and kind columns are `enumText`. `node_mode`'s two
+  // role columns are plain `label()`s narrowed by `$type`, so this suite does not see them.
+  declaresClosedVocabularies: true,
 });

@@ -6,7 +6,8 @@ import { blankComments } from "../packages/shared/src/source-comments.js";
 /**
  * The tables the application code may read and never write: venue.db's `tenants`, `nodes` and
  * `deployment`, and node.db's `node_mode`, `node_mirror_link`, `node_primary_key`,
- * `node_recovery_key` and `node_signing_key`.
+ * `node_recovery_key`, `node_signing_key`, `node_handover_operations`, `node_handover_events` and
+ * `node_handover_restriction`.
  *
  * NOTHING BUT THIS FILE REFUSES THEM. SQLite has no roles and no grants, so the rule survives only
  * as a convention over source text, and this guard is the whole of its enforcement.
@@ -191,6 +192,9 @@ describe("no source writes a table the application role may only read", () => {
   it("keeps every table whose writes belong in the named provisioning or identity files", () => {
     expect(TABLES.slice().sort()).toEqual([
       "deployment",
+      "node_handover_events",
+      "node_handover_operations",
+      "node_handover_restriction",
       "node_mirror_link",
       "node_mode",
       "node_primary_key",

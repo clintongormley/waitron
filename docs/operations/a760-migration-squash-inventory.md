@@ -11,6 +11,9 @@ _2026-11-01: A947 slice 3a removed the `node_roles` and `mirror_config` tables l
 added the `node` migration set (`packages/node-db`), applied to `node.db`; refresh the inventory
 for both._
 
+_2026-11-02: A1018 slice 1 added the `node` set's second migration, `0001_chubby_dust`, after
+`0000_adorable_zarek`; it creates the three `node_handover_*` tables._
+
 Pinned tree: `13bb9ec1aa4d49eac4903c22b90b39c560085c93`, 16 October 2026. Read this with the [operator procedure](a760-migration-squash.md). Refresh it at the execution freeze; it does not cover later merges.
 
 ## What was run
