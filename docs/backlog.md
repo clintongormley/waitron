@@ -6476,6 +6476,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   refuses with `mirror.venue_not_copied` before a node write when no venue row exists, including
   with the node's venue foreign key removed. Pending-adoption files no longer write or forward a
   location id; an old-shaped file is read without a reset. S25 still needs to drop the key.
+  S6 landed (#2394): venue-service's service side (departments, zones, sale policy, order
+  contexts, receipts, transfers, provisioning, kitchen screens and notices, station times, routing,
+  floor layouts and the delete paths) no longer narrows by location; its exported functions keep
+  their scope parameter as an unread `_cfg` until S18 removes it.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](superpowers/plans/2026-11-01-a1301-remove-location.md),
   [working-time plan](superpowers/plans/2026-11-02-a1301-working-time-slices.md)
@@ -6490,6 +6494,12 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   says a slice "may not delete that case" and lands after the owning slice; the watcher's standing
   rule of 2026-11-01 lets a slice delete another slice's cross-location half instead, as S9 (#2389)
   did for `floor-delete.test.ts`'s last case on S7's behalf. Reword the plan's rule to match.
+
+- **A1301 S8: reword the week routes' "another venue's" season refusal.**
+  `docs/developers/conventions-data.md` (the menu-week and closed-week routes paragraph) says an
+  unknown or another venue's season is refused `season.not_found`. The check still exists, in
+  `packages/venue-service/src/season-weeks.ts`, but S6 (#2394) deleted the tests that set up another
+  venue. When S8 removes that check, drop "or another venue's" from the sentence.
 
 - **The venue's menu routes are named unlike their neighbours.** S5 moved them to
   `/management-api/venue/…`, as the A1301 plan chose, while the other venue routes are one
