@@ -570,7 +570,7 @@ export class TillPassScreen extends LitElement {
   #empty(boardId: BoardId): TemplateResult | typeof nothing {
     const { held, toFire, inProgress, ready } = this.board;
     if (held.length + toFire.length + inProgress.length + ready.length > 0) return nothing;
-    return html`<p class="empty" role="status" slot="status" data-empty>
+    return html`<p class="empty" slot="status" data-empty>
       ${t(boardId === "pass" ? "expo.watcher_empty" : "expo.empty")}
     </p>`;
   }
@@ -630,7 +630,7 @@ export class TillPassScreen extends LitElement {
         const { opener } = (event as CustomEvent<{ opener: HTMLElement }>).detail;
         this.columnsWindow = { boardId, opener };
       }}
-      >${this.#lead("lead")}${this.#unavailable("status")}${this.#empty(boardId)}
+      >${this.#lead("lead")}${this.#unavailable("status")}
       <p class="stale" role="status" slot="status" ?data-stale=${this.stale}>
         ${this.stale ? html`<till-stale-since .since=${this.#lastGoodAt}></till-stale-since>` : nothing}
       </p>
@@ -662,7 +662,7 @@ export class TillPassScreen extends LitElement {
               ${t("station.table_changed")}
             </p>`
           : nothing
-      }</till-pass-board
+      }${this.#empty(boardId)}</till-pass-board
     >`;
   }
 

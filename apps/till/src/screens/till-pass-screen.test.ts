@@ -717,6 +717,17 @@ describe("A773 pass screen", () => {
       expect(el.shadowRoot!.querySelector("[data-empty]")!.getAttribute("slot")).toBe("status");
     });
 
+    it("draws the words last in the status slot, after the stale line, and as no live region", async () => {
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockRejectedValue({ code: "server.internal" }),
+      });
+      const el = await mount({ api, deviceMode: true });
+      const status = [...boardOf(el)!.querySelectorAll(':scope > [slot="status"]')];
+      expect(el.shadowRoot!.querySelector(".stale[data-stale]")).not.toBeNull();
+      expect(status.at(-1)!.hasAttribute("data-empty")).toBe(true);
+      expect(status.at(-1)!.hasAttribute("role")).toBe(false);
+    });
+
     it.each([
       [[chosen("pass")], "expo.watcher_empty"],
       [[chosen("pass_monitor")], "expo.empty"],
