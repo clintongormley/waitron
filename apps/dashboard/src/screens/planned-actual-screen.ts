@@ -26,6 +26,9 @@ export class PlannedActualScreen extends LitElement {
         font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
       }
+      .pickers {
+        display: flex;
+      }
       .picker {
         margin-bottom: var(--wt-space-4);
       }
@@ -141,15 +144,17 @@ export class PlannedActualScreen extends LitElement {
 
   #renderBody(): TemplateResult {
     return html`
-      <wt-input
-        class="picker"
-        type="date"
-        data-test="week-picker"
-        name="week"
-        label=${t("planned.week")}
-        .value=${this.weekMonday}
-        @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#onSelectWeek(e)}
-      ></wt-input>
+      <div class="pickers">
+        <wt-input
+          class="picker"
+          type="date"
+          data-test="week-picker"
+          name="week"
+          label=${t("planned.week")}
+          .value=${this.weekMonday}
+          @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#onSelectWeek(e)}
+        ></wt-input>
+      </div>
       ${
         this.rows.length === 0
           ? html`<p class="muted" data-test="empty">${t("planned.empty")}</p>`

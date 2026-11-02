@@ -1,5 +1,6 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -205,6 +206,20 @@ describe("planned-actual-screen week field", () => {
     );
     await flush(el);
     expect(api.getPlannedVsActual).toHaveBeenLastCalledWith("2026-04-06", "2026-04-13");
+  });
+
+  it("keeps the week field at its own width on a wide screen", async () => {
+    await page.viewport(1280, 800);
+    try {
+      const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      const week = el.shadowRoot!.querySelector("wt-input[data-test=week-picker]")!;
+      expect(week.getBoundingClientRect().width).toBeLessThan(el.getBoundingClientRect().width / 2);
+    } finally {
+      await page.viewport(window.innerWidth, window.innerHeight);
+    }
   });
 });
 
