@@ -40,6 +40,12 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { mountManagementApi } from "./management-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
+import {
+  createDepartment,
+  createServiceZone,
+  setProfileServiceAccess,
+} from "@waitron/venue-service";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -807,7 +813,7 @@ describe("A773 pass release: route", () => {
     });
   });
 
-  it("releases from a till pass only for the person signed in on it, recording their kitchen work", async () => {
+  it("releases from a till pass only for the person signed in on it, recording their kitchen work, and refuses another person's or an out-of-zone retry", async () => {
     const f = await releaseFixture({ attendance: true });
     const [profile] = await inTx(f.v, (tx) =>
       tx
@@ -837,6 +843,41 @@ describe("A773 pass release: route", () => {
     expect(facts.map((fact) => [fact.key, fact.personId, fact.kind, fact.outcome])).toEqual([
       [`service:${seated.tabId}:${ask.submissionId}`, person!.id, "order", "qualifying"],
     ]);
+
+    const [cook] = await inTx(f.v, (tx) =>
+      tx
+        .insert(persons)
+        .values({ displayName: "Second cook", pinHash: fixturePinHash("2468"), role: "staff" })
+        .returning({ id: persons.id }),
+    );
+    const cookToken = (
+      await inTx(f.v, (tx) =>
+        loginWithPin(tx, { deviceId: till.id, personId: cook!.id, pin: "2468" }),
+      )
+    ).token;
+    await refused(
+      f,
+      () => release(f.app, `${till.cookie}; ${SESSION_COOKIE}=${cookToken}`, ask),
+      409,
+      { code: "submission.id_reused", params: { submissionId: ask.submissionId } },
+    );
+
+    await inTx(f.v, async (tx) => {
+      const deli = await createDepartment(tx, f.v.cfg, { name: "Deli", orderStart: "counter" });
+      const zone = await createServiceZone(tx, f.v.cfg, {
+        name: "Deli counter",
+        departmentId: deli.id,
+      });
+      await setProfileServiceAccess(tx, f.v.cfg, profile!.id, {
+        departmentId: deli.id,
+        allowedZoneIds: null,
+        startingZoneId: zone.id,
+      });
+    });
+    const again = `${till.cookie}; ${SESSION_COOKIE}=${await tokenOn(till.id)}`;
+    await refused(f, () => release(f.app, again, ask), 403, {
+      code: "service_zone.not_allowed",
+    });
   });
 
   it("answers a retry with its first result, even after the burger is served, and refuses a changed one", async () => {
@@ -884,6 +925,31 @@ describe("A773 pass release: route", () => {
         code: "submission.id_reused",
         params: { submissionId: ask.submissionId },
       });
+
+    await inTx(f.v, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, f.v.cfg, profileId, {
+        station: { stationIds: null, zoneIds: null },
+      }),
+    );
+    await refused(f, () => release(f.app, display.cookie, ask), 401, {
+      code: "device.unauthorized",
+    });
+  });
+
+  it("releases ids sent in any order, and answers their retry in the card's order with the first result", async () => {
+    const f = await releaseFixture();
+    const display = await kdsOn(f, await f.savedProfile(FULL));
+    await requested(f, 2);
+    const [toFire] = await card(f.app, display.cookie);
+    const ask = askOf(toFire!);
+    expect(ask.ticketItemIds).toHaveLength(2);
+    expect(ask.ticketItemIds).toEqual([...ask.ticketItemIds].sort());
+    const released = { status: 200, body: { releasedTicketItemIds: ask.ticketItemIds } };
+    for (const ticketItemIds of [[...ask.ticketItemIds].reverse(), ask.ticketItemIds]) {
+      const answer = await release(f.app, display.cookie, { ...ask, ticketItemIds });
+      expect({ status: answer.status, body: await answer.json() }).toEqual(released);
+    }
+    expect(await f.jobs()).toBe(1);
   });
 
   it("refuses a card read before a partial serve as changed", async () => {
