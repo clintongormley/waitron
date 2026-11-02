@@ -22,12 +22,11 @@ The till entry’s
 no longer matches “Three till handlers still leave a failed list refresh unhandled”.
 Retarget the link during the till backlog cleanup; keep the open handlers entry.
 
-Two other index links need the same cleanup: A555 still targets the fiscal detail's old
-`design-proposed-2026-10-21` heading, while that heading now says `DESIGN APPROVED`;
+One other index link needs the same cleanup:
 the payments link still names “The card refund path records only after the provider call,
 with a fresh key each time”, while its detail now says “The reconciler's card reversal records
-only after the provider call, with a fresh key each time”. Retarget both without changing
-their open work, then check the index's local heading links.
+only after the provider call, with a fresh key each time”. Retarget it without changing
+its open work, then check the index's local heading links.
 
 ## Retain failure screenshots for long browser test names
 
@@ -1310,3 +1309,76 @@ its legitimate negative/historical controls. Add the missing escaped-prefix case
 control first. This branch records the scanner gap; it does not claim a new guard fix.
 The two-way probe and blocked-hook output are in Lane E
 `receipts/a696-resume-20261101/retired-setting-escape-control.log` and `push-1.log`.
+
+## A1306. Rewrite git history to drop the development artifacts
+
+Owner, 2026-11-02: "there is no point in keeping these development artifacts as history".
+Mock-ups and screenshots left the tree on 2026-11-02, but history still holds 2,327 image
+versions, about 300 MB compressed of a 584 MB pack (measured that day with `git rev-list
+--objects --all` and `git cat-file --batch-check`). Rewrite `main` with them removed, at a moment
+when the lanes are paused, such as beside A760's squash. Every clone, worktree, lane and open pull
+request then restarts from the rewritten `main`, and old commit links stop resolving. Decide then
+whether other development artifacts (finished specs and plans, look reports) go too.
+
+## A1251. Finish qualifying and reviewing historical PRs that skipped the Claude run-it review
+
+Exclude documentation-only changes, verified test-data/name renames and changes already reviewed.
+Review each remaining squash against its parent and check findings against current main before
+opening a repair. Check refusal wording against independent expectations kept in the app's
+`i18n` area.
+Use the [qualified public-connection wording receipt](self-service-refusals.md#tls-repair)
+without treating browser refusal checks as certificate-recovery qualification.
+Check the later regional demo guides’ photo-library name claims against image metadata and the
+screen’s content-language selection.
+Repair the setup-test helper’s cleanup after a listener-readiness refusal, and retain the
+shared port fixture’s multiple-listener limit. Keep the IPP clock-driver limit explicit when
+changing the polling continuation, and check that a failed fixture’s print call settles after
+teardown. Strengthen the Spanish exhausted-cleanup check so restoring the installer referral
+fails it. [Setup cleanup](#a1251-setup-test-cleanup-after-a-listener-readiness-refusal),
+[Spanish cleanup guidance](#a1251-spanish-exhausted-cleanup-test-checks-mapping-only).
+Give the archive-settings advice its own condition so it does not follow a failed key check as
+another recovery step. Strengthen its Spanish checks to reject a support referral and require
+leaving without applying. [Archive settings findings](#a1251-archive-settings-advice-needs-its-own-condition).
+
+## A1213. Does a re-run till shard's report reach `test-till-merge`?
+
+Seen once, not proven, in A1125's CI (#2238, 2026-10-29), while the merge still used the download
+action. Since A1216 the merge runs `scripts/download-coverage-blobs.mjs`, which keeps the
+highest-id copy of each report name. Check on a throwaway branch (fail one shard on purpose,
+re-run it, read which artifact id the helper downloads) that the highest id is the re-run's. If
+it is, delete this entry; if not, make the helper keep the re-run's copy.
+
+## Two setup-app checks for an absent error message cannot fail (left open by A1176)
+
+`apps/setup/src/setup-app-missing-database.test.ts`'s "a damaged record reaches the
+confirmation" case and the activity re-read case that checks for `initialOwnerStrings.en.error`
+read the page's own text, but those messages are drawn only inside `wt-form-actions`' shadow
+root. Read the form errors too, as `shown()` in `setup-app-held-refusals.test.ts` does, and
+prove each check by injecting the message. Found by reading, not run.
+
+## The mutation report downloads still use `actions/download-artifact`
+
+Left open by A1216; shared added by A1272. `mutation-ui-core-aggregate`, `mutation-ui-aggregate`,
+`mutation-db-aggregate` and CI's `mutation-shared-aggregate` fetch
+`mutation-report-*-shard-*` directories. The coverage downloader accepts only coverage blob
+names and writes one flat directory, while the mutation aggregate counts report directories.
+Measure the mutation downloads before replacing their bounded action retries.
+[Receipt](../developers/ci-and-gates.md#a-completed-transfer-can-still-leave-the-download-action-alive).
+
+## A1307 follow-up: the file-progress reporter's tests set up a page with two near-copies of one helper
+
+`scripts/vitest-file-progress.test.mjs` gained a second page-and-module setup beside the
+existing one in #2395, and two of its new cases sit apart from the cases they extend. Fold the
+new setup into the existing helper and move the two cases beside their neighbours; no assertion
+changes.
+
+## Check that the nightly `mutation-db` shards now finish well inside 25 minutes
+
+A1309 (#2401) packs db's mutation shards by a committed per-file cost table
+(`packages/db/mutation-costs.json`, about 720 s of estimated work each) instead of by file size,
+and removed the test helper's reset checks whose mutants changed nothing and ran to Stryker's
+timeout. Pull-request CI never runs the nightly packing, so the first nightly `mutation.yml` run
+after 2026-11-02 is the proof: read each `mutation-db (N)` job's duration. A shard above about
+20 minutes means the table needs refreshing with `scripts/mutation-costs.mjs` from that run's
+reports (receipt in `docs/developers/ci-and-gates.md`, "db's mutation shards are packed by
+estimated cost").

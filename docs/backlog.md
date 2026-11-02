@@ -5971,13 +5971,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   starts a child is not checked. A fix also needs a `gnutimeout` stub in `ci-main-recovery.test.mjs`.
 
 - **A1306. Rewrite git history to drop the development artifacts** (owner, 2026-11-02: "there is
-  no point in keeping these development artifacts as history"). Mock-ups and screenshots left the
-  tree on 2026-11-02, but history still holds 2,327 image versions, about 300 MB compressed of a
-  584 MB pack (measured that day with `git rev-list --objects --all` and `git cat-file
-  --batch-check`). Rewrite `main` with them removed, at a moment when the lanes are paused, such as
-  beside A760's squash. Every clone, worktree, lane and open pull request then restarts from the
-  rewritten `main`, and old commit links stop resolving. Decide then whether other development
-  artifacts (finished specs and plans, look reports) go too.
+  no point in keeping these development artifacts as history"). Rewrite `main` with them removed,
+  at a moment when the lanes are paused, such as beside A760's squash.
+  [Detail](backlog/ci.md#a1306-rewrite-git-history-to-drop-the-development-artifacts).
 
 - **Real-source bundle tests repeat metadata work.**
   Measure selective shared setup and audit the remaining smaller build limits in the recovery
@@ -5987,21 +5983,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **A1251. Finish qualifying and reviewing historical PRs that skipped the Claude run-it review.**
   Exclude documentation-only changes, verified test-data/name renames and changes already reviewed.
   Review each remaining squash against its parent and check findings against current main before
-  opening a repair. Check refusal wording against independent expectations kept in the app's
-  `i18n` area.
-  Use the [qualified public-connection wording receipt](backlog/self-service-refusals.md#tls-repair)
-  without treating browser refusal checks as certificate-recovery qualification.
-  Check the later regional demo guides’ photo-library name claims against image metadata and the
-  screen’s content-language selection.
-  Repair the setup-test helper’s cleanup after a listener-readiness refusal, and retain the
-  shared port fixture’s multiple-listener limit. Keep the IPP clock-driver limit explicit when
-  changing the polling continuation, and check that a failed fixture’s print call settles after
-  teardown. Strengthen the Spanish exhausted-cleanup check so restoring the installer referral
-  fails it. [Setup cleanup](backlog/ci.md#a1251-setup-test-cleanup-after-a-listener-readiness-refusal),
-  [Spanish cleanup guidance](backlog/ci.md#a1251-spanish-exhausted-cleanup-test-checks-mapping-only).
-  Give the archive-settings advice its own condition so it does not follow a failed key check as
-  another recovery step. Strengthen its Spanish checks to reject a support referral and require
-  leaving without applying. [Archive settings findings](backlog/ci.md#a1251-archive-settings-advice-needs-its-own-condition).
+  opening a repair.
+  [Detail](backlog/ci.md#a1251-finish-qualifying-and-reviewing-historical-prs-that-skipped-the-claude-run-it-review).
 
 - **Spanish separately installed certificate guidance is checked only against its translation.**
   Add an independent check for address checking, stopping on a certificate warning and the page's
@@ -6026,18 +6009,13 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   [Reproduction](backlog/ci.md#retired-settings-after-a-source-escape).
 
 - **A1213. Does a re-run till shard's report reach `test-till-merge`?** Seen once, not proven, in
-  A1125's CI (#2238, 2026-10-29), while the merge still used the download action. Since A1216 the
-  merge runs `scripts/download-coverage-blobs.mjs`, which keeps the highest-id copy of each report
-  name. Check on a throwaway branch (fail one shard on purpose, re-run it, read which artifact id
-  the helper downloads) that the highest id is the re-run's. If it is, delete this entry; if not,
-  make the helper keep the re-run's copy.
+  A1125's CI (#2238, 2026-10-29), while the merge still used the download action.
+  [Detail](backlog/ci.md#a1213-does-a-re-run-till-shards-report-reach-test-till-merge).
 
 - **Two setup-app checks for an absent error message cannot fail** (left open by A1176).
-  `apps/setup/src/setup-app-missing-database.test.ts`'s "a damaged record reaches the
-  confirmation" case and the activity re-read case that checks for `initialOwnerStrings.en.error`
-  read the page's own text, but those messages are drawn only inside `wt-form-actions`' shadow
-  root. Read the form errors too, as `shown()` in `setup-app-held-refusals.test.ts` does, and
-  prove each check by injecting the message. Found by reading, not run.
+  Read the form errors too, as `shown()` in `setup-app-held-refusals.test.ts` does, and
+  prove each check by injecting the message.
+  [Detail](backlog/ci.md#two-setup-app-checks-for-an-absent-error-message-cannot-fail-left-open-by-a1176).
 
 - **The receipt-guests upgrade test reinstalls the append-only triggers itself** (left open by
   A1164, #2176). `packages/db/src/schema/sale-receipt-guests-upgrade.test.ts` calls
@@ -6047,12 +6025,9 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   `*-upgrade.test.ts` files with no shared helper.
 
 - **The mutation report downloads still use `actions/download-artifact`** (left open by
-  A1216; shared added by A1272). `mutation-ui-core-aggregate`, `mutation-ui-aggregate`,
-  `mutation-db-aggregate` and CI's `mutation-shared-aggregate` fetch
-  `mutation-report-*-shard-*` directories. The coverage downloader accepts only coverage blob
-  names and writes one flat directory, while the mutation aggregate counts report directories.
-  Measure the mutation downloads before replacing their bounded action retries.
-  [Receipt](developers/ci-and-gates.md#a-completed-transfer-can-still-leave-the-download-action-alive).
+  A1216; shared added by A1272). Measure the mutation downloads before replacing their bounded
+  action retries.
+  [Detail](backlog/ci.md#the-mutation-report-downloads-still-use-actionsdownload-artifact).
 
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).
@@ -6106,10 +6081,7 @@ under another key fall outside that check.
 - **Whether the checkout stalls were a GitHub-side incident remains unverified (A935).**
   A1178 adds checkout-stage traces and stored-pack measurements in CI and licence jobs;
   a hosted recurrence reached `fetch_refs` with an unfinished `index-pack`, without distinguishing
-  transfer from indexing. Suite jobs use depth one while change classification and sign-off retain
-  full history; full hosted runs passed with matching package test counts and coverage gates.
-  The 27 October bookings checkout and 28 October full-history and shallow checkouts exhausted
-  both attempts before running tests. Their underlying causes remain unknown.
+  transfer from indexing.
   [Detail](backlog/ci.md#whether-the-2026-10-20-checkout-stalls-were-a-github-side-incident-was-not-checked-a935).
 
 - **Investigate two full-run till browser failures seen during A669 validation.**
@@ -6200,10 +6172,9 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   [Detail](backlog/ci.md#a1305-the-dashboard-page-blocked-during-a-click-and-what-blocked-it-is-unknown).
 
 - **A1307 follow-up: the file-progress reporter's tests set up a page with two near-copies of one helper.**
-  `scripts/vitest-file-progress.test.mjs` gained a second page-and-module setup beside the
-  existing one in #2395, and two of its new cases sit apart from the cases they extend. Fold the
-  new setup into the existing helper and move the two cases beside their neighbours; no assertion
-  changes. Raised by #2395's convention review and left out of that PR.
+  Fold the new setup into the existing helper and move the two cases beside their neighbours; no
+  assertion changes.
+  [Detail](backlog/ci.md#a1307-follow-up-the-file-progress-reporters-tests-set-up-a-page-with-two-near-copies-of-one-helper).
 
 - **A1027 residual: the till shard's blocked operation is unknown.**
   [Detail](backlog/ci.md#the-till-shards-blocked-operation-is-unknown-a1027).
@@ -6297,15 +6268,10 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
   Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position.
 
-- **Check that the nightly `mutation-db` shards now finish well inside 25 minutes.** A1309
-  (#2401) packs db's mutation shards by a committed per-file cost table
-  (`packages/db/mutation-costs.json`, about 720 s of estimated work each) instead of by file size,
-  and removed the test helper's reset checks whose mutants changed nothing and ran to Stryker's
-  timeout. Pull-request CI never runs the nightly packing, so the first nightly `mutation.yml` run
-  after 2026-11-02 is the proof: read each `mutation-db (N)` job's duration. A shard above about
-  20 minutes means the table needs refreshing with `scripts/mutation-costs.mjs` from that run's
-  reports (receipt in `docs/developers/ci-and-gates.md`, "db's mutation shards are packed by
-  estimated cost").
+- **Check that the nightly `mutation-db` shards now finish well inside 25 minutes** (left open
+  by A1309, #2401). The first nightly `mutation.yml` run after 2026-11-02 is the proof: read each
+  `mutation-db (N)` job's duration.
+  [Detail](backlog/ci.md#check-that-the-nightly-mutation-db-shards-now-finish-well-inside-25-minutes).
 
 - **`mutation.yml` repeats one shard-and-merge job pair three times** — OPEN.
   [Detail](backlog/ci.md#mutationyml-repeats-one-shard-and-merge-job-pair-three-times).
