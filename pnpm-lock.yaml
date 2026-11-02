@@ -207,6 +207,9 @@ importers:
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../../packages/fiscal-verifactu
+      '@waitron/handover':
+        specifier: workspace:*
+        version: link:../../packages/handover
       '@waitron/identity':
         specifier: workspace:*
         version: link:../../packages/identity
