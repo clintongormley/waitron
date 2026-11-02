@@ -1,7 +1,8 @@
 // A Vitest reporter that prints which test FILE is running, so a CI job that hangs shows the file
 // it hung in. Vitest's default reporter, off a terminal, names a file only once it finishes. In a
 // browser project it also attaches Chrome's debugger to each test page, and pauses a page whose
-// file has run 60 seconds to print its JavaScript stack.
+// file has reported no case or hook for longer than its timeouts allow plus 60 seconds, to print
+// its JavaScript stack.
 
 const PREFIX = "[file-progress]";
 const STACK = `${PREFIX} stack:`;
@@ -21,6 +22,10 @@ function seconds(ms) {
 
 function oneLine(text) {
   return String(text).replace(/[\r\n\u2028\u2029]/g, " ");
+}
+
+function limit(ms) {
+  return typeof ms === "number" ? ms : undefined;
 }
 
 function send(cdp, method, params) {
@@ -58,6 +63,8 @@ export default class FileProgressReporter {
     this.running = new Map();
     this.modules = new Map();
     this.sampled = new Set();
+    this.progress = new Map();
+    this.unbounded = new Set();
     this.unshown = new Set();
     this.pages = new Map();
     this.timer = undefined;
@@ -84,14 +91,17 @@ export default class FileProgressReporter {
   }
 
   onTestModuleCollected(testModule) {
+    this.progressed(testModule);
     this.trace(testModule, "collected");
   }
 
   onTestCaseReady(testCase) {
+    this.progressed(testCase.module, { caseTimeout: limit(testCase.options?.timeout) });
     this.trace(testCase.module, "case-start", { name: testCase.fullName });
   }
 
   onTestCaseResult(testCase) {
+    this.progressed(testCase.module, { caseTimeout: undefined });
     this.trace(testCase.module, "case-end", {
       name: testCase.fullName,
       state: testCase.result().state,
@@ -108,7 +118,13 @@ export default class FileProgressReporter {
 
   hook(phase, { name, entity }) {
     const testModule = entity.type === "module" ? entity : entity.module;
+    this.progressed(testModule);
     this.trace(testModule, phase, { hook: name, name: entity.fullName });
+  }
+
+  progressed(testModule, step = {}) {
+    const key = label(testModule);
+    this.progress.set(key, { ...this.progress.get(key), ...step, at: this.now() });
   }
 
   trace(testModule, phase, details = {}) {
@@ -122,6 +138,7 @@ export default class FileProgressReporter {
     const key = label(testModule);
     const startedAt = this.running.get(key);
     this.running.delete(key);
+    this.progress.delete(key);
     if (startedAt === undefined) {
       this.write(`${PREFIX} end ${key} ${testModule.state()}`);
       return;
@@ -145,6 +162,7 @@ export default class FileProgressReporter {
   started(testModule) {
     this.attachPages();
     const key = label(testModule);
+    this.progressed(testModule);
     if (this.running.has(key)) return;
     this.running.set(key, this.now());
     this.modules.set(key, { moduleId: testModule.moduleId, project: testModule.project });
@@ -198,14 +216,37 @@ export default class FileProgressReporter {
   sampleStalledFiles() {
     const at = this.now();
     for (const [key, startedAt] of this.running) {
-      const elapsed = at - startedAt;
-      if (elapsed < this.stackAfterMs || this.sampled.has(key)) continue;
-      const head = `${key} has run ${seconds(elapsed)};`;
+      const silent = at - this.progress.get(key).at;
+      if (silent < this.stackAfterMs || this.sampled.has(key)) continue;
+      const head = `${key} has run ${seconds(at - startedAt)};`;
+      const bound = this.silenceAllowed(key);
+      if (bound === undefined) {
+        this.noteUnbounded(key, head);
+        continue;
+      }
+      if (silent < bound) continue;
       this.sampleFile(key, head).catch((error) => {
         this.sampled.add(key);
         this.stack(`${head} sampling failed: ${error?.message ?? error}`);
       });
     }
+  }
+
+  // A healthy page reports a case or hook within these, because Vitest's own timer fails a stuck
+  // case; onTestFinished callbacks run under hookTimeout before the case reports. Undefined when a
+  // timeout of 0 leaves the step unbounded.
+  silenceAllowed(key) {
+    const config = this.modules.get(key).project.config ?? {};
+    const { caseTimeout } = this.progress.get(key);
+    const timeouts = [caseTimeout ?? limit(config.testTimeout), limit(config.hookTimeout)];
+    if (timeouts.includes(0)) return undefined;
+    return timeouts.reduce((sum, ms) => sum + (ms ?? 0), this.stackAfterMs);
+  }
+
+  noteUnbounded(key, head) {
+    if (this.unbounded.has(key) || !this.modules.get(key).project.browser?.provider?.pages) return;
+    this.unbounded.add(key);
+    this.stack(`${head} a time limit of 0 bounds nothing, so its page is not paused`);
   }
 
   async sampleFile(key, head) {
@@ -250,9 +291,12 @@ export default class FileProgressReporter {
       return;
     }
     debuggee.waiters = debuggee.waiters.filter((pending) => pending !== waiter);
+    // A pause left armed would stop the page's next script, in whatever test runs it.
     const answer = await this.within(
       ANSWER_WAIT_MS,
-      send(debuggee.cdp, "Runtime.evaluate", { expression: "0" }),
+      send(debuggee.cdp, "Debugger.disable")
+        .then(() => send(debuggee.cdp, "Debugger.enable"))
+        .then(() => send(debuggee.cdp, "Runtime.evaluate", { expression: "0" })),
     );
     const reply =
       answer === TIMED_OUT
