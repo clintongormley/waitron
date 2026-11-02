@@ -8,6 +8,46 @@
 > transaction), and a spare checks the main box's certificate fingerprint before it receives the
 > venue's keys ([slice 3a plan](../plans/2026-10-31-a947-3a-node-db.md)).
 
+> **A1018, 2 November 2026: what the simple handover changes here.** The
+> [A1018 design](2026-10-23-a1018-simple-handover-design.md) (owner-approved 24 October) and its
+> [build plan](../plans/2026-11-02-a1018-handover-build.md) amend six parts of this design. The
+> sections not named here stand. Slice numbers below are the build plan's.
+>
+> - **§6.3 (what the spare does):** step 1 keeps "stop following, apply, verify, then check the
+>   person". Step 2's promotion now runs only after the A1018 emergency declaration is recorded in
+>   the spare's `node.db` (Slice 7); the declaration's audit fields are the plan's "Emergency
+>   declaration" format. Step 3's "starts filing … the old main box's records that reached it" is
+>   unchanged and now explicitly sole: the old box never files again. The minute name is the next
+>   free one, as §6.5 already says for a switch (the plan's Q2 default).
+> - **§6.4 (the hand-over):** replaced by A1018's controlled handover: a stepdown that is saved and
+>   survives a reboot, a final copy compared against a signed indicator (a small signed summary of
+>   the old box's final state), the spare's saved acceptance, the old box's relinquishment, then
+>   activation, whose approval records "relinquished", not "offline" (Slices 2, 4, 5a and 5). "Waits
+>   until its copy holds exactly that change" is replaced by the indicator's snapshot digest. A lost
+>   answer never lets the old box resume.
+> - **§7 item 1:** the boot check asks every other box the chart lists that finished joining, by a
+>   signed query, and a till hands over a newer chart (Slice 3). «Seguir sin el equipo de reserva»
+>   must name the other box and confirm it is switched off and that no other recovery is running,
+>   and is refused when this box's `node.db` holds a handover (A1018 design §4, point 1).
+> - **§7.1 (the tail):** fiscal-only. The batch carries tax records, their chain and filing rows,
+>   `envio_flujo`, every AEAT answer and every unanswered send — never sales, orders, payments,
+>   cash, stock or printing rows, which stay in the returning box's archive. The topology design's
+>   "`ledger` tables only" tail no longer applies to A947. Kept: the full-state batch, the frozen
+>   sender, identical retries, the per-chain pause while a batch applies, a filing case where two
+>   finished states disagree, and the rule that the receiver files and the sender files nothing.
+>   The S2 re-run (5b) is amended to the fiscal-only batch, with a third control: a batch cut back
+>   to missing records only (Slice 9). Records the spare never saw are kept in a separate store and
+>   filed from there, sharing the drain's AEAT wait and chain order (Slice 11).
+> - **§7.2 (becoming the spare):** check 1 is A1018's return receipt, for a controlled handover too
+>   (its batch holds no records). Check 3's archive keeps every non-fiscal row. The archive is
+>   **not** deleted after 90 days while any reconciliation item or filing case naming one of its
+>   records is open, and retention otherwise follows A664's policy (A1018 design §5). The
+>   manager's override still reaches check 2 only.
+> - **§11:** 4e → Slices 2, 4, 5a, 5 and 6; 5a → Slice 3; 5b → Slice 9; 5c → Slices 10 and 11;
+>   5d → Slice 13. 4b keeps "stop following" and the in-memory passkey challenge, and calls Slice
+>   7's declaration and activation. A764's collection owner, which §6.3 left to the switch slice, is
+>   Slice 4b. 3b, 3c, 4c, 4d and 5e are unchanged.
+
 # A947 — Go-live on two local boxes: a spare box that takes over
 
 **Date:** 2026-10-21, revised twice the same day for the owner's answers, amended 2026-10-22.
@@ -682,6 +722,8 @@ judge it.
 
 ### 6.3 What the spare does
 
+> **A1018, 2026-11-02:** step 2 now waits for a recorded emergency declaration, and step 3's filing is the spare's alone — see the dated A1018 block at the top.
+
 In this order, each step refusing cleanly before the next (the existing promotion's discipline):
 
 1. **Stops following**, applies what its store already holds, runs `PRAGMA integrity_check` and the
@@ -731,6 +773,8 @@ re-open it. A card payment in flight when the main box died is the open "provide
 ownership" question (A764), which this design does not settle and the switch slice must.
 
 ### 6.4 The hand-over: when the main box still answers
+
+> **A1018, 2026-11-02:** replaced by A1018's controlled handover — see the dated A1018 block at the top.
 
 A main box that is up but failing — disk filling, a broken printer port, the owner wanting to swap
 the hardware — can **hand over** without losing a second. The spare asks the main box to stop: the
@@ -1422,6 +1466,8 @@ sheet's key, and no longer its code.
 
 ## 7. When the old main box comes back
 
+> **A1018, 2026-11-02:** item 1's boot check and «Seguir sin el equipo de reserva» are amended — see the dated A1018 block at the top.
+
 Mock-up 4. The old main box powers on still believing it is the main box. Two things must happen
 before it can do any harm, and **both are structural, not a runbook step:**
 
@@ -1459,6 +1505,8 @@ stream into; its database still holds everything, which is what the decision pro
 topologies the decision applies as written.
 
 ### 7.1 The tail, and the fix for the failed prototype scenario
+
+> **A1018, 2026-11-02:** the tail is fiscal-only, and the S2 re-run gains a third control — see the dated A1018 block at the top.
 
 The topology design's tail shipper (§5.2) stands: one direction, once per return, `ledger` tables
 only, rows keyed by the sender's node, parents before children, applied in one transaction. The
@@ -1507,6 +1555,8 @@ arrives with the tail. Both are named for slice 4b's tests, against the drain's 
 handling, since the rig's stand-in for AEAT is not AEAT.
 
 ### 7.2 Becoming the new spare, by itself
+
+> **A1018, 2026-11-02:** check 1 is A1018's return receipt, and the archive outlives any open reconciliation item or filing case — see the dated A1018 block at the top.
 
 The owner, question 3: "Can it check the health status of the new primary and then decide whether
 to wipe itself automatically?" Yes. Once its tail is handed over, the returning box **wipes itself
@@ -1663,6 +1713,8 @@ This design uses the pointer in the spare's store as the main box's outside witn
 adopts W41s-10b's format when it lands rather than inventing one.
 
 ## 11. Build order: slices 3–5, as pull requests
+
+> **A1018, 2026-11-02:** 4e, 5a, 5b, 5c and 5d are mapped to A1018's build slices — see the dated A1018 block at the top.
 
 Each line is one pull request. **Fiscal** ones wait for the owner to land (lanes land their own
 pull requests except truly fiscal ones, owner 2026-10-21). Every slice adds its step to the stream
