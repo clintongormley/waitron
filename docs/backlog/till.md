@@ -987,6 +987,26 @@ identity remains sub-project C of the
 Handheld actions follow the profile: placing, collecting, cancelling, cash, the drawer, integrated
 card payment and printing need their respective current profile actions.
 
+## Session-only writes without a profile-action gate
+
+The A941 whole-branch review found three writes without a profile-action gate, outside its
+profile/capability-route audit: `POST /api/sales/:id/receipt/handover`,
+`POST /api/tables/:id/cleared` and `PUT /api/service-zones/:zoneId/zone-extension`.
+A separate loopback HTTP probe on A941 head `d70bfe71cb` returned, respectively,
+`404 working_order.not_found`, `404 table.not_found` and `403 authorization.not_permitted`
+with only a real staff-session cookie. Adding its enrolled-device cookie gave the same answers;
+removing the staff cookie gave `401 session.required`. This proves admission to the later checks,
+not a successful write. The candidate probe's three expected `401 device.unauthorized` checks
+failed. These handlers are unchanged from the captured main `fe080412c5`; their admission calls
+trace to October commits in `git blame`.
+
+Next, decide and test request-device admission for those routes without weakening their existing
+permission, zone or business checks. Also probe device active-profile/zones/equipment writes,
+box-clock challenge/confirmation and schedule writes through their real mounts. The review's
+harness did not mount the device and clock APIs; their request-device admission is unverified.
+These are pending audits, not deliberate session-only exceptions. A941 changes neither these
+handlers nor their contracts.
+
 ## Malformed sale and cancellation bodies
 
 A941's 2026-10-21 loopback HTTP probe on `dc1772c4dd147e65ff2c46251b0dfe6d5f60a644`
@@ -1476,8 +1496,8 @@ whether those reads should follow today's map once a group is left.
 
 ## Decisions and deliberate limits
 
-- **Request-device proof on till actions (A941, device enrolment design).** Authenticate the enrolled
-  device and match it to the PIN session. Keep management order reprints and invoice delivery
+- **Request-device proof on profile-gated till actions, payments, refunds and printing (A941,
+  device enrolment design).** Authenticate the enrolled device and match it to the PIN session. Keep management order reprints and invoice delivery
   available through their management session without a device cookie. Request-device proof is
   passive; session resolution owns whether the request records activity.
 

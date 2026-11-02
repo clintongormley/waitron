@@ -3158,10 +3158,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **Location-consistency guard** — nothing enforces that a sale-capable device's own location
   (`devices.location_id`) is the box's configured location. Guard at enrol or first sale.
 
-- **Maintain a route-to-profile-action table and qualify printer identity.** The request-device
-  proof is in place; a guard that walks every route's profile action and the enrolment design's
-  printer-identity work remain separate.
+- **Maintain a route-to-profile-action table and qualify printer identity.** A guard that walks
+  every route's profile action and the enrolment design's printer-identity work remain separate.
   [Detail](backlog/till.md#till-route-to-profile-checks-and-printer-identity).
+
+- **Audit session-only writes without a profile-action gate.** Receipt handover, table clearing
+  and zone extension reach their own lookup or permission refusal without a device cookie.
+  Check the device-settings, clock-confirmation and schedule routes too; A941 did not qualify them.
+  [Detail](backlog/till.md#session-only-writes-without-a-profile-action-gate).
 
 - **Malformed sale and cancellation bodies answer 500.** With an authenticated, permitted till,
   `POST /api/sales` with `{}` or `{"lines": []}`, and
