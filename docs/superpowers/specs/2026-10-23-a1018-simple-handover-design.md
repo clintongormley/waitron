@@ -1,3 +1,25 @@
+> **Cloud agreement pinned, 2 November 2026 (build plan, Slice 0).** The signed contract at
+> Cloud `08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec` still hashes to the value recorded below.
+> Run on 2026-11-02:
+>
+> ```
+> $ gh api 'repos/waitron-io/waitron-cloud/contents/docs/waitron-integration-contract.md?ref=08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec' --jq .content | base64 -d | shasum -a 256
+> 157556c31753ccf64cc9f8f0a7144f20683325231d212cd344e259b644366d02  -
+> ```
+>
+> The A1018 section is unchanged on Cloud `main`: the same file fetched without `ref` (Cloud
+> `main` at `7b8ffec5b68d169e4e6c3d340e5bea67d993dd93`), each copy cut from
+> `## Handover between local and hosted machines: A1018` up to the next `## ` heading, and the two
+> cuts compared with `diff`. The pinned cut's 194 lines match the first 194 lines of `main`'s;
+> `main` adds only a `### A951 routing revision 2 response, 2026-10-23 (D136)` subsection after
+> them, which is about A951.
+>
+> Formats are local-only, version 1, in the
+> [build plan](../plans/2026-11-02-a1018-handover-build.md#formats-local-only-version-1); the
+> contract qualifies no wire format (`:1387`: "No wire format or runtime behaviour is qualified by
+> this agreement"). The authentication bridge, the provider-resource field, a hosted copy's
+> identity and the binding of Cloud's resource journal wait for joint specification with Cloud.
+
 > **Owner design approval, 24 October 2026, 04:07.** The owner approved the
 > revised Harbour Kitchen handovers in §§8–9 and the retained defaults in §§3, 5
 > and 7, as published at Waitron `2c13c7f55dd53a6a7b4d4423ccdc166df5af7397`.
