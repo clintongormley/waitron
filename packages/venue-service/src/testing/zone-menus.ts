@@ -1,6 +1,6 @@
 import { readBusinessDayScheduleRevision } from "../business-day-schedule.js";
 import { and, asc, eq } from "drizzle-orm";
-import { catalogues, locations, type Transaction } from "@waitron/db";
+import { catalogues, readVenueClock, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod, updateMenuPeriod } from "../menu-timetable.js";
 import { menuPeriods, menuPeriodStaffMenus } from "../schema/menus.js";
@@ -72,11 +72,7 @@ export async function offerMenuThroughZone(
           ),
         );
   }
-  const [location] = await tx
-    .select({ dayCutover: locations.dayCutover })
-    .from(locations)
-    .where(eq(locations.id, cfg.locationId));
-  const start = location!.dayCutover.slice(0, 5);
+  const start = (await readVenueClock(tx)).dayCutover.slice(0, 5);
   const middle = `${String((Number(start.slice(0, 2)) + 12) % 24).padStart(2, "0")}:${start.slice(3, 5)}`;
   await replaceMenuWeek(
     tx,

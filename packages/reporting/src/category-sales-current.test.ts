@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { SaleLineClassification } from "@waitron/shared";
-import { seedVenue, seedVoid } from "../test/fixtures.js";
+import { seedVenueWithSeries, seedVoid } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { at, chain, classified, CUTOVER, rows, sellLines, TZ } from "../test/category-fixtures.js";
 import type { LineSpec } from "../test/category-fixtures.js";
@@ -15,7 +15,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let venue: SeededVenue;
 
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
 });
 
 function sell(day: string, lines: LineSpec[]) {

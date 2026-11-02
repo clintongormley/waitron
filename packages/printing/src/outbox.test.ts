@@ -5,16 +5,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
-  locations,
   printJobs,
   printers,
   sales,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { createPrinter, deactivatePrinter } from "./printers.js";
 import { canResendPrintJob, enqueuePrintJob, resendPrintJob } from "./outbox.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
@@ -31,12 +30,13 @@ afterEach(() => {
 });
 
 async function setup(): Promise<PrintConfig> {
-  await seedTenant(suite.db);
-  const [row] = await suite.db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
-    .returning({ id: locations.id });
-  return { locationId: row!.id };
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Sale on premises",
+  });
+  const venueId = await venueLocationId(suite.db);
+  return { locationId: venueId };
 }
 
 async function jobRow(
@@ -271,11 +271,9 @@ describe("resendPrintJob", () => {
   );
 
   it("stores the sale a job is enqueued with, and every resend in its chain carries it", async () => {
-    const cfg = await setup();
-    const nodeId = await seedNode(suite.db, brandLocationId(cfg.locationId));
-    const { deviceId } = await seedDevice(suite.db, {
-      locationId: brandLocationId(cfg.locationId),
-    });
+    await setup();
+    const nodeId = await seedNode(suite.db);
+    const { deviceId } = await seedDevice(suite.db);
     await withTransaction(suite.db, async (tx) => {
       const [series] = await tx
         .insert(invoiceSeries)
@@ -466,8 +464,8 @@ describe("completed invoice receipt resends", () => {
 it.each(["same original", "same copy", "other original"] as const)(
   "permits an exhausted original retry unless a completed %s belongs to it",
   async (completedKind) => {
-    const cfg = await setup();
-    const nodeId = await seedNode(suite.db, brandLocationId(cfg.locationId));
+    await setup();
+    const nodeId = await seedNode(suite.db);
     const saleId = randomUUID();
     const first = await withTransaction(suite.db, async (tx) => {
       const [series] = await tx.insert(invoiceSeries).values({ nodeId, code: "A" }).returning();
@@ -535,8 +533,8 @@ it.each(["same original", "same copy", "other original"] as const)(
 it.each(["queued", "printing", "failed"] as const)(
   "admits only one retry while the original's successor is %s",
   async (status) => {
-    const cfg = await setup();
-    const nodeId = await seedNode(suite.db, brandLocationId(cfg.locationId));
+    await setup();
+    const nodeId = await seedNode(suite.db);
     const original = await withTransaction(suite.db, async (tx) => {
       const [series] = await tx.insert(invoiceSeries).values({ nodeId, code: "A" }).returning();
       const [sale] = await tx

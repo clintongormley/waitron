@@ -5,7 +5,7 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { VENUE_SERVICE_MIGRATIONS, departments } from "@waitron/venue-service";
 import { WORKFORCE_MIGRATIONS, shifts } from "@waitron/workforce";
-import { seedVenue } from "../test/seed.js";
+import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { STAFFING_PERSONAL_DATA } from "./personal-data.js";
 import { personStaffRoles, shiftAssignments, staffRoles } from "./schema/staffing.js";
@@ -52,7 +52,7 @@ const EVENING_SHIFT = "00000000-0000-4000-8000-0000000000a2";
 
 /** Marta (`ana`) and a colleague (`marc`), each with distinct roles, areas and shifts. */
 async function seedAll() {
-  const venue = await seedVenue(suite.db);
+  const venue = await seedVenueWithStaff(suite.db);
   const locationId = venue.cfg.locationId;
   const marta = venue.ana;
   const colleague = venue.marc;
@@ -154,7 +154,7 @@ describe("STAFFING_PERSONAL_DATA", () => {
   });
 
   it("orders shifts that start together by shift id", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithStaff(suite.db);
     const locationId = venue.cfg.locationId;
     await withTransaction(suite.db, async (tx) => {
       await tx.insert(staffRoles).values({ id: WAITER, locationId, name: "Waiter" });
@@ -198,7 +198,7 @@ describe("STAFFING_PERSONAL_DATA", () => {
   });
 
   it("builds no file for a person with no role and no assigned shift", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithStaff(suite.db);
     await suite.db.insert(shifts).values({
       personId: venue.marc,
       locationId: venue.cfg.locationId,
@@ -211,7 +211,7 @@ describe("STAFFING_PERSONAL_DATA", () => {
   });
 
   it("builds the file for a held role even with no assigned shift", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithStaff(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await tx
         .insert(staffRoles)
@@ -224,7 +224,7 @@ describe("STAFFING_PERSONAL_DATA", () => {
   });
 
   it("builds the file for an assigned shift even when no role is held", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithStaff(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await tx
         .insert(staffRoles)

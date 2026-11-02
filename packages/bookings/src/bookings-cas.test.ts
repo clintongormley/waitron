@@ -12,12 +12,12 @@ import {
   floorTodayTables,
   diningTables,
   floorZones,
-  locations,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
@@ -30,17 +30,13 @@ const LOCALE = "es-ES";
 async function setupVenue(
   db: Database,
 ): Promise<{ cfg: { locationId: LocationId }; createdBy: string }> {
-  await seedTenant(db);
-  const [loc] = await db
-    .insert(locations)
-    .values({
-      name: "Front counter",
-      invoiceLocales: [LOCALE],
-      operationDescription: "Restaurant service",
-    })
-    .returning({ id: locations.id });
-  const locationId = loc!.id;
-  await seedNode(db, brandLocationId(locationId));
+  await seedVenue(db, {
+    name: "Front counter",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Restaurant service",
+  });
+  const locationId = await venueLocationId(db);
+  await seedNode(db);
   return { cfg: { locationId: brandLocationId(locationId) }, createdBy: crypto.randomUUID() };
 }
 

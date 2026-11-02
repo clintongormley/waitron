@@ -4,11 +4,12 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
-  locations,
   withTransaction,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { stationDayStates } from "./schema/station-times.js";
@@ -189,17 +190,15 @@ const suite = useVenueDb({
 const AT = new Date("2026-10-02T18:00:00Z");
 
 async function stationFixture(tx: Transaction) {
-  const [venue] = await tx
-    .insert(locations)
-    .values({
-      name: "Venue",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00:00",
-    })
-    .returning();
-  const cfg = { locationId: locationId(venue!.id) };
+  await seedVenue(tx, {
+    name: "Venue",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00:00",
+  });
+  const venueId = await venueLocationId(tx);
+  const cfg = { locationId: locationId(venueId) };
   const stations = await tx
     .insert(kitchenStations)
     .values([

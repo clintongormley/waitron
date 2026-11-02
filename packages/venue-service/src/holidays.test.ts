@@ -10,8 +10,10 @@ import {
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import {
   createHolidayStore,
@@ -155,17 +157,15 @@ async function setCountry(tx: Transaction, country: string) {
 async function venue(address: Address = {}): Promise<VenueScope> {
   return withTransaction(db, async (tx) => {
     await setCountry(tx, address.country ?? "ZZ");
-    const [location] = await tx
-      .insert(locations)
-      .values({
-        name: `Venue ${randomUUID()}`,
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-        province: address.province === undefined ? "Northshire" : address.province,
-        city: address.city === undefined ? "Villa Real" : address.city,
-      })
-      .returning();
-    return { locationId: locationId(location!.id) };
+    await seedVenue(tx, {
+      name: `Venue ${randomUUID()}`,
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+      province: address.province === undefined ? "Northshire" : address.province,
+      city: address.city === undefined ? "Villa Real" : address.city,
+    });
+    const venueId = await venueLocationId(tx);
+    return { locationId: locationId(venueId) };
   });
 }
 

@@ -8,12 +8,13 @@ import {
   deviceProfiles,
   devices,
   floorZones,
-  locations,
   withTransaction,
   workingOrders,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import type { FloorDeletion } from "@waitron/module";
 import { AppError, locationId, type DeleteImpactRefusal } from "@waitron/shared";
 import * as serviceDelete from "./index.js";
@@ -40,15 +41,13 @@ const noFloor: FloorDeletion = {
 
 async function fixture() {
   return run(async (tx) => {
-    const [venue] = await tx
-      .insert(locations)
-      .values({
-        name: randomUUID(),
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-      })
-      .returning();
-    const cfg = { locationId: locationId(venue!.id) };
+    await seedVenue(tx, {
+      name: randomUUID(),
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+    });
+    const venueId = await venueLocationId(tx);
+    const cfg = { locationId: locationId(venueId) };
     const ds = await tx
       .insert(departments)
       .values([
@@ -193,13 +192,10 @@ describe("service deletion", () => {
   it("pending transfers in both directions refuse departments and a destination zone", async () => {
     const f = await fixture();
     const ids = await run(async (tx) => {
-      const orders = await tx
-        .insert(workingOrders)
-        .values([
-          { source: "operator_script", locationId: f.cfg.locationId, orderNumber: 1 },
-          { source: "operator_script", locationId: f.cfg.locationId, orderNumber: 2 },
-        ])
-        .returning({ id: workingOrders.id });
+      const orders = [
+        await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 1 }),
+        await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 2 }),
+      ];
       const requests = await tx
         .insert(departmentTransferRequests)
         .values([
@@ -246,18 +242,10 @@ describe("service deletion", () => {
   it("open and placed counter orders refuse a zone and its department without tables", async () => {
     const f = await fixture();
     const orderIds = await run(async (tx) => {
-      const orders = await tx
-        .insert(workingOrders)
-        .values([
-          { source: "operator_script", locationId: f.cfg.locationId, orderNumber: 3 },
-          {
-            source: "operator_script",
-            locationId: f.cfg.locationId,
-            orderNumber: 4,
-            status: "placed",
-          },
-        ])
-        .returning({ id: workingOrders.id });
+      const orders = [
+        await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 3 }),
+        await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 4, status: "placed" }),
+      ];
       await tx.insert(orderServiceContexts).values(
         orders.map((order) => ({
           workingOrderId: order.id,
@@ -314,13 +302,8 @@ describe("service deletion", () => {
         { deviceProfileId: rows[2]!.id, zoneId: f.alpha },
         { deviceProfileId: rows[3]!.id, zoneId: f.alpha },
       ]);
-      await tx.insert(devices).values({
-        locationId: f.cfg.locationId,
-        deviceProfileId: rows[1]!.id,
-        label: "Off till",
-        tokenHash: "hash",
-        active: false,
-      });
+      const { deviceId } = await seedDevice(tx, { profileId: rows[1]!.id, label: "Off till" });
+      await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
       return rows;
     });
     const one = await run((tx) =>
@@ -583,18 +566,15 @@ describe("service deletion", () => {
         .refusals,
     ).toEqual([]);
     const orderId = await run(async (tx) => {
-      const [order] = await tx
-        .insert(workingOrders)
-        .values({ source: "operator_script", locationId: f.cfg.locationId, orderNumber: 4 })
-        .returning({ id: workingOrders.id });
+      const order = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 4 });
       await tx.insert(orderServiceContexts).values({
-        workingOrderId: order!.id,
+        workingOrderId: order.id,
         locationId: f.cfg.locationId,
         zoneId: f.alpha,
         departmentId: f.dining,
         serviceMode: "prepay",
       });
-      return order!.id;
+      return order.id;
     });
     expect(
       await refusal(run((tx) => serviceDelete.deleteZone(tx, f.cfg, noFloor, f.alpha, NOW))),
@@ -603,14 +583,11 @@ describe("service deletion", () => {
       tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, orderId)),
     );
     const transferId = await run(async (tx) => {
-      const [order] = await tx
-        .insert(workingOrders)
-        .values({ source: "operator_script", locationId: f.cfg.locationId, orderNumber: 5 })
-        .returning({ id: workingOrders.id });
+      const order = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 5 });
       const [request] = await tx
         .insert(departmentTransferRequests)
         .values({
-          tabId: order!.id,
+          tabId: order.id,
           sourceDepartmentId: f.bar,
           destinationDepartmentId: f.dining,
           destinationZoneId: f.alpha,

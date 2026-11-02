@@ -4,7 +4,7 @@ import { CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { validateBackupVerificationContribution } from "@waitron/module";
-import { seedVenue } from "@waitron/reporting/test/fixtures.js";
+import { seedVenueWithSeries } from "@waitron/reporting/test/fixtures.js";
 import {
   seedRefundableSale,
   seedTenderRefund,
@@ -94,7 +94,7 @@ async function corrupt(db: Database, statement: string) {
 }
 /** A €3.00 link from one refund, under the same ids in each copy, to the seeded cancel. */
 async function seedRefundLink(db: Database) {
-  const venue = await seedVenue(db);
+  const venue = await seedVenueWithSeries(db);
   const sale = await seedRefundableSale(db, venue, {
     method: "cash",
     applied: "10.00",

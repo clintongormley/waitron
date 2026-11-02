@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS, setProductVariants, type DietaryOrigin } from "@waitron/catalogue";
 import { createIngredient, updateIngredient } from "./ingredients.js";
 import { getProductRecipe, setProductRecipe } from "./recipes.js";
-import { seedProduct, seedVenue } from "../test/fixtures.js";
+import { seedProduct, seedVenueWithNode } from "../test/fixtures.js";
 
 const fx = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
 
@@ -23,7 +23,7 @@ async function publishedAllergens(productId: string) {
 describe("recipe composition and allergen derivation", () => {
   let productId: string;
   beforeEach(async () => {
-    await seedVenue(fx.db);
+    await seedVenueWithNode(fx.db);
     productId = await seedProduct(fx.db);
   });
 

@@ -1,8 +1,14 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, locations, withTransaction, type Database } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  locations,
+  withTransaction,
+  type Database,
+  venueLocationId,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { readStarterStaffLanguage } from "./starter-language.js";
@@ -61,17 +67,16 @@ describe("readStarterStaffLanguage", () => {
       expected: "es",
     },
   ] as const)("$title answers $expected", async ({ tenant, province, locale, expected }) => {
-    if (tenant) await seedTenant(db);
-    const [row] = await db
-      .insert(locations)
-      .values({
-        name: "Starter venue",
-        province,
-        invoiceLocales: [locale],
-        operationDescription: "Hospitality",
-      })
-      .returning({ id: locations.id });
-    const cfg = { locationId: brandLocationId(row!.id) };
+    const venue = {
+      name: "Starter venue",
+      province,
+      invoiceLocales: [locale],
+      operationDescription: "Hospitality",
+    };
+    if (tenant) await seedVenue(db, venue);
+    else await db.insert(locations).values(venue);
+    const venueId = await venueLocationId(db);
+    const cfg = { locationId: brandLocationId(venueId) };
     expect(await withTransaction(db, (tx) => readStarterStaffLanguage(tx, cfg))).toBe(expected);
   });
 });

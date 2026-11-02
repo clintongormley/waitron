@@ -5,15 +5,14 @@ import {
   CORE_MIGRATIONS,
   invoiceDeliveries,
   invoiceSeries,
-  locations,
   printAgents,
   printJobs,
   sales,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import { claimPrintJobs, reportPrintJob } from "./runtime.js";
@@ -21,15 +20,16 @@ import { claimPrintJobs, reportPrintJob } from "./runtime.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const now = "2026-12-01T00:00:00.000Z";
 async function setup() {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["en-GB"], operationDescription: "Sale on premises" })
-    .returning();
-  const nodeId = await seedNode(suite.db, locationId(location!.id));
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Sale on premises",
+  });
+  const venueId = await venueLocationId(suite.db);
+  const nodeId = await seedNode(suite.db);
   const [agent] = await suite.db
     .insert(printAgents)
-    .values({ locationId: location!.id, name: "Agent", tokenHash: "fixture" })
+    .values({ locationId: venueId, name: "Agent", tokenHash: "fixture" })
     .returning();
   return withTransaction(suite.db, async (tx) => {
     const [series] = await tx
@@ -82,7 +82,7 @@ async function setup() {
       ordinary: ordinary.jobId,
       deliveryId: delivery!.id,
       agentId: agent!.id,
-      locationId: location!.id,
+      locationId: venueId,
     };
   });
 }

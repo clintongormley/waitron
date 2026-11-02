@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq, isNull } from "drizzle-orm";
 import { invoiceSeries, nodes, tenants, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { NodeSeed, ProvisionedNode } from "@waitron/module";
@@ -255,13 +256,10 @@ it("refuses a returned reference moved to a different node", async () => {
   await expect(
     setup(async (tx, node, bases) => {
       const refs = await read(tx, node, bases);
-      const [other] = await tx
-        .insert(nodes)
-        .values({ locationId: node.locationId, name: "Other" })
-        .returning({ id: nodes.id });
+      const other = await seedNode(tx);
       await tx
         .update(invoiceSeries)
-        .set({ nodeId: other!.id })
+        .set({ nodeId: other })
         .where(eq(invoiceSeries.id, refs[0]!.id));
       return refs;
     }),

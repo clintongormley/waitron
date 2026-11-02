@@ -7,7 +7,7 @@ import {
   seedPurchaseInvoice,
   seedSale,
   seedSubstitution,
-  seedVenue,
+  seedVenueWithSeries,
   seedVoid,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -23,7 +23,7 @@ let venue: SeededVenue;
 const augNoonUtc = new Date("2026-08-04T10:00:00Z").toISOString();
 
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
 });
 
 function run(opts: { year: number; month: number }): Promise<VatReturn> {

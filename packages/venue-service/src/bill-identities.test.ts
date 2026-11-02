@@ -4,14 +4,13 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  locations,
   parties,
   withTransaction,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   allocateBillNumber,
   readBillIdentities,
@@ -27,21 +26,15 @@ const suite = useVenueDb({
 });
 const actor = randomUUID();
 const tx = <T>(fn: (t: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
-let locationId: string;
 let nextOrderNumber = 1;
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Dining room",
-      invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
-      timeZone: "UTC",
-    })
-    .returning();
-  locationId = location!.id;
+  await seedVenue(suite.db, {
+    name: "Dining room",
+    invoiceLocales: ["en"],
+    operationDescription: "Restaurant",
+    timeZone: "UTC",
+  });
 });
 
 async function newParty(): Promise<string> {
@@ -50,9 +43,12 @@ async function newParty(): Promise<string> {
 }
 
 async function newBill(partyId: string | null, id: string = randomUUID()): Promise<string> {
-  await suite.db
-    .insert(workingOrders)
-    .values({ id, locationId, partyId, orderNumber: nextOrderNumber++, source: "dashboard" });
+  await seedWorkingOrder(suite.db, {
+    id,
+    partyId,
+    orderNumber: nextOrderNumber++,
+    source: "dashboard",
+  });
   return id;
 }
 

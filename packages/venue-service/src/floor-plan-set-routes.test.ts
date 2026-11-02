@@ -13,11 +13,12 @@ import {
   CORE_MIGRATIONS,
   floorPlanSets,
   floorPlanTables,
-  locations,
   withTransaction,
   type Database,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   IDENTITY_MIGRATIONS,
@@ -122,17 +123,14 @@ function fakeCore(locationId: string) {
 }
 
 async function casaMarina() {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: `Seaside House ${randomUUID()}`,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00:00",
-    })
-    .returning({ id: locations.id });
-  const locationId = brandLocationId(location!.id);
+  await seedVenue(db, {
+    name: `Seaside House ${randomUUID()}`,
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Hospitality",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00:00",
+  });
+  const locationId = brandLocationId(await venueLocationId(db));
   const cfg = { locationId };
   const fake = fakeCore(locationId);
   const app = new Hono();

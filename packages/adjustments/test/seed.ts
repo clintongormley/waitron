@@ -1,22 +1,24 @@
-import { locations, withTransaction, workingOrders, type Database } from "@waitron/db";
+import { locations, withTransaction, type Database } from "@waitron/db";
+import { seedVenue, seedWorkingOrder as seedOrder } from "@waitron/db/testing/seed.js";
 import { decimal } from "@waitron/shared";
 import { createAdjustmentReason, type AdjustmentReasonInput } from "../src/operations.js";
 import type { AdjustmentReason } from "../src/policy.js";
 
 let orderNumber = 0;
 
-/** An open working order on a fresh location, opened from the dashboard; returns its id. */
+/** An open working order at the venue (seeded on first use), opened from the dashboard; returns
+ * its id. */
 export async function seedWorkingOrder(db: Database): Promise<string> {
-  const [location] = await db
-    .insert(locations)
-    .values({ name: "Dining room", invoiceLocales: ["es"], operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
+  const [venue] = await db.select({ id: locations.id }).from(locations).limit(1);
+  if (venue === undefined)
+    await seedVenue(db, {
+      name: "Dining room",
+      invoiceLocales: ["es"],
+      operationDescription: "Hospitality",
+    });
   orderNumber += 1;
-  const [order] = await db
-    .insert(workingOrders)
-    .values({ source: "dashboard", deviceId: null, locationId: location!.id, orderNumber })
-    .returning({ id: workingOrders.id });
-  return order!.id;
+  const order = await seedOrder(db, { source: "dashboard", deviceId: null, orderNumber });
+  return order.id;
 }
 
 let reasonCount = 0;

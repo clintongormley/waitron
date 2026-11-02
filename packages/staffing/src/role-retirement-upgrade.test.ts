@@ -8,7 +8,7 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { WORKFORCE_MIGRATIONS, shifts, shiftSwaps, shiftTemplates } from "@waitron/workforce";
-import { seedVenue } from "../test/seed.js";
+import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { staffRoles, shiftAssignments } from "./schema/staffing.js";
 
@@ -24,7 +24,7 @@ const suite = useVenueDb({
 });
 
 it("keeps assignments, both swap legs and templates across the free-text role drop", async () => {
-  const { cfg, ana, marc, departmentId } = await seedVenue(suite.db);
+  const { cfg, ana, marc, departmentId } = await seedVenueWithStaff(suite.db);
   // Reconstruct the two retired columns around today's otherwise migrated schema.
   await suite.db.execute(sql`alter table shifts add column role text`);
   await suite.db.execute(sql`alter table shift_templates add column role text`);

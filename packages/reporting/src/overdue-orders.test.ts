@@ -18,7 +18,7 @@ import {
   seedNodeAndSeries,
   seedOpenOrder,
   seedPartyAt,
-  seedVenue,
+  seedVenueWithSeries,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeOverdueOrders } from "./overdue-orders.js";
@@ -30,7 +30,7 @@ let venue: SeededVenue;
 let stationId: string;
 
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
   stationId = await seedKitchenStation(suite.db, {
     locationId: brandLocationId(venue.locationId),
     name: "Kitchen",

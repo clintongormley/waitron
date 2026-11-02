@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { CORE_MIGRATIONS, deviceProfiles, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, deviceProfiles, withTransaction, venueLocationId } from "@waitron/db";
 import type { Database } from "@waitron/db";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -37,11 +37,12 @@ interface Seeded {
 }
 
 async function seedLocation(db: Database): Promise<string> {
-  const [row] = await db
-    .insert(locations)
-    .values({ name: "Main", invoiceLocales: ["en"], operationDescription: "Sale on premises" })
-    .returning({ id: locations.id });
-  return row!.id;
+  await seedVenue(db, {
+    name: "Main",
+    invoiceLocales: ["en"],
+    operationDescription: "Sale on premises",
+  });
+  return venueLocationId(db);
 }
 
 /** A person with a distinct value in every exported column, and rows in every table. */

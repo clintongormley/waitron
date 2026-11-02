@@ -5,7 +5,7 @@ import { CORE_MIGRATIONS, invoiceSeries, withTransaction } from "@waitron/db";
 import { seriesId as brandSeriesId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedSale, seedSubstitution, seedVenue, seedVoid } from "../test/fixtures.js";
+import { seedSale, seedSubstitution, seedVenueWithSeries, seedVoid } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeCloseCounts } from "./counts.js";
 import type { CloseCounts, DailyCloseInput } from "./types.js";
@@ -14,7 +14,7 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let venue: SeededVenue;
 const noon = new Date("2026-08-04T10:00:00Z").toISOString();
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
 });
 function input(overrides: Partial<DailyCloseInput> = {}): DailyCloseInput {
   return {

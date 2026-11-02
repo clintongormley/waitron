@@ -7,9 +7,11 @@ import {
   locations,
   withTransaction,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
@@ -34,17 +36,15 @@ const week = (ranges = night) =>
 const tx = <T>(body: Parameters<typeof withTransaction<T>>[1]) => withTransaction(suite.db, body);
 async function venue() {
   return tx(async (db) => {
-    const [row] = await db
-      .insert(locations)
-      .values({
-        name: randomUUID(),
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurant",
-      })
-      .returning();
-    const cfg = { locationId: locationId(row!.id) };
+    await seedVenue(db, {
+      name: randomUUID(),
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Restaurant",
+    });
+    const venueId = await venueLocationId(db);
+    const cfg = { locationId: locationId(venueId) };
     const departmentId = (await createDepartment(db, cfg, { name: "Dining", orderStart: "table" }))
       .id;
     const zone = async (name: string, displayOrder: number, active = true) => {

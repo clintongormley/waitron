@@ -19,11 +19,11 @@ import {
   locationDayCutoverChanges,
   withTransaction,
   workingOrderLines,
-  workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { AppError, locationId as brandLocationId, thousandthsToDecimal } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -65,7 +65,7 @@ describe("A669 storage notice payload", () => {
   };
   it("round-trips changed and removed copies through the service read without changing ordinary notices", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     const items = [
       {
         workingOrderLineId: order.burgerLineId,
@@ -104,7 +104,7 @@ describe("A669 storage notice payload", () => {
 
   it("A669 notices keeps every allergy correction until acknowledgement across days and the ordinary fifty limit", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     const items = [
       {
         workingOrderLineId: order.burgerLineId,
@@ -175,7 +175,7 @@ describe("A669 storage notice payload", () => {
     { kind: "allergy_removed" as const, options: { movedTo: "Table 2" }, field: "allergyBlock" },
   ])("refuses $kind with mixed/missing $field before writing", async ({ kind, options, field }) => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     await expect(
       inTx((tx) =>
         recordKitchenNotices(
@@ -202,7 +202,7 @@ describe("A669 storage notice payload", () => {
 describe("whole-order instruction changes", () => {
   it("keeps the frozen before/after instruction separate from the dish's own note", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     const change = { before: "All together", after: "Dessert later" };
     await inTx((tx) =>
       recordKitchenNotices(
@@ -237,7 +237,7 @@ describe("whole-order instruction changes", () => {
 
   it("retains an explicit removal and omits the payload on other changed notices", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     const items = [
       {
         workingOrderLineId: order.burgerLineId,
@@ -266,7 +266,7 @@ describe("whole-order instruction changes", () => {
     { kind: "changed" as const, options: { movedTo: "Table 2" } },
   ])("refuses an instruction change mixed with $kind/$options", async ({ kind, options }) => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     await expect(
       inTx((tx) =>
         recordKitchenNotices(
@@ -299,16 +299,14 @@ function cutoverFromNow(minutes: number): string {
 }
 
 async function seedLocation(name: string): Promise<LocationId> {
-  const [row] = await db
-    .insert(locations)
-    .values({
-      name,
-      invoiceLocales: ["en"],
-      operationDescription: "Hospitality",
-      timeZone: "UTC",
-    })
-    .returning({ id: locations.id });
-  return brandLocationId(row!.id);
+  await seedVenue(db, {
+    name,
+    invoiceLocales: ["en"],
+    operationDescription: "Hospitality",
+    timeZone: "UTC",
+  });
+  const venueId = await venueLocationId(db);
+  return brandLocationId(venueId);
 }
 
 async function seedStation(locationId: LocationId, name: string): Promise<string> {
@@ -327,16 +325,17 @@ async function seedStation(locationId: LocationId, name: string): Promise<string
  * customer-facing "Large sourdough pizza".
  */
 async function seedOrder(
-  locationId: LocationId,
   orderNumber: number,
   label: string | null,
 ): Promise<{ orderId: string; burgerLineId: string; lemonadeLineId: string; pizzaLineId: string }> {
-  const [order] = await db
-    .insert(workingOrders)
-    .values({ source: "dashboard", deviceId: null, locationId, orderNumber, label })
-    .returning({ id: workingOrders.id });
+  const order = await seedWorkingOrder(db, {
+    source: "dashboard",
+    deviceId: null,
+    orderNumber,
+    label,
+  });
   const line = {
-    workingOrderId: order!.id,
+    workingOrderId: order.id,
     quantity: 2000,
     unitPriceGross: 1100,
     vatClass: "reduced",
@@ -371,7 +370,7 @@ async function seedOrder(
     })
     .returning({ id: workingOrderLines.id });
   return {
-    orderId: order!.id,
+    orderId: order.id,
     burgerLineId: burger!.id,
     lemonadeLineId: lemonade!.id,
     pizzaLineId: pizza!.id,
@@ -379,7 +378,6 @@ async function seedOrder(
 }
 
 async function venue() {
-  await seedTenant(db);
   const locationId = await seedLocation("Venue");
   const grill = await seedStation(locationId, "Grill");
   const bar = await seedStation(locationId, "Bar");
@@ -411,7 +409,7 @@ async function noticeAt(
 describe("recordKitchenNotices", () => {
   it("records each item as the kitchen saw it: the order label, the kitchen name and the line's note", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 12, "Table 4");
+    const order = await seedOrder(12, "Table 4");
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
@@ -469,7 +467,7 @@ describe("recordKitchenNotices", () => {
 
   it("names a variant line by the parent and variant kitchen pair", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 8, null);
+    const order = await seedOrder(8, null);
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
@@ -493,7 +491,7 @@ describe("recordKitchenNotices", () => {
 
   it("copies a weighed line's unit, in every language it was recorded in", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 5, null);
+    const order = await seedOrder(5, null);
     const [octopus] = await db
       .insert(workingOrderLines)
       .values({
@@ -542,7 +540,7 @@ describe("recordKitchenNotices", () => {
    */
   it("marks a notice sold in Each by the identity of the unit its line was sold in, never its text", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 7, null);
+    const order = await seedOrder(7, null);
     const stored = await db
       .insert(units)
       .values([
@@ -680,7 +678,7 @@ describe("recordKitchenNotices", () => {
 
     it("an unknown order as not found", async () => {
       const v = await venue();
-      const order = await seedOrder(v.locationId, 1, null);
+      const order = await seedOrder(1, null);
       const unknown = "00000000-0000-4000-8000-00000000dead";
       await expect(
         inTx((tx) =>
@@ -695,7 +693,7 @@ describe("recordKitchenNotices", () => {
 
     it("an unknown station as not found", async () => {
       const v = await venue();
-      const order = await seedOrder(v.locationId, 1, null);
+      const order = await seedOrder(1, null);
       const stationId = "00000000-0000-4000-8000-00000000beef";
       await expect(
         inTx((tx) =>
@@ -716,7 +714,7 @@ describe("recordKitchenNotices", () => {
       ["a negative", thousandthsToDecimal(-1000)],
     ])("%s quantity as not positive", async (_, quantity) => {
       const v = await venue();
-      const order = await seedOrder(v.locationId, 1, null);
+      const order = await seedOrder(1, null);
       await expect(
         inTx((tx) =>
           recordKitchenNotices(
@@ -734,7 +732,7 @@ describe("recordKitchenNotices", () => {
       "a direction on a %s notice, which only a changed notice carries",
       async (kind) => {
         const v = await venue();
-        const order = await seedOrder(v.locationId, 1, null);
+        const order = await seedOrder(1, null);
         await expect(
           inTx((tx) =>
             recordKitchenNotices(
@@ -755,7 +753,7 @@ describe("recordKitchenNotices", () => {
       "an extra taken off on a %s notice, which only a changed notice carries",
       async (kind) => {
         const v = await venue();
-        const order = await seedOrder(v.locationId, 1, null);
+        const order = await seedOrder(1, null);
         await expect(
           inTx((tx) =>
             recordKitchenNotices(
@@ -777,7 +775,7 @@ describe("recordKitchenNotices", () => {
 
     it("a rerouted notice without its destination station", async () => {
       const v = await venue();
-      const order = await seedOrder(v.locationId, 1, null);
+      const order = await seedOrder(1, null);
       await expect(
         inTx((tx) =>
           recordKitchenNotices(
@@ -794,7 +792,7 @@ describe("recordKitchenNotices", () => {
 
     it("a destination station on a recalled notice", async () => {
       const v = await venue();
-      const order = await seedOrder(v.locationId, 1, null);
+      const order = await seedOrder(1, null);
       await expect(
         inTx((tx) =>
           recordKitchenNotices(
@@ -814,7 +812,7 @@ describe("recordKitchenNotices", () => {
       "a came-from order number on a %s notice, which only a moved notice carries",
       async (kind) => {
         const v = await venue();
-        const order = await seedOrder(v.locationId, 1, null);
+        const order = await seedOrder(1, null);
         await expect(
           inTx((tx) =>
             recordKitchenNotices(
@@ -836,7 +834,7 @@ describe("recordKitchenNotices", () => {
 
     it("a came-from order number on a rerouted notice", async () => {
       const v = await venue();
-      const order = await seedOrder(v.locationId, 1, null);
+      const order = await seedOrder(1, null);
       await expect(
         inTx((tx) =>
           recordKitchenNotices(
@@ -854,7 +852,7 @@ describe("recordKitchenNotices", () => {
 
     it("a direction other than added or removed", async () => {
       const v = await venue();
-      const order = await seedOrder(v.locationId, 1, null);
+      const order = await seedOrder(1, null);
       await expect(
         inTx((tx) =>
           recordKitchenNotices(
@@ -872,8 +870,8 @@ describe("recordKitchenNotices", () => {
 
     it("a line that is not on the order as a caller fault, with no domain code", async () => {
       const v = await venue();
-      const order = await seedOrder(v.locationId, 1, null);
-      const other = await seedOrder(v.locationId, 2, null);
+      const order = await seedOrder(1, null);
+      const other = await seedOrder(2, null);
       const refusal = inTx((tx) =>
         recordKitchenNotices(tx, v.cfg, order.orderId, [item(other.burgerLineId, v.grill)], "void"),
       );
@@ -886,7 +884,7 @@ describe("recordKitchenNotices", () => {
 
   it("labels an order with no label by its number alone, and records the kind it is given", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 7, null);
+    const order = await seedOrder(7, null);
     for (const kind of ["recalled", "changed"] as const) {
       await inTx((tx) =>
         recordKitchenNotices(
@@ -914,7 +912,7 @@ describe("recordKitchenNotices", () => {
 
   it("records which way a changed notice went, and no direction when none is given or for any other kind", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 6, null);
+    const order = await seedOrder(6, null);
     const burger = [
       {
         workingOrderLineId: order.burgerLineId,
@@ -948,7 +946,7 @@ describe("recordKitchenNotices", () => {
   // Fails if the list leaves out which way a changed notice went.
   it("lists a changed notice with its direction", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 6, null);
+    const order = await seedOrder(6, null);
     const burger = [
       {
         workingOrderLineId: order.burgerLineId,
@@ -977,7 +975,7 @@ describe("recordKitchenNotices", () => {
   // Fails if the extra a change took off the dish is not recorded, or not listed.
   it("records and lists a changed notice with the extra taken off the dish, and none on the others", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 6, null);
+    const order = await seedOrder(6, null);
     const burger = [
       {
         workingOrderLineId: order.burgerLineId,
@@ -1019,7 +1017,7 @@ describe("recordKitchenNotices", () => {
 
   it("records a moved notice with the table the work moved to", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 9, null);
+    const order = await seedOrder(9, null);
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
@@ -1061,8 +1059,8 @@ describe("recordKitchenNotices", () => {
 
   it("labels a moved notice by the number the dishes came from and the one they are on, when the two differ", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 27, null);
-    const labelled = await seedOrder(v.locationId, 30, "Table 4");
+    const order = await seedOrder(27, null);
+    const labelled = await seedOrder(30, "Table 4");
     const burger = (o: { burgerLineId: string }) => [
       { workingOrderLineId: o.burgerLineId, stationId: v.grill, quantity: ONE, wasStarted: false },
     ];
@@ -1093,7 +1091,7 @@ describe("recordKitchenNotices", () => {
 
   it("records and lists a rerouted notice with its destination station", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 10, null);
+    const order = await seedOrder(10, null);
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
@@ -1123,7 +1121,7 @@ describe("recordKitchenNotices", () => {
 
   it("the engine refuses a non-rerouted notice with a destination station", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 11, null);
+    const order = await seedOrder(11, null);
     await expect(
       db.insert(kitchenNotices).values({
         stationId: v.bar,
@@ -1139,7 +1137,7 @@ describe("recordKitchenNotices", () => {
 
   it("lists the notices one call records in the order it was given them", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 4, null);
+    const order = await seedOrder(4, null);
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
@@ -1169,14 +1167,14 @@ describe("recordKitchenNotices", () => {
 
   it("records nothing for no items", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 3, null);
+    const order = await seedOrder(3, null);
     await inTx((tx) => recordKitchenNotices(tx, v.cfg, order.orderId, [], "void"));
     expect(await db.select().from(kitchenNotices)).toEqual([]);
   });
 
   it("keeps the notice when the line it describes is deleted", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 5, null);
+    const order = await seedOrder(5, null);
     await inTx(async (tx) => {
       await recordKitchenNotices(
         tx,
@@ -1203,7 +1201,7 @@ describe("recordKitchenNotices", () => {
 describe("listStationNotices", () => {
   it("returns the newest fifty unacknowledged notices, oldest first", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
     const base = Date.now() - 60 * 60_000;
     for (let index = 0; index < 55; index += 1) {
@@ -1225,7 +1223,7 @@ describe("listStationNotices", () => {
 
   it("returns none older than the venue's business day, whatever their age in hours", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
     await noticeAt(v.grill, order.orderId, hoursAgo(23), "23 hours ago");
     await noticeAt(v.grill, order.orderId, hoursAgo(25), "25 hours ago");
@@ -1244,7 +1242,7 @@ describe("listStationNotices", () => {
 
   it("returns only the named station's notices", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     await noticeAt(v.bar, order.orderId, new Date().toISOString(), "at the bar");
     expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
     expect(
@@ -1257,7 +1255,7 @@ describe("listStationNotices", () => {
 describe("listStationsNotices and the scope", () => {
   it("returns a notice at the venue's station whatever location the scope names", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     await noticeAt(v.grill, order.orderId, new Date().toISOString(), "at the grill");
     const notices = await inTx((tx) =>
       listStationsNotices(tx, { locationId: brandLocationId(randomUUID()) }, [v.grill]),
@@ -1284,7 +1282,7 @@ describe.each([
 
   it("keeps each station's own newest fifty, oldest first, whatever another station holds", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
     const base = Date.now() - 60 * 60_000;
     for (let index = 0; index < 55; index += 1) {
@@ -1303,7 +1301,7 @@ describe.each([
 
   it("orders notices recorded in the same instant by insertion, and keeps the newest fifty of them", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
     const at = minutesAgo(1);
     for (let index = 0; index < 51; index += 1) {
@@ -1320,7 +1318,7 @@ describe.each([
 
   it("answers a notice with every field the single-station read gives", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
     const [row] = await db
       .insert(kitchenNotices)
@@ -1403,7 +1401,7 @@ describe.each([
 describe("acknowledgeKitchenNotice", () => {
   it("clears a notice from its station's list, and a second acknowledgement keeps the first time", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     const id = await noticeAt(v.grill, order.orderId, new Date().toISOString());
     const acknowledgedAt = async () =>
       (
@@ -1438,7 +1436,7 @@ describe("acknowledgeKitchenNotice", () => {
 describe("acknowledgeKitchenNotice for one station", () => {
   it("clears a notice at the named station, and refuses one at another station as not found", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     const atGrill = await noticeAt(v.grill, order.orderId, new Date().toISOString());
 
     await expect(
@@ -1466,7 +1464,7 @@ it.each(["03:00", "07:00"])(
       effectiveBusinessDay: "2026-11-04",
       dayCutover: `${cutover}:00`,
     });
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     await noticeAt(v.grill, order.orderId, "2026-11-03T04:59:59.000Z");
     const kept = await noticeAt(v.grill, order.orderId, "2026-11-03T05:00:00.000Z");
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -1522,7 +1520,7 @@ describe("A807 one notice per kitchen-note change", () => {
 
   it("lists one notice per station, its dishes in the order recorded", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 4, null);
+    const order = await seedOrder(4, null);
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
@@ -1562,7 +1560,7 @@ describe("A807 one notice per kitchen-note change", () => {
     "clears every dish of the notice at that station from row %i, keeping the first time",
     async (pick) => {
       const v = await venue();
-      const order = await seedOrder(v.locationId, 4, null);
+      const order = await seedOrder(4, null);
       await inTx((tx) =>
         recordKitchenNotices(
           tx,
@@ -1617,8 +1615,8 @@ describe("A807 one notice per kitchen-note change", () => {
     },
   ])("keeps two notices for changes that differ in $part", async ({ second }) => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 4, null);
-    const other = await seedOrder(v.locationId, 5, null);
+    const order = await seedOrder(4, null);
+    const other = await seedOrder(5, null);
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
@@ -1651,7 +1649,7 @@ describe("A807 one notice per kitchen-note change", () => {
 
   it("keeps two notices for the same change recorded a millisecond apart", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 4, null);
+    const order = await seedOrder(4, null);
     for (const lineId of [order.burgerLineId, order.lemonadeLineId])
       await inTx((tx) =>
         recordKitchenNotices(tx, v.cfg, order.orderId, [at(v.grill, lineId)], "changed", change),
@@ -1674,7 +1672,7 @@ describe("A807 one notice per kitchen-note change", () => {
 
   it("folds two writes of the same change at the same moment into one notice", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 4, null);
+    const order = await seedOrder(4, null);
     for (const lineId of [order.burgerLineId, order.lemonadeLineId])
       await inTx((tx) =>
         recordKitchenNotices(tx, v.cfg, order.orderId, [at(v.grill, lineId)], "changed", change),
@@ -1688,7 +1686,7 @@ describe("A807 one notice per kitchen-note change", () => {
 
   it("merges identical dishes, adding their quantities, and keeps started and differently noted ones apart", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 4, null);
+    const order = await seedOrder(4, null);
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
@@ -1731,7 +1729,7 @@ describe("A807 one notice per kitchen-note change", () => {
 
   it("keeps measured portions and fractional quantities apart, as the printed slip does", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 5, null);
+    const order = await seedOrder(5, null);
     const [fish] = await db
       .insert(workingOrderLines)
       .values({
@@ -1776,7 +1774,7 @@ describe("A807 one notice per kitchen-note change", () => {
 
   it("keeps a measured dish apart at whole quantities and merges whole dishes sold in each", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 5, null);
+    const order = await seedOrder(5, null);
     const [fish] = await db
       .insert(workingOrderLines)
       .values({
@@ -1828,7 +1826,7 @@ describe("A807 one notice per kitchen-note change", () => {
 
   it("keeps a note change's notice whole at the fifty limit", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     await db.update(locations).set({ dayCutover: cutoverFromNow(90) });
     await inTx((tx) =>
       recordKitchenNotices(
@@ -1857,7 +1855,7 @@ describe("A807 one notice per kitchen-note change", () => {
 
   it("gives other changed notices no dish list", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
+    const order = await seedOrder(1, null);
     await inTx((tx) =>
       recordKitchenNotices(tx, v.cfg, order.orderId, [at(v.grill, order.burgerLineId)], "changed", {
         direction: "added",

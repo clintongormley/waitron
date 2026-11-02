@@ -10,6 +10,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import {
   addDecimal,
@@ -31,7 +32,7 @@ import {
   type EntryCursor,
 } from "./reports.js";
 import type { AdjustmentStage } from "./schema/adjustments.js";
-import { seedVenue } from "@waitron/reporting/test/fixtures.js";
+import { seedVenueWithSeries } from "@waitron/reporting/test/fixtures.js";
 import {
   seedRefundableSale,
   seedTenderRefund,
@@ -61,7 +62,6 @@ async function person(name: string, status?: "suspended"): Promise<string> {
   return row!.id;
 }
 
-let locationId: string;
 let orderNumber = 0;
 
 /** A bill opened from the dashboard at `openedAt`, at this test's location, made on first use. */
@@ -69,26 +69,20 @@ async function bill(
   opts: { openedAt?: string } = {},
 ): Promise<{ id: string; orderNumber: number }> {
   const [location] = await db.select({ id: locations.id }).from(locations);
-  if (location === undefined) {
-    [{ id: locationId }] = (await db
-      .insert(locations)
-      .values({ name: "Sala", invoiceLocales: ["es"], operationDescription: "Restaurante" })
-      .returning({ id: locations.id })) as [{ id: string }];
-  } else {
-    locationId = location.id;
-  }
+  if (location === undefined)
+    await seedVenue(db, {
+      name: "Sala",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurante",
+    });
   orderNumber += 1;
-  const [order] = await db
-    .insert(workingOrders)
-    .values({
-      source: "dashboard",
-      deviceId: null,
-      locationId,
-      orderNumber,
-      openedAt: opts.openedAt ?? EVENING,
-    })
-    .returning({ id: workingOrders.id });
-  return { id: order!.id, orderNumber };
+  const order = await seedWorkingOrder(db, {
+    source: "dashboard",
+    deviceId: null,
+    orderNumber,
+    openedAt: opts.openedAt ?? EVENING,
+  });
+  return { id: order.id, orderNumber };
 }
 
 /** A line still on `billId`: `quantity` at `unit`, first priced at `list` when an adjustment
@@ -708,7 +702,7 @@ describe("each cancel's charge, preparation and refunds (plan Decision 7)", () =
     const ana = await person("Ana");
     const reason = await seedReason(db);
     const visit = await bill();
-    const venue = await seedVenue(db);
+    const venue = await seedVenueWithSeries(db);
     const cancelOf = (name: string, preparationStarted: boolean | null, at: string) =>
       adjust({
         bill: visit.id,
@@ -796,7 +790,7 @@ describe("each cancel's charge, preparation and refunds (plan Decision 7)", () =
 
   /** A refund in `state` on its own cash sale, linked to `adjustmentId` for `amount` at `at`. */
   async function linkedRefund(
-    venue: Awaited<ReturnType<typeof seedVenue>>,
+    venue: Awaited<ReturnType<typeof seedVenueWithSeries>>,
     invoiceNumber: number,
     state: "pending" | "completed",
     adjustmentId: string,
@@ -835,7 +829,7 @@ describe("each cancel's charge, preparation and refunds (plan Decision 7)", () =
     const ana = await person("Ana");
     const reason = await seedReason(db);
     const visit = await bill();
-    const venue = await seedVenue(db);
+    const venue = await seedVenueWithSeries(db);
     const cancel = await chargedCancel(visit.id, reason, ana, "Steak", "2026-09-15T19:00:00.000Z");
     await linkedRefund(venue, 1, "completed", cancel, "2.00", "2026-09-15T19:40:00.000Z");
     await linkedRefund(venue, 2, "pending", cancel, "3.00", "2026-09-15T19:50:00.000Z");
@@ -855,7 +849,7 @@ describe("each cancel's charge, preparation and refunds (plan Decision 7)", () =
     const ana = await person("Ana");
     const reason = await seedReason(db);
     const visit = await bill();
-    const venue = await seedVenue(db);
+    const venue = await seedVenueWithSeries(db);
     const older = await chargedCancel(visit.id, reason, ana, "Steak", "2026-09-15T19:00:00.000Z");
     const newer = await chargedCancel(visit.id, reason, ana, "Soup", "2026-09-15T19:10:00.000Z");
     await linkedRefund(venue, 1, "completed", older, "2.00", "2026-09-15T19:40:00.000Z");

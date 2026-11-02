@@ -20,7 +20,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import type { CoreServices } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
@@ -59,16 +59,6 @@ interface Venue {
   createdBy: string;
 }
 
-/** Raw SQL names `id` because it has no SQL default: drizzle's `$defaultFn` fills it for builder
- * inserts only. `invoice_locales` is a JSON array stored as text. */
-async function insertLocation(name: string): Promise<string> {
-  const loc = await db.execute<{ id: string }>(sql`
-    insert into locations (id, name, invoice_locales, operation_description)
-    values (${newId()}, ${name}, '["es-ES"]', 'Restaurant service')
-    returning id`);
-  return loc.rows[0]!.id;
-}
-
 /** Raw inserts supply the id and timestamp; the helper optionally gives the table a today row. */
 async function insertDiningTable(
   locationId: string,
@@ -88,8 +78,12 @@ async function insertDiningTable(
 }
 
 async function setupVenue(): Promise<Venue> {
-  await seedTenant(db);
-  const locationId = await insertLocation("Front counter");
+  await seedVenue(db, {
+    name: "Front counter",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant service",
+  });
+  const locationId = await venueLocationId(db);
   return {
     cfg: { locationId: brandLocationId(locationId) },
     createdBy: randomUUID(),
@@ -481,9 +475,13 @@ describe("seatBooking", () => {
     createdBy: string;
     seatedBy: string;
   }> {
-    await seedTenant(db);
-    const locationId = await insertLocation("Front counter");
-    const nodeId = await seedNode(db, brandLocationId(locationId));
+    await seedVenue(db, {
+      name: "Front counter",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Restaurant service",
+    });
+    const locationId = await venueLocationId(db);
+    const nodeId = await seedNode(db);
     return {
       cfg: { locationId: brandLocationId(locationId) },
       core: fakeCore({ locationId, nodeId }),

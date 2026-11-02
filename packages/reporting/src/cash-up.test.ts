@@ -9,7 +9,7 @@ import {
   seedSale,
   seedTender,
   seedVenueDevice,
-  seedVenue,
+  seedVenueWithSeries,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
 import { computeCashUp } from "./cash-up.js";
@@ -21,7 +21,7 @@ const DAY = "2026-08-04";
 const settledNoon = new Date("2026-08-04T10:00:00Z").toISOString();
 
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
 });
 function run(overrides: Partial<DailyCloseInput> = {}): Promise<CashUp> {
   const input: DailyCloseInput = {
@@ -271,7 +271,7 @@ describe("computeCashUp", () => {
   });
 
   it("excludes another node's tenders", async () => {
-    const other = await seedVenue(suite.db);
+    const other = await seedVenueWithSeries(suite.db);
     const s = await seedSale(suite.db, other, {
       invoiceNumber: 1,
       issuedAt: settledNoon,
@@ -555,7 +555,7 @@ describe("computeCashUp — bill payments and their refunds", () => {
   });
 
   it("scopes a payment and its refund to a node through their bill", async () => {
-    const other = await seedVenue(suite.db);
+    const other = await seedVenueWithSeries(suite.db);
     const bill = await openBill(other);
     const payment = await seedBillPayment(
       suite.db,

@@ -3,15 +3,15 @@ import {
   captureError,
   deviceProfilePrinters,
   devices,
-  locations,
   pagePrinters,
   printerHolders,
   printers,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq } from "drizzle-orm";
@@ -56,11 +56,9 @@ function lists(partial: Partial<ProfilePrinterLists>): ProfilePrinterLists {
 }
 
 async function seedLocation(name: string): Promise<string> {
-  const [row] = await suite.db
-    .insert(locations)
-    .values({ name, invoiceLocales: ["es"], operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
-  return row!.id;
+  await seedVenue(suite.db, { name, invoiceLocales: ["es"], operationDescription: "Hospitality" });
+  const venueId = await venueLocationId(suite.db);
+  return venueId;
 }
 
 async function seedPrinter(
@@ -163,13 +161,11 @@ describe("which printer each of a device's roles resolves to", () => {
 
   // `useVenueDb` empties every table after each test.
   beforeEach(async () => {
-    await seedTenant(suite.db);
     loc = await seedLocation("Here");
-    const first = await seedDevice(suite.db, { locationId: loc, label: "Till A" });
+    const first = await seedDevice(suite.db, { label: "Till A" });
     profile = first.profileId;
     a = first.deviceId;
-    b = (await seedDevice(suite.db, { locationId: loc, label: "Till B", profileId: profile }))
-      .deviceId;
+    b = (await seedDevice(suite.db, { label: "Till B", profileId: profile })).deviceId;
     f1 = await seedPrinter(loc, "Bar");
     f2 = await seedPrinter(loc, "Counter");
     p1 = await seedPrinter(loc, "Handheld", { portable: true });
@@ -369,7 +365,7 @@ describe("which printer each of a device's roles resolves to", () => {
       ),
     );
     await choose(a, "receipt", "default");
-    const other = await seedDevice(suite.db, { locationId: loc, label: "Till C" });
+    const other = await seedDevice(suite.db, { label: "Till C" });
     await inTx((tx) =>
       setProfilePrinterLists(
         tx,
@@ -638,7 +634,7 @@ describe("which printer each of a device's roles resolves to", () => {
     await choose(a, "receipt", { id: f1 });
     await choose(a, "payment_slip", { id: f2 });
     await choose(a, "cash_drawer", { id: drawer });
-    const other = (await seedDevice(suite.db, { locationId: loc })).profileId;
+    const other = (await seedDevice(suite.db)).profileId;
     await inTx((tx) =>
       setProfilePrinterLists(
         tx,
@@ -834,13 +830,11 @@ describe("a deleted printer as a device's choice or a portable setting", () => {
   let other: string;
 
   beforeEach(async () => {
-    await seedTenant(suite.db);
     loc = await seedLocation("Here");
-    const first = await seedDevice(suite.db, { locationId: loc, label: "Till A" });
+    const first = await seedDevice(suite.db, { label: "Till A" });
     profile = first.profileId;
     a = first.deviceId;
-    b = (await seedDevice(suite.db, { locationId: loc, label: "Till B", profileId: profile }))
-      .deviceId;
+    b = (await seedDevice(suite.db, { label: "Till B", profileId: profile })).deviceId;
     fixed = await seedPrinter(loc, "Bar", { hasCashDrawer: true });
     carried = await seedPrinter(loc, "Handheld", { portable: true });
     other = await seedPrinter(loc, "Counter", { hasCashDrawer: true });
@@ -1013,13 +1007,11 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
   let awayPrinter: string;
 
   beforeEach(async () => {
-    await seedTenant(suite.db);
     loc = await seedLocation("Here");
-    const first = await seedDevice(suite.db, { locationId: loc, label: "Till A" });
+    const first = await seedDevice(suite.db, { label: "Till A" });
     profile = first.profileId;
     a = first.deviceId;
-    b = (await seedDevice(suite.db, { locationId: loc, label: "Till B", profileId: profile }))
-      .deviceId;
+    b = (await seedDevice(suite.db, { label: "Till B", profileId: profile })).deviceId;
     receiptPrinter = await seedPrinter(loc, "Bar");
     page = await seedPagePrinter(loc, "Office");
     carried = await seedPrinter(loc, "Handheld", { portable: true });

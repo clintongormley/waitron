@@ -6,7 +6,7 @@ import {
   seedNodeAndSeries,
   seedSale,
   seedSubstitution,
-  seedVenue,
+  seedVenueWithSeries,
   seedVoid,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -23,7 +23,7 @@ const TZ = "Europe/Madrid";
 const noonUtc = new Date("2026-08-04T10:00:00Z").toISOString();
 
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
 });
 
 function run(overrides: Partial<DailyCloseInput> = {}): Promise<import("./types.js").VatSummary> {

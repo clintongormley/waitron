@@ -13,8 +13,10 @@ import {
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { readCalendarDays, type HolidayReader } from "./hours.js";
 import { createHolidayStore, readHolidayFacts as installedReadHolidayFacts } from "./holidays.js";
@@ -51,17 +53,15 @@ interface Fixture {
 
 async function fixture(): Promise<Fixture> {
   return withTransaction(db, async (tx) => {
-    const [location] = await tx
-      .insert(locations)
-      .values({
-        name: `Venue ${randomUUID()}`,
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00:00",
-      })
-      .returning();
-    const cfg = { locationId: locationId(location!.id) };
+    await seedVenue(tx, {
+      name: `Venue ${randomUUID()}`,
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00:00",
+    });
+    const venueId = await venueLocationId(tx);
+    const cfg = { locationId: locationId(venueId) };
     const department = (location: string, name: string, isDefault = false) => ({
       locationId: location,
       name,
@@ -70,20 +70,20 @@ async function fixture(): Promise<Fixture> {
     });
     const [restaurant, deli] = await tx
       .insert(departments)
-      .values([department(location!.id, "Restaurant", true), department(location!.id, "Deli")])
+      .values([department(venueId, "Restaurant", true), department(venueId, "Deli")])
       .returning();
     const [bar, kitchen] = await tx
       .insert(kitchenStations)
       .values([
-        { locationId: location!.id, name: "Bar" },
-        { locationId: location!.id, name: "Kitchen", isDefault: true },
+        { locationId: venueId, name: "Bar" },
+        { locationId: venueId, name: "Kitchen", isDefault: true },
       ])
       .returning();
     const [restaurantStation, deliStation] = await tx
       .insert(kitchenStations)
       .values([
-        { locationId: location!.id, name: "Pass" },
-        { locationId: location!.id, name: "Grill" },
+        { locationId: venueId, name: "Pass" },
+        { locationId: venueId, name: "Grill" },
       ])
       .returning();
     const [calendarMenu] = await tx

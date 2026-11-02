@@ -7,11 +7,12 @@ import {
   deviceProfiles,
   devices,
   floorZones,
-  locations,
   withTransaction,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
@@ -26,15 +27,13 @@ const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db
 
 async function fixture() {
   return run(async (tx) => {
-    const [venue] = await tx
-      .insert(locations)
-      .values({
-        name: randomUUID(),
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-      })
-      .returning();
-    const cfg = { locationId: locationId(venue!.id) };
+    await seedVenue(tx, {
+      name: randomUUID(),
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+    });
+    const venueId = await venueLocationId(tx);
+    const cfg = { locationId: locationId(venueId) };
     const restaurant = await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" });
     const deli = await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" });
     const dining = await createServiceZone(tx, cfg, {
@@ -61,17 +60,10 @@ async function fixture() {
       allowedZoneIds: null,
       startingZoneId: counter.id,
     });
-    const enrolled = await tx
-      .insert(devices)
-      .values(
-        [0, 1].map((n) => ({
-          ...cfg,
-          deviceProfileId: profileId,
-          label: `Till ${n}`,
-          tokenHash: randomUUID(),
-        })),
-      )
-      .returning();
+    const enrolled = [
+      await seedDevice(tx, { profileId, label: "Till 0" }),
+      await seedDevice(tx, { profileId, label: "Till 1" }),
+    ];
     return {
       cfg,
       restaurant: restaurant.id,
@@ -81,8 +73,8 @@ async function fixture() {
       profileId,
       secondProfileId: profiles[1]!.id,
       unrestrictedProfileId: profiles[2]!.id,
-      deviceId: enrolled[0]!.id,
-      otherDeviceId: enrolled[1]!.id,
+      deviceId: enrolled[0]!.deviceId as string,
+      otherDeviceId: enrolled[1]!.deviceId as string,
     };
   });
 }

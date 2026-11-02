@@ -4,13 +4,14 @@ import { randomUUID } from "node:crypto";
 import {
   CORE_MIGRATIONS,
   locationDayCutoverChanges,
-  locations,
   nodes,
   readVenueClock,
   readVenueClockAndPlace,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   businessDayOf,
   businessDayRangeWindow,
@@ -165,39 +166,33 @@ describe("readLocationClock", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
   it("reads a location's zone and its cutover as HH:MM", async () => {
-    const [location] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Sala",
-        invoiceLocales: ["es"],
-        operationDescription: "Restaurante",
-        timeZone: "Atlantic/Canary",
-        dayCutover: "04:30:00",
-      })
-      .returning({ id: locations.id });
+    await seedVenue(suite.db, {
+      name: "Sala",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurante",
+      timeZone: "Atlantic/Canary",
+      dayCutover: "04:30:00",
+    });
+    const venueId = await venueLocationId(suite.db);
 
-    const clock = await withTransaction(suite.db, (tx) => readLocationClock(tx, location!.id));
+    const clock = await withTransaction(suite.db, (tx) => readLocationClock(tx, venueId));
 
     expect(clock).toEqual({ cutoverChanges: [], timeZone: "Atlantic/Canary", dayCutover: "04:30" });
   });
 
   it("reads the clock beside the location's province and city", async () => {
-    const [location] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Sala",
-        invoiceLocales: ["es"],
-        operationDescription: "Restaurante",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00:00",
-        province: "Sevilla",
-        city: "Dos Hermanas",
-      })
-      .returning({ id: locations.id });
+    await seedVenue(suite.db, {
+      name: "Sala",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurante",
+      timeZone: "Europe/Madrid",
+      dayCutover: "05:00:00",
+      province: "Sevilla",
+      city: "Dos Hermanas",
+    });
+    const venueId = await venueLocationId(suite.db);
 
-    const read = await withTransaction(suite.db, (tx) =>
-      readLocationClockAndPlace(tx, location!.id),
-    );
+    const read = await withTransaction(suite.db, (tx) => readLocationClockAndPlace(tx, venueId));
 
     expect(read).toEqual({
       clock: { cutoverChanges: [], timeZone: "Europe/Madrid", dayCutover: "05:00" },
@@ -213,29 +208,27 @@ describe("readLocationClock", () => {
   });
 
   it("readVenueClock reads what readLocationClock reads for the one location", async () => {
-    const [location] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Sala",
-        invoiceLocales: ["es"],
-        operationDescription: "Restaurante",
-        timeZone: "Atlantic/Canary",
-        dayCutover: "04:30:00",
-        province: "Las Palmas",
-        city: "Telde",
-      })
-      .returning({ id: locations.id });
+    await seedVenue(suite.db, {
+      name: "Sala",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurante",
+      timeZone: "Atlantic/Canary",
+      dayCutover: "04:30:00",
+      province: "Las Palmas",
+      city: "Telde",
+    });
+    const venueId = await venueLocationId(suite.db);
     await suite.db.insert(locationDayCutoverChanges).values([
-      { locationId: location!.id, effectiveBusinessDay: "2026-05-01", dayCutover: "05:00:00" },
-      { locationId: location!.id, effectiveBusinessDay: "2026-01-15", dayCutover: "03:00:00" },
+      { locationId: venueId, effectiveBusinessDay: "2026-05-01", dayCutover: "05:00:00" },
+      { locationId: venueId, effectiveBusinessDay: "2026-01-15", dayCutover: "03:00:00" },
     ]);
 
     await withTransaction(suite.db, async (tx) => {
       expect(await readVenueClockAndPlace(tx)).toEqual(
-        await readLocationClockAndPlace(tx, location!.id),
+        await readLocationClockAndPlace(tx, venueId),
       );
       const clock = await readVenueClock(tx);
-      expect(clock).toEqual(await readLocationClock(tx, location!.id));
+      expect(clock).toEqual(await readLocationClock(tx, venueId));
       // So two readers wrong in the same way cannot pass.
       expect(clock.cutoverChanges.map((change) => change.effectiveBusinessDay)).toEqual([
         "2026-01-15",
@@ -246,19 +239,17 @@ describe("readLocationClock", () => {
   });
 
   it("resolveVenueClock reads the venue's clock for a node the database holds", async () => {
-    const [location] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Sala",
-        invoiceLocales: ["es"],
-        operationDescription: "Restaurante",
-        timeZone: "Atlantic/Canary",
-        dayCutover: "04:30:00",
-      })
-      .returning({ id: locations.id });
+    await seedVenue(suite.db, {
+      name: "Sala",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurante",
+      timeZone: "Atlantic/Canary",
+      dayCutover: "04:30:00",
+    });
+    const venueId = await venueLocationId(suite.db);
     const [node] = await suite.db
       .insert(nodes)
-      .values({ locationId: location!.id, name: "Box" })
+      .values({ locationId: venueId, name: "Box" })
       .returning({ id: nodes.id });
 
     expect(await withTransaction(suite.db, (tx) => resolveVenueClock(tx, node!.id))).toEqual({

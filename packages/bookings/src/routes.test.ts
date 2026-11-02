@@ -4,13 +4,13 @@ import {
   floorTodayTables,
   diningTables,
   floorZones,
-  locations,
   withTransaction,
   type Database,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   persons,
@@ -47,17 +47,13 @@ interface Venue {
  * and close a composition → bookings → composition cycle. */
 async function setupVenue(): Promise<Venue> {
   const db: Database = suite.db;
-  await seedTenant(db);
-  const [loc] = await db
-    .insert(locations)
-    .values({
-      name: "Main room",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant service",
-    })
-    .returning({ id: locations.id });
-  const locationId = loc!.id;
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  await seedVenue(db, {
+    name: "Main room",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant service",
+  });
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
 
   const { managerSid, staffSid } = await withTransaction(db, async (tx: Transaction) => {
     const [mgr] = await tx

@@ -5,13 +5,13 @@ import {
   CORE_MIGRATIONS,
   UNIQUE_VIOLATION,
   isRefusal,
-  locations,
   printers,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { randomUUID } from "node:crypto";
 import { createPrinter, deactivatePrinter, listPrinters, updatePrinter } from "./printers.js";
 import type { PaperWidth } from "./layout.js";
@@ -25,12 +25,13 @@ import "./errors.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function setup(): Promise<PrintConfig> {
-  await seedTenant(suite.db);
-  const [row] = await suite.db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
-    .returning({ id: locations.id });
-  return { locationId: row!.id };
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Sale on premises",
+  });
+  const venueId = await venueLocationId(suite.db);
+  return { locationId: venueId };
 }
 
 function asTx<T>(cfg: PrintConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {

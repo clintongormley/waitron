@@ -11,8 +11,9 @@ import {
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -41,22 +42,20 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return withTransaction(db, fn);
 }
 
-async function seedVenue(
+async function seedVenueCfg(
   name: string,
   invoiceLocales: string[] = ["en-GB"],
   options: { tenant?: boolean; province?: string } = {},
 ): Promise<{ locationId: LocationId }> {
-  if (options.tenant === true) await seedTenant(db);
-  const [row] = await db
-    .insert(locations)
-    .values({
-      name,
-      invoiceLocales,
-      province: options.province ?? null,
-      operationDescription: "Hospitality",
-    })
-    .returning({ id: locations.id });
-  return { locationId: brandLocationId(row!.id) };
+  const venue = {
+    name,
+    invoiceLocales,
+    province: options.province ?? null,
+    operationDescription: "Hospitality",
+  };
+  if (options.tenant === true) await seedVenue(db, venue);
+  else await db.insert(locations).values(venue);
+  return { locationId: brandLocationId(await venueLocationId(db)) };
 }
 
 async function seedCourse(
@@ -136,7 +135,7 @@ describe("a new department's starter steps", () => {
     },
   ] as const)("$title", async ({ locales, names, ...row }) => {
     const venue = "venue" in row ? row.venue : {};
-    const cfg = await seedVenue(`Starter ${locales.join(" ")}`, [...locales], venue);
+    const cfg = await seedVenueCfg(`Starter ${locales.join(" ")}`, [...locales], venue);
     const department = await scoped((tx) =>
       createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
     );
@@ -148,7 +147,7 @@ describe("a new department's starter steps", () => {
 
 describe("service steps", () => {
   it("lists each active department's steps in order, and none of a deleted department", async () => {
-    const cfg = await seedVenue("Listing steps");
+    const cfg = await seedVenueCfg("Listing steps");
     const { dining, bar, gone } = await scoped(async (tx) => ({
       dining: await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
       bar: await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" }),
@@ -190,7 +189,7 @@ describe("service steps", () => {
   });
 
   it("lists the venue's live courses in firing order", async () => {
-    const cfg = await seedVenue("Listing courses");
+    const cfg = await seedVenueCfg("Listing courses");
     const mains = await seedCourse(cfg, "Mains", 2);
     const starters = await seedCourse(cfg, "Starters", 1);
     await seedCourse(cfg, "Retired", 0, false);
@@ -201,7 +200,7 @@ describe("service steps", () => {
   });
 
   it("keeps a renamed or moved step's id, deletes one not sent, and gives a new one an id", async () => {
-    const cfg = await seedVenue("Change set");
+    const cfg = await seedVenueCfg("Change set");
     const mains = await seedCourse(cfg, "Mains", 1);
     const department = await scoped((tx) =>
       createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
@@ -237,7 +236,7 @@ describe("service steps", () => {
   });
 
   it("refuses a step id of another department, naming it, and writes nothing", async () => {
-    const cfg = await seedVenue("Foreign step");
+    const cfg = await seedVenueCfg("Foreign step");
     const { dining, bar } = await scoped(async (tx) => ({
       dining: await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
       bar: await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" }),
@@ -271,7 +270,7 @@ describe("service steps", () => {
   it.each(["inactive", "of no venue"] as const)(
     "refuses a course that is %s, naming it, and writes nothing",
     async (kind) => {
-      const cfg = await seedVenue(`Bad course ${kind}`);
+      const cfg = await seedVenueCfg(`Bad course ${kind}`);
       const courseId =
         kind === "inactive" ? await seedCourse(cfg, "Retired", 0, false) : randomUUID();
       const department = await scoped((tx) =>
@@ -296,7 +295,7 @@ describe("service steps", () => {
   );
 
   it("an empty list deletes the department's steps", async () => {
-    const cfg = await seedVenue("Empty list");
+    const cfg = await seedVenueCfg("Empty list");
     const department = await scoped((tx) =>
       createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
     );
@@ -338,7 +337,7 @@ describe("a step's completions", () => {
       .then((rows) => rows.map((row) => row.stepId));
 
   it("a department save keeps a renamed step's completions and drops a removed step's", async () => {
-    const cfg = await seedVenue("Completions on save");
+    const cfg = await seedVenueCfg("Completions on save");
     const department = await scoped((tx) =>
       createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
     );
@@ -359,7 +358,7 @@ describe("a step's completions", () => {
   });
 
   it("a department delete takes its steps' completions", async () => {
-    const cfg = await seedVenue("Completions on delete");
+    const cfg = await seedVenueCfg("Completions on delete");
     const { dining, bar } = await scoped(async (tx) => ({
       dining: await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" }),
       bar: await createDepartment(tx, cfg, { name: "Bar", orderStart: "counter" }),

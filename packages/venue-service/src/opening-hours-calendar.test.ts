@@ -16,9 +16,11 @@ import {
   tenants,
   withTransaction,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { CALENDAR_MONTH_PLAN_READS } from "./dashboard/live-queries.js";
@@ -50,23 +52,19 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
     .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "House Ltd" })
     .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
   const [existing] = await suite.db.select({ id: locations.id }).from(locations);
-  const [location] =
-    existing === undefined
-      ? await suite.db
-          .insert(locations)
-          .values({
-            name: `House ${randomUUID()}`,
-            invoiceLocales: ["es-ES"],
-            operationDescription: "Hospitality",
-            timeZone: "Europe/Madrid",
-            dayCutover: "06:00",
-            province: "Sevilla",
-            city: "Sevilla",
-          })
-          .returning({ id: locations.id })
-      : [existing];
+  if (existing === undefined)
+    await seedVenue(suite.db, {
+      name: `House ${randomUUID()}`,
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Hospitality",
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
+      province: "Sevilla",
+      city: "Sevilla",
+    });
+  const venueId = await venueLocationId(suite.db);
   const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
-  const cfg: VenueScope = { locationId: locationId(location!.id) };
+  const cfg: VenueScope = { locationId: locationId(venueId) };
   return run(async (tx) => {
     const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
@@ -667,19 +665,17 @@ describe("the Opening hours month read", () => {
   });
 
   it("gives a venue with no seasons yet every date with no season and no chips", async () => {
-    const [location] = await suite.db
-      .insert(locations)
-      .values({
-        name: `House ${randomUUID()}`,
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00",
-        province: "Sevilla",
-        city: "Sevilla",
-      })
-      .returning({ id: locations.id });
-    const month = await readMonth({ cfg: { locationId: locationId(location!.id) } }, "2030-12");
+    await seedVenue(suite.db, {
+      name: `House ${randomUUID()}`,
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Hospitality",
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
+      province: "Sevilla",
+      city: "Sevilla",
+    });
+    const venueId = await venueLocationId(suite.db);
+    const month = await readMonth({ cfg: { locationId: locationId(venueId) } }, "2030-12");
     expect(month.seasons).toEqual([]);
     expect(month.days).toHaveLength(42);
     expect(month.days.map(({ seasonId, departments }) => ({ seasonId, departments }))).toEqual(

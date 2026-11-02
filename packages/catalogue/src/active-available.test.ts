@@ -11,7 +11,7 @@ import {
 } from "./operations.js";
 import { readProductEditor, saveProductEditor, type ProductEditorInput } from "./product-editor.js";
 import { createUnit } from "./units.js";
-import { seedVenue, useCatalogueDb } from "../test/fixtures.js";
+import { seedVenueWithSeries, useCatalogueDb } from "../test/fixtures.js";
 
 // Active is whether the product exists for the venue, Available is "sold out for now".
 // The till sells a product only when it is BOTH, and each state is written without touching the
@@ -24,7 +24,7 @@ let productId = "";
 let body: ProductEditorInput;
 
 beforeEach(async () => {
-  await seedVenue(fx.db);
+  await seedVenueWithSeries(fx.db);
   await run(async (tx) => {
     const menu = await createCatalogue(tx, { name: "Deli" });
     catalogueId = menu.id;

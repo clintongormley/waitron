@@ -1,22 +1,19 @@
 import { randomUUID } from "node:crypto";
-import { kitchenStations, locations, withTransaction, type Database } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { kitchenStations, venueLocationId, withTransaction, type Database } from "@waitron/db";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
 import { departments, seasons } from "@waitron/venue-service";
 
-/** A location with two staff, a department, a prep station and a season, each inserted directly. */
-export async function seedVenue(db: Database) {
-  await seedTenant(db);
+/** The venue with two staff, a department, a prep station and a season. */
+export async function seedVenueWithStaff(db: Database) {
   return withTransaction(db, async (tx) => {
-    const [location] = await tx
-      .insert(locations)
-      .values({
-        name: `Casa ${randomUUID()}`,
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurant",
-      })
-      .returning({ id: locations.id });
-    const locationId = location!.id;
+    const venue = {
+      name: `Casa ${randomUUID()}`,
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Restaurant",
+    };
+    await seedVenue(tx, venue);
+    const locationId = await venueLocationId(tx);
     const person = async (displayName: string) => {
       const [row] = await tx
         .insert(persons)

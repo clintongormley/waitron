@@ -1,9 +1,15 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, locations, printAgents, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  locations,
+  printAgents,
+  withTransaction,
+  venueLocationId,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { hashSecret } from "@waitron/identity";
 import { authenticateAgent } from "./agent.js";
 type PrintAgentConfig = { locationId: string };
@@ -13,16 +19,13 @@ const LOCALE = "es-ES";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function setup(): Promise<PrintAgentConfig> {
-  await seedTenant(suite.db);
-  const [row] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Bar",
-      invoiceLocales: [LOCALE],
-      operationDescription: "Sale on premises",
-    })
-    .returning({ id: locations.id });
-  return { locationId: row!.id };
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Sale on premises",
+  });
+  const venueId = await venueLocationId(suite.db);
+  return { locationId: venueId };
 }
 
 async function lastSeenAt(agentId: string): Promise<string | null> {

@@ -12,13 +12,14 @@ import {
   CORE_MIGRATIONS,
   floorZones,
   kitchenStations,
-  locations,
   locationDayCutoverChanges,
   products,
   withTransaction,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
@@ -41,17 +42,15 @@ const tx = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.d
 const week = <T>(field: "slots" | "ranges", monday: readonly T[]) =>
   Array.from({ length: 7 }, (_, weekday) => ({ weekday, [field]: weekday === 1 ? monday : [] }));
 async function fixture(db: Transaction) {
-  const [venue] = await db
-    .insert(locations)
-    .values({
-      name: randomUUID(),
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Restaurant",
-    })
-    .returning();
-  const cfg = { locationId: locationId(venue!.id) };
+  await seedVenue(db, {
+    name: randomUUID(),
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Restaurant",
+  });
+  const venueId = await venueLocationId(db);
+  const cfg = { locationId: locationId(venueId) };
   const department = (await createDepartment(db, cfg, { name: "Dining", orderStart: "table" })).id;
   const [terrace] = await db
     .insert(floorZones)

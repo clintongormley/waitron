@@ -25,9 +25,10 @@ import {
   workingOrderLines,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { occurrenceKey } from "./floor-layout-due.js";
 import { addDays } from "./hours-rules.js";
@@ -601,20 +602,16 @@ describe("service-period writers", () => {
  * apart. */
 async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } = {}) {
   const [existing] = await db.select({ id: locations.id }).from(locations);
-  const [location] =
-    existing === undefined
-      ? await db
-          .insert(locations)
-          .values({
-            name: `Casa ${randomUUID()}`,
-            invoiceLocales: ["es-ES"],
-            operationDescription: "Hostelería",
-            timeZone: ZONE,
-          })
-          .returning({ id: locations.id })
-      : [existing];
+  if (existing === undefined)
+    await seedVenue(db, {
+      name: `Casa ${randomUUID()}`,
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Hostelería",
+      timeZone: ZONE,
+    });
+  const venueId = await venueLocationId(db);
   const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
-  const locationId: LocationId = brandLocationId(location!.id);
+  const locationId: LocationId = brandLocationId(venueId);
   const cfg = { locationId };
   await db
     .insert(kitchenStations)
@@ -1492,7 +1489,7 @@ describe("a zone moved to another department", () => {
 
 /** Adds Tortilla to Desayunos, republishes it, and records one Sala order line from it. */
 async function recordedLine(v: Timed) {
-  const nodeId = await seedNode(db, v.locationId);
+  const nodeId = await seedNode(db);
   await db.execute(sql`
     insert into units (id, seed_key, staff_name, staff_abbreviation, name, abbreviation, precision, hardware_unit)
     values (${randomUUID()}, 'each', 'Each', 'ea', '{"en":"each"}', '{"en":"ea"}', 0, null)`);

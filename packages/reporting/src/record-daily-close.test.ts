@@ -20,7 +20,7 @@ import {
   seedSale,
   seedTender,
   seedVenueDevice,
-  seedVenue,
+  seedVenueWithSeries,
   seedVoid,
 } from "../test/fixtures.js";
 import type { SeededVenue } from "../test/fixtures.js";
@@ -39,7 +39,7 @@ const CLOSED_BY = "cccccccc-0000-4000-8000-000000000001";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 let venue: SeededVenue;
 beforeEach(async () => {
-  venue = await seedVenue(suite.db);
+  venue = await seedVenueWithSeries(suite.db);
 });
 
 function closeInput(businessDay: string) {

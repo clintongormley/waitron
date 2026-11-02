@@ -11,12 +11,13 @@ import {
 import {
   CORE_MIGRATIONS,
   locationBusinessDaySettings,
-  locations,
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   IDENTITY_MIGRATIONS,
@@ -56,17 +57,15 @@ const BASE = "/management-api/venue-service";
 const noopLog: Logger = () => {};
 
 async function routed() {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: `Venue ${randomUUID()}`,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00",
-    })
-    .returning({ id: locations.id });
-  const cfg = { locationId: brandLocationId(location!.id) };
+  await seedVenue(db, {
+    name: `Venue ${randomUUID()}`,
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Hospitality",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00",
+  });
+  const venueId = await venueLocationId(db);
+  const cfg = { locationId: brandLocationId(venueId) };
   const made = await scoped(async (tx) => {
     const restaurant = (
       await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })

@@ -17,7 +17,7 @@ import { createUnit } from "./units.js";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
 import { priceBasket } from "./pricing.js";
 import { customerPresentationText } from "./product-presentation.js";
-import { seedVenue } from "../test/fixtures.js";
+import { seedVenueWithSeries } from "../test/fixtures.js";
 import { deviceOrigin } from "@waitron/shared";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
@@ -77,8 +77,8 @@ const clock: TrustedClock = {
 
 describe("catalogue → priceBasket → recordSale (end-to-end)", () => {
   it("rings a sale entirely from catalogue data", async () => {
-    const { locationId, nodeId, seriesId } = await seedVenue(suite.db);
-    const { deviceId } = await seedDevice(suite.db, { locationId });
+    const { nodeId, seriesId } = await seedVenueWithSeries(suite.db);
+    const { deviceId } = await seedDevice(suite.db);
     const backend = new CapturingFakeBackend(suite.db);
 
     let priced: ReturnType<typeof priceBasket>;

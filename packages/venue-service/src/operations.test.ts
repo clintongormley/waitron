@@ -51,7 +51,7 @@ import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
 import type { ZoneMenu, ZoneMenuState } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -278,16 +278,14 @@ describe("order flow from sale policies", () => {
 describe("new department service periods", () => {
   it("names a new department's period in a Spanish venue's staff language", async () => {
     const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
-    const [row] = await db
-      .insert(locations)
-      .values({
-        name: `Spanish ${randomUUID()}`,
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Hospitality",
-        catalogueId: menu.id,
-      })
-      .returning({ id: locations.id });
-    const id = brandLocationId(row!.id);
+    await seedVenue(db, {
+      name: `Spanish ${randomUUID()}`,
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Hospitality",
+      defaultCatalogueId: menu.id,
+    });
+    const venueId = await venueLocationId(db);
+    const id = brandLocationId(venueId);
     const department = await scoped((tx) =>
       createDepartment(tx, { locationId: id }, { name: "Restaurant", orderStart: "counter" }),
     );
@@ -408,16 +406,14 @@ async function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 async function seedLocation(name: string, withDefault = true): Promise<string> {
-  const [row] = await db
-    .insert(locations)
-    .values({ name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
+  await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
+  const venueId = await venueLocationId(db);
   if (withDefault) {
     await db
       .insert(kitchenStations)
-      .values({ locationId: brandLocationId(row!.id), name: "Default prep", isDefault: true });
+      .values({ locationId: brandLocationId(venueId), name: "Default prep", isDefault: true });
   }
-  return row!.id;
+  return venueId;
 }
 
 async function seedZone(locationId: LocationId, name: string): Promise<string> {
@@ -794,7 +790,7 @@ describe("venue service routing", () => {
     const location = await seedLocation("Venue");
     const locationId = brandLocationId(location);
     const zone = await seedZone(locationId, "Deli counter");
-    const nodeId = await seedNode(db, locationId);
+    const nodeId = await seedNode(db);
 
     await scoped(async (tx) => {
       const department = await createDepartment(
@@ -1011,7 +1007,7 @@ describe("venue service routing", () => {
     const location = await seedLocation("Venue");
     const locationId = brandLocationId(location);
     const zone = await seedZone(locationId, "Deli counter");
-    const nodeId = await seedNode(db, locationId);
+    const nodeId = await seedNode(db);
 
     await scoped(async (tx) => {
       const department = await createDepartment(
@@ -1887,7 +1883,7 @@ async function seedSellingVenue() {
   const cfg = { locationId };
   const diningZone = await seedZone(locationId, "Dining room");
   const barZone = await seedZone(locationId, "Bar");
-  const nodeId = await seedNode(db, locationId);
+  const nodeId = await seedNode(db);
   return scoped(async (tx) => {
     const restaurant = await createDepartment(tx, cfg, {
       name: "Restaurant",

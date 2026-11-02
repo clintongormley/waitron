@@ -6,12 +6,12 @@ import {
   CORE_MIGRATIONS,
   catalogues,
   floorZones,
-  locations,
   withTransaction,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import * as service from "./index.js";
 
@@ -29,16 +29,14 @@ const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.
 const at = new Date("2026-10-11T12:00:00Z");
 async function fixture() {
   return run(async (tx) => {
-    const [place] = await tx
-      .insert(locations)
-      .values({
-        name: randomUUID(),
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-      })
-      .returning();
-    const cfg = { locationId: locationId(place!.id), receiptLanguages: ["en-GB"] };
+    await seedVenue(tx, {
+      name: randomUUID(),
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+      timeZone: "Europe/Madrid",
+    });
+    const venueId = await venueLocationId(tx);
+    const cfg = { locationId: locationId(venueId), receiptLanguages: ["en-GB"] };
     const live = await service.createDepartment(tx, cfg, { name: "Live" });
     const gone = await service.createDepartment(tx, cfg, { name: "Gone" });
     const zone = await service.createServiceZone(tx, cfg, {
@@ -309,7 +307,7 @@ describe("deleted service targets", () => {
       ),
     ).rejects.toThrow(/UNIQUE constraint failed: departments.location_id/);
     expect(await snapshot()).toEqual(beforeClash);
-    const nodeId = await seedNode(suite.db, f.cfg.locationId);
+    const nodeId = await seedNode(suite.db);
     await run((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, { ...f.cfg, nodeId }));
     const ds = await run((tx) =>
       tx.select().from(departments).where(eq(departments.locationId, f.cfg.locationId)),

@@ -7,9 +7,10 @@ import {
   locations,
   tenants,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { StarterContentLanguage, StarterTranslations } from "@waitron/country-packs";
 import { CATALOGUE_MIGRATIONS } from "./migrations.js";
@@ -33,17 +34,14 @@ const expected: StarterTranslations<StarterContentLanguage> = STARTER_UNIT_NAMES
 async function venue(country: string, province: string, receipt: string | string[]) {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ country }).where(eq(tenants.id, 1));
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Venue",
-      province,
-      invoiceLocales: typeof receipt === "string" ? [receipt] : receipt,
-      operationDescription: "Hospitality",
-    })
-    .returning({ id: locations.id });
-  const locationId = brandLocationId(location!.id);
-  const nodeId = await seedNode(suite.db, locationId);
+  await seedVenue(suite.db, {
+    name: "Venue",
+    province,
+    invoiceLocales: typeof receipt === "string" ? [receipt] : receipt,
+    operationDescription: "Hospitality",
+  });
+  const locationId = brandLocationId(await venueLocationId(suite.db));
+  const nodeId = await seedNode(suite.db);
   return { locationId, nodeId };
 }
 
@@ -229,7 +227,7 @@ describe("catalogue provisioning", () => {
       .set({ name: { en: "piece" } })
       .where(eq(units.seedKey, "g"));
     await suite.db.delete(units).where(eq(units.seedKey, "mg"));
-    const otherNode = await seedNode(suite.db, node.locationId);
+    const otherNode = await seedNode(suite.db);
     await run(otherNode);
     expect((await storedUnits()).find((unit) => unit.seed_key === "g")?.name).toEqual({
       en: "piece",

@@ -17,8 +17,9 @@ import {
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { starterName } from "@waitron/country-packs";
 import { readLocationClock } from "@waitron/reporting";
@@ -64,11 +65,9 @@ beforeAll(() => {
 });
 
 async function newLocation(name: string): Promise<LocationId> {
-  const [row] = await db
-    .insert(locations)
-    .values({ name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
-  return brandLocationId(row!.id);
+  await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
+  const venueId = await venueLocationId(db);
+  return brandLocationId(venueId);
 }
 
 const shape = (rows: { name: string; startsOn: string }[]) =>
@@ -115,17 +114,16 @@ describe("ensureDefaultSeasons", () => {
   });
 
   const staffVenue = async (tenant: boolean, province: string | null, locale: string) => {
-    if (tenant) await seedTenant(db);
-    const [row] = await db
-      .insert(locations)
-      .values({
-        name: "Staff language",
-        province,
-        invoiceLocales: [locale],
-        operationDescription: "Hospitality",
-      })
-      .returning({ id: locations.id });
-    return brandLocationId(row!.id);
+    const venue = {
+      name: "Staff language",
+      province,
+      invoiceLocales: [locale],
+      operationDescription: "Hospitality",
+    };
+    if (tenant) await seedVenue(db, venue);
+    else await db.insert(locations).values(venue);
+    const venueId = await venueLocationId(db);
+    return brandLocationId(venueId);
   };
   const starterSeasons = (language: "es" | "en") =>
     DEFAULT_SEASONS.map(({ name, startsOn, colour }) => ({
@@ -222,17 +220,15 @@ const SUNDAY = 0;
  *  nothing near the 06:00 changeover, and Winter's Saturday has no late Dinner before its own
  *  Sunday Breakfast at 06:00. */
 async function autumnVenue() {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: `House ${randomUUID()}`,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00",
-    })
-    .returning({ id: locations.id });
-  const cfg: VenueScope = { locationId: brandLocationId(location!.id) };
+  await seedVenue(db, {
+    name: `House ${randomUUID()}`,
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Hospitality",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00",
+  });
+  const venueId = await venueLocationId(db);
+  const cfg: VenueScope = { locationId: brandLocationId(venueId) };
   const [zone] = await db
     .insert(floorZones)
     .values({ locationId: cfg.locationId, name: "Terrace", displayOrder: 0 })

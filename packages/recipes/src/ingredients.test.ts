@@ -6,13 +6,13 @@ import {
   listIngredients,
   updateIngredient,
 } from "./ingredients.js";
-import { seedVenue, useIngredientDb } from "../test/fixtures.js";
+import { seedVenueWithNode, useIngredientDb } from "../test/fixtures.js";
 
 const fx = useIngredientDb();
 
 describe("ingredient operations", () => {
   beforeEach(async () => {
-    await seedVenue(fx.db);
+    await seedVenueWithNode(fx.db);
   });
 
   it("creates an ingredient with allergens and reads it back", async () => {

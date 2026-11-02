@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, products, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, products, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   activateDueMenuPublications,
   addMember,
@@ -82,19 +82,17 @@ it("changes presentation without rewriting product, variant, section, folder, re
     await queueMenuPublication(tx, menu.id, (await previewMenu(tx, menu.id)).hash, due, "manager", {
       at,
     });
-    const [place] = await tx
-      .insert(locations)
-      .values({
-        name: "Restaurant",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Hospitality",
-      })
-      .returning();
+    await seedVenue(tx, {
+      name: "Restaurant",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Hospitality",
+    });
+    const venueId = await venueLocationId(tx);
     for (const active of [true, false]) {
       const [department] = await tx
         .insert(departments)
         .values({
-          locationId: place!.id,
+          locationId: venueId,
           name: active ? "Dining" : "Closed",
           tradingName: "Room",
           active,

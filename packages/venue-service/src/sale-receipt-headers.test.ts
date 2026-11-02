@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, invoiceSeries, locations, sales } from "@waitron/db";
+import { CORE_MIGRATIONS, invoiceSeries, sales, venueLocationId } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { appendOnlyTablesIn } from "@waitron/sync-enrolment";
 import { VENUE_SERVICE_CLASSIFICATION } from "./classification.js";
@@ -28,17 +28,14 @@ beforeAll(() => {
 
 describe("sale receipt header snapshot", () => {
   it("keeps the issued department heading when its source department changes", async () => {
-    await seedTenant(db);
-    const [location] = await db
-      .insert(locations)
-      .values({
-        name: "Corner Kitchen",
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-      })
-      .returning({ id: locations.id });
-    const locationId = brandLocationId(location!.id);
-    const nodeId = await seedNode(db, locationId);
+    await seedVenue(db, {
+      name: "Corner Kitchen",
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+    });
+    const venueId = await venueLocationId(db);
+    const locationId = brandLocationId(venueId);
+    const nodeId = await seedNode(db);
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, { locationId, nodeId }));
     const [series] = await db
       .insert(invoiceSeries)

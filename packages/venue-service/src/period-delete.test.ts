@@ -16,8 +16,10 @@ import {
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { resolveDepartmentDays } from "./day-resolver.js";
@@ -64,17 +66,15 @@ const slot = (periodId: string, startsAt: string, endsAt: string): MenuSlot => (
 });
 
 async function venue() {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: `Venue ${randomUUID()}`,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
-      timeZone: ZONE,
-      dayCutover: "06:00:00",
-    })
-    .returning({ id: locations.id });
-  const locationId = brandLocationId(location!.id);
+  await seedVenue(db, {
+    name: `Venue ${randomUUID()}`,
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Hospitality",
+    timeZone: ZONE,
+    dayCutover: "06:00:00",
+  });
+  const venueId = await venueLocationId(db);
+  const locationId = brandLocationId(venueId);
   const cfg = { locationId };
   const [station] = await db
     .insert(kitchenStations)

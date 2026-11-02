@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { kitchenCourses, withTransaction, type Database, type Transaction } from "@waitron/db";
-import { seedLegacySellingUnits, seedVenue } from "./fixtures.js";
+import { seedLegacySellingUnits, seedVenueWithSeries } from "./fixtures.js";
 import { createCatalogue, createProduct, updateMenuItem } from "../src/operations.js";
 import { createCategory } from "../src/categories.js";
 import { createExtraList } from "../src/extras.js";
@@ -52,7 +52,7 @@ export const section = (sectionId: string): MemberRef => ({ kind: "section", sec
  * internal and customer names differ, so a read of the wrong one fails.
  */
 export async function menusFixture(db: Database): Promise<MenusFixture> {
-  const { locationId } = await seedVenue(db);
+  const { locationId } = await seedVenueWithSeries(db);
   await seedLegacySellingUnits(db);
   return withTransaction(db, async (tx) => {
     const softDrinks = (await createCategory(tx, { name: "Soft drinks" })).id;

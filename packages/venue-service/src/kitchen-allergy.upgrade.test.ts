@@ -9,9 +9,7 @@ import {
   CORE_MIGRATIONS,
   installChangeFeed,
   kitchenStations,
-  locations,
   parties,
-  workingOrders,
   workingOrderLines,
   ticketItems,
   printers,
@@ -19,11 +17,11 @@ import {
   kitchenPrintJobs,
   kitchenPrintJobLines,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations } from "@waitron/migrations";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { savePartyAllergy, setAllergyLineTicks } from "./party-allergy.js";
@@ -69,38 +67,31 @@ const suite = useVenueDb({
 });
 
 it("A669 storage upgrades populated kitchen work and restores boot change feeds without inventing originals", async () => {
-  await seedTenant(suite.db);
   const actor = randomUUID();
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Predecessor room",
-      invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
-    })
-    .returning();
-  const nodeId = await seedNode(suite.db, locationId(location!.id));
+  await seedVenue(suite.db, {
+    name: "Predecessor room",
+    invoiceLocales: ["en"],
+    operationDescription: "Restaurant",
+  });
+  const venueId = await venueLocationId(suite.db);
+  const nodeId = await seedNode(suite.db);
   const [station] = await suite.db
     .insert(kitchenStations)
-    .values({ locationId: location!.id, name: "Old grill" })
+    .values({ locationId: venueId, name: "Old grill" })
     .returning();
   const [party] = await suite.db
     .insert(parties)
     .values({ openedBy: actor, name: "Old guests" })
     .returning();
-  const [order] = await suite.db
-    .insert(workingOrders)
-    .values({
-      locationId: location!.id,
-      partyId: party!.id,
-      source: "dashboard",
-      orderNumber: 23,
-    })
-    .returning();
+  const order = await seedWorkingOrder(suite.db, {
+    partyId: party!.id,
+    source: "dashboard",
+    orderNumber: 23,
+  });
   const [dish] = await suite.db
     .insert(workingOrderLines)
     .values({
-      workingOrderId: order!.id,
+      workingOrderId: order.id,
       lineNo: 1,
       name: "Old dish",
       descriptions: { en: "Customer dish" },
@@ -114,7 +105,7 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
   const [extra] = await suite.db
     .insert(workingOrderLines)
     .values({
-      workingOrderId: order!.id,
+      workingOrderId: order.id,
       parentLineId: dish!.id,
       lineNo: 2,
       name: "Old extra",
@@ -129,7 +120,7 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
     .insert(ticketItems)
     .values({
       nodeId,
-      workingOrderId: order!.id,
+      workingOrderId: order.id,
       workingOrderLineId: dish!.id,
       stationId: station!.id,
       quantity: 2000,
@@ -140,7 +131,7 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
     .returning();
   await suite.db.insert(ticketItems).values({
     nodeId,
-    workingOrderId: order!.id,
+    workingOrderId: order.id,
     workingOrderLineId: extra!.id,
     stationId: station!.id,
     quantity: 1000,
@@ -149,7 +140,7 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
   const [printer] = await suite.db
     .insert(printers)
     .values({
-      locationId: location!.id,
+      locationId: venueId,
       name: "Old printer",
       transport: "network_tcp",
       host: "192.0.2.10",
@@ -158,7 +149,7 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
   const [job] = await suite.db
     .insert(printJobs)
     .values({
-      locationId: location!.id,
+      locationId: venueId,
       printerId: printer!.id,
       payload: Uint8Array.of(27, 64, 79, 76, 68),
       status: "done",
@@ -166,7 +157,7 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
     .returning();
   await suite.db.insert(kitchenPrintJobs).values({
     printJobId: job!.id,
-    workingOrderId: order!.id,
+    workingOrderId: order.id,
     stationId: station!.id,
     reprint: false,
   });
@@ -196,7 +187,7 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
       await suite.db.execute(sql`insert into kitchen_notices
         (id, station_id, working_order_id, order_label, kind, line_name, quantity, created_at,
          acknowledged_at, direction, cancelled_extra, moved_to, rerouted_to, order_note_change)
-        values (${randomUUID()}, ${station!.id}, ${order!.id}, '#23', ${kind}, 'OLD GRILL', 1000,
+        values (${randomUUID()}, ${station!.id}, ${order.id}, '#23', ${kind}, 'OLD GRILL', 1000,
          '2026-10-19T10:00:00Z', ${acknowledged ? "2026-10-19T10:10:00Z" : null},
          ${kind === "changed" ? "removed" : null}, ${kind === "changed" ? "Old garnish" : null},
          ${kind === "moved" ? "Table 8" : null}, ${kind === "rerouted" ? "Cold" : null}, ${null})`);
@@ -330,7 +321,7 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
   for (const kind of ["allergy_changed", "allergy_removed"]) {
     await suite.db.execute(sql`insert into kitchen_notices
       (id, station_id, working_order_id, order_label, kind, line_name, quantity, created_at, allergy_block)
-      values (${randomUUID()}, ${station!.id}, ${order!.id}, '#23', ${kind}, 'OLD GRILL', 1000,
+      values (${randomUUID()}, ${station!.id}, ${order.id}, '#23', ${kind}, 'OLD GRILL', 1000,
       '2026-10-20T10:00:00Z', ${kind === "allergy_changed" ? JSON.stringify(block) : null})`);
   }
   expect(

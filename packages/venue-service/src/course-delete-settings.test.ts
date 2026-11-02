@@ -4,12 +4,13 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   kitchenCourses,
-  locations,
+  venueLocationId,
   withTransaction,
   type Database,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId, type LocationId } from "@waitron/shared";
 import {
   clearCourseDeleteSettings as clear,
@@ -38,11 +39,8 @@ const clearCourseDeleteSettings = async (tx: Transaction, cfg: Scope, courseId: 
 type Step = [name: string, start: ServiceStepStart, minutes?: number, course?: "dessert"];
 
 async function venue(name: string) {
-  const [row] = await db
-    .insert(locations)
-    .values({ name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
-  const cfg: { locationId: LocationId } = { locationId: locationId(row!.id) };
+  await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
+  const cfg: { locationId: LocationId } = { locationId: locationId(await venueLocationId(db)) };
   const [dessert] = await db
     .insert(kitchenCourses)
     .values({ ...cfg, name: "Dessert", displayOrder: 1 })

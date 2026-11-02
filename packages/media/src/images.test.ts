@@ -7,8 +7,6 @@ import {
   catalogues,
   products,
   tenantReceipts,
-  locations,
-  workingOrders,
   workingOrderLines,
   type Transaction,
 } from "@waitron/db";
@@ -32,7 +30,7 @@ import {
   publishMenu,
 } from "@waitron/catalogue";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 import {
   uploadImage,
@@ -1314,20 +1312,14 @@ describe("free default choice with incomplete catalogue and image text", () => {
       ]);
       const { hash } = await previewMenu(tx, menu.id);
       await publishMenu(tx, menu.id, hash, "person-default-switch");
-      const [location] = await tx
-        .insert(locations)
-        .values({
-          name: "Saved-order venue",
-          invoiceLocales: ["en"],
-          operationDescription: "Restaurant",
-        })
-        .returning();
-      const [order] = await tx
-        .insert(workingOrders)
-        .values({ source: "dashboard", locationId: location!.id, orderNumber: 17 })
-        .returning();
+      await seedVenue(tx, {
+        name: "Saved-order venue",
+        invoiceLocales: ["en"],
+        operationDescription: "Restaurant",
+      });
+      const order = await seedWorkingOrder(tx, { source: "dashboard", orderNumber: 17 });
       await tx.insert(workingOrderLines).values({
-        workingOrderId: order!.id,
+        workingOrderId: order.id,
         lineNo: 1,
         name: "Recorded staff potatoes",
         descriptions: { en: "Recorded potatoes" },

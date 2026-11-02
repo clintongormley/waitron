@@ -4,15 +4,15 @@ import {
   deviceProfilePrinters,
   deviceProfiles,
   devices,
-  locations,
   pagePrinters,
   printers,
   restrictRefused,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
@@ -46,11 +46,9 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 async function seedLocation(name: string): Promise<LocationId> {
-  const [row] = await suite.db
-    .insert(locations)
-    .values({ name, invoiceLocales: ["es"], operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
-  return brandLocationId(row!.id);
+  await seedVenue(suite.db, { name, invoiceLocales: ["es"], operationDescription: "Hospitality" });
+  const venueId = await venueLocationId(suite.db);
+  return brandLocationId(venueId);
 }
 
 async function seedPrinter(location: string, name: string): Promise<string> {
@@ -102,7 +100,6 @@ describe("a profile's printer lists and each device's current printers", () => {
 
   // `useVenueDb` empties every table after each test.
   beforeEach(async () => {
-    await seedTenant(suite.db);
     loc = await seedLocation("Here");
     p1 = await seedPrinter(loc, "Bar");
     p2 = await seedPrinter(loc, "Counter");
@@ -110,7 +107,7 @@ describe("a profile's printer lists and each device's current printers", () => {
   });
 
   it("stores both lists in the order given and reads them back", async () => {
-    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { profileId } = await seedDevice(suite.db);
     await inTx((tx) =>
       setProfilePrinterLists(
         tx,
@@ -130,7 +127,7 @@ describe("a profile's printer lists and each device's current printers", () => {
   });
 
   it("replaces the lists rather than adding to them", async () => {
-    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { profileId } = await seedDevice(suite.db);
     await inTx((tx) =>
       setProfilePrinterLists(
         tx,
@@ -160,7 +157,7 @@ describe("a profile's printer lists and each device's current printers", () => {
   });
 
   it("accepts the same printer on both lists", async () => {
-    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { profileId } = await seedDevice(suite.db);
     await inTx((tx) =>
       setProfilePrinterLists(
         tx,
@@ -180,7 +177,7 @@ describe("a profile's printer lists and each device's current printers", () => {
   });
 
   it("reads empty lists for a profile that has none", async () => {
-    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { profileId } = await seedDevice(suite.db);
     expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(
       lists({
         receiptPrinterIds: [],
@@ -190,7 +187,7 @@ describe("a profile's printer lists and each device's current printers", () => {
   });
 
   it("returns a device whose printer leaves the list to Use default, in the same transaction", async () => {
-    const { deviceId, profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { deviceId, profileId } = await seedDevice(suite.db);
     await inTx(async (tx) => {
       await setProfilePrinterLists(
         tx,
@@ -259,7 +256,7 @@ describe("a profile's printer lists and each device's current printers", () => {
   });
 
   it("leaves a device holding no printer on none when the lists change", async () => {
-    const { deviceId, profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { deviceId, profileId } = await seedDevice(suite.db);
     await inTx((tx) =>
       setProfilePrinterLists(
         tx,
@@ -277,7 +274,7 @@ describe("a profile's printer lists and each device's current printers", () => {
   });
 
   it("keeps a device on a switched-off printer that is still listed when another list changes", async () => {
-    const { deviceId, profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { deviceId, profileId } = await seedDevice(suite.db);
     await inTx(async (tx) => {
       await setProfilePrinterLists(
         tx,
@@ -313,7 +310,7 @@ describe("a profile's printer lists and each device's current printers", () => {
   });
 
   it("returns a device off a delisted printer to Use default rather than another listed one", async () => {
-    const { deviceId, profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { deviceId, profileId } = await seedDevice(suite.db);
     await inTx(async (tx) => {
       await setProfilePrinterLists(
         tx,
@@ -349,8 +346,8 @@ describe("a profile's printer lists and each device's current printers", () => {
   });
 
   it("leaves devices on other profiles untouched", async () => {
-    const mine = await seedDevice(suite.db, { locationId: loc });
-    const other = await seedDevice(suite.db, { locationId: loc });
+    const mine = await seedDevice(suite.db);
+    const other = await seedDevice(suite.db);
     await inTx(async (tx) => {
       await setProfilePrinterLists(
         tx,
@@ -394,8 +391,8 @@ describe("a profile's printer lists and each device's current printers", () => {
   });
 
   it("resettles a device moved onto another profile off the printers that profile does not list", async () => {
-    const from = await seedDevice(suite.db, { locationId: loc });
-    const to = await seedDevice(suite.db, { locationId: loc });
+    const from = await seedDevice(suite.db);
+    const to = await seedDevice(suite.db);
     await inTx(async (tx) => {
       await setProfilePrinterLists(
         tx,
@@ -439,7 +436,7 @@ describe("a profile's printer lists and each device's current printers", () => {
   });
 
   it("refuses a printer not on the device's list for that role, naming the field, and leaves the device unchanged", async () => {
-    const { deviceId, profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { deviceId, profileId } = await seedDevice(suite.db);
     await inTx(async (tx) => {
       await setProfilePrinterLists(
         tx,
@@ -504,7 +501,7 @@ describe("a profile's printer lists and each device's current printers", () => {
   });
 
   it("keeps a deactivated current printer stored, and refuses choosing an inactive one", async () => {
-    const { deviceId, profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { deviceId, profileId } = await seedDevice(suite.db);
     await inTx(async (tx) => {
       await setProfilePrinterLists(
         tx,
@@ -581,7 +578,6 @@ describe("a deleted printer on a profile's lists", () => {
   let gone: string;
 
   beforeEach(async () => {
-    await seedTenant(suite.db);
     loc = await seedLocation("Here");
     live = await seedPrinter(loc, "Bar");
     const [row] = await suite.db
@@ -633,7 +629,7 @@ describe("a deleted printer on a profile's lists", () => {
   it.each(ROLES)(
     "refuses newly listing it on the %s list with printer.not_found, storing nothing",
     async (_role, partial) => {
-      const { profileId } = await seedDevice(suite.db, { locationId: loc });
+      const { profileId } = await seedDevice(suite.db);
       const stored = lists({ receiptPrinterIds: [live], receiptPrinterDefaultId: live });
       await inTx((tx) => setProfilePrinterLists(tx, profileId, stored));
       await tombstone(gone);
@@ -652,7 +648,7 @@ describe("a deleted printer on a profile's lists", () => {
   it.each(ROLES)(
     "refuses a %s list still naming it when the same lists are saved again, storing nothing",
     async (_role, partial) => {
-      const { deviceId, profileId } = await seedDevice(suite.db, { locationId: loc });
+      const { deviceId, profileId } = await seedDevice(suite.db);
       const stale = withGone(partial);
       await inTx((tx) => setProfilePrinterLists(tx, profileId, stale));
       await tombstone(gone);
@@ -673,7 +669,7 @@ describe("a deleted printer on a profile's lists", () => {
   );
 
   it("names the deleted printer before an id no printer has, whichever list comes first", async () => {
-    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { profileId } = await seedDevice(suite.db);
     await tombstone(gone);
     const e = await captureError(() =>
       inTx((tx) =>
@@ -691,7 +687,7 @@ describe("a deleted printer on a profile's lists", () => {
   });
 
   it("still saves lists naming a switched-off printer that is not deleted", async () => {
-    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { profileId } = await seedDevice(suite.db);
     const saved = withGone(ROLES[5][1]);
     await inTx((tx) => setProfilePrinterLists(tx, profileId, saved));
     await setActive(gone, false);
@@ -700,7 +696,7 @@ describe("a deleted printer on a profile's lists", () => {
   });
 
   it("saves lists that no longer name it", async () => {
-    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { profileId } = await seedDevice(suite.db);
     await inTx((tx) =>
       setProfilePrinterLists(tx, profileId, lists({ receiptPrinterIds: [live, gone] })),
     );
@@ -717,14 +713,13 @@ describe("a profile's invoice printer list", () => {
   let office: string;
 
   beforeEach(async () => {
-    await seedTenant(suite.db);
     loc = await seedLocation("Here");
     receipt = await seedPrinter(loc, "Bar");
     office = await seedPagePrinter(loc, "Office");
   });
 
   it("stores a page printer and a receipt printer in the order given, with the default", async () => {
-    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { profileId } = await seedDevice(suite.db);
     const saved = lists({ invoicePrinterIds: [office, receipt], invoicePrinterDefaultId: office });
     await inTx((tx) => setProfilePrinterLists(tx, profileId, saved));
     expect(await inTx((tx) => readProfilePrinterLists(tx, profileId))).toEqual(saved);
@@ -743,7 +738,7 @@ describe("a profile's invoice printer list", () => {
   });
 
   it("refuses an id in neither printer table with printer.not_found, storing nothing", async () => {
-    const { profileId } = await seedDevice(suite.db, { locationId: loc });
+    const { profileId } = await seedDevice(suite.db);
     const stored = lists({ receiptPrinterIds: [receipt] });
     await inTx((tx) => setProfilePrinterLists(tx, profileId, stored));
     const e = await captureError(() =>
@@ -766,7 +761,7 @@ describe("a profile's invoice printer list", () => {
   ] as const)(
     "refuses a page printer on the %s list with printer.not_found, not a constraint error",
     async (_role, partial) => {
-      const { profileId } = await seedDevice(suite.db, { locationId: loc });
+      const { profileId } = await seedDevice(suite.db);
       const [key] = Object.keys(partial) as (keyof ProfilePrinterLists)[];
       const e = await captureError(() =>
         inTx((tx) => setProfilePrinterLists(tx, profileId, lists({ [key!]: [office] }))),

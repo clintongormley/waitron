@@ -19,6 +19,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -43,17 +44,15 @@ const scoped = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTrans
 const AT = new Date("2030-10-07T10:00:00Z");
 
 async function venue() {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: `Venue ${randomUUID()}`,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant service",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00",
-    })
-    .returning({ id: locations.id });
-  const cfg: VenueScope = { locationId: brandLocationId(location!.id) };
+  await seedVenue(db, {
+    name: `Venue ${randomUUID()}`,
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant service",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00",
+  });
+  const venueId = await venueLocationId(db);
+  const cfg: VenueScope = { locationId: brandLocationId(venueId) };
   const [zone] = await db
     .insert(floorZones)
     .values({ locationId: cfg.locationId, name: "Dining room", displayOrder: 0 })

@@ -6,12 +6,12 @@ import {
   floorTodayTables,
   floorZones,
   installChangeFeed,
-  locations,
   subscribeToChanges,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import type { ResourceChange } from "@waitron/shared";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
@@ -60,12 +60,13 @@ describe("BOOKINGS_CLASSIFICATION", () => {
 describe("booking change interests", () => {
   const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS });
   it("booking create/move/cancel invalidates old and new table interests", async () => {
-    await seedTenant(suite.db);
-    const [loc] = await suite.db
-      .insert(locations)
-      .values({ name: "Events", invoiceLocales: ["es"], operationDescription: "test" })
-      .returning();
-    const cfg = { locationId: locationId(loc!.id) };
+    await seedVenue(suite.db, {
+      name: "Events",
+      invoiceLocales: ["es"],
+      operationDescription: "test",
+    });
+    const venueId = await venueLocationId(suite.db);
+    const cfg = { locationId: locationId(venueId) };
     const [zone] = await suite.db
       .insert(floorZones)
       .values({ locationId: cfg.locationId, name: "Events" })

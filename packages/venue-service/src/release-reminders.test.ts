@@ -6,11 +6,12 @@ import {
   CORE_MIGRATIONS,
   floorZones,
   kitchenStations,
-  locations,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -36,11 +37,9 @@ function scoped<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 async function seedLocation(name: string): Promise<LocationId> {
-  const [row] = await db
-    .insert(locations)
-    .values({ name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
-  const locationId = brandLocationId(row!.id);
+  await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
+  const venueId = await venueLocationId(db);
+  const locationId = brandLocationId(venueId);
   await db.insert(kitchenStations).values({ locationId, name: "Default prep", isDefault: true });
   return locationId;
 }

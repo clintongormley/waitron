@@ -6,14 +6,14 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedPurchaseInvoice, seedVenue } from "../test/fixtures.js";
+import { seedPurchaseInvoice, seedVenueWithSeries } from "../test/fixtures.js";
 import { computeInputVat } from "./input-vat.js";
 import type { InputVatReturn } from "./types.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
 
 beforeEach(async () => {
-  await seedVenue(suite.db);
+  await seedVenueWithSeries(suite.db);
 });
 
 function run(opts: { year: number; month: number }): Promise<InputVatReturn> {

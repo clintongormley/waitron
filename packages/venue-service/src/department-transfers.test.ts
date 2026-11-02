@@ -23,11 +23,13 @@ import {
   deviceProfiles,
   floorZones,
   locations,
+  venueLocationId,
   withTransaction,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
@@ -51,19 +53,15 @@ const suite = useVenueDb({
 async function venue() {
   return withTransaction(suite.db, async (tx) => {
     const [existing] = await tx.select({ id: locations.id }).from(locations);
-    const [place] =
-      existing === undefined
-        ? await tx
-            .insert(locations)
-            .values({
-              name: randomUUID(),
-              invoiceLocales: ["en-GB"],
-              operationDescription: "Hospitality",
-            })
-            .returning()
-        : [existing];
+    if (existing === undefined) {
+      await seedVenue(tx, {
+        name: randomUUID(),
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+      });
+    }
     const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
-    const cfg = { locationId: locationId(place!.id) };
+    const cfg = { locationId: locationId(await venueLocationId(tx)) };
     const a = await createDepartment(tx, cfg, { name: `Deli${suffix}`, orderStart: "table" });
     const b = await createDepartment(tx, cfg, {
       name: `Restaurant${suffix}`,
@@ -86,12 +84,9 @@ async function venue() {
       allowedZoneIds: null,
       startingZoneId: bz.id,
     });
-    const [tab] = await tx
-      .insert(workingOrders)
-      .values({ source: "operator_script", locationId: cfg.locationId, orderNumber: 1 })
-      .returning();
-    await recordOrderServiceContext(tx, cfg, tab!.id, az.id);
-    return { cfg, a: a.id, b: b.id, az: az.id, bz: bz.id, profile: profile!.id, tab: tab!.id };
+    const tab = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 1 });
+    await recordOrderServiceContext(tx, cfg, tab.id, az.id);
+    return { cfg, a: a.id, b: b.id, az: az.id, bz: bz.id, profile: profile!.id, tab: tab.id };
   });
 }
 

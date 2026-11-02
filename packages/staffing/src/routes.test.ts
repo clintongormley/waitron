@@ -32,7 +32,7 @@ import {
   specialDays,
 } from "@waitron/venue-service";
 import { WORKFORCE_MIGRATIONS, shifts, WorkforceBackend } from "@waitron/workforce";
-import { seedVenue } from "../test/seed.js";
+import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { STAFFING_PERMISSIONS } from "./permissions.js";
 import { STAFFING_ROUTES } from "./routes.js";
@@ -57,7 +57,7 @@ const BASE = "/management-api/staffing/staff-roles";
 const noopLog: Logger = () => {};
 
 async function routed() {
-  const venue = await seedVenue(suite.db);
+  const venue = await seedVenueWithStaff(suite.db);
   const cookies = await withTransaction(suite.db, async (tx) => {
     const session = async (personRole: PersonRoleValue) => {
       const [row] = await tx

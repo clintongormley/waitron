@@ -10,8 +10,10 @@ import {
   locations,
   withTransaction,
   type Database,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { readLocationClock } from "@waitron/reporting";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import { eq } from "drizzle-orm";
@@ -35,16 +37,14 @@ const closedMonday = (ranges: { startsAt: string; endsAt: string }[]) =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: weekday === 1 ? ranges : [] }));
 
 async function venue() {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: `Venue ${randomUUID()}`,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
-    })
-    .returning({ id: locations.id });
-  const cfg = { locationId: brandLocationId(location!.id) };
+  await seedVenue(db, {
+    name: `Venue ${randomUUID()}`,
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Hospitality",
+    timeZone: "Europe/Madrid",
+  });
+  const venueId = await venueLocationId(db);
+  const cfg = { locationId: brandLocationId(venueId) };
   await db
     .insert(kitchenStations)
     .values({ locationId: cfg.locationId, name: "Kitchen", isDefault: true });

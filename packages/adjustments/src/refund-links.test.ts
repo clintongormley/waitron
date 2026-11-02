@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal } from "@waitron/shared";
-import { seedVenue, type SeededVenue } from "@waitron/reporting/test/fixtures.js";
+import { seedVenueWithSeries, type SeededVenue } from "@waitron/reporting/test/fixtures.js";
 import {
   seedRefundableSale,
   seedTenderRefund,
@@ -80,7 +80,7 @@ let venue: SeededVenue | undefined;
 
 /** A €5.50 cash refund in `state` of a sale numbered `invoiceNumber`, at one venue per test. */
 async function refund(state: "pending" | "completed" | "failed", invoiceNumber: number) {
-  venue ??= await seedVenue(db);
+  venue ??= await seedVenueWithSeries(db);
   const sale = await seedRefundableSale(db, venue, {
     method: "cash",
     applied: "20.00",

@@ -2,9 +2,9 @@ import { locationId } from "@waitron/shared";
 import { expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, locations, tenantReceipts, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, tenantReceipts, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   createDepartment,
   deleteDepartment,
@@ -22,23 +22,20 @@ const suite = useVenueDb({
 const photo = await samplePreparedImage({ width: 19 });
 
 it("counts only department logos and protects each until cleared despite retired venue values", async () => {
-  await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
-    const [place] = await tx
-      .insert(locations)
-      .values({
-        name: "Dining room",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Hospitality",
-      })
-      .returning();
+    await seedVenue(tx, {
+      name: "Dining room",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Hospitality",
+    });
+    const venueId = await venueLocationId(tx);
     const rows = await tx
       .insert(departments)
       .values([
-        { locationId: place!.id, name: "Dining", tradingName: "Room" },
-        { locationId: place!.id, name: "Bar", tradingName: "Counter", active: false },
-        { locationId: place!.id, name: "Garden", tradingName: "Terrace" },
-        { locationId: place!.id, name: "Events", tradingName: "Events" },
+        { locationId: venueId, name: "Dining", tradingName: "Room" },
+        { locationId: venueId, name: "Bar", tradingName: "Counter", active: false },
+        { locationId: venueId, name: "Garden", tradingName: "Terrace" },
+        { locationId: venueId, name: "Events", tradingName: "Events" },
       ])
       .returning();
     const { image } = await uploadImage(
@@ -89,21 +86,18 @@ it("counts only department logos and protects each until cleared despite retired
 it.each(["{", "null", "[]", "123", '{"logo":null}', '{"logo":[]}', '{"logo":{}}'])(
   "ignores malformed imported department receipt %s beside a valid explicit use",
   async (bad) => {
-    await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
-      const [place] = await tx
-        .insert(locations)
-        .values({
-          name: "Restaurant",
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Hospitality",
-        })
-        .returning();
+      await seedVenue(tx, {
+        name: "Restaurant",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Hospitality",
+      });
+      const venueId = await venueLocationId(tx);
       const [good, broken] = await tx
         .insert(departments)
         .values([
-          { locationId: place!.id, name: "Dining", tradingName: "Dining" },
-          { locationId: place!.id, name: "Bar", tradingName: "Bar" },
+          { locationId: venueId, name: "Dining", tradingName: "Dining" },
+          { locationId: venueId, name: "Bar", tradingName: "Bar" },
         ])
         .returning();
       const { image } = await uploadImage(
@@ -127,17 +121,14 @@ it.each(["{", "null", "[]", "123", '{"logo":null}', '{"logo":[]}', '{"logo":{}}'
 );
 
 it("protects a deleted department's retained receipt logo after its name is reused", async () => {
-  await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
-    const [place] = await tx
-      .insert(locations)
-      .values({
-        name: "Restaurant",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Hospitality",
-      })
-      .returning();
-    const cfg = { locationId: locationId(place!.id) };
+    await seedVenue(tx, {
+      name: "Restaurant",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Hospitality",
+    });
+    const venueId = await venueLocationId(tx);
+    const cfg = { locationId: locationId(venueId) };
     await createDepartment(tx, cfg, { name: "Survivor" });
     const old = await createDepartment(tx, cfg, { name: "Dining" });
     const { image } = await uploadImage(

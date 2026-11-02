@@ -9,7 +9,6 @@ import {
   deviceProfiles,
   devices,
   engineErrorMessage,
-  nodes,
   refusalOn,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -53,6 +52,7 @@ import {
 import { listOpenHolds, recordHold, recordHoldOutcome } from "./holds.js";
 import { freshNif, seedSale, seedWorkingOrder } from "../test/seed.js";
 import type { Seeded } from "../test/seed.js";
+import { seedNode } from "@waitron/db/testing/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
@@ -90,11 +90,8 @@ async function getRow(key: { provider: string; paymentRef: string }) {
 /** A second node, because `seedSale` always plants its `invoice_series` at code "A" for the node it
  * is given, and the series is keyed `(node_id, code)`. */
 async function seedSecondSale(seeded: Seeded): Promise<string> {
-  const [node2] = await suite.db
-    .insert(nodes)
-    .values({ locationId: seeded.locationId, name: "Node 2" })
-    .returning({ id: nodes.id });
-  return seedSale(suite.db, { ...seeded, nodeId: node2!.id });
+  const node2 = await seedNode(suite.db);
+  return seedSale(suite.db, { ...seeded, nodeId: node2 });
 }
 
 describe("insertCapturedPayment", () => {

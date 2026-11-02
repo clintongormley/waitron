@@ -17,7 +17,7 @@ import {
   specialDays,
 } from "@waitron/venue-service";
 import { WorkforceBackend, WORKFORCE_MIGRATIONS } from "@waitron/workforce";
-import { seedVenue } from "../test/seed.js";
+import { seedVenueWithStaff } from "../test/seed.js";
 import { STAFFING_MIGRATIONS } from "./migrations.js";
 import { QUERY_DEPENDENCIES } from "./dashboard/live-queries.js";
 import { readStaffingMonth } from "./month.js";
@@ -52,7 +52,7 @@ const block = (staffRoleId: string, over: Partial<StaffingBlock> = {}): Staffing
  *  Saturday 2026-08-15 closed all day with no row of its own, and Friday 2026-08-21 an empty row
  *  for the department. */
 async function painted() {
-  const v = await seedVenue(suite.db);
+  const v = await seedVenueWithStaff(suite.db);
   return inTx(async (tx) => {
     const [waiter] = await tx
       .insert(staffRoles)

@@ -9,10 +9,11 @@ import {
   pagePrinters,
   printers,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import type { PersonRoleValue } from "@waitron/identity";
 import { AppError, isAppError } from "@waitron/shared";
@@ -533,15 +534,16 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("frees a retired profile's printer lists", async () => {
-    await seedTenant(suite.db);
     const session = await seedSession("manager");
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hospitality" })
-      .returning({ id: locations.id });
+    await seedVenue(suite.db, {
+      name: "Loc",
+      invoiceLocales: ["es"],
+      operationDescription: "Hospitality",
+    });
+    const venueId = await venueLocationId(suite.db);
     const [printer] = await suite.db
       .insert(printers)
-      .values({ locationId: location!.id, name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
+      .values({ locationId: venueId, name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
       .returning({ id: printers.id });
     const created = await inTx((tx) =>
       createDeviceProfile(tx, {
@@ -633,17 +635,18 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("stores a profile's printer lists on create, keeps them on an update that names none, and replaces them on one that does", async () => {
-    await seedTenant(suite.db);
     const session = await seedSession("manager");
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hospitality" })
-      .returning({ id: locations.id });
+    await seedVenue(suite.db, {
+      name: "Loc",
+      invoiceLocales: ["es"],
+      operationDescription: "Hospitality",
+    });
+    const venueId = await venueLocationId(suite.db);
     const [p1, p2] = await suite.db
       .insert(printers)
       .values([
-        { locationId: location!.id, name: "Bar", transport: "network_tcp", host: "10.0.0.1" },
-        { locationId: location!.id, name: "Counter", transport: "network_tcp", host: "10.0.0.2" },
+        { locationId: venueId, name: "Bar", transport: "network_tcp", host: "10.0.0.1" },
+        { locationId: venueId, name: "Counter", transport: "network_tcp", host: "10.0.0.2" },
       ])
       .returning({ id: printers.id });
     const base = {
@@ -700,20 +703,21 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("lists a page printer on a profile's invoice list by its id, never as null", async () => {
-    await seedTenant(suite.db);
     const session = await seedSession("manager");
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hospitality" })
-      .returning({ id: locations.id });
+    await seedVenue(suite.db, {
+      name: "Loc",
+      invoiceLocales: ["es"],
+      operationDescription: "Hospitality",
+    });
+    const venueId = await venueLocationId(suite.db);
     const [bar] = await suite.db
       .insert(printers)
-      .values({ locationId: location!.id, name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
+      .values({ locationId: venueId, name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
       .returning({ id: printers.id });
     const [office] = await suite.db
       .insert(pagePrinters)
       .values({
-        locationId: location!.id,
+        locationId: venueId,
         name: "Office",
         host: "10.0.0.9",
         port: 631,

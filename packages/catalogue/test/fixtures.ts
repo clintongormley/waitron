@@ -4,15 +4,15 @@ import {
   CORE_MIGRATIONS,
   categories,
   invoiceSeries,
-  locations,
   products,
+  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId as brandLocationId, seriesId as brandSeriesId } from "@waitron/shared";
+import { seriesId as brandSeriesId } from "@waitron/shared";
 import type { NodeId, SeriesId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -132,15 +132,11 @@ export async function seedLegacySellingUnits(db: Database): Promise<void> {
   ]);
 }
 
-/** Three rows written through their tables, for the reason {@link seedLegacySellingUnits} gives. */
-export async function seedVenue(db: Database): Promise<SeededVenue> {
-  await seedTenant(db);
-  const [loc] = await db
-    .insert(locations)
-    .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Test op" })
-    .returning({ id: locations.id });
-  const locationId = loc!.id;
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+/** Seeds the taxpayer, the venue, a node and that node's invoice series "A". */
+export async function seedVenueWithSeries(db: Database): Promise<SeededVenue> {
+  await seedVenue(db, { name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Test op" });
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
   const [series] = await db
     .insert(invoiceSeries)
     .values({ nodeId, code: "A" })

@@ -9,12 +9,13 @@ import {
   devices,
   floorZones,
   kitchenStations,
-  locations,
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import * as module from "./index.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -56,17 +57,15 @@ const sorted = <T extends { id: string }>(rows: T[]) =>
 const at = new Date("2026-10-10T12:00:00Z");
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(db, fn);
 async function fixture(tx: Transaction) {
-  const [venue] = await tx
-    .insert(locations)
-    .values({
-      name: randomUUID(),
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00:00",
-    })
-    .returning();
-  const cfg = { locationId: locationId(venue!.id) };
+  await seedVenue(tx, {
+    name: randomUUID(),
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00:00",
+  });
+  const venueId = await venueLocationId(tx);
+  const cfg = { locationId: locationId(venueId) };
   const stations = await tx
     .insert(kitchenStations)
     .values([
@@ -91,18 +90,10 @@ async function profile(tx: Transaction, name: string, formFactor: "kds" | "till"
   const [row] = await tx.insert(deviceProfiles).values({ name, formFactor }).returning();
   return row!.id;
 }
-async function device(
-  tx: Transaction,
-  f: Awaited<ReturnType<typeof fixture>>,
-  profileId: string,
-  label: string,
-  active = true,
-) {
-  const [row] = await tx
-    .insert(devices)
-    .values({ ...f.cfg, deviceProfileId: profileId, label, active, tokenHash: "hash" })
-    .returning();
-  return row!.id;
+async function device(tx: Transaction, profileId: string, label: string, active = true) {
+  const { deviceId } = await seedDevice(tx, { profileId, label });
+  if (!active) await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+  return deviceId;
 }
 
 it("counts base and child routing rows once and clears only their union", async () => {
@@ -263,8 +254,8 @@ it("ignores deleted KDS rows while an off retained display still binds the stati
     await setProfileKitchenScreens(tx, f.cfg, pid, {
       station: { stationIds: null, zoneIds: null },
     });
-    const deleted = await device(tx, f, pid, "Deleted display", false);
-    const off = await device(tx, f, pid, "Off display", false);
+    const deleted = await device(tx, pid, "Deleted display", false);
+    const off = await device(tx, pid, "Off display", false);
     for (const id of [deleted, off])
       await setDeviceKitchenScreens(tx, f.cfg, {
         deviceId: id,
@@ -292,12 +283,12 @@ it("finds explicitly bound KDS choices including switched-off devices and dedupl
     await setProfileKitchenScreens(tx, f.cfg, every, {
       station: { stationIds: null, zoneIds: null },
     });
-    const explicit = await device(tx, f, every, "Á explicit");
-    const boundEvery = await device(tx, f, bounded, "B bound");
-    const bothEvery = await device(tx, f, every, "Every");
-    const off = await device(tx, f, every, "Off", false);
-    const removed = await device(tx, f, every, "Removed");
-    const kindRemoved = await device(tx, f, every, "Kind removed");
+    const explicit = await device(tx, every, "Á explicit");
+    const boundEvery = await device(tx, bounded, "B bound");
+    const bothEvery = await device(tx, every, "Every");
+    const off = await device(tx, every, "Off", false);
+    const removed = await device(tx, every, "Removed");
+    const kindRemoved = await device(tx, every, "Kind removed");
     for (const id of [explicit, off, removed, kindRemoved])
       await setDeviceKitchenScreens(tx, f.cfg, {
         deviceId: id,
@@ -317,7 +308,7 @@ it("finds explicitly bound KDS choices including switched-off devices and dedupl
       { deviceId: removed, screen: "station", stationId: f.gone },
       { deviceId: kindRemoved, screen: "station" },
     ]);
-    const noticeOnly = await device(tx, f, every, "Notice only");
+    const noticeOnly = await device(tx, every, "Notice only");
     await tx
       .insert(deviceKitchenScreenRemovals)
       .values({ deviceId: noticeOnly, screen: "pass", stationId: f.gone });
@@ -377,8 +368,8 @@ it("retains empty explicit device and profile parents and all unrelated zones", 
       pass: { stationIds: [f.gone], zoneIds: [f.zone] },
       station: { stationIds: [f.other], zoneIds: null },
     });
-    const explicit = await device(tx, f, pid, "Explicit");
-    const every = await device(tx, f, pid, "Every");
+    const explicit = await device(tx, pid, "Explicit");
+    const every = await device(tx, pid, "Every");
     await setDeviceKitchenScreens(tx, f.cfg, {
       deviceId: explicit,
       profileId: pid,
@@ -435,7 +426,7 @@ it("omits deleted stations from public routing and screen offerings while retain
   await run(async (tx) => {
     const f = await fixture(tx);
     const pid = await profile(tx, "History");
-    const did = await device(tx, f, pid, "History");
+    const did = await device(tx, pid, "History");
     await setProfileKitchenScreens(tx, f.cfg, pid, {
       station: { stationIds: [f.gone, f.other], zoneIds: null },
     });
@@ -520,7 +511,7 @@ it("rejects stale profile and device writes retaining a deleted station", async 
   const f = await run(async (tx) => {
     const f = await fixture(tx);
     const pid = await profile(tx, "Stale");
-    const did = await device(tx, f, pid, "Stale");
+    const did = await device(tx, pid, "Stale");
     await setProfileKitchenScreens(tx, f.cfg, pid, {
       station: { stationIds: [f.gone], zoneIds: null },
     });
@@ -568,13 +559,13 @@ it.each(["pass", "pass_monitor"] as const)(
         await setProfileKitchenScreens(tx, f.cfg, pid, {
           [kind]: { stationIds: null, zoneIds: null },
         });
-      const explicit = await device(tx, f, every, "A explicit");
-      const boundEvery = await device(tx, f, bounded, "B bound");
-      const bothEvery = await device(tx, f, every, "Every");
-      const off = await device(tx, f, every, "Off", false);
-      const removed = await device(tx, f, every, "Removed");
-      const kindRemoved = await device(tx, f, every, "Kind removed");
-      const tillExplicit = await device(tx, f, till, "Till explicit");
+      const explicit = await device(tx, every, "A explicit");
+      const boundEvery = await device(tx, bounded, "B bound");
+      const bothEvery = await device(tx, every, "Every");
+      const off = await device(tx, every, "Off", false);
+      const removed = await device(tx, every, "Removed");
+      const kindRemoved = await device(tx, every, "Kind removed");
+      const tillExplicit = await device(tx, till, "Till explicit");
       for (const [did, pid] of [
         [explicit, every],
         [off, every],
