@@ -129,6 +129,8 @@ export class TillPassScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      /* The station screen's warning banner, so a wall monitor's stale read stands out across the room. */
+      .stale[data-stale],
       .table-changed {
         margin: 0;
         padding: var(--wt-space-2) var(--wt-space-3);

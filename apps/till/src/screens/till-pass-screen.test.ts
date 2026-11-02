@@ -16,6 +16,8 @@ import type {
 import { PASS_NOW, passBoard, passCard } from "../../test/pass-board-fixtures.js";
 import type { TillPassScreen } from "./till-pass-screen.js";
 import "./till-pass-screen.js";
+import type { TillStationScreen } from "./till-station-screen.js";
+import "./till-station-screen.js";
 
 const BOX = "https://box.local";
 const COLUMNS_PREFIX = "waitron.kitchenColumns.";
@@ -108,8 +110,32 @@ async function withFakeTimers(run: () => Promise<void>): Promise<void> {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => (resolve = done));
-  return { promise, resolve };
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+/** Answers as `fetch` does: at once, refused, when its signal was cancelled before it set out. */
+const likeFetch =
+  <T>(value: T) =>
+  (options?: { signal?: AbortSignal }) =>
+    options?.signal?.aborted ? Promise.reject(options.signal.reason) : Promise.resolve(value);
+const hangUntilAborted = (options?: { signal?: AbortSignal }) =>
+  new Promise<never>((_resolve, reject) =>
+    options?.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+  );
+
+async function listening(run: (reboot: ReturnType<typeof vi.fn>) => Promise<void>): Promise<void> {
+  const reboot = vi.fn();
+  document.addEventListener("device-unauthorized", reboot);
+  try {
+    await run(reboot);
+  } finally {
+    document.removeEventListener("device-unauthorized", reboot);
+  }
 }
 
 describe("A773 pass screen", () => {
@@ -221,6 +247,49 @@ describe("A773 pass screen", () => {
       expect(cardKeys(el)).toEqual(["bill:b"]);
     }));
 
+  it("draws a stale read's line as the station screen draws its own", () =>
+    withFakeTimers(async () => {
+      const api = fakeApi({ getDevicePassBoard: vi.fn().mockRejectedValue(new Error("offline")) });
+      const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard() });
+      const { el: station } = await mountWidget<TillStationScreen>("till-station-screen", {
+        api: {
+          getDeviceStationScreen: vi.fn().mockRejectedValue(new Error("offline")),
+        } as unknown as TillApi,
+        deviceMode: true,
+        initialDeviceStation: {
+          stations: [
+            {
+              id: "st-1",
+              name: "Cocina",
+              available: true,
+              today: { open: true, isDefault: false, byHand: null, sendsTo: null, why: "open" },
+              queue: [],
+              notices: [],
+              printersDown: [],
+            },
+          ],
+        },
+      });
+      await vi.advanceTimersByTimeAsync(15_000);
+      await flush(el);
+      await station.updateComplete;
+      const look = (root: ShadowRoot) => {
+        const style = getComputedStyle(root.querySelector("[data-stale]")!);
+        return [
+          style.backgroundColor,
+          style.color,
+          style.fontWeight,
+          style.paddingTop,
+          style.paddingLeft,
+          style.borderTopLeftRadius,
+        ];
+      };
+      expect(look(el.shadowRoot!)).toEqual(look(station.shadowRoot!));
+      expect(
+        getComputedStyle(el.shadowRoot!.querySelector("[data-stale]")!).backgroundColor,
+      ).not.toBe("rgba(0, 0, 0, 0)");
+    }));
+
   it("on a kitchen display, a read refused device.unauthorized emits device-unauthorized", async () => {
     const reboot = vi.fn();
     document.addEventListener("device-unauthorized", reboot);
@@ -246,6 +315,162 @@ describe("A773 pass screen", () => {
     } finally {
       document.removeEventListener("device-unauthorized", reboot);
     }
+  });
+
+  describe("reads and refreshes", () => {
+    const stale = (el: TillPassScreen) => el.shadowRoot!.querySelector(".stale[data-stale]");
+
+    it("hands the board the time it was given", async () => {
+      const el = await mount({ deviceMode: true, initialBoard: deviceBoard() });
+      expect(boardOf(el)!.now).toBe(PASS_NOW);
+    });
+
+    it("marks its board out of date when a choice read never answers and is cancelled 25 seconds after it set out", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({ getDevicePassBoard: vi.fn(likeFetch(deviceBoard())) });
+        api.getDeviceIdentity
+          .mockResolvedValueOnce(identity([chosen("pass")]))
+          .mockImplementation(hangUntilAborted);
+        const el = await mount({ api });
+        await vi.advanceTimersByTimeAsync(39_999); // the choice read that set out at 15 s is still out
+        await flush(el);
+        expect(stale(el)).toBeNull();
+        await vi.advanceTimersByTimeAsync(1); // and is cancelled at 40 s
+        await flush(el);
+        expect(stale(el)).not.toBeNull();
+        expect(cardKeys(el)).toEqual(["bill:a"]);
+      }));
+
+    it("shows no stale line when an older refresh's choice read is cancelled after a newer refresh read its board", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({ getDevicePassBoard: vi.fn(likeFetch(deviceBoard())) });
+        api.getDeviceIdentity
+          .mockResolvedValueOnce(identity([chosen("pass")]))
+          .mockImplementationOnce(hangUntilAborted) // 15 s, cancelled at 40 s
+          .mockRejectedValueOnce({ code: "server.internal" }) // 30 s: keeps the pass and reads it
+          .mockImplementation(() => new Promise(() => {}));
+        const el = await mount({ api });
+        await vi.advanceTimersByTimeAsync(31_000);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        await vi.advanceTimersByTimeAsync(9_000);
+        await flush(el);
+        expect(stale(el)).toBeNull();
+      }));
+
+    it("shows no stale line when an older refresh's read fails after a newer refresh read its board", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          getDevicePassBoard: vi
+            .fn()
+            .mockImplementationOnce(hangUntilAborted) // 15 s, cancelled at 40 s
+            .mockResolvedValueOnce(deviceBoard(boardB)) // 30 s
+            .mockImplementation(() => new Promise(() => {})),
+        });
+        const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard() });
+        await vi.advanceTimersByTimeAsync(31_000);
+        await flush(el);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+        await vi.advanceTimersByTimeAsync(9_000);
+        await flush(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        expect(stale(el)).toBeNull();
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+      }));
+
+    it("ignores a read that answers after it left the page", async () => {
+      const answer = deferred<DevicePassBoard>();
+      const api = fakeApi({ getDevicePassBoard: vi.fn(() => answer.promise) });
+      const el = await mount({ api, deviceMode: true });
+      expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+      el.remove();
+      answer.resolve(deviceBoard(boardB));
+      await flush(el);
+      expect(cardKeys(el)).toEqual([]);
+    });
+
+    it("ignores a failed read that answers after it left the page", async () => {
+      const answer = deferred<DevicePassBoard>();
+      const api = fakeApi({ getDevicePassBoard: vi.fn(() => answer.promise) });
+      const el = await mount({ api, deviceMode: true });
+      el.remove();
+      answer.reject(new Error("offline"));
+      await flush(el);
+      expect(el.shadowRoot!.querySelector("[data-stale]")).toBeNull();
+    });
+
+    it("stops refreshing once taken off the page", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi();
+        const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard() });
+        el.remove();
+        await vi.advanceTimersByTimeAsync(45_000);
+        expect(api.getDevicePassBoard).not.toHaveBeenCalled();
+      }));
+
+    it("at a till, stays on All stations, reading it, while the device's choice cannot be read", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockRejectedValue({ code: "server.internal" }),
+        });
+        const el = await mount({ api });
+        expect(api.getExpoBoard).toHaveBeenCalledOnce();
+        expect(boardOf(el)!.mode).toBe("all_stations");
+        expect(cardKeys(el)).toEqual(["bill:a"]);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
+        expect(cardKeys(el)).toEqual(["bill:a"]);
+      }));
+
+    it("an embedded card reads All stations every fifteen seconds and never the device's choice", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi();
+        const el = await mount({ api, embedded: true });
+        expect(api.getExpoBoard).toHaveBeenCalledOnce();
+        expect(boardOf(el)!.mode).toBe("all_stations");
+        expect(cardKeys(el)).toEqual(["bill:a"]);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
+        expect(api.getDeviceIdentity).not.toHaveBeenCalled();
+      }));
+
+    it("on a kitchen display, re-boots when a refresh is refused device.unauthorized, and not for any other failure", () =>
+      listening((reboot) =>
+        withFakeTimers(async () => {
+          const api = fakeApi({
+            getDevicePassBoard: vi.fn().mockRejectedValueOnce({ code: "server.internal" }),
+          });
+          const el = await mount({ api, deviceMode: true, initialBoard: deviceBoard() });
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el);
+          expect(stale(el)).not.toBeNull();
+          expect(reboot).not.toHaveBeenCalled();
+          api.getDevicePassBoard.mockRejectedValueOnce({ code: "device.unauthorized" });
+          await vi.advanceTimersByTimeAsync(15_000);
+          expect(reboot).toHaveBeenCalledOnce();
+        }),
+      ));
+
+    it("an embedded card whose refresh is refused device.unauthorized marks its board out of date and re-boots nothing", () =>
+      listening((reboot) =>
+        withFakeTimers(async () => {
+          const api = fakeApi({
+            getExpoBoard: vi
+              .fn()
+              .mockResolvedValueOnce({ board: boardA })
+              .mockRejectedValue({ code: "device.unauthorized" }),
+          });
+          const el = await mount({ api, embedded: true });
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el);
+          expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
+          expect(reboot).not.toHaveBeenCalled();
+          expect(stale(el)).not.toBeNull();
+          expect(cardKeys(el)).toEqual(["bill:a"]);
+        }),
+      ));
   });
 
   describe("lost slots and a lost screen", () => {
@@ -288,6 +513,17 @@ describe("A773 pass screen", () => {
       expect(lines(el)).toEqual([t("station.unavailable").replace("{name}", "Freidora")]);
       expect(boardOf(el)).toBeNull();
       expect(el.shadowRoot!.querySelector(".stale")).toBeNull();
+    });
+
+    it("shows only its lines when a narrowing took every zone", async () => {
+      const el = await mount({
+        deviceMode: true,
+        initialBoard: deviceBoard(boardA, {
+          zones: [{ id: "z-1", name: "Terraza", available: false }],
+        }),
+      });
+      expect(lines(el)).toEqual([t("zone.unavailable").replace("{name}", "Terraza")]);
+      expect(boardOf(el)).toBeNull();
     });
 
     it("at a till whose pass screen a narrowing took, says so and reads no board", async () => {
@@ -355,6 +591,64 @@ describe("A773 pass screen", () => {
       expect(storedColumnKeys()).toEqual([columnsKey("all_stations")]);
     });
 
+    it("names the pass's columns, and the board, in the Columns window", async () => {
+      const names = (el: TillPassScreen) =>
+        [...columnsWindow(el)!.shadowRoot!.querySelectorAll("[data-column-name]")].map((name) =>
+          name.textContent!.trim(),
+        );
+      const boardName = (el: TillPassScreen) =>
+        columnsWindow(el)!
+          .shadowRoot!.querySelector("wt-dialog")!
+          .shadowRoot!.querySelector(".description")
+          ?.textContent!.trim();
+      const open = async (el: TillPassScreen) => {
+        await userEvent.click(
+          boardOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-columns-open]")!,
+        );
+        await flush(el);
+        await columnsWindow(el)!.updateComplete;
+      };
+      const words = [
+        t("station.overview"),
+        t("pass.column.held"),
+        t("pass.column.to_fire"),
+        t("pass.column.in_progress"),
+        t("pass.column.ready"),
+      ];
+      const display = await mount({
+        deviceMode: true,
+        deviceName: "Pass 1",
+        initialBoard: deviceBoard(),
+      });
+      await open(display);
+      expect(names(display)).toEqual(words);
+      expect(boardName(display)).toBe("Pass 1");
+      display.remove();
+      const till = await mount({});
+      await open(till);
+      expect(names(till)).toEqual(words);
+      expect(boardName(till)).toBe(t("expo.title"));
+    });
+
+    it("with a store that refuses every read and write, still changes the layout in memory", async () => {
+      const refuse = () => {
+        throw new DOMException("refused", "SecurityError");
+      };
+      const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(refuse);
+      const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(refuse);
+      try {
+        const el = await mount({ deviceMode: true, initialBoard: deviceBoard() });
+        expect(boardOf(el)!.columns).toEqual(PASS_COLUMNS);
+        await changeAll(el);
+        expect(boardOf(el)!.columns).toEqual(changed);
+        expect(getItem).toHaveBeenCalled();
+        expect(setItem).toHaveBeenCalled();
+      } finally {
+        getItem.mockRestore();
+        setItem.mockRestore();
+      }
+    });
+
     it("with no device id saves nothing and still changes the layout in memory", async () => {
       const el = await mount({ deviceMode: true, deviceId: "", initialBoard: deviceBoard() });
       await changeAll(el);
@@ -388,6 +682,13 @@ describe("A773 pass screen", () => {
       el.addEventListener("back-to-counter", seen);
       back.click();
       expect(seen).toHaveBeenCalledOnce();
+    });
+
+    it("an embedded card draws no title and no Back", async () => {
+      const el = await mount({ embedded: true });
+      expect(boardOf(el)).not.toBeNull();
+      expect(lead(el)).toEqual([]);
+      expect(el.shadowRoot!.querySelector("[data-back], .title")).toBeNull();
     });
 
     it("puts the stale line in the board's status slot", async () => {
