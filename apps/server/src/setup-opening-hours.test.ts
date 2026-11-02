@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { and, eq, inArray } from "drizzle-orm";
-import { CORE_MIGRATIONS, catalogues, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, catalogues, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { locationId } from "@waitron/shared";
 import {
@@ -23,20 +23,16 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 
 async function seed(withMenu = true, receiptLocale = "en-GB") {
   const db = suite.db;
-  await seedTenant(db);
   const [menu] = await db.insert(catalogues).values({ name: "First menu" }).returning();
-  const [venue] = await db
-    .insert(locations)
-    .values({
-      name: "First venue",
-      invoiceLocales: [receiptLocale],
-      operationDescription: "Hospitality",
-      catalogueId: withMenu ? menu!.id : null,
-    })
-    .returning();
+  await seedVenue(db, {
+    name: "First venue",
+    invoiceLocales: [receiptLocale],
+    operationDescription: "Hospitality",
+    defaultCatalogueId: withMenu ? menu!.id : null,
+  });
   const cfg = {
-    locationId: locationId(venue!.id),
-    nodeId: await seedNode(db, locationId(venue!.id)),
+    locationId: locationId(await venueLocationId(db)),
+    nodeId: await seedNode(db),
   };
   await withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, cfg));
   const [department] = await db

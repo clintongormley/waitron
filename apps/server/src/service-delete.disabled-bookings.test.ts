@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { diningTables, locations, withTransaction } from "@waitron/db";
+import { diningTables, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { locationId, nodeId } from "@waitron/shared";
 import {
@@ -29,17 +29,13 @@ const suite = useVenueDb({
 const NOW = new Date("2026-10-11T12:00:00Z");
 
 it("deletes through the real core seat when the optional bookings table was never migrated", async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Booking-free venue",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
-    })
-    .returning({ id: locations.id });
+  await seedVenue(suite.db, {
+    name: "Booking-free venue",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+  });
   const cfg: TradingContext = {
-    locationId: locationId(location!.id),
+    locationId: locationId(await venueLocationId(suite.db)),
     nodeId: nodeId(randomUUID()),
     locale: "en-GB",
     invoiceLocales: ["en-GB"],

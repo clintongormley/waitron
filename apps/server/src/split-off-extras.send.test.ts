@@ -6,7 +6,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceMadeHereStations,
   deviceProfiles,
-  devices,
   diningTables,
   kitchenStations,
   printJobs,
@@ -18,6 +17,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { createCategory, createProduct, getExtraList, readCategory } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
@@ -985,20 +985,12 @@ describe("sending split-off extras", () => {
         .insert(deviceProfiles)
         .values({ name: "Bar till", formFactor: "till", capabilities: [] })
         .returning({ id: deviceProfiles.id });
-      const [device] = await tx
-        .insert(devices)
-        .values({
-          locationId: cfg.locationId,
-          deviceProfileId: profile!.id,
-          label: "Bar till",
-          tokenHash: "test",
-        })
-        .returning({ id: devices.id });
-      await tx.insert(deviceMadeHereStations).values({ deviceId: device!.id, stationId: bar.id });
+      const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Bar till" });
+      await tx.insert(deviceMadeHereStations).values({ deviceId, stationId: bar.id });
       const sink = new Set<string>();
       const { orderId, lines } = await sendWithHold(
         tx,
-        { ...cfg, sendingDeviceId: device!.id, madeHereSink: sink },
+        { ...cfg, sendingDeviceId: deviceId, madeHereSink: sink },
         burger.id,
         listId,
         chips!,
@@ -1032,27 +1024,14 @@ describe("sending split-off extras", () => {
         .insert(deviceProfiles)
         .values({ name: "Bar till", formFactor: "till", capabilities: [] })
         .returning({ id: deviceProfiles.id });
-      const [here] = await tx
-        .insert(devices)
-        .values({
-          locationId: venue.cfg.locationId,
-          deviceProfileId: profile!.id,
-          label: "Here",
-          tokenHash: `here-${randomUUID()}`,
-        })
-        .returning({ id: devices.id });
-      const [elsewhere] = await tx
-        .insert(devices)
-        .values({
-          locationId: venue.cfg.locationId,
-          deviceProfileId: profile!.id,
-          label: "Elsewhere",
-          tokenHash: `elsewhere-${randomUUID()}`,
-        })
-        .returning({ id: devices.id });
+      const { deviceId: here } = await seedDevice(tx, { profileId: profile!.id, label: "Here" });
+      const { deviceId: elsewhere } = await seedDevice(tx, {
+        profileId: profile!.id,
+        label: "Elsewhere",
+      });
       await tx
         .insert(deviceMadeHereStations)
-        .values({ deviceId: here!.id, stationId: venue.stations.fryer });
+        .values({ deviceId: here, stationId: venue.stations.fryer });
       const groupLine = {
         menuItemId: venue.tables.offerFor(venue.products.burger),
         quantity: "1",
@@ -1063,7 +1042,7 @@ describe("sending split-off extras", () => {
       const sink = new Set<string>();
       const placed = await placeGroups(
         tx,
-        { ...venue.cfg, sendingDeviceId: here!.id, madeHereSink: sink },
+        { ...venue.cfg, sendingDeviceId: here, madeHereSink: sink },
         venue.party.partyId,
         { operatorId: OPERATOR, groups: [{ lines: [groupLine], release: "hold" }] },
       );
@@ -1116,7 +1095,7 @@ describe("sending split-off extras", () => {
 
       const peer = await placeGroups(
         tx,
-        { ...venue.cfg, sendingDeviceId: elsewhere!.id },
+        { ...venue.cfg, sendingDeviceId: elsewhere },
         venue.party.partyId,
         { operatorId: OPERATOR, groups: [{ lines: [groupLine], release: "hold" }] },
       );

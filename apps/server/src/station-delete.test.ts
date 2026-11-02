@@ -23,6 +23,7 @@ import {
   locations,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   closeStationForToday,
@@ -69,23 +70,19 @@ async function food(
   } = {},
 ) {
   return inTx(v, async (tx) => {
-    const [order] = await tx
-      .insert(workingOrders)
-      .values({
-        ...v.cfg.origin,
-        nodeId: v.cfg.nodeId,
-        locationId: v.cfg.locationId,
-        orderNumber: 42,
-        label: "Table 8",
-        status: "open",
-        settledAt: null,
-        collectedAt: flags.collected ? at : null,
-      })
-      .returning();
+    const order = await seedWorkingOrder(tx, {
+      ...v.cfg.origin,
+      nodeId: v.cfg.nodeId,
+      orderNumber: 42,
+      label: "Table 8",
+      status: "open",
+      settledAt: null,
+      collectedAt: flags.collected ? at : null,
+    });
     const [line] = await tx
       .insert(workingOrderLines)
       .values({
-        workingOrderId: order!.id,
+        workingOrderId: order.id,
         lineNo: 1,
         name: "Flan",
         descriptions: { "es-ES": "Flan de huevo" },
@@ -103,7 +100,7 @@ async function food(
     if (flags.ticket !== false)
       await tx.insert(ticketItems).values({
         nodeId: v.cfg.nodeId,
-        workingOrderId: order!.id,
+        workingOrderId: order.id,
         workingOrderLineId: line!.id,
         stationId: id,
         state: flags.state ?? "queued",
@@ -117,8 +114,8 @@ async function food(
       await tx
         .update(workingOrders)
         .set({ status: flags.status, settledAt: flags.status === "settled" ? at : null })
-        .where(eq(workingOrders.id, order!.id));
-    return { order: order!, line: line! };
+        .where(eq(workingOrders.id, order.id));
+    return { order: order, line: line! };
   });
 }
 async function binding(v: PartyVenue, id: string) {
@@ -130,22 +127,14 @@ async function binding(v: PartyVenue, id: string) {
     await setProfileKitchenScreens(tx, v.cfg, profile!.id, {
       station: { stationIds: null, zoneIds: null },
     });
-    const [device] = await tx
-      .insert(devices)
-      .values({
-        locationId: v.cfg.locationId,
-        deviceProfileId: profile!.id,
-        label: "Off display",
-        active: false,
-        tokenHash: randomUUID(),
-      })
-      .returning();
+    const { deviceId } = await seedDevice(tx, { profileId: profile!.id, label: "Off display" });
+    await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
     await setDeviceKitchenScreens(tx, v.cfg, {
-      deviceId: device!.id,
+      deviceId,
       profileId: profile!.id,
       screens: [{ kind: "station", stationIds: [id], zoneIds: null }],
     });
-    return device!;
+    return { id: deviceId };
   });
 }
 async function snapshot(v: PartyVenue) {

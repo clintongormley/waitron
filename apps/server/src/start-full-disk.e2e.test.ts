@@ -24,15 +24,14 @@ import {
   devices,
   drawerOpens,
   invoiceSeries,
-  locations,
   lockVenueDatabase,
-  nodes,
   openVenueDatabase,
   sales,
+  venueLocationId,
   withTransaction,
   type Database,
 } from "@waitron/db";
-import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import {
   hashPin,
@@ -280,20 +279,13 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
     store = await openVenueDatabase(venueDir);
     db = store.venue;
-    await seedTenant(db);
-    const [main] = await db
-      .insert(locations)
-      .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" })
-      .returning({ id: locations.id });
+    await seedVenue(db, { name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" });
+    const venueId = await venueLocationId(db);
     manager = await seedPerson("manager", "Marta");
     supervisor = await seedPerson("supervisor", "Sergio");
     admin = await seedPerson("admin", "Ana");
     cashier = await seedPerson("staff", "Paula");
-    const [node] = await db
-      .insert(nodes)
-      .values({ locationId: main!.id, name: "Box" })
-      .returning({ id: nodes.id });
-    nodeId = node!.id;
+    nodeId = await seedNode(db);
     // Here, not in the case: a clock-in's `withTransaction` drain would deliver the change the
     // case leaves waiting.
     await withTransaction(db, (tx) =>
@@ -306,7 +298,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       }),
     );
     // Paula's sale and its drawer opening, so her download looks a sale number up on the full disk.
-    const { deviceId } = await seedDevice(db, { locationId: main!.id });
+    const { deviceId } = await seedDevice(db);
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "FD", purpose: "standard" })
@@ -461,7 +453,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
         backend: new FakeFiscalBackend(db),
         tradingContext: {
           nodeId: brandNodeId(nodeId),
-          locationId: brandLocationId(main!.id),
+          locationId: brandLocationId(venueId),
           locale: "en-GB",
           invoiceLocales: ["en-GB"],
           tipsEnabled: false,
@@ -1182,15 +1174,12 @@ describe("a start on a real full disk", () => {
     const store = await openVenueDatabase(dir);
     const db = store.venue;
     try {
-      await seedTenant(db);
-      const [location] = await db
-        .insert(locations)
-        .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" })
-        .returning({ id: locations.id });
-      const { deviceId } = await seedDevice(db, {
-        locationId: brandLocationId(location!.id),
-        label: "Till 1",
+      await seedVenue(db, {
+        name: "Main",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Sale",
       });
+      const { deviceId } = await seedDevice(db, { label: "Till 1" });
       const token = "equipment-token";
       await db
         .update(devices)
@@ -1382,11 +1371,12 @@ describe("a start on a real full disk", () => {
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
     });
     try {
-      await seedTenant(db);
-      const [location] = await db
-        .insert(locations)
-        .values({ name: "Corner Bistro", invoiceLocales: ["en-GB"], operationDescription: "Sale" })
-        .returning({ id: locations.id });
+      await seedVenue(db, {
+        name: "Corner Bistro",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Sale",
+      });
+      const venueId = await venueLocationId(db);
       const [admin] = await db
         .insert(persons)
         .values({ displayName: "Admin", role: "admin", email: "admin@example.test" })
@@ -1401,7 +1391,7 @@ describe("a start on a real full disk", () => {
         const context = await readBoxEmailContext(db, {
           ring,
           practiceMode: true,
-          locationId: location!.id,
+          locationId: venueId,
           venueLanguage: "en",
         });
         expect(context.venue).toBe("Corner Bistro");
@@ -1431,15 +1421,12 @@ describe("a start on a real full disk", () => {
     const disk = createDiskFullState({ dir, now: () => new Date(), log: () => {} });
     const unwatch = watchForDiskFull(disk, [store.venue, store.node]);
     try {
-      await seedTenant(db);
-      const [location] = await db
-        .insert(locations)
-        .values({ name: "Main", invoiceLocales: ["en-GB"], operationDescription: "Sale" })
-        .returning({ id: locations.id });
-      const { deviceId } = await seedDevice(db, {
-        locationId: brandLocationId(location!.id),
-        label: "Till 1",
+      await seedVenue(db, {
+        name: "Main",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Sale",
       });
+      const { deviceId } = await seedDevice(db, { label: "Till 1" });
       const token = "equipment-notices-token";
       await db
         .update(devices)

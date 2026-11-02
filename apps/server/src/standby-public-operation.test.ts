@@ -10,11 +10,12 @@ import {
   locations,
   nodes,
   stampDeployment,
+  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { NODE_MIGRATIONS, readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing } from "@waitron/credentials";
 import { IDENTITY_MIGRATIONS, hashPassword, persons } from "@waitron/identity";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -38,7 +39,7 @@ vi.mock("./modules.js", () => ({ ALL_MODULES: modules }));
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, IDENTITY_MIGRATIONS, NODE_MIGRATIONS],
 });
-const LOCATION = "f1000000-0000-4000-8000-000000000001";
+let LOCATION: string;
 const PRIMARY = "f1000000-0000-4000-8000-000000000002";
 const TARGET = "f1000000-0000-4000-8000-000000000003";
 const ADMIN = "f1000000-0000-4000-8000-000000000004";
@@ -76,12 +77,12 @@ beforeEach(async () => {
   observedOperator = undefined;
   replaceKey = false;
   await seedTenant(suite.db);
-  await suite.db.insert(locations).values({
-    id: LOCATION,
+  await seedVenue(suite.db, {
     name: "Restaurant",
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
+  LOCATION = await venueLocationId(suite.db);
   await suite.db.insert(nodes).values([
     { id: PRIMARY, locationId: LOCATION, name: "Primary" },
     { id: TARGET, locationId: LOCATION, name: "Spare" },
