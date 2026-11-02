@@ -722,7 +722,7 @@ export async function finishTable(
     operatorId: string;
     expectedEdits: BillEditExpected[];
   },
-  attendance?: { recorder: AttendanceRecorder; locationId: string },
+  attendance?: { recorder: AttendanceRecorder },
 ): Promise<{ state: "closed" }> {
   const { partyId } = args;
   await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
@@ -751,7 +751,7 @@ export async function closeParty(
   partyId: string,
   emptyBillIds: readonly string[],
   operatorId: string,
-  attendance: { recorder: AttendanceRecorder; locationId: string } | undefined,
+  attendance: { recorder: AttendanceRecorder } | undefined,
   expectedEdits: BillEditExpected[],
 ): Promise<{ state: "closed" }> {
   await requirePartyClosingEdits(tx, partyId, operatorId, expectedEdits);

@@ -182,9 +182,7 @@ export async function recordUnpaidDeparture(
     partyId,
     empty,
     operator.personId,
-    deps.attendance === undefined
-      ? undefined
-      : { recorder: deps.attendance, locationId: cfg.locationId },
+    deps.attendance === undefined ? undefined : { recorder: deps.attendance },
     req.expectedEdits,
   );
   return { ...closed, departures };

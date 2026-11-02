@@ -171,9 +171,7 @@ async function finish(
         expectedPartyRevision: await partyRevision(tx, args.partyId),
         expectedEdits: args.expectedEdits.filter((edit) => !moved.includes(edit.billId)),
       },
-      attendance === undefined
-        ? undefined
-        : { recorder: attendance.recorder, locationId: cfg.locationId },
+      attendance === undefined ? undefined : { recorder: attendance.recorder },
     );
   }
   const requested = args.cancellations ?? [];
@@ -228,9 +226,7 @@ async function finish(
   const closed = await finishTable(
     tx,
     { ...args, expectedPartyRevision: await partyRevision(tx, args.partyId) },
-    attendance === undefined
-      ? undefined
-      : { recorder: attendance.recorder, locationId: cfg.locationId },
+    attendance === undefined ? undefined : { recorder: attendance.recorder },
   );
   return refundLinks.length === 0 ? closed : { ...closed, refundLinks };
 }

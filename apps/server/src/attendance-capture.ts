@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
-import { newId, readVenueClock, venueLocationId, workingOrders } from "@waitron/db";
+import { newId, readVenueClock, venueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
 import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
@@ -30,15 +30,10 @@ export async function captureKitchenActivity(
   if (attendance === undefined || !personId || orderIds.length === 0) return;
   const at = attendance.clock.now().instant.toISOString();
   for (const id of new Set(orderIds)) {
-    const [order] = await tx
-      .select({ locationId: workingOrders.locationId })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id));
     await attendance.recorder(tx, {
       source: "order",
       key: `service:${id}:${commandKey}`,
       personId,
-      locationId: order!.locationId,
       kind: "order",
       at,
       offsetMinutes: 0,

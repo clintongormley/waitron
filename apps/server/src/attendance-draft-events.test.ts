@@ -179,7 +179,6 @@ describe("natural draft-event attendance snapshots", () => {
     await run((tx) =>
       discardPartyDrafts(tx, partyId, other, {
         recorder: recordAttendanceFact,
-        locationId: v.cfg.locationId,
       }),
     );
     const events = (await state()).events.filter(

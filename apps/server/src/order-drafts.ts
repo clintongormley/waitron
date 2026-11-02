@@ -285,16 +285,7 @@ export async function splitDraft(
             detail: { intoDraftId: newDraftId, lineIds },
           },
         );
-      await captureDraft(
-        tx,
-        attendance,
-        cfg.locationId,
-        input.operatorId,
-        id,
-        draft.revision + 1,
-        "save",
-        at,
-      );
+      await captureDraft(tx, attendance, input.operatorId, id, draft.revision + 1, "save", at);
       return {
         billId: newBillId,
         revision,
@@ -710,29 +701,11 @@ export async function saveDraft(
         detail: {},
       },
     );
-    await captureDraft(
-      tx,
-      attendance,
-      cfg.locationId,
-      operatorId,
-      draftId,
-      draft!.revision + 1,
-      "discard",
-      at,
-    );
+    await captureDraft(tx, attendance, operatorId, draftId, draft!.revision + 1, "discard", at);
     return { draft: null, edit: released };
   }
   const saved = await readOpenDraft(tx, cfg, partyId, draftId, offers);
-  await captureDraft(
-    tx,
-    attendance,
-    cfg.locationId,
-    operatorId,
-    saved.id,
-    saved.revision,
-    "save",
-    at,
-  );
+  await captureDraft(tx, attendance, operatorId, saved.id, saved.revision, "save", at);
   return { draft: saved, edit: await readBillEditState(tx, billId) };
 }
 
@@ -780,7 +753,6 @@ export async function takeOverDraft(
         await captureDraft(
           tx,
           attendance,
-          cfg.locationId,
           operatorId,
           draft.id,
           edit.draftRevision!,
@@ -904,7 +876,7 @@ export async function discardPartyDrafts(
   tx: Transaction,
   partyId: string,
   operatorId: string,
-  attendance?: { recorder: AttendanceRecorder; locationId: string },
+  attendance?: { recorder: AttendanceRecorder },
 ): Promise<void> {
   const at = nowIso();
   const open = await openDraftsOn(tx, partyId);
@@ -941,7 +913,6 @@ export async function discardPartyDrafts(
       await captureDraft(
         tx,
         attendance.recorder,
-        attendance.locationId,
         operatorId,
         draft.id,
         draft.revision + 1,
@@ -1083,7 +1054,6 @@ export async function discardDraft(
       await captureDraft(
         tx,
         attendance?.recorder,
-        cfg.locationId,
         operatorId,
         draft.id,
         closed!.revision,
@@ -1263,16 +1233,7 @@ export async function submitDraft(
           detail: { groupIds: placed.groups.map((group) => group.id) },
         },
       );
-      await captureDraft(
-        tx,
-        attendance,
-        cfg.locationId,
-        operatorId,
-        id,
-        draft.revision + 1,
-        "submit",
-        at,
-      );
+      await captureDraft(tx, attendance, operatorId, id, draft.revision + 1, "submit", at);
       return {
         ...placed,
         draft: emptied ? null : await readOpenDraft(tx, cfg, partyId, id, offers),
@@ -1286,7 +1247,6 @@ export async function submitDraft(
 async function captureDraft(
   tx: Transaction,
   recorder: AttendanceRecorder | undefined,
-  locationId: string,
   personId: string,
   draftId: string,
   revision: number,
@@ -1297,7 +1257,6 @@ async function captureDraft(
     source: "draft",
     key: `${draftId}:${revision}:${action}`,
     personId,
-    locationId,
     kind: "order",
     at,
     offsetMinutes: 0,
@@ -1628,17 +1587,17 @@ async function recordDraftEvents(
   const saved = await tx.insert(orderDraftEvents).values(events).returning();
   if (attendance === undefined) return;
   for (const event of saved) {
-    const orders = await tx
-      .selectDistinct({ locationId: workingOrders.locationId })
+    const [order] = await tx
+      .select({ id: workingOrders.id })
       .from(workingOrders)
       .innerJoin(orderDrafts, eq(orderDrafts.billId, workingOrders.id))
-      .where(eq(orderDrafts.id, event.draftId));
-    if (orders.length !== 1) continue;
+      .where(eq(orderDrafts.id, event.draftId))
+      .limit(1);
+    if (order === undefined) continue;
     await attendance.recorder(tx, {
       source: "draft",
       key: `event:${event.id}`,
       personId: event.actorId,
-      locationId: orders[0]!.locationId,
       kind: "order",
       at: attendance.at,
       offsetMinutes: 0,

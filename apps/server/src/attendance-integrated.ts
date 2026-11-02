@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { workingOrders, type Transaction } from "@waitron/db";
+import { venueLocationId, type Transaction } from "@waitron/db";
 import { attendanceOperationFacts, attendanceSourceState } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 
@@ -30,16 +30,11 @@ export async function beginIntegratedAttendance(
     .where(pendingAttempt(order.id, order.provider));
   for (const fact of abandoned) await attendance(tx, { ...fact, outcome: "refused" });
   if (order.personId === undefined) return;
-  const [stored] = await tx
-    .select({ locationId: workingOrders.locationId })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, order.id));
   const key = `${attemptPrefix(order.id, order.provider)}${randomUUID()}`;
   await attendance(tx, {
     source: "whole-payment",
     key,
     personId: order.personId,
-    locationId: stored!.locationId,
     kind: "payment",
     at: at().toISOString(),
     offsetMinutes: 0,
@@ -49,7 +44,7 @@ export async function beginIntegratedAttendance(
     sql`select payment_ref as paymentRef from payments where working_order_id = ${order.id} and provider = ${order.provider} and bill_payment_id is null`,
   );
   await tx.insert(attendanceSourceState).values({
-    locationId: stored!.locationId,
+    locationId: await venueLocationId(tx),
     source: "whole-payment",
     recordKind: "watch",
     key,

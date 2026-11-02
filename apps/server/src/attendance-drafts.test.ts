@@ -96,7 +96,7 @@ describe("accepted draft attendance capture", () => {
         finishTable(
           tx,
           { partyId, expectedPartyRevision: 0, operatorId: other },
-          { recorder: recordAttendanceFact, locationId: v.cfg.locationId },
+          { recorder: recordAttendanceFact },
         ),
       ),
     ).rejects.toMatchObject({
@@ -132,7 +132,7 @@ describe("accepted draft attendance capture", () => {
         finishTable(
           tx,
           { partyId, expectedPartyRevision: 0, operatorId: other },
-          { recorder: refusing, locationId: v.cfg.locationId },
+          { recorder: refusing },
         ),
       ),
     ).rejects.toMatchObject({
@@ -232,14 +232,12 @@ describe("accepted draft attendance capture", () => {
     await run((tx) =>
       discardPartyDrafts(tx, partyId, other, {
         recorder: recordAttendanceFact,
-        locationId: v.cfg.locationId,
       }),
     );
     const before = await operations();
     await run((tx) =>
       discardPartyDrafts(tx, partyId, other, {
         recorder: recordAttendanceFact,
-        locationId: v.cfg.locationId,
       }),
     );
     expect(await operations()).toEqual(before);

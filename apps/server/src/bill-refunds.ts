@@ -1,7 +1,7 @@
 import { assertStillSignedIn } from "./till-session.js";
 import { requireEconomicWrite } from "./trading-admission.js";
 import { and, eq, isNotNull, ne } from "drizzle-orm";
-import { billPaymentRefunds, billPayments, withTransaction, workingOrders } from "@waitron/db";
+import { billPaymentRefunds, billPayments, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
 import { IssuanceRefusedError } from "@waitron/fiscal";
@@ -114,22 +114,12 @@ async function captureRefundAttendance(
   refund: RefundRow,
   attendance: AttendanceRecorder | undefined,
   outcome: "pending" | "qualified" | "refused",
-  locationId?: string,
 ): Promise<void> {
   if (attendance === undefined) return;
-  if (locationId === undefined) {
-    const [order] = await tx
-      .select({ locationId: workingOrders.locationId })
-      .from(billPayments)
-      .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
-      .where(eq(billPayments.id, refund.billPaymentId));
-    locationId = order!.locationId;
-  }
   await attendance(tx, {
     source: "refund",
     key: refund.id,
     personId: refund.requestedBy,
-    locationId,
     kind: "payment",
     at: refund.createdAt,
     offsetMinutes: 0,
@@ -728,7 +718,7 @@ export async function refundBillPayment(
             .insert(billPaymentRefunds)
             .values({ ...values, state: "completed", completedAt: createdAt })
             .returning();
-          await captureRefundAttendance(tx, refund!, deps.attendance, "qualified", cfg.locationId);
+          await captureRefundAttendance(tx, refund!, deps.attendance, "qualified");
           await enqueueBillRefundDrawer(tx, cfg, paymentId, operator.personId, {
             authorizedBy: authorization.authorizedBy,
             viaOverride: authorization.viaOverride,
@@ -768,7 +758,7 @@ export async function refundBillPayment(
             amount: centsToDecimal(values.appliedAmount + values.tipAmount),
             authorizedBy: confirmedBy,
           });
-          await captureRefundAttendance(tx, refund!, deps.attendance, "qualified", cfg.locationId);
+          await captureRefundAttendance(tx, refund!, deps.attendance, "qualified");
           return { kind: "done" as const, result: await resultOf(tx, refund!, workingOrderId) };
         }
         const provider =
@@ -787,7 +777,7 @@ export async function refundBillPayment(
           .insert(billPaymentRefunds)
           .values({ ...values, state: "pending" })
           .returning();
-        await captureRefundAttendance(tx, refund!, deps.attendance, "pending", cfg.locationId);
+        await captureRefundAttendance(tx, refund!, deps.attendance, "pending");
         // Inside the transaction, so no loop pass runs between the insert and the claim.
         release = claimLive(liveRefundsOf(deps.db), refund!.id);
         return { kind: "send" as const, refundId: refund!.id, provider };

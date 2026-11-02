@@ -2451,16 +2451,16 @@ export async function recordGroupEvent(
     .values(values)
     .returning({ id: orderGroupEvents.id });
   if (attendance === undefined || !values.actorId) return;
-  const orders = await tx
-    .selectDistinct({ locationId: workingOrders.locationId })
+  const [order] = await tx
+    .select({ id: workingOrders.id })
     .from(workingOrders)
-    .where(eq(workingOrders.partyId, values.partyId));
-  if (orders.length !== 1) return;
+    .where(eq(workingOrders.partyId, values.partyId))
+    .limit(1);
+  if (order === undefined) return;
   await attendance.recorder(tx, {
     source: "draft",
     key: `group:${event!.id}`,
     personId: values.actorId,
-    locationId: orders[0]!.locationId,
     kind: "order",
     at: attendance.at,
     offsetMinutes: 0,
