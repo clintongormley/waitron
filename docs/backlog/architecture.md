@@ -298,20 +298,6 @@ run to install the new trigger. Owner question Q5 of A483.
   `scripts/workspace-cycles.test.ts` looks only for loops, and `eslint.config.js`'s
   `no-restricted-paths` zones name `packages/*` as targets, never `apps/*`.
 
-## Four order paths read `working_orders` by id alone, with nothing narrowing them to the caller's location
-
-Scope these alongside the other by-id verbs when multi-location lands. All
-   four are in `apps/server/src/working-order.ts`: `handOver`, which `POST /api/orders/:id/collect`
-   reaches through `handOverOrder`, selects and updates on `eq(workingOrders.id, id)`, using its
-   `TradingContext` only to read a placed order's service mode, through `findOrderServiceContext`, which
-   filters by `cfg.locationId`; without a stored context, the handover check uses the unscoped
-   `prepay` default;
-   `cancelPlacedOrder` selects and updates the same way and uses `cfg` only to stamp the amendment's
-   till and node and, for an order whose invoice was issued, to give the credit note its node and
-   series (its till is the requesting device's); `readLockedLines` takes no `cfg` at all, nor does `priceStoredOrder`, which calls
-   it to rebuild a filed ticket, nor `priceStoredOrderForIssuance`, which the filing sites in
-   `till-sale.ts` and `working-order.ts` call.
-
 ## These index and key names still read `tenant`, and the columns they name are gone
 
 `print_agents_tenant_node_key`,
@@ -382,20 +368,6 @@ non-test files under `apps/` and `packages/` also found raw engine imports in
 `apps/server/src/recovery-lock.ts` and `apps/server/scripts/cloud-backup-fixture.ts`. **Next
 action:** review each remaining raw connection separately before deciding whether a shared store
 API fits.
-
-## Location-scope the by-id verb family together
-
-Scope (`getHeldOrder`/`getPlacedCounterOrder`/
-`updateHeldOrder`/`abandonHeldOrder`/`openTab`) when multi-location lands — alongside `handOver`,
-`cancelPlacedOrder`, `readLockedLines`, `priceStoredOrder` and `priceStoredOrderForIssuance` in
-`apps/server/src/working-order.ts`.
-[Order-path detail](#four-order-paths-read-working_orders-by-id-alone-with-nothing-narrowing-them-to-the-callers-location).
-Floor plans slice 1 (A429) added more read and written by id alone: in
-`apps/server/src/table-removal.ts`, `tablesTied` and `removeLiveTables`' label read and the deletes
-after it; `releaseDeliveries` (`apps/server/src/delivery-release.ts`); `followersOf`
-(`apps/server/src/floor-plan.ts`); and bookings' `release` (`packages/bookings/src/table-removal.ts`),
-unscoped on purpose so a stray booking under another location cannot block a table's final delete
-(`25ecf900b`) — scoping it needs that case answered first.
 
 ## A913's fix items: general code English only
 

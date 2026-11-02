@@ -6526,6 +6526,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   English and Spanish guide `content-and-images.md`, whose receipt-language paragraph still speaks
   of "the location's default".
 
+- **A1301 S13 left an unread `locationId` in `readChoiceChangeableOrder`'s columns**
+  (`apps/server/src/working-order.ts`): it selects `workingOrders.locationId`, and neither caller
+  reads it. Delete it with S18's sweep of the `location_id` columns, or sooner.
+
 - **A1301 S8: reword the week routes' "another venue's" season refusal.**
   `docs/developers/conventions-data.md` (the menu-week and closed-week routes paragraph) says an
   unknown or another venue's season is refused `season.not_found`. The check still exists, in
@@ -6888,10 +6892,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   behind by the TypeScript 7 upgrade (#460, 2026-09-20). Moving the WHOLE cohort would settle it,
   and that is a print agent layering decision.
   [Detail](backlog/architecture.md#appsserver--appsprint-agent-is-the-first-app-to-app-workspace-edge-in-the-tree)
-
-- **Location-scope the by-id verb family together** (`getHeldOrder`/`getPlacedCounterOrder`/
-  `updateHeldOrder`/`abandonHeldOrder`/`openTab`) when multi-location lands.
-  [Detail](backlog/architecture.md#location-scope-the-by-id-verb-family-together)
 
 - **Nothing stops two queries being started at once on one transaction.** The rule and its receipt
   are in `docs/developers/conventions-data.md` under "Multi-table writes share ONE transaction"; no
