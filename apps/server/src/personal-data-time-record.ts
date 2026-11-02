@@ -35,7 +35,6 @@ export function timeRecordPersonalData(modules: readonly WaitronModule[]): Perso
       if (days?.first == null || days.last == null) return async () => [];
       const today = civilDateOf(subject.at, subject.timeZone);
       const format = await exporter.prepare(tx, {
-        locationId,
         personId: subject.personId,
         period: { start: days.first, end: addDays(days.last > today ? days.last : today, 1) },
         audience: "standard",

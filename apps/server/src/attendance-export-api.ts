@@ -1,13 +1,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import {
-  locations,
-  venueLocationId,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { locations, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   authorizeManager,
   persons,
@@ -94,7 +88,6 @@ export function mountAttendanceExportApi(app: Hono, deps: ExportDeps, log: Logge
           }
           if (!deps.exporter) return { selection, format: null };
           const format = await deps.exporter.prepare(tx, {
-            locationId: await venueLocationId(tx),
             personId: mode === "own" ? viewerId : personId,
             period: { start: selection.from, end: selection.before },
             audience: selection.audience,

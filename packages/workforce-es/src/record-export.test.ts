@@ -66,7 +66,6 @@ const event = (at: string, personId = worker) => ({
   origin,
 });
 const input = (patch: Partial<RecordExportInput> = {}): RecordExportInput => ({
-  locationId,
   period,
   audience: "standard",
   locale: "en",
@@ -491,7 +490,7 @@ it("names the venue once and gives entries and closures no workplace column", as
   const english = await doc({ locale: "en" });
   const metadata = english.sections.find((s) => s.key === "metadata")!;
   expect(metadata.columns.map((c) => c.key)).toEqual([
-    "locationName",
+    "venueName",
     "periodStart",
     "periodEnd",
     "audience",
@@ -503,6 +502,7 @@ it("names the venue once and gives entries and closures no workplace column", as
     "From",
     "Before (excluded)",
   ]);
+  expect(cells(english, "metadata")[0]!.venueName).toBe("Deli");
   for (const key of ["history", "frozen-history", "closures"])
     expect(english.sections.find((s) => s.key === key)!.columns.map((c) => c.key)).not.toContain(
       "locationId",
