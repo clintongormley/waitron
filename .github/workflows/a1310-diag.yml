@@ -1,0 +1,65 @@
+name: a1310-diag
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: probe on ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [ubuntu-24.04, ubuntu-26.04]
+    runs-on: ${{ matrix.image }}
+    timeout-minutes: 8
+    steps:
+      - name: Which timeout
+        run: |
+          set -x
+          command -v timeout gtimeout || true
+          readlink -f "$(command -v timeout)"
+          timeout --version | head -3 || true
+          dpkg -S "$(readlink -f "$(command -v timeout)")" || true
+          dpkg -l | grep -i -E 'coreutils|uutils' || true
+          ls /usr/bin/gnutimeout /usr/lib/cargo/bin/coreutils 2>&1 || true
+          ls /usr/lib/cargo/bin 2>/dev/null | head -50 || true
+      - name: Does timeout's kill reach a grandchild that ignores TERM
+        run: |
+          start=$SECONDS
+          timeout -k 1 1 bash -c "trap '' TERM; sleep 301" & tpid=$!
+          sleep 0.5
+          ps -o pid,ppid,pgid,sid,stat,comm -e | awk 'NR==1 || /timeout|bash|sleep/'
+          echo "my pgid: $(ps -o pgid= -p $$)"
+          wait $tpid; echo "timeout exit $? after $((SECONDS-start))s"
+          sleep 1
+          if pgrep -a -f 'sleep 301'; then echo "RESULT: grandchild SURVIVED"; else echo "RESULT: no survivor"; fi
+          pkill -f 'sleep 301' || true
+      - name: Does timeout's TERM reach a grandchild that keeps TERM
+        run: |
+          start=$SECONDS
+          timeout -k 1 1 bash -c "sleep 302; echo after" ; echo "timeout exit $? after $((SECONDS-start))s"
+          sleep 1
+          if pgrep -a -f 'sleep 302'; then echo "RESULT: grandchild SURVIVED"; else echo "RESULT: no survivor"; fi
+          pkill -f 'sleep 302' || true
+      - name: The real script, ignore-term stub, read through a pipe like spawnSync
+        timeout-minutes: 3
+        env:
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          mkdir -p repo/scripts stub state/rt
+          curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/$SHA/scripts/ci-setup-pnpm.sh" -o repo/scripts/ci-setup-pnpm.sh
+          curl -fsSL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/$SHA/package.json" -o repo/package.json
+          printf '#!/usr/bin/env bash\ntrap "" TERM; sleep 303; exit 0\n' > stub/npm; chmod +x stub/npm
+          : > state/gp
+          start=$SECONDS
+          ( PATH="$PWD/stub:$PATH" RUNNER_TEMP="$PWD/state/rt" GITHUB_PATH="$PWD/state/gp" \
+            PNPM_SETUP_ATTEMPT_SECONDS=1 PNPM_SETUP_KILL_SECONDS=1 bash repo/scripts/ci-setup-pnpm.sh; \
+            echo "script exit $? after $((SECONDS-start))s" ) 2>&1 | cat > state/out & ppid=$!
+          for i in $(seq 1 40); do kill -0 $ppid 2>/dev/null || break; sleep 1; done
+          if kill -0 $ppid 2>/dev/null; then echo "RESULT: pipe still open after 40s"; else echo "RESULT: pipe closed after $((SECONDS-start))s"; fi
+          cat state/out
+          pgrep -a -f 'sleep 303' || echo "no sleep 303 left"
+          pkill -f 'sleep 303' || true
