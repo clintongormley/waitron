@@ -69,16 +69,14 @@ async function seed() {
       offsetMinutes: 60,
       outcome: "qualified",
     });
-    await beginAttendanceDiscovery(tx, { locationId, generation: "opened" });
+    await beginAttendanceDiscovery(tx, { generation: "opened" });
   });
 }
 async function prime() {
   for (let i = 0; i < 20; i++)
     if (
       !(
-        await withTransaction(suite.db, (tx) =>
-          discoverAttendanceDays(tx, { locationId, now, batchSize: 100 }),
-        )
+        await withTransaction(suite.db, (tx) => discoverAttendanceDays(tx, { now, batchSize: 100 }))
       ).more
     )
       return;
@@ -300,7 +298,7 @@ describe("a running shift across a clock days off", () => {
         offsetMinutes: 60,
         outcome: "qualified",
       });
-      await beginAttendanceDiscovery(tx, { locationId, generation: "opened" });
+      await beginAttendanceDiscovery(tx, { generation: "opened" });
     });
   };
   const settleAt = async (at: Date) => {

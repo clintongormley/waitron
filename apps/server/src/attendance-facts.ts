@@ -1,5 +1,5 @@
 import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
-import { readVenueClock, venueLocationId, type Transaction } from "@waitron/db";
+import { readVenueClock, type Transaction } from "@waitron/db";
 import { offsetMinutes } from "@waitron/venue-service";
 import { rosterVersions, shifts } from "@waitron/workforce";
 import type { AttendanceDay, AttendanceFact, PlannedAttendanceShift } from "@waitron/workforce";
@@ -11,7 +11,6 @@ export async function readAttendanceFacts(
   day: AttendanceDay,
 ): Promise<AttendanceFact[]> {
   const clock = await readVenueClock(tx);
-  const venue = await venueLocationId(tx);
   const { rows } = await tx.execute<SourceFact>(sql`
     with retained(source, key, personId, kind, at) as (
       select 'session', s.id, s.person_id, 'sign-in', s.opened_at
@@ -45,7 +44,7 @@ export async function readAttendanceFacts(
     and not exists (select 1 from attendance_operation_facts f where f.source = r.source and f.key = r.key)
     union all
     select source, key, person_id, kind, at from attendance_operation_facts
-    where location_id = ${venue} and at >= ${day.startAt} and at < ${day.endAt}
+    where at >= ${day.startAt} and at < ${day.endAt}
     and outcome = 'qualifying'
   `);
   return rows

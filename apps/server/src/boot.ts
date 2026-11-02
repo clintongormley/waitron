@@ -2053,16 +2053,10 @@ async function bootServer(
   let attendanceLoop: Promise<void> | undefined;
   let attendanceEmailLoop: Promise<void> | undefined;
   if (workforceEnabled && isSingletonPrimary) {
-    await withTransaction(db, (tx) =>
-      beginAttendanceDiscovery(tx, {
-        locationId: tradingContext.locationId,
-        generation: randomUUID(),
-      }),
-    );
+    await withTransaction(db, (tx) => beginAttendanceDiscovery(tx, { generation: randomUUID() }));
     attendanceLoop = runAttendanceLoop({
       db,
       nodeId: tradingContext.nodeId,
-      locationId: tradingContext.locationId,
       now,
       isPrimary: () => holders.singletonRole.current === "primary",
       signal: attendanceController.signal,

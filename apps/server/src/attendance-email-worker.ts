@@ -100,7 +100,7 @@ export async function runAttendanceEmailPass(
     await retireObsoleteRotaQuestions(tx, day);
     const latest = await reconcileAttendanceDay(
       tx,
-      { nodeId: deps.nodeId, locationId: deps.locationId, personId: candidate.person.id, day },
+      { nodeId: deps.nodeId, personId: candidate.person.id, day },
       now,
     );
     const [current] = await candidates().where(

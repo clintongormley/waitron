@@ -84,18 +84,16 @@ describe("transactional attendance operation capture", () => {
       expect(dirtied).toEqual({ ...before, dirtyRevision: 2 });
       const { beginAttendanceDiscovery, discoverAttendanceDays, nextAttendanceDay } =
         await import("./attendance-discovery.js");
-      await run((tx) => beginAttendanceDiscovery(tx, { locationId, generation: "after-settings" }));
+      await run((tx) => beginAttendanceDiscovery(tx, { generation: "after-settings" }));
       for (let n = 0; n < 15; n++) {
         const { more } = await run((tx) =>
-          discoverAttendanceDays(tx, { locationId, now: new Date(), batchSize: 100 }),
+          discoverAttendanceDays(tx, { now: new Date(), batchSize: 100 }),
         );
         if (!more) break;
         if (n === 14) throw new Error("cutover discovery did not settle");
       }
       expect(
-        await run((tx) =>
-          nextAttendanceDay(tx, { locationId, now: new Date("2026-01-06T03:00:00Z") }),
-        ),
+        await run((tx) => nextAttendanceDay(tx, { now: new Date("2026-01-06T03:00:00Z") })),
       ).toBeNull();
       expect(await suite.db.select().from(attendanceDayWork)).toEqual([
         expect.objectContaining({

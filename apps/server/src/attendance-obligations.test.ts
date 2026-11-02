@@ -27,34 +27,29 @@ const suite = useVenueDb({
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const backend = new WorkforceBackend();
 const now = new Date("2026-01-08T12:00:00.000Z");
-let locationId: string, personId: string, shiftId: string, questionId: string;
+let personId: string, shiftId: string, questionId: string;
 const day = () => ({
   businessDay: "2026-01-05",
   startAt: "2026-01-05T04:00:00.000Z",
   endAt: "2026-01-06T04:00:00.000Z",
 });
 const own = () => run((tx) => listPendingAttendanceQuestions(tx, personId));
-const next = (at = now) => run((tx) => nextAttendanceDay(tx, { locationId, now: at }));
+const next = (at = now) => run((tx) => nextAttendanceDay(tx, { now: at }));
 async function drain() {
   for (let i = 0; i < 100; i++) {
-    if (!(await run((tx) => discoverAttendanceDays(tx, { locationId, now, batchSize: 1 }))).more)
-      return;
+    if (!(await run((tx) => discoverAttendanceDays(tx, { now, batchSize: 1 }))).more) return;
   }
   throw new Error("source discovery did not finish");
 }
 beforeEach(async () => {
   await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Deli",
-      timeZone: "UTC",
-      dayCutover: "04:00",
-      invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
-    })
-    .returning({ id: locations.id });
-  locationId = location!.id;
+  await suite.db.insert(locations).values({
+    name: "Deli",
+    timeZone: "UTC",
+    dayCutover: "04:00",
+    invoiceLocales: ["en"],
+    operationDescription: "Restaurant",
+  });
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: "Ana", pinHash: "scrypt$00$00", role: "staff" })
@@ -88,7 +83,7 @@ beforeEach(async () => {
       now,
     ),
   );
-  await run((tx) => beginAttendanceDiscovery(tx, { locationId, generation: "opening" }));
+  await run((tx) => beginAttendanceDiscovery(tx, { generation: "opening" }));
 });
 async function replace() {
   await run(async (tx) => {
@@ -150,7 +145,7 @@ describe("selected-day rota reconciliation", () => {
     const mail = await suite.db.select().from(attendanceMail);
     await expect(
       run(async (tx) => {
-        await nextAttendanceDay(tx, { locationId, now });
+        await nextAttendanceDay(tx, { now });
         throw new Error("processor failed");
       }),
     ).rejects.toThrow("processor failed");
