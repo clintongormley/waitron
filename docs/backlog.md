@@ -6446,9 +6446,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
   slices. S1 landed (#2379): `@waitron/db`'s `readVenue`, `readVenueClock`,
-  `readVenueClockAndPlace` and the interim `venueLocationId` are on main, so S2–S12 and S16 can
-  start. `refactor/a1301-s2-invoice-inputs` holds S2's invoice-input, document and receipt-reader
-  changes for owner review and landing.
+  `readVenueClockAndPlace` and the interim `venueLocationId` are on main for the remaining
+  consumer slices. S2 landed (#2384): invoice inputs, documents and receipt readers use the venue.
   F1 landed (#2383): `@waitron/db/testing/seed.js` has `seedVenue` and `seedWorkingOrder`,
   `packages/db`'s tests seed through them, and `scripts/a1301-seed-codemod.mjs` rewrites the common
   shapes and reports the rest, so F2–F5 can start. S5 landed (#2386): the default and extra menus
@@ -6461,10 +6460,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   own plan, written against A1268's merged diff (#2375): S13, S14, S15 (three pull requests) and
   S12d, lane B's, landed in that order. S18 waits for S2–S17, and the schema
   slices S20–S28 get a plan of their own, which first settles what the venue id sent to Cloud and
-  naming the backup folder becomes. S4 is implemented for owner review: standby establishment
+  naming the backup folder becomes. S4 landed (#2388): standby establishment
   refuses with `mirror.venue_not_copied` before a node write when no venue row exists, including
   with the node's venue foreign key removed. Pending-adoption files no longer write or forward a
-  location id; an old-shaped file is read without a reset. S4 must land before S25 drops the key.
+  location id; an old-shaped file is read without a reset. S25 still needs to drop the key.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](superpowers/plans/2026-11-01-a1301-remove-location.md),
   [working-time plan](superpowers/plans/2026-11-02-a1301-working-time-slices.md)
