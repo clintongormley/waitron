@@ -757,22 +757,10 @@ it("delete keeps missing-parent and KDS service access unrestricted while a reta
   });
 });
 
-it("delete ignores another location and preserves defaults when the removed zone was not default", async () => {
+it("delete preserves defaults when the removed zone was not default", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);
-    const elsewhere = await fixture(tx, " other location");
-    const before = {
-      policies: await tx.select().from(zoneServicePolicies),
-      departments: await tx.select().from(departments),
-      scopes: await tx.select().from(deviceProfileServiceAccess),
-    };
-    expect(
-      await readServiceDeleteSettings(tx, f.cfg, [elsewhere.gone], elsewhere.department),
-    ).toEqual([]);
-    await clearServiceDeleteSettings(tx, f.cfg, [elsewhere.gone], elsewhere.department);
-    expect(await tx.select().from(zoneServicePolicies)).toEqual(before.policies);
-    expect(await tx.select().from(departments)).toEqual(before.departments);
-    expect(await tx.select().from(deviceProfileServiceAccess)).toEqual(before.scopes);
+    const before = { departments: await tx.select().from(departments) };
     expect(await readServiceDeleteSettings(tx, f.cfg, [f.forbidden], null)).toEqual([
       { key: "zone_policies", count: 1, targets: [] },
     ]);

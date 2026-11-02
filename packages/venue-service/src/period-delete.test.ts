@@ -280,19 +280,6 @@ describe("where a period is painted", () => {
     expect(painted.get(v.deliLunch)).toEqual({ seasons: [], specialDays: [] });
   });
 
-  it("holds this venue's periods only", async () => {
-    const v = await venue();
-    const other = await venue();
-    await specialDay(other, "Festival", [TODAY], [slot(other.afternoon, "16:00", "19:00")]);
-
-    const painted = await scoped((tx) => readPaintedIn(tx, v.cfg, AT));
-
-    expect([...painted.keys()].sort()).toEqual(
-      [v.lunch, v.dinner, v.afternoon, v.deliLunch].sort(),
-    );
-    expect(painted.get(v.afternoon)).toEqual({ seasons: [], specialDays: [] });
-  });
-
   it("lists every special day that paints the period when the clock cannot be read", async () => {
     const v = await venue();
     const pastSpecialDay = await specialDay(
@@ -374,13 +361,12 @@ describe("what deleting a period touches", () => {
     });
   });
 
-  it("refuses a period that does not exist, or is another venue's, as not found", async () => {
+  it("refuses a period that does not exist as not found", async () => {
     const v = await venue();
-    const other = await venue();
-    for (const periodId of [randomUUID(), other.lunch])
-      await expect(
-        scoped((tx) => periodDeleteImpact(tx, v.cfg, periodId, AT)),
-      ).rejects.toMatchObject({ code: "menu_period.not_found", params: { periodId } });
+    const periodId = randomUUID();
+    await expect(scoped((tx) => periodDeleteImpact(tx, v.cfg, periodId, AT))).rejects.toMatchObject(
+      { code: "menu_period.not_found", params: { periodId } },
+    );
   });
 });
 
@@ -694,13 +680,12 @@ describe("deleting a period", () => {
   });
 
   describe("refusals", () => {
-    it("refuses a replacement of another department, the period itself, an unknown one or another venue's, changing nothing", async () => {
+    it("refuses a replacement of another department, the period itself or an unknown one, changing nothing", async () => {
       const v = await deleteVenue();
-      const other = await venue();
       await specialDay(v, "Anniversary", ["2026-10-20"], [slot(v.lunch, "13:00", "15:00")]);
       const before = await stored(v);
 
-      for (const replacementId of [v.deliLunch, v.lunch, randomUUID(), other.afternoon]) {
+      for (const replacementId of [v.deliLunch, v.lunch, randomUUID()]) {
         const error = await refusal(() => remove(v, v.lunch, replacementId));
         expect(error.code).toBe("menu_period.invalid");
         expect(error.params).toEqual({ field: "replacementPeriodId" });
@@ -708,14 +693,12 @@ describe("deleting a period", () => {
       expect(await stored(v)).toEqual(before);
     });
 
-    it("refuses a period that does not exist, or is another venue's, as not found", async () => {
+    it("refuses a period that does not exist as not found", async () => {
       const v = await venue();
-      const other = await venue();
-      for (const periodId of [randomUUID(), other.lunch]) {
-        const error = await refusal(() => remove(v, periodId, null));
-        expect(error.code).toBe("menu_period.not_found");
-        expect(error.params).toEqual({ periodId });
-      }
+      const periodId = randomUUID();
+      const error = await refusal(() => remove(v, periodId, null));
+      expect(error.code).toBe("menu_period.not_found");
+      expect(error.params).toEqual({ periodId });
     });
 
     it("refuses a stale clock revision, changing nothing", async () => {

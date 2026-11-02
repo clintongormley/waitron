@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -677,10 +678,9 @@ describe("recordKitchenNotices", () => {
       quantity = ONE,
     ): KitchenNoticeItem => ({ workingOrderLineId, stationId, quantity, wasStarted: false });
 
-    it("an unknown order, and an order at another location, as not found", async () => {
+    it("an unknown order as not found", async () => {
       const v = await venue();
       const order = await seedOrder(v.locationId, 1, null);
-      const elsewhere = await seedOrder(await seedLocation("Other venue"), 2, null);
       const unknown = "00000000-0000-4000-8000-00000000dead";
       await expect(
         inTx((tx) =>
@@ -690,41 +690,24 @@ describe("recordKitchenNotices", () => {
         code: "working_order.not_found",
         params: { workingOrderId: unknown },
       });
+      expect(await db.select().from(kitchenNotices)).toEqual([]);
+    });
+
+    it("an unknown station as not found", async () => {
+      const v = await venue();
+      const order = await seedOrder(v.locationId, 1, null);
+      const stationId = "00000000-0000-4000-8000-00000000beef";
       await expect(
         inTx((tx) =>
           recordKitchenNotices(
             tx,
             v.cfg,
-            elsewhere.orderId,
-            [item(elsewhere.burgerLineId, v.grill)],
+            order.orderId,
+            [item(order.burgerLineId, v.grill), item(order.lemonadeLineId, stationId)],
             "void",
           ),
         ),
-      ).rejects.toMatchObject({
-        code: "working_order.not_found",
-        params: { workingOrderId: elsewhere.orderId },
-      });
-      expect(await db.select().from(kitchenNotices)).toEqual([]);
-    });
-
-    it("an unknown station, and a station at another location, as not found", async () => {
-      const v = await venue();
-      const order = await seedOrder(v.locationId, 1, null);
-      const elsewhere = await seedStation(await seedLocation("Other venue"), "Grill");
-      const unknown = "00000000-0000-4000-8000-00000000beef";
-      for (const stationId of [unknown, elsewhere]) {
-        await expect(
-          inTx((tx) =>
-            recordKitchenNotices(
-              tx,
-              v.cfg,
-              order.orderId,
-              [item(order.burgerLineId, v.grill), item(order.lemonadeLineId, stationId)],
-              "void",
-            ),
-          ),
-        ).rejects.toMatchObject({ code: "station.not_found", params: { stationId } });
-      }
+      ).rejects.toMatchObject({ code: "station.not_found", params: { stationId } });
       expect(await db.select().from(kitchenNotices)).toEqual([]);
     });
 
@@ -1259,17 +1242,27 @@ describe("listStationNotices", () => {
     expect(await listed()).toEqual(["just now"]);
   });
 
-  it("returns only the named station's notices, and none for a station at another location", async () => {
+  it("returns only the named station's notices", async () => {
     const v = await venue();
     const order = await seedOrder(v.locationId, 1, null);
-    const elsewhere = await seedStation(await seedLocation("Other venue"), "Grill");
     await noticeAt(v.bar, order.orderId, new Date().toISOString(), "at the bar");
-    await noticeAt(elsewhere, order.orderId, new Date().toISOString(), "elsewhere");
     expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([]);
     expect(
       (await inTx((tx) => listStationNotices(tx, v.cfg, v.bar))).map((n) => n.lineName),
     ).toEqual(["at the bar"]);
-    expect(await inTx((tx) => listStationNotices(tx, v.cfg, elsewhere))).toEqual([]);
+  });
+});
+
+// A1301: deleted with cfg in S18
+describe("listStationsNotices and the scope", () => {
+  it("returns a notice at the venue's station whatever location the scope names", async () => {
+    const v = await venue();
+    const order = await seedOrder(v.locationId, 1, null);
+    await noticeAt(v.grill, order.orderId, new Date().toISOString(), "at the grill");
+    const notices = await inTx((tx) =>
+      listStationsNotices(tx, { locationId: brandLocationId(randomUUID()) }, [v.grill]),
+    );
+    expect(notices.get(v.grill)!.map((notice) => notice.lineName)).toEqual(["at the grill"]);
   });
 });
 
@@ -1299,15 +1292,12 @@ describe.each([
       await noticeAt(v.grill, order.orderId, at, `G${index}`);
       await noticeAt(v.bar, order.orderId, at, `B${index}`);
     }
-    const elsewhere = await seedStation(await seedLocation("Other venue"), "Grill");
-    await noticeAt(elsewhere, order.orderId, minutesAgo(1), "elsewhere");
 
-    const notices = await inTx((tx) => listStationsNotices(tx, v.cfg, [v.bar, v.grill, elsewhere]));
+    const notices = await inTx((tx) => listStationsNotices(tx, v.cfg, [v.bar, v.grill]));
 
     expect([...notices].map(([id, list]) => [id, list.map((notice) => notice.lineName)])).toEqual([
       [v.bar, Array.from({ length: 50 }, (_, index) => `B${index + 5}`)],
       [v.grill, Array.from({ length: 50 }, (_, index) => `G${index + 5}`)],
-      [elsewhere, []],
     ]);
   });
 
@@ -1435,25 +1425,13 @@ describe("acknowledgeKitchenNotice", () => {
     expect(await acknowledgedAt()).toBe(first);
   });
 
-  it("refuses an unknown notice, and one at another location's station, as not found", async () => {
+  it("refuses an unknown notice as not found", async () => {
     const v = await venue();
-    const order = await seedOrder(v.locationId, 1, null);
-    const elsewhere = await seedStation(await seedLocation("Other venue"), "Grill");
-    const foreign = await noticeAt(elsewhere, order.orderId, new Date().toISOString());
     const unknown = "00000000-0000-4000-8000-00000000dead";
     await expect(inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, unknown))).rejects.toMatchObject({
       code: "kitchen_notice.not_found",
       params: { noticeId: unknown },
     });
-    await expect(inTx((tx) => acknowledgeKitchenNotice(tx, v.cfg, foreign))).rejects.toMatchObject({
-      code: "kitchen_notice.not_found",
-      params: { noticeId: foreign },
-    });
-    const [row] = await db
-      .select({ at: kitchenNotices.acknowledgedAt })
-      .from(kitchenNotices)
-      .where(eq(kitchenNotices.id, foreign));
-    expect(row!.at).toBeNull();
   });
 });
 

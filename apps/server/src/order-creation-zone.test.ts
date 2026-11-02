@@ -2,9 +2,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { devices, floorZones, locations, withTransaction, workingOrders } from "@waitron/db";
-import { seedDevice } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
+import { devices, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SimulatorPaymentProvider } from "@waitron/payments";
@@ -13,8 +11,6 @@ import {
   orderServiceContexts,
   setProfileServiceScope,
   replaceZoneClosedWeek,
-  createDepartment,
-  configureZone,
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
@@ -255,53 +251,4 @@ it("a closed zone refuses new orders but still lets its existing bill split", as
       sql`select working_order_id as orderId, quantity from working_order_lines where working_order_id in (${id}, ${result.billId}) order by working_order_id`,
     ),
   ).toEqual([id, result.billId].sort().map((orderId) => ({ orderId, quantity: 1000 })));
-});
-
-it("another location's device profile cannot supply the zone for this location's order", async () => {
-  const [place] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Other location",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Other service",
-    })
-    .returning();
-  const cfg = { locationId: locationId(place!.id) };
-  const other = await seedDevice(suite.db, {
-    locationId: cfg.locationId,
-    capabilities: ["take-orders"],
-  });
-  await withTransaction(suite.db, async (tx) => {
-    const department = await createDepartment(tx, cfg, {
-      name: "Other department",
-      orderStart: "table",
-    });
-    const [zone] = await tx
-      .insert(floorZones)
-      .values({ locationId: cfg.locationId, name: "Other zone" })
-      .returning();
-    await configureZone(tx, cfg, { zoneId: zone!.id, departmentId: department.id });
-    const [device] = await tx.select().from(devices).where(eq(devices.id, other.deviceId));
-    await setProfileServiceScope(tx, cfg, device!.deviceProfileId, {
-      departmentId: department.id,
-      allowedZoneIds: null,
-      startingZoneId: zone!.id,
-    });
-  });
-  const id = randomUUID();
-  await withTransaction(suite.db, (tx) =>
-    createOpenOrder(
-      tx,
-      {
-        ...venue.cfg,
-        origin: { source: "device", deviceId: other.deviceId },
-      },
-      id,
-      [],
-      null,
-    ),
-  );
-  expect(await context(id)).toEqual([
-    { zoneId: venue.counter.zoneId, departmentId: counterDepartmentId },
-  ]);
 });

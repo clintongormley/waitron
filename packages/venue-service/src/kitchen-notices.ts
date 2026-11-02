@@ -1,9 +1,15 @@
 import { and, asc, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
-import { kitchenStations, nowIso, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  kitchenStations,
+  nowIso,
+  readVenueClock,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { KitchenAllergyBlock, KitchenNoteChange, StationNoticeDish } from "@waitron/module";
 import { kitchenPresentationName } from "@waitron/catalogue";
-import { businessDayStart, readLocationClock } from "@waitron/reporting";
+import { businessDayStart } from "@waitron/reporting";
 import {
   AppError,
   decimalToThousandths,
@@ -79,7 +85,7 @@ const FOLD_KEY = sql<string>`case when ${kitchenNotices.orderNoteChange} is null
 /** Copy line presentation before deleting a line: notices outlive the work they describe. */
 export async function recordKitchenNotices(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   orderId: string,
   items: readonly KitchenNoticeItem[],
   kind: KitchenNoticeKind,
@@ -129,7 +135,7 @@ export async function recordKitchenNotices(
   const [order] = await tx
     .select({ orderNumber: workingOrders.orderNumber, label: workingOrders.label })
     .from(workingOrders)
-    .where(and(eq(workingOrders.id, orderId), eq(workingOrders.locationId, cfg.locationId)));
+    .where(eq(workingOrders.id, orderId));
   if (order === undefined) {
     throw new AppError("working_order.not_found", { workingOrderId: orderId });
   }
@@ -137,9 +143,7 @@ export async function recordKitchenNotices(
   const stations = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
-    .where(
-      and(inArray(kitchenStations.id, stationIds), eq(kitchenStations.locationId, cfg.locationId)),
-    );
+    .where(inArray(kitchenStations.id, stationIds));
   const knownStations = new Set(stations.map((station) => station.id));
   const unknownStation = stationIds.find((id) => !knownStations.has(id));
   if (unknownStation !== undefined) {
@@ -226,12 +230,12 @@ export async function listStationNotices(
  */
 export async function listStationsNotices(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   stationIds: readonly string[],
 ): Promise<Map<string, KitchenNotice[]>> {
   const byStation = new Map<string, KitchenNotice[]>(stationIds.map((id) => [id, []]));
   if (stationIds.length === 0) return byStation;
-  const since = businessDayStart(new Date(), await readLocationClock(tx, cfg.locationId));
+  const since = businessDayStart(new Date(), await readVenueClock(tx));
   const allergy = inArray(kitchenNotices.kind, ["allergy_changed", "allergy_removed"]);
   const ranked = tx
     .select({
@@ -261,11 +265,9 @@ export async function listStationsNotices(
         ),
     })
     .from(kitchenNotices)
-    .innerJoin(kitchenStations, eq(kitchenStations.id, kitchenNotices.stationId))
     .where(
       and(
         inArray(kitchenNotices.stationId, [...stationIds]),
-        eq(kitchenStations.locationId, cfg.locationId),
         isNull(kitchenNotices.acknowledgedAt),
         or(allergy, gte(kitchenNotices.createdAt, since)),
       ),
@@ -375,7 +377,7 @@ function sameNames(a: Record<string, string> | null, b: Record<string, string> |
  */
 export async function acknowledgeKitchenNotice(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   id: string,
   scope: { stationId?: string } = {},
 ): Promise<void> {
@@ -386,11 +388,9 @@ export async function acknowledgeKitchenNotice(
       foldKey: FOLD_KEY,
     })
     .from(kitchenNotices)
-    .innerJoin(kitchenStations, eq(kitchenStations.id, kitchenNotices.stationId))
     .where(
       and(
         eq(kitchenNotices.id, id),
-        eq(kitchenStations.locationId, cfg.locationId),
         scope.stationId === undefined ? undefined : eq(kitchenNotices.stationId, scope.stationId),
       ),
     );

@@ -192,21 +192,3 @@ it("a first step that does not start after the step before is left as it is", as
     { name: "Anything else?", start: "all_served", minutes: 10 },
   ]);
 });
-
-it("leaves a department at another location alone, even when its step names the course", async () => {
-  const { cfg, courseId } = await venue("Here");
-  const other = await venue("Elsewhere");
-  await department(cfg, courseId, "Dining", [["Dessert?", "course_served", 10, "dessert"]]);
-  const away = await department(other.cfg, courseId, "Away", [
-    ["Dessert?", "course_served", 10, "dessert"],
-    ["Coffee", "after_previous", 5],
-  ]);
-  expect(await run((tx) => readCourseDeleteSettings(tx, cfg, courseId))).toEqual([
-    { key: "course_service_steps", count: 1, targets: [] },
-  ]);
-  await run((tx) => clearCourseDeleteSettings(tx, cfg, courseId));
-  expect(await stepsOf(away)).toEqual([
-    { name: "Dessert?", start: "course_served", minutes: 10 },
-    { name: "Coffee", start: "after_previous", minutes: 5 },
-  ]);
-});

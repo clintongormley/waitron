@@ -70,7 +70,7 @@ export async function assertProfileZone(
 /** The zone half of {@link ProfileServiceAccess}. */
 export async function readProfileZones(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   profileId: string,
 ): Promise<Pick<ProfileServiceAccess, "departmentId" | "allowedZoneIds" | "startingZoneId">> {
   const [profile] = await tx
@@ -104,7 +104,6 @@ export async function readProfileZones(
       .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
       .where(
         and(
-          eq(zoneServicePolicies.locationId, cfg.locationId),
           eq(zoneServicePolicies.departmentId, profile.departmentId),
           eq(floorZones.active, true),
           eq(departments.active, true),
@@ -147,11 +146,11 @@ export interface StoredProfileServiceScope {
 /** Replaces the profile's whole service scope, after checking every id against the venue's rows. */
 export async function setProfileServiceAccess(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   profileId: string,
   input: ProfileServiceAccessInput,
 ): Promise<void> {
-  const scope = await checkedScope(tx, cfg, await liveFormFactor(tx, profileId), input);
+  const scope = await checkedScope(tx, await liveFormFactor(tx, profileId), input);
   await writeScope(tx, profileId, scope);
 }
 
@@ -171,7 +170,7 @@ const NO_SCOPE: ProfileServiceScope = {
  */
 export async function setProfileServiceScope(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   profileId: string,
   input: Partial<ProfileServiceScope>,
 ): Promise<void> {
@@ -192,7 +191,7 @@ export async function setProfileServiceScope(
   };
   if (formFactor !== SHARED_DISPLAY && scope.departmentId === null)
     refuse("departmentId", "required");
-  await writeScope(tx, profileId, await checkedScope(tx, cfg, formFactor, scope));
+  await writeScope(tx, profileId, await checkedScope(tx, formFactor, scope));
 }
 
 /**
@@ -269,7 +268,6 @@ async function writeScope(
 
 async function checkedScope(
   tx: Transaction,
-  cfg: VenueScope,
   formFactor: string,
   input: ProfileServiceScope,
 ): Promise<{ departmentId: string; zoneIds: string[] | null; startingZoneId: string } | null> {
@@ -287,13 +285,7 @@ async function checkedScope(
   const [department] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(
-      and(
-        eq(departments.id, departmentId),
-        eq(departments.locationId, cfg.locationId),
-        eq(departments.active, true),
-      ),
-    );
+    .where(and(eq(departments.id, departmentId), eq(departments.active, true)));
   if (department === undefined) refuse("departmentId", "not_found");
 
   const zoneIds = input.allowedZoneIds === null ? null : [...new Set(input.allowedZoneIds)];
@@ -312,7 +304,7 @@ async function checkedScope(
         })
         .from(floorZones)
         .leftJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
-        .where(and(inArray(floorZones.id, named), eq(floorZones.locationId, cfg.locationId)))
+        .where(inArray(floorZones.id, named))
     ).map((zone) => [zone.id, zone]),
   );
   const check = (field: "allowedZoneIds" | "startingZoneId", zoneId: string) => {

@@ -223,25 +223,6 @@ describe("a profile's service access", () => {
     });
   });
 
-  it("refuses a department at another location", async () => {
-    const venue = await seedVenue();
-    const elsewhere = await seedVenue();
-    await expect(
-      outcome(
-        save(
-          venue,
-          restaurantScope(venue, {
-            departmentId: elsewhere.restaurant,
-            startingZoneId: elsewhere.dining,
-          }),
-        ),
-      ),
-    ).resolves.toEqual({
-      code: "device_profile.access_invalid",
-      params: { field: "departmentId", reason: "not_found" },
-    });
-  });
-
   it("refuses a disabled department", async () => {
     const venue = await seedVenue();
     await scoped((tx) =>
@@ -380,7 +361,7 @@ describe("a profile's service access", () => {
     });
   });
 
-  it("stops offering an allowed zone once it is deactivated or moved to another department", async () => {
+  it("stops offering an allowed zone once it is deactivated", async () => {
     const venue = await seedVenue();
     await save(
       venue,
@@ -393,7 +374,9 @@ describe("a profile's service access", () => {
       tx.execute(sql`update floor_zones set active = false where id = ${venue.terrace}`),
     );
     await expect(read(venue)).resolves.toMatchObject({ allowedZoneIds: [venue.dining] });
+  });
 
+  it("stops offering an allowed zone once it is moved to another department", async () => {
     const other = await seedVenue();
     await save(other, restaurantScope(other));
     await scoped((tx) =>

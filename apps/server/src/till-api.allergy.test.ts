@@ -473,26 +473,6 @@ describe("A669 allergy routes", () => {
     await restrict(tableZoneId);
     expect((await request(verb, route(verb), bodyFor(verb))).status).toBe(200);
   });
-  it.each(verbs)("hides another location's party from %s", async (verb) => {
-    const [other] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Other location",
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-      })
-      .returning();
-    const otherCfg = { ...cfg, locationId: locationId(other!.id) };
-    const zone = await createZone(suite.db, otherCfg, { name: "Other tables" });
-    const table = await createTable(suite.db, otherCfg, { label: "Other table", zoneId: zone.id });
-    await suite.db.delete(partyTables).where(eq(partyTables.partyId, partyId));
-    await suite.db.insert(partyTables).values({ partyId, tableId: table.id });
-    await suite.db
-      .update(workingOrders)
-      .set({ locationId: otherCfg.locationId })
-      .where(eq(workingOrders.id, billId));
-    await expectError(await request(verb, route(verb), bodyFor(verb)), 404, "party.not_found");
-  });
   it("keeps automatic reads passive and explicit preview active", async () => {
     const seen = "2020-01-01T00:00:00.000Z";
     await suite.db.update(devices).set({ lastSeenAt: seen }).where(eq(devices.id, deviceId));

@@ -268,40 +268,41 @@ describe("permanent service delete HTTP contracts", () => {
       expect(await run(rows)).toEqual(before);
     },
   );
-  it.each(["zone", "department"] as const)(
-    "keeps %s malformed/unknown/wrong-location not-found contracts",
-    async (kind) => {
-      const [other] = await run((tx) =>
-        tx
-          .insert(locations)
-          .values({ name: "Other", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
-          .returning(),
-      );
-      const outside = await run((tx) =>
-        kind === "zone"
-          ? tx
-              .insert(floorZones)
-              .values({ locationId: other!.id, name: "Outside" })
-              .returning({ id: floorZones.id })
-          : tx
-              .insert(departments)
-              .values({ locationId: other!.id, name: "Outside", tradingName: "Outside" })
-              .returning({ id: departments.id }),
-      );
-      for (const id of ["bad-id", randomUUID(), outside[0]!.id])
-        for (const method of ["GET", "DELETE"]) {
-          await error(
-            await send(method, `${path(kind, id)}${method === "GET" ? "/delete-impact" : ""}`),
-            kind === "department" && id === "bad-id" ? 400 : 404,
-            kind === "department" && id === "bad-id"
-              ? "shared.invalid_id"
-              : kind === "zone"
-                ? "zone.not_found"
-                : "department.not_found",
-          );
-        }
-    },
-  );
+  it("keeps zone malformed/unknown/wrong-location not-found contracts", async () => {
+    const [other] = await run((tx) =>
+      tx
+        .insert(locations)
+        .values({ name: "Other", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
+        .returning(),
+    );
+    const outside = await run((tx) =>
+      tx
+        .insert(floorZones)
+        .values({ locationId: other!.id, name: "Outside" })
+        .returning({ id: floorZones.id }),
+    );
+    for (const id of ["bad-id", randomUUID(), outside[0]!.id])
+      for (const method of ["GET", "DELETE"]) {
+        await error(
+          await send(method, `${path("zone", id)}${method === "GET" ? "/delete-impact" : ""}`),
+          404,
+          "zone.not_found",
+        );
+      }
+  });
+  it("keeps department malformed/unknown not-found contracts", async () => {
+    for (const id of ["bad-id", randomUUID()])
+      for (const method of ["GET", "DELETE"]) {
+        await error(
+          await send(
+            method,
+            `${path("department", id)}${method === "GET" ? "/delete-impact" : ""}`,
+          ),
+          id === "bad-id" ? 400 : 404,
+          id === "bad-id" ? "shared.invalid_id" : "department.not_found",
+        );
+      }
+  });
   it("authenticates and validates an empty zone PATCH before returning 204", async () => {
     const f = await target();
     const url = path("zone", f.zoneId);

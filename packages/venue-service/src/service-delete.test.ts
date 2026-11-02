@@ -735,23 +735,6 @@ describe("service deletion", () => {
       await refusal(run((tx) => serviceDelete.deleteDepartment(tx, f.cfg, noFloor, f.dining, NOW))),
     ).toBe("department.not_found");
   });
-
-  it("does not read a target from another location", async () => {
-    const f = await fixture();
-    const other = await fixture();
-    expect(
-      await refusal(
-        run((tx) => serviceDelete.readZoneDeleteImpact(tx, other.cfg, noFloor, f.alpha, NOW)),
-      ),
-    ).toBe("service_zone.not_found");
-    expect(
-      await refusal(
-        run((tx) =>
-          serviceDelete.readDepartmentDeleteImpact(tx, other.cfg, noFloor, f.dining, NOW),
-        ),
-      ),
-    ).toBe("department.not_found");
-  });
 });
 
 it("exposes only permanent hierarchy removal operations", () => {

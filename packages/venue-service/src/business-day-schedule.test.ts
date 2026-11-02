@@ -1864,8 +1864,9 @@ it("identifies conflicting period and zone schedules with names and recorded ran
   }
 });
 
-it("reports a clashing season range once per season it is painted in, naming the season", async () => {
-  for (const zone of [false, true]) {
+it.each([false, true])(
+  "reports a clashing season range once per season it is painted in, naming the season (zone: %s)",
+  async (zone) => {
     const v = await fixture([], { zone });
     const result = await withTransaction(suite.db, async (tx) => {
       const winter = { id: v.seasonId };
@@ -1922,8 +1923,8 @@ it("reports a clashing season range once per season it is painted in, naming the
     expect(result.twice.conflicts).toEqual(
       expect.arrayContaining([conflict(result.winter), conflict(result.summer)]),
     );
-  }
-});
+  },
+);
 
 it("names the season of each season range conflict", async () => {
   const v = await fixture([]);

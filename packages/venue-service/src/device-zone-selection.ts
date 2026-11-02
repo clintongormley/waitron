@@ -32,13 +32,7 @@ export async function readDeviceZoneSelection(
     })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .where(
-      and(
-        eq(devices.id, deviceId),
-        eq(devices.locationId, cfg.locationId),
-        isNull(devices.deletedAt),
-      ),
-    );
+    .where(and(eq(devices.id, deviceId), isNull(devices.deletedAt)));
   if (profile === undefined) throw new AppError("device.not_found", { deviceId });
   const scope = await readProfileZones(tx, cfg, profile.id);
   const profileScope = await readProfileServiceScopes(tx, [profile.id]);
@@ -92,7 +86,6 @@ export async function readDeviceZoneSelection(
   const snapshot = createHash("sha256")
     .update(
       JSON.stringify([
-        cfg.locationId,
         deviceId,
         profile.id,
         profile.formFactor,

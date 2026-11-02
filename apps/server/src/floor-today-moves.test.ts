@@ -4,14 +4,11 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
-  diningTables,
-  floorZones,
   floorPlanPlacements,
   floorPlanTables,
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodayTables,
-  locations,
 } from "@waitron/db";
 import { moveToday, placeSpareToday, resetZone, rotateToday } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
@@ -212,51 +209,6 @@ describe("today's moves", () => {
       code: "table.not_on_today_plan",
       params: { tableId: never },
     });
-  });
-
-  it("refuses a table of another venue as not found", async () => {
-    const elsewhere = randomUUID();
-    const id = randomUUID();
-    await inTx(v, async (tx) => {
-      await tx.insert(locations).values({
-        id: elsewhere,
-        name: "Other",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurant",
-      });
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ locationId: elsewhere, name: "Other tables" })
-        .returning({ id: floorZones.id });
-      await tx.insert(diningTables).values({
-        id,
-        locationId: elsewhere,
-        zoneId: zone!.id,
-        label: `Elsewhere ${id.slice(0, 6)}`,
-      });
-      await tx.insert(floorTodayTables).values({
-        tableId: id,
-        seats: 4,
-        x: 0,
-        y: 0,
-        width: 8,
-        height: 8,
-        shape: "rect",
-        rotation: 0,
-      });
-    });
-    const before = await todayRow(v, id);
-    for (const write of [
-      () => move(id, { x: 1, y: 1 }),
-      () => rotate(id),
-      () => placeSpare(id, { x: 1, y: 1 }),
-    ]) {
-      await expect(write()).rejects.toMatchObject({
-        code: "table.not_found",
-        params: { tableId: id },
-      });
-    }
-    expect(await todayRow(v, id)).toEqual(before);
   });
 
   it("refuses a spare that is also taken off as not on the plan", async () => {

@@ -553,17 +553,6 @@ it("rejects stale profile and device writes retaining a deleted station", async 
   ).rejects.toMatchObject({ code: "kitchen_screen.invalid", params: { reason: "not_found" } });
 });
 
-it.each(["read", "clear"])("refuses %s settings for another location", async (kind) => {
-  const f = await run(async (tx) => ({ here: await fixture(tx), other: await fixture(tx) }));
-  await expect(
-    run<unknown>((tx) =>
-      kind === "read"
-        ? module.readStationDeleteSettings(tx, f.here.cfg, f.other.gone)
-        : module.clearStationDeleteSettings(tx, f.here.cfg, f.other.gone),
-    ),
-  ).rejects.toMatchObject({ code: "station.not_found" });
-});
-
 it.each(["pass", "pass_monitor"] as const)(
   "finds explicit KDS %s bindings while excluding Every and removed choices",
   async (kind) => {

@@ -63,26 +63,14 @@ async function selection(
       ? await tx
           .select()
           .from(departments)
-          .where(
-            and(
-              eq(departments.id, id),
-              eq(departments.locationId, cfg.locationId),
-              eq(departments.active, true),
-            ),
-          )
+          .where(and(eq(departments.id, id), eq(departments.active, true)))
       : [];
   const [zone] =
     kind === "zone"
       ? await tx
           .select()
           .from(floorZones)
-          .where(
-            and(
-              eq(floorZones.id, id),
-              eq(floorZones.locationId, cfg.locationId),
-              eq(floorZones.active, true),
-            ),
-          )
+          .where(and(eq(floorZones.id, id), eq(floorZones.active, true)))
       : [];
   if (kind === "department" && department === undefined)
     throw new AppError("department.not_found", { departmentId: id });
@@ -95,13 +83,7 @@ async function selection(
           .select({ id: floorZones.id, name: floorZones.name, active: floorZones.active })
           .from(zoneServicePolicies)
           .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
-          .where(
-            and(
-              eq(zoneServicePolicies.departmentId, id),
-              eq(zoneServicePolicies.locationId, cfg.locationId),
-              eq(floorZones.locationId, cfg.locationId),
-            ),
-          )
+          .where(eq(zoneServicePolicies.departmentId, id))
       : await tx
           .select({ id: floorZones.id, name: floorZones.name, active: floorZones.active })
           .from(floorZones)
@@ -117,7 +99,7 @@ async function selection(
     const active = await tx
       .select({ id: departments.id })
       .from(departments)
-      .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)));
+      .where(eq(departments.active, true));
     if (active.length === 1)
       refusals.push({ code: "department.last_active", params: { departmentId: id }, targets: [] });
   }
@@ -149,7 +131,6 @@ async function selection(
           .innerJoin(workingOrders, eq(workingOrders.id, orderServiceContexts.workingOrderId))
           .where(
             and(
-              eq(orderServiceContexts.locationId, cfg.locationId),
               inArray(workingOrders.status, ["open", "placed"]),
               or(
                 inArray(orderServiceContexts.zoneId, zoneIds),
@@ -231,14 +212,7 @@ async function selection(
     .from(zoneServicePolicies)
     .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
     .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .where(
-      and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(floorZones.locationId, cfg.locationId),
-        eq(floorZones.active, true),
-        eq(departments.active, true),
-      ),
-    );
+    .where(and(eq(floorZones.active, true), eq(departments.active, true)));
   for (const profile of ordered(scopes)) {
     if (profile.retiredAt !== null || profile.formFactor === "kds") continue;
     if (departmentId !== null) {

@@ -18,17 +18,15 @@ const at = new Date("2026-10-06T10:00:00Z");
 
 async function fixture() {
   return withTransaction(suite.db, async (tx) => {
-    const [venue, other] = await tx
+    const [venue] = await tx
       .insert(locations)
-      .values(
-        ["Venue", "Other"].map((name) => ({
-          name: `${name} ${randomUUID()}`,
-          invoiceLocales: ["en-GB"],
-          operationDescription: "Hospitality",
-          timeZone: "Europe/Madrid",
-          dayCutover: "04:30:00",
-        })),
-      )
+      .values({
+        name: `Venue ${randomUUID()}`,
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+        timeZone: "Europe/Madrid",
+        dayCutover: "04:30:00",
+      })
       .returning();
     const cfg = { locationId: locationId(venue!.id) };
     const [department] = await tx
@@ -40,7 +38,7 @@ async function fixture() {
         isDefault: true,
       })
       .returning();
-    return { cfg, other: other!.id, department: department!.id };
+    return { cfg, department: department!.id };
   });
 }
 
@@ -69,7 +67,6 @@ describe("Calendar without a station-hours page model", () => {
           { locationId: f.cfg.locationId, name: "Bar" },
           { locationId: f.cfg.locationId, name: "Prep", active: false },
           { locationId: f.cfg.locationId, name: "Kitchen", isDefault: true },
-          { locationId: f.other, name: "Elsewhere" },
         ])
         .returning();
       return { bar: bar!.id, prep: prep!.id, kitchen: kitchen!.id };
@@ -129,11 +126,6 @@ it("keeps local department names in the Opening hours model without station colu
         active: false,
       })
       .returning();
-    await tx.insert(departments).values({
-      locationId: f.other,
-      name: "Foreign dining",
-      tradingName: "Foreign dining",
-    });
     return row!.id;
   });
   const model = await withTransaction(suite.db, (tx) => readOpeningHoursModel(tx, f.cfg, at));
@@ -141,7 +133,6 @@ it("keeps local department names in the Opening hours model without station colu
     { id: f.department, name: "Dining" },
   ]);
   expect(model.departments.some(({ id }) => id === inactive)).toBe(false);
-  expect(model.departments.some(({ name }) => name === "Foreign dining")).toBe(false);
   expect(model).not.toHaveProperty("subjects");
 });
 

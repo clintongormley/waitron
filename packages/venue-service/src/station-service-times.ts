@@ -1,6 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { kitchenStations, type Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { kitchenStations, readVenueClock, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
 import type { LocalDate } from "./hours-types.js";
@@ -34,17 +33,11 @@ export async function stationServiceTimes(
   const [station] = await tx
     .select({ active: kitchenStations.active, isDefault: kitchenStations.isDefault })
     .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.id, stationId),
-        eq(kitchenStations.locationId, cfg.locationId),
-        eq(kitchenStations.active, true),
-      ),
-    );
+    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
   if (!station) throw new AppError("station.not_found", { stationId });
   if (station.isDefault) return { always: "default", days: [] };
 
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const dates = Array.from({ length: dayCount }, (_, index) => addDays(from, index));
   const guides = await readPlannedServiceGuides(tx, cfg, [stationId], {
     kind: "dates",

@@ -28,10 +28,6 @@ their full text.
   without its switched-off stations and zones; and in Devices → edit a kitchen screen kind the
   profile no longer shows is dropped from the draft, so it is lost if the choice is changed and
   saved.
-- A profile's explicit station and zone lists for its kitchen screens hold only the saving
-  location's ids, so saving the profile at one location empties another location's lists and,
-  now that a narrowing is allowed, narrows that location's devices. The flat station list these
-  lists replace was saved the same way, from W97 (#1311).
 
 ## Split-off checks may reach the same path as a held-order edit that changes sent lines
 

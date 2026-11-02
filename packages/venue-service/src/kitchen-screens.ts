@@ -10,12 +10,7 @@ import type {
   ResolvedKitchenScreen,
   ScreenSlot,
 } from "@waitron/module";
-import {
-  AppError,
-  compareStationNames,
-  locationId as brandLocationId,
-  type ErrorParams,
-} from "@waitron/shared";
+import { AppError, compareStationNames, type ErrorParams } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
 import {
   deviceKitchenScreenRemovals,
@@ -49,20 +44,20 @@ type MutableScreens = Partial<Record<KitchenScreenKind, KitchenScreenScope>>;
 
 export async function readProfileKitchenScreens(
   tx: Transaction,
-  cfg: VenueScope,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
 ): Promise<{ profileId: string; screens: ProfileKitchenScreens }[]> {
   const profiles = await tx
     .select({ id: deviceProfiles.id })
     .from(deviceProfiles)
     .where(isNull(deviceProfiles.retiredAt))
     .orderBy(asc(deviceProfiles.id));
-  const stored = await readStored(tx, cfg);
+  const stored = await readStored(tx);
   return profiles.map(({ id }) => ({ profileId: id, screens: stored.get(id) ?? {} }));
 }
 
 async function readStored(
   tx: Transaction,
-  cfg: VenueScope,
   profileIds?: readonly string[],
 ): Promise<Map<string, MutableScreens>> {
   const rows = await tx
@@ -87,7 +82,6 @@ async function readStored(
     )
     .where(
       and(
-        eq(kitchenStations.locationId, cfg.locationId),
         eq(kitchenStations.active, true),
         profileIds === undefined
           ? undefined
@@ -106,7 +100,6 @@ async function readStored(
     .innerJoin(floorZones, eq(floorZones.id, deviceProfileKitchenScreenZones.zoneId))
     .where(
       and(
-        eq(floorZones.locationId, cfg.locationId),
         eq(floorZones.active, true),
         profileIds === undefined
           ? undefined
@@ -142,28 +135,27 @@ async function liveFormFactor(tx: Transaction, profileId: string): Promise<strin
 
 export async function setProfileKitchenScreens(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   profileId: string,
   screens: ProfileKitchenScreens,
 ): Promise<NarrowedDevice[]> {
-  const stored = (await readStored(tx, cfg, [profileId])).get(profileId) ?? {};
-  return replaceProfileKitchenScreens(tx, cfg, profileId, screens, stored);
+  const stored = (await readStored(tx, [profileId])).get(profileId) ?? {};
+  return replaceProfileKitchenScreens(tx, profileId, screens, stored);
 }
 
 export async function copyProfileKitchenScreens(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   sourceId: string,
   targetId: string,
 ): Promise<void> {
   await liveFormFactor(tx, sourceId);
-  const stored = (await readStored(tx, cfg, [sourceId])).get(sourceId) ?? {};
-  await replaceProfileKitchenScreens(tx, cfg, targetId, stored, stored);
+  const stored = (await readStored(tx, [sourceId])).get(sourceId) ?? {};
+  await replaceProfileKitchenScreens(tx, targetId, stored, stored);
 }
 
 async function replaceProfileKitchenScreens(
   tx: Transaction,
-  cfg: VenueScope,
   profileId: string,
   screens: ProfileKitchenScreens,
   stored: MutableScreens,
@@ -182,51 +174,37 @@ async function replaceProfileKitchenScreens(
     const scope = screens[kind]!;
     const fields = LIST_FIELDS[kind];
     if (fields.zones === null && scope.zoneIds !== null) refuse("kitchenScreens", "not_for_screen");
-    const stationIds = await checkedStations(tx, cfg, scope.stationIds, fields);
-    const zoneIds = await checkedZones(tx, cfg, scope.zoneIds, stored[kind], fields);
+    const stationIds = await checkedStations(tx, scope.stationIds, fields);
+    const zoneIds = await checkedZones(tx, scope.zoneIds, stored[kind], fields);
     checked.push({ kind, scope: { stationIds, zoneIds } });
   }
 
-  // A profile belongs to no location, so its devices are narrowed wherever they are, each
-  // against the profile's lists as read at its own location.
   const onProfile = await tx
-    .select({ id: devices.id, label: devices.label, locationId: devices.locationId })
+    .select({ id: devices.id, label: devices.label })
     .from(devices)
     .where(and(eq(devices.deviceProfileId, profileId), isNull(devices.deletedAt)))
     .orderBy(asc(devices.label), asc(devices.id));
-  const locations = [...new Set(onProfile.map((device) => device.locationId))];
-  const before = new Map<string, MutableScreens>();
-  for (const id of locations) before.set(id, await profileScreensAt(tx, id, profileId));
+  const before =
+    onProfile.length === 0
+      ? undefined
+      : { formFactor, screens: await profileScreens(tx, profileId) };
 
   await tx
     .delete(deviceProfileKitchenScreens)
     .where(eq(deviceProfileKitchenScreens.deviceProfileId, profileId));
   for (const { kind, scope } of checked) await insertScreen(tx, profileId, kind, scope);
 
-  const narrowed: NarrowedDevice[] = [];
-  for (const id of locations) {
-    const after = { formFactor, screens: await profileScreensAt(tx, id, profileId) };
-    const targets = onProfile.filter((device) => device.locationId === id);
-    const scope = { locationId: brandLocationId(id) };
-    const was = { formFactor, screens: before.get(id)! };
-    narrowed.push(...(await narrowDevices(tx, scope, targets, was, after)));
-  }
-  const order = new Map(onProfile.map((device, index) => [device.id, index]));
-  return narrowed.sort((a, b) => order.get(a.deviceId)! - order.get(b.deviceId)!);
+  if (before === undefined) return [];
+  const after = { formFactor, screens: await profileScreens(tx, profileId) };
+  return narrowDevices(tx, onProfile, before, after);
 }
 
-async function profileScreensAt(
-  tx: Transaction,
-  locationId: string,
-  profileId: string,
-): Promise<MutableScreens> {
-  const here = { locationId: brandLocationId(locationId) };
-  return (await readStored(tx, here, [profileId])).get(profileId) ?? {};
+async function profileScreens(tx: Transaction, profileId: string): Promise<MutableScreens> {
+  return (await readStored(tx, [profileId])).get(profileId) ?? {};
 }
 
 async function checkedStations(
   tx: Transaction,
-  cfg: VenueScope,
   ids: readonly string[] | null,
   fields: { stations: Field },
 ): Promise<string[] | null> {
@@ -236,9 +214,7 @@ async function checkedStations(
   const found = await tx
     .select({ id: kitchenStations.id, active: kitchenStations.active })
     .from(kitchenStations)
-    .where(
-      and(inArray(kitchenStations.id, unique), eq(kitchenStations.locationId, cfg.locationId)),
-    );
+    .where(inArray(kitchenStations.id, unique));
   const usable = found.filter((row) => row.active);
   if (usable.length !== unique.length) refuse(fields.stations, "not_found");
   return unique;
@@ -246,7 +222,6 @@ async function checkedStations(
 
 async function checkedZones(
   tx: Transaction,
-  cfg: VenueScope,
   ids: readonly string[] | null,
   stored: KitchenScreenScope | undefined,
   fields: { zones: Field | null },
@@ -260,7 +235,7 @@ async function checkedZones(
   const found = await tx
     .select({ id: floorZones.id, active: floorZones.active })
     .from(floorZones)
-    .where(and(inArray(floorZones.id, unique), eq(floorZones.locationId, cfg.locationId)));
+    .where(inArray(floorZones.id, unique));
   const usable = found.filter((row) => row.active);
   if (usable.length !== unique.length) refuse(fields.zones, "not_found");
   return unique;
@@ -312,11 +287,11 @@ async function insertLists(
  */
 export async function addProfileKitchenScreen(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   profileId: string,
   screen: DeviceKitchenScreen,
 ): Promise<void> {
-  const current = (await readStored(tx, cfg, [profileId])).get(profileId)?.[screen.kind];
+  const current = (await readStored(tx, [profileId])).get(profileId)?.[screen.kind];
   if (current === undefined) {
     await insertScreen(tx, profileId, screen.kind, screen);
     return;
@@ -373,20 +348,17 @@ interface Place {
   readonly active: boolean;
 }
 
-async function placesHere(
-  tx: Transaction,
-  cfg: VenueScope,
-): Promise<{ stations: Place[]; zones: Place[] }> {
+async function placesHere(tx: Transaction): Promise<{ stations: Place[]; zones: Place[] }> {
   const stations = await tx
     .select({ id: kitchenStations.id, name: kitchenStations.name, active: kitchenStations.active })
     .from(kitchenStations)
-    .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
+    .where(eq(kitchenStations.active, true))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
   stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
   const zones = await tx
     .select({ id: floorZones.id, name: floorZones.name, active: floorZones.active })
     .from(floorZones)
-    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
+    .where(eq(floorZones.active, true))
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
   return { stations, zones };
 }
@@ -481,7 +453,6 @@ function lessRemovals(
 
 async function checkChoice(
   tx: Transaction,
-  cfg: VenueScope,
   profileId: string,
   screens: readonly DeviceKitchenScreen[],
   stored: ReadonlyMap<KitchenScreenKind, KitchenScreenScope>,
@@ -493,8 +464,8 @@ async function checkChoice(
   if (kinds.size !== screens.length || (sharedDisplay && screens.length > 1) || bothPassKinds) {
     refuseChoice("screens", "one_only");
   }
-  const offered = (await readStored(tx, cfg, [profileId])).get(profileId) ?? {};
-  const places = await placesHere(tx, cfg);
+  const offered = (await readStored(tx, [profileId])).get(profileId) ?? {};
+  const places = await placesHere(tx);
   for (const screen of screens) {
     const bound = offered[screen.kind];
     if (bound === undefined && (sharedDisplay || screen.kind === "pass_monitor")) {
@@ -552,25 +523,25 @@ function checkedChoice(
 
 export async function assertDeviceKitchenScreens(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   profileId: string,
   screens: readonly DeviceKitchenScreen[],
   deviceId?: string,
 ): Promise<void> {
   const stored =
     deviceId === undefined ? new Map() : (await readChoices(tx, [deviceId])).get(deviceId)!;
-  await checkChoice(tx, cfg, profileId, screens, stored);
+  await checkChoice(tx, profileId, screens, stored);
 }
 
 /** Replaces the device's kitchen screens; a pick forgets everything narrowings took from it. */
 export async function setDeviceKitchenScreens(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   input: { deviceId: string; profileId: string; screens: readonly DeviceKitchenScreen[] },
 ): Promise<void> {
   const { deviceId, profileId, screens } = input;
   const stored = (await readChoices(tx, [deviceId])).get(deviceId)!;
-  await checkChoice(tx, cfg, profileId, screens, stored);
+  await checkChoice(tx, profileId, screens, stored);
   await tx.delete(deviceKitchenScreens).where(eq(deviceKitchenScreens.deviceId, deviceId));
   await tx
     .delete(deviceKitchenScreenRemovals)
@@ -624,7 +595,7 @@ export async function removeDeviceKitchenScreens(tx: Transaction, deviceId: stri
 
 /**
  * The slots a list shows: the device's explicit list, or else the profile's (no row or "every"
- * meaning every switched-on one here) less what narrowings took; what they took shows too, as
+ * meaning every switched-on one) less what narrowings took; what they took shows too, as
  * no longer available. Deleted places are absent.
  */
 function slots(
@@ -657,18 +628,18 @@ export async function readDeviceKitchenScreens(
   return (await readDevicesKitchenScreens(tx, cfg, [deviceId])).get(deviceId)!;
 }
 
-/** Each named device's {@link readDeviceKitchenScreens}; one unknown here reads none. */
+/** Each named device's {@link readDeviceKitchenScreens}; one unknown reads none. */
 export async function readDevicesKitchenScreens(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   deviceIds: readonly string[],
 ): Promise<Map<string, ResolvedKitchenScreen[]>> {
   if (deviceIds.length === 0) return new Map();
   const found = await tx
     .select({ id: devices.id, profileId: devices.deviceProfileId })
     .from(devices)
-    .where(and(inArray(devices.id, [...deviceIds]), eq(devices.locationId, cfg.locationId)));
-  const resolved = await resolveDevices(tx, cfg, found);
+    .where(inArray(devices.id, [...deviceIds]));
+  const resolved = await resolveDevices(tx, found);
   return new Map(deviceIds.map((id) => [id, resolved.get(id) ?? []]));
 }
 
@@ -689,7 +660,6 @@ async function readDeviceState(
 /** Each device's resolved kitchen screens, read in a fixed number of queries. */
 async function resolveDevices(
   tx: Transaction,
-  cfg: VenueScope,
   targets: readonly { id: string; profileId: string }[],
   read?: DeviceReads,
 ): Promise<Map<string, ResolvedKitchenScreen[]>> {
@@ -701,8 +671,8 @@ async function resolveDevices(
       targets.map((device) => device.id),
     ));
   const profileIds = [...new Set(targets.map((device) => device.profileId))];
-  const offeredByProfile = await readStored(tx, cfg, profileIds);
-  const places = await placesHere(tx, cfg);
+  const offeredByProfile = await readStored(tx, profileIds);
+  const places = await placesHere(tx);
 
   const resolved = new Map<string, ResolvedKitchenScreen[]>();
   for (const device of targets) {
@@ -788,7 +758,6 @@ const removalKey = (deviceId: string, kind: KitchenScreenKind, id: string | null
  */
 async function narrowDevices(
   tx: Transaction,
-  cfg: VenueScope,
   targets: readonly { id: string; label: string }[],
   before: Offer,
   after: Offer,
@@ -813,7 +782,7 @@ async function narrowDevices(
   const recordedKeys = new Set(
     remaining.map((row) => removalKey(row.deviceId, row.screen, row.stationId ?? row.zoneId)),
   );
-  const places = await placesHere(tx, cfg);
+  const places = await placesHere(tx);
   const active = (list: readonly Place[]) =>
     list.filter((place) => place.active).map((place) => place.id);
 
@@ -883,9 +852,8 @@ async function narrowDevices(
 }
 
 /**
- * Narrows the device from its current profile to `profileId`, before a switch writes it, against
- * the profiles' lists at the device's own location, and gives back what `profileId` allows again;
- * null when it loses nothing, or is unknown.
+ * Narrows the device from its current profile to `profileId`, before a switch writes it, and gives
+ * back what `profileId` allows again; null when it loses nothing, or is unknown.
  */
 export async function narrowDeviceKitchenScreens(
   tx: Transaction,
@@ -898,7 +866,6 @@ export async function narrowDeviceKitchenScreens(
       id: devices.id,
       label: devices.label,
       profileId: devices.deviceProfileId,
-      locationId: devices.locationId,
       formFactor: deviceProfiles.formFactor,
     })
     .from(devices)
@@ -907,14 +874,13 @@ export async function narrowDeviceKitchenScreens(
   if (device === undefined) return null;
   const after = {
     formFactor: await liveFormFactor(tx, profileId),
-    screens: await profileScreensAt(tx, device.locationId, profileId),
+    screens: await profileScreens(tx, profileId),
   };
   const before = {
     formFactor: device.formFactor,
-    screens: await profileScreensAt(tx, device.locationId, device.profileId),
+    screens: await profileScreens(tx, device.profileId),
   };
-  const here = { locationId: brandLocationId(device.locationId) };
-  const [narrowed] = await narrowDevices(tx, here, [device], before, after);
+  const [narrowed] = await narrowDevices(tx, [device], before, after);
   return narrowed ?? null;
 }
 
@@ -939,20 +905,20 @@ export async function assertKitchenDisplayHasScreen(
  */
 export async function assertPassScreenZone(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   deviceId: string,
   zoneId: string | null,
 ): Promise<void> {
   const [device] = await tx
     .select({ id: devices.id, profileId: devices.deviceProfileId })
     .from(devices)
-    .where(and(eq(devices.id, deviceId), eq(devices.locationId, cfg.locationId)));
+    .where(eq(devices.id, deviceId));
   if (device === undefined) throw new AppError("kitchen_screen.not_allowed", { screen: "pass" });
   const read = await readDeviceState(tx, [deviceId]);
   if (!read.choices.get(deviceId)!.has("pass")) {
     throw new AppError("kitchen_screen.not_allowed", { screen: "pass" });
   }
-  const pass = (await resolveDevices(tx, cfg, [device], read))
+  const pass = (await resolveDevices(tx, [device], read))
     .get(deviceId)!
     .find((screen) => screen.kind === "pass")!;
   if (pass.zones === null) return;
@@ -963,7 +929,7 @@ export async function assertPassScreenZone(
 
 export async function readStationScreens(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   options: { withSwitchedOff?: boolean } = {},
 ): Promise<{ deviceId: string; stationIds: string[] }[]> {
   const displays = await tx
@@ -977,13 +943,7 @@ export async function readStationScreens(
         eq(deviceKitchenScreens.screen, "station"),
       ),
     )
-    .where(
-      and(
-        eq(devices.locationId, cfg.locationId),
-        eq(devices.active, true),
-        eq(deviceProfiles.formFactor, SHARED_DISPLAY),
-      ),
-    )
+    .where(and(eq(devices.active, true), eq(deviceProfiles.formFactor, SHARED_DISPLAY)))
     .orderBy(asc(devices.id));
   const read = await readDeviceState(
     tx,
@@ -991,7 +951,7 @@ export async function readStationScreens(
   );
   const { choices } = read;
   const running = displays.filter((display) => choices.get(display.id)!.has("station"));
-  const resolved = await resolveDevices(tx, cfg, running, read);
+  const resolved = await resolveDevices(tx, running, read);
   return running.map(({ id }) => {
     const explicit = new Set(
       options.withSwitchedOff === true ? (choices.get(id)!.get("station")!.stationIds ?? []) : [],

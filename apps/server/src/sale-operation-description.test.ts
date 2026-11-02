@@ -262,19 +262,4 @@ describe("department operation description", () => {
       }),
     );
   });
-  it.each(["order", "sale"] as const)("refuses another location's %s context", async (kind) => {
-    const f = await fixture();
-    const other = await fixture();
-    await authored(f.primary, { operationDescription: "Deli meals" });
-    await authored(other.primary, { operationDescription: "Other meals" });
-    await authored(other.fallback, { operationDescription: "Other default drinks" });
-    const source = kind === "order" ? { kind, orderId: f.orderId } : { kind, saleId: f.saleId };
-    await expect(read(other.cfg, source)).rejects.toEqual(
-      expect.objectContaining({
-        code: "sale.department_missing",
-        params: {},
-      }),
-    );
-    expect(await read(f.cfg, source)).toBe("Deli meals");
-  });
 });

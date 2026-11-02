@@ -47,24 +47,36 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 
+/** A second call in one case reuses the venue's row and names its departments and zones apart. */
 async function venue() {
   return withTransaction(suite.db, async (tx) => {
-    const [place] = await tx
-      .insert(locations)
-      .values({
-        name: randomUUID(),
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-      })
-      .returning();
+    const [existing] = await tx.select({ id: locations.id }).from(locations);
+    const [place] =
+      existing === undefined
+        ? await tx
+            .insert(locations)
+            .values({
+              name: randomUUID(),
+              invoiceLocales: ["en-GB"],
+              operationDescription: "Hospitality",
+            })
+            .returning()
+        : [existing];
+    const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
     const cfg = { locationId: locationId(place!.id) };
-    const a = await createDepartment(tx, cfg, { name: "Deli", orderStart: "table" });
+    const a = await createDepartment(tx, cfg, { name: `Deli${suffix}`, orderStart: "table" });
     const b = await createDepartment(tx, cfg, {
-      name: "Restaurant",
+      name: `Restaurant${suffix}`,
       orderStart: "table",
     });
-    const az = await createServiceZone(tx, cfg, { name: "Deli counter", departmentId: a.id });
-    const bz = await createServiceZone(tx, cfg, { name: "Restaurant counter", departmentId: b.id });
+    const az = await createServiceZone(tx, cfg, {
+      name: `Deli counter${suffix}`,
+      departmentId: a.id,
+    });
+    const bz = await createServiceZone(tx, cfg, {
+      name: `Restaurant counter${suffix}`,
+      departmentId: b.id,
+    });
     const [profile] = await tx
       .insert(deviceProfiles)
       .values({ name: randomUUID(), formFactor: "till", capabilities: ["take-orders"] })
@@ -447,81 +459,60 @@ describe("departmental tab transfers", () => {
     ).toEqual([next]);
   });
 
-  it.each([
-    "wrong_department",
-    "retired",
-    "shared",
-    "self",
-    "missing",
-    "inactive",
-    "foreign",
-  ] as const)("refuses %s settings and retains the previous configuration", async (kind) => {
-    const v = await ready();
-    const before = await withTransaction(suite.db, (tx) =>
-      service.readDepartmentTransferSettings(tx, v.cfg, v.b),
-    );
-    let target = v.a;
-    await withTransaction(suite.db, async (tx) => {
-      if (kind === "retired")
-        await tx
-          .update(deviceProfiles)
-          .set({ retiredAt: new Date().toISOString() })
-          .where(eq(deviceProfiles.id, v.profile));
-      if (kind === "shared")
-        await tx
-          .update(deviceProfiles)
-          .set({ formFactor: "kds" })
-          .where(eq(deviceProfiles.id, v.profile));
-      if (kind === "inactive")
-        await tx.update(departments).set({ active: false }).where(eq(departments.id, v.a));
-      if (kind === "foreign") {
-        const [other] = await tx
-          .insert(locations)
-          .values({
-            name: randomUUID(),
-            invoiceLocales: ["en-GB"],
-            operationDescription: "Hospitality",
-          })
-          .returning();
-        const foreign = await createDepartment(
-          tx,
-          { locationId: locationId(other!.id) },
-          { name: "Other venue", orderStart: "table" },
-        );
-        target = foreign.id;
-      }
-    });
-    const profileId =
-      kind === "wrong_department"
-        ? await withTransaction(suite.db, async (tx) => {
-            const [p] = await tx
-              .insert(deviceProfiles)
-              .values({ name: randomUUID(), formFactor: "till" })
-              .returning();
-            await setProfileServiceScope(tx, v.cfg, p!.id, {
-              departmentId: v.a,
-              allowedZoneIds: null,
-              startingZoneId: v.az,
-            });
-            return p!.id;
-          })
-        : v.profile;
-    if (kind === "self") target = v.b;
-    if (kind === "missing") target = randomUUID();
-    await expect(
-      withTransaction(suite.db, (tx) =>
-        service.setDepartmentTransferSettings(tx, v.cfg, v.b, {
-          receivingProfileId: profileId,
-          destinationDepartmentIds: [target],
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "department_transfer.settings_invalid" });
-    expect(
-      await withTransaction(suite.db, (tx) =>
+  it.each(["wrong_department", "retired", "shared", "self", "missing", "inactive"] as const)(
+    "refuses %s settings and retains the previous configuration",
+    async (kind) => {
+      const v = await ready();
+      const before = await withTransaction(suite.db, (tx) =>
         service.readDepartmentTransferSettings(tx, v.cfg, v.b),
-      ),
-    ).toEqual(before);
-  });
+      );
+      let target = v.a;
+      await withTransaction(suite.db, async (tx) => {
+        if (kind === "retired")
+          await tx
+            .update(deviceProfiles)
+            .set({ retiredAt: new Date().toISOString() })
+            .where(eq(deviceProfiles.id, v.profile));
+        if (kind === "shared")
+          await tx
+            .update(deviceProfiles)
+            .set({ formFactor: "kds" })
+            .where(eq(deviceProfiles.id, v.profile));
+        if (kind === "inactive")
+          await tx.update(departments).set({ active: false }).where(eq(departments.id, v.a));
+      });
+      const profileId =
+        kind === "wrong_department"
+          ? await withTransaction(suite.db, async (tx) => {
+              const [p] = await tx
+                .insert(deviceProfiles)
+                .values({ name: randomUUID(), formFactor: "till" })
+                .returning();
+              await setProfileServiceScope(tx, v.cfg, p!.id, {
+                departmentId: v.a,
+                allowedZoneIds: null,
+                startingZoneId: v.az,
+              });
+              return p!.id;
+            })
+          : v.profile;
+      if (kind === "self") target = v.b;
+      if (kind === "missing") target = randomUUID();
+      await expect(
+        withTransaction(suite.db, (tx) =>
+          service.setDepartmentTransferSettings(tx, v.cfg, v.b, {
+            receivingProfileId: profileId,
+            destinationDepartmentIds: [target],
+          }),
+        ),
+      ).rejects.toMatchObject({ code: "department_transfer.settings_invalid" });
+      expect(
+        await withTransaction(suite.db, (tx) =>
+          service.readDepartmentTransferSettings(tx, v.cfg, v.b),
+        ),
+      ).toEqual(before);
+    },
+  );
 
   it("refuses a desk whose permitted zones have all been deactivated", async () => {
     const v = await ready();
@@ -729,22 +720,6 @@ describe("departmental tab transfers", () => {
           },
         });
       }
-      const foreign = await venue();
-      await expect(
-        withTransaction(suite.db, (tx) =>
-          service.readDepartmentTransfer(tx, foreign.cfg, v.request.id, sender),
-        ),
-      ).rejects.toMatchObject({ code: "department.not_found" });
-      await expect(
-        withTransaction(suite.db, (tx) =>
-          service.listSentDepartmentTransfers(tx, foreign.cfg, v.tab, sender),
-        ),
-      ).rejects.toMatchObject({ code: "department.not_found" });
-      await expect(
-        withTransaction(suite.db, (tx) =>
-          service.listDepartmentSentTransfers(tx, foreign.cfg, sender),
-        ),
-      ).rejects.toMatchObject({ code: "department.not_found" });
       await expect(
         withTransaction(suite.db, (tx) =>
           service.readDepartmentTransfer(tx, v.cfg, v.request.id, { ...sender, departmentId: v.b }),

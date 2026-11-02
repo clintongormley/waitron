@@ -1714,9 +1714,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Prep stations' older address cases among them). Move them to `pushState`/`replaceState` spies, as
   the retired-address tests do — left open by A506-12.
 
-- **A routing period line naming another location's period is flagged but never drawn** (left open by A455, #1492).
-  [Detail](backlog/kitchen.md#a-routing-period-line-naming-another-locations-period-is-flagged-but-never-drawn)
-
 - KDS-4 follow-up: device-mode reprint behind `requireDevice`.
 
 - **A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision, 2026-10-19).**

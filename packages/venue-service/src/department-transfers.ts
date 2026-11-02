@@ -63,25 +63,19 @@ export async function readDepartmentTransferSettings(
   };
 }
 
-async function recordedDepartment(tx: Transaction, cfg: VenueScope, departmentId: string) {
+async function recordedDepartment(tx: Transaction, departmentId: string) {
   const [row] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(and(eq(departments.id, departmentId), eq(departments.locationId, cfg.locationId)));
+    .where(eq(departments.id, departmentId));
   if (row === undefined) throw new AppError("department.not_found", { departmentId });
 }
 
-async function activeDepartment(tx: Transaction, cfg: VenueScope, departmentId: string) {
+async function activeDepartment(tx: Transaction, departmentId: string) {
   const [row] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(
-      and(
-        eq(departments.id, departmentId),
-        eq(departments.locationId, cfg.locationId),
-        eq(departments.active, true),
-      ),
-    );
+    .where(and(eq(departments.id, departmentId), eq(departments.active, true)));
   if (row === undefined) throw new AppError("department.not_found", { departmentId });
 }
 
@@ -109,7 +103,7 @@ export async function listDepartmentTransferProfiles(
   cfg: VenueScope,
   departmentId: string,
 ): Promise<{ id: string; name: string }[]> {
-  await activeDepartment(tx, cfg, departmentId);
+  await activeDepartment(tx, departmentId);
   const profiles = await tx
     .select({ id: deviceProfiles.id, name: deviceProfiles.name })
     .from(deviceProfiles)
@@ -128,7 +122,7 @@ export async function setDepartmentTransferSettings(
   departmentId: string,
   input: Omit<DepartmentTransferSettings, "departmentId">,
 ): Promise<void> {
-  await activeDepartment(tx, cfg, departmentId);
+  await activeDepartment(tx, departmentId);
   if (
     input.receivingProfileId !== null &&
     !(await usableProfile(tx, cfg, departmentId, input.receivingProfileId))
@@ -139,13 +133,7 @@ export async function setDepartmentTransferSettings(
     const [destination] = await tx
       .select({ id: departments.id })
       .from(departments)
-      .where(
-        and(
-          eq(departments.id, destinationId),
-          eq(departments.locationId, cfg.locationId),
-          eq(departments.active, true),
-        ),
-      );
+      .where(and(eq(departments.id, destinationId), eq(departments.active, true)));
     if (destinationId === departmentId || destination === undefined)
       throw new AppError("department_transfer.settings_invalid", {
         field: "destinationDepartmentIds",
@@ -180,7 +168,7 @@ export async function requestDepartmentTransfer(
   const [tab] = await tx
     .select({ status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
-    .where(and(eq(workingOrders.id, tabId), eq(workingOrders.locationId, cfg.locationId)));
+    .where(eq(workingOrders.id, tabId));
   if (tab === undefined || (tab.status !== "open" && tab.status !== "placed"))
     throw new AppError("department_transfer.tab_unavailable", { tabId });
   if (tab.partyId !== null) {
@@ -200,8 +188,8 @@ export async function requestDepartmentTransfer(
   const context = await getOrderServiceContext(tx, cfg, tabId);
   if (context.departmentId !== sender.departmentId)
     throw new AppError("department_transfer.not_allowed", {});
-  await activeDepartment(tx, cfg, context.departmentId);
-  await activeDepartment(tx, cfg, destinationDepartmentId);
+  await activeDepartment(tx, context.departmentId);
+  await activeDepartment(tx, destinationDepartmentId);
   const [direction] = await tx
     .select()
     .from(departmentTransferDestinations)
@@ -274,7 +262,7 @@ export async function readDepartmentTransfer(
     .from(departmentTransferRequests)
     .where(eq(departmentTransferRequests.id, requestId));
   if (request === undefined) throw new AppError("department_transfer.not_found", { requestId });
-  await recordedDepartment(tx, cfg, request.sourceDepartmentId);
+  await recordedDepartment(tx, request.sourceDepartmentId);
   if (request.status === "pending") await assertDepartment(tx, cfg, request.sourceDepartmentId);
   if (request.sourceDepartmentId !== sender.departmentId)
     throw new AppError("department_transfer.not_allowed", {});
@@ -388,10 +376,7 @@ export async function acceptDepartmentTransfer(
 ) {
   const request = await pendingRequest(tx, cfg, requestId);
   await checkReceiver(tx, cfg, request.destinationDepartmentId, receiver);
-  const [tab] = await tx
-    .select()
-    .from(workingOrders)
-    .where(and(eq(workingOrders.id, request.tabId), eq(workingOrders.locationId, cfg.locationId)));
+  const [tab] = await tx.select().from(workingOrders).where(eq(workingOrders.id, request.tabId));
   if (tab === undefined || (tab.status !== "open" && tab.status !== "placed"))
     throw new AppError("department_transfer.tab_unavailable", { tabId: request.tabId });
   if (tab.revision !== input.tabRevision)
@@ -432,7 +417,6 @@ export async function acceptDepartmentTransfer(
       .where(
         and(
           eq(diningTables.id, input.tableId),
-          eq(diningTables.locationId, cfg.locationId),
           eq(diningTables.zoneId, input.zoneId),
           tableInService(diningTables.id),
         ),
@@ -473,7 +457,7 @@ export async function listDepartmentTransferDestinations(
   cfg: VenueScope,
   sender: DepartmentTransferActor,
 ): Promise<{ id: string; name: string }[]> {
-  await activeDepartment(tx, cfg, sender.departmentId);
+  await activeDepartment(tx, sender.departmentId);
   const rows = await tx
     .select({
       id: departments.id,
@@ -489,7 +473,6 @@ export async function listDepartmentTransferDestinations(
     .where(
       and(
         eq(departmentTransferDestinations.sourceDepartmentId, sender.departmentId),
-        eq(departments.locationId, cfg.locationId),
         eq(departments.active, true),
       ),
     )
@@ -588,7 +571,7 @@ export async function listSentDepartmentTransfers(
   tabId: string,
   sender: DepartmentTransferActor,
 ) {
-  await recordedDepartment(tx, cfg, sender.departmentId);
+  await recordedDepartment(tx, sender.departmentId);
   const rows = await tx
     .select()
     .from(departmentTransferRequests)
@@ -614,7 +597,7 @@ export async function listDepartmentSentTransfers(
   cfg: VenueScope,
   sender: DepartmentTransferActor,
 ) {
-  await recordedDepartment(tx, cfg, sender.departmentId);
+  await recordedDepartment(tx, sender.departmentId);
   const recent = tx
     .select({ id: departmentTransferRequests.id })
     .from(departmentTransferRequests)

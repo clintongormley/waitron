@@ -43,10 +43,6 @@ async function fixture(tx: Transaction) {
     })
     .returning();
   const cfg = { locationId: locationId(location!.id) };
-  const [other] = await tx
-    .insert(locations)
-    .values({ name: "Other", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
-    .returning();
   const stations = await tx
     .insert(kitchenStations)
     .values([
@@ -54,7 +50,6 @@ async function fixture(tx: Transaction) {
       { ...cfg, name: "Downstairs bar" },
       { ...cfg, name: "Kitchen", isDefault: true },
       { ...cfg, name: "Retired", active: false },
-      { locationId: locationId(other!.id), name: "Other station" },
     ])
     .returning();
   return {
@@ -63,7 +58,6 @@ async function fixture(tx: Transaction) {
     downstairs: stations[1]!.id,
     kitchen: stations[2]!.id,
     retired: stations[3]!.id,
-    otherStation: stations[4]!.id,
   };
 }
 
@@ -542,7 +536,6 @@ describe("station today controls", () => {
 
   it.each([
     ["missing", "station.not_found"],
-    ["otherStation", "station.not_found"],
     ["retired", "station.not_found"],
     ["kitchen", "station.always_open"],
   ] as const)(
@@ -560,7 +553,6 @@ describe("station today controls", () => {
   it.each([
     ["upstairs", "self"],
     ["retired", "inactive"],
-    ["otherStation", "unknown"],
     ["missing", "unknown"],
     ["downstairs", "closed"],
   ] as const)("refuses the %s destination and retains the previous close", async (key, reason) => {
@@ -687,7 +679,6 @@ describe("station today controls", () => {
 
   it.each([
     ["missing", "station.not_found"],
-    ["otherStation", "station.not_found"],
     ["retired", "station.not_found"],
   ] as const)("refuses to open the %s source", async (key, code) => {
     const f = await db.transaction(fixture);

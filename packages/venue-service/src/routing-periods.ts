@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { loadSectionGraph, reachableProducts } from "@waitron/catalogue";
 import type { VenueScope } from "./operations.js";
@@ -13,10 +13,10 @@ type PeriodRow = Omit<RoutingPeriod, "productIds" | "departmentInactive"> & {
   departmentActive: boolean;
 };
 
-/** The venue's periods, or only those of `ids` that are the venue's. */
+/** The venue's periods, or only those of `ids`. */
 export async function readPeriods(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   ids?: readonly string[],
 ): Promise<PeriodRow[]> {
   if (ids?.length === 0) return [];
@@ -32,12 +32,7 @@ export async function readPeriods(
     })
     .from(menuPeriods)
     .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
-    .where(
-      and(
-        eq(departments.locationId, cfg.locationId),
-        ids === undefined ? undefined : inArray(menuPeriods.id, [...ids]),
-      ),
-    );
+    .where(ids === undefined ? undefined : inArray(menuPeriods.id, [...ids]));
 }
 
 /**
@@ -117,7 +112,6 @@ export async function inPeriodOrder<T extends { id: string; departmentId: string
   const departmentRows = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(eq(departments.locationId, cfg.locationId))
     .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
   const departmentOrder = new Map(departmentRows.map((row, index) => [row.id, index]));
   const weeks = await readDepartmentSeasonWeeks(tx, cfg, undefined, dayCutover);

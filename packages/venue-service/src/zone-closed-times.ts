@@ -5,8 +5,7 @@ import {
   sameScheduleRanges,
 } from "./business-day-schedule.js";
 import { and, asc, eq, inArray } from "drizzle-orm";
-import { floorZones, type Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { floorZones, readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
 import { resolveZoneContext, wireTime, type VenueScope } from "./operations.js";
 import { parseClosedRanges, type ClosedRange, rangeSpan, rangeSpanInDay } from "./service-day.js";
@@ -38,7 +37,7 @@ export async function replaceZoneClosedWeek(
   options: { seasonId?: string; afterWrite?: (read: ServingRead) => Promise<void> } = {},
 ): Promise<void> {
   const zone = await resolveZoneContext(tx, cfg, zoneId);
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const staged = await stageZoneClosedWeek(
     tx,
     cfg,
@@ -126,7 +125,11 @@ export async function stageZoneClosedWeek(
 }
 
 /** The venue's active zones that serve an active department. */
-export async function readServiceZones(tx: Transaction, cfg: VenueScope) {
+export async function readServiceZones(
+  tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
+) {
   return tx
     .select({
       id: floorZones.id,
@@ -136,14 +139,7 @@ export async function readServiceZones(tx: Transaction, cfg: VenueScope) {
     .from(floorZones)
     .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
     .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .where(
-      and(
-        eq(floorZones.locationId, cfg.locationId),
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(floorZones.active, true),
-        eq(departments.active, true),
-      ),
-    )
+    .where(and(eq(floorZones.active, true), eq(departments.active, true)))
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.id));
 }
 
@@ -218,7 +214,7 @@ export async function zoneClosureDays(
   at: Date,
   prepared?: ServiceDay,
 ) {
-  const clock = prepared?.clock ?? (await readLocationClock(tx, cfg.locationId));
+  const clock = prepared?.clock ?? (await readVenueClock(tx));
   const moment = momentAt(at, clock, prepared);
   const zones = new Map<string, ZoneClosure>();
   if (moment === null) return { clock, moment, dayContext: null, cutover: clock.dayCutover, zones };
@@ -241,10 +237,8 @@ export async function zoneClosureDays(
             endsAt: zoneExtensions.endsAt,
           })
           .from(zoneExtensions)
-          .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, zoneExtensions.zoneId))
           .where(
             and(
-              eq(zoneServicePolicies.locationId, cfg.locationId),
               eq(zoneExtensions.businessDay, moment.businessDay),
               zoneIds === undefined ? undefined : inArray(zoneExtensions.zoneId, [...zoneIds]),
             ),

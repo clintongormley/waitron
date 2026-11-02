@@ -2741,39 +2741,6 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     expect(await row()).toEqual([{ active: true }]);
   });
 
-  it("PATCH refuses another venue's course with 404 course.not_found, changing nothing", async () => {
-    const foreign = await withTransaction(suite.db, async (tx) => {
-      const [location] = await tx
-        .insert(locations)
-        .values({
-          name: unique("Elsewhere"),
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Bar",
-        })
-        .returning({ id: locations.id });
-      const [course] = await tx
-        .insert(kitchenCourses)
-        .values({ locationId: location!.id, name: "Brunch", active: false })
-        .returning({ id: kitchenCourses.id });
-      return course!.id;
-    });
-    const res = await req(
-      `/courses/${foreign}`,
-      { method: "PATCH", body: JSON.stringify({ name: unique("Taken") }) },
-      managerCookie,
-    );
-    expect(res.status).toBe(404);
-    expect(await res.json()).toMatchObject({
-      error: { code: "course.not_found", params: { courseId: foreign } },
-    });
-    expect(
-      await suite.db
-        .select({ name: kitchenCourses.name, active: kitchenCourses.active })
-        .from(kitchenCourses)
-        .where(eq(kitchenCourses.id, foreign)),
-    ).toEqual([{ name: "Brunch", active: false }]);
-  });
-
   it("PUT /courses/:id/position moves a course and answers the venue's active courses renumbered", async () => {
     const id = await createCourse(unique("Moved"), { displayOrder: 1_000_000 });
     const res = await req(

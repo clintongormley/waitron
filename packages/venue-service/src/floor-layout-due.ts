@@ -1,10 +1,10 @@
 import { and, eq, inArray, or } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { readVenueClock, type Transaction } from "@waitron/db";
 import type { DueFloorLayout, PreparedServiceDay, ZoneFloorLayout } from "@waitron/module";
-import type { BusinessDayClock, LocationId } from "@waitron/shared";
-import { readLocationClock } from "@waitron/reporting";
+import type { BusinessDayClock } from "@waitron/shared";
 import { momentAt, resolveDepartmentsDays, serviceDayOf, type DayPlan } from "./day-resolver.js";
 import { serviceRuns } from "./menu-timetable.js";
+import type { VenueScope } from "./operations.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
@@ -91,7 +91,7 @@ const NO_LAYOUT: DueFloorLayout = {
  *  keep open play no part. */
 export async function dueFloorLayouts(
   tx: Transaction,
-  cfg: { locationId: LocationId },
+  cfg: VenueScope,
   zones: readonly {
     zoneId: string;
     recordedOccurrence: string | null;
@@ -112,8 +112,6 @@ export async function dueFloorLayouts(
           .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
           .where(
             and(
-              eq(zoneServicePolicies.locationId, cfg.locationId),
-              eq(departments.locationId, cfg.locationId),
               eq(departments.active, true),
               inArray(
                 zoneServicePolicies.zoneId,
@@ -142,7 +140,6 @@ export async function dueFloorLayouts(
           .innerJoin(departments, eq(departments.id, departmentFloorPlanSets.departmentId))
           .where(
             and(
-              eq(departments.locationId, cfg.locationId),
               eq(departments.active, true),
               or(
                 inArray(departmentFloorPlanSets.departmentId, departmentIds),
@@ -169,7 +166,7 @@ export async function dueFloorLayouts(
     .where(inArray(menuPeriods.departmentId, withSets));
   const periodOf = new Map(periods.map((row) => [row.id, row]));
   const day = serviceDayOf(prepared);
-  const clock = day?.clock ?? (await readLocationClock(tx, cfg.locationId));
+  const clock = day?.clock ?? (await readVenueClock(tx));
   const moment = momentAt(at, clock, day);
   const today =
     moment === null
@@ -218,7 +215,7 @@ export async function dueFloorLayouts(
  *  independent of how many departments there are. */
 async function dueDays(
   tx: Transaction,
-  cfg: { locationId: LocationId },
+  cfg: VenueScope,
   departmentIds: readonly string[],
   moment: ServiceMoment,
   clock: BusinessDayClock,

@@ -24,7 +24,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter } from "@waitron/printing";
 import {
@@ -2315,42 +2315,6 @@ describe("moveDishesToStation", () => {
     }).toEqual(before);
   });
 
-  it("refuses an order of another location as not found, without writing", async () => {
-    const { tabId, item } = await burger();
-    const before = await snapshot(tabId, item.id);
-    const elsewhere = await inTx(venue, async (tx) => {
-      const [location] = await tx
-        .insert(locations)
-        .values({
-          name: `Elsewhere ${randomUUID()}`,
-          invoiceLocales: ["en-GB"],
-          operationDescription: "Other venue",
-        })
-        .returning({ id: locations.id });
-      return brandLocationId(location!.id);
-    });
-    try {
-      await expect(
-        inTx(venue, (tx) =>
-          moveDishesToStation(
-            tx,
-            { ...venue.cfg, locationId: elsewhere },
-            tabId,
-            {
-              submissionId: randomUUID(),
-              lineIds: [item.workingOrderLineId],
-              stationId: grill,
-            },
-            mover(),
-          ),
-        ),
-      ).rejects.toMatchObject({ code: "working_order.not_found" });
-      expect(await snapshot(tabId, item.id)).toEqual(before);
-    } finally {
-      await inTx(venue, (tx) => tx.delete(locations).where(eq(locations.id, elsewhere)));
-    }
-  });
-
   it("refuses an unowned line and an unknown destination", async () => {
     const one = await burger();
     const other = await burger();
@@ -2385,44 +2349,7 @@ describe("moveDishesToStation", () => {
         ),
       ),
     ).rejects.toMatchObject({ code: "station.not_found" });
-    const foreignStation = await inTx(venue, async (tx) => {
-      const [location] = await tx
-        .insert(locations)
-        .values({
-          name: `Elsewhere ${randomUUID()}`,
-          invoiceLocales: ["en-GB"],
-          operationDescription: "Other venue",
-        })
-        .returning({ id: locations.id });
-      const [station] = await tx
-        .insert(kitchenStations)
-        .values({ locationId: location!.id, name: "Foreign grill" })
-        .returning({ id: kitchenStations.id });
-      return { locationId: location!.id, stationId: station!.id };
-    });
-    try {
-      await expect(
-        inTx(venue, (tx) =>
-          moveDishesToStation(
-            tx,
-            venue.cfg,
-            one.tabId,
-            {
-              submissionId: randomUUID(),
-              lineIds: [one.item.workingOrderLineId],
-              stationId: foreignStation.stationId,
-            },
-            mover(),
-          ),
-        ),
-      ).rejects.toMatchObject({ code: "station.not_found" });
-      expect(await snapshot(one.tabId, one.item.id)).toEqual(before);
-    } finally {
-      await inTx(venue, async (tx) => {
-        await tx.delete(kitchenStations).where(eq(kitchenStations.id, foreignStation.stationId));
-        await tx.delete(locations).where(eq(locations.id, foreignStation.locationId));
-      });
-    }
+    expect(await snapshot(one.tabId, one.item.id)).toEqual(before);
   });
 
   it("refuses a deleted station but accepts one closed for today", async () => {

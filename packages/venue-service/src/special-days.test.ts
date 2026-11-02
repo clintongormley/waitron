@@ -706,12 +706,6 @@ describe("saveSpecialDay", () => {
       code: "special_day.not_found",
       params: { specialDayId: missing },
     });
-    const other = await venue();
-    const theirs = await christmasDinners(other);
-    expect(await refusal(save(v, theirs.id, input))).toEqual({
-      code: "special_day.not_found",
-      params: { specialDayId: theirs.id },
-    });
   });
 
   describe("clock skips (Europe/Madrid, changeover 06:00)", () => {

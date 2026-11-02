@@ -70,7 +70,6 @@ interface Fixture {
   deli: HoursSubject;
   bar: HoursSubject;
   kitchen: HoursSubject;
-  otherDepartment: HoursSubject;
   departmentIds: { restaurant: string; deli: string };
   manager: string;
   supervisor: string;
@@ -88,7 +87,6 @@ async function fixture(): Promise<Fixture> {
       dayCutover: "06:00:00",
     });
     const [location] = await tx.insert(locations).values(venue("Venue")).returning();
-    const [other] = await tx.insert(locations).values(venue("Other")).returning();
     const department = (location: string, name: string, isDefault = false) => ({
       locationId: location,
       name,
@@ -97,11 +95,7 @@ async function fixture(): Promise<Fixture> {
     });
     const [restaurant, deli] = await tx
       .insert(departments)
-      .values([
-        department(location!.id, "Restaurant", true),
-        department(location!.id, "Deli"),
-        department(other!.id, "Other restaurant", true),
-      ])
+      .values([department(location!.id, "Restaurant", true), department(location!.id, "Deli")])
       .returning();
     const [bar, kitchen] = await tx
       .insert(kitchenStations)
@@ -118,12 +112,11 @@ async function fixture(): Promise<Fixture> {
       return (await startManagementSession(tx, { personId: row!.id })).token;
     };
     const cfg = { locationId: locationId(location!.id) };
-    const [restaurantStation, deliStation, foreignStation] = await tx
+    const [restaurantStation, deliStation] = await tx
       .insert(kitchenStations)
       .values([
         { locationId: location!.id, name: "Pass" },
         { locationId: location!.id, name: "Grill" },
-        { locationId: other!.id, name: "Other pass" },
       ])
       .returning();
     const [calendarMenu] = await tx
@@ -153,7 +146,6 @@ async function fixture(): Promise<Fixture> {
       deli: { kind: "station" as const, id: deliStation!.id },
       bar: { kind: "station" as const, id: bar!.id },
       kitchen: { kind: "station" as const, id: kitchen!.id },
-      otherDepartment: { kind: "station" as const, id: foreignStation!.id },
       manager: await person("manager"),
       supervisor: await person("supervisor"),
       staff: await person("staff"),
@@ -506,7 +498,6 @@ describe("writing Hours", () => {
       { subject: fx.deli, days: unsetWeek() },
       { subject: fx.deli, days: week({ 1: periods(period("12:00", "12:00")) }) },
       { subject: fx.kitchen, days: week() },
-      { subject: fx.otherDepartment, days: week() },
       { subject: { kind: "department", id: fx.departmentIds.restaurant }, days: week() },
       {},
     ];

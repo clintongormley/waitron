@@ -190,13 +190,6 @@ fills also run one after the other, so a dish named `Tea {station}` takes the st
   supervisor gets a read-only view, which would now mean offering stations in a read-only
   Calendar's Show — left open by A506-12.
 
-## A routing period line naming another location's period is flagged but never drawn
-
-- Left open by A455, #1492: the server marks it `notOffered`, but the grid (`routing-grid-model.ts`) and the
-  cell editor (`routing-cell-editor.ts`) drop a line whose period is not in the model's periods, so
-  an unrelated save of that cell removes it silently. Reachable only by a hand-made database insert.
-  Fix: show the line and make removing it an explicit choice.
-
 ## A908. Kitchen cancellation on Record unpaid departure (left open by A758's Q43 revision, 2026-10-19)
 
 Decide whether departure should ask about each unserved dish and send kitchen
