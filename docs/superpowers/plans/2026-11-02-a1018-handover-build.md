@@ -532,7 +532,7 @@ same shape.
 
 | Step | Restart or lost answer at… | What happens | Test |
 | --- | --- | --- | --- |
-| M1 starts a controlled handover (Task 5.3): `node.db` `prepared` → offer to M2 → stepdown's node transaction | after `prepared`, before the stepdown's node transaction (offer unsent, unanswered or answered) | M1's next start moves it to `abandoned` and sells (Task 3.4); M2, if it recorded `prepared`, closes when M1's status reports `abandoned` (Task 5.4) | 3.4 "a source operation left at `prepared`…"; 5.3 "a stepdown that throws…"; 5.4 "M1's status reporting… `abandoned`" |
+| M1 starts a controlled handover (Task 5.3): `node.db` `prepared` → offer to M2 → stepdown's node transaction | after `prepared`, before the stepdown's node transaction (offer unsent, unanswered or answered) | M1's next start moves it to `abandoned`, then the start check runs: it sells once M2 answers = (rule 4), and waits if M2 is silent (rule 5), as any box with a joined peer does (Task 3.4); M2, if it recorded `prepared`, closes when M1's status reports `abandoned` (Task 5.4) | 3.4 "a source operation left at `prepared`…"; 5.3 "a stepdown that throws…"; 5.4 "M1's status reporting… `abandoned`" |
 | | the offer was refused, or the stepdown threw | M1 records `abandoned` at once and keeps selling | 5.3 |
 | Stepdown (Task 2.4): restriction → gate → signal duties → answer → await duties → admitted requests → close → restart | anywhere after the restriction's node transaction, or the answer is lost | M1 starts restricted; a repeated request is answered from the stored operation by the restricted start | 2.6; 5.3 "a retry after the restart…"; 2.4 "the caller… receives its full answer body" |
 | Capture (Task 4.7): copy file → `final_state` event | after the file, before the event | the next request captures again from an unchanged `venue.db` (a restricted start writes nothing to it, Task 2.2) and records one event | 4.7 "a crash between the copy and the event…" |
@@ -540,12 +540,12 @@ same shape.
 | M2 accepts (Task 5.5): `node.db` `copy_accepted` → post acceptance → M1 records `filing_relinquished` → answer → M2 records `filing_assumed` | M2 restarts after `copy_accepted`, or the answer is lost | the posting duty re-posts the same stored acceptance; M1 answers its stored relinquishment byte for byte | 5.5 "M2 restarted at `copy_accepted`…"; 5.6 "a repeated acceptance…"; 5.8 "a reboot of M1 between relinquishment and M2's assumption…" |
 | M2 places the copy (Task 5.7): file swap → `copy_placed` event | mid-swap; after the swap, before the event | mid-swap: placed again from the kept `accepted.db`; after the swap: the live digest equals the indicator's, so only the event is recorded | 5.7 |
 | Activation (Tasks 5.8, 7.4): one `venue.db` transaction (module activation, `trading.env`, chart; handover rows with it or right after) → `node.db` role and `activated` → restart | before the venue commit | still a mirror at `filing_assumed` / `emergency_declared`; the page repeats the activation | 5.8 "a lost activation answer…"; 7.5 "a reboot between declaration and activation…" |
-| | after the venue commit, before the `node.db` records | `finishPromotedRole` makes it primary (`promoted-role.ts:39-62`); the `handover_activations` row committed with the chart (Task 5.8), so Task 5.8b records `activated`; the start check asks the source but does not wait for it; it sells | 5.8b "M2 killed between…"; 7.4 "a crash after the activation commit…" |
+| | after the venue commit, before the `node.db` records | `finishPromotedRole` makes it primary (`promoted-role.ts:39-62`); the `handover_activations` row committed with the chart (Task 5.8), so Task 5.8b records `activated`; the start check asks the source but does not wait for it (rule 3, when M1 is its only peer); it sells | 5.8b "M2 killed between…"; 7.4 "a crash after the activation commit…" |
 | A controlled handover stuck at `copy_accepted` or later, M1 gone for good | — | M2 waits on M1, by design: once final-copy acceptance exists, design §7 keeps the controlled operation and its selected M2 "until its state and filing assignment are recovered", and an emergency may not replace it (`handover.controlled_unresolved`, Task 7.3). M2 is still a mirror and files nothing | 7.3 "refused from `copy_accepted`" |
 | | the answer is lost | a repeat answers `activated` and takes no second name | 5.8; 7.4 |
 | M2 hands its chart to M1 (Tasks 5.10, 10.4) | the post is lost, or M1 is off | the return watch re-posts while M1 reports an older term | 10.4 "posts M2's chart…" |
 | Emergency declaration (Task 7.3): one node transaction (old controlled operation to `replaced` first, then the new one) | before or after the commit; the answer is lost | before: nothing recorded, the person presses again; after: the same operation id answers the stored declaration | 7.3; 7.5 |
-| Returning M1 learns it was superseded (Tasks 3.3, 3.4): restriction → restricted start | before the restriction | the next start asks again and writes it | 3.4; 7.5 "M1 comes back while M2 is at `emergency_declared`…" |
+| Returning M1 learns it was superseded (Tasks 3.3, 3.4): restriction → restricted start | before the restriction | the next start asks again; M2's newer fencing chart gives `superseded` (rule 1) and the restriction is written; if M2 is silent, M1 waits (rule 5) | 3.4; 7.5 "M1 comes back while M2 is at `emergency_declared`…" |
 | Return batch (Tasks 10.3–10.7, 11.2): M1 writes the batch file and `return_pending` → answer → M2 applies in one `venue.db` transaction → `node.db` state → receipt | M1 restarts after the file; the answer is lost | the same request (same heads) is answered from the stored file, byte for byte | 10.3 "the same request twice…" |
 | | M2 restarts after the apply commit, before its `node.db` record | the watch asks again; the apply changes nothing the second time; the state is recorded | 10.6 "a crash after the apply commit…" |
 | | M1 holds a replaced X when Y's request arrives | one node transaction: X to `replaced`, then Y begun | 10.3 |
@@ -758,7 +758,7 @@ full path.
 | 4 | The final copy and its indicator | **yes** | no | 8 | 2 | — |
 | 4b | Payment collection belongs to one box (A764) | no | no | 4 | 0 | — |
 | 5a | The relinquished fact (crosses the module operation contract) | **yes, loud** | no | 5 | 0 | — |
-| 5 | Controlled handover, server | **yes** | yes (`venue.db`, new `handover` set) | 13 | 3, 4, 4b, 5a (real boxes: A947 3b) | — |
+| 5 | Controlled handover, server | **yes** | yes (`venue.db`, new `handover` set) | 14 | 3, 4, 4b, 5a (real boxes: A947 3b) | — |
 | 6 | Controlled handover, screens and guide | no | no | 6 | 5 | — |
 | 7 | Emergency handover, server | **yes** | yes (`venue.db`, `handover` set) | 7 (+ 7.4b only if Q2 is (b)) | 5 (real boxes: A947 3b; continuous copy: 3c) | Q2, Task 7.4b only |
 | 8 | Emergency declaration page and guide | no | no | 4 | 6, 7 | — |
@@ -1109,29 +1109,77 @@ The allowed list for a stepdown, used by Task 2.4: `GET /health`, `GET /api/node
 A **pure refactor**: no behaviour changes, and the existing boot suites prove it by passing
 unedited.
 
-**Files:** Create `apps/server/src/background-duties.ts`; modify `boot.ts`. Today's `stopWork` is
-an unnamed function written inline (`:3400-3437`): it aborts seven controllers (`controller`,
-`pendingCardController`, `cloudController`, `invoiceEmailController`, `attendanceController`,
-`certificateReminderController`, `tenderRefundController`), then stops the rest one after another
-in a fixed order — among them `tunnelController.abort()` only after `liveEvents.close()`,
-`backupSupervisor.stop()` only after the drain loop has finished, and `streamHost.stop()` last,
-because "Litestream writes venue.db, so its stop is awaited before the store closes"
-(`boot.ts:3434-3435`). Its stops move into a named table, `backgroundDuties`, in that same order,
-one entry per duty: `{ name, kind: "abort" | "sequenced", signal(): void, settled(): Promise<void>, atStepdown: boolean, reason?: string }`.
-`stopWork` becomes: signal every `abort` entry in table order, then for each `sequenced` entry in
-table order signal it and await it, exactly as today; then await the aborted loops in today's
-order; and skip any entry already stopped (Task 2.4 uses that). `atStepdown` and `reason` are
-data only in this task; nothing reads them yet. Test `apps/server/src/background-duties.test.ts`.
+**Today's order**, copied from `apps/server/src/boot.ts:3400-3437` (`stopWork`). First seven
+aborts, in this order:
 
-- [ ] **Step 1: Write the failing tests.** "`stopWork` signals and awaits the entries in table
-  order" (a recorder seam); "an entry already stopped is skipped"; "the table's order equals
-  today's: the seven aborts, then each sequenced stop with `streamHost` last".
+```
+controller.abort();
+pendingCardController.abort();
+cloudController.abort();
+invoiceEmailController.abort();
+attendanceController.abort();
+certificateReminderController?.abort();
+tenderRefundController.abort();
+```
+
+then ONE `closeAll` list, run strictly in this order, each entry after the one before settles,
+carrying on past a failure and throwing the first failure at the end
+(`apps/server/src/close-all.ts:5-15`):
+
+```
+() => pendingCardLoop,
+() => tenderRefundLoop,
+() => attendanceLoop,
+() => attendanceEmailLoop,
+() => certificateReminderLoop,
+() => certificateDiagnosis?.stop(),
+() => invoiceEmailLoop,
+() => cloudWorker,
+() => cloudSnapshots,
+() => suggestionLoop,
+unsubscribeFromChanges,
+stopSealingNodeCommits,
+// A refresh still running would otherwise run against the closed store and log a failure.
+() => sealedState.settled(),
+() => menuActivation.stop(),
+() => appendOnlyWatch.stop(),
+() => freeSpaceWatch.stop(),
+() => boxEmails.stop(),
+() => liveEvents.close(),
+() => tunnelController.abort(),
+() => loop,
+() => tunnelWorker?.catch(() => {}),
+() => backupSupervisor.stop(),
+() => demoPrinterLoop?.stop(),
+() => clockWatch.stop(),
+// Litestream writes venue.db, so its stop is awaited before the store closes.
+() => streamHost.stop(),
+```
+
+So the waits for the aborted loops sit in their own places in that list — the AEAT sending loop
+(`() => loop`) is awaited before `backupSupervisor.stop()`, and `streamHost.stop()` is last.
+
+**Files:** Create `apps/server/src/background-duties.ts`; modify `boot.ts`. The table holds exactly
+these two lists, in exactly this order: `aborts: { name, abort(): void }[]` and
+`closers: { name, close(): unknown, atStepdown?: true, reason?: string }[]`. A closer that calls a
+`stop()` keeps the promise of its first call and returns it on any later call, so a stop called
+early (Task 2.4) is awaited in its place, never called twice. `stopWork` becomes: call every
+`abort` in order, then `closeAll(closers.map((c) => c.close))` — the same function, so the
+carry-on-past-failure rule is kept. `atStepdown` and `reason` are data only in this task. Test
+`apps/server/src/background-duties.test.ts`.
+
+- [ ] **Step 1: Write the failing tests.** "the aborts and the closers are in exactly the order
+  above" (the test holds the two lists as written here); "`stopWork` runs them in that order" (a
+  recorder seam); "a closer that fails does not stop the ones after it, and `stopWork` rejects with
+  the first failure"; "a stop called early is awaited in its place and not called again".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/background-duties.test.ts` — FAIL.
-- [ ] **Step 3: Implement.** Move each stop into the table without changing what it calls.
+- [ ] **Step 3: Implement.** Move each line into the table without changing what it calls; keep
+  the two comments beside their entries.
 - [ ] **Step 4: Run** it — PASS; then `pnpm --filter @waitron/server exec vitest run src/boot.test.ts src/boot.promote.test.ts src/boot.mirror.test.ts` — PASS with
   `git diff origin/main -- apps/server/src/boot.test.ts apps/server/src/boot.promote.test.ts apps/server/src/boot.mirror.test.ts`
-  printing nothing.
-- [ ] **Step 5: Commit** `git commit -s -m "server: name the background duties in a table, keeping today's shutdown order"`.
+  printing nothing. Those suites may not notice an order change; the order test above is what
+  pins it.
+- [ ] **Step 5: Commit** `git commit -s -m "server: name the background duties in a table, keeping today's shutdown order exactly"`.
 
 #### Task 2.4: The stepdown, in order
 
@@ -1148,38 +1196,33 @@ gate and the restart used after promotion, `:3079-3092`). Test
 1. in ONE node transaction: the operation row at `source_stepped_down` (for `handed-over`) and the
    restriction (successor = destination) — before anything is acknowledged;
 2. `gate.close({ allowed: STEPDOWN_ALLOWED, self })` — new requests refused `handover.stepping_down`;
-3. **signal** every `atStepdown` entry — synchronously, still inside the request, so no loop whose
-   sleep ends after this point starts a new pass (each loop checks its signal before a pass,
-   `apps/server/src/loop.ts:54-56`, and its sleep takes the signal, `:84`), and a pass already
-   running stops at its next step (Task 2.4b). For an `abort` entry, signalling is the abort. For a
-   `sequenced` entry it is calling its `stop()` without awaiting, which works only where the stop's
-   first effect happens before its first `await` — true of the clock watch, which sets `stopped`
-   first (`apps/server/src/clock-watch.ts:461-462`); for each other `atStepdown` sequenced entry
-   the implementer reads its `stop()` and, where that is not so, adds a synchronous flag the duty
-   checks — the test below checks each;
+3. **signal**, synchronously and still inside the request, only what takes effect at once:
+   all seven aborts, in today's order (the close repeats them harmlessly), and the first call of
+   these five closers' stops, marked `atStepdown`: `certificateDiagnosis?.stop()`,
+   `menuActivation.stop()`, `boxEmails.stop()`, `demoPrinterLoop?.stop()` and `clockWatch.stop()`.
+   Calling a stop early is safe only where its first effect happens before its first `await` —
+   true of the clock watch, which sets `stopped` first (`apps/server/src/clock-watch.ts:461-462`);
+   for each of the other four the implementer reads its `stop()` and, where that is not so, adds a
+   synchronous flag the duty checks. After this, no loop starts a new pass (each loop checks its
+   signal before a pass, `apps/server/src/loop.ts:54-56`, and its sleep takes the signal, `:84`),
+   and a pass already running stops at its next step (Tasks 2.4b, 2.4c). **Backups, Litestream
+   and the tunnel are not touched here**: they stop in the close, in today's place — backups after
+   the sending loop has finished, Litestream last — so Litestream never stops while the sending
+   loop may still be storing an answer;
 then `stepDown` resolves, the route sends its answer, and **after the answer** (scheduled with
 `setTimeout(…, 0)` as promotion does, `boot.ts:3089-3091`, so the response is written first —
 decision 2):
-4. **await** the `atStepdown` entries' `settled()` in table order, so Litestream still stops last.
-   The entries marked `atStepdown` are these — each one that files, moves money, sends to an
-   outside service or device, or is a module's own background writer (design §2 step 1; decision
-   3): the drain loop (`controller`, the loop that runs `singletonPass`); the card sweep
-   (`pendingCardController`); tender-refund recovery (`tenderRefundController`); the Cloud worker,
-   snapshots and suggestion loop (`cloudController`, `boot.ts:3387`); invoice emails
-   (`invoiceEmailController`); the attendance loops, which write working-time records and send
-   their emails (`attendanceController`, shared by both, `boot.ts:2053,2067`); box emails
-   (`boxEmails.stop()`, `:2602`); the clock watch (`clockWatch.stop()`); certificate diagnosis and
-   reminders; menu activation (`menuActivation.stop()`, `:3167`); the demo printer loop
-   (`demoPrinterLoop?.stop()`, `:2128`); backups (`backupSupervisor.stop()`) and Litestream
-   (`streamHost.stop()`). **Left to the close**, as today, each with its `reason`: the change
-   subscription, the sealing of node commits and the sealed-state refresh, the append-only watch,
-   the free-space watch, the live events, and the tunnel (it only carries requests to this box,
-   which the gate already refuses). An entry found to send anything outside, or to be a module's
-   writer, is marked `atStepdown` instead of getting a reason;
-5. `gate.settled(HANDOVER_ADMITTED_WORK_LIMIT_MS)`, logging `handover.admitted_work_cut` with the
+4. `gate.settled(HANDOVER_ADMITTED_WORK_LIMIT_MS)`, logging `handover.admitted_work_cut` with the
    method and path of each request still inside;
-6. the existing graceful close (whose `stopWork` skips the entries already stopped, Task 2.3b),
-   then SIGTERM.
+5. the normal graceful close, unchanged: `stopWork` exactly as Task 2.3b keeps it (the aborts, then
+   the `closeAll` list in today's order, which awaits each aborted loop and each early stop in its
+   own place, Litestream last), then the listener, the request settling and the store, as today
+   (`boot.ts:828-843`); then SIGTERM.
+The closers left without `atStepdown` each carry a one-line `reason`: the loop waits (they only
+wait), the change subscription, the sealing of node commits and the sealed-state refresh, the
+append-only and free-space watches, the live events, the tunnel (it only carries requests, which
+the gate refuses), backups and Litestream (they stop in their place in the close). A closer found
+to send anything outside, move money or be a module's writer is marked `atStepdown` instead.
 If anything after step 1 throws — closing the gate, signalling, or any later step — the restart
 is still scheduled, in a `finally`, so the box comes back restricted rather than selling with its
 gate half closed. `HANDOVER_ADMITTED_WORK_LIMIT_MS = 180_000`. `stepDown` never calls
@@ -1187,12 +1230,13 @@ gate half closed. `HANDOVER_ADMITTED_WORK_LIMIT_MS = 180_000`. `stepDown` never 
 
 - [ ] **Step 1: Write the failing tests** (seams for each duty's stop, counting calls; a real HTTP
   listener for the first case): **"the caller of the stepdown receives its full answer body"**
-  (control: run steps 4–6 inside the request, locally, and the body never arrives — the client
+  (control: run steps 4–5 inside the request, locally, and the body never arrives — the client
   sees its connection closed); "the restriction is on disk before the answer" (read it from a
-  second store handle inside the route's answer seam); "every `atStepdown` entry has taken effect
-  when `stepDown` resolves" (each duty seam reports whether it would start new work); "each stop
-  runs exactly once across the stepdown and the close"; "every entry is either `atStepdown` or
-  carries a reason"; **"no named duty starts a new pass after the restriction is written"** (each
+  second store handle inside the route's answer seam); "every abort and every `atStepdown` stop has
+  taken effect when `stepDown` resolves" (each duty seam reports whether it would start new work);
+  "backups and Litestream are not stopped before the answer"; "after the answer the close runs in
+  Task 2.3b's order, Litestream last"; "each stop runs exactly once across the stepdown and the
+  close"; "every closer is either `atStepdown` or carries a reason"; **"no named duty starts a new pass after the restriction is written"** (each
   duty seam records pass starts; one duty's sleep is made to end between the answer and the await:
   control — signal after the answer instead, and that duty records a pass); "a throw while
   signalling still schedules the restart"; "the trading admission still reads `ready` during the
@@ -1218,14 +1262,21 @@ design §2 steps 1–2 forbid.
 **Files:** `apps/server/src/pass.ts` (`runPass` takes the loop's `signal` and skips the reconcile
 once it is aborted); `packages/fiscal-verifactu/src/drain.ts` (an optional `signal` checked before
 each claim in the `while (dueCount > 0)` loop, `:256`; a batch already sent is answered and stored
-as today; nothing else in the drain changes); the drain's caller in `boot.ts` passes it. Tests
+as today; nothing else in the drain changes); the drain's caller in `boot.ts` passes it. **How it
+leaves:** after the loop the drain always stores AEAT's next allowed send time, `now + t`
+(`upsertFlujo`, `drain.ts:385-386`). So when the signal is seen before this pass sent anything,
+the drain **returns** without that write, and AEAT's wait is not moved later for a send that never
+happened; when a batch was already sent this pass, it **breaks** out of the loop, so the wait AEAT
+set after that send is stored as today. Tests
 `packages/fiscal-verifactu/src/drain.signal.test.ts`, `apps/server/src/pass.signal.test.ts`.
 
 - [ ] **Step 1: Write the failing tests.** Drain: "with three batches due, a signal raised while
   the first batch's answer is held sends no second batch, and the first is stored as answered"
-  (control: no signal, three batches); "no signal: unchanged" (`src/drain.test.ts` passes
-  unedited). Pass: "a signal raised during the drain skips the reconcile" (control: no signal,
-  the reconcile runs).
+  (control: no signal, three batches); **"a signal seen before the first send leaves
+  `envio_flujo` unchanged"** (control: `break` instead of `return`, and the stored next send time
+  moves later); "a signal seen after a send stores the wait AEAT set"; "no signal: unchanged"
+  (`src/drain.test.ts` passes unedited). Pass: "a signal raised during the drain skips the
+  reconcile" (control: no signal, the reconcile runs).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/drain.signal.test.ts src/drain.test.ts` and `pnpm --filter @waitron/server exec vitest run src/pass.signal.test.ts` — FAIL (the new ones).
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** them — PASS, with `git diff origin/main -- packages/fiscal-verifactu/src/drain.test.ts` printing nothing; the golden and immutability suites unedited; typecheck `@waitron/fiscal-verifactu` and `@waitron/server`.
@@ -1369,6 +1420,7 @@ there:
 | `POST /api/node/peer-status` | mirror, fenced | a `query` envelope signed by a key the held chart vouches for and does not evict; answers only signed status | Slice 3 |
 | `POST /api/node/membership` | mirror, fenced | none needed from the caller: the body is a signed chart, accepted only through `acceptMembershipDocument` against the stored trust set; the answer is one boolean | Slice 3 |
 | `POST /api/node/handover/offer` | mirror | a `stepdown` envelope signed by the binding's source with a key the chart vouches for, the binding's chart term and digest equal to M2's | Slice 5 |
+| `POST /api/node/handover/:operationId/preparation` | mirror | the same sign-in as `prepare` (`apps/server/src/node-operation-preparation.ts:227-241`, `node.promote`); the operation must be at `filing_assumed` or `emergency_declared`; its context comes from the operation's own record, never the body | Slice 5 (Task 5.7b) |
 | `POST /api/node/handover/:operationId/activate` | mirror | email, password and code when enrolled, against the placed copy; `node.promote`; the operation's recorded state | Slice 5 |
 | `POST /api/node/handover/emergency/declare` | mirror | email, password and code when enrolled; `node.promote` | Slice 7 |
 
@@ -1422,16 +1474,43 @@ peer). Test `apps/server/src/boot-peer-check.test.ts` (Review Focus 3 and 7).
 `joined` reads whether this box's `venue.db` holds a `nodes` row with that id (decision 5).
 `activatedFrom` is the source node of every operation in this
 box's `node.db` where this box is the destination and reached `activated`, open or closed.
-- **Counted peers** are the other boxes with a routable standing in the held chart for which
-  `joined` is true and which are not in `activatedFrom`. **Asked peers** are the counted peers plus
-  every routable box in `activatedFrom`: a box this one took over from is still asked, but its
-  silence never makes this box wait. No asked peer → `proceed`.
-- any asked peer's answer carries a newer chart that fences this box, or a restriction or
-  operation naming this box as source → `superseded` (the caller writes the restriction and starts
-  restricted);
-- at least one counted peer answers with nothing newer → `proceed`;
-- no counted peer answers within `timeoutMs` (default 5 s each), or every counted peer's address
-  equals `ownOrigin` or is empty → `wait`.
+**Two kinds of peer.** A **counted peer** is another box with a routable standing in the held
+chart for which `joined` is true and which is not in `activatedFrom`. An **asked-only peer** is a
+routable box in `activatedFrom`: a box this one took over from. Both are asked; only counted peers
+can make this box wait.
+
+**Four kinds of answer**, each asked with a timeout of `timeoutMs` (default 5 s):
+- **F — newer and fencing:** a verified chart newer than the held one in which this box is
+  `sell-only` or `evicted` (`isFencedStanding`, `packages/membership/src/fence.ts:20-24`), **or** a
+  status whose restriction or operation names this box as source;
+- **N — newer, not fencing:** a verified chart newer than the held one in which this box still
+  serves. It is persisted (`persistNodeMembershipIfNewer`, as Task 3.3 does) before the result,
+  so the box starts with it;
+- **= — nothing newer:** a valid signed status whose chart is the same or older;
+- **S — silent:** no answer in time, an address equal to `ownOrigin` or empty, an invalid
+  signature, or a chart signed by a key this box does not trust.
+
+**The decision, as one table** — what each answer contributes:
+
+| Answer | from a counted peer | from an asked-only peer |
+| --- | --- | --- |
+| F | `superseded` | `superseded` |
+| N | the chart is held; counts as an answer | the chart is held; nothing else |
+| = | counts as an answer | nothing |
+| S | no answer | nothing |
+
+**And how the contributions combine**, in this order:
+1. any F from any peer → `superseded` (the caller writes the restriction and starts restricted);
+2. else, an open operation in which this box is the source → `wait` (it never reaches here in
+   practice: see the repairs below);
+3. else, no counted peer at all → `proceed`;
+4. else, at least one counted peer counts as an answer (N or =) → `proceed`;
+5. else (every counted peer S) → `wait`.
+
+So an M2 whose only peer is the M1 it took over from proceeds whether M1 is silent or answers
+with an older chart (rule 3), and stops only if M1 brings a newer chart that fences it (rule 1) —
+which needs a person to have promoted a cold-restored M1, since a restore writes a new term but
+keeps every other box's standing (`apps/server/src/rebuild-first-start.ts:121-139`).
 `openOperation` — an open operation in which this box is the **source** — never returns
 `proceed`. A destination's operation never blocks a start: a destination before activation is a
 read-only mirror that files nothing, and **the check runs only on a box whose mode is not
@@ -1462,11 +1541,15 @@ Slice 3 lands before `handover_activations` exists, so Task 3.4 provides the rep
   holds M1's `nodes` row and its chart lists M1 `sell-only`), with its control "the same chart and
   rows without the activated operation waits"; "a destination whose operation is `activated` and
   still `return_pending` proceeds"; "a source operation left at `prepared` is moved to
-  `abandoned` and the box proceeds"; "a mirror runs no check"; **"a box in `activatedFrom` is
+  `abandoned`, and the box proceeds once its counted peer answers =" (rule 4; with that peer
+  silent it waits, rule 5); "a mirror runs no check"; **"a box in `activatedFrom` is
   asked: if it answers with a newer chart that fences this box, the result is `superseded`"**
   (round 4's outside case: an old box's id can come back by a cold restore, which brings back its
   `trading.env`, `apps/server/src/state-secrets.ts:16-23`); "a box in `activatedFrom` that does
-  not answer leaves the result `proceed`".
+  not answer, with no counted peer, leaves the result `proceed`" (rule 3); and one case per cell
+  of the decision table: counted F, N, =, S and asked-only F, N, =, S, each alone, plus "counted S
+  with asked-only = waits" (rule 5) and "counted = with asked-only F is superseded" (rule 1). Each
+  N case also asserts the newer chart is held after the check.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/boot-peer-check.test.ts` — FAIL.
 - [ ] **Step 3: Implement**, and wire it in `boot.ts`; `superseded` writes the restriction and
   takes the restricted start (Task 2.1); `wait` takes the waiting start (Task 3.5). Add a boot
@@ -2187,6 +2270,40 @@ file. If Task 4.5's probe made the minute history a transferred item, the retain
 - [ ] **Step 4: Run** them — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: the spare places the accepted copy under the venue folder's house rules"`.
 
+#### Task 5.7b: The handover's own preparation route
+
+**Why.** Every promotion needs a clock check against the person's browser, which the browser
+drives itself with `clock-challenge` and `compare-clocks` steps
+(`packages/fiscal-verifactu/src/conflict-recovery-contract.ts:14-15`); the box refuses its own
+machine as the second clock (`hour-setup-clock.ts:106-107`). Those steps reach the module only
+through `nodePreparation.prepare` (`apps/server/src/node-operation-preparation.ts:227-241`), whose
+one route today is `POST /management-api/promote/preparation` (`apps/server/src/promote-api.ts:93`).
+That route is refused while a handover is open (Task 5.2b) and cannot carry the relinquished fact
+(Task 5a.1b). So the handover has a route of its own.
+
+**Files:** `apps/server/src/handover-activation.ts` gains
+`POST /api/node/handover/:operationId/preparation`, body `{ moduleOperation, signIn, proposal }`,
+mounted on a mirror and added to `read-only-exemptions.ts` (Task 3.2's row). It refuses
+`handover.step_out_of_order` unless the operation is at `filing_assumed` or `emergency_declared`,
+and `module.operation_invalid` unless the binding's action is `promote` and its target is this
+box. It builds the context with one function, `handoverPromotionContext(operation)`, from the
+operation's own record — controlled: `{ oldNodeNeutralised: true, noParallelRecovery: true, oldMachineRelinquished: true }`;
+emergency: the same with `oldMachineRelinquished: false` — and never from the body; the onBox
+check is the existing one (`promote-api.ts:91`). Tasks 5.8 and 7.4 use the same function for
+`withPromotion`. Test `apps/server/src/handover-preparation.test.ts`.
+
+- [ ] **Step 1: Write the failing tests.** "a controlled operation at `filing_assumed` gets a clock
+  challenge and a comparison"; "a body that sets `oldMachineRelinquished` is ignored: the context
+  comes from the record"; "an operation at `copy_accepted` is refused `handover.step_out_of_order`";
+  "the browser on the box itself is refused as the second clock" (`same_machine`); "the route is
+  reached through a mirror's read-only gate" (Task 3.2's exemption test gains the row); "after a
+  prepare here, the activation with the same context is not refused `event_mismatch`" (control:
+  prepare with the other scenario's context, and it is).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-preparation.test.ts src/read-only-exemptions.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a handover prepares its clock check and minute through its own route, with the context its record gives"`.
+
 #### Task 5.8: M2 activates
 
 **Files:** Create `apps/server/src/handover-activation.ts`; add the activate row to
@@ -2195,17 +2312,17 @@ file. If Task 4.5's probe made the minute history a transferred item, the retain
 **Interfaces — Produces:** `POST /api/node/handover/:operationId/activate` with
 `{ signIn: { email, password, totp? }, comparisonId }`: the person signs in against the placed copy
 (`password.invalid` for every credential failure) and must hold `node.promote` there; the clock
-comparison is the existing preparation's (`hour-setup-clock.ts`). It promotes through the same
+comparison and minute selection were prepared through Task 5.7b's route, which `comparisonId`
+names. It promotes through the same
 path the promote route uses — `nodePreparation.withPromotion(operation, signIn, context, …)`
-(`apps/server/src/promote-api.ts:116-125`) with `context = { oldNodeNeutralised: true,
+(`apps/server/src/promote-api.ts:116-125`) with `context = handoverPromotionContext(operation)` (Task 5.7b), here `{ oldNodeNeutralised: true,
 noParallelRecovery: true, oldMachineRelinquished: true }`, justified by the recorded
 relinquishment — so the module receives `oldMachineOffline: false, oldMachineRelinquished: true`
 (Task 5a.1) and `createHourPromotionPreparation`
 (`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:108-110`) stores a version 2 approval
-(Task 5a.2); the next free minute (decision 7). The **same context** is passed to the
-preparation's `prepare` step (the clock comparison and minute selection, as
-`/management-api/promote/preparation` does, `apps/server/src/promote-api.ts:93`) and to
-`withPromotion`: the approval is part of the prepared input, and the promotion refuses
+(Task 5a.2); the next free minute (decision 7). The **same context** — built by one function
+from the operation's own record, Task 5.7b — is passed to the `prepare` step behind Task 5.7b's
+route and to `withPromotion`: the approval is part of the prepared input, and the promotion refuses
 `event_mismatch` when the input it rebuilds differs from the one prepared
 (`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:197`). Promotion's one venue
 transaction holds the module activation, `trading.env` and the new chart
@@ -2370,7 +2487,10 @@ different request.
 
 Once the status reports the copy placed (the `copy_placed` event, Task 5.7) the page asks for a
 sign-in (email, password, then code) and shows the clock comparison with its explained wait and
-countdown; then **Start the venue on this box**. Refusals in place.
+countdown, sending the browser's `clock-challenge` and `compare-clocks` steps to
+`POST /api/node/handover/:operationId/preparation` (Task 5.7b) — not to
+`/management-api/promote/preparation`, which Task 5.2b refuses while the handover is open; then
+**Start the venue on this box**. Refusals in place.
 
 - [ ] **Step 1: Write the failing tests.** The sign-in appears only once the copy is placed; the
   button stays disabled until the clock comparison passes; a lost answer followed by a status of
@@ -2484,7 +2604,9 @@ order, Formats), and the declaration's `replaces` names it; with anything later 
 Test `apps/server/src/handover-emergency-activation.test.ts`.
 
 **Interfaces — Produces:** `POST /api/node/handover/:operationId/activate` accepts an emergency
-operation at `emergency_declared`, with the same sign-in and clock comparison, through the same
+operation at `emergency_declared`, with the same sign-in, the clock comparison prepared through
+Task 5.7b's route (whose context, built from this operation's record, carries
+`oldMachineRelinquished: false`), and through the same
 `withPromotion` path with `context = { oldNodeNeutralised: true, noParallelRecovery: true,
 oldMachineRelinquished: false }`, so the module receives `oldMachineOffline: true`, justified by
 the recorded declaration; the next free minute (Q2's default). In the activation's own venue
@@ -2567,16 +2689,22 @@ look like a failed machine. If {M1} is still running, both machines may take sal
 and your bills, cash and stock will disagree. {M2} may be missing {M1}'s latest records. Only tax
 records will return later; the business difference will need reconciliation."; the three
 statements (required checkboxes); the reason (required, up to 500 characters); the sign-in
-(email, password, then code), with one line "Passkeys are not offered here yet."; the clock
-comparison; **Start the venue on this box**, disabled until every required field and the clock
-pass. Refusals in place: still answering — "{M1} still answers, so it was not switched off. Hand
+(email, password, then code), with one line "Passkeys are not offered here yet."; then two
+actions in order. **Record the declaration**, disabled until every required field passes, sends
+Task 7.3's request. Once it is recorded, the page compares clocks through
+`POST /api/node/handover/:operationId/preparation` (Task 5.7b needs the operation at
+`emergency_declared`), and **Start the venue on this box** is enabled once the clocks pass. A
+declaration recorded while the clocks then fail leaves the spare a mirror that files nothing; the
+page offers **Check again**. Refusals in place: still answering — "{M1} still answers, so it was not switched off. Hand
 over from {M1} instead, or switch it off and check again." with **Check again** and **Hand over
 instead**; a broken chain — "This copy's invoice records do not check out, so it cannot be used.
 Choose a backup instead." with the backup choice once Slice 14 lands; a role refusal offers
 **Sign in as someone else** (an administrator in place).
 
-- [ ] **Step 1: Write the failing tests.** The warning and statements in both languages; the
-  button disabled until all required pass; each refusal's sentence and choices; the reason over
+- [ ] **Step 1: Write the failing tests.** The warning and statements in both languages;
+  **Record the declaration** disabled until all required pass; the clock comparison starts only
+  after the declaration is recorded, and **Start the venue on this box** is enabled only once it
+  passes; each refusal's sentence and choices; the reason over
   500 characters marked inline; axe both themes, 390 px.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/setup exec vitest run src/screens/handover-screen.emergency.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
@@ -3385,4 +3513,21 @@ split into 2.4b (drain and pass, FISCAL) and 2.4c (payments and refunds), and th
 | M5 the crash table did not show a controlled handover stuck at `copy_accepted` | design §7 | Applied: a row saying M2 waits on M1 by design, with the test that refuses an emergency replacement from `copy_accepted` |
 | M6 two line citations pointed at comments | `grep -n` on `boot.ts` (`:1590` is the call, `:1600` the mirror check) | Applied in Task 3.4 and in the round-3 table |
 | Fiscal marks | — | Slice 2's row now names the drain change. Every slice still runs the golden huella and `inmutabilidad` suites unedited, and `drain.test.ts` stays unedited in Tasks 2.4b, 10.5 and 11.3 |
+
+---
+
+## Review round 5: what changed
+
+A tight check of revision `264d525a7d` (`/Users/clintongormley/waitron-campaign/a1018/review-5.md`).
+Each finding was checked on `61bfdfe405` before acting; none was rejected. Owner questions are
+unchanged. Slice table: Slice 5 from 13 to 14 tasks (Task 5.7b); no FISCAL or migration mark
+changes.
+
+| Finding | Checked by | What changed |
+| --- | --- | --- |
+| 2 (Critical) Task 5.2b blocks both handover activations | read `hour-setup-clock.ts:106-107` (the box is refused as its own second clock), `conflict-recovery-contract.ts:14-15` (the browser's clock steps), `node-operation-preparation.ts:227-241` (`prepare`), and `git grep "nodePreparation.prepare"` (one caller, `promote-api.ts:93`) | Applied, by the route the coordinator preferred. New Task 5.7b: `POST /api/node/handover/:operationId/preparation`, a row in Task 3.2's exemption table, open only at `filing_assumed` or `emergency_declared`, with its context built from the operation's own record by one function (`handoverPromotionContext`) that Tasks 5.8 and 7.4 also use for `withPromotion` — so prepare and promote always agree. Checked against Task 5a.1b (the existing routes still cannot set the fact: this route never reads it from the body), Task 5.2b (it still refuses only the ordinary routes), and Slice 14 (its activation is Task 7.4's, so it uses the same route). Tasks 6.4 and 8.1 send the browser's clock steps there; the emergency page now records the declaration before it compares clocks, because the route needs `emergency_declared` |
+| 4 Task 2.3b did not keep today's shutdown order | read `boot.ts:3400-3437` and `close-all.ts:5-15` | Applied. Task 2.3b now copies today's seven aborts and the whole `closeAll` list verbatim, keeps the waits for the aborted loops in their own places (`() => loop` before `backupSupervisor.stop()`, Litestream last) and keeps `closeAll`'s carry-on-past-failure rule; its test holds the list as written. Task 2.4 signals only the aborts and five immediate-effect stops inside the request; backups, Litestream and the tunnel stop in their place in the normal close, which then runs unchanged |
+| 4 (smaller) Litestream's stop started inside the request | the same reading | Applied by the same change: Litestream is never stopped before the close, so it never stops while the sending loop may still store an answer |
+| 5 the start-check rules contradicted their tests | read the rules against each Task 3.4 test; `rebuild-first-start.ts:120-139` (a restore writes a new term and rewrites only its own address) and `fence.ts:20-24` | Applied. Task 3.4 now states the rule as one decision table (counted or asked-only peer × F, N, =, S) and five combination rules in order; an M2 whose only peer is its old M1 proceeds whether M1 is silent or answers older (rule 3); a newer chart that does not fence this box is held, and counts as an answer only from a counted peer. Every Task 3.4 test was checked against the table — one, "a source left at `prepared`… proceeds", needed its peer's answer stated — and a test was added per cell. The crash-table rows that rely on the start check now name the rule they use; the M1-at-`prepared` row no longer says "sells" unconditionally |
+| Drain point: exit with `return` before the first send | read `drain.ts:385-386` (`upsertFlujo` after the loop) | Applied in Task 2.4b, with a test whose control (`break`) moves AEAT's stored next send time later |
 
