@@ -152,6 +152,17 @@ it("heads a pending question card by its work day alone", async () => {
   const headings = [...el.shadowRoot!.querySelectorAll("section article[data-prompt] h3")];
   expect(headings.map((h) => h.textContent!.trim())).toEqual(["2026-01-05"]);
 });
+it("draws no heading on a pending proposal card without a work day", async () => {
+  const view = hoursView();
+  view.pending = {
+    ...view.pending,
+    prompts: [attendancePrompt({ personId: "p1", kind: "proposal", businessDay: null })],
+    automaticEntryIds: [],
+  };
+  const { el } = await mount({ view });
+  expect(el.shadowRoot!.querySelectorAll("section article[data-prompt]")).toHaveLength(1);
+  expect(el.shadowRoot!.querySelector("section article[data-prompt] h3")).toBeNull();
+});
 it("loading and refusal states expose Retry without rendering a raw code or enabling stale actions", async () => {
   const { el } = await mount({ view: null, reading: true });
   expect(el.shadowRoot!.textContent).toContain("Reading your hours");

@@ -1318,8 +1318,8 @@ export interface CounterWaitingOrder {
   total: string;
   counts: OrderStateCounts;
   canHandOver: boolean;
-  /** A placed order's own service mode, frozen when it was opened, or the venue's order flow when
-   * the order has none frozen; null on a settled one. */
+  /** A placed order's own service mode, frozen when it was opened, or `prepay` when it has none;
+   * null on a settled one. */
   serviceMode: OrderFlow | "table_tab" | null;
   /** Only on a placed order whose invoice is issued: its number ("A/12"). */
   invoiceNumber?: string;

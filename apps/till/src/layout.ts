@@ -12,7 +12,7 @@ export interface ReceiptConfig {
   footerMessage?: string;
   phone?: string;
   email?: string;
-  /** Absent prints the venue's address; `false` prints none. */
+  /** Only `true` prints the venue's address. */
   printAddress?: boolean;
   /** A media library filename. */
   logo?: string;
