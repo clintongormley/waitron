@@ -249,6 +249,33 @@ describe("A773 request kind", () => {
       expect(await groupRow(mains)).toEqual({ state: "fired", requestKind: "next_course" });
     });
 
+    async function fire(groupId: string) {
+      const partyId = split.party.partyId;
+      const args = await command(partyId);
+      await inTx((tx) => fireGroup(tx, split.cfg, partyId, groupId, args));
+    }
+
+    it("gives an all-held first send new_order when its group is fired", async () => {
+      const held = (await submit([{ release: "hold", lines: [burger()] }])).groups[0]!.id;
+      expect(await groupRow(held)).toEqual({ state: "held", requestKind: "next_course" });
+      await fire(held);
+      expect(await groupRow(held)).toEqual({ state: "fired", requestKind: "new_order" });
+    });
+
+    it("gives the first of two held groups fired new_order and the second next_course", async () => {
+      const [first, second] = (
+        await submit([
+          { release: "hold", lines: [burger()] },
+          { release: "hold", lines: [water()] },
+        ])
+      ).groups.map((group) => group.id) as [string, string];
+      await fire(first);
+      expect(await groupRow(first)).toEqual({ state: "fired", requestKind: "new_order" });
+      expect(await groupRow(second)).toEqual({ state: "held", requestKind: "next_course" });
+      await fire(second);
+      expect(await groupRow(second)).toEqual({ state: "fired", requestKind: "next_course" });
+    });
+
     it("gives a send after a fired group whose dishes were all cancelled added", async () => {
       const first = (await submit([{ release: "fire", lines: [water()] }])).groups[0]!;
       const lineNo = await lineNoOf(first.lineIds[0]!);

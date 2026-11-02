@@ -3587,7 +3587,7 @@ export class TillApi {
   }
 
   /** The pass's Fire → `POST /api/device/pass-screen/release`. A stale card rejects
-   *  `ticket.pass_context_changed`; the same `submissionId` replays its first answer. */
+   *  `ticket.pass_context_changed`. */
   releaseDevicePass(ask: PassReleaseAsk): Promise<PassReleaseResult> {
     return this.#request<PassReleaseResult>("/api/device/pass-screen/release", "POST", ask);
   }

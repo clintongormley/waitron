@@ -47,6 +47,7 @@ import { passScopeOf, readPassCardRows, readScopedPassBoard } from "./pass-board
 import { passCardRelease, type PassCard } from "./pass-card.js";
 import {
   fireOrderLines,
+  listTablesWithState,
   markServed,
   routingOnce,
   unmarkServed,
@@ -269,6 +270,23 @@ describe("A773 pass release: set and stamps", () => {
       releasedTicketItemIds: [f.salad],
     });
     expect(await rows([f.salad])).toEqual([{ ...saladBefore, firedAt: LATER, queuedAt: LATER }]);
+  });
+
+  it("leaves the floor measuring a released dish from when it was asked for (D65)", async () => {
+    const f = await hotAndCold();
+    const every = await passOn(f.venue, "Pass", null);
+    const [card] = await toFire(f.venue, every);
+    expect([...card!.releaseTicketItemIds].sort()).toEqual([f.burger, f.salad].sort());
+    vi.setSystemTime(new Date("2026-03-14T12:14:00.000Z"));
+    await release(f.venue, every, askOf(card!));
+    vi.setSystemTime(new Date("2026-03-14T12:16:00.000Z"));
+    const table = (await withTransaction(db, (tx) => listTablesWithState(tx, f.venue.cfg))).find(
+      (row) => row.id === f.venue.party.tableId,
+    )!;
+    expect(table.timingBand).toBe("forgotten");
+    expect(table.signals.filter((signal) => signal.kind === "long_wait")).toEqual([
+      { kind: "long_wait", band: "forgotten" },
+    ]);
   });
 
   it("refuses a forged mixed batch whole", async () => {

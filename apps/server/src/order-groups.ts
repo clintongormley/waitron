@@ -875,10 +875,12 @@ async function releaseGroup(
   for (const [orderId, lineIds] of byOrder) {
     await fireOrderLines(tx, cfg, orderId, lineIds, fire, routing);
   }
+  const firstFood = (await nextFireKind(tx, partyId)) === "new_order";
   await tx
     .update(orderGroups)
     .set({
       state: "fired",
+      ...(firstFood ? { requestKind: "new_order" as const } : {}),
       firedAt: routing.at.toISOString(),
       remindAt: null,
       ...("deviceId" in firer
@@ -1371,7 +1373,10 @@ export async function startGroup(
   return group!.id;
 }
 
-/** new_order while the party has no group other than removed ones; added after. */
+/**
+ * new_order while the party has no fired group, added after: a held or removed group is not food
+ * the pass was asked to cook.
+ */
 export async function nextFireKind(
   tx: Transaction,
   partyId: string,

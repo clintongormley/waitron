@@ -14,6 +14,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
+import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import { readBillSignals, readPartySignals } from "./table-signals.js";
 import type { FamilyBill } from "./parties.js";
@@ -130,17 +131,34 @@ describe("D65 a dish waiting for the pass ages on the floor", () => {
     });
   });
 
-  it("measures a requeued dish at a station that does not wait for the pass from its queueing", async () => {
+  it("measures a dish moved between stations that do not wait for the pass from its move, on both readers", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
-    const { venue, itemId } = await burgerAtGrill(false);
+    const { venue, lineId } = await burgerAtGrill(false);
+    vi.setSystemTime(new Date(minutes(14)));
+    await withTransaction(db, (tx) =>
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        venue.party.tabId,
+        { submissionId: randomUUID(), lineIds: [lineId], stationId: venue.stations.fryer },
+        { deviceId: venue.cfg.origin.deviceId, personId: OPERATOR },
+      ),
+    );
     await withTransaction(db, async (tx) => {
-      await tx
-        .update(ticketItems)
-        .set({ queuedAt: iso(14) })
-        .where(eq(ticketItems.id, itemId));
-      const [item] = await tx.select().from(ticketItems).where(eq(ticketItems.id, itemId));
-      expect(item).toMatchObject({ requestedAt: AT, firedAt: AT, passControlled: false });
+      const [item] = await tx
+        .select()
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, lineId));
+      expect(item).toMatchObject({
+        stationId: venue.stations.fryer,
+        requestedAt: AT,
+        firedAt: AT,
+        queuedAt: iso(14),
+        passControlled: false,
+      });
       expect(await longWait(tx, venue, minutes(16))).toEqual([]);
+      vi.setSystemTime(new Date(minutes(16)));
+      expect((await floorRow(tx, venue)).timingBand).toBe("fresh");
     });
   });
 
