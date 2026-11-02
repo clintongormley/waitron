@@ -15,10 +15,11 @@ AEAT's answers.
 **Architecture:** One new generic package, `@waitron/handover`, owns the signed message formats,
 digests and the order of steps. Each box keeps its handover progress in its own `node.db` (the
 per-box database file that the venue copy never overwrites). The server gains routes on both
-boxes; the tax module contributes what only it understands (a summary of each invoice chain, and
-building and applying the returned tax records) through new optional module seats, so generic code
-never learns the tax regime. Everything is built and tested local-to-local first; the Cloud
-placements reuse the same steps once the Cloud half is jointly specified.
+boxes; the tax module contributes what only it understands (a summary of each invoice chain, a
+whole-chain check of a copy, and building and applying the returned tax records) through new
+optional module seats, so generic code never learns the tax regime. Everything is built and
+tested local-to-local first; the Cloud placements reuse the same steps once the Cloud half is
+jointly specified.
 
 **Tech Stack:** TypeScript, Hono routes, Lit screens, Drizzle on SQLite (`@waitron/store`),
 Ed25519 signatures (`@waitron/membership`'s `signBytes`/`verifyBytes`), Vitest (Node and real
@@ -27,31 +28,42 @@ Chromium), the `bench/sqlite-failover` rig.
 **Spec:** [A1018 design](../specs/2026-10-23-a1018-simple-handover-design.md), owner-approved
 2026-10-24 as published at `2c13c7f55d` (both Harbour Kitchen handovers, §§8–9, and the retained
 defaults in §§3, 5 and 7). Read beside it: [A947 design](../specs/2026-10-21-a947-two-box-failover-design.md)
-§§6.3, 6.4, 7, 7.1, 7.2, 11, and the [A947 slice 3a plan](2026-10-31-a947-3a-node-db.md) (what
+§§6.3, 6.4, 6.5, 7, 7.1, 7.2, 11, and the [A947 slice 3a plan](2026-10-31-a947-3a-node-db.md) (what
 `node.db` holds). Build authority: the owner, 2026-11-01, "Yes, build it" (campaign queue, A1018).
+Revised after a fresh-context review on 2026-11-02; what changed is in the last section.
 
 ---
 
 ## Words used in this plan
 
 - **M1, M2**: the old box and the selected replacement, as in the design.
-- **Stepdown**: M1 writes, on its own disk, that it has handed over, then restarts into a
-  *restricted start*: it sells nothing, files nothing, contacts AEAT in no way, and serves only
-  its status page and the handover routes.
+- **Stepdown**: M1 writes, on its own disk, that it has handed over, closes its doors to new
+  requests, stops every background duty that reaches outside or files, lets requests already
+  admitted finish, then restarts into a *restricted start*: it sells nothing, files nothing,
+  contacts AEAT in no way, and serves only its status page and the handover routes.
+- **Handover gate**: the request filter that does the "closes its doors" part of a stepdown. It
+  refuses every new request except a short list, and counts the requests already inside so the
+  stepdown can wait for them (Slice 2).
 - **Final copy**: a complete, consistent copy of M1's `venue.db` taken after stepdown.
 - **Indicator**: the signed summary M1 sends with the final copy, which M2 checks the copy against
   (design §3).
 - **Relinquishment**: M1's signed record that it gives up filing to this M2 (design §§2, 6).
+- **Relinquished fact**: the new fact a controlled activation records in its tax approval —
+  "the old box signed away filing to this box" — in place of "the old box is offline", which
+  would be false while M1 sits restricted (Slice 5a).
 - **Declaration**: the emergency statement a person makes on M2 — M1 is switched off, nobody else
   is recovering the venue, and the missing last minutes are accepted (design §4).
-- **Return batch**: what a returning M1 sends M2 after an emergency — its tax records M2 lacks,
-  the filing state of all its tax records, every AEAT answer it received, and any send whose answer
-  is still unknown (design §§5–6).
+- **Return batch**: what a returning M1 sends M2 — its tax records M2 lacks, the filing state of
+  all its tax records, every AEAT answer it received, and any send whose answer is still unknown
+  (design §§5–6). After a controlled handover the batch holds no records (M2 already has them all)
+  and serves only as the receipt M1 needs before it may become a spare.
 - **Chain**: one box's sequence of tax records, each linked to the one before by its fingerprint
   (the *huella*). A new box always starts a new chain.
 - **Filing**: sending tax records to AEAT. **Drain**: the code that does it
   (`packages/fiscal-verifactu/src/drain.ts`).
 - **Mirror**: a box in `mode = mirror`, serving read-only (`packages/node-db/src/schema/node-mode.ts:11`).
+- **Finished joining**: a spare whose `nodes` row the main box's `venue.db` holds. Only A947 slice
+  3b writes that row for a spare (below).
 - **Simulation**: two servers started in one test process on two folders. It is a test, never
   physical qualification.
 
@@ -61,33 +73,48 @@ defaults in §§3, 5 and 7). Read beside it: [A947 design](../specs/2026-10-21-a
 
 **A947 slices 3b onwards are not built** (campaign queue, A947 heading: "NEXT for A947: slices 3b
 onwards"; `git log --oneline origin/main | grep -i a947` on 2026-11-02 shows only 3a, #2371, and 4a,
-#1990). Four facts follow, each traced on `61bfdfe405`:
+#1990). Five facts follow, each traced on `61bfdfe405`:
 
 1. **A joined spare never finishes joining today.** `adoptFromPrimary` writes a pending-adoption
    latch (`apps/server/src/adopt.ts:195-202`); finishing refuses `mirror.venue_not_copied` while
    the spare's `venue.db` holds no venue row (`apps/server/src/reserved-identity.ts:68-69`), and
    nothing copies one (`apps/server/src/finish-adoption.ts:29-33`). While latched, a spare serves
    only `/health` and its box status (`apps/server/src/boot.ts:1540-1579`).
-2. **Both boxes put the same address in the membership chart** (A947 §2; `apps/server/src/adopt.ts:109` sends the
-   advertised origin, `https://waitron.local` by default), so neither can address the other by the
-   chart. A947 slice 3b gives each box its own name.
-3. **Nothing follows the main box's stream into a live copy** (A947 slice 3c).
-4. **The spare's own `nodes` row is not in the main box's database** until A947 3b writes it, and
-   promotion refuses `node.not_found` without it (`apps/server/src/promote.ts:250-254`).
+2. **But the main box's chart already lists that spare.** Adoption appends it as
+   `serving-secondary` at the address the spare sent (`apps/server/src/mirror-bundle-api.ts:207`,
+   through `withMember`, `packages/membership/src/standings.ts:30-38`), and both boxes send the
+   same advertised origin, `https://waitron.local` by default (A947 §2; `apps/server/src/adopt.ts:109`).
+   So a rule that reads "the chart lists another box" is already true on any main box that ever
+   started an adoption. A947 slice 3b gives each box its own name.
+3. **The main box's `venue.db` holds no `nodes` row for any other box today.** The non-test
+   writers of `nodes` are a first setup, for the box itself
+   (`packages/provisioning/src/venue-apply.ts:359`), and a spare finishing its own adoption, into
+   its own file (`apps/server/src/reserved-identity.ts:77`, via `insertReservedNodeTx`,
+   `packages/db/src/reserved-identity.ts:26-31`) — read with
+   `git grep -n "insert(nodes)" -- 'apps/**/*.ts' 'packages/**/*.ts'` on 2026-11-02, test files
+   and demo scripts set aside. A947 3b is where "the main box writes the spare's `nodes` row and
+   adoption-pending closes" (A947 design, slice 3b, `:1678-1682`). Promotion already refuses
+   `node.not_found` without it (`apps/server/src/promote.ts:250-254`).
+4. **A mirror listens on loopback only** unless the operator opts in with
+   `WAITRON_MIRROR_ALLOW_EXPOSED` (`assertMirrorBindSafe`, `apps/server/src/boot.ts:1691-1695`), so
+   no other box can reach a real mirror's routes today.
+5. **Nothing follows the main box's stream into a live copy** (A947 slice 3c).
 
 So this plan is cut in two:
 
-- **Buildable now, and useful alone** (Slices 0–4, 9): formats, durable progress, the restricted
-  start, the boot check, capture of the final copy, the prototype re-run.
+- **Buildable now, and useful alone** (Slices 0–4, 4b, 5a, 9): formats, durable progress, the
+  restricted start, the boot check, the final copy, payment collection ownership, the relinquished
+  fact, the prototype re-run.
 - **Buildable now against a simulated mirror, reachable on real boxes only after A947 3b** (Slices
   5–8, 10–14): every step where M2 runs. Their tests start M2 as a mirror whose `venue.db` was
   seeded from M1's, the pattern `apps/server/src/till-reroute-e2e.test.ts:315-392` already uses
-  (both servers up together, M2 promoted and restarted). A mirror that has finished joining already
-  mounts the full application behind the read-only gate (`boot.ts:1699-1724`). On a real venue,
-  M2's routes refuse with `handover.destination_unaddressable` while M2's chart address equals
-  M1's (Task 5.2), so nothing here is reachable before A947 3b by accident. The emergency's
-  continuous last copy arrives with A947 3c; until then Slice 14's selected-backup copy is the
-  only copy source a real spare has.
+  (both servers up together, M2 promoted and restarted). Nothing here is reachable on a real venue
+  before 3b, for three separate reasons: M1 cannot reach a mirror bound to loopback (fact 4);
+  M1's start of a controlled handover refuses `handover.destination_unaddressable` while M2's
+  chart address equals M1's (Task 5.3); and Slice 3's start check counts only peers that finished
+  joining (fact 3; Task 3.4), so a main box whose chart lists a half-joined spare starts as it
+  does today. The emergency's continuous last copy arrives with A947 3c; until then Slice 14's
+  selected-backup copy is the only copy source a real spare has.
 
 A947 slices 4b, 4c, 4d, 4e, 5a, 5b, 5c and 5d overlap this plan. Slice 0 writes the amendment that
 says which A1018 slice replaces or narrows each.
@@ -96,75 +123,138 @@ says which A1018 slice replaces or narrows each.
 
 ## Questions for the owner
 
-**One question; the build proceeds on its recommended default, and only Slice 11 depends on it.**
+**Two questions. The build proceeds on each recommended default. Q1 gates only Slice 12b; Q2
+gates only Task 7.4b, which is built only if the owner picks Q2's second option.** Every other
+slice is the same under either answer.
 
-### Q1 — When the old box comes back after an emergency, may an invoice the new box never saw come back as a tax record only, kept apart from the new box's sales?
+**Dropped from the draft: "may a returned invoice come back as a tax record only?"** The approved
+design already answers it. §5: "Do not replay orders, payments, cash, drawer, stock, printing or
+other business side effects", and only "original immutable fiscal records and the fiscal chain
+and filing rows needed to understand them" return. The draft's option (b) brought the sale's order
+row back, which that rules out; the only other way to put a returned record into
+`registros_facturacion` is to make its required `sale_id` optional
+(`packages/fiscal-verifactu/src/schema/registros.ts:52-55`), which changes a protected table. So the
+separate store of returned records (Slice 11) is what the design implies, and it is built without
+asking.
 
-**What forces the question.** The design says only fiscal records return, never M1's business
-rows (§5). But today a tax record cannot be stored without its sale: `registros_facturacion.sale_id`
-is required and points at `sales` (`packages/fiscal-verifactu/src/schema/registros.ts:52-55`), the
-sale row points at the order it was rung from (`sales.working_order_id`, foreign key
-`sales_working_order_fk`, `packages/db/src/schema/sales.ts:119,141`), and an order may be closed only
-once (`sales_working_order_id_key`, `:144`). The design did not settle this; nothing in it chooses
-between the two ways round it below.
+### Q1 — Do invoices that come back from the old box after an emergency count in the new box's VAT return (modelo 303)?
 
-**A worked example (the design's §9).** Harbour Kitchen's M1 issued invoice `A-0CNNW/218` at 21:40
-for table 4 (€100.00 taxable, €10.00 VAT, €110.00 in cash). M2's copy is from 21:39, when table 4
-was still open. After the switch a waiter, seeing table 4 open on M2, closes it again on M2. At
-23:30 M1 comes back and returns invoice 218.
+**What forces the question.** Slice 11 stores and files a returned invoice, but the VAT return
+Waitron prepares sums only the new box's own sales: `computeVatReturn` reads `sales.vat_breakdown`
+through `aggregateVatByRate` (`packages/reporting/src/vat-return.ts:11-27,36-38`). A returned
+invoice has no sale on M2, so today it would be filed to AEAT and left out of the VAT return.
 
-- **(a) Recommended: invoice 218 comes back as a tax record only, kept in a separate store on M2,
-  and M2 files it from there.** M2's sales, VAT, cash-up and payment reports do not count it; the
-  reconciliation list shows it — 23 October, €100.00 taxable, €10.00 VAT, €110.00 gross, "issued on
-  the old box, no sale on this box" — and the VAT report shows a line "invoices returned from the
-  old box" with those totals beside its own. Table 4's second close on M2 stays as it is, and the
-  list shows both, for a manager to settle with a new correction if needed. **Cost:** a second
-  store for returned records, and a second filing path that reuses the drain's sending and
-  duplicate handling (Slice 11): fiscal code the owner lands, with a fresh-context review of its
-  own. M2's own VAT report needs the extra line to be complete.
-- **(b) Invoice 218 comes back whole: its tax record, its sale and lines, and — because the
-  database requires it — the order row it was rung from, read-only.** M2's VAT report then counts
-  it by itself; cash-up and payments still do not. **Cost:** order rows (and, for a full invoice,
-  the customer row the order names) come back after all, which the design rules out; and in this
-  example it cannot work at all — table 4 is already closed on M2, so the import would be refused
-  by `sales_working_order_id_key` (read from the constraint, not run), and invoice 218 could then
-  never be filed. Option (b) would still
-  need (a)'s separate store for that case.
+**A worked example (the design's §9, carried on).** Harbour Kitchen's M1 issues invoice
+`A-0CNNW/218` at 21:40 on 23 October for table 4 (€100.00 taxable, €10.00 VAT, €110.00 in cash),
+then dies. M2's copy is from 21:39, so table 4 is still open on M2. Nora declares the emergency;
+a waiter, seeing table 4 open, closes it again on M2 at 21:58 and M2 issues its own invoice for it
+(another €10.00 VAT). At 23:30 M1 comes back and returns invoice 218, which M2 files in M1's
+identity.
 
-**Default built:** (a). Slices 0–10 and 12–14 are the same under either answer.
+- **(a) Recommended: count it.** M2's VAT return for the quarter shows a line "Invoices returned
+  from the old box: €100.00 taxable, €10.00 VAT", dated by the invoice's own issue date, beside
+  and added to M2's own sales. Until Nora settles table 4 (for example with a corrective invoice
+  for M2's duplicate), the quarter shows €20.00 of VAT for one meal, and the reconciliation list
+  says why. Why recommended: AEAT receives invoice 218 under the venue's own tax number (M2 files
+  it, design §6); the code describes the return's output side as a sum over filed invoices' VAT,
+  bucketed by their filed issue date (`vat-return.ts:14-16`), and a returned invoice is a filed
+  invoice that only lacks a sale row on M2. Leaving it out would make Waitron's figure disagree
+  with what AEAT holds. That is a reading of the design and of the code's own description, **not tax
+  advice**: the plan builds (a) and marks it pending the venue's tax adviser. **Cost:** a FISCAL
+  change to `vat-return.ts`, `modelo-303.ts` and `dr303.ts` (Slice 12b).
+- **(b) Leave it out, and show it only in the reconciliation list and beside the reports.** The
+  quarter's return shows €10.00 less VAT than AEAT holds, and Nora adds invoice 218 to the return
+  by hand. **Cost:** none in code; the risk of an understated return sits with the person.
 
-**No other owner question.** The design's retained defaults decide everything else; the choices
-this plan makes as a builder are listed under "Decisions this plan makes" with their reasons.
+**Either way, a returned invoice never enters a daily close.** The daily close is a frozen,
+append-only record (`packages/db/src/classification.ts:38`) whose hash covers its whole snapshot
+(`packages/reporting/src/daily-close-hash.ts:71-95`), and 23 October's close may be made before
+23:30. So returned invoices are shown *beside* the close and the cash-up, read when the screen
+opens, and the close itself is unchanged (Task 12a.5). Putting them inside later closes would
+change the format of a hash-chained record; it is not built unless the owner asks.
+
+**Default built:** (a), in Slice 12b, which lands only after the owner and the adviser answer.
+Slice 12a (the list and the lines beside the reports) is the same under either answer.
+
+### Q2 — In an emergency, does the new box wait 90 to 150 seconds before naming its new invoice series, or take the next free minute?
+
+**What forces the question.** The draft said an emergency takes the setup and restore wait,
+because the last copy might lack a name the old box took after it. The code lets only a setup, a
+restore and a conflict switch wait (`packages/fiscal-verifactu/src/hour-selection.ts:461`), and
+CLAUDE.md §5 says "Setup/restore wait 90–150 seconds; promotion does not." So the draft's wait
+cannot be built without changing fiscal code. Meanwhile A947's own switch — the spare taking over
+from a main box that died, which is this same situation — takes the next free minute, by the
+owner's approval of A947 §6.5 (rules 2–3, `docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md:836-850`).
+
+**A worked example.** Harbour Kitchen, 23 October. M1 dies at 21:40 (19:40 UTC). Nora presses
+**Start the venue on this box** on M2 at 21:52:10 (19:52:10 UTC); her phone's clock and M2's agree.
+
+- **(a) Recommended: the next free minute, as A947's switch already does.** M2 takes 19:52 UTC at
+  once: its series are `A-0D008` and so on. No fiscal code changes and CLAUDE.md §5 stays as it
+  is. **What it leaves open:** names are UTC minutes, so the only name M2 could repeat is one M1
+  took in roughly its last 150 seconds that the copy lacks (A947 §6.5's arithmetic, 45 + 45 + 60
+  seconds, `:841-847`). M1 takes a name only when it is itself being set up, restored or switched,
+  which a box selling at 21:40 was not doing; another box doing so is what the declaration's "no
+  other recovery is in progress" rules out. The same holds for a copy from an older backup
+  (Slice 14): a name M1 took long after that backup is an earlier minute than now, so it cannot
+  be the one M2 takes.
+- **(b) The restore's wait.** The page counts down 90 to 150 seconds, then takes 19:54 UTC
+  (`A-0D00A`). **Cost:** a FISCAL change to `hour-selection.ts:461` letting a promotion under a
+  recorded emergency declaration wait, a change to CLAUDE.md §5's "promotion does not" line, the
+  owner lands it (Task 7.4b), and staff wait up to two and a half more minutes during an outage.
+
+**Default built:** (a). Task 7.4b exists only if the owner chooses (b).
+
+**No third question.** The other choices this plan makes are builder's choices that follow from
+the approved designs; each is listed under "Decisions this plan makes" with its reason, open to
+the owner.
 
 ---
 
 ## Decisions this plan makes (builder's choices, open to the owner)
 
-1. **Stepdown is a restart, not a live switch.** M1 writes its restriction to `node.db`, stops
-   starting new work, lets work already started finish to its own deadline, and restarts into the
-   restricted start (Slice 2). Why: no live way to close every writer exists — the read-only gate
-   is mounted only at boot (`boot.ts:1699-1718`), and `TradingAdmission.requireRestart`
-   (`apps/server/src/trading-admission.ts:19-21`) covers only "economic" writes
-   (`:26-33`) — while the restricted start can refuse to start each writer, which a test can list.
-   The restart already exists for promotion (`boot.ts:3079-3092`; Docker restarts the box,
-   `deploy/compose.yml:12`).
-2. **A stepdown waits for requests already admitted, not only for background passes.** The
-   background loops already finish a pass in flight when stopped: the abort is checked after the
-   pass (`apps/server/src/loop.ts:77-80`), and both the drain and the card loop run on `runLoop`
-   (`boot.ts:3200`, `apps/server/src/pending-card-recovery.ts:19`). Requests are different: the
-   listener drops connections after a 500 ms grace (`apps/server/src/close-listener.ts:28,44`)
-   and the store closes after that (`boot.ts:836-844`), so a till request still waiting on a card
-   reader would lose its last write. The stepdown therefore counts requests in flight and waits for
-   that count to reach zero, at most `HANDOVER_ADMITTED_WORK_LIMIT_MS = 180_000`, before it
-   restarts; a request still running at the limit is logged by route and left to the existing
-   crash-safety (a card payment is written `attempting` before its network call,
-   `packages/payments/src/schema/payments.ts:23-26`, and its outcome stays unknown, design §2).
+1. **Stepdown is a restart, not a live switch.** M1 writes its restriction to `node.db`, closes
+   the handover gate, stops its outside-facing background duties, lets admitted requests finish,
+   and restarts into the restricted start (Slice 2). Why: no live way to close every writer
+   exists — the read-only gate is mounted only on a box that boots as a mirror or fenced
+   (`boot.ts:1699-1718`) — while the restricted start can refuse to start each writer, which a
+   test can list. The restart already exists for promotion (`boot.ts:3079-3092`; Docker restarts
+   the box, `deploy/compose.yml:12`).
+2. **A stepdown never touches the trading admission or the singleton role.** The draft used
+   `TradingAdmission.requireRestart()` (`apps/server/src/trading-admission.ts:19-21`). That breaks
+   the work it means to let finish: a card sale re-checks the admission in a second transaction
+   after the reader answers (`apps/server/src/till-sale.ts:1625`, also `:1774`, `:2184`, through
+   `requireEconomicWrite`, `trading-admission.ts:26-33`), so a card captured during the wait would
+   lose its sale with `venue.time_zone_not_ready`. Instead the handover gate refuses *new*
+   requests at the door and counts the ones inside, and the stepdown waits for that count to reach
+   zero, at most `HANDOVER_ADMITTED_WORK_LIMIT_MS = 180_000`. The stepdown request itself is not
+   counted, nor are the two event streams (`apps/server/src/live-api.ts:106`,
+   `apps/server/src/department-transfer-api.ts:127`), which the listener close ends as today. A
+   request still running at the limit is logged by route and left to the existing crash-safety (a
+   card payment is written `attempting` before its network call,
+   `packages/payments/src/schema/payments.ts:23-26`). The singleton role is left alone because it
+   is read at many sites in `boot.ts` (`:1691`, `:2052-2114`, `:2356`, `:2490`, `:2551`, `:2628`,
+   `:2662`, `:2731`, `:2891`, `:2973`, `:3170`) and this plan has not traced which of them a
+   request reaches; stopping the named duties is enough and changes nothing a request reads.
    The 180 seconds is a starting value, to be measured in the owner's rehearsal.
-3. **Peers ask each other with a signed request, not a person's password.** The chart is kept off
+3. **A stepdown stops outside-facing background work at once, not at the restart.** The drain is
+   started by the singleton role, not the admission (`singletonPass`, `boot.ts:3205-3206`); the
+   clock watch asks AEAT whenever `filesRecords()` is true (`apps/server/src/clock-watch.ts:281`);
+   the card sweep runs in every role (`boot.ts:505-512`). Design §2 step 1 says no new filing or
+   payment work starts once the restriction is on disk. So the stepdown aborts and awaits, before
+   it waits for requests, the duties named in Task 2.4 — the same stops `stopWork` makes at close
+   (`boot.ts:3400-3437`). A pass already in flight finishes, because each loop checks its abort
+   after a pass (`apps/server/src/loop.ts:77-80`), so a request already sent to AEAT or a card
+   provider waits only to its own deadline (design §2 step 2).
+4. **Peers ask each other with a signed request, not a person's password.** The chart is kept off
    arbitrary readers today (`apps/server/src/management-api.ts:1040-1044`, which asks for a
    manager's password); a box asks a peer by signing a short query with its own node key, which
    the peer checks against the keys its own chart vouches for (Slice 3).
-4. **The person drives an activation from a page M2 serves.** M2 names its new series from its
+5. **The start check counts only peers that finished joining** — a routable box in the chart
+   whose `nodes` row this box's `venue.db` holds (fact 3 above). Why: the chart already lists a
+   half-joined spare at the main box's own address (fact 2), so the draft's rule would have made
+   every such main box wait at every start. Reading `nodes.id` adds no location reader.
+6. **The person drives an activation from a page M2 serves.** M2 names its new series from its
    own minute after another machine's clock agrees (CLAUDE.md §5), and the second clock it accepts
    is a browser's, read by challenge, never one on the same machine
    (`packages/fiscal-verifactu/src/hour-setup-clock.ts:106-127`). So in a controlled handover the
@@ -172,23 +262,54 @@ this plan makes as a builder are listed under "Decisions this plan makes" with t
    `confirmFreshSignIn`, `apps/server/src/fresh-sign-in.ts:45`), and the dashboard then opens M2's
    own handover page for the clock reading and the activation; in an emergency the person is on
    M2's page throughout.
-5. **The minute-name wait.** Controlled: a switch's rule — the next free minute — because the
-   final copy holds every name M1 ever used. Emergency: the setup and restore wait of 90 to 150
-   seconds, because the last copy may lack a name M1 took after it (the same reason a restore
-   waits, A947 §6.7). A1188 §12 left this to this build.
-6. **The returned records reach M2 as a full-state batch for every chain M1 holds**: every
+7. **The minute name:** the next free minute in both scenarios — pending Q2. A controlled
+   handover's final copy holds every name M1 ever used; for the emergency, see Q2.
+8. **The returned records reach M2 as a full-state batch for every chain M1 holds**: every
    filing-state row and every AEAT answer M1 holds (A947 §7.1's rule, "not only the rows the
-   receiver lacks"), and the tax records after the head M2 reports for each chain. A retry with the
-   same reported heads returns the same bytes (Slice 10).
-7. **The emergency declaration page offers password plus authenticator code, not a passkey, until
+   receiver lacks"), M1's `envio_flujo` row (the AEAT wait time and the technical-incident token,
+   `drain.ts:416-442,1185-1237`), and the tax records after the head M2 reports for each chain. M2
+   never moves its own `envio_flujo` gate earlier because of M1's: it keeps the later of the two
+   next-send times, and records M1's incident token as evidence without adopting it. A retry with
+   the same reported heads returns the same bytes (Slice 10).
+9. **The emergency declaration page offers password plus authenticator code, not a passkey, until
    A947 4b/4d.** A passkey sign-in writes its one-time challenge to the venue database
-   (`packages/identity/src/passkey.ts:232-235`), and a passkey registered for `waitron.local`
+   (`packages/identity/src/passkey.ts:263-265`), and a passkey registered for `waitron.local`
    needs the venue's or the box's own name (A947 §6.6), which A947 3b and 4d provide. The page says
-   so in one line. Controlled handovers start on M1's dashboard, where passkeys work.
+   so in one line. Controlled handovers start on M1's dashboard, where passkeys work. The code is
+   asked when the person has one enrolled, as design §7 says ("password plus TOTP when enrolled").
+10. **"Carry on as the main box" lasts for this start only.** The next start asks the peers again
+    (Task 3.5). Why: a decision that outlived a restart would let a box that later learns of a
+    handover keep ignoring it.
+11. **Resolving a reconciliation item takes `node.promote`**, the permission to switch the
+    venue's server; listing takes `report.view` (Task 12a.2).
+12. **Payment collection belongs to the box that started the payment.** A764 asks, before a second
+    venue node is enabled, to "restrict provider cancellation to its collection owner or add
+    coordination between nodes" (`docs/backlog/payments.md:476-479`). This plan takes the first:
+    every payment row names the box that started it in its existing `node_id` column, which nothing
+    writes today (`packages/payments/src/schema/payments.ts:57-58`); the card sweep acts only on
+    rows its own box owns; and an activation passes the old box's rows to the new box (Slices 4b
+    and 5). Tender refunds already carry `node_id` and recover only on a non-fenced primary
+    (`boot.ts:3304-3306`).
+13. **A controlled M1 becomes a spare through the same return exchange as an emergency M1.** Its
+    batch holds no records, because M2 already holds every one; the receipt and the gates then run
+    unchanged (Slices 10 and 13). Why: one path to test, and A947 §7.2's checks are the proof a box
+    needs before it wipes itself.
+14. **M2 may close a return that is never coming.** If the old box never returns, a person holding
+    `node.promote` records "the old box will not return"; the operation closes as
+    `return_abandoned` and the unknown interval stays open in the reconciliation list (design §5:
+    "If the disk never returns, retain a known-unknown missing-tail gap"). Without this, M2 could
+    never hand over again (Task 13.5).
 
 ---
 
-## Formats this plan settles
+## Formats (local-only, version 1)
+
+These formats are **local-to-local, version 1**. They are not qualified for Cloud: the contract
+says "No wire format or runtime behaviour is qualified by this agreement" (Cloud
+`docs/waitron-integration-contract.md:1387` at `08a2a0d4`), and asks that Cloud's resource
+journal be bound to "the same operation, venue/installation mapping, M1, selected M2, expected
+signed membership revision/digest, scenario and input fingerprint" (`:1488-1490`). A Cloud
+placement may need a version 2. Slice 0 sends Cloud's lane G that notice before any build slice.
 
 Every signed object is an **envelope**:
 
@@ -236,16 +357,23 @@ fingerprint returns the stored result; with a different fingerprint it is refuse
 
 | Role | Controlled | Emergency |
 | --- | --- | --- |
-| source (M1) | `prepared` → `source_stepped_down` → `filing_relinquished` | (learns at return) `source_superseded` → `return_pending` → `return_complete` |
-| destination (M2) | `prepared` → `copy_accepted` → `filing_assumed` → `activated` | `prepared` → `emergency_declared` → `activated` → `return_pending` → `return_complete` |
+| source (M1) | `prepared` → `source_stepped_down` → `filing_relinquished` → `return_pending` → `return_complete` | (learns at return) `source_superseded` → `return_pending` → `return_complete` |
+| destination (M2) | `prepared` → `copy_accepted` → `filing_assumed` → `activated` → `return_pending` → `return_complete` or `return_abandoned`; from `prepared` only, `replaced` | `prepared` → `emergency_declared` → `activated` → `return_pending` → `return_complete` or `return_abandoned` |
 
-A box waiting at a step records a `waiting_reason` (a code from the errors registry) beside its
-state, never a new state.
+An operation is **open** until `return_complete`, `return_abandoned` or `replaced`; a box holds
+at most one open operation. `replaced` is the design §7 crash case: a controlled operation that
+reached only `prepared`, closed by an emergency declaration that names it. A box waiting at a step
+records a `waiting_reason` (a code from the errors registry) beside its state, never a new state.
 
 **Stepdown record** (`node_handover_restriction`, M1's `node.db`): `node_id`, `operation_id`,
 `kind` (`handed-over` | `superseded`), `successor_node_id`, `membership_term`, `recorded_at`. Written
 before the stepdown is acknowledged; read at every start before any worker (Slice 2). `superseded`
-is what a returning emergency M1 writes when it learns of M2's newer chart (Slice 3).
+is what a returning emergency M1 writes when it learns of M2's newer chart (Slice 3). **Nothing
+clears it.** It ends only when the box becomes a spare: the rejoin wipe deletes the whole of
+`node.db` along with `venue.db` (`DATABASE_FILES = [VENUE_FILE, NODE_FILE]`,
+`packages/store/src/index.ts:49`, removed by `apps/server/src/db-wipe.ts:20-28`; called from
+`apps/server/src/rejoin-command.ts:133-139`), and the re-adopted box starts with an empty
+`node.db` (Task 13.4).
 
 **Final-state indicator body** (`kind: "final-state"`, signed by M1):
 
@@ -266,11 +394,16 @@ interface FinalStateIndicator {
 The Veri*Factu module's summary is, per chain it holds (`registro_sif` row): `sifId`, `nodeId`,
 `idSistemaInformatico`, `numeroInstalacion`, record count, head record id and head huella (by
 `secuencia`), `envios` counts per state, the SHA-256 of its `acks` rows in key order, and the ids
-of rows in `enviando`. The payments module's summary is every payment in `attempting`
-(`packages/payments/src/schema/payments.ts:28-40`) with its provider and the provider reference
-that anchors its retry (`:62`). The snapshot is `StoreHandle.archiveTo`'s `VACUUM INTO` copy
-(`packages/store/src/archive.ts:24-34`); a copy taken with every writer stopped is the "consistent
-snapshot" of design §3, committed journal changes included.
+of rows in `enviando`. The payments module's summary lists every external request whose outcome
+is still open, with the provider and the reference that anchors its retry: payments in
+`attempting`, `initiated` (a hosted payment minted but not yet paid) and `accepted_offline`
+(accepted by the reader offline, not yet forwarded) (`packages/payments/src/schema/payments.ts:20-40`,
+reference at `:62`), and card refunds still `pending` at a provider (`tender_refunds`, a core
+table, `packages/db/src/schema/tender-refunds.ts:23,88-98`). The snapshot is
+`StoreHandle.archiveTo`'s `VACUUM INTO` copy (`packages/store/src/archive.ts:24-34`); a copy taken
+with every writer stopped is the "consistent snapshot" of design §3, committed journal changes
+included. It carries Litestream's `_litestream_seq` and `_litestream_lock` tables as they stood
+(CLAUDE.md §3); the comparison expects them, and placement starts a new stream generation.
 
 **Acceptance** (`kind: "acceptance"`, signed by M2): `{ binding, indicatorDigest, acceptedAtMs }`.
 M2 records `copy_accepted` in its `node.db` before answering.
@@ -307,7 +440,8 @@ frozenAtMs, fiscal: <regime body> }`. `requestDigest` is the digest of M2's requ
 M2's head (`secuencia`) for each of M1's chains. The Veri*Factu body: for each chain M1 holds,
 every `registros_facturacion` row after M2's reported head, in `secuencia` order, byte-for-byte as
 stored; every `envios`, `acks`, `filing_cases` and `filing_case_events` row M1 holds for any record
-of those chains; the ids of rows left `enviando`. M1 stores the bytes of each batch beside its
+of those chains; M1's `envio_flujo` row (decision 8); the ids of rows left `enviando`. After a
+controlled handover the records list is empty. M1 stores the bytes of each batch beside its
 operation and answers a retry with the same request with the same bytes (design §6).
 
 **Return receipt** (`kind: "return-receipt"`, signed by M2): per record, its id and huella as M2
@@ -316,24 +450,33 @@ count and head huella. M1 checks it against its own (Slice 13).
 
 ### The node-local manifest
 
-What a box keeps in `node.db` and its state folder, and what M2 does with each (design §3 asks the
-builder to enumerate it). `node.db` tables are from `packages/node-db/src/classification.ts:6-12`;
-state files from `apps/server/src/state-secrets.ts:16-23` and
-`apps/server/src/backup-optional-state.ts:10-16`.
+What a box keeps for itself — in `node.db`, in its state folder, and in the `local` tables inside
+`venue.db` — and what M2 does with each (design §3 asks the builder to enumerate it). `node.db`
+tables are from `packages/node-db/src/classification.ts:6-12`; `venue.db`'s `local` tables from
+`packages/db/src/classification.ts:257-276`, `packages/fiscal-verifactu/src/classification.ts:20-29`
+and `packages/credentials/src/classification.ts:12`; state files from
+`apps/server/src/state-secrets.ts:16-23`, `apps/server/src/backup-optional-state.ts:10-16` and the
+modules' non-database state (`apps/server/src/backup-sources.ts:50-62`).
 
-| Item | Class | M2's treatment |
-| --- | --- | --- |
-| `node_mode`, `node_mirror_link`, `node_primary_key` | destination-owned | M2 keeps its own; M1's never travel |
-| `node_recovery_key` | destination-owned | M2 keeps its own recovery-key check |
-| `node_signing_key` | source-only | M1's private key never leaves M1 (design §2) |
-| `node_handover_operations`, `_steps`, `_restriction` (Slice 1) | destination-owned | each box keeps its own |
-| `secrets.env` (key ring) | transferred, earlier | reached M2 at joining (A947 3a Task 14a); the indicator lists the ring's key versions and M2 refuses `handover.key_ring_mismatch` when it lacks one (backlog A1273) |
-| `trading.env` | destination-owned | M2 keeps its own node id; promotion rewrites it (`boot.ts:3067-3075`) |
-| `tls/ca.*`, `tls/server.*`, `tls/venue-ca.*` | destination-owned | M2 keeps its own; the venue authority reached it at joining |
-| `backup.env` | transferred, compared | the indicator carries its digest; a difference waits `handover.backup_settings_differ` |
-| `modules.json` | transferred, compared | as `backup.env`; M2 refuses a module set that differs |
-| `module-preparation-state.json` | rebuildable | each box's own (`packages/provisioning/src/module-preparation-state.ts:9-16`) |
-| Litestream's `.venue.db-litestream/` | rebuildable | never copied; the new primary opens a new generation |
+| Item | Where | Class | M2's treatment |
+| --- | --- | --- | --- |
+| `node_mode`, `node_mirror_link`, `node_primary_key` | `node.db` | destination-owned | M2 keeps its own; M1's never travel |
+| `node_recovery_key` | `node.db` | destination-owned | M2 keeps its own recovery-key check |
+| `node_signing_key` | `node.db` | source-only | M1's private key never leaves M1 (design §2) |
+| `node_handover_operations`, `_events`, `_restriction` (Slice 1) | `node.db` | destination-owned | each box keeps its own |
+| `join_requests` | `venue.db` | source-only, inside the copy | keyed by the receiving box's node id; M2 reads only its own rows, so M1's lie unused |
+| `change_log` | `venue.db` | rebuildable, inside the copy | a dashboard signal deleted by the transaction that wrote it; a leftover row is delivered once on M2, harmlessly |
+| `node_sealed_state` | `venue.db` | source-only, inside the copy | M1's state files sealed with M1's recovery key, which M2 cannot open; M2 writes its own row |
+| `recovery_packs` | `venue.db` | source-only, inside the copy | keyed by M1's node id; M2 reads its own or none |
+| `fiscal_certificate_installs`, `fiscal_certificate_reminders` | `venue.db` | source-only, inside the copy | keyed by M1's node id. The certificate itself is in `tenant_credentials`. What M2's certificate card shows after activation is asserted in Task 5.10; if it shows no certificate, that is reported as a follow-up FISCAL task, not patched here |
+| `tenant_credentials` | `venue.db` | transferred, inside the copy | sealed under the venue key ring (`packages/credentials/src/schema/tenant-credentials.ts`), so usable on M2 only when M2's ring holds every version: the ring check below |
+| `secrets.env` (key ring) | state | transferred, earlier | reached M2 at joining (A947 3a Task 14a); the indicator lists the ring's key versions and M2 refuses `handover.key_ring_mismatch` when it lacks one (backlog A1273) |
+| `trading.env` | state | destination-owned | M2 keeps its own node id; promotion rewrites it (`boot.ts:3067-3075`) |
+| `tls/ca.*`, `tls/server.*`, `tls/venue-ca.*` | state | destination-owned | M2 keeps its own; the venue authority reached it at joining |
+| `backup.env` | state | transferred, compared | the indicator carries its digest; a difference waits `handover.backup_settings_differ` |
+| `modules.json` | state | transferred, compared | as `backup.env`; M2 refuses a module set that differs |
+| `module-preparation-state.json` | state | source-only, summarised | it holds module operation history, including the minute selections (`packages/provisioning/src/module-preparation-state.ts:73-83`; backed up as `secrets/module-evidence/fiscal-verifactu/hour-history.json` through `FISCAL_HOUR_BACKUP_STATE`, `packages/fiscal-verifactu/src/hour-backup-state.ts:49`). M2 keeps its own file. Task 4.5 finds, by a test, whether M2's minute selection sees every name M1 used from the copy alone; if it does not, M1's projected history travels as the retained `module-evidence` file the restore path already places (`apps/server/src/first-setup-backup-recovery.ts:551-582`) |
+| Litestream's `.venue.db-litestream/` | state | rebuildable | never copied; the new primary opens a new generation |
 
 ---
 
@@ -347,28 +490,32 @@ schema and its append-only triggers, the alta builders `recordSale` / `recordCor
 (`packages/fiscal-verifactu/src/restore.ts:3`). Every slice's final task runs
 `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`
 and `git diff origin/main -- packages/fiscal-verifactu/src/write-path.e2e.test.ts packages/fiscal-verifactu/src/inmutabilidad.test.ts`
-(which must print nothing).
+(which must print nothing). The first is the golden huella test; neither is edited by any slice.
 
 | Slice | Fiscal? | What touches fiscal behaviour |
 | --- | --- | --- |
 | 0 Docs | no | — |
 | 1 Records and formats | no | — |
-| 2 Restricted start | **FISCAL** | stops a filing box's drain and every other AEAT contact |
+| 2 Restricted start | **FISCAL** | stops a filing box's drain and every other AEAT contact, at once and across restarts |
 | 3 Boot check | **FISCAL** | decides, before the first filing pass, whether a box may file (A947 5a's place) |
-| 4 Final copy | **FISCAL** | new read-only code in `packages/fiscal-verifactu` (chain summary seat) |
+| 4 Final copy | **FISCAL** | new read-only code in `packages/fiscal-verifactu` (chain summary, whole-chain check) |
+| 4b Payment collection owner | no | payments only; full review for concurrency |
+| 5a The relinquished fact | **FISCAL — LOUD** | changes what an activation's approval records in the append-only `fiscal_allocations` (`packages/fiscal-verifactu/src/classification.ts:10`, `schema/allocations.ts:26`) |
 | 5 Controlled, server | **FISCAL** | activates a fresh fiscal identity on M2; M2 then files M1's copied records |
-| 6 Controlled, screens | no, unless Task 6.2 must change `packages/fiscal-verifactu/src/setup/` (then FISCAL) | screens and guides; lands after 5 |
-| 7 Emergency, server | **FISCAL** | as 5, under a declaration; the emergency minute wait (decision 5) |
+| 6 Controlled, screens | no, unless Task 6.4 must change `packages/fiscal-verifactu/src/setup/` (then FISCAL) | screens and guides; lands after 5 |
+| 7 Emergency, server | **FISCAL** | as 5, under a declaration; Task 7.4b, if built, changes `hour-selection.ts` |
 | 8 Emergency, page | no | page and guides only; lands after 7 |
 | 9 Prototype re-run | no | a rig that imports no `@waitron/*` package |
-| 10 Return batch: evidence | **FISCAL** | writes `envios`, `acks` and filing cases on M2; a new outside input to the drain's per-chain block |
-| 11 Return batch: originals | **FISCAL — LOUD** | a new store of returned tax records and a second filing path (Q1). It stores originals byte-for-byte and never recomputes a huella; it does not write `registros_facturacion` |
-| 12 Reconciliation list | no | reads fiscal facts through a seat; writes only its own tables |
+| 10 Return batch: evidence | **FISCAL** | writes `envios`, `acks`, `envio_flujo` and filing cases on M2; a new outside input to the drain's per-chain block |
+| 11 Return batch: originals | **FISCAL — LOUD** | a new store of returned tax records and a second filing path sharing the drain's AEAT wait and chain order. It stores originals byte-for-byte and never recomputes a huella; it does not write `registros_facturacion` |
+| 12a Reconciliation list | no | reads fiscal facts through a seat; writes only the `handover` set's tables; the frozen daily close is unchanged, pinned by a test |
+| 12b The VAT return line | **FISCAL** | changes the VAT figure Waitron prepares (Q1) |
 | 13 Archive and wipe | **FISCAL** | gates the wipe of a box that holds tax records |
 | 14 Copy from a backup | **FISCAL** | places a copy that a fiscal activation then uses |
 
 Every slice is on the **full review path** (risk triggers: fiscal, concurrency, cross-package
-contract). A FISCAL slice is landed by the owner.
+contract). A FISCAL slice is landed by the owner. Slices 5a and 11 get a fresh-context review of
+their tasks before their first implementer.
 
 **The drain already files every chain it holds** — `claimBatch` has no node or SIF filter
 (`packages/fiscal-verifactu/src/drain.ts:600-743`, the `pendiente` read at `:629`) — and each
@@ -376,7 +523,7 @@ record is sent with the identity stored on it when it was written
 (`fromRegistroRow`, `packages/fiscal-verifactu/src/registro-row.ts:369`; built from the writing
 box's SIF at `backend.ts:757-768`). So after activation M2 files M1's copied records in M1's
 generating identity with no change to the drain (asesor Q2). That is read from the code, not run;
-Task 5.6's simulation runs it against a stand-in AEAT, and Slice 5 changes no drain code.
+Task 5.10's simulation runs it against a stand-in AEAT, and Slice 5 changes no drain code.
 
 ---
 
@@ -394,6 +541,13 @@ Task 5.6's simulation runs it against a stand-in AEAT, and Slice 5 changes no dr
   after, and say so in a one-line comment at the site; write `node.db` only through
   `withNodeTransaction` (`packages/db/src/tenancy.ts:48-53`). Each new `node.db` table's writer
   file is listed in `scripts/write-path-tables.json`.
+- **Replacing or removing the live `venue.db`** (Tasks 5.7, 14.1): take `lockVenueDatabase`
+  (`packages/db/src/client.ts:98`) first; delete `<state>/backup-room-note.json` through
+  `deleteBackupRoomNote` before the file changes, and add the file to `REPLACES` in
+  `scripts/backup-room-note.test.ts`, as `apps/server/src/restore.ts:590` does; move the side
+  files (`SIDE_FILE_SUFFIXES`) with it and remove Litestream's `.venue.db-litestream/`, as
+  `apps/server/src/db-wipe.ts:22-27` and `restore.ts:651` do; never unlink `venue.lock` or
+  `migrations.lock` (`db-wipe.ts:9-15`).
 - **Migration numbers are indicative**; `drizzle-kit generate` assigns them. A collision on rebase
   is fixed by regeneration (CLAUDE.md §3).
 - **New error codes** are declared in their package's `errors.ts` and imported by the throwing
@@ -416,9 +570,9 @@ Task 5.6's simulation runs it against a stand-in AEAT, and Slice 5 changes no dr
   and no new demand for proof that the old box stopped. A failed controlled handover never turns
   into an emergency or a restore by itself: only a person's new declaration does, under Task 7.3's
   rule (design §§7, 10).
-- **The handover never charges, refunds or settles a payment again.** Payments in `attempting`
-  keep their provider reference and go through the existing recovery
-  (design §4; A764, `docs/backlog/payments.md:472-480`).
+- **The handover never charges, refunds or settles a payment again.** Open payments and refunds
+  keep their provider reference and go through the existing recovery, run by the box that owns
+  the collection (decision 12; design §4; A764, `docs/backlog/payments.md:472-480`).
 - **Plain English** in comments, commit messages and PR text. Every commit `git commit -s`. A
   Vitest run counts only when its `Tests` line is read; run under `env -u AI_AGENT -u CLAUDECODE`
   to see a passing test's output.
@@ -429,19 +583,26 @@ Task 5.6's simulation runs it against a stand-in AEAT, and Slice 5 changes no dr
 
 ## Review Focus
 
-1. **A stepped-down box that loses power mid-capture** comes back restricted, sells nothing and
+1. **A card sale admitted before a stepdown completes and keeps its sale**, while a request that
+   arrives after the restriction is refused `handover.stepping_down`, and the drain, the card sweep
+   and AEAT's clock reading start nothing new. Test: Task 2.5, with the real card route and a real
+   drain loop.
+2. **A stepped-down box that loses power mid-capture** comes back restricted, sells nothing and
    contacts AEAT in no way — including the clock reading from AEAT's host
    (`apps/server/src/clock-watch.ts:281-284`) and the certificate checks
-   (`apps/server/src/fiscal-certificate-api.ts:90,150`). Test: Task 2.4.
-2. **A lost reply at each checkpoint** (acceptance, relinquishment, activation) followed by a
+   (`apps/server/src/fiscal-certificate-api.ts:90,150`). Test: Task 2.6.
+3. **A main box whose chart lists a half-joined spare at its own address starts normally.** Test:
+   Task 3.4's regression case.
+4. **A lost reply at each checkpoint** (acceptance, relinquishment, activation) followed by a
    retry or a reboot of either box leaves exactly one filing box and never a second activation.
-   Tests: Tasks 5.5 and 7.5.
-3. **A copy that differs by one late row** is refused before acceptance, and M1 stays stepped down.
-   Test: Task 5.3, with the control.
-4. **A returned record that M2 already holds, with different bytes**, opens a case and keeps both
-   facts rather than letting the last arrival win. Tests: Tasks 10.4 and 11.3.
-5. **A returning M1 whose `node.db` was lost** (backlog A1274: it reads as a sole primary) still
-   waits at start, because its chart lists another routable box. Test: Task 3.3.
+   Tests: Tasks 5.8 and 7.5.
+5. **A copy that differs by one late row** is refused before acceptance, and M1 stays stepped down.
+   Test: Task 5.5, with the control.
+6. **A returned record that M2 already holds, with different bytes**, opens a case and keeps both
+   facts rather than letting the last arrival win; and a returned original never goes to AEAT
+   before an earlier record of its chain still waiting in M2's own store. Tests: Tasks 10.6 and 11.4.
+7. **A returning M1 whose `node.db` was lost** (backlog A1274: it reads as a sole primary) still
+   waits at start, because its chart lists another box that finished joining. Test: Task 3.4.
 
 ---
 
@@ -450,23 +611,29 @@ Task 5.6's simulation runs it against a stand-in AEAT, and Slice 5 changes no dr
 | Piece | Where | What it does today |
 | --- | --- | --- |
 | Promotion | `apps/server/src/promote.ts:227-311` | operator attestation (`:64-68`), module activation in one venue transaction (`:268-287`), chart term n+1 with the old primary `sell-only` (`:258-266`; `packages/membership/src/standings.ts:9-22`), role written to `node.db` after (`:300-303`) |
-| Promotion preparation | `packages/fiscal-verifactu/src/hour-recovery-preparation.ts:108-118` | refuses unless the old machine is confirmed offline and not absent, and no parallel recovery runs |
+| Promotion preparation | `packages/fiscal-verifactu/src/hour-recovery-preparation.ts:108-118` | refuses unless the old machine is confirmed offline and not absent, and no parallel recovery runs; the approval it builds always says `oldMachineOffline: true` (`:91`), stored in append-only `fiscal_allocations` |
+| Minute waits | `packages/fiscal-verifactu/src/hour-selection.ts:461` | only `setup`, `restore` and `conflict-switch` wait; a promotion takes the next free minute |
 | Restart after promotion | `apps/server/src/boot.ts:3079-3092` | SIGTERM to itself; Docker restarts it |
+| Trading admission | `apps/server/src/trading-admission.ts:7-33` | one switch per process; a card sale re-checks it after the reader answers (`till-sale.ts:1625,1774,2184`) |
 | Fresh sign-in on the dashboard | `apps/server/src/fresh-sign-in.ts:45-90` | password or the person's own passkey, plus authenticator or recovery code when enrolled |
 | One-action sign-in by id | `apps/server/src/operation-authentication.ts:91-131` | password and optional code, `node.promote` or `mirror.create`, session ended in the same step |
 | `node.promote` | `packages/identity/src/permissions.ts:38,78-85` | administrators only |
 | Boot peer check | `apps/server/src/boot.ts:1600-1622`, `membership-reconcile.ts:28-53` | runs only on a non-mirror with a `node_mirror_link` row; an unreachable peer means "proceed" (`:33-34`); the fetch sends no credential (`:60-63`), so `GET /management-api/membership` answers `password.invalid` (`management-api.ts:1044-1083`) — inferred, not run |
-| Fence at boot | `boot.ts:1627-1637` | a held chart that fences this box demotes its singleton role and mounts the read-only gate (`:1699-1718`) |
-| Duties by role | `boot.ts:1690-1691` (`filesRecords`), `:3200-3210` (drain via `singletonPass`), `:505-512` (card sweep, **every role**), `:3305` (tender refunds), `:2541-2556` (stream), `:2481` (backups), `:2651` (clock watch) | see Slice 2's list |
-| Shutdown | `boot.ts:3400-3437` | aborts the drain's and card loop's controllers, then awaits each loop |
+| Read-only gate | `apps/server/src/read-only-gate.ts:28-39`, mounted at `boot.ts:1699-1718` | on a mirror or fenced box, refuses every write verb `node.read_only` (403) except `POST /api/box/retire` (fenced only), `/management-api/promote` and `/management-api/promote/preparation`; each exempt route authenticates itself |
+| Fence at boot | `boot.ts:1627-1637` | a held chart that fences this box demotes its singleton role and mounts the read-only gate |
+| Duties by role | `boot.ts:1690-1691` (`filesRecords`), `:3200-3210` (drain via `singletonPass`), `:505-512` (card sweep, **every role**), `:3304-3306` (tender refunds, non-fenced primary), `:2541-2556` (stream), `:2481` (backups), `:2651` (clock watch) | see Task 2.4's list |
+| Shutdown | `boot.ts:3400-3437` (`stopWork`), `:828-843` (order: `stopWork`, listener close, `settleRequests`, store close) | aborts every loop's controller, then awaits each |
 | Consistent copy | `packages/store/src/archive.ts:24-34` | `VACUUM INTO` a `.partial` file, then rename |
 | Restore placement | `apps/server/src/restore.ts:579-703` | moves the old files aside, puts `node.db` before `venue.db`; `skipSecrets` keeps the box's own identity and `node.db` (`:403-404,417-419`) |
-| Drain | `packages/fiscal-verifactu/src/drain.ts` | files every chain (`:600-743`); per-pass, memory-only chain block (`:252-255`, "open design decision" `:577-579`); restart resets every `enviando` row (`:513-521`); duplicate handling compares the record's own stored identity (`:1727-1803`, `:1830-1903`) |
+| Rejoin wipe | `apps/server/src/rejoin.ts:39-62`, `rejoin-command.ts:133-139`, `db-wipe.ts:20-28` | refuses unless fenced; deletes the backup-room note, `venue.db`, `node.db` and Litestream's folder |
+| Drain | `packages/fiscal-verifactu/src/drain.ts` | files every chain (`:600-743`); per-pass, memory-only chain block (`:252-255`, "open design decision" `:577-579`); one `envio_flujo` row for AEAT's wait and the technical incident (`:416-442`, `:1185-1237`); restart resets every `enviando` row (`:513-521`); duplicate handling compares the record's own stored identity (`:1727-1803`, `:1830-1903`) |
+| Whole-chain check | `packages/fiscal-verifactu/src/backup-verification-chain.ts:52-153` (`walk`), exported only inside `verifyBackupFiscalChains` (`:155`) | reads every record of every chain through a `BackupQuery`, recomputing each huella; read-only. (`verify.ts:41` `verifyChain` checks only the last two records and can insert a chain head, `chain.ts:112-130`) |
 | Filing cases | `packages/fiscal-verifactu/src/filing-cases.ts:51-70` | one case per record (`filing_cases_registro_uq`) |
 | Chain head | `packages/fiscal-verifactu/src/schema/cadenas.ts` | one row per node |
 | Activation | `packages/fiscal-verifactu/src/allocation.ts:437-458` | revokes, resets and retires only the activating node's SIF, chain and series |
 | Two servers in one test | `apps/server/src/till-reroute-e2e.test.ts:315-392` | primary and seeded mirror up together; mirror promoted and restarted |
-| Reports | `packages/reporting/src/daily-close.ts:15-35`, `cash-up.ts:18-40` | daily close and cash-up |
+| Reports | `packages/reporting/src/daily-close.ts:15-35`, `cash-up.ts:18-40`, `vat-return.ts:29-45` | daily close (frozen, hash-chained), cash-up, VAT return over `sales` only |
+| Payments | `packages/payments/src/schema/payments.ts:28-58` | states incl. `attempting`, `initiated`, `accepted_offline`; `node_id` exists, no writer sets it |
 | Servers screen | `apps/dashboard/src/screens/servers-screen.ts:23-36` | Remove and Clear only |
 | Prototype S2 | `bench/sqlite-failover/src/scenarios/s2_no_double_submit.ts` | recorded FAIL (`docs/research/2026-09-16-sqlite-failover-prototype.md:37`) |
 
@@ -479,7 +646,7 @@ Task 5.6's simulation runs it against a stand-in AEAT, and Slice 5 changes no dr
   `vitest.config.ts` (98/98/98/95, `coverage.include: ["src/**"]`), `stryker.config.json`
   (`break: 90`), `drizzle.config.ts` (`migrations.table: "__drizzle_migrations_handover"`),
   `src/envelope.ts`, `src/binding.ts`, `src/states.ts`, `src/indicator.ts`, `src/manifest.ts`,
-  `src/declaration.ts`, `src/return-batch.ts`, `src/errors.ts`, `src/index.ts`; from Slice 7,
+  `src/declaration.ts`, `src/return-batch.ts`, `src/errors.ts`, `src/index.ts`; from Slice 5,
   `src/schema/*.ts`, `src/classification.ts`, `src/migrations.ts`, `drizzle/`. Wiring as A947 3a's
   Task 4 did for `@waitron/node-db`: `scripts/changed-scope.mjs` (`LIGHT_B_PACKAGES`),
   `.github/workflows/ci.yml` (the light-A filter), `.github/workflows/mutation.yml` (a
@@ -487,50 +654,53 @@ Task 5.6's simulation runs it against a stand-in AEAT, and Slice 5 changes no dr
 - **`packages/node-db`**: `src/schema/node-handover.ts`, `src/handover.ts`, a second migration.
 - **`packages/module`**: the `handover` seat on `WaitronModule` (`src/module.ts:1686` area).
 - **`packages/fiscal`**: the `handover` seat on `FiscalContribution` (`src/contribution.ts:166`).
-- **`packages/fiscal-verifactu`**: `src/handover-summary.ts` (Slice 4), `src/handover-return.ts`
-  (Slice 10), `src/returned-records.ts`, `src/schema/returned-records.ts`, `src/relay-drain.ts`
-  (Slice 11).
-- **`packages/payments`**: `src/handover-summary.ts` (Slice 4).
-- **`packages/reporting`**: the gap lines (Slice 12).
+- **`packages/fiscal-verifactu`**: `src/handover-summary.ts`, `src/handover-chain-check.ts` (Slice 4);
+  the relinquished fact (Slice 5a); `src/handover-return.ts` (Slice 10);
+  `src/returned-records.ts`, `src/schema/returned-records.ts`, `src/relay-drain.ts` (Slice 11).
+- **`packages/payments`**: `src/handover-summary.ts` (Slice 4); collection ownership (Slice 4b).
+- **`packages/reporting`**: the returned-invoice line in the VAT return (Slice 12b).
 - **`apps/server/src`**: `handover-*.ts` files named per task.
-- **`apps/dashboard`**, **`apps/till`**: named per task.
+- **`apps/dashboard`**, **`apps/till`**, **`apps/setup`**: named per task.
 - **Guides**: new `apps/server/src/guide/en/servers.md` and `apps/server/src/guide/es/servers.md`
   (which also answers backlog A1283).
 
 ---
 ## Slices
 
-Each slice is one pull request, landing `main` green and working on its own, in this order. "Waits
-for" names anything outside this plan. Every slice ends with the same final checks (its last task):
-the focused suites named in its tasks, `pnpm format:check`, the typecheck of every package it
-touched, the fiscal golden and immutability suites unedited (Fiscal boundary), then
-`/finish-branch` on the full path.
+Each slice is one pull request, landing `main` green and working on its own, in the order of the
+"Waits for" column. Every slice ends with the same final checks (its last task): the focused
+suites named in its tasks, `pnpm format:check`, the typecheck of every package it touched, the
+fiscal golden and immutability suites unedited (Fiscal boundary), then `/finish-branch` on the
+full path.
 
-| # | Slice | Fiscal | Migration | Tasks | Waits for |
-| --- | --- | --- | --- | --- | --- |
-| 0 | Docs: the A947 amendment, the Cloud pin, the backlog | no | no | 3 | — |
-| 1 | The handover records and their formats | no | yes (`node.db`) | 5 | 0 |
-| 2 | A box that has stepped down stays down | **yes** | no | 6 | 1 |
-| 3 | A returning box asks before it sells or files | **yes** | no | 7 | 2 |
-| 4 | The final copy and its indicator | **yes** | no | 6 | 2 |
-| 5 | Controlled handover, server | **yes** | no | 7 | 3, 4 (real boxes: A947 3b) |
-| 6 | Controlled handover, screens and guide | no | no | 4 | 5 |
-| 7 | Emergency handover, server | **yes** | yes (`venue.db`, `handover` set) | 6 | 5 (real boxes: A947 3b; continuous copy: 3c) |
-| 8 | Emergency declaration page and guide | no | no | 4 | 7 |
-| 9 | The S2 prototype re-run, fiscal-only | no | no | 3 | 0 |
-| 10 | Return batch: evidence for records M2 holds | **yes** | no | 6 | 7, 9 |
-| 11 | Return batch: originals M2 never saw | **yes, loud** | yes (fiscal set) | 6 | 10, Q1 |
-| 12 | The reconciliation list and the report gaps | no | no | 5 | 11 |
-| 13 | Archive, the wipe gates, and becoming the spare | **yes** | no | 5 | 12 |
-| 14 | A last copy from a selected backup | **yes** | no | 4 | 7 |
+| # | Slice | Fiscal | Migration | Tasks | Waits for | Gated by |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | Docs: the A947 amendment, the Cloud pin and notice, the backlog | no | no | 4 | — | — |
+| 1 | The handover records and their formats | no | yes (`node.db`) | 5 | 0 | — |
+| 2 | A box that has stepped down stays down | **yes** | no | 8 | 1 | — |
+| 3 | A returning box asks before it sells or files | **yes** | no | 9 | 2 | — |
+| 4 | The final copy and its indicator | **yes** | no | 8 | 2 | — |
+| 4b | Payment collection belongs to one box (A764) | no | no | 4 | 0 | — |
+| 5a | The relinquished fact | **yes, loud** | no | 3 | 0 | — |
+| 5 | Controlled handover, server | **yes** | yes (`venue.db`, new `handover` set) | 11 | 3, 4, 4b, 5a (real boxes: A947 3b) | — |
+| 6 | Controlled handover, screens and guide | no | no | 6 | 5 | — |
+| 7 | Emergency handover, server | **yes** | yes (`venue.db`, `handover` set) | 7 (+ 7.4b only if Q2 is (b)) | 5 (real boxes: A947 3b; continuous copy: 3c) | Q2, Task 7.4b only |
+| 8 | Emergency declaration page and guide | no | no | 4 | 6, 7 | — |
+| 9 | The S2 prototype re-run, fiscal-only | no | no | 3 | 0 | — |
+| 10 | Return batch: evidence, and the exchange both scenarios use | **yes** | no | 8 | 7, 9 | — |
+| 11 | Return batch: originals M2 never saw | **yes, loud** | yes (fiscal set) | 8 | 10 | — |
+| 12a | The reconciliation list, and lines beside the reports | no | no | 7 | 11 | — |
+| 12b | Returned invoices in the VAT return | **yes** | no | 2 | 12a | Q1 |
+| 13 | Archive, the wipe gates, and becoming the spare | **yes** | no | 6 | 11 | — |
+| 14 | A last copy from a selected backup | **yes** | no | 4 | 7, 8 | — |
 
 ---
 
-### Slice 0 — Docs: the A947 amendment, the Cloud pin, the backlog
+### Slice 0 — Docs: the A947 amendment, the Cloud pin and notice, the backlog
 
 Docs-only, so it takes CLAUDE.md §6's docs path: branch, `git commit -s`, fast-forward `main`,
 push direct. It must land before Slice 1, so that no build slice contradicts an approved design
-that still says otherwise.
+that still says otherwise, and so that Cloud's lane G knows before any format is built.
 
 #### Task 0.1: A dated A1018 amendment to the A947 design
 
@@ -544,39 +714,42 @@ under each heading it amends (§6.3, §6.4, §7, §7.1, §7.2, §11). History is
     person"; step 2's promotion now runs only after the A1018 emergency declaration is recorded in
     the spare's `node.db` (A1018 Slice 7), and the declaration's audit fields are this plan's
     "Emergency declaration"; step 3's "starts filing … the old main box's records that reached it"
-    is unchanged and now explicitly sole: the old box never files again.
+    is unchanged and now explicitly sole: the old box never files again. The minute name is the
+    next free one, as §6.5 already says for a switch (A1018 Q2's default).
   - **§6.4 (the hand-over):** replaced by A1018's controlled handover — a durable stepdown that
     survives a reboot, a final copy compared against a signed indicator, M2's durable acceptance,
-    M1's relinquishment, then activation (A1018 Slices 2, 4, 5). "Waits until its copy holds
-    exactly that change" is replaced by the indicator's snapshot digest; a lost answer never lets
-    M1 resume.
-  - **§7 item 1:** the boot check asks every other box the chart lists, by a signed query, and a
-    till hands over a newer chart (A1018 Slice 3); «Seguir sin el equipo de reserva» must name the
-    other box, confirm it is switched off and no other recovery runs, and is refused when this
-    box's `node.db` holds a handover (A1018 design §4, point 1).
+    M1's relinquishment, then activation, whose approval records "relinquished", not "offline"
+    (A1018 Slices 2, 4, 5a, 5). "Waits until its copy holds exactly that change" is replaced by
+    the indicator's snapshot digest; a lost answer never lets M1 resume.
+  - **§7 item 1:** the boot check asks every other box the chart lists that finished joining, by
+    a signed query, and a till hands over a newer chart (A1018 Slice 3); «Seguir sin el equipo de
+    reserva» must name the other box, confirm it is switched off and no other recovery runs, and
+    is refused when this box's `node.db` holds a handover (A1018 design §4, point 1).
   - **§7.1 (the tail):** fiscal-only. The batch carries tax records, their chain and filing rows,
-    every AEAT answer and every unanswered send — never sales, orders, payments, cash, stock or
-    printing rows, which stay in the returning box's archive; the "ledger tables only" tail of the
-    topology design no longer applies to A947. Kept: full-state batch, frozen sender, identical
-    retries, the per-chain pause while a batch applies, a filing case where two finished states
-    disagree, the receiver files and the sender files nothing. The S2 re-run (5b) is amended to
-    the fiscal-only batch, with a third control: a batch cut back to missing records only
-    (A1018 Slice 9). Records M2 never saw are kept in a separate store and filed from there
-    (A1018 Q1, default (a); Slice 11).
-  - **§7.2 (becoming the spare):** check 1 is A1018's return receipt; check 3's archive keeps every
-    non-fiscal row; the archive is **not** deleted after 90 days while any reconciliation item or
-    filing case naming one of its records is open, and retention otherwise follows A664's policy
-    (A1018 design §5). The manager override still reaches check 2 only.
-  - **§11:** 4e → A1018 Slices 2, 4, 5 and 6; 5a → A1018 Slice 3; 5b → A1018 Slice 9; 5c →
+    `envio_flujo`, every AEAT answer and every unanswered send — never sales, orders, payments,
+    cash, stock or printing rows, which stay in the returning box's archive; the "ledger tables
+    only" tail of the topology design no longer applies to A947. Kept: full-state batch, frozen
+    sender, identical retries, the per-chain pause while a batch applies, a filing case where two
+    finished states disagree, the receiver files and the sender files nothing. The S2 re-run (5b)
+    is amended to the fiscal-only batch, with a third control: a batch cut back to missing records
+    only (A1018 Slice 9). Records M2 never saw are kept in a separate store and filed from there,
+    sharing the drain's AEAT wait and chain order (A1018 Slice 11).
+  - **§7.2 (becoming the spare):** check 1 is A1018's return receipt, for a controlled handover
+    too (its batch holds no records); check 3's archive keeps every non-fiscal row; the archive is
+    **not** deleted after 90 days while any reconciliation item or filing case naming one of its
+    records is open, and retention otherwise follows A664's policy (A1018 design §5). The manager
+    override still reaches check 2 only.
+  - **§11:** 4e → A1018 Slices 2, 4, 5a, 5 and 6; 5a → A1018 Slice 3; 5b → A1018 Slice 9; 5c →
     A1018 Slices 10 and 11; 5d → A1018 Slice 13. 4b keeps "stop following" and the in-memory
-    passkey challenge, and calls A1018 Slice 7's declaration and activation. 3b, 3c, 4c, 4d and 5e
-    are unchanged.
+    passkey challenge, and calls A1018 Slice 7's declaration and activation. A764's collection
+    owner, which §6.3 left to the switch slice, is A1018 Slice 4b. 3b, 3c, 4c, 4d and 5e are
+    unchanged.
 - [ ] **Step 2: Check** `pnpm exec prettier --file-info docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md`
   prints `"ignored": true` (docs are not format-checked), and open each relative link path in
   the block with `ls` (no guard reads links in specs).
 - [ ] **Step 3: Commit** `git commit -s -m "docs(a947): A1018's simple handover amends the hand-over, the boot check, the tail and the return"`.
 
-#### Task 0.2: Pin the Cloud agreement and record the formats
+#### Task 0.2: Pin the Cloud agreement and mark the formats local-only
 
 **Files:** Modify `docs/superpowers/specs/2026-10-23-a1018-simple-handover-design.md` (a dated
 block at the top) and `docs/backlog/replication-cloud.md` → "A1018".
@@ -589,22 +762,43 @@ block at the top) and `docs/backlog/replication-cloud.md` → "A1018".
   fetch without `ref`, cut both at `## Handover between local and hosted machines: A1018` up to
   the next `## ` heading, and `diff` them; on 2026-11-02 at Cloud `1aae8f14c0` the first 194
   lines matched and `main` added only a `### A951 routing revision 2 response, 2026-10-23 (D136)`
-  subsection after them, about A951). Then: "Formats settled in the
-  [build plan](../plans/2026-11-02-a1018-handover-build.md#formats-this-plan-settles); the
-  authentication bridge, the provider-resource field and a hosted copy's identity wait for joint
+  subsection after them, about A951). Then: "Formats are local-only, version 1, in the
+  [build plan](../plans/2026-11-02-a1018-handover-build.md#formats-local-only-version-1); the
+  contract qualifies no wire format (`:1387`). The authentication bridge, the provider-resource
+  field, a hosted copy's identity and the binding of Cloud's resource journal wait for joint
   specification with Cloud."
-- [ ] **Step 2: Commit** `git commit -s -m "docs(a1018): pin the Cloud agreement and point at the settled formats"`.
+- [ ] **Step 2: Commit** `git commit -s -m "docs(a1018): pin the Cloud agreement; the formats are local-only version 1"`.
 
-#### Task 0.3: The backlog
+#### Task 0.3: Tell Cloud's lane G what is waiting on it
+
+**Files:** None in this repository beyond a line in `docs/backlog/replication-cloud.md` → "A1018"
+naming where the notice went. The notice goes to Cloud's lane G through the shared contract's
+proposal process (the route the A1018 section took, Cloud PRs #312 and #323), and one line goes in
+the campaign's questions file for the watcher.
+
+- [ ] **Step 1: Write the notice.** Four questions, each citing this plan's Formats and the
+  contract's own lines (Cloud `docs/waitron-integration-contract.md` at `08a2a0d4`, `:1466-1495`):
+  the authentication bridge (binding a Cloud account, venue and operation to the venue's
+  `node.promote` holder, with format, expiry, revocation and replay refusal); the provider-resource
+  field (the declaration's `provider` is `null` for every local declaration); a hosted M2 that is
+  not in M1's chart (backlog A1275); and Cloud's resource journal bound to the same operation id
+  and binding fingerprint (`:1488-1490`). It says plainly that Waitron's formats are local-only
+  version 1 and that a Cloud placement may need a version 2, and that no local slice waits for an
+  answer (design §7: "local-to-local needs no Cloud binding").
+- [ ] **Step 2: Commit** the backlog line: `git commit -s -m "docs(a1018): note the questions sent to Cloud's lane G"`.
+
+#### Task 0.4: The backlog
 
 **Files:** Modify `docs/backlog.md` (the A1018 entry) and `docs/backlog/replication-cloud.md`
-(A1018 and A947 sections).
+(A1018 and A947 sections); `docs/backlog/payments.md` (A764's collection-owner sentence points at
+this plan's Slice 4b).
 
 - [ ] **Step 1:** Replace "Exact formats, compatible A947 amendments, separate build authority and
-  physical runtime qualification remain open" with: formats and the A947 amendment settled (links),
-  build authority given 2026-11-01, Q1 open with its default, physical qualification the owner's
-  (this plan's last section). Add one line to the A947 section pointing at the amendment.
-- [ ] **Step 2: Commit** `git commit -s -m "docs(backlog): A1018's formats and A947 amendment are settled; the build is planned"`.
+  physical runtime qualification remain open" with: formats local-only version 1 and the A947
+  amendment written (links), build authority given 2026-11-01, Q1 and Q2 open with their defaults,
+  physical qualification the owner's (this plan's last section). Add one line to the A947 section
+  pointing at the amendment.
+- [ ] **Step 2: Commit** `git commit -s -m "docs(backlog): A1018 is planned; formats are local-only and the A947 amendment is written"`.
 
 ---
 
@@ -658,17 +852,19 @@ Not fiscal. Adds `@waitron/handover` and `node.db`'s second migration. Nothing c
 **Interfaces — Produces:** `HandoverRole = "source" | "destination"`; `HandoverState` (the union of
 every state in the Formats table); `nextState(role, scenario, from: HandoverState | null, to: HandoverState): HandoverState`
 (throws `handover.step_out_of_order` with `{ from, to }`); `isOpen(state): boolean` (false only for
-`return_complete`, and for a controlled destination's `activated`).
+`return_complete`, `return_abandoned` and `replaced`).
 
 - [ ] **Step 1: Write the failing tests.** One `it.each` over every allowed transition in the
   Formats table (passes); one over a set of forbidden ones, including "a controlled destination
   cannot reach `filing_assumed` before `copy_accepted`", "a source cannot relinquish before it
-  stepped down", "an emergency destination cannot activate before `emergency_declared`", "no state
-  goes back".
+  stepped down", "an emergency destination cannot activate before `emergency_declared`", "only a
+  controlled destination at `prepared` can become `replaced`", "`return_abandoned` is reachable
+  only by a destination at `return_pending`", "no state goes back"; and "`isOpen` is false for
+  exactly the three closed states".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/handover exec vitest run src/states.test.ts` — FAIL.
 - [ ] **Step 3: Implement** as a table.
 - [ ] **Step 4: Run** it — PASS.
-- [ ] **Step 5: Commit** `git commit -s -m "handover: the order of steps for each box and scenario"`.
+- [ ] **Step 5: Commit** `git commit -s -m "handover: the order of steps for each box and scenario, and when an operation closes"`.
 
 #### Task 1.4: `node.db`'s handover tables
 
@@ -682,15 +878,15 @@ Tables, using only `packages/db/src/schema/columns.ts` builders:
 - `node_handover_operations`: `node_id`, `operation_id` (primary key together), `role`,
   `scenario`, `source_node_id`, `destination_node_id`, `binding` (json), `fingerprint`, `state`,
   `waiting_reason` (nullable), `created_at`, `updated_at`; checks on the three enumerations; a
-  unique partial index `node_handover_one_open_uq` on `node_id` where `state not in ('return_complete')`
-  and not (`role = 'destination'` and `scenario = 'controlled'` and `state = 'activated'`).
+  unique partial index `node_handover_one_open_uq` on `node_id` where
+  `state not in ('return_complete', 'return_abandoned', 'replaced')`.
 - `node_handover_events`: `node_id`, `operation_id` (nullable: a "carry on" decision has none),
   `kind`, `detail` (json), `envelope` (nullable text), `recorded_at`; primary key a new id.
   Insert-only by code: the writer file has no update or delete (no trigger reaches `node.db`,
   A947 3a's Task 2 kept append-only triggers venue-only).
 - `node_handover_restriction`: `node_id` (primary key), `operation_id` (nullable for a chart-only
   supersession), `kind` (`handed-over` | `superseded`), `successor_node_id`, `membership_term`,
-  `recorded_at`.
+  `recorded_at`. No delete: it ends with the rejoin wipe (Formats → "Stepdown record").
 - Classification: all three `local`, reason "this box's own handover record, in node.db, keyed by
   this box's node id". No foreign key anywhere; `source_node_id`, `destination_node_id` and
   `successor_node_id` name venue rows, and the column comment says nothing establishes them in this
@@ -709,9 +905,10 @@ checked by the caller with `nextState` (Task 1.3), not here: this package does n
 
 - [ ] **Step 1: Write the failing tests** with `useVenueDb` and the node set: "creates the three
   tables in node.db and none in venue.db"; "a second operation while one is open is refused";
-  "the same operation id with another fingerprint is refused"; "a replay with the same fingerprint
-  answers `replayed` and writes nothing"; "a restriction rewritten with other values is refused";
-  "an event is never updated" (the module exports no update).
+  "a closed operation (`return_abandoned`) lets a new one begin"; "the same operation id with
+  another fingerprint is refused"; "a replay with the same fingerprint answers `replayed` and
+  writes nothing"; "a restriction rewritten with other values is refused"; "an event is never
+  updated" (the module exports no update).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/node-db exec vitest run src/handover.test.ts` — FAIL.
 - [ ] **Step 3: Implement**; generate the migration.
 - [ ] **Step 4: Run** it — PASS. From the root: `pnpm exec vitest run scripts/classification-complete.test.ts scripts/two-file-foreign-keys.test.ts scripts/migrations-match-schema.test.ts scripts/schema-constraints.test.ts scripts/journal-monotonic.test.ts scripts/column-vocabulary.test.ts scripts/write-path-tables.test.ts scripts/id-columns-are-references.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts`;
@@ -761,15 +958,18 @@ server the way the pending-adoption mode returns early, `:1540-1579`); create
 `apps/server/src/restricted-start.ts` (its routes). Test `apps/server/src/boot.restricted.test.ts`.
 
 **Interfaces — Produces:** `startRestricted(deps: RestrictedStartDeps): StartedServer`, serving
-only `/health`, `GET /api/node` (always `acceptingSales: false`), the status page (Task 2.5), and
-the routes later slices register through `RestrictedStartDeps.routes: ((app: Hono) => void)[]`.
+only `/health`, `GET /api/node` (always `acceptingSales: false`, and always `nodeId` and the held
+chart's `term` — a till needs the term to hand over a newer chart, Task 3.6), the status page
+(Task 2.7), and the routes later slices register through
+`RestrictedStartDeps.routes: ((app: Hono) => void)[]`.
 
 - [ ] **Step 1: Write the failing tests** (a real `startServer` on a seeded folder with a
-  `node_handover_restriction` row): "answers `acceptingSales: false`"; "refuses a till sign-in"
-  (status 403 or 404, never 200); "mounts no dashboard, till, print or device route" (each
-  representative path answers 404); "starts no fiscal pass": a stand-in AEAT server records zero
-  requests over two `minTickMs` intervals; control: the same folder without the row starts the
-  drain, and the stand-in records a request (the failing case prints a non-zero count).
+  `node_handover_restriction` row): "answers `acceptingSales: false` with its node id and term";
+  "refuses a till sign-in" (status 403 or 404, never 200); "mounts no dashboard, till, print or
+  device route" (each representative path answers 404); "starts no fiscal pass": a stand-in AEAT
+  server records zero requests over two `minTickMs` intervals; control: the same folder without
+  the row starts the drain, and the stand-in records a request (the failing case prints a
+  non-zero count).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/boot.restricted.test.ts` — FAIL.
 - [ ] **Step 3: Implement.** The early return comes before `runFirstStart`, the stream host, the
   backup supervisor and every loop.
@@ -793,50 +993,112 @@ the routes later slices register through `RestrictedStartDeps.routes: ((app: Hon
 - [ ] **Step 4: Run** it — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: prove a restricted box writes nothing and contacts no outside service"`.
 
-#### Task 2.3: The stepdown, in order
+#### Task 2.3: The handover gate
 
-**Files:** Create `apps/server/src/handover-stepdown.ts`; modify `boot.ts` (an in-flight request
-counter middleware on the trading app, and `stepDown` wired with the trading admission and the
-restart used after promotion, `:3079-3092`). Test `apps/server/src/handover-stepdown.test.ts`.
+**Files:** Create `apps/server/src/handover-gate.ts`; modify `boot.ts` (create one gate per full
+start and mount its middleware with `app.use("*", …)` before every other middleware, including
+the read-only gate at `:1700`). Test `apps/server/src/handover-gate.test.ts`.
+
+**Interfaces — Produces:**
+`createHandoverGate(deps: { notCounted: (c: Context) => boolean }): HandoverGate`, where
+`HandoverGate` is `{ middleware: MiddlewareHandler; close(deps: { allowed: (c: Context) => boolean; self: Context }): void; isClosed(): boolean; settled(limitMs: number): Promise<{ remaining: readonly { method: string; path: string }[] }> }`.
+- Open: every request passes; each is counted on entry and uncounted in a `finally` after
+  `next()`, except where `notCounted` says so — the two event streams (`apps/server/src/live-api.ts:106`,
+  `apps/server/src/department-transfer-api.ts:127`).
+- `close`: from then on, a request that `allowed` names passes uncounted; any other is refused
+  503 `handover.stepping_down` (a code of its own, so no refusal blames the time zone or the read
+  path). `self` — the request that closes the gate — is uncounted at once, so the stepdown never
+  waits on itself.
+- `settled(limitMs)`: resolves when the count reaches zero, or at the limit with the method and
+  path of each request still inside.
+- The trading admission and the singleton role are not touched (decision 2).
+
+The allowed list for a stepdown, used by Task 2.4: `GET /health`, `GET /api/node`,
+`POST /api/node/peer-status` (Slice 3), `GET /api/node/handover/:operationId` (Slice 5).
+
+- [ ] **Step 1: Write the failing tests** (a Hono app with stand-in routes): "counts a request
+  while it runs and not after"; "an event stream is not counted"; "after close, a new request is
+  refused 503 `handover.stepping_down` and an allowed one passes"; "a request inside before close
+  still completes after it"; "the closing request is not waited for"; "settled resolves at zero";
+  "settled at the limit names each request still inside" (fake timers).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-gate.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it — PASS; then `pnpm --filter @waitron/server exec vitest run src/boot.test.ts` (the gate is mounted and open on every normal start).
+- [ ] **Step 5: Commit** `git commit -s -m "server: a gate that closes the door to new requests and counts the ones already inside"`.
+
+#### Task 2.4: The stepdown, in order
+
+**Files:** Create `apps/server/src/handover-stepdown.ts`; modify `boot.ts` (add
+`quiesceOutsideWork` to the full start's teardown beside `stopWork`, `:3400-3437`, and make the
+later close skip each stop it already made; wire `stepDown` with the gate and the restart used
+after promotion, `:3079-3092`). Test `apps/server/src/handover-stepdown.test.ts`.
 
 **Interfaces — Consumes:** `beginHandover`, `advanceHandover` (Task 1.5),
-`recordHandoverRestrictionTx` (Task 1.4). **Produces:**
-`stepDown(deps: StepDownDeps, binding: HandoverBinding): Promise<{ restarting: true }>`:
-1. in ONE node transaction: the operation row at `source_stepped_down` and the restriction
-   (`kind: "handed-over"`, successor = destination) — before anything is acknowledged;
-2. `tradingAdmission.requireRestart()` (`apps/server/src/trading-admission.ts:19-21`), so economic
-   writes refuse at once;
-3. wait until the in-flight request count is zero, at most `HANDOVER_ADMITTED_WORK_LIMIT_MS`
-   (decision 2), logging `handover.admitted_work_cut` with each remaining route;
-4. the existing graceful close, then SIGTERM, as promotion does.
-`HANDOVER_ADMITTED_WORK_LIMIT_MS = 180_000`.
+`recordHandoverRestrictionTx` (Task 1.4), `HandoverGate` (Task 2.3). **Produces:**
+`stepDown(deps: StepDownDeps, request: { binding: HandoverBinding; kind: "handed-over" | "superseded"; self: Context }): Promise<{ restarting: true }>`:
+1. in ONE node transaction: the operation row at `source_stepped_down` (for `handed-over`) and the
+   restriction (successor = destination) — before anything is acknowledged;
+2. `gate.close({ allowed: STEPDOWN_ALLOWED, self })` — new requests refused `handover.stepping_down`;
+3. `quiesceOutsideWork()`, which aborts and awaits, at once, every duty that files, reaches an
+   outside service or writes in the background: the drain loop (`controller`, the loop that runs
+   `singletonPass`), the card sweep (`pendingCardController`), tender-refund recovery
+   (`tenderRefundController`), the Cloud worker and snapshots (`cloudController`), invoice emails
+   (`invoiceEmailController`), the clock watch (`clockWatch.stop()`), certificate diagnosis and
+   reminders, the tunnel (`tunnelController`), backups (`backupSupervisor.stop()`) and Litestream
+   (`streamHost.stop()`); a pass already in flight finishes (decision 3);
+4. `gate.settled(HANDOVER_ADMITTED_WORK_LIMIT_MS)`, logging `handover.admitted_work_cut` with the
+   method and path of each request still inside;
+5. the existing graceful close (which no longer repeats step 3's stops), then SIGTERM, as
+   promotion does.
+`HANDOVER_ADMITTED_WORK_LIMIT_MS = 180_000`. `stepDown` never calls `tradingAdmission.requireRestart()`
+and never writes `holders.singletonRole` (decision 2).
 
-- [ ] **Step 1: Write the failing tests.** "the restriction is on disk before the call returns or
-  restarts" (read it from a second store handle inside the restart seam); "a sale request admitted
-  before the stepdown finishes and commits" (a stand-in handler that waits 2 s); "a sale request
-  arriving after step 2 is refused" with the trading admission's code; "a request still running
-  at the limit is cut and logged by route, and the stepdown proceeds" (fake timers); "a second
-  call for the same binding answers `replayed` and does not restart twice".
+- [ ] **Step 1: Write the failing tests** (seams for each duty's stop, counting calls): "the
+  restriction is on disk before the call returns or restarts" (read it from a second store handle
+  inside the restart seam); "every duty in step 3 is stopped before the request wait begins, and
+  each stop runs exactly once across the stepdown and the close"; "the trading admission still
+  reads `ready` during the wait"; "a request still running at the limit is cut and logged by
+  route, and the stepdown proceeds" (fake timers); "a second call for the same binding answers
+  `replayed` and does not restart twice".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-stepdown.test.ts` — FAIL.
 - [ ] **Step 3: Implement.** One-line comment at step 1: the restriction is written before the
   answer, so a lost answer leaves the box stepped down (design §2).
 - [ ] **Step 4: Run** it — PASS.
-- [ ] **Step 5: Commit** `git commit -s -m "server: a stepdown records itself first, lets admitted work finish, then restarts restricted"`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a stepdown records itself, closes the door, stops outside work, lets admitted work finish, then restarts"`.
 
-#### Task 2.4: Power lost at any point of a stepdown
+#### Task 2.5: A card sale in flight survives a stepdown, and nothing new reaches outside
 
-**Files:** Test `apps/server/src/handover-stepdown.crash.test.ts` (Review Focus 1).
+**Files:** Test `apps/server/src/handover-stepdown.real.test.ts` (Review Focus 1).
+
+- [ ] **Step 1: Write the test.** A real `startServer` with a stand-in AEAT that counts requests,
+  a real drain loop, and a card provider whose capture the test holds open — the simulator
+  provider (`apps/server/src/boot.ts:500`, `packages/payments/src/simulator.ts`) or a stand-in
+  passed through `StartServerSeams`, whichever lets the test hold the capture; the test's first
+  comment names which. Start a card sale on the real till route; while the capture is held, call
+  the stepdown; release the capture. Assert: the sale's second transaction commits (a `sales` row
+  exists for the order, and the response is not `venue.time_zone_not_ready`); a new till request
+  made after the stepdown began is refused `handover.stepping_down`; the stand-in AEAT records no
+  request after the restriction's `recorded_at`; the card-sweep stand-in is not called after it.
+  **Control:** replace the gate's close with `tradingAdmission.requireRestart()` (locally, not
+  committed) and the first assertion fails with `venue.time_zone_not_ready` — write that expected
+  failing line in the test's comment before running it.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-stepdown.real.test.ts` — PASS (it pins Tasks 2.3–2.4); the control fails as written.
+- [ ] **Step 3: Commit** `git commit -s -m "server: a card sale admitted before a stepdown keeps its sale, and nothing new reaches AEAT or the provider"`.
+
+#### Task 2.6: Power lost at any point of a stepdown
+
+**Files:** Test `apps/server/src/handover-stepdown.crash.test.ts` (Review Focus 2).
 
 - [ ] **Step 1: Write the tests.** For each crash point — after the node transaction, during the
-  admitted-work wait, during close — stop the process's store without the graceful close, then
-  `startServer` on the same folder: "comes back restricted, `acceptingSales: false`, no AEAT
-  request" (stand-in counts zero); "the operation reads `source_stepped_down`". Control: a crash
-  before the node transaction comes back as a normal primary (the failing case prints
-  `acceptingSales: true` for the first three).
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-stepdown.crash.test.ts` — PASS (it pins Tasks 2.1–2.3); if a case passes for the wrong reason, the control shows it.
+  quiesce, during the admitted-work wait, during close — stop the process's store without the
+  graceful close, then `startServer` on the same folder: "comes back restricted,
+  `acceptingSales: false`, no AEAT request" (stand-in counts zero); "the operation reads
+  `source_stepped_down`". Control: a crash before the node transaction comes back as a normal
+  primary (the failing case prints `acceptingSales: true` for the first four).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-stepdown.crash.test.ts` — PASS (it pins Tasks 2.1–2.4); if a case passes for the wrong reason, the control shows it.
 - [ ] **Step 3: Commit** `git commit -s -m "server: a stepdown interrupted at any point comes back restricted"`.
 
-#### Task 2.5: The restricted box's own page, and its guide
+#### Task 2.7: The restricted box's own page, and its guide
 
 **Files:** Create `apps/server/src/restricted-page.ts` (server-rendered, English and Spanish, in
 the recovery page's style, `apps/server/src/recovery-surface.ts:123-133`); create
@@ -846,9 +1108,9 @@ Test `apps/server/src/restricted-page.test.ts`.
 
 Words (English; Spanish in the same file): title "This box has handed over", body "It takes no
 sales and sends nothing to the tax agency. The venue now runs on {successor}." plus the operation's
-progress, one line per recorded step, and a line "If this box comes back after an emergency, it
-sends its invoices to {successor} by itself." No action button: nothing here needs a person
-(a state this box is meant to be in; CLAUDE.md §3).
+progress, one line per recorded step, and a line "It sends its invoice records to {successor} by
+itself, then becomes the spare." No action button: nothing here needs a person (a state this box
+is meant to be in; CLAUDE.md §3).
 
 - [ ] **Step 1: Write the failing tests.** "shows the successor and each recorded step, in English
   and in Spanish"; "escapes the successor's name"; "carries no form". Then
@@ -861,7 +1123,7 @@ sends its invoices to {successor} by itself." No action button: nothing here nee
 - [ ] **Step 4: Run** them — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a stepped-down box says what it is and where the venue went, in English and Spanish"`.
 
-#### Task 2.6: Final checks for Slice 2
+#### Task 2.8: Final checks for Slice 2
 
 - [ ] Run the slice's focused suites, `pnpm format:check`, `pnpm --filter @waitron/server typecheck`,
   `pnpm --filter @waitron/node-db typecheck`, the fiscal golden and immutability suites with the
@@ -873,13 +1135,14 @@ sends its invoices to {successor} by itself." No action button: nothing here nee
 ### Slice 3 — A returning box asks before it sells or files
 
 **FISCAL** (A947 5a's place: it decides, before the first filing pass, whether this box may
-file). The owner lands it. It changes A947's Ruling C7 for any box whose chart lists another
-routable box: an unreachable peer means wait, not proceed (design §4, point 1).
+file). The owner lands it. It changes A947's Ruling C7 for any box whose chart lists another box
+that finished joining: an unreachable peer means wait, not proceed (design §4, point 1). Until
+A947 3b no such box exists (fact 3), so on today's boxes every start proceeds as it does now.
 
 #### Task 3.1: The signed peer query
 
 **Files:** Create `apps/server/src/peer-status-api.ts`; mount it in the full start, the restricted
-start, the pending-adoption start (`boot.ts:1540-1579`) and the waiting start (Task 3.4). Test
+start, the pending-adoption start (`boot.ts:1540-1579`) and the waiting start (Task 3.5). Test
 `apps/server/src/peer-status-api.test.ts`.
 
 **Interfaces — Produces:** `POST /api/node/peer-status`, body a `query` envelope
@@ -893,11 +1156,44 @@ Refusals: `handover.peer_unknown` (403) when the signer is not a key `peerKeyOf`
   "the answer verifies with this box's key and fails with any other"; "the restricted and the
   pending-adoption starts answer it too".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/peer-status-api.test.ts` — FAIL.
-- [ ] **Step 3: Implement.** The chart is not served to unsigned callers (decision 3).
+- [ ] **Step 3: Implement.** The chart is not served to unsigned callers (decision 4).
 - [ ] **Step 4: Run** it — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: boxes ask each other for the current chart with a signed query"`.
 
-#### Task 3.2: A newer chart handed to a box
+#### Task 3.2: Which write routes a mirror or fenced box lets through, and how each authenticates
+
+**Files:** Create `apps/server/src/read-only-exemptions.ts` (the list as data, and the predicate);
+modify `boot.ts:1707-1715` to use it. Test `apps/server/src/read-only-exemptions.test.ts`.
+
+The read-only gate refuses every write verb on a mirror or fenced box (`read-only-gate.ts:32-37`),
+and "each exempt route authenticates itself" (`:26`). Exempting a POST is a security decision, so
+the full list lives in one file, each with how it authenticates, and later slices add their rows
+there:
+
+| Route | Box | How it authenticates | Added by |
+| --- | --- | --- | --- |
+| `POST /api/box/retire` | fenced | existing (`boot.ts:1709`) | today |
+| `POST /management-api/promote`, `/management-api/promote/preparation` | mirror, fenced | existing | today |
+| `POST /api/node/peer-status` | mirror, fenced | a `query` envelope signed by a key the held chart vouches for and does not evict; answers only signed status | Slice 3 |
+| `POST /api/node/membership` | mirror, fenced | none needed from the caller: the body is a signed chart, accepted only through `acceptMembershipDocument` against the stored trust set; the answer is one boolean | Slice 3 |
+| `POST /api/node/handover/offer` | mirror | a `stepdown` envelope signed by the binding's source with a key the chart vouches for, the binding's chart term and digest equal to M2's | Slice 5 |
+| `POST /api/node/handover/:operationId/activate` | mirror | email, password and code when enrolled, against the placed copy; `node.promote`; the operation's recorded state | Slice 5 |
+| `POST /api/node/handover/emergency/declare` | mirror | email, password and code when enrolled; `node.promote` | Slice 7 |
+
+GET routes need no exemption. M2's return routes run after activation, when M2 is no longer a
+mirror; M1's run on the restricted start, which mounts no read-only gate.
+
+- [ ] **Step 1: Write the failing tests.** "the exempt set is exactly this list" (so a new
+  exemption is a deliberate edit); per row, on a real mirror start, "the route is reached and
+  refuses an unauthenticated call with its own code, not `node.read_only`"; control: "an
+  unlisted write route on the same mirror answers 403 `node.read_only`". Rows for Slices 5 and 7
+  are added by those slices.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/read-only-exemptions.test.ts` — FAIL.
+- [ ] **Step 3: Implement.** Move today's three exemptions into the list unchanged.
+- [ ] **Step 4: Run** it — PASS; then `pnpm --filter @waitron/server exec vitest run src/boot.mirror.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: one list of the write routes a read-only box lets through, each with how it authenticates"`.
+
+#### Task 3.3: A newer chart handed to a box
 
 **Files:** Create `apps/server/src/node-membership-api.ts` (`POST /api/node/membership`, body
 `{ document }`); mounted in all four starts. Test `apps/server/src/node-membership-api.test.ts`.
@@ -905,56 +1201,67 @@ Refusals: `handover.peer_unknown` (403) when the signer is not a key `peerKeyOf`
 **Interfaces — Produces:** the route verifies with `acceptMembershipDocument` against the stored
 trust set and the held chart (as boot does, `boot.ts:1616-1619`), persists it when strictly newer
 (`persistNodeMembershipIfNewer`), and — when it fences this box (`isFencedStanding`,
-`packages/membership/src/fence.ts:20-24`) and this box is not already restricted — writes
-`node_handover_restriction` `{ kind: "superseded", successorNodeId: servingPrimaryNodeId(doc) }`
-and restarts. Answers `{ accepted: boolean }`; a refused chart is 200 `{ accepted: false }` (the
-caller learns nothing it did not send).
+`packages/membership/src/fence.ts:20-24`) and this box is not already restricted — on the full
+start runs `stepDown` with `kind: "superseded"` and `successorNodeId: servingPrimaryNodeId(doc)`
+(Task 2.4: the same gate, quiesce and bounded wait, design §4 point 2), and on the waiting start
+writes the restriction and restarts. Answers `{ accepted: boolean }`; a refused chart is 200
+`{ accepted: false }` (the caller learns nothing it did not send).
 
-- [ ] **Step 1: Write the failing tests.** "a newer chart that fences this box restricts it and
-  restarts" (restart seam called once; restriction row present); "a newer chart that does not
-  fence it is held, and the box keeps selling"; "an older or equal chart changes nothing"; "a chart
-  signed by an unknown key changes nothing"; "a restricted box stays restricted when handed an
-  older chart".
+- [ ] **Step 1: Write the failing tests.** "a newer chart that fences a selling box closes its
+  gate, stops its outside work, restricts it and restarts" (the stepdown seam called once with
+  `superseded`); "a newer chart that does not fence it is held, and the box keeps selling"; "an
+  older or equal chart changes nothing"; "a chart signed by an unknown key changes nothing"; "a
+  restricted box stays restricted when handed an older chart"; "on a mirror the route is reached
+  through the read-only gate" (Task 3.2's row).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/node-membership-api.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS.
-- [ ] **Step 5: Commit** `git commit -s -m "server: a box handed a newer chart that fences it stops before it sells again"`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a box handed a newer chart that fences it steps down before it sells again"`.
 
-#### Task 3.3: The check at start
+#### Task 3.4: The check at start
 
 **Files:** Create `apps/server/src/boot-peer-check.ts`; modify `boot.ts` (call it after
 `finishPromotedRole` and the restriction read, before the held-membership read at `:1627`; the
-existing `reconcileMembershipOnBoot` call stays for a box with a `node_mirror_link` and no other
-peer). Test `apps/server/src/boot-peer-check.test.ts`.
+existing `reconcileMembershipOnBoot` call stays for a box with a `node_mirror_link` and no counted
+peer). Test `apps/server/src/boot-peer-check.test.ts` (Review Focus 3 and 7).
 
 **Interfaces — Produces:**
-`checkPeersAtStart(deps: { held: SignedMembershipDocument | null; nodeId: string; ownOrigin: string; ask: (peer: RoutableServer) => Promise<PeerStatus | null>; accept: (doc) => Promise<AcceptResult>; restricted: boolean; openOperation: boolean; timeoutMs: number }): Promise<"proceed" | "superseded" | "wait">`:
-- no other box with a routable standing in the held chart → `proceed`;
-- a peer's answer carries a newer chart that fences this box, or a restriction or operation naming
-  this box as source → `superseded` (the caller writes the restriction and starts restricted);
-- at least one peer answers with nothing newer → `proceed`;
-- no peer answers within `timeoutMs` (default 5 s each), or every listed peer's address equals
-  `ownOrigin` or is empty (unaddressable, A947 §2) → `wait`.
-`restricted` or `openOperation` true never returns `proceed`.
+`checkPeersAtStart(deps: { held: SignedMembershipDocument | null; nodeId: string; ownOrigin: string; joined: (nodeId: string) => Promise<boolean>; ask: (peer: RoutableServer) => Promise<PeerStatus | null>; accept: (doc) => Promise<AcceptResult>; openOperation: boolean; timeoutMs: number }): Promise<"proceed" | "superseded" | "wait">`.
+`joined` reads whether this box's `venue.db` holds a `nodes` row with that id (decision 5).
+- **Counted peers** are the other boxes with a routable standing in the held chart for which
+  `joined` is true. No counted peer → `proceed`.
+- a counted peer's answer carries a newer chart that fences this box, or a restriction or
+  operation naming this box as source → `superseded` (the caller writes the restriction and starts
+  restricted);
+- at least one counted peer answers with nothing newer → `proceed`;
+- no counted peer answers within `timeoutMs` (default 5 s each), or every counted peer's address
+  equals `ownOrigin` or is empty → `wait`.
+`openOperation` true never returns `proceed`.
 
-- [ ] **Step 1: Write the failing tests** (pure, stand-in `ask`): one per rule above; "a peer that
-  answers with a chart signed by an unknown key counts as no answer"; "a stale chart from a till
-  does not clear a wait" (only a peer answer or a person does, design §4); "a box with no `node.db`
-  row but a chart that lists a spare waits" (Review Focus 5; backlog A1274).
+- [ ] **Step 1: Write the failing tests** (pure, stand-in `ask` and `joined`): one per rule above;
+  **"a main box whose chart lists a pending spare at the same address, with no `nodes` row for
+  it, proceeds and asks nobody"** (the review's regression case: today's adoption puts that spare
+  in the chart, `mirror-bundle-api.ts:207`); control for it: "the same chart with a `nodes` row
+  for the spare and no answer waits"; "a peer that answers with a chart signed by an unknown key
+  counts as no answer"; "a stale chart from a till does not clear a wait" (only a peer answer or a
+  person does, design §4); "a box with no `node.db` row but a chart that lists a joined spare
+  waits" (backlog A1274).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/boot-peer-check.test.ts` — FAIL.
 - [ ] **Step 3: Implement**, and wire it in `boot.ts`; `superseded` writes the restriction and
-  takes the restricted start (Task 2.1); `wait` takes the waiting start (Task 3.4).
-- [ ] **Step 4: Run** it — PASS; then the boot suites in Task 3.6's list.
-- [ ] **Step 5: Commit** `git commit -s -m "server: a box whose chart lists another box asks it before selling or filing"`.
+  takes the restricted start (Task 2.1); `wait` takes the waiting start (Task 3.5). Add a boot
+  test in the same file on a real `startServer`: a seeded main box whose chart lists an adopted,
+  unfinished spare starts selling (`acceptingSales: true`).
+- [ ] **Step 4: Run** it — PASS; then `pnpm --filter @waitron/server exec vitest run src/boot.test.ts src/boot.reconcile.test.ts src/boot.mirror.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a box whose chart lists a joined box asks it before selling or filing"`.
 
-#### Task 3.4: The waiting start and "Carry on as the main box"
+#### Task 3.5: The waiting start and "Carry on as the main box"
 
 **Files:** Create `apps/server/src/waiting-start.ts`, `apps/server/src/waiting-page.ts`
 (server-rendered, English and Spanish); modify `boot.ts`. Test `apps/server/src/waiting-start.test.ts`.
 
-The waiting start serves `/health`, `GET /api/node` (`acceptingSales: false`), the peer routes
-(Tasks 3.1–3.2), and its page; it asks the peers again every 15 seconds and restarts when the
-answer is `proceed` or `superseded`.
+The waiting start serves `/health`, `GET /api/node` (`acceptingSales: false`, with `nodeId` and
+`term`), the peer routes (Tasks 3.1, 3.3), and its page; it asks the peers again every 15 seconds
+and restarts when the answer is `proceed` or `superseded`.
 
 The page: title "This box is waiting for {other box}", body "It will not take sales or send
 anything to the tax agency until it knows whether {other box} has taken over. It checks again
@@ -964,85 +1271,101 @@ every 15 seconds." and one form, **Carry on as the main box**: email, password, 
 required. Pressing it signs the person in by email (`password.invalid` for every credential
 failure), requires `node.promote`, records a `node_handover_events` row
 `{ kind: "carried_on_without_peer", detail: { personId, peerNodeIds, chartTerm } }`, and restarts
-into a normal start **for this start only** (the decision is not consulted again). Refusal when
-this box holds a restriction or an open operation: `handover.known_handover` — "This box has
-already handed over to {successor}. It cannot carry on as the main box." with no choice but the
-status page link (design §4: it cannot undo a known handover).
+into a normal start **for this start only** (decision 10). Refusal when this box holds a
+restriction or an open operation: `handover.known_handover` — "This box has already handed over
+to {successor}. It cannot carry on as the main box." with no choice but the status page link
+(design §4: it cannot undo a known handover).
 
-- [ ] **Step 1: Write the failing tests.** "waits, answering `acceptingSales: false`"; "restarts
-  when a peer answers"; "carry on with a correct sign-in and both statements restarts normally
-  and records the decision"; "a person without `node.promote` is refused with the role sentence";
-  "a wrong password answers `password.invalid`"; "either statement unticked keeps the action
-  disabled"; "a box with a restriction refuses `handover.known_handover`"; "the next start asks
-  the peers again".
+- [ ] **Step 1: Write the failing tests.** "waits, answering `acceptingSales: false` with its
+  term"; "restarts when a peer answers"; "carry on with a correct sign-in and both statements
+  restarts normally and records the decision"; "a person without `node.promote` is refused with
+  the role sentence"; "a wrong password answers `password.invalid`"; "either statement unticked
+  keeps the action disabled"; "a box with a restriction refuses `handover.known_handover`"; "the
+  next start asks the peers again".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/waiting-start.test.ts` — FAIL.
 - [ ] **Step 3: Implement.** Render the page to a file and open it in Chromium, both themes, 390 px.
 - [ ] **Step 4: Run** it — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a box that cannot reach its peer waits, and a person may carry on only by naming it"`.
 
-#### Task 3.5: A till hands its newer chart to a box it reaches
+#### Task 3.6: A till hands its newer chart to a box it reaches
 
 **Files:** Modify `apps/server/src/till-api.ts` (`GET /api/till`, `:1525`, adds `membership`: the
 held signed chart); `apps/till/src/api/server-router.ts` (keep the newest chart it has been given;
-when a probe of a server answers a `term` lower than the held chart's, POST the chart to that
-server's `/api/node/membership` once per server and term). Tests
-`apps/till/src/api/server-router.test.ts`, `apps/server/src/till-api.test.ts`.
+when a probe of a server answers a `term` lower than the held chart's, **or answers no `term` at
+all**, POST the chart to that server's `/api/node/membership` once per server and held term).
+Tests `apps/till/src/api/server-router.test.ts`, `apps/server/src/till-api.test.ts`.
+
+Why the missing term counts: `GET /api/node` answers only `{ acceptingSales: false }` when the
+trading admission is not ready (`apps/server/src/node-api.ts:45-47`), so a box in that state gives
+the till no term to compare.
 
 - [ ] **Step 1: Write the failing tests.** Router: "posts the held chart to a server answering a
-  lower term, once"; "posts nothing to a server at the same or a higher term"; "keeps the newest of
-  two charts it was given". Server: "the start read carries the held chart". Control for the
-  router: with the POST removed, the first case fails with zero calls.
+  lower term, once"; "posts it to a server answering no term, once"; "posts nothing to a server at
+  the same or a higher term"; "keeps the newest of two charts it was given". Server: "the start
+  read carries the held chart". Control for the router: with the POST removed, the first case
+  fails with zero calls.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/api/server-router.test.ts` and `pnpm --filter @waitron/server exec vitest run src/till-api.test.ts -t "membership"` — FAIL.
 - [ ] **Step 3: Implement.** The till never changes its own routing because of this post.
 - [ ] **Step 4: Run** them — PASS.
-- [ ] **Step 5: Commit** `git commit -s -m "till: hand a newer chart to a box that still holds an older one"`.
+- [ ] **Step 5: Commit** `git commit -s -m "till: hand a newer chart to a box that holds an older one or does not say"`.
 
-#### Task 3.6: Suites that start a box with peers, and the guide
+#### Task 3.7: Suites that start a box with a joined peer — first half
 
-**Files:** The suites printed by `git grep -ln 'serving-secondary\|mirrorEnv' apps/server/src/*.test.ts`
-(18 files on `61bfdfe405`) that start a non-mirror box whose chart lists another routable box:
-each either starts the peer first, or passes the test seam `peerCheck: () => "proceed"` the task
-adds to `StartServerSeams` (`boot.ts:851`) with a comment naming why. Guide: section
+**Files:** The suites printed by `git grep -ln 'serving-secondary\|mirrorEnv' -- 'apps/server/src/*.test.ts'`
+(19 files on `61bfdfe405`), first ten in that command's order. Each one that starts a non-mirror box
+whose chart lists another box **with a `nodes` row** either starts the peer first, or passes the
+test seam `peerCheck: () => "proceed"` the task adds to `StartServerSeams` (`boot.ts:851`) with a
+comment naming why. Most will need nothing, because only a seeded `nodes` row makes a peer count.
+
+- [ ] **Step 1:** Run those ten files directly (`pnpm --filter @waitron/server exec vitest run <files>`),
+  not the package's whole coverage run; fix each that now waits, never by loosening the check.
+  Record each in the PR's "Changed test checks" table: file, test, what changed, why.
+- [ ] **Step 2:** Run them — PASS.
+- [ ] **Step 3: Commit** `git commit -s -m "server: suites with joined peers start the peer or say why they skip the start check (1 of 2)"`.
+
+#### Task 3.8: Suites that start a box with a joined peer — second half, and the guide
+
+**Files:** The remaining nine files from Task 3.7's command; guide section
 `{#waiting-for-the-other-box}` in both `servers.md` files.
 
-- [ ] **Step 1:** Run `pnpm --filter @waitron/server test:coverage` once to list the suites that now
-  wait (they time out); fix each as above, never by loosening the check. Record each in the PR's
-  "Changed test checks" table: file, test, what changed, why.
-- [ ] **Step 2:** Run the listed suites — PASS; then `src/guide-content.test.ts` and, from the root,
+- [ ] **Step 1:** As Task 3.7 for these nine.
+- [ ] **Step 2:** Run them — PASS; then `src/guide-content.test.ts` and, from the root,
   `scripts/guide-links.test.ts`.
-- [ ] **Step 3: Commit** `git commit -s -m "server: suites with two boxes start the peer or say why they skip the start check"`.
+- [ ] **Step 3: Commit** `git commit -s -m "server: suites with joined peers (2 of 2), and the guide for a waiting box"`.
 
-#### Task 3.7: Final checks for Slice 3
+#### Task 3.9: Final checks for Slice 3
 
-- [ ] As Task 2.6, plus `pnpm --filter @waitron/till typecheck` and
-  `pnpm --filter @waitron/till exec vitest run src/api`. PR first line: FISCAL, and "changes
-  Ruling C7 for a box with a peer".
+- [ ] As Task 2.8, plus `pnpm --filter @waitron/till typecheck` and
+  `pnpm --filter @waitron/till exec vitest run src/api`. CI runs the server package's full
+  coverage. PR first line: FISCAL, and "changes Ruling C7 for a box with a joined peer; no box
+  has one before A947 3b".
 
 ---
 
 ### Slice 4 — The final copy and its indicator
 
 **FISCAL** (new read-only code in `packages/fiscal-verifactu`). The owner lands it. Everything
-here runs only in the restricted start.
+here runs only in the restricted start or on a copy.
 
-#### Task 4.1: The module seat for handover summaries
+#### Task 4.1: The module seat for handover summaries and checks
 
 **Files:** Modify `packages/module/src/module.ts` (`WaitronModule.handover?: ModuleHandoverContribution`,
 beside `fiscal`, `:1686`); create `packages/module/src/handover.ts`. Test
 `packages/module/src/handover.test.ts`.
 
 **Interfaces — Produces:**
-`interface ModuleHandoverContribution { summarise(tx: Transaction): Promise<CanonicalValue> }`;
+`interface ModuleHandoverContribution { summarise(tx: Transaction): Promise<CanonicalValue>; checkCopy?(query: BackupQuery): Promise<"ok" | "broken"> }`;
 `collectHandoverSummaries(modules: readonly WaitronModule[], tx: Transaction): Promise<Record<string, CanonicalValue>>`
-(keyed by module name, enabled modules only, in name order).
+(keyed by module name, enabled modules only, in name order);
+`checkHandoverCopy(modules, query): Promise<{ ok: true } | { ok: false; module: string }>`.
 
 - [ ] **Step 1: Write the failing tests.** "collects each enabled module's summary under its
   name"; "skips a module without the seat"; "a module that throws fails the whole collection with
-  `handover.summary_failed` naming it".
+  `handover.summary_failed` naming it"; "a copy check that answers `broken` names its module".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/module exec vitest run src/handover.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS; then `pnpm --filter @waitron/composition exec vitest run src/composition.test.ts` and, from the root, `scripts/module-seams.test.ts`.
-- [ ] **Step 5: Commit** `git commit -s -m "module: a seat for what each module must vouch for in a handover"`.
+- [ ] **Step 5: Commit** `git commit -s -m "module: a seat for what each module must vouch for, and check, in a handover"`.
 
 #### Task 4.2: The Veri*Factu chain summary
 
@@ -1064,42 +1387,91 @@ Read-only: `select` statements only; no `readChainHead` (it inserts, `chain.ts:1
 - [ ] **Step 4: Run** it — PASS; then `src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "fiscal-verifactu: summarise each chain for a handover, reading only"`.
 
-#### Task 4.3: The payments summary
+#### Task 4.3: The Veri*Factu whole-chain check of a copy
+
+**Files:** Create `packages/fiscal-verifactu/src/handover-chain-check.ts`; modify
+`backup-verification-chain.ts` only to export its `walk` (`:52`) under a plain name, with
+`verifyBackupFiscalChains` unchanged; register `checkCopy` on the module's descriptor. Test
+`packages/fiscal-verifactu/src/handover-chain-check.test.ts`.
+
+Why this and not `verifyChain`: `verifyChain` reads only the last two records of one node and can
+insert a chain head (`verify.ts:41-60`, `chain.ts:112-130`); `walk` reads every record of every
+chain through a read-only `BackupQuery`, recomputing each huella with `verifyHuella` and checking
+each link (`backup-verification-chain.ts:13-153`), which is design §4's "check integrity and
+fiscal chains".
+
+**Interfaces — Produces:** `checkFiscalChains(query: BackupQuery): Promise<"ok" | "broken">`.
+
+- [ ] **Step 1: Write the failing tests.** "an intact copy of two chains is `ok`"; "one record's
+  `importe_total` changed in the copy is `broken`" (control in the other direction: the unchanged
+  copy is `ok`); "one record removed from the middle of a chain is `broken`"; "reads only" (the
+  copy's digest before and after are equal); `backup-verification-chain.test.ts` passes unedited.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/handover-chain-check.test.ts src/backup-verification-chain.test.ts` — FAIL (the first).
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS; then the golden and immutability suites.
+- [ ] **Step 5: Commit** `git commit -s -m "fiscal-verifactu: check every record of every chain in a copy, reading only"`.
+
+#### Task 4.4: The payments summary
 
 **Files:** Create `packages/payments/src/handover-summary.ts`; register it on the payments
 module's descriptor (`packages/composition/src/modules.ts:262`). Test
 `packages/payments/src/handover-summary.test.ts`.
 
-**Interfaces — Produces:** `summariseUncertainPayments(tx): Promise<{ paymentId: string; provider: string; reference: string | null; state: "attempting" }[]>`, ordered by id.
+**Interfaces — Produces:** `summariseOpenPayments(tx): Promise<{ payments: { paymentId: string; provider: string; reference: string | null; state: "attempting" | "initiated" | "accepted_offline" }[]; refunds: { refundId: string; provider: string | null; providerPaymentRef: string | null }[] }>`,
+each ordered by id. `refunds` are `tender_refunds` rows in state `pending`
+(`packages/db/src/schema/tender-refunds.ts:23,88-98`).
 
-- [ ] **Step 1: Write the failing tests.** "lists every payment in `attempting` with its provider
-  reference"; "lists no other state"; "writes nothing".
+- [ ] **Step 1: Write the failing tests.** "lists every payment in `attempting`, `initiated` and
+  `accepted_offline` with its provider reference"; "lists no payment in another state"; "lists
+  every pending card refund and no completed or failed one"; "writes nothing".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/payments exec vitest run src/handover-summary.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS.
-- [ ] **Step 5: Commit** `git commit -s -m "payments: list the payments whose outcome is still unknown, for a handover"`.
+- [ ] **Step 5: Commit** `git commit -s -m "payments: list every payment and refund whose outcome is still open, for a handover"`.
 
-#### Task 4.4: The node-local manifest
+#### Task 4.5: The node-local manifest, as data
 
 **Files:** Create `packages/handover/src/manifest.ts` (the table under "The node-local manifest"
-as data) and `apps/server/src/handover-manifest.ts` (fills in the digests). Tests
-`packages/handover/src/manifest.test.ts`, `apps/server/src/handover-manifest.test.ts`.
+as data). Test `packages/handover/src/manifest.test.ts`, and a root guard
+`scripts/handover-manifest-complete.test.ts` (it reads every module's classification, so it
+belongs in the root project, CLAUDE.md §4).
 
-**Interfaces — Produces:** `NODE_LOCAL_MANIFEST: readonly { item: string; class: "transferred" | "source-only" | "destination-owned" | "rebuildable"; treatment: string }[]`;
-`buildNodeLocalManifest(stateDir: string, ring: KeyRing): Promise<NodeLocalItem[]>`, where
-`NodeLocalItem` adds `sha256` for `backup.env` and `modules.json` (absent file: `null`) and
+**Interfaces — Produces:** `NODE_LOCAL_MANIFEST: readonly { item: string; where: "node.db" | "venue.db" | "state"; class: "transferred" | "source-only" | "destination-owned" | "rebuildable"; treatment: string }[]`.
+
+- [ ] **Step 1: Write the failing tests.** Root guard: "every table classified `local` in any
+  migration set the composition lists, and every `node.db` table in `NODE_CLASSIFICATION`, appears
+  in the manifest" (so a new `local` table cannot be forgotten); "every name in `RECOVERY_FILES`
+  and `OPTIONAL_BACKUP_STATE` appears"; "every module's `backup.nonDbState` source appears"
+  (`apps/server/src/backup-sources.ts:50-62`; today only `FISCAL_HOUR_BACKUP_STATE`,
+  `packages/composition/src/modules.ts:327`). Package: "no item is listed twice". Then a probe
+  test in `apps/server/src/handover-minute-history.test.ts`: on a seeded copy of a box that used
+  two minute names, a mirror seeded from it and activated takes a name later than both **without**
+  the source's `module-preparation-state.json`; its result decides the manifest's row for that
+  file, as the manifest table says.
+- [ ] **Step 2: Run** `pnpm exec vitest run scripts/handover-manifest-complete.test.ts`, `pnpm --filter @waitron/handover exec vitest run src/manifest.test.ts` and `pnpm --filter @waitron/server exec vitest run src/handover-minute-history.test.ts` — FAIL.
+- [ ] **Step 3: Implement.** If the probe shows the copy alone is not enough, the manifest row
+  says "transferred, as the retained `module-evidence` file", and Task 5.7 places it as the
+  restore path does; record the probe's result in the PR.
+- [ ] **Step 4: Run** them — PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "handover: name every piece of a box's own state, wherever it lives, and what the new box does with it"`.
+
+#### Task 4.6: The manifest's digests
+
+**Files:** Create `apps/server/src/handover-manifest.ts`. Test `apps/server/src/handover-manifest.test.ts`.
+
+**Interfaces — Produces:** `buildNodeLocalManifest(stateDir: string, ring: KeyRing): Promise<NodeLocalItem[]>`,
+where `NodeLocalItem` adds `sha256` for `backup.env` and `modules.json` (absent file: `null`) and
 `ringVersions: number[]` for `secrets.env`; never a secret's bytes.
 
-- [ ] **Step 1: Write the failing tests.** "every `node.db` table in `NODE_CLASSIFICATION` appears
-  in the manifest" (so a new table cannot be forgotten); "every name in `RECOVERY_FILES` and
-  `OPTIONAL_BACKUP_STATE` appears"; "the manifest carries no secret": no value equals the ring's
-  key bytes; "a missing `backup.env` reads `sha256: null`".
-- [ ] **Step 2: Run** `pnpm --filter @waitron/handover exec vitest run src/manifest.test.ts` and `pnpm --filter @waitron/server exec vitest run src/handover-manifest.test.ts` — FAIL.
+- [ ] **Step 1: Write the failing tests.** "the manifest carries no secret": no value equals the
+  ring's key bytes; "a missing `backup.env` reads `sha256: null`"; "a changed `modules.json`
+  changes its digest".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-manifest.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** them — PASS.
-- [ ] **Step 5: Commit** `git commit -s -m "handover: name every piece of a box's own state and what the new box does with it"`.
+- [ ] **Step 4: Run** it — PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "server: digest the state a box compares in a handover, never a secret"`.
 
-#### Task 4.5: Capture the final copy and sign the indicator
+#### Task 4.7: Capture the final copy and sign the indicator
 
 **Files:** Create `packages/handover/src/indicator.ts` (the type and `assembleIndicator`) and
 `apps/server/src/handover-capture.ts`. Tests `packages/handover/src/indicator.test.ts`,
@@ -1124,7 +1496,7 @@ without capturing again.
 - [ ] **Step 4: Run** them — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a stepped-down box captures its final copy once and signs what it holds"`.
 
-#### Task 4.6: Serve the final copy to the selected box only, and final checks
+#### Task 4.8: Serve the final copy to the selected box only, and final checks
 
 **Files:** Create `apps/server/src/handover-source-api.ts`, registered in the restricted start.
 Test `apps/server/src/handover-source-api.test.ts`.
@@ -1138,29 +1510,173 @@ envelope signed by the binding's destination; any other signer is refused
   the copy's digest matches"; "another listed box is refused"; "an unknown operation is 404".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-source-api.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** it — PASS; then the final checks as Task 2.6, plus the typechecks of
+- [ ] **Step 4: Run** it — PASS; then the final checks as Task 2.8, plus the typechecks of
   `@waitron/module`, `@waitron/fiscal-verifactu`, `@waitron/payments`, `@waitron/handover`. PR first
   line: FISCAL (read-only code in the fiscal package).
 - [ ] **Step 5: Commit** `git commit -s -m "server: only the selected box may fetch the final copy and its indicator"`.
 
 ---
+
+### Slice 4b — Payment collection belongs to one box (A764)
+
+Not fiscal; on the full review path (concurrency, payments). No migration: `payments.node_id`
+already exists (`packages/payments/src/schema/payments.ts:57-58`). It answers the A764 condition
+"Before enabling a second venue node, restrict provider cancellation to its collection owner"
+(`docs/backlog/payments.md:476-479`), which A1018 design §4 makes a build dependency ("A764's
+payment ownership remains a build qualification dependency, including background workers as well
+as till requests"). Lands before Slice 5.
+
+#### Task 4b.1: Every payment row names the box that started it
+
+**Files:** Every writer of `payments` (list them with
+`git grep -n "insert(payments)" -- 'packages/**/*.ts' 'apps/**/*.ts'`, test files aside) sets
+`node_id` to the writing box's node id. Test `packages/payments/src/collection-owner.test.ts`.
+
+- [ ] **Step 1: Write the failing tests.** One case per writer found: "a payment written by this
+  path carries this box's node id". The test file's first comment pastes the grep's output, so a
+  new writer is visible in review.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/payments exec vitest run src/collection-owner.test.ts` — FAIL.
+- [ ] **Step 3: Implement.** Update the column's comment: it is now the collection owner.
+- [ ] **Step 4: Run** it — PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "payments: each payment records the box that started it"`.
+
+#### Task 4b.2: The card sweep acts only on payments its own box owns
+
+**Files:** Modify the in-flight read the sweep uses (`packages/payments/src/store.ts:493` area) and
+`withPendingSweep`'s wiring (`apps/server/src/boot.ts:505-512`) so `resolvePending` sees only
+rows owned by this box: `node_id` equals this box's id, or `node_id` is one of the boxes this box
+has taken over from (an empty set until Slice 5's Task 5.9 supplies it), or `node_id` is null and
+this box is the singleton primary. Test `packages/payments/src/collection-owner.sweep.test.ts`.
+
+- [ ] **Step 1: Write the failing tests.** "a sweep on box B leaves box A's `attempting` payment
+  alone" (the provider stand-in records no call for it); "it sweeps its own"; "a null owner is
+  swept by the primary only"; control: with the filter removed, the first case records a call.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/payments exec vitest run src/collection-owner.sweep.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it — PASS; then `pnpm --filter @waitron/server exec vitest run src/boot-pending-sweep.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "payments: a box resolves only the card payments it owns"`.
+
+#### Task 4b.3: The backlog
+
+**Files:** `docs/backlog/payments.md` (A764's "Collection ownership is process-local …" sentence
+says what now holds and what stays open: coordination between two boxes collecting at the same
+time is not built; one collection owner per payment is).
+
+- [ ] Edit; `git commit -s -m "docs(backlog): A764's collection owner is built; coordination between boxes is not"`.
+
+#### Task 4b.4: Final checks for Slice 4b
+
+- [ ] As Task 2.8, with `pnpm --filter @waitron/payments typecheck`. PR first line: "payments:
+  one collection owner per payment (A764), before a second box".
+
+---
+
+### Slice 5a — The relinquished fact
+
+**FISCAL — LOUD.** The owner lands it. A fresh-context review of these tasks, against A1018
+design §§2 and 6, runs before the first implementer. No migration; pre-live, so no compatibility
+code and development boxes are reset (CLAUDE.md §3).
+
+**Why.** Promotion's approval always records `oldMachineOffline: true`
+(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:91`), and the preparation refuses
+anything else (`:113-114`). That approval is stored in the append-only `fiscal_allocations`
+(`packages/fiscal-verifactu/src/classification.ts:10`; `schema/allocations.ts:26`). In a controlled
+handover M1 is running, restricted, when M2 activates; recording "offline" would write a false
+fact into a record nobody can correct. The approval instead records what happened: M1 signed away
+filing to this box.
+
+#### Task 5a.1: The preparation takes the fact and records it truthfully
+
+**Files:** `packages/fiscal-verifactu/src/hour-recovery-preparation.ts` (`HourRecoveryFacts`,
+`:21-26`, gains `oldMachineRelinquished: boolean`; `checked`, `:113-114`, accepts a promotion when
+`oldMachineOffline` **or** `oldMachineRelinquished` is true, and a recovery only when
+`oldMachineOffline` is; `inputFor`'s approval, `:85-95`, records both facts as given instead of a
+fixed `true`); `allocation-types.ts:15-26` (`RecoveryApproval` gains the field). Test
+`packages/fiscal-verifactu/src/hour-recovery-preparation.relinquished.test.ts`.
+
+- [ ] **Step 1: Write the failing tests.** "a promotion with `oldMachineOffline: false,
+  oldMachineRelinquished: true` is admitted and its stored approval says exactly that"; "a
+  recovery with only `oldMachineRelinquished` is refused `old_machine_active`"; "a promotion with
+  neither is refused `old_machine_active`"; "an emergency promotion records `oldMachineOffline:
+  true, oldMachineRelinquished: false`".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/hour-recovery-preparation.relinquished.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it — PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "fiscal-verifactu: an activation records that the old box relinquished filing, not that it was offline"`.
+
+#### Task 5a.2: Every reader and builder of the approval knows the new field
+
+**Files:** The approval's exact key set is checked in `allocation-envelope.ts:195-210` (and its
+"old machine" rule at `:394`), `backup-verification-history.ts:127-143` (including its
+`!oldMachineAbsent && !oldMachineOffline` refusal at `:142`), `declared-paper-evidence.ts:185-204`
+and `initial-setup.ts:193,234,243`; approvals are built in `hour-throwaway-allocation.ts:67`,
+`throwaway-allocation.ts:89`, `hour-preparation.ts:64` and `conflict-recovery-routes.ts:92,152`
+(all under `packages/fiscal-verifactu/src/`; found with `grep -rn oldMachineOffline` on
+`61bfdfe405`, test files aside). Each reader accepts the field, and accepts "relinquished" where
+it accepts "offline" only for a promotion; each builder sets it `false`. Tests in each file's
+existing suite.
+
+- [ ] **Step 1: Write the failing tests.** Per reader: "an approval without the field is
+  malformed"; "a relinquished promotion's approval passes"; for `backup-verification-history.ts`,
+  "a stored relinquished approval verifies"; per builder, "it writes `oldMachineRelinquished:
+  false`".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run` over those suites — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS; then the golden and immutability suites unedited.
+- [ ] **Step 5: Commit** `git commit -s -m "fiscal-verifactu: every approval reader and builder carries the relinquished fact"`.
+
+#### Task 5a.3: Final checks for Slice 5a
+
+- [ ] As Task 2.8, plus `pnpm --filter @waitron/fiscal-verifactu exec vitest run` and
+  `pnpm --filter @waitron/fiscal-verifactu mutation`. Update CLAUDE.md §5 only if a line there
+  states the approval's facts (grep `oldMachine` and "offline" in CLAUDE.md first). PR first line:
+  "FISCAL — the allocation approval gains a relinquished fact; development boxes are reset".
+
+---
+
 ### Slice 5 — Controlled handover, server
 
 **FISCAL** (it activates a fresh fiscal identity on M2, which then files M1's copied records). The
-owner lands it. Tested as a simulation; reachable on real boxes after A947 3b.
+owner lands it. Adds the `handover` module's `venue.db` migration set. Tested as a simulation;
+reachable on real boxes after A947 3b.
 
-The order, end to end (design §2): the person starts on M1's dashboard (Task 5.2) → M1 offers to
+The order, end to end (design §2): the person starts on M1's dashboard (Task 5.3) → M1 offers to
 M2 (M2 records `prepared`) → M1 steps down and restarts restricted (Slice 2) and captures (Slice
-4) → M2 fetches and compares, records `copy_accepted`, sends its acceptance (Task 5.3) → M1
-records `filing_relinquished` and answers with its relinquishment (Task 5.4) → M2 records
-`filing_assumed`, restarts to place the accepted copy, and waits for a person on its own page to
-compare clocks and press Activate (Task 5.5) → M2 activates under its own identity and restarts
-as the main box; the tills follow the chart.
+4) → M2 fetches and compares, records `copy_accepted`, sends its acceptance (Task 5.5) → M1
+records `filing_relinquished` and answers with its relinquishment (Task 5.6) → M2 records
+`filing_assumed`, restarts to place the accepted copy (Task 5.7), and waits for a person on its
+own page to compare clocks and press Activate (Task 5.8) → M2 activates under its own identity,
+takes over M1's payment collection (Task 5.9), restarts as the main box and hands its chart to M1
+(Task 5.10); the tills follow the chart.
 
-#### Task 5.1: M2 receives an offer
+#### Task 5.1: The `handover` module and its venue record of activations
 
-**Files:** Create `apps/server/src/handover-destination-api.ts`, mounted in a mirror's start.
-Test `apps/server/src/handover-destination-api.test.ts`.
+**Files:** `packages/handover/src/schema/*.ts`, `src/classification.ts`, `src/migrations.ts`,
+`drizzle/` (generated); register the module in `packages/composition/src/modules.ts` (mandatory,
+after `node`) and `packages/migrations/migrations.manifest.json` (with its append-only table). The
+commit message states the reason it is a set of its own and not core's (CLAUDE.md §3): the
+handover is one seat's records, kept out of the core set.
+
+- `handover_activations` — ledger, append-only: `operation_id` (primary key), `scenario`,
+  `source_node_id`, `destination_node_id`, `evidence` (json: the signed relinquishment, or the
+  signed declaration), `person_id` (plain id; `persons` is identity's set), `activated_at`. Each
+  `_id` column is a declared reference, a location column or left out of the export
+  (`scripts/id-columns-are-references.test.ts`); the column comments say which.
+
+- [ ] **Step 1: Write the failing tests** (`packages/handover/src/schema.test.ts`): "creates the
+  table in venue.db"; "a row cannot be updated or deleted" (the append-only trigger's error).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/handover exec vitest run src/schema.test.ts` — FAIL.
+- [ ] **Step 3: Implement**; generate the migration.
+- [ ] **Step 4: Run** it — PASS; then from the root every guard in Task 1.4's Step 4 plus
+  `scripts/append-only-migration-sets.test.ts scripts/module-graph-honesty.test.ts scripts/module-seams.test.ts`,
+  and `pnpm --filter @waitron/composition exec vitest run src/composition.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "handover: the venue keeps a record of every activation and its evidence"`.
+
+#### Task 5.2: M2 receives an offer
+
+**Files:** Create `apps/server/src/handover-destination-api.ts`, mounted in a mirror's start; add
+the offer's row to `read-only-exemptions.ts` (Task 3.2). Test
+`apps/server/src/handover-destination-api.test.ts`.
 
 **Interfaces — Produces:** `POST /api/node/handover/offer`, body a `stepdown` envelope signed by
 M1 whose body is `{ binding, authorisedBy: personId }`. M2 refuses `handover.not_a_spare` unless it
@@ -1171,27 +1687,29 @@ chart, and `handover.operation_in_progress` when another operation is open. Othe
 signed status for the page and for retries.
 
 - [ ] **Step 1: Write the failing tests.** One per refusal; "a valid offer records `prepared` and
-  a replay returns the same status"; "an offer naming another destination is refused".
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-destination-api.test.ts` — FAIL.
+  a replay returns the same status"; "an offer naming another destination is refused"; "the
+  offer reaches the route through the read-only gate" (Task 3.2's exemption test gains the row).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-destination-api.test.ts src/read-only-exemptions.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** it — PASS.
+- [ ] **Step 4: Run** them — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a spare accepts a handover offer only from the main box its chart names"`.
 
-#### Task 5.2: M1 starts a controlled handover
+#### Task 5.3: M1 starts a controlled handover
 
 **Files:** Create `apps/server/src/handover-source-start-api.ts` (`POST /management-api/handover`),
 mounted in the full start. Test `apps/server/src/handover-source-start-api.test.ts`.
 
 **Interfaces — Consumes:** `confirmFreshSignIn` (`apps/server/src/fresh-sign-in.ts:45`), `stepDown`
-(Task 2.3), `currentBinding`, `signAsThisBox` (Task 1.5). **Produces:** body
+(Task 2.4), `currentBinding`, `signAsThisBox` (Task 1.5). **Produces:** body
 `{ operationId, destinationNodeId, signIn }`; the session's person must hold `node.promote`. Checks,
 each refusing before anything is recorded: the destination is `serving-secondary` in the held
 chart (`handover.destination_not_spare`); its `contactUrl` is non-empty and differs from this
 box's advertised origin (`handover.destination_unaddressable`, the case every real venue is in
 until A947 3b); it answers a signed peer query within 5 s (`handover.destination_unreachable`).
-Then it begins its own operation (role source, `prepared`), posts the offer, and calls `stepDown`.
-Answers `{ handoverPage: "<M2 contactUrl>/handover/<operationId>" }` before the restart. The same
-operation id and inputs return the stored answer; changed inputs refuse `handover.operation_conflict`.
+Then it begins its own operation (role source, `prepared`), posts the offer, and calls `stepDown`
+with this request as `self`. Answers `{ handoverPage: "<M2 contactUrl>/handover/<operationId>" }`
+before the restart. The same operation id and inputs return the stored answer; changed inputs
+refuse `handover.operation_conflict`.
 
 - [ ] **Step 1: Write the failing tests.** One per refusal (each also asserts no node.db row and
   no restart); "a person without `node.promote` is refused"; "a valid start records `prepared`,
@@ -1202,11 +1720,24 @@ operation id and inputs return the stored answer; changed inputs refuse `handove
 - [ ] **Step 4: Run** it — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a person holding node.promote starts a controlled handover from the main box"`.
 
-#### Task 5.3: M2 fetches, compares and accepts the final copy
+#### Task 5.4: M2 fetches the final copy
 
-**Files:** Create `apps/server/src/handover-compare.ts`; extend `handover-destination-api.ts`
-with a background duty that runs while M2 holds `prepared` for a controlled operation. Test
-`apps/server/src/handover-compare.test.ts` (Review Focus 3).
+**Files:** Extend `handover-destination-api.ts` with a background duty that runs while M2 holds
+`prepared` for a controlled operation: it fetches the indicator and the copy from M1 (Task 4.8)
+into `<state>/handover/<operationId>/received.db`, retrying every 5 seconds while M1 restarts.
+Test `apps/server/src/handover-fetch.test.ts`.
+
+- [ ] **Step 1: Write the failing tests.** "fetches once M1's restricted start answers"; "a
+  partial download is discarded and fetched again"; "stops when the operation leaves `prepared`".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-fetch.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it — PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "server: the spare fetches the old box's final copy and indicator"`.
+
+#### Task 5.5: M2 compares and accepts the final copy
+
+**Files:** Create `apps/server/src/handover-compare.ts`. Test `apps/server/src/handover-compare.test.ts`
+(Review Focus 5).
 
 **Interfaces — Produces:**
 `compareFinalCopy(deps, operation, indicator: SignedHandoverEnvelope<FinalStateIndicator>, copyPath: string): Promise<{ ok: true } | { ok: false; reason: ErrorCode; detail: CanonicalValue }>`.
@@ -1214,7 +1745,8 @@ In this order, each failure recording `waitHandover(reason)` and leaving M1 step
 indicator signed by the binding's source (`handover.indicator_untrusted`); its binding equals the
 operation's (`handover.indicator_mismatch`); the received file's SHA-256 and size equal the
 indicator's (`handover.copy_mismatch`); `PRAGMA integrity_check` is `ok`
-(`handover.copy_damaged`); no set's version is ahead of M2's image
+(`handover.copy_damaged`); every module's copy check passes (Task 4.1, `checkHandoverCopy`;
+`handover.chain_broken` naming the module); no set's version is ahead of M2's image
 (`provisioning.database_ahead`, as `assertNotAhead`); the module set and versions equal M2's
 (`handover.modules_differ`); `backup.env` and `modules.json` digests equal M2's
 (`handover.backup_settings_differ`); every ring version listed is in M2's ring
@@ -1223,9 +1755,10 @@ equals the indicator's (`handover.summary_mismatch`, naming the module). On succ
 kept at `<state>/handover/<operationId>/accepted.db`, `copy_accepted` is recorded with the
 acceptance envelope, and only then is the acceptance posted to M1.
 
-- [ ] **Step 1: Write the failing tests.** One per check, built from a real capture (Task 4.5) and
+- [ ] **Step 1: Write the failing tests.** One per check, built from a real capture (Task 4.7) and
   then altered: "one row written after capture" (`handover.copy_mismatch`); "a copy whose bytes
-  match but whose indicator lists one fewer record in a chain" (`handover.summary_mismatch`); and
+  match but whose indicator lists one fewer record in a chain" (`handover.summary_mismatch`); "a
+  copy with one record's amount changed and a re-signed indicator" (`handover.chain_broken`); and
   so on. "Nothing is posted to M1 before `copy_accepted` is on disk" (the post seam reads node.db).
   Control: the unaltered copy is accepted.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-compare.test.ts` — FAIL.
@@ -1235,7 +1768,7 @@ acceptance envelope, and only then is the acceptance posted to M1.
 - [ ] **Step 4: Run** it — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: the spare accepts the final copy only when every check of the indicator passes"`.
 
-#### Task 5.4: M1 relinquishes filing to this M2, once
+#### Task 5.6: M1 relinquishes filing to this M2, once
 
 **Files:** Extend `apps/server/src/handover-source-api.ts` (restricted start) with
 `POST /api/node/handover/:operationId/acceptance`. Test
@@ -1254,66 +1787,107 @@ acceptance for another indicator refuses `handover.indicator_mismatch`.
 - [ ] **Step 4: Run** it — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: the old box gives up filing to the spare that accepted its copy, and only once"`.
 
-#### Task 5.5: M2 places the copy and activates
+#### Task 5.7: M2 places the accepted copy
 
-**Files:** Create `apps/server/src/handover-activation.ts`, `apps/server/src/handover-place-copy.ts`;
-modify `boot.ts` (before the store opens, as `runStagedRestore` does, `apps/server/src/restore-request.ts:344-642`,
-place `accepted.db` as `venue.db` when the operation is at `filing_assumed` and not yet placed;
-`node.db` is never touched). Test `apps/server/src/handover-activation.test.ts` (Review Focus 2).
+**Files:** Create `apps/server/src/handover-place-copy.ts`; modify `boot.ts` (before the store
+opens, as `runStagedRestore` does, `apps/server/src/restore-request.ts:344-642`, place
+`accepted.db` as `venue.db` when the operation is at `filing_assumed` and not yet placed; `node.db`
+is never touched); add the file to `REPLACES` in `scripts/backup-room-note.test.ts`. Test
+`apps/server/src/handover-place-copy.test.ts`.
 
 **Interfaces — Produces:** on receiving the relinquishment M2 records `filing_assumed` and
-restarts; at start it places the copy (moving its old `venue.db` aside, as `restoreDatabase`
-does, `apps/server/src/restore.ts:661-694`) and records `copy_placed` as an event.
-`POST /api/node/handover/:operationId/activate` with `{ signIn: { email, password, totp? }, comparisonId }`:
-the person signs in against the placed copy (`password.invalid` for every credential failure) and
-must hold `node.promote` there; the clock comparison is the existing preparation's
-(`hour-setup-clock.ts`); the facts given to `createHourPromotionPreparation`
-(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:108-118`) are
-`{ oldMachineAbsent: false, oldMachineOffline: true, noParallelRecovery: true }`, justified by the
-recorded relinquishment; the controlled scenario takes the next free minute (decision 5). It calls
+restarts; at start it places the copy under the house rules (Global Constraints → "Replacing or
+removing the live `venue.db`": `lockVenueDatabase`, `deleteBackupRoomNote` first, the old file and
+its side files moved aside as `restoreDatabase` does, `apps/server/src/restore.ts:661-694`,
+Litestream's folder removed) and records `copy_placed` as an event. If Task 4.5's probe made the
+minute history a transferred item, the retained `module-evidence` file is placed here too.
+
+- [ ] **Step 1: Write the failing tests.** "places once; a reboot between `filing_assumed` and
+  placement places once"; "the backup-room note is gone before `venue.db` changes" (control:
+  without the deletion, the note survives and the test prints it); "`.venue.db-litestream/` is
+  removed"; "`node.db` is byte-for-byte unchanged"; "`venue.lock` is never unlinked".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-place-copy.test.ts` and, from the root, `pnpm exec vitest run scripts/backup-room-note.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "server: the spare places the accepted copy under the venue folder's house rules"`.
+
+#### Task 5.8: M2 activates
+
+**Files:** Create `apps/server/src/handover-activation.ts`; add the activate row to
+`read-only-exemptions.ts`. Test `apps/server/src/handover-activation.test.ts` (Review Focus 4).
+
+**Interfaces — Produces:** `POST /api/node/handover/:operationId/activate` with
+`{ signIn: { email, password, totp? }, comparisonId }`: the person signs in against the placed copy
+(`password.invalid` for every credential failure) and must hold `node.promote` there; the clock
+comparison is the existing preparation's (`hour-setup-clock.ts`); the facts given to
+`createHourPromotionPreparation` (`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:108-110`)
+are `{ oldMachineAbsent: false, oldMachineOffline: false, oldMachineRelinquished: true, noParallelRecovery: true }`
+(Slice 5a), justified by the recorded relinquishment; the next free minute (decision 7). It calls
 `promoteMirrorToPrimary(deps, { oldNodeNeutralised: true })` with the operator's id as authority;
-then records `activated` (venue first, node after; a re-run finds the committed chart and only
-records the state); then restarts as the promotion route does.
+writes the `handover_activations` row with the relinquishment as evidence in the same venue
+transaction as the activation; then records `activated` in node.db (venue first, node after; a
+re-run finds the committed chart and only records the state); then restarts as the promotion
+route does.
 
 - [ ] **Step 1: Write the failing tests.** "activates under a new SIF and series, with M1's SIF
-  untouched" (`registro_sif` rows for M1 unchanged); "the new chart marks M1 `sell-only`"; "a lost
+  untouched" (`registro_sif` rows for M1 unchanged); "the stored approval says relinquished, not
+  offline"; "the new chart marks M1 `sell-only`"; "writes one `handover_activations` row"; "a lost
   activation answer, then a retry with the same operation, answers `activated` and takes no second
-  name" (`fiscal_allocations` count unchanged); "a reboot of M2 between `filing_assumed` and
-  placement places once"; "a reboot of M1 between relinquishment and M2's assumption leaves M1
-  restricted, and M2's retry of the acceptance gets the same relinquishment"; "activate before
-  `filing_assumed` is refused `handover.step_out_of_order`"; "a person without `node.promote` in
-  the placed copy is refused".
+  name" (`fiscal_allocations` count unchanged); "a reboot of M1 between relinquishment and M2's
+  assumption leaves M1 restricted, and M2's retry of the acceptance gets the same relinquishment";
+  "activate before `filing_assumed` is refused `handover.step_out_of_order`"; "a person without
+  `node.promote` in the placed copy is refused".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-activation.test.ts` — FAIL.
-- [ ] **Step 3: Implement.** If the preparation cannot take these facts without a change to
-  `packages/fiscal-verifactu`, stop and report: that change needs its own review.
+- [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS; then `pnpm --filter @waitron/server exec vitest run src/promote.test.ts src/promoted-role.test.ts src/boot.promote.test.ts`.
-- [ ] **Step 5: Commit** `git commit -s -m "server: the spare places the accepted copy and activates its own identity after a fresh sign-in"`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: the spare activates its own identity after a fresh sign-in, recording that the old box relinquished"`.
 
-#### Task 5.6: The controlled handover, end to end (simulation)
+#### Task 5.9: The new main box takes over the old box's payment collection
 
-**Files:** Create `apps/server/src/handover-controlled.e2e.test.ts`, on the pattern of
+**Files:** `apps/server/src/handover-collection.ts` supplies Task 4b.2's "boxes this box has taken
+over from" set, read from `handover_activations` rows whose `destination_node_id` is this box.
+Test `apps/server/src/handover-collection.test.ts`.
+
+- [ ] **Step 1: Write the failing tests.** "after activation, M2's sweep resolves M1's
+  `attempting` payment once" (provider stand-in counts one call); "before activation it does
+  not"; "a box that took over from nobody sweeps only its own".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-collection.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it — PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "server: the new main box resolves the old box's open card payments, and no one else does"`.
+
+#### Task 5.10: The old box learns the new chart, and the controlled handover end to end (simulation)
+
+**Files:** `apps/server/src/handover-activation.ts` (after the restart as the main box, M2 posts
+its new chart to M1's `/api/node/membership` once, as a till would, Task 3.3); create
+`apps/server/src/handover-controlled.e2e.test.ts`, on the pattern of
 `till-reroute-e2e.test.ts:315-392`, with a stand-in AEAT that records each request's
 `IdSistemaInformatico` and `NumeroInstalacion`. The file's first comment says: a simulation of two
 boxes in one process, not physical qualification.
 
-- [ ] **Step 1: Write the test.** M1 primary with one filed and one `pendiente` record and one
-  open table; M2 a mirror seeded from M1; the handover from Task 5.2 through activation with a
-  browser clock sample from the test. Assert: M2 `acceptingSales: true` with a new series; M1
-  answers `acceptingSales: false` and makes **no** AEAT request after its stepdown; M2 files M1's
+- [ ] **Step 1: Write the test.** M1 primary with one filed and one `pendiente` record, one open
+  table and one `attempting` card payment; M2 a mirror seeded from M1; the handover from Task 5.3
+  through activation with a browser clock sample from the test. Assert: M2 `acceptingSales: true`
+  with a new series; M1 answers `acceptingSales: false`, holds M2's chart (so the rejoin's fence
+  check will pass later), and makes **no** AEAT request after its stepdown; M2 files M1's
   `pendiente` record with **M1's** identity and its own first sale with **its own**; the open
-  table is on M2; a till router pointed at both moves to M2.
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-controlled.e2e.test.ts` — PASS (it pins Tasks 5.1–5.5). Control: comment out the restricted start's early return and the "no AEAT request from M1" assertion fails.
+  table is on M2; M2's sweep, not M1's, resolves the card payment; a till router pointed at both
+  moves to M2; and what M2's certificate card shows (the manifest's open row: if it shows no
+  certificate, the test records that as `it.fails` with a comment naming the follow-up, and the
+  PR reports it).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-controlled.e2e.test.ts` — PASS (it pins Tasks 5.2–5.9). Control: comment out the restricted start's early return and the "no AEAT request from M1" assertion fails.
 - [ ] **Step 3: Commit** `git commit -s -m "server: a controlled handover between two simulated boxes, end to end"`.
 
-#### Task 5.7: Final checks for Slice 5
+#### Task 5.11: Final checks for Slice 5
 
-- [ ] As Task 2.6. PR first line: FISCAL; "reachable on real boxes after A947 3b".
+- [ ] As Task 2.8, plus the root guards in Task 5.1's Step 4. PR first line: FISCAL; "adds the
+  `handover` migration set; reachable on real boxes after A947 3b".
 
 ---
 
 ### Slice 6 — Controlled handover, screens and guide
 
-Not fiscal, unless Task 6.2 must give the fiscal module's clock element a promotion mode (then the
+Not fiscal, unless Task 6.4 must give the fiscal module's clock element a promotion mode (then the
 PR says FISCAL and the owner lands it). Lands after Slice 5.
 
 #### Task 6.1: "Hand over to this box" on the Servers screen
@@ -1340,32 +1914,56 @@ answers. Refusals per code, each saying what happened and what to do (CLAUDE.md 
 - [ ] **Step 4: Run** it and the two existing suites — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "dashboard: hand the venue over to a spare from the Servers screen"`.
 
-#### Task 6.2: M2's handover page
+#### Task 6.2: M2 serves its handover page
+
+**Files:** Create `apps/server/src/handover-page-mount.ts` (serves the setup app's handover screen
+at `/handover/:operationId` on a mirror and on a box between placement and activation, the way
+`boot.ts:923` serves the setup app). Test `apps/server/src/handover-page-mount.test.ts`.
+
+- [ ] **Step 1: Write the failing tests.** "a mirror serves `/handover/<id>`"; "a box between
+  placement and activation serves it"; "a primary that finished activating answers 404 for an
+  unknown id".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-page-mount.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it — PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "server: the spare serves its own handover page"`.
+
+#### Task 6.3: The handover screen shows progress
 
 **Files:** Create `apps/setup/src/screens/handover-screen.ts` (the setup app already hosts the
-fiscal module's clock comparison with its explained waits, `vf-recovery-hour`, A947 4a) and
-`apps/server/src/handover-page-mount.ts` (serves it at `/handover/:operationId` on a mirror and
-on a box between placement and activation, the way `boot.ts:923` serves the setup app). Tests
+fiscal module's clock comparison with its explained waits, `vf-recovery-hour`, A947 4a). Tests
 `apps/setup/src/screens/handover-screen.test.ts`, `.a11y.test.ts`.
 
-The page shows the operation's progress from `GET /api/node/handover/:operationId` (Task 5.1), one
-line per step, refreshing every 2 seconds; once the status reports the copy placed (the
-`copy_placed` event, Task 5.5) it asks for a sign-in (email, password, then code) and shows the clock comparison with its explained wait and countdown; then
-**Start the venue on this box**. Refusals in place; a lost answer re-reads the status, never
-re-sends a different request.
+The page shows the operation's progress from `GET /api/node/handover/:operationId` (Task 5.2), one
+line per step, refreshing every 2 seconds; a lost answer re-reads the status, never re-sends a
+different request.
 
-- [ ] **Step 1: Write the failing tests.** Progress lines per state; the sign-in appears only once
-  the copy is placed; the button stays disabled until the clock comparison passes; a lost answer
-  followed by a status of `activated` shows success without a second press; English and Spanish;
-  axe both themes, 390 px.
+- [ ] **Step 1: Write the failing tests.** Progress lines per state; a waiting reason shown in
+  words; English and Spanish; axe both themes, 390 px.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/setup exec vitest run src/screens/handover-screen.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it — PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "setup: the spare's handover page shows each step as it happens"`.
+
+#### Task 6.4: The handover screen signs in, compares clocks and activates
+
+**Files:** `apps/setup/src/screens/handover-screen.ts`. Tests `handover-screen.activate.test.ts`.
+
+Once the status reports the copy placed (the `copy_placed` event, Task 5.7) the page asks for a
+sign-in (email, password, then code) and shows the clock comparison with its explained wait and
+countdown; then **Start the venue on this box**. Refusals in place.
+
+- [ ] **Step 1: Write the failing tests.** The sign-in appears only once the copy is placed; the
+  button stays disabled until the clock comparison passes; a lost answer followed by a status of
+  `activated` shows success without a second press; English and Spanish.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/setup exec vitest run src/screens/handover-screen.activate.test.ts` — FAIL.
 - [ ] **Step 3: Implement.** If `vf-recovery-hour` cannot drive a promotion binding as it stands,
   give it a promotion mode in `packages/fiscal-verifactu/src/setup/` with its own tests and mark the
   PR FISCAL.
 - [ ] **Step 4: Run** it — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "setup: the spare's own page carries a handover through to activation"`.
 
-#### Task 6.3: The guide
+#### Task 6.5: The guide
 
 **Files:** `apps/server/src/guide/en/servers.md`, `apps/server/src/guide/es/servers.md`: sections
 `{#hand-over}` (when to use it, what each box shows, what staff do) and `{#after-hand-over}`;
@@ -1375,45 +1973,39 @@ re-sends a different request.
   root, `pnpm exec vitest run scripts/guide-links.test.ts` — PASS.
   `git commit -s -m "guide: handing the venue over to a spare, in English and Spanish"`.
 
-#### Task 6.4: Final checks for Slice 6
+#### Task 6.6: Final checks for Slice 6
 
-- [ ] As Task 2.6, with the dashboard and setup typechecks and their browser suites run with
+- [ ] As Task 2.8, with the dashboard and setup typechecks and their browser suites run with
   measured headroom (`memory_pressure | grep free`, CLAUDE.md §2).
 
 ---
 
 ### Slice 7 — Emergency handover, server
 
-**FISCAL**. The owner lands it. Adds the `handover` module's `venue.db` migration set.
+**FISCAL**. The owner lands it. Adds a second migration to the `handover` set.
 
-#### Task 7.1: The `handover` module and its venue tables
+#### Task 7.1: The gap tables
 
-**Files:** `packages/handover/src/schema/*.ts`, `src/classification.ts`, `src/migrations.ts`,
-`drizzle/` (generated); register the module in `packages/composition/src/modules.ts` (mandatory,
-after `node`) and `packages/migrations/migrations.manifest.json` (with its append-only tables).
-The commit message states the reason it is a set of its own and not core's (CLAUDE.md §3): the
-handover is one seat's records, kept out of the core set.
+**Files:** `packages/handover/src/schema/*.ts`, `drizzle/` (generated, the set's second
+migration), `packages/migrations/migrations.manifest.json` (the append-only table).
 
-- `handover_declarations` — ledger, append-only: `operation_id` (primary key), `envelope` (json:
-  the signed declaration), `person_id` (plain id; `persons` is identity's set), `declared_at`.
 - `handover_gap_items` — state: `id`, `operation_id`, `kind` (`unknown_interval` |
   `returned_invoice`), `source_node_id`, `installation`, `series_number`, `original_ids` (json),
   `issue_date`, `taxable_cents`, `tax_cents`, `gross_cents` (null for an unknown interval),
-  `interval_from`, `interval_to`, `status` (`open` | `acknowledged` | `resolved`), `updated_at`.
-  Money in whole cents (CLAUDE.md §3).
+  `interval_from`, `interval_to`, `evidence` (json: where the retained original and the batch that
+  carried it are kept; Slice 12a fills it), `status` (`open` | `acknowledged` | `resolved`),
+  `updated_at`. Money in whole cents (CLAUDE.md §3).
 - `handover_gap_events` — ledger, append-only: `id`, `gap_item_id` (foreign key), `kind`
   (`opened` | `acknowledged` | `resolved` | `interval_closed`), `person_id`, `note`,
   `correction_reference`, `recorded_at`.
 
-- [ ] **Step 1: Write the failing tests** (`packages/handover/src/schema.test.ts`): "creates the
-  three tables in venue.db"; "a declaration row cannot be updated or deleted" (the append-only
-  trigger's error); "a gap item's amounts are whole cents" (a fraction refused by its check).
-- [ ] **Step 2: Run** `pnpm --filter @waitron/handover exec vitest run src/schema.test.ts` — FAIL.
+- [ ] **Step 1: Write the failing tests** (`packages/handover/src/schema.gaps.test.ts`): "creates
+  the two tables in venue.db"; "a gap event cannot be updated or deleted"; "a gap item's amounts
+  are whole cents" (a fraction refused by its check).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/handover exec vitest run src/schema.gaps.test.ts` — FAIL.
 - [ ] **Step 3: Implement**; generate the migration.
-- [ ] **Step 4: Run** it — PASS; then from the root every guard in Task 1.4's Step 4 plus
-  `scripts/append-only-migration-sets.test.ts scripts/module-graph-honesty.test.ts scripts/module-seams.test.ts`,
-  and `pnpm --filter @waitron/composition exec vitest run src/composition.test.ts`.
-- [ ] **Step 5: Commit** `git commit -s -m "handover: the venue keeps each emergency declaration and the gaps it leaves"`.
+- [ ] **Step 4: Run** it — PASS; then the root guards in Task 5.1's Step 4.
+- [ ] **Step 5: Commit** `git commit -s -m "handover: the venue keeps the gaps an emergency leaves"`.
 
 #### Task 7.2: What the spare shows before a declaration
 
@@ -1421,74 +2013,90 @@ handover is one seat's records, kept out of the core set.
 `apps/server/src/handover-emergency-preview.test.ts`.
 
 **Interfaces — Produces:** `GET /api/node/handover/emergency/preview` answers
-`{ source: { nodeId, name }, copy: { kind: "mirror-copy", lastChangeAtMs, integrity: "ok" | "damaged" }, chains: ChainSummary[], sourceAnswering: boolean }`.
-`lastChangeAtMs` is the newest `issued_at` in `sales` and `updated_at` in `working_orders` of the
-copy, labelled on the page as "the latest activity this copy holds" (A947 3c's follower position
-replaces it). `sourceAnswering` is a signed peer query to the source (5 s). Reads only.
+`{ source: { nodeId, name }, copy: { kind: "mirror-copy", lastChangeAtMs, integrity: "ok" | "damaged", chains: "ok" | "broken" }, chainSummaries: ChainSummary[], sourceAnswering: boolean }`.
+`integrity` is `PRAGMA integrity_check`; `chains` is every module's copy check (Task 4.1,
+`checkHandoverCopy`; for Veri*Factu, Task 4.3's whole-chain walk), run on the copy opened as a
+read-only `BackupQuery`; `chainSummaries` is Task 4.2's summary. `lastChangeAtMs` is the newest
+`issued_at` in `sales` and `updated_at` in `working_orders` of the copy, labelled on the page as
+"the latest activity this copy holds" (A947 3c's follower position replaces it). `sourceAnswering`
+is a signed peer query to the source (5 s). Reads only.
 
 - [ ] **Step 1: Write the failing tests.** "names the last activity and every chain"; "reports a
-  damaged copy" (a corrupted page); "says the old box still answers when it does"; "writes nothing
-  to the copy" (digest before and after).
+  damaged copy" (a corrupted page); "reports a broken chain" (one record's amount changed in the
+  copy; control: unchanged reads `ok`); "says the old box still answers when it does"; "writes
+  nothing to the copy" (digest before and after).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-emergency-preview.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS.
-- [ ] **Step 5: Commit** `git commit -s -m "server: a spare shows what its copy holds before anyone declares"`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a spare checks its copy and its chains, and shows what it holds, before anyone declares"`.
 
 #### Task 7.3: The declaration
 
-**Files:** Extend `handover-emergency-api.ts` with `POST /api/node/handover/emergency/declare`.
-Test `apps/server/src/handover-emergency-declare.test.ts`.
+**Files:** Extend `handover-emergency-api.ts` with `POST /api/node/handover/emergency/declare`;
+add its row to `read-only-exemptions.ts`. Test `apps/server/src/handover-emergency-declare.test.ts`.
 
 **Interfaces — Produces:** body `{ operationId, signIn: { email, password, totp? }, statements, reason, locale }`.
 Refusals, each before anything is recorded: a credential failure `password.invalid`; no
 `node.promote` → `authorization.not_permitted` (what `authorizeManager` throws,
-`packages/identity/src/manager-login.ts:172`); a statement not `true` → `handover.request_invalid` naming it; `reason` empty or
-over 500 characters; the source still answers a signed query → `handover.source_still_answering`
-(409; the page offers the controlled handover); a damaged copy → `handover.copy_damaged`. Then, in
-one node transaction, the operation (`emergency`, role destination) at `emergency_declared` and the
-signed declaration as an event. **Crash replacement (design §7):** if this box holds an open
-controlled operation for the same source with only `prepared` recorded — no `copy_accepted`, no
-`filing_assumed`, no `activated` — that operation is closed with an event naming the new one and
-the declaration's `replaces` names it; with anything later recorded, the declaration is refused
+`packages/identity/src/manager-login.ts:172`); a statement not `true` → `handover.request_invalid`
+naming it; `reason` empty or over 500 characters; the source still answers a signed query →
+`handover.source_still_answering` (409; the page offers the controlled handover); a damaged copy →
+`handover.copy_damaged`; a broken chain → `handover.chain_broken`. Then, in one node transaction,
+the operation (`emergency`, role destination) at `emergency_declared` and the signed declaration
+as an event. **Crash replacement (design §7):** if this box holds an open controlled operation for
+the same source with only `prepared` recorded — no `copy_accepted`, no `filing_assumed`, no
+`activated` — that operation moves to `replaced` with an event naming the new one, and the
+declaration's `replaces` names it; with anything later recorded, the declaration is refused
 `handover.controlled_unresolved` (409).
 
 - [ ] **Step 1: Write the failing tests.** One per refusal (each asserting no node.db row); "a
   valid declaration records it before answering"; "the same operation and inputs answer the stored
-  declaration"; "replacement allowed from `prepared` only, refused from `copy_accepted`"; "the
-  reason is never in a log line" (capture the logger).
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-emergency-declare.test.ts` — FAIL.
+  declaration"; "replacement from `prepared` moves the old operation to `replaced`; refused from
+  `copy_accepted`"; "the reason is never in a log line" (capture the logger).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-emergency-declare.test.ts src/read-only-exemptions.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** it — PASS; then from the root `pnpm exec vitest run scripts/personal-log-params.test.ts scripts/errors-reachable.test.ts`.
+- [ ] **Step 4: Run** them — PASS; then from the root `pnpm exec vitest run scripts/personal-log-params.test.ts scripts/errors-reachable.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "server: an emergency declaration is recorded on the spare before anything changes"`.
 
 #### Task 7.4: Emergency activation
 
-**Files:** Extend `apps/server/src/handover-activation.ts` (Task 5.5) for the emergency scenario.
+**Files:** Extend `apps/server/src/handover-activation.ts` (Task 5.8) for the emergency scenario.
 Test `apps/server/src/handover-emergency-activation.test.ts`.
 
 **Interfaces — Produces:** `POST /api/node/handover/:operationId/activate` accepts an emergency
-operation at `emergency_declared`, with the same sign-in and clock comparison; facts as Task 5.5,
-justified by the recorded declaration; the minute name takes the setup and restore wait of 90 to
-150 seconds (decision 5). After the activation commits: in one venue transaction, the
-`handover_declarations` row and a `handover_gap_items` row `{ kind: "unknown_interval",
-interval_from: lastChangeAtMs, interval_to: null }`; then `activated` in node.db. A start that
-finds `activated` without the venue rows writes them (both are keyed by operation id, so a re-run
-writes nothing twice).
+operation at `emergency_declared`, with the same sign-in and clock comparison; facts
+`{ oldMachineAbsent: false, oldMachineOffline: true, oldMachineRelinquished: false, noParallelRecovery: true }`,
+justified by the recorded declaration; the next free minute (Q2's default). In the activation's
+venue transaction: the `handover_activations` row with the declaration as evidence and a
+`handover_gap_items` row `{ kind: "unknown_interval", interval_from: lastChangeAtMs, interval_to: null }`;
+then `activated` in node.db. A start that finds `activated` without the venue rows writes them
+(both are keyed by operation id, so a re-run writes nothing twice).
 
-- [ ] **Step 1: Write the failing tests.** "waits 90–150 seconds before taking its name" (fake
-  clock; a controlled activation in the same harness takes the next free minute); "writes the
-  declaration and the unknown interval with the activation"; "a crash after the activation commit
-  and before the venue rows: the next start writes them once"; "a lost answer and a retry take no
-  second name". If the preparation offers no way to take the restore wait for a promotion, stop
-  and report (the change would be in `hour-selection.ts`, fiscal).
+- [ ] **Step 1: Write the failing tests.** "takes the next free minute" (fake clock; the same as
+  a controlled activation in the same harness); "the stored approval says offline, not
+  relinquished"; "writes the activation and the unknown interval with the activation"; "a crash
+  after the activation commit and before the venue rows: the next start writes them once"; "a lost
+  answer and a retry take no second name".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-emergency-activation.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS.
-- [ ] **Step 5: Commit** `git commit -s -m "server: the spare activates after a declaration, waits as a restore does, and records the gap"`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: the spare activates after a declaration and records the gap"`.
+
+#### Task 7.4b (only if the owner answers Q2 with (b)): the emergency waits as a restore does
+
+**FISCAL.** **Files:** `packages/fiscal-verifactu/src/hour-selection.ts:461` (a promotion whose
+binding carries a recorded emergency declaration settles, as `setup`, `restore` and
+`conflict-switch` do); CLAUDE.md §5's "Setup/restore wait 90–150 seconds; promotion does not."
+line, rewritten to name the emergency promotion; `handover-emergency-activation.test.ts`.
+
+- [ ] Failing tests: "an emergency promotion waits 90–150 seconds"; "a controlled promotion still
+  takes the next free minute" (control); `minute-selection-unknown-name.test.ts` passes unedited.
+  Implement; PASS; golden and immutability suites unedited.
+  `git commit -s -m "fiscal-verifactu: an emergency promotion waits as a restore does (owner, Q2)"`.
 
 #### Task 7.5: Retries and crashes across both boxes
 
-**Files:** Test `apps/server/src/handover-emergency.crash.test.ts` (Review Focus 2).
+**Files:** Test `apps/server/src/handover-emergency.crash.test.ts` (Review Focus 4).
 
 - [ ] **Step 1: Write the tests.** "a reboot between declaration and activation resumes at
   `emergency_declared` and activates once"; "a second declaration naming another source while one
@@ -1499,45 +2107,51 @@ writes nothing twice).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-emergency.crash.test.ts` — PASS, each with its control named in the test.
 - [ ] **Step 3: Commit** `git commit -s -m "server: emergency retries and reboots keep one filing box"`.
 
-#### Task 7.6: The emergency, end to end (simulation), and final checks
+#### Task 7.6: The emergency, end to end (simulation)
 
 **Files:** `apps/server/src/handover-emergency.e2e.test.ts` (first comment: a simulation, not
 qualification).
 
-- [ ] **Step 1: Write the test** on Harbour Kitchen §9: M2 seeded from M1 "at 21:39"; M1 then
-  issues invoice `A-0CNNW/218` (€110.00) and is closed without a stepdown; M2's declaration and
-  activation; M2 files M1's copied `pendiente` record in M1's identity; M1 started again finds M2
-  (Slice 3), writes `superseded`, starts restricted, makes no AEAT request; the gap list holds one
-  unknown interval from 21:39 and **no** amounts.
+- [ ] **Step 1: Write the test** on Harbour Kitchen §9: M2 seeded from M1 "at 21:39" with a
+  `nodes` row for M2 in both files (as A947 3b will write it); M1 then issues invoice
+  `A-0CNNW/218` (€110.00) and is closed without a stepdown; M2's declaration and activation; M2
+  files M1's copied `pendiente` record in M1's identity; M1 started again finds M2 (Slice 3),
+  writes `superseded`, starts restricted, makes no AEAT request; the gap list holds one unknown
+  interval from 21:39 and **no** amounts.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-emergency.e2e.test.ts` — PASS.
-- [ ] **Step 3:** The slice's final checks as Task 2.6. PR first line: FISCAL; "reachable on real
-  boxes after A947 3b; continuous copy after 3c".
-- [ ] **Step 4: Commit** `git commit -s -m "server: an emergency handover between two simulated boxes, end to end"`.
+- [ ] **Step 3: Commit** `git commit -s -m "server: an emergency handover between two simulated boxes, end to end"`.
+
+#### Task 7.7: Final checks for Slice 7
+
+- [ ] As Task 2.8, plus the root guards in Task 5.1's Step 4. PR first line: FISCAL; "reachable on
+  real boxes after A947 3b; continuous copy after 3c"; and whether Task 7.4b is in it.
 
 ---
 
 ### Slice 8 — Emergency declaration page and guide
 
-Not fiscal. Lands after Slice 7.
+Not fiscal. Lands after Slices 6 and 7.
 
 #### Task 8.1: The emergency mode of M2's page
 
-**Files:** Modify `apps/setup/src/screens/handover-screen.ts` (Task 6.2) with an emergency mode at
-`/handover/emergency`; strings in `apps/setup/src/i18n/`. Tests `handover-screen.emergency.test.ts`,
-`.a11y.test.ts`.
+**Files:** Modify `apps/setup/src/screens/handover-screen.ts` (Tasks 6.3–6.4) with an emergency
+mode at `/handover/emergency`; strings in `apps/setup/src/i18n/`. Tests
+`handover-screen.emergency.test.ts`, `.a11y.test.ts`.
 
 The page, top to bottom: what the copy holds ("The latest activity this copy holds is from
-{time}. Anything after that is missing."); the design's warning (§4), in English and Spanish:
-"Switch off {M1} before continuing. A broken connection can look like a failed machine. If {M1} is
-still running, both machines may take sales and payments, and your bills, cash and stock will
-disagree. {M2} may be missing {M1}'s latest records. Only tax records will return later; the
-business difference will need reconciliation."; the three statements (required checkboxes);
-the reason (required, up to 500 characters); the sign-in (email, password, then code), with one
-line "Passkeys are not offered here yet."; the clock comparison with its explained wait and
-countdown; **Start the venue on this box**, disabled until every required field and the clock
+{time}. Anything after that is missing."), and whether its records check out; the design's
+warning (§4), in English and Spanish: "Switch off {M1} before continuing. A broken connection can
+look like a failed machine. If {M1} is still running, both machines may take sales and payments,
+and your bills, cash and stock will disagree. {M2} may be missing {M1}'s latest records. Only tax
+records will return later; the business difference will need reconciliation."; the three
+statements (required checkboxes); the reason (required, up to 500 characters); the sign-in
+(email, password, then code), with one line "Passkeys are not offered here yet."; the clock
+comparison; **Start the venue on this box**, disabled until every required field and the clock
 pass. Refusals in place: still answering — "{M1} still answers, so it was not switched off. Hand
 over from {M1} instead, or switch it off and check again." with **Check again** and **Hand over
-instead**; a role refusal offers **Sign in as someone else** (an administrator in place).
+instead**; a broken chain — "This copy's invoice records do not check out, so it cannot be used.
+Choose a backup instead." with the backup choice once Slice 14 lands; a role refusal offers
+**Sign in as someone else** (an administrator in place).
 
 - [ ] **Step 1: Write the failing tests.** The warning and statements in both languages; the
   button disabled until all required pass; each refusal's sentence and choices; the reason over
@@ -1560,12 +2174,12 @@ own address); the Servers screen, opened on the spare's own dashboard, links to 
 #### Task 8.3: The guide
 
 - [ ] Sections `{#emergency}` and `{#old-box-returns}` in both `servers.md` files: when to use it,
-  the warning in plain words, what comes back later and what does not. Guide suites as Task 6.3.
+  the warning in plain words, what comes back later and what does not. Guide suites as Task 6.5.
   `git commit -s -m "guide: the emergency switch and what happens when the old box returns"`.
 
 #### Task 8.4: Final checks for Slice 8
 
-- [ ] As Task 6.4.
+- [ ] As Task 6.6.
 
 ---
 
@@ -1605,10 +2219,14 @@ built").
   **If S2 does not pass, Slices 10 and 11 are not built**; stop and report.
 
 ---
-### Slice 10 — Return batch: evidence for records M2 already holds
+
+### Slice 10 — Return batch: evidence, and the exchange both scenarios use
 
 **FISCAL**. The owner lands it. Waits for Slice 9's PASS. A fresh-context review of this slice's
 tasks, against A947 §7.1 as amended, runs before its first implementer (topology §5.2, risk 2).
+Until Slice 11 lands, a batch that carries records M2 lacks leaves the operation at
+`return_pending` with the waiting reason `handover.returned_originals_waiting`; nothing reaches
+`return_complete` while a returned original is unstored.
 
 #### Task 10.1: The fiscal seat for the return batch
 
@@ -1639,28 +2257,27 @@ Test `packages/fiscal-verifactu/src/handover-return.build.test.ts`.
 
 **Interfaces — Produces:** the body in Formats → "Return batch": per chain M1 holds, records after
 the requested head in `secuencia` order, byte-for-byte; every `envios`, `acks`, `filing_cases`
-and `filing_case_events` row for any record of those chains; `enviando` rows carried as
-`pendiente` with their original state named (A947 §7.1). Read-only.
+and `filing_case_events` row for any record of those chains; the `envio_flujo` row; `enviando`
+rows carried as `pendiente` with their original state named (A947 §7.1). Read-only.
 
-- [ ] **Step 1: Write the failing tests.** "carries records after the head, all filing rows and all
-  answers"; "an `enviando` row is carried as `pendiente` with its original state named"; "carries
-  no `sales`, `sale_lines`, `working_orders`, `payments` or `tenders` row" (the body's keys);
-  "built twice from the same database and request, the canonical bytes are equal"; "writes
-  nothing" (file digest).
+- [ ] **Step 1: Write the failing tests.** "carries records after the head, all filing rows, all
+  answers and `envio_flujo`"; "with every head equal to M1's, carries no records and still every
+  filing row" (the controlled case); "an `enviando` row is carried as `pendiente` with its
+  original state named"; "carries no `sales`, `sale_lines`, `working_orders`, `payments` or
+  `tenders` row" (the body's keys); "built twice from the same database and request, the canonical
+  bytes are equal"; "writes nothing" (file digest).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/handover-return.build.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS, then the golden and immutability suites.
 - [ ] **Step 5: Commit** `git commit -s -m "fiscal-verifactu: build a returning box's tax records, filing state and AEAT answers, and nothing else"`.
 
-#### Task 10.3: M1 freezes and serves its batch; M2 asks for it
+#### Task 10.3: M1 freezes and serves its batch
 
 **Files:** Create `apps/server/src/handover-return-source.ts` (restricted start:
 `POST /api/node/handover/:operationId/return`, a request signed by the operation's destination
-carrying its heads) and `apps/server/src/handover-return-watch.ts` (on M2 after an emergency
-activation: every minute, a signed peer query to the source; when it answers restricted and
-`superseded`, request the batch). On M1 a returning box that wrote `superseded` (Task 3.2/3.3)
-records the operation as source at `source_superseded` from M2's status. Test
-`apps/server/src/handover-return-source.test.ts`.
+carrying its heads). An emergency M1 that wrote `superseded` (Tasks 3.3, 3.4) records the
+operation as source at `source_superseded` from M2's status; a controlled M1 already holds it at
+`filing_relinquished`. Test `apps/server/src/handover-return-source.test.ts`.
 
 **Interfaces — Produces:** the batch envelope stored at `<state>/handover/<operationId>/return-<sequence>.json`
 keyed by the request digest; the same request answers the same bytes; a request with other heads
@@ -1668,22 +2285,49 @@ is a new sequence. M1 records `return_pending`.
 
 - [ ] **Step 1: Write the failing tests.** "the same request twice answers identical bytes";
   "another destination is refused"; "a box that is not restricted refuses
-  `handover.not_stepped_down`"; "M2's watch asks every minute and stops once the batch is applied".
+  `handover.not_stepped_down`"; "a controlled M1 answers an empty-records batch".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-return-source.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a returning box freezes its tax records into a batch that every retry repeats"`.
 
-#### Task 10.4: M2 pauses those chains, applies known answers, keeps conflicts
+#### Task 10.4: M2 asks for the batch
+
+**Files:** Create `apps/server/src/handover-return-watch.ts` (on M2 after an activation, either
+scenario: every minute, a signed peer query to the source; when it answers restricted, request
+the batch with M2's heads; M2's operation moves to `return_pending`). Test
+`apps/server/src/handover-return-watch.test.ts`.
+
+- [ ] **Step 1: Write the failing tests.** "asks every minute until the source answers
+  restricted"; "requests with M2's head for each of the source's chains"; "stops once the
+  operation is `return_complete` or `return_abandoned`"; "after a controlled activation it asks at
+  once".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-return-watch.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it — PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "server: the new main box asks a returning old box for its tax records"`.
+
+#### Task 10.5: The drain's outside pause
 
 **Files:** Modify `packages/fiscal-verifactu/src/drain.ts` (an outside input
 `pausedSifIds?: () => ReadonlySet<string>` read at the start of each pass and joined with
 `blockedSifIds`, `:252-255`; the comment at `:577-579` updated to say the per-pass block now has
-this outside input); implement `applyReturn` in `handover-return.ts`; create
+this outside input). Test `packages/fiscal-verifactu/src/drain.paused.test.ts`.
+
+- [ ] **Step 1: Write the failing tests.** "a paused chain is not claimed; another chain is";
+  control "without the pause both are claimed"; `src/drain.test.ts` passes unedited.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/drain.paused.test.ts src/drain.test.ts` — FAIL (the first).
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS; then the golden and immutability suites.
+- [ ] **Step 5: Commit** `git commit -s -m "fiscal-verifactu: the drain can pause chosen chains from outside"`.
+
+#### Task 10.6: M2 applies known answers, keeps conflicts
+
+**Files:** implement `applyReturn` in `handover-return.ts`; create
 `apps/server/src/handover-return-apply.ts` (adds the chains to the paused set, waits for the pass
 in flight to end, applies in one venue transaction, lifts the pause). Tests
-`packages/fiscal-verifactu/src/handover-return.apply.test.ts`, `src/drain.paused.test.ts`,
-`apps/server/src/handover-return-apply.test.ts` (Review Focus 4).
+`packages/fiscal-verifactu/src/handover-return.apply.test.ts`,
+`apps/server/src/handover-return-apply.test.ts` (Review Focus 6).
 
 Rules for a record M2 holds, using the filing order of A947 §7.2 check 1 (not yet filed —
 `pendiente`, `enviando` — before finished — `aceptado`, `aceptado_con_errores`, `rechazado`,
@@ -1693,53 +2337,60 @@ further along → nothing; two different finished states → keep M2's row, reco
 `fiscal_conflict_evidence` and open a filing case on M2 (`openFilingCase`,
 `packages/fiscal-verifactu/src/filing-cases.ts:51-70`) — never last-arrival-wins. A record M2 lacks
 goes to `missingRecords`. A record whose stored bytes differ from M2's copy of the same id is a
-conflict, never an overwrite.
+conflict, never an overwrite. M1's `envio_flujo` row: M2 keeps the later of the two next-send
+times and the larger wait, and records M1's incident token as evidence without adopting it
+(decision 8).
 
-- [ ] **Step 1: Write the failing tests.** Drain: "a paused chain is not claimed; another chain is";
-  control "without the pause both are claimed". Apply: one per rule; "applying the same batch twice
-  changes nothing"; "a pass in flight on a paused chain finishes before the batch applies"
-  (server).
-- [ ] **Step 2: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/handover-return.apply.test.ts src/drain.paused.test.ts` and `pnpm --filter @waitron/server exec vitest run src/handover-return-apply.test.ts` — FAIL.
+- [ ] **Step 1: Write the failing tests.** One per rule; "M1's later AEAT wait moves M2's gate
+  later, and an earlier one never moves it earlier"; "applying the same batch twice changes
+  nothing"; "a pass in flight on a paused chain finishes before the batch applies" (server); "a
+  batch with missing records leaves the operation `return_pending` with
+  `handover.returned_originals_waiting`".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/handover-return.apply.test.ts` and `pnpm --filter @waitron/server exec vitest run src/handover-return-apply.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** them — PASS; then `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/drain.test.ts src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "fiscal: apply a returning box's AEAT answers to records the new box holds, keeping both facts when they disagree"`.
 
-#### Task 10.5: The receipt
+#### Task 10.7: The receipt
 
 **Files:** `receipt` in `handover-return.ts`; `apps/server/src/handover-return-apply.ts` answers
 it to M1 as a `return-receipt` envelope and records it. Test
 `packages/fiscal-verifactu/src/handover-return.receipt.test.ts`.
 
 - [ ] Failing tests "per record, the id and huella M2 holds; per filing row, M2's state; per chain,
-  count and head"; "a record M2 lacks is listed as missing, not as held". Implement; PASS.
+  count and head"; "a record M2 lacks is listed as missing, not as held"; "an empty-records batch
+  gets a receipt whose chains equal M1's". Implement; PASS.
   `git commit -s -m "fiscal-verifactu: the new box's receipt for a return batch"`.
 
-#### Task 10.6: Final checks for Slice 10
+#### Task 10.8: Final checks for Slice 10
 
-- [ ] As Task 2.6, plus `pnpm --filter @waitron/fiscal exec vitest run`. PR first line: FISCAL;
+- [ ] As Task 2.8, plus `pnpm --filter @waitron/fiscal exec vitest run`. PR first line: FISCAL;
   "the drain gains an outside per-chain pause".
 
 ---
 
 ### Slice 11 — Return batch: originals M2 never saw
 
-**FISCAL — LOUD.** The owner lands it, and decides Q1 before it is built; this is default (a). It
-adds a store of returned tax records and a second filing path. It **does not** write
-`registros_facturacion`, never recomputes a huella and never builds a record; it stores M1's
-records byte-for-byte and sends them unchanged in their generating identity. A fresh-context
-review of the slice before its first implementer, as Slice 10.
+**FISCAL — LOUD.** The owner lands it. It adds a store of returned tax records and a second filing
+path. It **does not** write `registros_facturacion`, never recomputes a huella and never builds a
+record; it stores M1's records byte-for-byte and sends them unchanged in their generating
+identity. A fresh-context review of the slice before its first implementer, as Slice 10.
 
 #### Task 11.1: The returned-records store
 
 **Files:** `packages/fiscal-verifactu/src/schema/returned-records.ts`, `src/classification.ts`,
-the package's migration (generated), `src/returned-records.ts`. Test
+the package's migration (generated), `src/returned-records.ts`,
+`packages/migrations/migrations.manifest.json` (the append-only table). Test
 `packages/fiscal-verifactu/src/returned-records.test.ts`.
 
 - `registros_devueltos` — ledger, append-only: every column `registros_facturacion` stores, with
   the same text representations for huella inputs, plus `operation_id`, `source_node_id`,
   `received_at`; primary key the original id; no foreign key to `sales`, `devices`, `nodes` or
   `registro_sif` (the column comments say so, and that the source box's archive holds those rows);
-  a unique index equal to `registros_identidad_uq`'s columns.
+  a unique index equal to `registros_identidad_uq`'s columns. Each `_id` column (`sale_id`,
+  `node_id`, `sif_id`, `operation_id`, `source_node_id` and the rest the copied columns bring) is
+  a declared reference, a location column or left out of the export
+  (`scripts/id-columns-are-references.test.ts`), and the column comment says which.
 - `envios_devueltos` — ledger, mutable as `envios` is: `registro_id` (foreign key to
   `registros_devueltos`), the `envios` states, `intentos`, `proximo_intento_en`, the AEAT reply,
   `conflict` (json, nullable: both facts when finished states disagree).
@@ -1749,43 +2400,75 @@ the package's migration (generated), `src/returned-records.ts`. Test
   returned row cannot be updated or deleted"; "the same id twice with other bytes is refused".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/returned-records.test.ts` — FAIL.
 - [ ] **Step 3: Implement**; generate.
-- [ ] **Step 4: Run** it — PASS; then from the root every guard in Task 7.1's Step 4 and
+- [ ] **Step 4: Run** it — PASS; then from the root every guard in Task 5.1's Step 4 and
   `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/inmutabilidad.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "fiscal-verifactu: a separate store for tax records a returning box sends back"`.
 
 #### Task 11.2: Apply stores the missing originals, checking their chain
 
-**Files:** `applyReturn` (Task 10.4) stores `missingRecords` through `returned-records.ts`. Test
+**Files:** `applyReturn` (Task 10.6) stores `missingRecords` through `returned-records.ts`, and the
+operation reaches `return_complete` only when every missing record is stored. Test
 `packages/fiscal-verifactu/src/handover-return.originals.test.ts`.
 
 - [ ] Failing tests: "the first returned record's predecessor huella equals the head M2 holds for
   that chain, and each next record's equals the one before"; "a break in that link stores the
   records and raises `handover.returned_chain_broken` as a recorded incident" (with its area claim
   and English and Spanish alert wording, `scripts/alert-codes.test.ts`); "an `enviando` original is
-  stored `pendiente`". Implement; PASS.
+  stored `pendiente`"; "the operation moves from `return_pending` to `return_complete` once every
+  missing record is stored". Implement; PASS.
   `git commit -s -m "fiscal-verifactu: returned originals are stored only after their chain link is checked"`.
 
-#### Task 11.3: Filing the returned originals
+#### Task 11.3: The drain's sending pieces, shared without changing the drain
 
-**Files:** Create `packages/fiscal-verifactu/src/relay-drain.ts`; modify `drain.ts` only to export
-the pieces the relay reuses — the transport call, the reply parsing and `handleDuplicate` /
-`routeB` (`:1727-1903`) — behind a storage interface, with the drain's own behaviour unchanged
-(`src/drain.test.ts` passes unedited). Wire the relay pass into the same `singletonPass` as the
-drain (`apps/server/src/boot.ts:3205-3210`), so it runs only on the box holding the singleton role.
-Test `packages/fiscal-verifactu/src/relay-drain.test.ts`.
+**Files:** Modify `drain.ts` only to export the pieces the relay reuses — the transport call, the
+reply parsing, the `envio_flujo` gate (`readGate`, `upsertFlujo`, `:416-481`), the technical
+incident (`technicalIncidentToken`, `openTechnicalIncident`, `closeTechnicalIncident`,
+`:1185-1237`) and `handleDuplicate` / `routeB` (`:1727-1903`) — behind a storage interface, with
+the drain's own behaviour unchanged. Test: `src/drain.test.ts` passes **unedited**, and a new
+`src/drain-pieces.test.ts` pins the exported signatures.
+
+- [ ] **Step 1:** Write `drain-pieces.test.ts` (each piece callable through the storage interface
+  with the drain's own storage); run it — FAIL.
+- [ ] **Step 2:** Extract; run `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/drain-pieces.test.ts src/drain.test.ts` — PASS, with `git diff origin/main -- packages/fiscal-verifactu/src/drain.test.ts` printing nothing.
+- [ ] **Step 3: Commit** `git commit -s -m "fiscal-verifactu: share the drain's sending, wait and duplicate pieces, with the drain unchanged"`.
+
+#### Task 11.4: Filing the returned originals, with one AEAT wait and one chain order
+
+**Files:** Create `packages/fiscal-verifactu/src/relay-drain.ts`. Test
+`packages/fiscal-verifactu/src/relay-drain.test.ts` (Review Focus 6).
+
+Two rules from the drain that the relay must keep (review I7): **one wait** — the relay reads and
+writes the same `envio_flujo` row as the drain (AEAT's wait time and the technical-incident
+token, `drain.ts:416-481,1185-1237`), so the two never send closer together than AEAT allows, and
+an incident one opens marks the other's cohort; **one chain order** — a returned record N+1 of a
+chain never goes before record N of the same chain while N still waits in `envios` on M2 (N is in
+M2's own copy, N+1 came back later).
 
 - [ ] **Step 1: Write the failing tests** with a stand-in AEAT: "sends a returned record with its
   stored `SistemaInformatico`" (M1's `IdSistemaInformatico` and `NumeroInstalacion`); "in chain
-  order per source chain"; "a 3000 duplicate is settled by consulta when the fingerprint and
-  installation match, and kept waiting when the answer is missing"; "two different finished facts
-  are kept in `conflict` and the record is not refiled"; "honours the paused set"; "never runs on
-  a box without the singleton role".
-- [ ] **Step 2: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/relay-drain.test.ts src/drain.test.ts` — FAIL (the first).
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** them — PASS; the golden and immutability suites unedited.
-- [ ] **Step 5: Commit** `git commit -s -m "fiscal-verifactu: the new box files returned originals in their own identity, with the drain's duplicate handling"`.
+  order per source chain"; "**holds record N+1 while record N of the same chain is still
+  `pendiente` in `envios`**, and sends it after N is accepted"; "**respects the AEAT wait the drain
+  last stored, and stores the wait AEAT gives it** for the drain to read"; "an incident the relay
+  opens marks the drain's pending rows too"; "a 3000 duplicate is settled by consulta when the
+  fingerprint and installation match, and kept waiting when the answer is missing"; "two different
+  finished facts are kept in `conflict` and the record is not refiled"; "honours the paused set".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/relay-drain.test.ts` — FAIL.
+- [ ] **Step 3: Implement** on Task 11.3's pieces.
+- [ ] **Step 4: Run** it — PASS; the golden and immutability suites unedited.
+- [ ] **Step 5: Commit** `git commit -s -m "fiscal-verifactu: file returned originals in their own identity, sharing the drain's AEAT wait and chain order"`.
 
-#### Task 11.4: Box status shows the returned records
+#### Task 11.5: The relay runs only where the drain runs
+
+**Files:** Wire the relay pass into the same `singletonPass` as the drain
+(`apps/server/src/boot.ts:3205-3210`), after the drain in each pass, so it runs only on the box
+holding the singleton role and is stopped by the same controller (Task 2.4's quiesce). Test
+`apps/server/src/relay-drain.wiring.test.ts`.
+
+- [ ] Failing tests: "never runs on a box without the singleton role"; "runs after the drain in the
+  same pass"; "a stepdown's quiesce stops it". Implement; PASS.
+  `git commit -s -m "server: the relay files only on the main box, in the drain's own pass"`.
+
+#### Task 11.6: Box status shows the returned records
 
 **Files:** `apps/server/src/box-status.ts` and `apps/dashboard/src/screens/box-status-rows.ts` (a
 row "Invoices returned from {old box}: {n} waiting, {m} filed, {k} need checking"); strings and
@@ -1794,83 +2477,136 @@ guide (`box-status.md` `{#returned-invoices}`, both languages). Tests in their s
 - [ ] Failing tests for the row in both languages; implement; PASS; guide suites.
   `git commit -s -m "box status: show the invoices returned from the old box and their filing"`.
 
-#### Task 11.5: Harbour Kitchen's invoice 218 (simulation)
+#### Task 11.7: Harbour Kitchen's invoice 218 (simulation)
 
 **Files:** Extend `apps/server/src/handover-emergency.e2e.test.ts` (Task 7.6).
 
 - [ ] After M2's activation, M1 starts again restricted; M2's watch fetches the batch; assert:
-  invoice 218 is in `registros_devueltos`, filed by M2 with **M1's** identity; M1 made **no** AEAT
-  request; a record M1 had already sent before failing (stand-in AEAT answers 3000, then consulta
-  matches) ends `aceptado` with one submission counted; no `sales` row for 218 exists on M2.
+  invoice 218 is in `registros_devueltos`, filed by M2 with **M1's** identity, after M1's record
+  217 if 217 was still `pendiente` on M2; M1 made **no** AEAT request; a record M1 had already
+  sent before failing (stand-in AEAT answers 3000, then consulta matches) ends `aceptado` with one
+  submission counted; no `sales` row for 218 exists on M2; the operation reads `return_complete`.
   `git commit -s -m "server: invoice 218 returns, is filed in the old box's identity, and no sale is replayed"`.
 
-#### Task 11.6: Final checks for Slice 11
+#### Task 11.8: Final checks for Slice 11
 
-- [ ] As Task 2.6. PR first line: "FISCAL — a returned-records store and a second filing path;
-  `registros_facturacion` untouched".
+- [ ] As Task 2.8. PR first line: "FISCAL — a returned-records store and a second filing path
+  sharing the drain's AEAT wait and chain order; `registros_facturacion` untouched".
 
 ---
 
-### Slice 12 — The reconciliation list and the report gaps
+### Slice 12a — The reconciliation list, and lines beside the reports
 
-Not fiscal (it reads fiscal facts through the seat and writes only the `handover` set's tables).
+Not fiscal: it reads fiscal facts through the seat, writes only the `handover` set's tables, and
+leaves the frozen daily close and cash-up untouched, which a test pins. The same under either
+answer to Q1.
 
-#### Task 12.1: Gap items from a return
+#### Task 12a.1: Gap items from a return
 
 **Files:** `apps/server/src/handover-return-apply.ts` writes, in the apply transaction, one
 `handover_gap_items` row `{ kind: "returned_invoice" }` per stored original, with installation,
 series and number, original ids, issue date and amounts taken from the record (gross
-`importe_total`, tax `cuota_total`, taxable their difference, converted with `decimalToCents`);
-when the receipt shows every chain matched, the operation's unknown interval gets an
-`interval_closed` event. Test `apps/server/src/handover-gap-items.test.ts`.
+`importe_total`, tax `cuota_total`, taxable their difference, converted with `decimalToCents`),
+and `evidence` naming the retained original (its `registros_devueltos` id), the batch that
+carried it (its file and digest on M2) and the source box's archive (its operation id, Task 13.1)
+— design §5: "It links the retained original and any available archived evidence". When the
+receipt shows every chain matched, the operation's unknown interval gets an `interval_closed`
+event. Test `apps/server/src/handover-gap-items.test.ts`.
 
-- [ ] Failing tests: "invoice 218 gives one item: 23 October, 10000, 1000, 11000 cents"; "applying
-  the batch again adds nothing"; "an interval stays open while any chain is unmatched".
-  Implement; PASS. `git commit -s -m "server: each returned invoice becomes a reconciliation item with its known amounts"`.
+- [ ] Failing tests: "invoice 218 gives one item: 23 October, 10000, 1000, 11000 cents, with its
+  evidence"; "applying the batch again adds nothing"; "an interval stays open while any chain is
+  unmatched". Implement; PASS.
+  `git commit -s -m "server: each returned invoice becomes a reconciliation item with its known amounts and evidence"`.
 
-#### Task 12.2: The management API
+#### Task 12a.2: The management API
 
 **Files:** `apps/server/src/handover-gap-api.ts`: `GET /management-api/handover/gaps`
 (`report.view`), `POST .../:id/acknowledge` and `POST .../:id/resolve`
-`{ note, correctionReference? }` (both `node.promote`: the people who may switch the venue's
-server; a builder's choice, open to the owner). An acknowledgement is not a resolution; a
-correction reference names an M2-owned record and never changes the item's amounts. Test
-`apps/server/src/handover-gap-api.test.ts`.
+`{ note, correctionReference? }` (both `node.promote`, decision 11). An acknowledgement is not a
+resolution; a correction reference names an M2-owned record and never changes the item's
+amounts. Test `apps/server/src/handover-gap-api.test.ts`.
 
 - [ ] Failing tests per route and permission; "resolve without a note is refused naming `note`";
   implement; PASS. `git commit -s -m "server: list, acknowledge and resolve handover gaps"`.
 
-#### Task 12.3: The dashboard screen
+#### Task 12a.3: The list screen
 
 **Files:** `apps/dashboard/src/screens/handover-gaps-screen.ts` (under Reports), its strings,
-`navigation.ts`, tests (`*.test.ts`, `*.a11y.test.ts`, `*.unsaved.test.ts` for the resolve form,
-CLAUDE.md §3). Columns: date, old box, series and number, taxable, tax, gross ("unknown" for an
-interval), status, responsible person. Guide: `servers.md` `{#reconciliation}` both languages.
+`navigation.ts`, tests (`*.test.ts`, `*.a11y.test.ts`). Columns: date, old box, series and number,
+taxable, tax, gross ("unknown" for an interval), status, responsible person, and a link to the
+item's evidence.
 
-- [ ] Failing tests (Forms contract; English and Spanish; axe both themes); implement; PASS.
+- [ ] Failing tests (English and Spanish; axe both themes); implement; PASS.
   `git commit -s -m "dashboard: the handover reconciliation list"`.
 
-#### Task 12.4: The gap in the reports
+#### Task 12a.4: Acknowledge and resolve
 
-**Files:** `packages/reporting/src/daily-close.ts` and `vat-summary.ts` gain a section "Invoices
-returned from the old box" for the day (counts and taxable, tax and gross, from
-`handover_gap_items`), and "Unknown: the old box's records from {from} are missing" for a day an
-open interval covers; `cash-up.ts` gains the same lines beside, not inside, its totals. Tests in
-their suites.
+**Files:** the same screen's acknowledge action and resolve form, with `draftScopeFor` and a
+`*.unsaved.test.ts` (CLAUDE.md §3).
 
-- [ ] Failing tests: "the day of invoice 218 shows €100.00 / €10.00 / €110.00 returned and the
-  cash-up's own totals unchanged"; "a day inside an open interval says unknown". Implement; PASS.
-  `git commit -s -m "reporting: show returned invoices and unknown intervals beside the day's own totals"`.
+- [ ] Failing tests (Forms contract; the unsaved-changes guard; English and Spanish); implement;
+  PASS. `git commit -s -m "dashboard: acknowledge and resolve a handover gap"`.
 
-#### Task 12.5: Final checks for Slice 12
+#### Task 12a.5: Lines beside the daily close and the cash-up
 
-- [ ] As Task 6.4, plus `pnpm --filter @waitron/reporting exec vitest run`.
+**Files:** Create `packages/reporting/src/handover-gap-lines.ts` (`handoverGapLines(tx, day)`:
+"Invoices returned from the old box" with counts and taxable, tax and gross for the day, and
+"Unknown: the old box's records from {from} are missing" for a day an open interval covers), read
+by the close and cash-up screens when they open. `daily-close.ts`, `cash-up.ts`, `close-types.ts`,
+`record-daily-close.ts` and `daily-close-hash.ts` are **not** changed. Tests
+`packages/reporting/src/handover-gap-lines.test.ts`, the two screens' suites.
+
+- [ ] **Step 1: Write the failing tests.** "the day of invoice 218 shows €100.00 / €10.00 /
+  €110.00 returned"; "a day inside an open interval says unknown"; **"the frozen close of a
+  fixture day hashes the same before and after this change"** (a golden `entry_hash` for a seeded
+  day, through `recordDailyClose`); "the cash-up's own totals are unchanged".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/reporting exec vitest run src/handover-gap-lines.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it and the screens' suites — PASS; then `pnpm --filter @waitron/reporting exec vitest run src/daily-close-hash.test.ts src/record-daily-close.test.ts src/verify-daily-close-chain.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "reporting: show returned invoices and unknown intervals beside the day's close, never inside it"`.
+
+#### Task 12a.6: The guide
+
+- [ ] `servers.md` `{#reconciliation}` in both languages: what each line means, what
+  acknowledgement and resolution do, why a returned invoice is beside the close and not in it.
+  Guide suites as Task 6.5. `git commit -s -m "guide: the handover reconciliation list"`.
+
+#### Task 12a.7: Final checks for Slice 12a
+
+- [ ] As Task 6.6, plus `pnpm --filter @waitron/reporting exec vitest run`.
+
+---
+
+### Slice 12b — Returned invoices in the VAT return
+
+**FISCAL** (it changes the VAT figure Waitron prepares). The owner lands it, **after the owner
+and the venue's tax adviser answer Q1**. Built on Q1's default (a); under (b) this slice is not
+landed.
+
+#### Task 12b.1: The returned-invoices line
+
+**Files:** `packages/reporting/src/vat-return.ts` (the output side adds the returned invoices of
+the period, bucketed by their own *fecha de expedición*, as a separate line in `VatReturn`),
+`modelo-303.ts` and `dr303.ts` (the line carried into the boxes they fill), `types.ts`. Tests in
+`vat-return.test.ts`, `modelo-303.test.ts`, `dr303.test.ts`.
+
+- [ ] Failing tests: "the quarter of invoice 218 shows €10.00 more output VAT, on its own line";
+  "a returned invoice dated in another period is not counted here"; "a period with none is
+  unchanged" (control: every existing case passes unedited). Implement; PASS; the golden and
+  immutability suites unedited.
+  `git commit -s -m "reporting: count invoices returned from the old box in the VAT return, on their own line (owner, Q1)"`.
+
+#### Task 12b.2: Final checks for Slice 12b
+
+- [ ] As Task 2.8, plus `pnpm --filter @waitron/reporting exec vitest run`. PR first line: FISCAL;
+  "the VAT return counts returned invoices; owner and adviser answered Q1 on <date>".
 
 ---
 
 ### Slice 13 — Archive, the wipe gates, and becoming the spare
 
-**FISCAL** (it gates the wipe of a box that holds tax records). The owner lands it.
+**FISCAL** (it gates the wipe of a box that holds tax records). The owner lands it. It runs for a
+returning box after either scenario (decision 13).
 
 #### Task 13.1: The returning box archives itself
 
@@ -1899,31 +2635,49 @@ signed query from a box its chart lists. Test `handover-health-api.test.ts`.
 receipt matches (huella exact; filing rows not behind); per-chain counts and heads equal; every
 record has a filing row on M2; per chain, the sums of `importe_total` and `cuota_total` of the
 transferred records equal; M2's health passes (five-minute and fifteen-minute bounds, starting
-values); the archive is verified. Shown on M1's restricted page and M2's Servers screen; retried
-every minute. A manager may override the health gate only, after a fresh sign-in on M1's page.
-Test `handover-wipe-gates.test.ts`.
+values); the archive is verified. After a controlled handover the receipt is the empty-records
+batch's (Task 10.7), so the same gates apply. Shown on M1's restricted page and M2's Servers
+screen; retried every minute. A manager may override the health gate only, after a fresh sign-in
+on M1's page. Test `handover-wipe-gates.test.ts`.
 
 - [ ] Failing tests: one per gate (each gate removed in turn lets a planted fault through — the
-  proof by deletion, CLAUDE.md §4); "the override reaches the health gate and no other".
-  Implement; PASS.
+  proof by deletion, CLAUDE.md §4); "the override reaches the health gate and no other"; "a
+  controlled M1 with an empty-records receipt passes when M2 is healthy". Implement; PASS.
   `git commit -s -m "server: a returning box wipes nothing until every gate passes"`.
 
 #### Task 13.4: Wipe and rejoin
 
 **Files:** `apps/server/src/rejoin.ts` (`rejoinAsSecondary`, `:39-62`) requires `judgeWipe` to pass
 when this box's `node.db` holds a handover operation; the wipe keeps `<state>/handover-archive/`.
-No archive is deleted by any code here: deletion waits for A664's retention policy, and while a
-reconciliation item or filing case names one of its records it must not happen (design §5).
-Tests in `rejoin.test.ts`.
+The wipe already removes `node.db` (`db-wipe.ts:20-28`), so the restriction and the operation rows
+go with it — the only way a restriction ends. No archive is deleted by any code here: deletion
+waits for A664's retention policy, and while a reconciliation item or filing case names one of its
+records it must not happen (design §5). Tests in `rejoin.test.ts`.
 
 - [ ] Failing tests: "refused while a gate fails"; "after a pass, the box wipes and keeps its
-  archive"; "no code path deletes an archive" (a text guard over `apps/server/src`, weaker than its
-  name: it reads text). Implement; PASS. Guide: `servers.md` `{#old-box-becomes-spare}`.
+  archive"; **"after the wipe and re-adoption, the box starts with no restriction and can later
+  be a handover's destination"** (a fresh `node.db`, then Task 5.2's offer accepted); "no code
+  path deletes an archive" (a text guard over `apps/server/src`, weaker than its name: it reads
+  text). Implement; PASS. Guide: `servers.md` `{#old-box-becomes-spare}`.
   `git commit -s -m "server: a returning box becomes a spare only after the gates, and keeps its archive"`.
 
-#### Task 13.5: Final checks for Slice 13
+#### Task 13.5: "The old box will not return"
 
-- [ ] As Task 2.6. PR first line: FISCAL.
+**Files:** `apps/server/src/handover-gap-api.ts` gains
+`POST /management-api/handover/:operationId/source-not-returning` (`node.promote`, fresh sign-in,
+a required note); the reconciliation screen offers it on an operation at `return_pending`. It
+moves M2's operation to `return_abandoned` and leaves every open gap item open (decision 14).
+Tests in `handover-gap-api.test.ts` and the screen's suite.
+
+- [ ] Failing tests: "closes the operation and keeps the unknown interval open"; "a new handover
+  can begin afterwards"; "refused without `node.promote`"; "a returning M1 after that is still
+  restricted by M2's chart" (Task 3.4's `superseded`), with its return not built — the test's
+  comment says so. Implement; PASS.
+  `git commit -s -m "server: a manager can close a return that is never coming, keeping the gap open"`.
+
+#### Task 13.6: Final checks for Slice 13
+
+- [ ] As Task 2.8. PR first line: FISCAL.
 
 ---
 
@@ -1936,12 +2690,15 @@ before A947 3c, and the groundwork A1188's part 0 needs.
 
 **Files:** `apps/server/src/handover-copy-from-backup.ts`, using the restore readers with the
 spare's own identity kept (`skipSecrets`, `apps/server/src/restore.ts:403-404,417-419`) and its
-`node.db` untouched. Refusals: `handover.copy_predates_destination` when the backup's chart does
-not list this box (a box missing from the chart could not be checked by a returning M1); the
-backup key missing → `handover.backup_key_missing`. Test `handover-copy-from-backup.test.ts`.
+`node.db` untouched, under the house rules for replacing `venue.db` (Global Constraints; add the
+file to `REPLACES` in `scripts/backup-room-note.test.ts`). Refusals:
+`handover.copy_predates_destination` when the backup's chart does not list this box (a box missing
+from the chart could not be checked by a returning M1); the backup key missing →
+`handover.backup_key_missing`. Test `handover-copy-from-backup.test.ts`.
 
-- [ ] Failing tests including "the box keeps its own node id and signing key after placement";
-  implement; PASS. `git commit -s -m "server: a spare can take a selected backup as its last copy, as itself"`.
+- [ ] Failing tests including "the box keeps its own node id and signing key after placement" and
+  "the backup-room note is gone before `venue.db` changes"; implement; PASS.
+  `git commit -s -m "server: a spare can take a selected backup as its last copy, as itself"`.
 
 #### Task 14.2: Choose the copy on the emergency page
 
@@ -1959,7 +2716,7 @@ backup key missing → `handover.backup_key_missing`. Test `handover-copy-from-b
 
 #### Task 14.4: Final checks for Slice 14
 
-- [ ] As Task 2.6.
+- [ ] As Task 2.8.
 
 ---
 
@@ -1980,7 +2737,7 @@ The later A1188 parts do use this plan:
 | --- | --- | --- |
 | 0 (a copy under its own identity) | placing a copy without taking the old box's identity | Slice 14 (local); a Cloud copy's identity waits for the contract amendment A1188 §9 item 4 names |
 | 3 (the locked start) | a start that serves nothing that sells | Slice 2's restricted start is the pattern; the locked start is A1188's own |
-| 4 (declaration and activation) | the declaration format, its recording before activation, the activation | Slices 7 and 8 (the declaration's `provider` field stays null until the joint specification) |
+| 4 (declaration and activation) | the declaration format, its recording before activation, the activation | Slices 7 and 8 (the declaration's `provider` field stays null until the joint specification); A1188 §12's open wait is Q2 here |
 | 6 (the returning box) | the start check and the supersession | Slice 3; asking Cloud is A1188's own addition |
 
 Tell the watcher in the campaign's questions file when Slices 3, 7 and 14 land (the queue asks).
@@ -1990,7 +2747,8 @@ Tell the watcher in the campaign's questions file when Slices 3, 7 and 14 land (
 ## Waiting for the joint specification with Cloud
 
 Not built by this plan, and not invented here (contract, "Map the person and the retry",
-`08a2a0d4` lines 1470–1484):
+`08a2a0d4` lines 1470–1495). Slice 0's Task 0.3 sends these to Cloud's lane G before any build
+slice; no local slice waits for the answer.
 
 - **The authentication bridge**: binding a Cloud account, venue and operation to the venue's
   `node.promote` holder, with its format, expiry, revocation and replay refusal.
@@ -1998,21 +2756,21 @@ Not built by this plan, and not invented here (contract, "Map the person and the
   declaration; its content for a hosted M1 is the joint format.
 - **A hosted M2 that is not in M1's chart**: a returning M1 cannot verify a chart signed by a key
   it never trusted (A1188 §12; backlog A1275). Slice 14 refuses such a copy locally.
-- **Cloud's resource journal bound to the same operation** (contract, same section).
-
-One docs task, after Slice 7 lands: write these four as questions to Cloud's lane G in the shared
-contract's proposal process, citing this plan's Formats.
+- **Cloud's resource journal bound to the same operation and binding fingerprint** (contract
+  `:1488-1490`), against formats that are local-only version 1 here.
 
 ---
 
 ## Owner task: physical qualification on real boxes
 
-**For the owner, after A947 3b and 3c and Slices 0–13 have landed. Not done by any implementer;
+**For the owner, after A947 3b and 3c and Slices 0–14 have landed. Not done by any implementer;
 no simulation above counts as it.** On two real boxes on one switch, with the internet unplugged
 throughout and every clock read at the start and the end:
 
-1. Controlled: hand over mid-service from the Servers screen; switch on the spare's page; pull M1's
-   power during the capture once, and during the activation once.
+1. Controlled: hand over mid-service from the Servers screen, with a card payment held open at the
+   reader during the stepdown; switch on the spare's page; pull M1's power during the capture
+   once, and during the activation once; watch M1 return its empty batch, pass the gates and
+   rejoin.
 2. Emergency: pull M1's plug mid-sale after a cash sale the spare has not copied; declare on the
    spare from a phone; sell; power M1 back; watch it restrict itself, return its invoice, pass the
    gates and rejoin.
@@ -2028,12 +2786,56 @@ the joint specification and Cloud's half.
 
 ## Still unsettled
 
-- **Q1** (above), before Slice 11.
-- **Passkeys on the spare's page** wait for A947 4b/4d (decision 7).
+- **Q1** (above), before Slice 12b lands; pending the venue's tax adviser too.
+- **Q2** (above); Task 7.4b only if the owner picks (b).
+- **Passkeys on the spare's page** wait for A947 4b/4d (decision 9).
 - **The last-activity time** of a mirror's copy is a proxy until A947 3c's follower reports its
   position (Task 7.2).
-- **Whether `vf-recovery-hour` can drive a promotion** is found in Task 6.2; if not, that task
+- **Whether `vf-recovery-hour` can drive a promotion** is found in Task 6.4; if not, that task
   touches fiscal UI code.
-- **Whether the promotion preparation can take the restore wait** is found in Task 7.4; if not,
-  that is a change to `hour-selection.ts`, stopped and reported.
+- **Whether M2 sees every minute name M1 used from the copy alone** is found by Task 4.5's probe;
+  if not, the history file travels as the restore path already places it.
+- **What M2's certificate card shows after activation** is found by Task 5.10; if it shows no
+  certificate, a FISCAL follow-up maps it.
+- **A return to a box other than the one the old box handed to** (M2 handed over to M3 before M1
+  came back) is not built; Task 13.5 leaves M1 restricted and its records in its archive.
 - **Archive deletion** waits for A664's retention policy; nothing here deletes one.
+
+---
+
+## Review round 1: what changed
+
+A fresh-context review of draft `4f62994710` (`/Users/clintongormley/waitron-campaign/a1018/review-1.md`).
+Each finding was checked against the code on `61bfdfe405` before acting; the check is named.
+
+| Finding | Checked by | What changed |
+| --- | --- | --- |
+| C1 stepdown refuses admitted card sales and stops nothing in the background | read `till-sale.ts:1625,1774,2184` (admission re-checked in the second transaction), `boot.ts:3205-3206`, `clock-watch.ts:281`, `boot.ts:505-512` | Applied. Decisions 2 and 3 rewritten; new Task 2.3 (handover gate, own code `handover.stepping_down`, self-exclusion, event streams uncounted); Task 2.4 quiesces the named duties at once and never touches the admission or the role; new Task 2.5 uses the real card route and drain loop, with the review's probe as its control; Task 3.3 uses the same sequence for a superseding chart |
+| C2 Slice 3 reachable today; a main box would wait at every start | read `mirror-bundle-api.ts:207`, `standings.ts:30-38`; `git grep "insert(nodes)"` (no writer of another box's row) | Applied: the rule counts only peers that finished joining (a `nodes` row, which only A947 3b writes; decision 5); the review's regression test and a real-start test in Task 3.4; the gate exemptions in Task 3.2; the false "nothing reachable" sentence replaced with three traced reasons |
+| I1 every new POST on M2 refused by the read-only gate | read `read-only-gate.ts:32-37`, `boot.ts:1707-1715` | Applied: new Task 3.2, one list of exempt routes with how each authenticates, a test that the list is exact, rows added by Slices 5 and 7 |
+| I2 controlled activation records a false "offline" fact | read `hour-recovery-preparation.ts:91,113-114`, `allocation-envelope.ts:195-210`, `classification.ts:10` (append-only) | Applied: new Slice 5a (FISCAL — LOUD) adds the relinquished fact and updates the four exact-key readers and every builder found by grep |
+| I3 the emergency wait needs fiscal code | read `hour-selection.ts:461`; CLAUDE.md §5 | Applied as owner question Q2, recommending the next free minute (A947 §6.5 already chose it for a switch); Task 7.4b exists only for the other answer; Task 7.4's "stop and report" removed |
+| I4 returned invoices left out of modelo 303; Q1 not a genuine choice | read `vat-return.ts:11-38`; design §5 | Applied: old Q1 dropped with its reason; new Q1 asks the 303 question; Slice 12 split into 12a (not fiscal) and 12b (FISCAL, gated by Q1) |
+| I5 handover records never end; a controlled M1 has no path to spare | read `db-wipe.ts:20-28`, `packages/store/src/index.ts:49` | Applied in part. The claim that a rejoined box restarts restricted forever does not hold: the rejoin wipe already deletes `node.db`; the plan now says so and Task 13.4 tests it. The rest holds: states `return_abandoned` and `replaced` added (the draft's crash replacement had no closed state either), a controlled M1 returns an empty batch through the same exchange (decision 13), Task 13.5 closes a return that never comes |
+| I6 `venue.db`'s `local` tables missing from the inventory | read `packages/db/src/classification.ts:257-276`, `fiscal-verifactu/src/classification.ts:20-29` | Applied, plus `tenant_credentials` (`credentials/src/classification.ts:12`), which the review missed, and a correction: `module-preparation-state.json` holds minute selections, not rebuildable data (Task 4.5's probe). The completeness test is a root guard over every `local` table and module state source |
+| I7 the second filing path ignores the AEAT wait and chain order | read `drain.ts:416-481,1185-1237` | Applied: Task 11.3 shares the wait and incident pieces with the drain unchanged; Task 11.4 tests both rules |
+| I8 A764 payment ownership not addressed | read `docs/backlog/payments.md:476-479`, `payments.ts:57-58` | Applied: new Slice 4b (one collection owner per payment, through the unwritten `node_id`), Task 5.9 hands the old box's payments to the new one (decision 12) |
+| I9 indicator misses open requests | read `payments.ts:20-40`, `tender-refunds.ts:23,88-98` | Applied: Task 4.4 lists `initiated`, `accepted_offline` and pending card refunds |
+| I10 emergency preview never checks the chains | read `verify.ts:41-60`, `chain.ts:112-130`, `backup-verification-chain.ts:52-155` | Applied with a different tool: `verifyChain` checks only two records and can insert, so new Task 4.3 exports the read-only whole-chain `walk`; Tasks 5.5, 7.2 and 7.3 use it |
+| I11 replacing `venue.db` omits house rules | read `scripts/backup-room-note.test.ts`, `restore.ts:590,651`, `client.ts:98` | Applied: a Global Constraint, and Tasks 5.7 and 14.1 test the note, the lock and Litestream's folder |
+| I12 tasks too big | — | Applied: 3.6 split into 3.7–3.8 (run the 19 files directly, not the package coverage run); 5.5 into 5.7–5.8; 6.2 into 6.2–6.4; 10.4 into 10.5–10.6; 11.3 into 11.3–11.5; 12.3 into 12a.3–12a.4 |
+| Minor: "Slices 0–10 and 12–14 the same under either answer" | — | Moot: that Q1 is dropped; the slice table now has a "Gated by" column |
+| Minor: formats "settled"; Cloud notice after Slice 7 | fetched the contract at `08a2a0d4` (hash `157556c3…6d02`), read `:1387`, `:1488-1490` | Applied: "local-only, version 1"; Task 0.3 sends the notice before Slice 1 |
+| Minor: passkey citation | read `passkey.ts:181,263` | Applied: the sign-in challenge write is `:263-265` |
+| Minor: suite count 19, not 18 | ran the review's `git grep` (19) | Applied |
+| Minor: the node probe drops `term` | read `node-api.ts:45-47` | Applied: restricted and waiting starts answer `term`; the till also posts to a server that answers none (Task 3.6) |
+| Minor: unlisted builder choices | — | Applied: decisions 10 and 11 |
+| Minor: return batch drops `envio_flujo` | read A947 §7.1 | Applied: carried, with a never-earlier rule (decision 8, Task 10.6) |
+| Minor: Slice 14 depends on Slice 8 | read Task 14.2 | Applied in the slice table |
+| Minor: Slice 10 must stay `return_pending` while originals are unstored | — | Applied: Slice 10's preamble, Tasks 10.6 and 11.2 |
+| Minor: Task 11.1's manifest entry and `_id` columns | — | Applied |
+| Minor: controlled handovers get no audit row | — | Applied: `handover_activations` in Task 5.1, for both scenarios |
+| Minor: reconciliation list lacks evidence links | design §5 | Applied: `evidence` column (Task 7.1), filled in Task 12a.1, linked in 12a.3 |
+| Minor: a mirror listens on loopback only | read `boot.ts:1691-1695` | Applied: fact 4 in "Before you build" |
+| Minor: daily close is hash-chained; Slice 12 "not fiscal" doubtful | read `daily-close-hash.ts:71-95`, `db/src/classification.ts:38` | Applied: returned invoices are shown beside the close, never inside it, with a golden-hash test (Task 12a.5); Q1 says so |
+| Fiscal guardrails | — | Slices 5a, 12b and Task 7.4b marked FISCAL; every slice keeps the golden huella and immutability suites unedited |
