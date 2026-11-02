@@ -40,7 +40,7 @@ function temporaryDirectory(prefix) {
   return directory;
 }
 
-const hasTimeout = ["gtimeout", "timeout"].some(
+const hasTimeout = ["gnutimeout", "gtimeout", "timeout"].some(
   (name) => spawnSync("sh", ["-c", `command -v ${name}`]).status === 0,
 );
 
@@ -123,7 +123,7 @@ const failureLines = (stderr) =>
 describe("ci-setup-pnpm.sh", () => {
   it("finds a timeout command, which the script needs", () => {
     // Fails rather than skips: without one every bound below is untested.
-    expect(hasTimeout, "neither gtimeout nor timeout is on PATH").toBe(true);
+    expect(hasTimeout, "none of gnutimeout, gtimeout or timeout is on PATH").toBe(true);
   });
 
   it("installs the package.json version and puts its bin directory on GITHUB_PATH", () => {
@@ -250,22 +250,26 @@ describe("ci-setup-pnpm.sh", () => {
     expect(result.npmArgs).toBe("");
   });
 
-  it("stops before calling npm when neither gtimeout nor timeout is on PATH", () => {
-    // Only what the script runs before its timeout lookup, so neither timeout command is reachable.
+  it("stops before calling npm when no timeout command is on PATH", () => {
+    // Only what the script runs before its timeout lookup, so no timeout command is reachable.
     const tools = temporaryDirectory("ci-setup-pnpm-tools-");
     symlinkSync(process.execPath, join(tools, "node"));
     const dirname = spawnSync("sh", ["-c", "command -v dirname"], { encoding: "utf8" });
     symlinkSync(dirname.stdout.trim(), join(tools, "dirname"));
     const path = `${STUB_BIN}:${tools}`;
-    const probe = spawnSync(BASH, ["-c", "command -v gtimeout || command -v timeout"], {
-      env: { PATH: path },
-    });
-    expect(probe.status, "the PATH must really hide both timeout commands").not.toBe(0);
+    const probe = spawnSync(
+      BASH,
+      ["-c", "command -v gnutimeout || command -v gtimeout || command -v timeout"],
+      {
+        env: { PATH: path },
+      },
+    );
+    expect(probe.status, "the PATH must really hide every timeout command").not.toBe(0);
     const node = spawnSync(BASH, ["-c", "node -p 1"], { encoding: "utf8", env: { PATH: path } });
     expect(node.stdout, "node must still run, or the script stops before the lookup").toBe("1\n");
     const result = run("ok", { PATH: path });
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("neither gtimeout nor timeout is on PATH");
+    expect(result.stderr).toContain("none of gnutimeout, gtimeout or timeout is on PATH");
     expect(result.npmArgs).toBe("");
     expect(result.githubPath).toBe("");
   });

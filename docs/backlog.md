@@ -5959,11 +5959,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **`scripts/ci-diff-paths.sh` still takes the first `timeout` on PATH for its `-k` bound.** On
-  GitHub's ubuntu-26.04 runners that is uutils `timeout`, whose forced kill misses the command's
-  children (A1310, [receipt](developers/ci-and-gates.md#every-pnpm-setup-is-bounded)). It bounds a
-  `gh api` call, and whether `gh` ever leaves a child running is not checked. Look for
-  `gnutimeout` first there too, with a test, or record why it need not.
+- **`scripts/ci-diff-paths.sh` never looks for `gnutimeout` for its `-k` bound** (left open by
+  A1310, #2400). On ubuntu-26.04 runners it gets uutils' `timeout`, whose forced kill reaches only
+  `gh` itself ([receipt](developers/ci-and-gates.md#every-pnpm-setup-is-bounded)); whether `gh api`
+  starts a child is not checked. A fix also needs a `gnutimeout` stub in `ci-main-recovery.test.mjs`.
 
 - **A1306. Rewrite git history to drop the development artifacts** (owner, 2026-11-02: "there is
   no point in keeping these development artifacts as history"). Mock-ups and screenshots left the

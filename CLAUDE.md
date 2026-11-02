@@ -156,10 +156,12 @@ hook, or how tests are scheduled:
 - **Every workflow pnpm setup runs `scripts/ci-setup-pnpm.sh`: three attempts, each under `timeout`,
   then fail. Never use `pnpm/action-setup`.** Guards: `scripts/ci-workflow.test.mjs` (weaker than its
   name: reads text) and `scripts/ci-setup-pnpm.test.mjs`.
-- **On Ubuntu 26.04 `timeout` is uutils, whose `-k` forced kill reaches the command alone, never its
-  children; a script that relies on `-k` to stop a process tree looks for `gnutimeout` first.** Cost:
-  main's root-guards went red on every 26.04 runner. Guard: the "prefers gnutimeout" case in
-  `scripts/ci-setup-pnpm.test.mjs`, weaker than the rule: that script only.
+- **On GitHub's ubuntu-26.04 runners `timeout` is uutils', not GNU's, and its `-k` forced kill
+  reaches the command alone, never its children; a script that relies on `-k` to stop a process tree
+  looks for `gnutimeout` first.** Cost: root-guards failed on 26.04 runners when the ignored-stop
+  case hit its 30 s limit, main's own CI among them. Guards: the "prefers gnutimeout" and "kills an
+  attempt that ignores the polite stop" cases in `scripts/ci-setup-pnpm.test.mjs`, weaker than the
+  rule: that script only; `scripts/ci-diff-paths.sh` never looks for `gnutimeout` (backlog).
   [Receipt](docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded).
 - **Every `actions/setup-node` has two bounded attempts; only a failed first attempt runs the retry,
   and a second failure fails the job.** Guard: `scripts/ci-workflow.test.mjs`, weaker than its name:

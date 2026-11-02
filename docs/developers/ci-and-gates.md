@@ -2203,16 +2203,22 @@ stop (`trap '' TERM`); with only `-k` taken off, it failed and the plain hang ca
 
 The script prefers GNU's timeout: `gnutimeout` (Ubuntu 26.04's name for it, package
 `gnu-coreutils`), then `gtimeout` (macOS Homebrew), then `timeout`. On GitHub's `ubuntu-26.04`
-image `/usr/bin/timeout` is uutils coreutils 0.10.0, whose forced kill reaches only the command it
-started, so a child of npm that ignores the polite stop outlives the attempt and holds its output
-open. Measured on a GitHub ubuntu-26.04 runner, 2026-11-02, PR #2400's diagnostic workflow, with
-`timeout -k 1 1 bash -c "trap '' TERM; sleep 304; exit 0"` under `strace`: it sent SIGTERM to the
-group but SIGKILL only to the `bash`, and the `sleep` exited 0 afterwards; GNU timeout on 24.04
-sent SIGKILL to the group, and `gnutimeout -k 1 1` on 26.04, in the same shape, sent SIGKILL to
-its own group (bash reported the `gnutimeout` itself killed) and left no `sleep` of its own running. The cause in the source: uucore 0.10.0, `src/uucore/src/lib/features/process/unix.rs:111-113`
-— `send_signal_group` first tries to ignore the signal itself, which fails for SIGKILL, so the
-group kill is never sent. The "prefers gnutimeout" case in `scripts/ci-setup-pnpm.test.mjs` checks
-the lookup order only, through a wrapper around whichever timeout the machine has.
+image `/usr/bin/timeout` is uutils coreutils 0.10.0 (a Rust rewrite of the GNU tools), whose forced
+kill reaches only the command it started, so a process that command started and that ignores the
+polite stop keeps running after the attempt ends. On 26.04 runners the "kills an attempt that
+ignores the polite stop" case timed out at its 30 s limit (main run `41397795382`'s root-guards,
+among others). Measured in run `41409021580`, PR #2400's diagnostic workflow, on GitHub
+ubuntu-26.04 and 24.04 runners, 2026-11-02, with
+`timeout -k 1 1 bash -c "trap '' TERM; sleep 304; exit 0"` under `strace`: on 26.04 it sent
+SIGTERM to the group but SIGKILL only to the `bash`, and the `sleep` exited 0 afterwards; GNU
+timeout on 24.04 sent SIGKILL to the group, and `gnutimeout -k 1 1` on 26.04, run in the same
+shape without `strace`, was itself killed (bash reported it `Killed`) and left no `sleep` of its own
+running.
+
+The cause in the source: uucore 0.10.0, `src/uucore/src/lib/features/process/unix.rs:111-113` —
+`send_signal_group` first tries to ignore the signal itself, which fails for SIGKILL, so the group
+kill is never sent. The "prefers gnutimeout" case in `scripts/ci-setup-pnpm.test.mjs` checks only
+that `gnutimeout` is picked first, through a wrapper around whichever timeout the machine has.
 
 The cache moved. The action exported `PNPM_HOME=~/setup-pnpm/node_modules/.bin`, and pnpm 9.15.0
 puts its store under `$PNPM_HOME/store/v3` when that is set (`PNPM_HOME=/tmp/fakehome pnpm store
@@ -2233,7 +2239,7 @@ run by a script the step calls is not seen, and the step's `timeout-minutes` is 
 the script's worst case. `scripts/setup-node-pnpm.test.mjs` finds the setup only by a one-line
 `run: bash scripts/ci-setup-pnpm.sh`. The script's behaviour — the bound, the kill
 grace, the retries, the version check, refusing an empty `RUNNER_TEMP` or `GITHUB_PATH`, a
-PATH with neither `gtimeout` nor `timeout`, and a `packageManager` that is not an exact version — is
+PATH with no timeout command, and a `packageManager` that is not an exact version — is
 run under a stubbed npm by `scripts/ci-setup-pnpm.test.mjs`; the real registry is never contacted
 by it.
 
