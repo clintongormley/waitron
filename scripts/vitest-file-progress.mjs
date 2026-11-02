@@ -111,8 +111,10 @@ export default class FileProgressReporter {
     this.progressed(testCase.module);
     const key = label(testCase.module);
     if (!this.cases.has(key)) this.cases.set(key, new Map());
+    const timeout = testCase.options?.timeout;
     this.cases.get(key).set(testCase.id, {
-      timeout: limit(testCase.options?.timeout),
+      // A browser project sends collected tasks as JSON, which turns an Infinity timeout into null.
+      timeout: timeout === null ? Infinity : limit(timeout),
       tries: tries(testCase.options),
     });
     this.trace(testCase.module, "case-start", { name: testCase.fullName });

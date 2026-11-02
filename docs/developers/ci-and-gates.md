@@ -815,9 +815,10 @@ hands the reporter's `onHookStart` only the hook's name and entity, and the call
 nothing), a second such callback (they run one after another with no event between them),
 several hooks of one kind registered in one suite (Vitest reports one start and one end for
 them all), an `aroundEach` or `aroundAll` hook (no report at all), or a retry's delay; only the
-60-second margin covers those. A timeout of 0 or less, or `Infinity`, for a running case or the
-project means Vitest's timer sets no limit, so the file is not paused while that holds; the
-first time it is skipped for this reason it gets one `stack:` line saying
+60-second margin covers those. A running case's timeout, the project's `hookTimeout`, or, while
+no case is running, the project's `testTimeout`, of 0 or less or `Infinity` (a case's `Infinity`
+arrives from a browser project as `null`), means Vitest's timer sets no limit, so the file is not
+paused while that holds; the first time it is skipped for this reason it gets one `stack:` line saying
 `what is running may have no time limit (0 or less, or Infinity), so its page is not paused now`.
 How long a file
 has run overall is not the trigger: a healthy file can run for minutes.
@@ -891,7 +892,7 @@ per page, the printed frames, each no-pause and refused-pause line, the 3- and
 2-second bounds, that every pause is resumed, that a file no page shows yet is
 sampled at a later check and named once, that a project with no browser prints
 nothing, that a file reporting cases and hooks is never paused, the silence bound
-from each timeout (including a timeout of 0 or less, or `Infinity`), that concurrent cases
+from each timeout (including a timeout of 0 or less, `Infinity`, and a case's `null`), that concurrent cases
 each keep their own timeout until their own result, that retries and repeats multiply a case's
 timeout and the hook timeout, that a file skipped for an unlimited case is paused later once a
 bounded case goes silent past its limit, and the disable-and-enable after an unanswered pause. No real browser runs in them.

@@ -1019,7 +1019,14 @@ describe("stack samples from a browser page that a file has kept busy", () => {
       ["the project's test timeout", -1, { testTimeout: -1, hookTimeout: 30_000 }, undefined],
       ["the project's hook timeout", -1, { testTimeout: 30_000, hookTimeout: -1 }, undefined],
       ["the running case's timeout", -1, { testTimeout: 30_000, hookTimeout: 30_000 }, -1],
+      ["the project's test timeout", Infinity, { testTimeout: Infinity, hookTimeout: 30_000 }],
       ["the project's hook timeout", Infinity, { testTimeout: 30_000, hookTimeout: Infinity }],
+      [
+        "the running case's timeout, as a browser project sends Infinity,",
+        null,
+        { testTimeout: 30_000, hookTimeout: 30_000 },
+        null,
+      ],
       [
         "the running case's timeout",
         Infinity,
