@@ -152,7 +152,6 @@ async function setCountry(tx: Transaction, country: string) {
     .onConflictDoUpdate({ target: tenants.id, set: { country } });
 }
 
-/** A venue at `address`. */
 async function venue(address: Address = {}): Promise<VenueScope> {
   return withTransaction(db, async (tx) => {
     await setCountry(tx, address.country ?? "ZZ");

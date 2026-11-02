@@ -75,7 +75,7 @@ const shape = (rows: { name: string; startsOn: string }[]) =>
   rows.map(({ name, startsOn }) => ({ name, startsOn }));
 
 describe("ensureDefaultSeasons", () => {
-  it("gives a location the four default seasons once, however often it runs", async () => {
+  it("gives the venue the four default seasons once, however often it runs", async () => {
     const locationId = await newLocation("Four seasons");
     const first = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
     const second = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
@@ -91,7 +91,7 @@ describe("ensureDefaultSeasons", () => {
     expect(stored).toEqual(first);
   });
 
-  it("gives a new location Spring green, Summer amber, Autumn orange and Winter blue", async () => {
+  it("gives a new venue Spring green, Summer amber, Autumn orange and Winter blue", async () => {
     const locationId = await newLocation("Coloured seasons");
     await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
     const stored = await withTransaction(db, (tx) => readSeasons(tx, { locationId }));
@@ -103,7 +103,7 @@ describe("ensureDefaultSeasons", () => {
     ]);
   });
 
-  it("leaves a location that already has a season alone", async () => {
+  it("leaves a venue that already has a season alone", async () => {
     const locationId = await newLocation("One season");
     const [own] = await db
       .insert(seasons)

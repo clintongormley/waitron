@@ -329,7 +329,7 @@ describe("service-period writers", () => {
     }
   });
 
-  it("uses the location's changeover and refuses a range crossing the end of its business day", async () => {
+  it("uses the venue's changeover and refuses a range crossing the end of its business day", async () => {
     const v = await venue();
     await db
       .update(locations)
