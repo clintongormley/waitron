@@ -9,7 +9,6 @@ afterEach(() => {
 const selection: HoursSelection = { kind: "week", date: "2026-01-05" };
 const hours: PersonHours = {
   personId: "worker",
-  locationId: "place",
   selection,
   period: { start: "2026-01-05", end: "2026-01-12" },
   businessDay: "2026-01-06",
@@ -44,13 +43,13 @@ async function client(respond: (path: string) => unknown = () => hours, cache?: 
 }
 it("own, inbox and manager GETs are passive and carry cookies, an abort signal and no person selector", async () => {
   const { api, calls, activity } = await client();
-  expect(await api.own("place", selection)).toEqual(hours);
+  expect(await api.own(selection)).toEqual(hours);
   await api.ownInbox();
-  await api.manager("place", { kind: "pay-period" });
+  await api.manager({ kind: "pay-period" });
   expect(calls.map((c) => c.path)).toEqual([
-    "/box/management-api/me/attendance/hours?locationId=place&kind=week&date=2026-01-05",
+    "/box/management-api/me/attendance/hours?kind=week&date=2026-01-05",
     "/box/management-api/me/attendance/inbox",
-    "/box/management-api/attendance/hours?locationId=place&kind=pay-period",
+    "/box/management-api/attendance/hours?kind=pay-period",
   ]);
   for (const { init } of calls) {
     expect(init.method).toBe("GET");
@@ -61,12 +60,10 @@ it("own, inbox and manager GETs are passive and carry cookies, an abort signal a
   }
   expect(activity).toEqual([]);
 });
-it("encodes query values and omits an absent date", async () => {
+it("omits an absent date", async () => {
   const { api, calls } = await client();
-  await api.own("a & b", { kind: "month" });
-  expect(calls[0]!.path).toBe(
-    "/box/management-api/me/attendance/hours?locationId=a+%26+b&kind=month",
-  );
+  await api.own({ kind: "month" });
+  expect(calls[0]!.path).toBe("/box/management-api/me/attendance/hours?kind=month");
 });
 const dependencies = [
   "time_entries",
@@ -81,9 +78,9 @@ const dependencies = [
 ];
 it("query keys distinguish each selected scope and every hours source is declared", async () => {
   const { api, calls, activity } = await client();
-  const own = api.ownQuery("place", selection),
+  const own = api.ownQuery(selection),
     inbox = api.ownInboxQuery(),
-    manager = api.managerQuery("place", { kind: "pay-period" });
+    manager = api.managerQuery({ kind: "pay-period" });
   for (const query of [own, inbox, manager]) {
     expect(query.dependencies.map((d) => d.type).sort()).toEqual([...dependencies].sort());
     await query.read();
@@ -92,9 +89,8 @@ it("query keys distinguish each selected scope and every hours source is declare
     own.key,
     inbox.key,
     manager.key,
-    api.ownQuery("elsewhere", selection).key,
-    api.ownQuery("place", { kind: "month" }).key,
-    api.ownQuery("place", { kind: "week", date: "2026-01-12" }).key,
+    api.ownQuery({ kind: "month" }).key,
+    api.ownQuery({ kind: "week", date: "2026-01-12" }).key,
   ];
   expect(new Set(keys).size).toBe(keys.length);
   expect(calls).toHaveLength(3);
@@ -107,7 +103,7 @@ it.each(dependencies)(
     caches.push(cache);
     let total = 480;
     const { api, activity } = await client(() => ({ ...hours, workedMinutes: total }), cache);
-    const watch = cache.observe(api.ownQuery("place", selection), () => {});
+    const watch = cache.observe(api.ownQuery(selection), () => {});
     try {
       await expect.poll(() => watch.snapshot.value?.workedMinutes).toBe(480);
       total = 540;
@@ -124,7 +120,7 @@ it("explicit invalidation refreshes a mounted summary when the change feed is si
   caches.push(cache);
   let total = 480;
   const { api } = await client(() => ({ ...hours, workedMinutes: total }), cache);
-  const watch = cache.observe(api.ownQuery("place", selection), () => {});
+  const watch = cache.observe(api.ownQuery(selection), () => {});
   try {
     await expect.poll(() => watch.snapshot.value?.workedMinutes).toBe(480);
     total = 540;
@@ -144,7 +140,7 @@ it("preserves structured refusal details", async () => {
         { status: 403 },
       ),
   );
-  await expect(api.own("place", selection)).rejects.toEqual({
+  await expect(api.own(selection)).rejects.toEqual({
     code: "attendance.not_permitted",
     params: { personId: "worker" },
     status: 403,
@@ -153,10 +149,8 @@ it("preserves structured refusal details", async () => {
 it("a cached query retains the selection represented by its key", async () => {
   const { api, calls } = await client();
   const selected = { ...selection };
-  const query = api.ownQuery("place", selected);
+  const query = api.ownQuery(selected);
   selected.date = "2026-02-01";
   await query.read();
-  expect(calls[0]!.path).toBe(
-    "/box/management-api/me/attendance/hours?locationId=place&kind=week&date=2026-01-05",
-  );
+  expect(calls[0]!.path).toBe("/box/management-api/me/attendance/hours?kind=week&date=2026-01-05");
 });

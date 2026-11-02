@@ -1,14 +1,7 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import { asc } from "drizzle-orm";
-import {
-  readVenue,
-  readVenueClock,
-  venueLocationId,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { authorizeManager, persons, resolveManagementSession } from "@waitron/identity";
 import { AppError, jobOrigin } from "@waitron/shared";
 import {
@@ -27,11 +20,7 @@ import {
   readManagerHours,
 } from "@waitron/workforce";
 import type { AttendanceLookups } from "@waitron/workforce/attendance-contract";
-import {
-  parseAttendanceCommand,
-  parseAttendanceDayQuery,
-  parseAttendanceLocationQuery,
-} from "./attendance-request.js";
+import { parseAttendanceCommand, parseAttendanceDayQuery } from "./attendance-request.js";
 import type { Logger } from "./logger.js";
 import type { ModuleTimeRecordExport } from "@waitron/module";
 import { mountAttendanceExportApi } from "./attendance-export-api.js";
@@ -168,14 +157,12 @@ export function mountManagementAttendanceApi(
         await withTransaction(deps.db, async (tx): Promise<AttendanceLookups> => {
           const viewer = await authorize(tx, token);
           noQuery(c);
-          const { name, timeZone } = await readVenue(tx);
           const people = await tx
             .select({ personId: persons.id, displayName: persons.displayName })
             .from(persons)
             .orderBy(asc(persons.displayName), asc(persons.id));
           return {
             viewer: { personId: viewer.authorizedBy, canSelfApprove: viewer.role === "admin" },
-            locations: [{ id: await venueLocationId(tx), name, timeZone }],
             people,
           };
         }),
@@ -188,7 +175,7 @@ export function mountManagementAttendanceApi(
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           await authorize(tx, token);
-          parseAttendanceLocationQuery(new URL(c.req.url).searchParams);
+          noQuery(c);
           return readAttendanceManagerQueue(tx);
         }),
       );

@@ -137,11 +137,11 @@ export class AttendanceController {
     await this.refresh();
   }
 
-  async readDay(date: string, locationId: string): Promise<AttendanceDayView | null> {
+  async readDay(date: string): Promise<AttendanceDayView | null> {
     const personId = this.#personId;
     return this.#readEditor("day", async (signal) => {
-      const day = await this.#api.getAttendanceDay(date, locationId, { signal });
-      if (day.personId !== personId || day.date !== date || day.locationId !== locationId)
+      const day = await this.#api.getAttendanceDay(date, { signal });
+      if (day.personId !== personId || day.date !== date)
         throw new TypeError("Attendance day belongs to another selection");
       return day;
     });

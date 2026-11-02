@@ -1,12 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import type {
-  AttendanceInbox,
-  AttendancePrompt,
-  HoursSelection,
-  PersonHours,
-} from "../api/client.js";
+import type { AttendancePrompt, HoursSelection, PersonHours } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import {
@@ -104,14 +99,9 @@ export class TillHoursScreen extends LitElement {
   @property({ type: Boolean }) blocked = false;
   @property({ type: Boolean }) canRetry = false;
   @property() error = "";
-  @property({ attribute: false }) locations: AttendanceInbox["locations"] = [];
-  @state() private selectedLocation = "";
   @state() private selection: HoursSelection = { kind: "week" };
   override willUpdate(changed: PropertyValues): void {
-    if (changed.has("view") && this.view) {
-      this.selectedLocation = this.view.locationId;
-      this.selection = { ...this.view.selection };
-    }
+    if (changed.has("view") && this.view) this.selection = { ...this.view.selection };
   }
   #emit(event: Event, type: string, detail: unknown = null): void {
     event.stopPropagation();
@@ -122,12 +112,9 @@ export class TillHoursScreen extends LitElement {
       return;
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
-  #choose(event: CustomEvent<{ value: string }>, field: "location" | "kind" | "date"): void {
+  #choose(event: CustomEvent<{ value: string }>, field: "kind" | "date"): void {
     event.stopPropagation();
     const value = event.detail.value;
-    const locationId =
-      field === "location" ? value : this.selectedLocation || this.locations[0]?.id;
-    if (!locationId || !this.locations.some((l) => l.id === locationId)) return;
     if (field === "kind" && value !== "week" && value !== "month") return;
     if (
       field === "date" &&
@@ -138,12 +125,9 @@ export class TillHoursScreen extends LitElement {
     const selection: HoursSelection =
       field === "kind"
         ? { ...this.selection, kind: value as "week" | "month" }
-        : field === "date"
-          ? { ...this.selection, date: value }
-          : { ...this.selection };
+        : { ...this.selection, date: value };
     this.selection = selection;
-    this.selectedLocation = locationId;
-    this.#emit(event, "hours-select", { locationId, selection });
+    this.#emit(event, "hours-select", { selection });
   }
   #move(event: Event, direction: number): void {
     const date = this.selection.date ?? this.view?.businessDay;
@@ -158,10 +142,7 @@ export class TillHoursScreen extends LitElement {
     }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(next)) return;
     this.selection = { ...this.selection, date: next };
-    this.#emit(event, "hours-select", {
-      locationId: this.selectedLocation,
-      selection: this.selection,
-    });
+    this.#emit(event, "hours-select", { selection: this.selection });
   }
   #prompt(prompt: AttendancePrompt) {
     const item = this.view?.pending.items.find((i) => i.id === prompt.itemId);
@@ -174,7 +155,7 @@ export class TillHoursScreen extends LitElement {
         >${label}</wt-button
       >`;
     return html`<article data-prompt=${prompt.id}>
-      <h3>${prompt.locationName}${prompt.businessDay ? ` · ${prompt.businessDay}` : ""}</h3>
+      ${prompt.businessDay ? html`<h3>${prompt.businessDay}</h3>` : nothing}
       <p>
         ${t(prompt.kind === "automatic-out" ? "attendance.automatic_counted" : prompt.kind === "missing-times" ? "attendance.supply" : "attendance.proposal")}
       </p>
@@ -207,13 +188,6 @@ export class TillHoursScreen extends LitElement {
         >
       </div>
       <div class="selectors">
-        <wt-combobox
-          name="hoursLocation"
-          label=${t("attendance.location")}
-          .value=${this.selectedLocation || this.locations[0]?.id || ""}
-          .options=${this.locations.map((l) => ({ value: l.id, label: l.name }))}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#choose(event, "location")}
-        ></wt-combobox>
         <wt-combobox
           name="hoursWindow"
           label=${t("hours.window")}
@@ -286,7 +260,7 @@ export class TillHoursScreen extends LitElement {
                       data-fix=${day.date}
                       variant="secondary"
                       .disabled=${this.reading || this.blocked}
-                      @click=${(event: Event) => this.#emit(event, "hours-day", { date: day.date, locationId: view.locationId })}
+                      @click=${(event: Event) => this.#emit(event, "hours-day", { date: day.date })}
                       >${t("attendance.fix_hours")}</wt-button
                     >
                   </article>`,

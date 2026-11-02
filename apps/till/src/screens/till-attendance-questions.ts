@@ -93,8 +93,7 @@ export class TillAttendanceQuestions extends LitElement {
     const proposal = prompt.kind === "proposal";
     const pending = item?.direction === "manager_proposal" && item.status === "waiting-worker";
     return html`<article data-prompt=${prompt.id}>
-      <h2>${prompt.locationName}</h2>
-      ${prompt.businessDay ? html`<p>${t("attendance.work_day")}: ${prompt.businessDay}</p>` : nothing}
+      ${prompt.businessDay ? html`<h2>${t("attendance.work_day")}: ${prompt.businessDay}</h2>` : nothing}
       ${prompt.kind === "automatic-out" ? html`<p>${t("attendance.automatic_counted")}</p>` : nothing}
       ${proposal ? html`<p>${t("attendance.proposal")}</p>` : nothing}
       ${prompt.kind === "missing-times" ? html`<p>${t("attendance.supply")}</p>` : nothing}

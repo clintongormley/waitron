@@ -83,7 +83,7 @@ it("does not offer export on Time corrections or change its existing queue", asy
   const m = await open();
   m.el.mode = "corrections";
   await m.el.updateComplete;
-  await expect.poll(() => m.reads.some((r) => r.path.includes("/queue?"))).toBe(true);
+  await expect.poll(() => m.reads.some((r) => r.path.endsWith("/queue"))).toBe(true);
   expect(m.root.querySelector("[data-export]")).toBeNull();
   expect(
     m.root.querySelector<AttendanceExportDialog>("dashboard-attendance-export-dialog")?.open,

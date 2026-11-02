@@ -129,26 +129,23 @@ for (const enabled of [true, false]) {
               },
             });
           const paths = [
-            `/api/attendance/hours?locationId=${venue.cfg.locationId}&kind=week`,
+            `/api/attendance/hours?kind=week`,
             "/management-api/me/attendance/inbox",
-            `/management-api/me/attendance/hours?locationId=${venue.cfg.locationId}&kind=month`,
-            `/management-api/me/attendance/day?locationId=${venue.cfg.locationId}&date=2026-01-05`,
+            `/management-api/me/attendance/hours?kind=month`,
+            "/management-api/me/attendance/day?date=2026-01-05",
             `/management-api/me/attendance/commands/${crypto.randomUUID()}`,
-            `/management-api/attendance/hours?locationId=${venue.cfg.locationId}&kind=pay-period`,
+            `/management-api/attendance/hours?kind=pay-period`,
           ];
           if (enabled && mode === "primary") {
             const own = await get(paths[1]!);
             expect(own.status).toBe(200);
             const inbox = (await own.json()) as AttendanceInbox;
-            expect(inbox.locations).toEqual([
-              { id: venue.cfg.locationId, name: "Clock venue", timeZone: "Europe/Madrid" },
-            ]);
+            expect(inbox.timeZone).toBe("Europe/Madrid");
             for (const path of [paths[0]!, paths[2]!]) {
               const response = await get(path);
               expect(response.status, path).toBe(200);
               expect(await response.json()).toMatchObject({
                 personId: venue.personId,
-                locationId: venue.cfg.locationId,
                 workedMinutes: 0,
               });
             }
@@ -164,7 +161,6 @@ for (const enabled of [true, false]) {
               expectedRevision: inbox.revision,
               action: "request",
               questionId: null,
-              locationId: venue.cfg.locationId,
               changes: [
                 { target: { missingKind: "in" }, at: "2026-01-05T09:00:00Z", offsetMinutes: 60 },
                 { target: { missingKind: "out" }, at: "2026-01-05T17:00:00Z", offsetMinutes: 60 },
@@ -180,7 +176,7 @@ for (const enabled of [true, false]) {
             result = (await response.json()) as AttendanceCommandResult;
             expect(result.entryIds).toHaveLength(2);
             const selected = await get(
-              `/management-api/me/attendance/hours?locationId=${venue.cfg.locationId}&kind=month&date=2026-01-05`,
+              `/management-api/me/attendance/hours?kind=month&date=2026-01-05`,
             );
             expect(selected.status).toBe(200);
             expect(await selected.json()).toMatchObject({

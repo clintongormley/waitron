@@ -15,24 +15,23 @@ export class HoursApi {
   ownInbox(): Promise<AttendanceInbox> {
     return this.request("/management-api/me/attendance/inbox", "GET", undefined, { passive: true });
   }
-  #path(locationId: string, selection: HoursSelection): string {
+  #path(selection: HoursSelection): string {
     return new URLSearchParams({
-      locationId,
       kind: selection.kind,
       ...(selection.date === undefined ? {} : { date: selection.date }),
     }).toString();
   }
-  own(locationId: string, selection: HoursSelection): Promise<PersonHours> {
+  own(selection: HoursSelection): Promise<PersonHours> {
     return this.request(
-      `/management-api/me/attendance/hours?${this.#path(locationId, selection)}`,
+      `/management-api/me/attendance/hours?${this.#path(selection)}`,
       "GET",
       undefined,
       { passive: true },
     );
   }
-  manager(locationId: string, selection: HoursSelection): Promise<ManagerHours> {
+  manager(selection: HoursSelection): Promise<ManagerHours> {
     return this.request(
-      `/management-api/attendance/hours?${this.#path(locationId, selection)}`,
+      `/management-api/attendance/hours?${this.#path(selection)}`,
       "GET",
       undefined,
       { passive: true },
@@ -51,16 +50,16 @@ export class HoursApi {
   ownInboxQuery(): ResourceQuery<AttendanceInbox> {
     return this.#query("ownInbox", [], () => this.ownInbox());
   }
-  ownQuery(locationId: string, selection: HoursSelection): ResourceQuery<PersonHours> {
+  ownQuery(selection: HoursSelection): ResourceQuery<PersonHours> {
     const selected = { ...selection };
-    return this.#query("hours", ["own", locationId, selected.kind, selected.date ?? null], () =>
-      this.own(locationId, selected),
+    return this.#query("hours", ["own", selected.kind, selected.date ?? null], () =>
+      this.own(selected),
     );
   }
-  managerQuery(locationId: string, selection: HoursSelection): ResourceQuery<ManagerHours> {
+  managerQuery(selection: HoursSelection): ResourceQuery<ManagerHours> {
     const selected = { ...selection };
-    return this.#query("hours", ["manager", locationId, selected.kind, selected.date ?? null], () =>
-      this.manager(locationId, selected),
+    return this.#query("hours", ["manager", selected.kind, selected.date ?? null], () =>
+      this.manager(selected),
     );
   }
 }

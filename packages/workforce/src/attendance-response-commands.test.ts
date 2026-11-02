@@ -202,7 +202,6 @@ function pair(): AttendanceCommandPayload {
   return {
     action: "request",
     questionId: null,
-    locationId,
     reason: "Forgot both times",
     changes: [
       { target: { missingKind: "in" }, at: "2026-01-05T09:00:00Z", offsetMinutes: 0 },
@@ -380,7 +379,6 @@ it("approval changes 480 to 540 only after the manager decides", async () => {
   const value = await command({
     action: "request",
     questionId,
-    locationId,
     reason: "Worked later",
     changes: [
       { target: { entryId: automaticEntryId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
@@ -411,7 +409,6 @@ it("manager pair stays pending until the worker accepts the entire item", async 
   const value = await command({
     action: "propose",
     personId,
-    locationId,
     changes: payload.changes,
     reason: "Please check these times",
   });
@@ -434,7 +431,6 @@ it("stores no location on an approval of a manager's proposal and keeps the ques
   const proposal = await command({
     action: "propose",
     personId,
-    locationId,
     changes: payload.changes,
     reason: "Please check these times",
   });
@@ -502,7 +498,6 @@ it("another worker's target cannot enter an own request", async () => {
   const value = await command({
     action: "request",
     questionId: null,
-    locationId,
     reason: "Wrong worker",
     changes: [{ target: { entryId: target }, at: "2026-01-05T10:00:00Z", offsetMinutes: 0 }],
   });
@@ -655,7 +650,6 @@ it("a declined automatic-time change asks again while the original 480 still cou
   const value = await command({
     action: "request",
     questionId,
-    locationId,
     reason: "Worked later",
     changes: [
       { target: { entryId: automaticEntryId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
@@ -903,7 +897,6 @@ it("a worker dispute retains 480 minutes and both original and proposed times", 
   const value = await command({
     action: "propose",
     personId,
-    locationId,
     reason: "Manager's proposed end",
     changes: [
       { target: { entryId: automaticEntryId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
@@ -952,7 +945,6 @@ it("approval after a frozen 480-minute period adds a live 60-minute impact witho
     await command({
       action: "request",
       questionId,
-      locationId,
       reason: "Worked another hour",
       changes: [
         { target: { entryId: automaticEntryId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },

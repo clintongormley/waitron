@@ -1,4 +1,4 @@
-import { readVenueClock, venueLocationId, type Transaction } from "@waitron/db";
+import { readVenueClock, type Transaction } from "@waitron/db";
 import { businessDayAt, businessDayBounds } from "@waitron/shared";
 import { readLatestLiveEntry, timeEntries } from "@waitron/workforce";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
@@ -7,7 +7,6 @@ export type TillClockStatus = "out" | "working" | "on_break";
 
 export interface TillClockState {
   personId: string;
-  locationId: string;
   businessDay: string;
   state: TillClockStatus;
   lastEntryId: string | null;
@@ -54,7 +53,6 @@ export async function readTillClockState(
   const state = latest === undefined ? "out" : stateAfter[latest.entryKind as LiveKind];
   return {
     personId: scope.personId,
-    locationId: await venueLocationId(tx),
     businessDay,
     state,
     lastEntryId: latest?.entryId ?? null,

@@ -50,7 +50,6 @@ const item: CorrectionItem = {
 };
 const day: AttendanceDayView = {
   personId: "worker",
-  locationId: "shop",
   date: "2026-10-14",
   timeZone: "Europe/Madrid",
   revision: "revision-1",
@@ -93,10 +92,6 @@ const day: AttendanceDayView = {
 };
 const lookups: AttendanceLookups = {
   viewer: { personId: "manager", canSelfApprove: false },
-  locations: [
-    { id: "shop", name: "Deli", timeZone: "Europe/Madrid" },
-    { id: "bar", name: "Bar", timeZone: "Europe/Madrid" },
-  ],
   people: [
     { personId: "worker", displayName: "Ana Worker" },
     { personId: "manager", displayName: "Morgan Manager" },
@@ -196,9 +191,8 @@ async function mount(
         if (lookupFailure) throw new Error("lookup offline");
         return Response.json(data.lookups);
       }
-      if (path.includes("/queue?"))
+      if (path.endsWith("/queue"))
         return Response.json({
-          locationId: new URL(path, location.origin).searchParams.get("locationId"),
           items: data.items.filter((row) =>
             ["waiting-manager", "waiting-worker", "disputed"].includes(row.status),
           ),
@@ -208,7 +202,6 @@ async function mount(
         return Response.json({
           ...data.day,
           personId: args.get("personId"),
-          locationId: args.get("locationId"),
           date: args.get("date"),
           ...(args.get("personId") === "manager"
             ? { items: [], record: { ...data.day.record, entries: [] } }
@@ -341,7 +334,7 @@ describe("dashboard attendance corrections", () => {
       await expect
         .poll(() => m.root.textContent)
         .toContain(action === "approve" ? "Approved" : "Declined");
-      expect(m.reads.filter((read) => read.path.includes("/queue?")).length).toBeGreaterThan(1);
+      expect(m.reads.filter((read) => read.path.endsWith("/queue")).length).toBeGreaterThan(1);
     },
   );
   it("an admin can self-approve, a non-admin cannot, and nobody can self-decline", async () => {
@@ -384,7 +377,6 @@ describe("dashboard attendance corrections", () => {
       ...event,
       action: "propose",
       personId: "worker",
-      locationId: "shop",
       expectedRevision: "revision-1",
       commandId: expect.any(String),
     });
@@ -410,7 +402,7 @@ describe("dashboard attendance corrections", () => {
     const message = m.root.querySelector("[data-action-error]")!.textContent;
     m.liveData!.invalidate([{ type: "time_entries" }]);
     await expect
-      .poll(() => m.reads.filter((r) => r.path.includes("/queue?")).length)
+      .poll(() => m.reads.filter((r) => r.path.endsWith("/queue")).length)
       .toBeGreaterThan(1);
     expect(m.root.querySelector("[data-action-error]")!.textContent).toBe(message);
   });
@@ -602,7 +594,7 @@ it("a worker's dispute delivered by the live feed updates the mounted manager de
   m.data.day = { ...m.data.day, items: m.data.items };
   m.liveData!.invalidate([{ type: "time_entries" }]);
   await expect
-    .poll(() => m.reads.filter((r) => r.path.includes("/queue?")).length)
+    .poll(() => m.reads.filter((r) => r.path.endsWith("/queue")).length)
     .toBeGreaterThan(1);
   await details(m.root);
   expect(m.root.querySelector("[data-approve]")).toBeNull();
@@ -649,7 +641,6 @@ it("names the recorded event kind and can propose one missing clock-out without 
   expect(m.commands[0]).toEqual({
     action: "propose",
     personId: "worker",
-    locationId: "shop",
     expectedRevision: "revision-1",
     commandId: expect.any(String),
     changes: [
@@ -715,15 +706,6 @@ it.each([
   expect(m.root.querySelector("[data-day]")!.textContent).toContain("Closed the shop late");
 });
 
-it("changing location replaces its queue and removes the prior day before another read", async () => {
-  const m = await mount();
-  await details(m.root);
-  await change(m.root, "attendanceLocation", "bar");
-  await expect
-    .poll(() => m.reads.some((read) => read.path.includes("queue?locationId=bar")))
-    .toBe(true);
-  expect(m.root.querySelector("[data-day]")).toBeNull();
-});
 it("a pending day's late answer stays hidden when the selection changes without opening another day", async () => {
   const m = await mount();
   const late = deferred<AttendanceDayView>();
@@ -736,39 +718,10 @@ it("a pending day's late answer stays hidden when the selection changes without 
   await m.el.updateComplete;
   expect(m.root.querySelector("[data-day]")).toBeNull();
 });
-it("a missing selected location blocks an edited proposal without overwriting its draft", async () => {
-  const m = await mount({ live: true });
-  await details(m.root);
-  await click(m.root, "[data-retime]");
-  const form = m.root.querySelector<LitElement>("dashboard-attendance-proposal-dialog")!;
-  await form.updateComplete;
-  await change(form.shadowRoot!, "attendanceReason", "Preserve my draft");
-  m.data.lookups.locations = [];
-  m.data.lookups.people = [];
-  m.liveData!.invalidate([{ type: "locations" }]);
-  await expect
-    .poll(
-      () =>
-        (m.root.querySelector("[name=attendanceLocation]") as HTMLElement & { options: unknown[] })
-          .options.length,
-    )
-    .toBe(0);
-  await form.updateComplete;
-  expect(
-    (form.shadowRoot!.querySelector("[name=attendanceReason]") as HTMLElement & { value: string })
-      .value,
-  ).toBe("Preserve my draft");
-  expect(
-    (form.shadowRoot!.querySelector("[data-save]") as HTMLElement & { disabled: boolean }).disabled,
-  ).toBe(true);
-  form.dispatchEvent(
-    new CustomEvent("proposal-save", {
-      detail: { changes: item.changes, reason: "Preserve my draft" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  expect(m.commands).toEqual([]);
+it("has no Location field and reads the queue as soon as lookups arrive", async () => {
+  const m = await mount();
+  expect(m.root.querySelector('[name="attendanceLocation"]')).toBeNull();
+  await expect.poll(() => m.reads.some((read) => read.path.endsWith("/queue"))).toBe(true);
 });
 it("a passive read's recovery clears its own failure and leaves a completed selected day", async () => {
   const m = await mount({ live: true });
@@ -924,7 +877,6 @@ it("proposes an explicit missing break pair as one command", async () => {
   expect(m.commands[0]).toEqual({
     action: "propose",
     personId: "worker",
-    locationId: "shop",
     expectedRevision: "revision-1",
     commandId: expect.any(String),
     changes: [
@@ -938,10 +890,10 @@ it("proposes an explicit missing break pair as one command", async () => {
     reason: "Forgot the break",
   });
 });
-it("a failed newly selected queue can be reread before choosing a date, and passive lookup refresh keeps the current day", async () => {
+it("a failed queue reread can be retried before choosing a date, and passive lookup refresh keeps the current day", async () => {
   const m = await mount({ live: true });
   m.failReads();
-  await change(m.root, "attendanceLocation", "bar");
+  m.liveData!.invalidate([{ type: "time_entries" }]);
   await expect.poll(() => m.root.querySelector("[data-read-error]")).not.toBeNull();
   m.allowReads();
   await click(m.root, "[data-retry-read]");

@@ -10,7 +10,6 @@ import {
 
 const state = {
   personId: "operator",
-  locationId: "venue",
   businessDay: "2026-10-14",
   state: "working",
   lastEntryId: "entry",

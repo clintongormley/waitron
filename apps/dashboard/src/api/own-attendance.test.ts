@@ -15,7 +15,6 @@ const command: OwnAttendanceCommand = {
 const saved = { commandId: command.commandId, entryIds: ["answer"], replayed: false };
 const day: AttendanceDayView = {
   personId: "worker",
-  locationId: "place",
   date: "2026-01-05",
   timeZone: "Europe/Madrid",
   revision: "current-revision",
@@ -47,11 +46,11 @@ async function client(
 }
 it("own day and requester receipt GETs are passive while the exact command POST is active", async () => {
   const { api, calls, activity } = await client((path) => (path.includes("/day?") ? day : saved));
-  expect(await api.day("place", day.date)).toEqual(day);
+  expect(await api.day(day.date)).toEqual(day);
   expect(await api.command("uuid/encode")).toEqual(saved);
   expect(await api.send(command)).toEqual(saved);
   expect(calls.map((c) => c.path)).toEqual([
-    "/box/management-api/me/attendance/day?locationId=place&date=2026-01-05",
+    "/box/management-api/me/attendance/day?date=2026-01-05",
     "/box/management-api/me/attendance/commands/uuid%2Fencode",
     "/box/management-api/me/attendance/commands",
   ]);
@@ -68,11 +67,10 @@ it("own day and requester receipt GETs are passive while the exact command POST 
   });
   expect(activity).toEqual(["/management-api/me/attendance/commands"]);
 });
-it("a day query distinguishes location and date without adding a person to the wire", async () => {
+it("a day query names only the date, without adding a person to the wire", async () => {
   const { api, calls } = await client(() => day);
-  const query = api.dayQuery("place", day.date);
-  expect(query.key).not.toBe(api.dayQuery("another", day.date).key);
-  expect(query.key).not.toBe(api.dayQuery("place", "2026-01-06").key);
+  const query = api.dayQuery(day.date);
+  expect(query.key).not.toBe(api.dayQuery("2026-01-06").key);
   expect(query.dependencies).toContainEqual({ type: "attendance_response_commands" });
   expect(query.dependencies).toContainEqual({ type: "pay_period_settings" });
   expect(await query.read()).toEqual(day);
@@ -91,7 +89,7 @@ it.each(["send", "receipt"] as const)(
           : { ...day, revision },
       cache,
     );
-    const watch = cache.observe(api.dayQuery("place", day.date), () => {});
+    const watch = cache.observe(api.dayQuery(day.date), () => {});
     try {
       await expect.poll(() => watch.snapshot.value?.revision).toBe("before");
       if (kind === "send") await api.send(command);
@@ -119,7 +117,7 @@ it("a missing receipt is null and a refusal does not refresh as if saved", async
           : day,
     cache,
   );
-  const watch = cache.observe(api.dayQuery("place", day.date), () => {});
+  const watch = cache.observe(api.dayQuery(day.date), () => {});
   try {
     await expect.poll(() => watch.snapshot.status).toBe("ready");
     await expect(api.send(command)).rejects.toEqual({

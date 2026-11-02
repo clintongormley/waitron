@@ -16,7 +16,6 @@ import { attendanceItem } from "./attendance-fixtures.js";
 export function managerHours(): ManagerHours {
   const hours = hoursView({
     personId: "worker",
-    locationId: "shop",
     selection: { kind: "pay-period" },
     period: { start: "2026-01-01", end: "2026-02-01" },
   });
@@ -33,7 +32,6 @@ export function managerHours(): ManagerHours {
     }),
   ];
   return {
-    locationId: "shop",
     selection: { kind: "pay-period" },
     period: hours.period,
     businessDay: hours.businessDay,
@@ -45,7 +43,6 @@ export function managerHours(): ManagerHours {
         displayName: "Retained worker",
         hours: hoursView({
           personId: "retained",
-          locationId: "shop",
           selection: { kind: "pay-period" },
           period: hours.period,
           workedMinutes: 0,
@@ -70,6 +67,7 @@ export async function mountManagerHours(
     theme?: "light" | "dark";
     fail?: boolean;
     held?: Promise<ManagerHours>;
+    hold?: { match: string; promise: Promise<unknown> };
     exportOptions?: { available: boolean; canExportAll: boolean };
   } = {},
 ) {
@@ -78,10 +76,6 @@ export async function mountManagerHours(
     exportOptions: options.exportOptions ?? { available: false, canExportAll: false },
     lookups: {
       viewer: { personId: "manager", canSelfApprove: false },
-      locations: [
-        { id: "shop", name: "Deli", timeZone: "Europe/Madrid" },
-        { id: "bar", name: "Bar", timeZone: "Europe/Madrid" },
-      ],
       people: [{ personId: "worker", displayName: "Ana Worker" }],
     } satisfies AttendanceLookups,
   };
@@ -91,7 +85,9 @@ export async function mountManagerHours(
     refusal = "",
     receipt: unknown = null,
     receiptFailure = false;
-  let held = options.held ? { match: "/hours?", promise: options.held as Promise<unknown> } : null;
+  let held = options.held
+    ? { match: "/hours?", promise: options.held as Promise<unknown> }
+    : (options.hold ?? null);
   let revision = "authoritative-day";
   const request = createRequest({
     fetchImpl: async (path, init) => {
@@ -120,13 +116,11 @@ export async function mountManagerHours(
         const args = new URL(path, location.origin).searchParams;
         return Response.json({
           ...data.hours,
-          locationId: args.get("locationId"),
           people: data.hours.people.map((person) => ({
             ...person,
             hours: {
               ...person.hours,
               period: data.hours.period,
-              locationId: args.get("locationId")!,
             },
           })),
           selection: {
@@ -135,7 +129,7 @@ export async function mountManagerHours(
           },
         });
       }
-      if (path.includes("/queue?")) return Response.json({ locationId: "shop", items: [] });
+      if (path.endsWith("/queue")) return Response.json({ items: [] });
       if (path.includes("/day?")) {
         const args = new URL(path, location.origin).searchParams;
         const hours = data.hours.people.find(
@@ -143,7 +137,6 @@ export async function mountManagerHours(
         )!.hours;
         return Response.json({
           personId: args.get("personId")!,
-          locationId: args.get("locationId")!,
           date: args.get("date")!,
           revision,
           timeZone: "Europe/Madrid",
@@ -161,7 +154,7 @@ export async function mountManagerHours(
     options.theme,
   );
   const root = mounted.el.shadowRoot!;
-  await expect.poll(() => root.querySelector('[name="attendanceLocation"]')).toBeTruthy();
+  await expect.poll(() => root.querySelector('[name="attendancePerson"]')).toBeTruthy();
   return {
     ...mounted,
     root,

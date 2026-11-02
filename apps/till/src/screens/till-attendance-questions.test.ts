@@ -26,9 +26,8 @@ function watch(el: HTMLElement, type: string): CustomEvent[] {
 }
 
 describe("attendance questions before work", () => {
-  it("shows the stored calendar time and offset, not the business day or current location zone", async () => {
+  it("shows the stored calendar time and offset, not the business day or the venue's current zone", async () => {
     const { el } = await mount();
-    expect(el.shadowRoot!.textContent).toContain("The deli");
     const time = el.shadowRoot!.querySelector("time")!;
     expect(time).not.toBeNull();
     expect(time.getAttribute("datetime")).toBe("2026-10-13T23:30:00.000Z");
@@ -37,6 +36,23 @@ describe("attendance questions before work", () => {
       "This automatic finish already counts towards your hours.",
     );
     expect(el.shadowRoot!.textContent).not.toMatch(/unconfirmed/i);
+  });
+
+  it("heads a question card by its work day and a proposal card by nothing", async () => {
+    const proposal = attendancePrompt({
+      id: "proposal",
+      questionId: null,
+      kind: "proposal",
+      businessDay: null,
+    });
+    const { el } = await mount({ inbox: attendanceInbox([attendancePrompt(), proposal]) });
+    const card = (id: string) => el.shadowRoot!.querySelector(`[data-prompt="${id}"]`)!;
+    expect([...card("question").querySelectorAll("h2")].map((h) => h.textContent!.trim())).toEqual([
+      "Work day: 2026-10-13",
+    ]);
+    expect(card("question").querySelectorAll("p")[0]!.textContent).not.toContain("2026-10-13");
+    expect(card("proposal").querySelector("h2")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain("The deli");
   });
 
   it("sends the exact confirmation or edit intent once through real controls", async () => {
@@ -126,11 +142,10 @@ describe("attendance questions before work", () => {
   });
 
   it("holds the supplied oldest-first order and does not turn a pending request into a question", async () => {
-    const first = attendancePrompt({ locationName: "First location" });
+    const first = attendancePrompt();
     const next = attendancePrompt({
       id: "next",
       questionId: "next",
-      locationName: "Second location",
     });
     const { el } = await mount({
       inbox: attendanceInbox(

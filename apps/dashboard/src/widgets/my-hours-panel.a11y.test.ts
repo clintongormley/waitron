@@ -79,7 +79,7 @@ describe.each(["light", "dark"] as const)("own Hours panel in%s", (theme) => {
               ? {
                   personId: "p1",
                   revision: "r",
-                  locations: [{ id: "venue", name: "Deli", timeZone: "Europe/Madrid" }],
+                  timeZone: "Europe/Madrid",
                   prompts: view.pending.prompts,
                   items: view.pending.items,
                 }

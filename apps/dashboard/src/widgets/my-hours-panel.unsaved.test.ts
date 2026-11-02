@@ -45,14 +45,13 @@ async function mount(failedRefresh = false) {
         ? {
             personId: "p1",
             revision: "r",
-            locations: [{ id: "venue", name: "Deli", timeZone: "Europe/Madrid" }],
+            timeZone: "Europe/Madrid",
             prompts: [],
             items: [],
           }
         : url.includes("/day?")
           ? {
               personId: "p1",
-              locationId: "venue",
               date: "2026-01-05",
               timeZone: "Europe/Madrid",
               revision: "day-r",
@@ -69,7 +68,7 @@ async function mount(failedRefresh = false) {
   );
   panel.shadowRoot!.querySelector("dashboard-hours-record")!.dispatchEvent(
     new CustomEvent("hours-day", {
-      detail: { date: "2026-01-05", locationId: "venue" },
+      detail: { date: "2026-01-05" },
       bubbles: true,
       composed: true,
     }),

@@ -3,6 +3,7 @@ import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { hoursView, hoursWithPending } from "../../test/hours-fixtures.js";
+import { attendancePrompt } from "../../test/attendance-fixtures.js";
 import type { HoursRecord } from "./hours-record.js";
 const modules = import.meta.glob<typeof import("./hours-record.js")>("./hours-record.ts");
 const locale = currentLocale();
@@ -37,8 +38,25 @@ it("offers a calendar-day event only with a supplied action label", async () => 
   host.addEventListener("hours-day", (e) => seen.push(e as CustomEvent));
   await userEvent.click(el.shadowRoot!.querySelector('[data-fix="2026-01-06"]')!);
   expect(seen.map((e) => [e.detail, e.bubbles, e.composed])).toEqual([
-    [{ date: "2026-01-06", locationId: "venue" }, true, true],
+    [{ date: "2026-01-06" }, true, true],
   ]);
+});
+it("heads a pending question card by its work day alone", async () => {
+  const { el } = await mount(hoursView());
+  const headings = [...el.shadowRoot!.querySelectorAll("section article h3")];
+  expect(headings.map((h) => h.textContent!.trim())).toEqual(["2026-01-05"]);
+  expect(el.shadowRoot!.querySelector("section")!.textContent).not.toContain("The deli");
+});
+it("draws no heading on a pending proposal card without a work day", async () => {
+  const view = hoursView();
+  view.pending = {
+    ...view.pending,
+    prompts: [attendancePrompt({ personId: "p1", kind: "proposal", businessDay: null })],
+    automaticEntryIds: [],
+  };
+  const { el } = await mount(view);
+  expect(el.shadowRoot!.querySelectorAll("section article")).toHaveLength(1);
+  expect(el.shadowRoot!.querySelector("section article h3")).toBeNull();
 });
 it("keeps pending outside the selected week and preserves480 until the server publishes540", async () => {
   const { el } = await mount(hoursWithPending());

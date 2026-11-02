@@ -206,7 +206,6 @@ describe("missing-attendance delivery worker", () => {
             expectedRevision: (await readAttendanceInbox(tx, personId)).revision,
             action: "request",
             questionId: first!.id,
-            locationId,
             reason: "Missing shift",
             changes: [
               { target: { missingKind: "in" }, at: "2026-01-05T09:00:00Z", offsetMinutes: 60 },

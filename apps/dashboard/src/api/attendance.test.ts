@@ -11,7 +11,6 @@ import type {
 const modules = import.meta.glob<typeof import("./attendance.js")>("./attendance.ts");
 const worker = "10000000-0000-4000-8000-000000000001";
 const manager = "10000000-0000-4000-8000-000000000002";
-const locationId = "10000000-0000-4000-8000-000000000003";
 const itemId = "10000000-0000-4000-8000-000000000004";
 const nodeId = "10000000-0000-4000-8000-000000000005";
 const command: AttendanceCommand = {
@@ -27,7 +26,6 @@ const saved = {
 };
 const lookups: AttendanceLookups = {
   viewer: { personId: manager, canSelfApprove: false },
-  locations: [{ id: locationId, name: "The deli", timeZone: "Europe/Madrid" }],
   people: [
     { personId: worker, displayName: "Ana" },
     { personId: manager, displayName: "Marta" },
@@ -35,7 +33,6 @@ const lookups: AttendanceLookups = {
 };
 const day: AttendanceDayView = {
   personId: worker,
-  locationId,
   date: "2026-10-13",
   timeZone: "Europe/Madrid",
   revision: "subject-revision",
@@ -115,25 +112,25 @@ async function client(
 }
 
 describe("dashboard attendance wire and live reads", () => {
-  it("reads minimal names/current viewer, an exact worker day and location queue with session cookies", async () => {
-    const queue: AttendanceManagerQueue = { locationId, items: [pending] };
+  it("reads minimal names/current viewer, an exact worker day and queue with session cookies", async () => {
+    const queue: AttendanceManagerQueue = { items: [pending] };
     const { api, requests } = await client((path) =>
       path.endsWith("/lookups") ? lookups : path.includes("/day?") ? day : queue,
     );
     expect(await api.lookups()).toEqual(lookups);
-    expect(await api.day(worker, locationId, "2026-10-13")).toEqual(day);
-    expect(await api.queue(locationId)).toEqual(queue);
+    expect(await api.day(worker, "2026-10-13")).toEqual(day);
+    expect(await api.queue()).toEqual(queue);
     expect(requests).toEqual([
       {
         path: "/box/management-api/attendance/lookups",
         init: { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
       },
       {
-        path: `/box/management-api/attendance/day?personId=${worker}&locationId=${locationId}&date=2026-10-13`,
+        path: `/box/management-api/attendance/day?personId=${worker}&date=2026-10-13`,
         init: { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
       },
       {
-        path: `/box/management-api/attendance/queue?locationId=${locationId}`,
+        path: `/box/management-api/attendance/queue`,
         init: { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
       },
     ]);
@@ -145,13 +142,13 @@ describe("dashboard attendance wire and live reads", () => {
         ? lookups
         : path.includes("/day?")
           ? day
-          : path.includes("/queue?")
-            ? { locationId, items: [] }
+          : path.endsWith("/queue")
+            ? { items: [] }
             : saved,
     );
     await api.background.lookups();
-    await api.background.queue(locationId);
-    await api.background.day(worker, locationId, "2026-10-13");
+    await api.background.queue();
+    await api.background.day(worker, "2026-10-13");
     await api.background.command(command.commandId);
     expect(activity).toEqual([]);
     for (const request of requests)
@@ -183,15 +180,11 @@ describe("dashboard attendance wire and live reads", () => {
 
   it("query identities distinguish scope and declare every record/revision source; their reads stay passive", async () => {
     const { api, requests, activity } = await client((path) =>
-      path.endsWith("/lookups")
-        ? lookups
-        : path.includes("/day?")
-          ? day
-          : { locationId, items: [] },
+      path.endsWith("/lookups") ? lookups : path.includes("/day?") ? day : { items: [] },
     );
     const lookup = api.lookupsQuery(),
-      queue = api.queueQuery(locationId),
-      selectedDay = api.dayQuery(worker, locationId, "2026-10-13");
+      queue = api.queueQuery(),
+      selectedDay = api.dayQuery(worker, "2026-10-13");
     const expected = [
       "time_entries",
       "pay_period_closures",
@@ -202,13 +195,11 @@ describe("dashboard attendance wire and live reads", () => {
       "location_day_cutover_changes",
       "location_business_day_settings",
     ].map((type) => ({ type }));
-    expect(lookup.dependencies).toEqual([{ type: "persons" }, { type: "locations" }]);
+    expect(lookup.dependencies).toEqual([{ type: "persons" }]);
     expect(queue.dependencies).toEqual(expected);
     expect(selectedDay.dependencies).toEqual(expected);
-    expect(queue.key).not.toBe(api.queueQuery(manager).key);
-    expect(selectedDay.key).not.toBe(api.dayQuery(manager, locationId, "2026-10-13").key);
-    expect(selectedDay.key).not.toBe(api.dayQuery(worker, manager, "2026-10-13").key);
-    expect(selectedDay.key).not.toBe(api.dayQuery(worker, locationId, "2026-10-14").key);
+    expect(selectedDay.key).not.toBe(api.dayQuery(manager, "2026-10-13").key);
+    expect(selectedDay.key).not.toBe(api.dayQuery(worker, "2026-10-14").key);
     await lookup.read();
     await queue.read();
     await selectedDay.read();
@@ -221,16 +212,16 @@ describe("dashboard attendance wire and live reads", () => {
   it("successful commands update a mounted shared query even with a silent change feed", async () => {
     const cache = new LiveData();
     caches.push(cache);
-    let queue: AttendanceManagerQueue = { locationId, items: [pending] };
+    let queue: AttendanceManagerQueue = { items: [pending] };
     const { api } = await client((_path, init) => {
       if (init.method === "POST") {
-        queue = { locationId, items: [] };
+        queue = { items: [] };
         return saved;
       }
       return queue;
     }, cache);
     expect(api.background.liveData).toBe(cache);
-    const watched = cache.observe(api.queueQuery(locationId), () => {});
+    const watched = cache.observe(api.queueQuery(), () => {});
     await expect.poll(() => watched.snapshot.value?.items.length).toBe(1);
     await api.send(command);
     await expect.poll(() => watched.snapshot.value?.items.length).toBe(0);
@@ -249,10 +240,10 @@ describe("dashboard attendance wire and live reads", () => {
               }),
               { status: 409 },
             )
-          : { locationId, items: [pending] },
+          : { items: [pending] },
       cache,
     );
-    const watched = cache.observe(api.queueQuery(locationId), () => {});
+    const watched = cache.observe(api.queueQuery(), () => {});
     await expect.poll(() => watched.snapshot.value?.items.length).toBe(1);
     await expect(api.send(command)).rejects.toEqual({
       code: "attendance.state_changed",
@@ -268,14 +259,14 @@ describe("dashboard attendance wire and live reads", () => {
 it("a resolved receipt refreshes mounted records without a POST when the feed is silent", async () => {
   const cache = new LiveData();
   caches.push(cache);
-  let queue: AttendanceManagerQueue = { locationId, items: [pending] };
+  let queue: AttendanceManagerQueue = { items: [pending] };
   const { api, requests } = await client(
     (path) => (path.includes("/commands/") ? { ...saved, replayed: true } : queue),
     cache,
   );
-  const watched = cache.observe(api.queueQuery(locationId), () => {});
+  const watched = cache.observe(api.queueQuery(), () => {});
   await expect.poll(() => watched.snapshot.value?.items.length).toBe(1);
-  queue = { locationId, items: [] };
+  queue = { items: [] };
   expect(await api.background.command(command.commandId)).toEqual({ ...saved, replayed: true });
   await expect.poll(() => watched.snapshot.value?.items.length).toBe(0);
   expect(requests.every((request) => request.init.method === "GET")).toBe(true);
@@ -296,17 +287,17 @@ it.each([
   caches.push(cache);
   let revision = "before";
   const { api, requests, activity } = await client(
-    (path) => (path.includes("/day?") ? { ...day, revision } : { locationId, items: [] }),
+    (path) => (path.includes("/day?") ? { ...day, revision } : { items: [] }),
     cache,
   );
-  const queue = cache.observe(api.queueQuery(locationId), () => {});
-  const selectedDay = cache.observe(api.dayQuery(worker, locationId, day.date), () => {});
+  const queue = cache.observe(api.queueQuery(), () => {});
+  const selectedDay = cache.observe(api.dayQuery(worker, day.date), () => {});
   await expect.poll(() => selectedDay.snapshot.value?.revision).toBe("before");
   await expect.poll(() => queue.snapshot.status).toBe("ready");
   revision = "after";
   cache.invalidate([{ type }]);
   await expect.poll(() => selectedDay.snapshot.value?.revision).toBe("after");
-  expect(requests.filter((request) => request.path.includes("/queue?")).length).toBe(2);
+  expect(requests.filter((request) => request.path.endsWith("/queue")).length).toBe(2);
   expect(
     requests.every((request) => new Headers(request.init.headers).get("x-waitron-live") === "1"),
   ).toBe(true);
@@ -315,7 +306,7 @@ it.each([
   selectedDay.unsubscribe();
 });
 
-it.each(["persons", "locations"] as const)(
+it.each(["persons"] as const)(
   "a %s event refreshes mounted lookups for eligibility or edit zones",
   async (type) => {
     const cache = new LiveData();
@@ -331,10 +322,6 @@ it.each(["persons", "locations"] as const)(
                 type === "persons"
                   ? [{ personId: worker, displayName: "Alicia" }, lookups.people[1]!]
                   : lookups.people,
-              locations:
-                type === "locations"
-                  ? [{ ...lookups.locations[0]!, timeZone: "Atlantic/Canary" }]
-                  : lookups.locations,
             }
           : lookups,
       cache,
@@ -347,10 +334,7 @@ it.each(["persons", "locations"] as const)(
     if (type === "persons") {
       await expect.poll(() => watched.snapshot.value?.viewer.canSelfApprove).toBe(true);
       expect(watched.snapshot.value?.people[0]!.displayName).toBe("Alicia");
-    } else
-      await expect
-        .poll(() => watched.snapshot.value?.locations[0]!.timeZone)
-        .toBe("Atlantic/Canary");
+    }
     watched.unsubscribe();
   },
 );
@@ -375,7 +359,7 @@ it.each(["send", "receipt"] as const)(
     const { AttendanceApi } = await modules["./attendance.ts"]!();
     const api = new AttendanceApi(request, cache);
     const watched = cache.observe(
-      new HoursApi(request, cache).managerQuery("shop", { kind: "pay-period" }),
+      new HoursApi(request, cache).managerQuery({ kind: "pay-period" }),
       () => {},
     );
     await expect.poll(() => watched.snapshot.value?.people[0]?.hours.workedMinutes).toBe(480);

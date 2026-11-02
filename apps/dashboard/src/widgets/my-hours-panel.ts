@@ -87,7 +87,6 @@ export class MyHoursPanel extends LitElement {
   @state() private inbox: AttendanceInbox | null = null;
   @state() private view: PersonHours | null = null;
   @state() private day: AttendanceDayView | null = null;
-  @state() private locationId = "";
   @state() private selection: HoursSelection = { kind: "week" };
   @state() private reading = false;
   @state() private readError = "";
@@ -205,7 +204,6 @@ export class MyHoursPanel extends LitElement {
     this.inbox = null;
     this.view = null;
     this.day = null;
-    this.locationId = "";
     this.selection = { kind: "week" };
     this.reading = false;
     this.editorOpen = false;
@@ -231,27 +229,14 @@ export class MyHoursPanel extends LitElement {
   async #refresh() {
     if (!this.active || !this.#hours) return;
     const generation = this.#generation;
-    let watchedHours = false;
     this.reading = true;
     try {
       await this.#reads.inbox.watch("inbox", this.#hours.ownInboxQuery(), async (value) => {
         if (value.personId !== this.personId)
           throw new TypeError("Attendance inbox owner mismatch");
         this.inbox = value;
-        const location =
-          value.locations.find((l) => l.id === this.locationId)?.id ?? value.locations[0]?.id ?? "";
-        if (location !== this.locationId) {
-          this.locationId = location;
-          this.#release("hours");
-          this.view = null;
-          this.day = null;
-          this.#release("day");
-          watchedHours = true;
-          await this.#watchHours();
-        }
       });
-      if (generation === this.#generation && this.locationId && !watchedHours)
-        await this.#watchHours();
+      if (generation === this.#generation) await this.#watchHours();
     } catch {
       /* QueryController owns read failures. */
     } finally {
@@ -259,14 +244,12 @@ export class MyHoursPanel extends LitElement {
     }
   }
   async #watchHours() {
-    if (!this.locationId || !this.#hours) return;
-    const location = this.locationId,
-      person = this.personId,
+    if (!this.#hours) return;
+    const person = this.personId,
       selection = { ...this.selection };
-    await this.#reads.hours.watch("hours", this.#hours.ownQuery(location, selection), (value) => {
+    await this.#reads.hours.watch("hours", this.#hours.ownQuery(selection), (value) => {
       if (
         value.personId !== person ||
-        value.locationId !== location ||
         value.selection.kind !== selection.kind ||
         value.selection.date !== selection.date
       )
@@ -274,14 +257,11 @@ export class MyHoursPanel extends LitElement {
       this.view = value;
     });
   }
-  async #select(event: CustomEvent<{ value: string }>, field: "location" | "kind" | "date") {
+  async #select(event: CustomEvent<{ value: string }>, field: "kind" | "date") {
     event.stopPropagation();
-    if (this.#blocked || this.editorOpen || !this.isConnected) return;
+    if (this.#blocked || this.editorOpen || !this.isConnected || !this.inbox) return;
     const value = event.detail.value;
-    if (field === "location") {
-      if (!this.inbox?.locations.some((l) => l.id === value)) return;
-      this.locationId = value;
-    } else if (field === "kind") {
+    if (field === "kind") {
       if (value !== "week" && value !== "month") return;
       this.selection = { ...this.selection, kind: value };
     } else {
@@ -298,7 +278,6 @@ export class MyHoursPanel extends LitElement {
     this.day = null;
     this.#release("day");
     const generation = this.#generation,
-      location = this.locationId,
       selection = this.selection;
     this.reading = true;
     try {
@@ -306,12 +285,7 @@ export class MyHoursPanel extends LitElement {
     } catch {
       /* QueryController owns read failures. */
     } finally {
-      if (
-        generation === this.#generation &&
-        location === this.locationId &&
-        selection === this.selection
-      )
-        this.reading = false;
+      if (generation === this.#generation && selection === this.selection) this.reading = false;
     }
   }
   #move(direction: number): void {
@@ -327,25 +301,24 @@ export class MyHoursPanel extends LitElement {
       "date",
     );
   }
-  async #openDay(event: CustomEvent<{ date: string; locationId: string }>) {
+  async #openDay(event: CustomEvent<{ date: string }>) {
     event.stopPropagation();
     if (
       this.#blocked ||
       this.editorOpen ||
       !this.view ||
-      event.detail.locationId !== this.locationId ||
       !this.view.days.some((d) => d.date === event.detail.date)
     )
       return;
-    await this.#readDay(event.detail.date, event.detail.locationId);
+    await this.#readDay(event.detail.date);
   }
-  async #readDay(date: string, location: string): Promise<boolean> {
+  async #readDay(date: string): Promise<boolean> {
     const person = this.personId;
     if (!this.#own) return false;
     this.day = null;
     try {
-      await this.#reads.day.watch("day", this.#own.dayQuery(location, date), (value) => {
-        if (value.personId !== person || value.locationId !== location || value.date !== date)
+      await this.#reads.day.watch("day", this.#own.dayQuery(date), (value) => {
+        if (value.personId !== person || value.date !== date)
           throw new TypeError("Own day mismatch");
         this.day = value;
       });
@@ -392,12 +365,11 @@ export class MyHoursPanel extends LitElement {
     if (!prompt.businessDay || (action !== "edit" && action !== "disagree")) return;
     const generation = this.#generation;
     const inbox = this.inbox;
-    await this.#readDay(prompt.businessDay, prompt.locationId);
+    await this.#readDay(prompt.businessDay);
     if (
       generation !== this.#generation ||
       this.inbox !== inbox ||
       !this.day ||
-      this.day.locationId !== prompt.locationId ||
       this.day.date !== prompt.businessDay
     )
       return;
@@ -441,7 +413,6 @@ export class MyHoursPanel extends LitElement {
             ...shared,
             action: "request",
             questionId: this.#editorQuestion,
-            locationId: this.day.locationId,
             ...event.detail,
           },
     );
@@ -551,7 +522,7 @@ export class MyHoursPanel extends LitElement {
         >${label}</wt-button
       >`;
     return html`<article>
-      <h3>${prompt.locationName} · ${prompt.businessDay ?? ""}</h3>
+      ${prompt.businessDay ? html`<h3>${prompt.businessDay}</h3>` : nothing}
       <ul>
         ${prompt.history.map(attendanceHistory)}
       </ul>
@@ -566,14 +537,6 @@ export class MyHoursPanel extends LitElement {
     return html`<div class="content">
       <div class="selectors">
         <wt-combobox
-          name="hoursLocation"
-          label=${t("attendance.location")}
-          .value=${this.locationId}
-          .options=${this.inbox?.locations.map((l) => ({ value: l.id, label: l.name })) ?? []}
-          .disabled=${disabled || !this.inbox}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#select(e, "location")}
-        ></wt-combobox>
-        <wt-combobox
           name="hoursWindow"
           label=${t("hours.window")}
           .value=${this.selection.kind}
@@ -581,7 +544,7 @@ export class MyHoursPanel extends LitElement {
             { value: "week", label: t("hours.week") },
             { value: "month", label: t("hours.month") },
           ]}
-          .disabled=${disabled}
+          .disabled=${disabled || !this.inbox}
           @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#select(e, "kind")}
         ></wt-combobox>
         <wt-input
@@ -589,7 +552,7 @@ export class MyHoursPanel extends LitElement {
           type="date"
           label=${t("attendance.date")}
           .value=${this.selection.date ?? this.view?.businessDay ?? ""}
-          .disabled=${disabled}
+          .disabled=${disabled || !this.inbox}
           @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#select(e, "date")}
         ></wt-input>
         <wt-button

@@ -77,7 +77,6 @@ function request(target: string, at = "2026-01-05T18:00:00Z", questionId: string
   return send({
     action: "request",
     questionId,
-    locationId: f.locationId,
     changes: [{ target: { entryId: target }, at, offsetMinutes: 0 }],
     reason: "I left later",
   });
@@ -122,7 +121,6 @@ it("defaults the window to the venue business date while the local calendar is i
   const value = await read({ kind: "month" });
   expect(value).toMatchObject({
     personId: f.personId,
-    locationId: f.locationId,
     selection: { kind: "month" },
     businessDay: "2026-10-31",
     period: { start: "2026-10-01", end: "2026-11-01" },
@@ -269,7 +267,6 @@ it("a proposal and then dispute retain 480 and old outstanding history in an emp
     {
       action: "propose",
       personId: f.personId,
-      locationId: f.locationId,
       changes: [{ target: { entryId: end }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 }],
       reason: "Check finish",
     },
@@ -373,7 +370,6 @@ it("follows late other-node corrections moving a whole shift across a closed mon
       {
         action: "propose",
         personId: f.personId,
-        locationId: f.locationId,
         changes: [{ target: { entryId: target! }, at: at!, offsetMinutes: 0 }],
         reason: "February shift",
       },

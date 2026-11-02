@@ -15,11 +15,9 @@ afterEach(() => {
 async function edit(options: Parameters<typeof clockApp>[0] = {}) {
   const f = await clockApp(options);
   f.api.getAttendanceInbox.mockResolvedValue({
-    ...attendanceInbox([
-      attendancePrompt({ personId: "p1", locationId: "venue", timeZone: "Europe/Madrid" }),
-    ]),
+    ...attendanceInbox([attendancePrompt({ personId: "p1", timeZone: "Europe/Madrid" })]),
     personId: "p1",
-    locations: [{ id: "venue", name: "Clock venue", timeZone: "Europe/Madrid" }],
+    timeZone: "Europe/Madrid",
   });
   await signIn(f.el);
   await vi.waitFor(() =>

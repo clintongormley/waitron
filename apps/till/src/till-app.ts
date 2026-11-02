@@ -2811,7 +2811,6 @@ export class TillApp extends LitElement {
   #attendancePanelVersion = 0;
   @state() private attendanceDayOpen = false;
   @state() private attendanceDayDate = "";
-  @state() private attendanceDayLocation = "";
   @state() private attendancePinReading = false;
   @state() private attendancePin: {
     itemId: string;
@@ -2823,7 +2822,6 @@ export class TillApp extends LitElement {
   @state() private attendanceEditor: {
     kind: "request" | "disagree";
     changes: AttendanceChange[];
-    locationId: string;
     questionId: string | null;
     itemId: string | null;
     timeZone: string;
@@ -3237,15 +3235,15 @@ export class TillApp extends LitElement {
   /** The working order that produced the ticket currently shown, a bill split off another included. */
   private ticketWorkingOrderId?: string;
   #receiptPrintVisit = 0;
-  /** The location's receipt language, never the operator-UI `currentLocale()`. */
+  /** The venue's receipt language, never the operator-UI `currentLocale()`. */
   @state() private invoiceLocale = "es-ES";
-  /** The receipt languages staff may choose, the location's own first. */
+  /** The receipt languages staff may choose, the venue's own first. */
   @state() private receiptLanguages: string[] = [];
   @state() private fullInvoices = false;
   #simplifiedInvoiceLimit: string | null = null;
   /** The counter basket's receipt language: the one staff chose, or the one stored with a retrieved
    * order. `saved` is false while the server does not hold it yet. With none, or one naming another
-   * order, the basket prints in the location's. */
+   * order, the basket prints in the venue's. */
   @state() private receiptLanguageChoice?: { orderId: string; language: string; saved: boolean };
   /** The order whose receipt language is being asked: the counter's, or a party bill as it was read
    * when asked. */
@@ -4630,8 +4628,7 @@ export class TillApp extends LitElement {
         queueMicrotask(async () => {
           if (!current()) return;
           await controller.refresh();
-          if (current() && this.attendanceDayOpen)
-            await controller.readDay(this.attendanceDayDate, this.attendanceDayLocation);
+          if (current() && this.attendanceDayOpen) await controller.readDay(this.attendanceDayDate);
           if (
             current() &&
             panelVersion === this.#attendancePanelVersion &&
@@ -4672,11 +4669,6 @@ export class TillApp extends LitElement {
 
   #startHours(): void {
     if (this.#hours || this.drill?.kind !== "hours" || !this.#allowsDestination("hours")) return;
-    const locationId = this.clockSnapshot.state?.locationId;
-    if (!locationId) {
-      if (!this.clockSnapshot.reading) void this.#clocking?.refresh();
-      return;
-    }
     const api = this.api,
       session = this.#operatorSession,
       signIn = this.#signIns;
@@ -4711,7 +4703,7 @@ export class TillApp extends LitElement {
       }
     });
     this.#hours = controller;
-    void controller.start(this.operatorPersonId, locationId, { kind: "week" });
+    void controller.start(this.operatorPersonId, { kind: "week" });
     void this.#attendance?.refresh();
   }
 
@@ -4768,7 +4760,7 @@ export class TillApp extends LitElement {
       this.attendanceSnapshot?.inbox &&
       !this.attendanceSnapshot.uncertainCommandId
     )
-      await this.#attendance?.readDay(this.attendanceDayDate, this.attendanceDayLocation);
+      await this.#attendance?.readDay(this.attendanceDayDate);
   }
 
   async #sendAttendance(
@@ -4812,7 +4804,7 @@ export class TillApp extends LitElement {
     else await this.#runAttendance(command);
   }
 
-  async #openAttendanceDay(scope?: { date: string; locationId: string }): Promise<void> {
+  async #openAttendanceDay(scope?: { date: string }): Promise<void> {
     const controller = this.#attendance;
     if (!controller || this.attendanceSnapshot?.busy) return;
     const version = ++this.#attendancePanelVersion;
@@ -4826,22 +4818,15 @@ export class TillApp extends LitElement {
       return;
     const inbox = this.attendanceSnapshot?.inbox;
     if (!inbox) return;
-    const location = scope
-      ? inbox.locations.find((candidate) => candidate.id === scope.locationId)
-      : (inbox.locations.find(
-          (candidate) => candidate.id === this.clockSnapshot.state?.locationId,
-        ) ?? inbox.locations[0]);
-    if (!location) return;
-    this.attendanceDayLocation = location.id;
     this.attendanceDayDate =
       scope?.date ??
       new Intl.DateTimeFormat("en-CA", {
-        timeZone: location.timeZone,
+        timeZone: inbox.timeZone,
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
       }).format(new Date());
-    await controller.readDay(this.attendanceDayDate, this.attendanceDayLocation);
+    await controller.readDay(this.attendanceDayDate);
   }
 
   #closeAttendanceDay(): void {
@@ -4852,14 +4837,13 @@ export class TillApp extends LitElement {
     this.attendancePin = null;
   }
 
-  #selectAttendanceDay(event: CustomEvent<{ date: string; locationId: string }>): void {
+  #selectAttendanceDay(event: CustomEvent<{ date: string }>): void {
     event.stopPropagation();
     if (!this.attendanceDayOpen || !this.#attendance) return;
     ++this.#attendancePanelVersion;
     this.attendancePinReading = false;
     this.attendanceDayDate = event.detail.date;
-    this.attendanceDayLocation = event.detail.locationId;
-    void this.#attendance.readDay(event.detail.date, event.detail.locationId);
+    void this.#attendance.readDay(event.detail.date);
   }
 
   #editAttendancePrompt(promptId: string, disagree = false): void {
@@ -4892,7 +4876,6 @@ export class TillApp extends LitElement {
     this.attendanceEditor = {
       kind: disagree ? "disagree" : "request",
       changes,
-      locationId: prompt.locationId,
       questionId: prompt.questionId,
       itemId: prompt.itemId,
       timeZone: prompt.timeZone,
@@ -4908,8 +4891,7 @@ export class TillApp extends LitElement {
       !this.attendanceDayOpen ||
       this.attendanceSnapshot?.busy ||
       this.attendanceSnapshot?.uncertainCommandId ||
-      day.date !== this.attendanceDayDate ||
-      day.locationId !== this.attendanceDayLocation
+      day.date !== this.attendanceDayDate
     )
       return;
     const targets = "target" in event.detail ? [event.detail.target] : event.detail.targets;
@@ -4929,7 +4911,6 @@ export class TillApp extends LitElement {
     this.attendanceEditor = {
       kind: "request",
       changes,
-      locationId: day.locationId,
       questionId: null,
       itemId: null,
       timeZone: day.timeZone,
@@ -4949,7 +4930,6 @@ export class TillApp extends LitElement {
         : {
             action: "request",
             questionId: editor.questionId,
-            locationId: editor.locationId,
             changes: event.detail.changes,
             reason: event.detail.reason,
           };
@@ -5023,9 +5003,7 @@ export class TillApp extends LitElement {
           ? html`<till-attendance-day-dialog
               .open=${true}
               .view=${snapshot?.day ?? null}
-              .locations=${snapshot?.inbox?.locations ?? []}
               .date=${this.attendanceDayDate}
-              .locationId=${this.attendanceDayLocation}
               .reading=${snapshot?.dayReading || snapshot?.reading || this.attendancePinReading}
               .busy=${snapshot?.busy ?? false}
               .blocked=${blocked}
@@ -9206,7 +9184,7 @@ export class TillApp extends LitElement {
       : [...this.receiptLanguages, filedLanguage];
   }
 
-  /** The language staff chose or the order stored; undefined while the location's applies. */
+  /** The language staff chose or the order stored; undefined while the venue's applies. */
   #chosenReceiptLanguage(orderId: string): string | undefined {
     const choice = this.receiptLanguageChoice;
     return choice?.orderId === orderId ? choice.language : undefined;
@@ -19370,17 +19348,9 @@ export class TillApp extends LitElement {
           .blocked=${this.attendanceSnapshot?.busy === true || this.attendanceSnapshot?.uncertainCommandId != null || this.attendanceSnapshot?.retryCommand != null || !this.attendanceSnapshot?.inbox || this.attendanceSnapshot?.readError != null}
           .canRetry=${this.attendanceSnapshot?.retryCommand != null && !this.attendanceSnapshot?.busy}
           .error=${this.#attendanceMessage() || (this.hoursSnapshot?.readError ? codeMessage(this.hoursSnapshot.readError.code) : "")}
-          .locations=${this.attendanceSnapshot?.inbox?.locations ?? []}
-          @hours-select=${(
-            event: CustomEvent<{ locationId: string; selection: HoursSelection }>,
-          ) => {
+          @hours-select=${(event: CustomEvent<{ selection: HoursSelection }>) => {
             event.stopPropagation();
-            if (
-              this.attendanceSnapshot?.inbox?.locations.some(
-                (l) => l.id === event.detail.locationId,
-              )
-            )
-              void this.#hours?.select(event.detail.locationId, event.detail.selection);
+            if (this.attendanceSnapshot?.inbox) void this.#hours?.select(event.detail.selection);
           }}
           @hours-refresh=${(event: Event) => {
             event.stopPropagation();
@@ -19388,7 +19358,7 @@ export class TillApp extends LitElement {
             else this.#startHours();
             void this.#attendance?.refresh();
           }}
-          @hours-day=${(event: CustomEvent<{ date: string; locationId: string }>) => {
+          @hours-day=${(event: CustomEvent<{ date: string }>) => {
             event.stopPropagation();
             this.#requestLeave(() => this.#openAttendanceDay(event.detail));
           }}

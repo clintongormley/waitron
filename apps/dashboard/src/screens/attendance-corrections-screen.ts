@@ -122,7 +122,6 @@ export class AttendanceCorrectionsScreen extends LitElement {
   @property({ attribute: false }) request!: DashboardRequest;
   @property({ attribute: false }) liveData?: LiveData;
   @state() private lookups: AttendanceLookups | null = null;
-  @state() private locationId = "";
   @state() private personId = "";
   @state() private date = "";
   @state() private hours: ManagerHours | null = null;
@@ -225,7 +224,6 @@ export class AttendanceCorrectionsScreen extends LitElement {
     this.lookups = null;
     this.view = null;
     this.queue = [];
-    this.locationId = "";
     this.personId = "";
     this.editorOpen = false;
     this.#pending = null;
@@ -236,24 +234,20 @@ export class AttendanceCorrectionsScreen extends LitElement {
     this.actionError = "";
     try {
       await this.#queries.watch("lookups", this.#api.lookupsQuery(), async (value) => {
-        const previous = this.locationId;
+        const first = this.lookups === null;
         const previousPerson = this.personId;
         this.lookups = value;
-        this.locationId =
-          value.locations.find((location) => location.id === this.locationId)?.id ??
-          value.locations[0]?.id ??
-          "";
         if (
           !(this.hours?.people ?? value.people).some((person) => person.personId === this.personId)
         )
           this.personId = value.people[0]?.personId ?? "";
-        if (previous !== this.locationId || previousPerson !== this.personId) {
+        if (previousPerson !== this.personId) {
           this.#queries.release("day");
           this.view = null;
           this.selectedItemId = null;
           this.reading = false;
         }
-        if (previous !== this.locationId) await this.#watchQueue();
+        if (first) await this.#watchQueue();
       });
     } catch {
       /* QueryController publishes the read's failure. */
@@ -264,12 +258,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
       await this.#watchHours();
       return;
     }
-    if (!this.locationId) {
-      this.#queries.release("queue");
-      this.queue = [];
-      return;
-    }
-    await this.#queries.watch("queue", this.#api!.queueQuery(this.locationId), (value) => {
+    await this.#queries.watch("queue", this.#api!.queueQuery(), (value) => {
       this.queue = value.items;
     });
   }
@@ -278,29 +267,17 @@ export class AttendanceCorrectionsScreen extends LitElement {
   }
   async #watchHours(): Promise<void> {
     this.#queries.release("queue");
-    if (!this.locationId) {
-      this.#queries.release("hours");
-      this.hours = null;
-      this.queue = [];
-      return;
-    }
     const generation = this.#generation;
-    const locationId = this.locationId,
-      date = this.periodDate;
+    const date = this.periodDate;
     this.hoursReading = true;
     try {
       await this.#queries.watch(
         "hours",
-        this.#hoursApi!.managerQuery(locationId, {
+        this.#hoursApi!.managerQuery({
           kind: "pay-period",
           ...(date ? { date } : {}),
         }),
         (value) => {
-          if (
-            value.locationId !== locationId ||
-            value.people.some((person) => person.hours.locationId !== locationId)
-          )
-            throw new TypeError("Hours do not match the workplace");
           this.hours = value;
           this.queue = value.people.flatMap((person) => person.hours.pending.items);
           if (
@@ -316,16 +293,11 @@ export class AttendanceCorrectionsScreen extends LitElement {
         },
       );
     } finally {
-      if (
-        generation === this.#generation &&
-        locationId === this.locationId &&
-        date === this.periodDate
-      )
-        this.hoursReading = false;
+      if (generation === this.#generation && date === this.periodDate) this.hoursReading = false;
     }
   }
   #period(date: string): void {
-    if (!this.isConnected || this.#blocked || this.editorOpen) return;
+    if (!this.isConnected || this.#blocked || this.editorOpen || !this.lookups) return;
     this.periodDate = date;
     this.hours = null;
     this.queue = [];
@@ -341,7 +313,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
           type="date"
           .label=${t("hours.window")}
           .value=${this.periodDate}
-          .disabled=${disabled}
+          .disabled=${disabled || !this.lookups}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.#period(event.detail.value);
@@ -412,14 +384,13 @@ export class AttendanceCorrectionsScreen extends LitElement {
               manager
               .dayActionLabel=${t("attendance.open_day")}
               .blocked=${disabled}
-              @hours-day=${(event: CustomEvent<{ date: string; locationId: string }>) => {
+              @hours-day=${(event: CustomEvent<{ date: string }>) => {
                 event.stopPropagation();
                 if (
                   !this.isConnected ||
                   this.#blocked ||
                   this.editorOpen ||
-                  this.#personHours !== hours ||
-                  event.detail.locationId !== this.locationId
+                  this.#personHours !== hours
                 )
                   return;
                 this.date = event.detail.date;
@@ -449,7 +420,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
   get #staleEditor(): boolean {
     return this.editorOpen && this.#editorRevision !== this.view?.revision;
   }
-  #select(event: CustomEvent<{ value: string }>, field: "locationId" | "personId" | "date"): void {
+  #select(event: CustomEvent<{ value: string }>, field: "personId" | "date"): void {
     event.stopPropagation();
     if (this.#blocked || this.editorOpen || !this.isConnected) return;
     this[field] = event.detail.value;
@@ -457,33 +428,22 @@ export class AttendanceCorrectionsScreen extends LitElement {
     this.view = null;
     this.selectedItemId = null;
     this.reading = false;
-    if (field === "locationId") {
-      this.hours = null;
-      this.periodDate = "";
-      this.queue = [];
-      void this.#watchQueue().catch(() => undefined);
-    }
   }
   async #day(): Promise<void> {
-    if (!this.personId || !this.locationId || !/^\d{4}-\d{2}-\d{2}$/.test(this.date)) return;
+    if (!this.personId || !/^\d{4}-\d{2}-\d{2}$/.test(this.date)) return;
     const generation = this.#generation;
-    const [personId, locationId, date] = [this.personId, this.locationId, this.date];
+    const [personId, date] = [this.personId, this.date];
     this.reading = true;
     try {
-      await this.#queries.watch("day", this.#api!.dayQuery(personId, locationId, date), (value) => {
-        if (value.personId !== personId || value.locationId !== locationId || value.date !== date)
+      await this.#queries.watch("day", this.#api!.dayQuery(personId, date), (value) => {
+        if (value.personId !== personId || value.date !== date)
           throw new TypeError("Attendance day does not match the selection");
         this.view = value;
       });
     } catch {
       /* QueryController publishes the read's failure. */
     } finally {
-      if (
-        generation === this.#generation &&
-        this.personId === personId &&
-        this.locationId === locationId &&
-        this.date === date
-      )
+      if (generation === this.#generation && this.personId === personId && this.date === date)
         this.reading = false;
     }
   }
@@ -567,7 +527,6 @@ export class AttendanceCorrectionsScreen extends LitElement {
       commandId: crypto.randomUUID(),
       expectedRevision: this.#editorRevision,
       personId: this.view.personId,
-      locationId: this.view.locationId,
       ...event.detail,
     });
   }
@@ -706,14 +665,6 @@ export class AttendanceCorrectionsScreen extends LitElement {
       ${this.mode === "hours" ? this.#periodControls(disabled) : nothing}
       <div class="selectors">
         <wt-combobox
-          name="attendanceLocation"
-          .label=${t("attendance.location")}
-          .value=${this.locationId}
-          .options=${this.lookups?.locations.map((location) => ({ value: location.id, label: location.name })) ?? []}
-          .disabled=${disabled || !this.lookups}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#select(event, "locationId")}
-        ></wt-combobox>
-        <wt-combobox
           name="attendancePerson"
           .label=${t("attendance.worker")}
           .value=${this.personId}
@@ -733,8 +684,8 @@ export class AttendanceCorrectionsScreen extends LitElement {
       <div class="actions">
         <wt-button
           data-open-day
-          variant=${this.personId && this.date && this.locationId ? "primary" : "secondary"}
-          .disabled=${disabled || !this.personId || !this.date || !this.locationId}
+          variant=${this.personId && this.date ? "primary" : "secondary"}
+          .disabled=${disabled || !this.personId || !this.date}
           @click=${() => {
             if (!disabled && this.isConnected) {
               this.selectedItemId = null;

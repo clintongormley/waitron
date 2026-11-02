@@ -42,13 +42,12 @@ function inbox(): AttendanceInbox {
     ...attendanceInbox([
       attendancePrompt({
         personId: "p1",
-        locationId: "venue",
         timeZone: "Europe/Madrid",
         history: [entry],
       }),
     ]),
     personId: "p1",
-    locations: [{ id: "venue", name: "Clock venue", timeZone: "Europe/Madrid" }],
+    timeZone: "Europe/Madrid",
   };
 }
 const empty = (): AttendanceInbox => ({ ...inbox(), prompts: [], items: [] });
@@ -87,7 +86,6 @@ describe("till attendance sign-in flow", () => {
       questionId: null,
       itemId: item.id,
       personId: "p1",
-      locationId: "venue",
       history: item.history,
     });
     f.api.getAttendanceInbox
@@ -322,7 +320,6 @@ describe("till correction editors and manager PIN", () => {
         expectedRevision: "revision",
         action: "request",
         questionId: "question",
-        locationId: "venue",
         changes: [
           {
             target: { entryId: "automatic-out" },
@@ -346,7 +343,6 @@ describe("till correction editors and manager PIN", () => {
     const missing = attendancePrompt({
       kind: "missing-times",
       personId: "p1",
-      locationId: "venue",
       timeZone: "Europe/Madrid",
       automaticEntryId: null,
       history: [],
@@ -373,7 +369,6 @@ describe("till correction editors and manager PIN", () => {
       expectedRevision: "revision",
       action: "request",
       questionId: "question",
-      locationId: "venue",
       changes: [
         { target: { missingKind: "in" }, at: "2026-10-13T20:00:00.000Z", offsetMinutes: 120 },
         { target: { missingKind: "out" }, at: "2026-10-13T23:30:00.000Z", offsetMinutes: 120 },
@@ -394,7 +389,6 @@ describe("till correction editors and manager PIN", () => {
             kind: "proposal",
             itemId: item.id,
             questionId: null,
-            locationId: "venue",
             personId: "p1",
             history: item.history,
           }),
@@ -437,7 +431,7 @@ describe("till correction editors and manager PIN", () => {
       "2026-10-14",
     );
     await vi.waitFor(() => expect(day.view?.date).toBe("2026-10-14"));
-    expect(f.api.getAttendanceDay).toHaveBeenCalledWith("2026-10-14", "venue", {
+    expect(f.api.getAttendanceDay).toHaveBeenCalledWith("2026-10-14", {
       signal: expect.any(AbortSignal),
     });
     await userEvent.click(day.shadowRoot!.querySelector<HTMLElement>('[data-add-pair="shift"]')!);
@@ -457,9 +451,8 @@ describe("till correction editors and manager PIN", () => {
         status: "waiting-manager",
       });
       f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
-      f.api.getAttendanceDay.mockImplementation(async (date, locationId) => ({
+      f.api.getAttendanceDay.mockImplementation(async (date) => ({
         personId: "p1",
-        locationId,
         date,
         revision: "day-revision",
         timeZone: "Europe/Madrid",
@@ -511,9 +504,8 @@ describe("till correction editors and manager PIN", () => {
       status: "waiting-manager",
     });
     f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
-    f.api.getAttendanceDay.mockImplementation(async (date, locationId) => ({
+    f.api.getAttendanceDay.mockImplementation(async (date) => ({
       personId: "p1",
-      locationId,
       date,
       revision: "revision",
       timeZone: "Europe/Madrid",
@@ -571,9 +563,8 @@ it("a lost PIN approval is recovered from the day and retried with the same comm
     personId: "p1",
   });
   f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
-  f.api.getAttendanceDay.mockImplementation(async (date, locationId) => ({
+  f.api.getAttendanceDay.mockImplementation(async (date) => ({
     personId: "p1",
-    locationId,
     date,
     revision: "revision",
     timeZone: "Europe/Madrid",
@@ -619,9 +610,8 @@ it("a recorded day's retime keeps its target and recovers a lost reply through t
   const { page } = await import("vitest/browser");
   const f = await clockApp({ state: clockState("working", "in") });
   f.api.getAttendanceInbox.mockResolvedValue(empty());
-  f.api.getAttendanceDay.mockImplementation(async (date, locationId) => ({
+  f.api.getAttendanceDay.mockImplementation(async (date) => ({
     personId: "p1",
-    locationId,
     date,
     revision: "day-revision",
     timeZone: "Europe/Madrid",
@@ -679,7 +669,6 @@ it("a recorded day's retime keeps its target and recovers a lost reply through t
     expectedRevision: "day-revision",
     action: "request",
     questionId: null,
-    locationId: "venue",
     reason: "Finished the delivery",
     changes: [
       { target: { entryId: "automatic-out" }, at: "2026-10-14T00:10:00.000Z", offsetMinutes: 120 },
@@ -776,9 +765,8 @@ it("closing during an approver read retires that opening and does not block a re
     status: "waiting-manager",
   });
   f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
-  f.api.getAttendanceDay.mockImplementation(async (date, locationId) => ({
+  f.api.getAttendanceDay.mockImplementation(async (date) => ({
     personId: "p1",
-    locationId,
     date,
     revision: "revision",
     timeZone: "Europe/Madrid",

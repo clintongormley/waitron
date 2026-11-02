@@ -20,20 +20,13 @@ function deferred<T>() {
   return { promise, resolve };
 }
 const inbox = () => ({
-  ...attendanceInbox(
-    [attendancePrompt({ personId: "p1", locationId: "venue", businessDay: "2026-01-05" })],
-    [],
-  ),
+  ...attendanceInbox([attendancePrompt({ personId: "p1", businessDay: "2026-01-05" })], []),
   personId: "p1",
   revision: "inbox-current",
-  locations: [
-    { id: "venue", name: "Deli", timeZone: "Europe/Madrid" },
-    { id: "old", name: "Old workplace", timeZone: "UTC" },
-  ],
+  timeZone: "Europe/Madrid",
 });
 const day = (): AttendanceDayView => ({
   personId: "p1",
-  locationId: "venue",
   date: "2026-01-05",
   timeZone: "Europe/Madrid",
   revision: "day-current",
@@ -93,7 +86,7 @@ async function openDay(el: MyHoursPanel) {
   await ready(el);
   el.shadowRoot!.querySelector("dashboard-hours-record")!.dispatchEvent(
     new CustomEvent("hours-day", {
-      detail: { date: "2026-01-05", locationId: "venue" },
+      detail: { date: "2026-01-05" },
       bubbles: true,
       composed: true,
     }),
@@ -139,13 +132,12 @@ it("reads the current own day before fixing and sends a reasoned request without
   await click(el, "[data-retime]");
   save(el);
   await vi.waitFor(() => expect(sent).toHaveLength(1));
-  expect(paths).toContain("/management-api/me/attendance/day?locationId=venue&date=2026-01-05");
+  expect(paths).toContain("/management-api/me/attendance/day?date=2026-01-05");
   expect(sent[0]).toEqual({
     commandId: expect.any(String),
     expectedRevision: "day-current",
     action: "request",
     questionId: null,
-    locationId: "venue",
     changes: [
       { target: { entryId: "automatic-out" }, at: "2026-01-05T18:00:00.000Z", offsetMinutes: 60 },
     ],
@@ -300,18 +292,70 @@ it("makes one passive summary read on first entry rather than fetching it twice"
   await new Promise((r) => requestAnimationFrame(r));
   expect(paths.filter((p) => p.includes("/hours?"))).toHaveLength(1);
 });
-it("month and historical-location selections retire a held older summary", async () => {
+it("has no Location field and reads hours once the inbox arrives", async () => {
+  const { el, paths } = await mount();
+  await ready(el);
+  expect(el.shadowRoot!.querySelector('[name="hoursLocation"]')).toBeNull();
+  const inboxRead = paths.findIndex((p) => p.endsWith("/inbox"));
+  const hoursRead = paths.findIndex((p) => p.includes("/hours?"));
+  expect(inboxRead).toBeGreaterThanOrEqual(0);
+  expect(hoursRead).toBeGreaterThan(inboxRead);
+});
+it("waits for the inbox before reading a chosen window or date, then reads the summary once", async () => {
   const held = deferred<unknown>();
-  const { el } = await mount({
+  const { el, paths } = await mount({
+    fetch: async (url) => {
+      if (url.endsWith("/inbox")) return held.promise;
+      const params = new URL(url, location.origin).searchParams;
+      return hoursView({
+        selection: {
+          kind: params.get("kind") as "week" | "month",
+          ...(params.has("date") ? { date: params.get("date")! } : {}),
+        },
+      });
+    },
+  });
+  await vi.waitFor(() => expect(paths.some((p) => p.endsWith("/inbox"))).toBe(true));
+  const control = (name: string) =>
+    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[name="${name}"]`)!;
+  const disabledBefore = [control("hoursWindow").disabled, control("hoursDate").disabled];
+  for (const [name, value] of [
+    ["hoursWindow", "month"],
+    ["hoursDate", "2026-01-07"],
+  ] as const)
+    control(name).dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+  await el.updateComplete;
+  await new Promise((r) => requestAnimationFrame(r));
+  const hoursReadsBefore = paths.filter((p) => p.includes("/hours?"));
+  held.resolve(inbox());
+  await ready(el);
+  await new Promise((r) => requestAnimationFrame(r));
+  expect(paths.filter((p) => p.includes("/hours?"))).toEqual([
+    "/management-api/me/attendance/hours?kind=week",
+  ]);
+  expect(hoursReadsBefore).toEqual([]);
+  expect(disabledBefore).toEqual([true, true]);
+  expect([control("hoursWindow").disabled, control("hoursDate").disabled]).toEqual([false, false]);
+});
+it("heads a pending question card by its work day alone", async () => {
+  const { el } = await mount();
+  await ready(el);
+  const headings = [...el.shadowRoot!.querySelectorAll("section article h3")];
+  expect(headings.map((h) => h.textContent!.trim())).toEqual(["2026-01-05"]);
+  expect(el.shadowRoot!.querySelector("section")!.textContent).not.toContain("The deli");
+});
+it("month selections retire a held older summary", async () => {
+  const held = deferred<unknown>();
+  const { el, paths } = await mount({
     fetch: async (url) => {
       if (url.endsWith("/inbox")) return inbox();
       const params = new URL(url, location.origin).searchParams;
-      if (params.get("kind") === "month" && params.get("locationId") === "venue")
-        return held.promise;
+      if (params.get("kind") === "month") return held.promise;
       return hoursView({
-        locationId: params.get("locationId")!,
         selection: { kind: params.get("kind") as "week" | "month" },
-        workedMinutes: params.get("locationId") === "old" ? 123 : 480,
+        workedMinutes: 480,
       });
     },
   });
@@ -323,15 +367,18 @@ it("month and historical-location selections retire a held older summary", async
     await el.updateComplete;
   };
   await change("hoursWindow", "month");
-  await change("hoursLocation", "old");
+  await vi.waitFor(() => expect(paths.some((p) => p.includes("kind=month"))).toBe(true));
+  await change("hoursWindow", "week");
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("dashboard-hours-record")!.view?.workedMinutes).toBe(123),
+    expect(el.shadowRoot!.querySelector("dashboard-hours-record")!.view?.selection.kind).toBe(
+      "week",
+    ),
   );
   held.resolve(hoursView({ selection: { kind: "month" }, workedMinutes: 999 }));
   await new Promise((r) => requestAnimationFrame(r));
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("dashboard-hours-record")!.view?.locationId).toBe("old");
-  expect(el.shadowRoot!.querySelector("dashboard-hours-record")!.view?.workedMinutes).toBe(123);
+  expect(el.shadowRoot!.querySelector("dashboard-hours-record")!.view?.selection.kind).toBe("week");
+  expect(el.shadowRoot!.querySelector("dashboard-hours-record")!.view?.workedMinutes).toBe(480);
 });
 it("uses only a current proposal for acceptance or reasoned disagreement", async () => {
   const current = inbox();
@@ -343,7 +390,6 @@ it("uses only a current proposal for acceptance or reasoned disagreement", async
     attendancePrompt({
       id: "current-proposal",
       personId: "p1",
-      locationId: "venue",
       businessDay: "2026-01-05",
       kind: "proposal",
       questionId: null,
@@ -449,32 +495,6 @@ it("moves by calendar weeks and months from the server's business date", async (
   await vi.waitFor(() =>
     expect(paths.some((p) => p.endsWith("kind=month&date=2025-12-01"))).toBe(true),
   );
-});
-it("retires a failed day's load message when its location is left", async () => {
-  const { el } = await mount({
-    fetch: async (url) => {
-      if (url.endsWith("/inbox")) return inbox();
-      if (url.includes("/day?")) throw { code: "connection.lost" };
-      const q = new URL(url, location.origin).searchParams;
-      return hoursView({ locationId: q.get("locationId")!, selection: { kind: "week" } });
-    },
-  });
-  await ready(el);
-  el.shadowRoot!.querySelector("dashboard-hours-record")!.dispatchEvent(
-    new CustomEvent("hours-day", {
-      detail: { date: "2026-01-05", locationId: "venue" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-read-error]")).not.toBeNull());
-  el.shadowRoot!.querySelector('[name="hoursLocation"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "old" }, bubbles: true, composed: true }),
-  );
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("dashboard-hours-record")!.view?.locationId).toBe("old"),
-  );
-  expect(el.shadowRoot!.querySelector("[data-read-error]")).toBeNull();
 });
 it("does not attach a refreshed inbox revision to a prompt removed while its day was loading", async () => {
   let current = inbox();

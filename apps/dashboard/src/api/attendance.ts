@@ -26,11 +26,11 @@ export class AttendanceApi {
   lookups(): Promise<AttendanceLookups> {
     return this.#get(`${BASE}/lookups`);
   }
-  queue(locationId: string): Promise<AttendanceManagerQueue> {
-    return this.#get(`${BASE}/queue?${new URLSearchParams({ locationId })}`);
+  queue(): Promise<AttendanceManagerQueue> {
+    return this.#get(`${BASE}/queue`);
   }
-  day(personId: string, locationId: string, date: string): Promise<AttendanceDayView> {
-    return this.#get(`${BASE}/day?${new URLSearchParams({ personId, locationId, date })}`);
+  day(personId: string, date: string): Promise<AttendanceDayView> {
+    return this.#get(`${BASE}/day?${new URLSearchParams({ personId, date })}`);
   }
   async command(commandId: string): Promise<AttendanceCommandResult | null> {
     const result = await this.#get<AttendanceCommandResult | null>(
@@ -62,12 +62,10 @@ export class AttendanceApi {
   lookupsQuery(): ResourceQuery<AttendanceLookups> {
     return this.#query("lookups", [], () => this.background.lookups());
   }
-  queueQuery(locationId: string): ResourceQuery<AttendanceManagerQueue> {
-    return this.#query("queue", [locationId], () => this.background.queue(locationId));
+  queueQuery(): ResourceQuery<AttendanceManagerQueue> {
+    return this.#query("queue", [], () => this.background.queue());
   }
-  dayQuery(personId: string, locationId: string, date: string): ResourceQuery<AttendanceDayView> {
-    return this.#query("day", [personId, locationId, date], () =>
-      this.background.day(personId, locationId, date),
-    );
+  dayQuery(personId: string, date: string): ResourceQuery<AttendanceDayView> {
+    return this.#query("day", [personId, date], () => this.background.day(personId, date));
   }
 }

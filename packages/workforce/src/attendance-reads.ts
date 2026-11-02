@@ -1,5 +1,5 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { readVenue, type Transaction, venueLocationId } from "@waitron/db";
+import { readVenue, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type {
   AttendanceDayView,
@@ -20,10 +20,6 @@ import "./errors.js";
 const invalid = () => new AppError("attendance.invalid", { reason: "record_scope_or_period" });
 function requireId(id: string) {
   if (typeof id !== "string" || id.length === 0) throw invalid();
-}
-async function venueInfo(tx: Transaction) {
-  const { name, timeZone } = await readVenue(tx);
-  return { id: await venueLocationId(tx), name, timeZone };
 }
 export async function readAttendanceInbox(
   tx: Transaction,
@@ -46,7 +42,7 @@ export async function readAttendanceInbox(
         isNull(attendanceQuestions.canonicalQuestionId),
       ),
     );
-  const venue = await venueInfo(tx);
+  const { timeZone } = await readVenue(tx);
   const byId = new Map(entries.map((e) => [e.entryId, e]));
   const prompts: { at: string; prompt: AttendancePrompt }[] = [];
   for (const question of questions) {
@@ -73,11 +69,8 @@ export async function readAttendanceInbox(
         questionId: question.id,
         itemId: null,
         personId,
-        locationId: venue.id,
-        locationName: venue.name,
         businessDay: question.businessDay,
         day: {
-          locationId: venue.id,
           businessDay: question.businessDay,
           startAt: question.startAt,
           endAt: question.endAt,
@@ -85,7 +78,7 @@ export async function readAttendanceInbox(
         kind: question.kind,
         automaticEntryId: question.automaticEntryId,
         missingKinds: answer.missingKinds,
-        timeZone: venue.timeZone,
+        timeZone,
         history: entries
           .filter((e) => roots.has(recordRoot(e, byId).entryId))
           .sort(compareRecording),
@@ -101,14 +94,12 @@ export async function readAttendanceInbox(
         questionId: null,
         itemId: item.id,
         personId,
-        locationId: venue.id,
-        locationName: venue.name,
         businessDay: null,
         day: null,
         kind: "proposal",
         automaticEntryId: null,
         missingKinds: [],
-        timeZone: venue.timeZone,
+        timeZone,
         history: item.history,
       },
     });
@@ -119,7 +110,7 @@ export async function readAttendanceInbox(
     revision: await readAttendanceRevision(tx, personId),
     prompts: prompts.map((p) => p.prompt),
     items,
-    locations: [venue],
+    timeZone,
   };
 }
 export async function readAttendanceDay(
@@ -132,7 +123,7 @@ export async function readAttendanceDay(
   next.setUTCDate(next.getUTCDate() + 1);
   const end = next.toISOString().slice(0, 10);
   if (!isRecordDate(end)) throw invalid();
-  const venue = await venueInfo(tx);
+  const { timeZone } = await readVenue(tx);
   const entries = await readRecordedEntries(tx, { personId: scope.personId });
   const commands = await tx
     .select()
@@ -148,16 +139,14 @@ export async function readAttendanceDay(
   );
   return {
     personId: scope.personId,
-    locationId: venue.id,
     date: scope.date,
-    timeZone: venue.timeZone,
+    timeZone,
     revision: await readAttendanceRevision(tx, scope.personId),
     record,
     items,
   };
 }
 export async function readAttendanceManagerQueue(tx: Transaction): Promise<AttendanceManagerQueue> {
-  const locationId = await venueLocationId(tx);
   const entries = await readRecordedEntries(tx, {});
   const commands = await tx.select().from(attendanceResponseCommands);
   const items = projectCorrectionItems(entries, commands).filter(
@@ -166,5 +155,5 @@ export async function readAttendanceManagerQueue(tx: Transaction): Promise<Atten
       item.status === "waiting-worker" ||
       item.status === "disputed",
   );
-  return { locationId, items };
+  return { items };
 }

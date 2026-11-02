@@ -537,7 +537,6 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     input: {
       action: "propose",
       personId: marta,
-      locationId,
       changes: [
         { target: { entryId: openEntry }, at: "2026-04-18T23:25:00.000Z", offsetMinutes: 120 },
         { target: { missingKind: "out" }, at: "2026-04-19T00:10:00.000Z", offsetMinutes: 120 },
@@ -558,7 +557,6 @@ async function seedAttendance(db: Database, people: Awaited<ReturnType<typeof se
     input: {
       action: "request",
       questionId: missingTimes,
-      locationId,
       changes: [
         { target: { missingKind: "in" }, at: "2026-04-18T15:58:00.000Z", offsetMinutes: 120 },
       ],

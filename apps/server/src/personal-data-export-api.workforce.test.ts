@@ -445,7 +445,6 @@ beforeEach(async () => {
     input: {
       action: "request",
       questionId: martaQuestion,
-      locationId,
       changes: [
         { target: { missingKind: "in" }, at: "2026-04-18T15:58:00.000Z", offsetMinutes: 120 },
       ],
@@ -462,7 +461,6 @@ beforeEach(async () => {
     input: {
       action: "propose",
       personId: martaId,
-      locationId,
       changes: [
         { target: { missingKind: "out" }, at: "2026-04-19T00:10:00.000Z", offsetMinutes: 120 },
       ],

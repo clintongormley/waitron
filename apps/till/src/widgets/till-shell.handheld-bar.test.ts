@@ -247,7 +247,6 @@ describe("a handheld's More on a short phone", () => {
             clockAvailable: true,
             clockState: {
               personId: "marta",
-              locationId: "venue",
               businessDay: "2026-10-29",
               state: "working",
               lastEntryId: "entry",

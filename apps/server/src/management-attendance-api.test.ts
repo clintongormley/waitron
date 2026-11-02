@@ -95,16 +95,13 @@ async function proposal() {
     expectedRevision: (await inbox()).revision,
     action: "propose",
     personId: venue.personId,
-    locationId: venue.cfg.locationId,
     changes: [{ target: { entryId: targetId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 60 }],
     reason: "Check the finish",
   };
 }
 const paths = ["lookups", "queue", "day", "commands/id", "commands"];
 function route(path: string) {
-  if (path === "queue") return `queue?locationId=${venue.cfg.locationId}`;
-  if (path === "day")
-    return `day?locationId=${venue.cfg.locationId}&personId=${venue.personId}&date=2026-01-05`;
+  if (path === "day") return `day?personId=${venue.personId}&date=2026-01-05`;
   return path.replace("/id", `/${randomUUID()}`);
 }
 it.each(paths)("requires management permission for %s", async (path) => {
@@ -125,7 +122,6 @@ it("provides minimal lookups, own viewer eligibility, an empty queue and a day f
   expect(lookups.status).toBe(200);
   expect(await lookups.json()).toEqual({
     viewer: { personId: managerId, canSelfApprove: true },
-    locations: [{ id: venue.cfg.locationId, name: "Clock venue", timeZone: "Europe/Madrid" }],
     people: expect.arrayContaining([
       { personId: managerId, displayName: "Owner" },
       { personId: venue.personId, displayName: "Ana" },
@@ -136,12 +132,10 @@ it("provides minimal lookups, own viewer eligibility, an empty queue and a day f
     viewer: { personId: managerId, canSelfApprove: false },
   });
   expect(await (await request(route("queue"))).json()).toEqual({
-    locationId: venue.cfg.locationId,
     items: [],
   });
   expect(await (await request(route("day"))).json()).toMatchObject({
     personId: venue.personId,
-    locationId: venue.cfg.locationId,
     date: "2026-01-05",
     revision: (await inbox()).revision,
   });
@@ -196,7 +190,6 @@ it("proposes with the authenticated manager, then the worker accepts with origin
     },
   ]);
   expect(await (await request(route("queue"))).json()).toEqual({
-    locationId: venue.cfg.locationId,
     items: [],
   });
 });
@@ -239,7 +232,7 @@ it("rejects forged actors, extra scope, worker actions, malformed JSON and suspe
   }
   for (const path of [
     "lookups?personId=x",
-    `${route("queue")}&locationId=${venue.cfg.locationId}`,
+    `${route("queue")}?locationId=${venue.cfg.locationId}`,
     `${route("day")}&date=2026-01-06`,
     "commands/not-an-id",
   ]) {

@@ -69,13 +69,6 @@ describe.each(["light", "dark"] as const)("My hours in %s", (theme) => {
             view: state === "loading" || state === "refused" ? null : view,
             reading: state === "loading",
             error: state === "refused" ? "Check your connection and try again." : "",
-            locations: [
-              {
-                id: "venue",
-                name: "A long workplace name that wraps on a narrow phone",
-                timeZone: "Europe/Madrid",
-              },
-            ],
           },
           theme,
         );

@@ -2,8 +2,7 @@ import type { PersonHours } from "@waitron/dashboard-modules";
 import { attendanceEntry, attendanceItem, attendancePrompt } from "./attendance-fixtures.js";
 
 export function hoursView(patch: Partial<PersonHours> = {}): PersonHours {
-  const personId = patch.personId ?? "p1",
-    locationId = patch.locationId ?? "venue";
+  const personId = patch.personId ?? "p1";
   const entry = attendanceEntry({
     personId,
     eventAt: "2026-01-05T17:00:00.000Z",
@@ -11,7 +10,6 @@ export function hoursView(patch: Partial<PersonHours> = {}): PersonHours {
   });
   return {
     personId,
-    locationId,
     selection: { kind: "week", date: "2026-01-05" },
     period: { start: "2026-01-05", end: "2026-01-12" },
     businessDay: "2026-01-06",
@@ -71,7 +69,6 @@ export function hoursView(patch: Partial<PersonHours> = {}): PersonHours {
       prompts: [
         attendancePrompt({
           personId,
-          locationId,
           businessDay: "2026-01-05",
           history: [entry],
           timeZone: "Europe/Madrid",

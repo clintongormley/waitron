@@ -4,10 +4,9 @@ import type { ReadOptions } from "../api/client.js";
 import type { HoursController, HoursSnapshot } from "./hours.js";
 const modules = import.meta.glob<typeof import("./hours.js")>("./hours.ts");
 const selection: HoursSelection = { kind: "week", date: "2026-01-05" };
-function view(personId = "ana", locationId = "venue", selected = selection): PersonHours {
+function view(personId = "ana", selected = selection): PersonHours {
   return {
     personId,
-    locationId,
     selection: { ...selected },
     period: { start: "2026-01-05", end: "2026-01-12" },
     businessDay: "2026-01-06",
@@ -40,9 +39,7 @@ async function fixture() {
   expect(load, "hours read controller").toBeTypeOf("function");
   const { HoursController } = await load!();
   const getHours = vi
-    .fn<
-      (locationId: string, selected: HoursSelection, options?: ReadOptions) => Promise<PersonHours>
-    >()
+    .fn<(selected: HoursSelection, options?: ReadOptions) => Promise<PersonHours>>()
     .mockResolvedValue(view());
   const changed = vi.fn<(snapshot: HoursSnapshot) => void>();
   const controller = new HoursController({ getHours }, changed);
@@ -53,40 +50,36 @@ it("reads only on entry, selection or explicit refresh and supplies an abort sig
   const f = await fixture();
   await f.controller.refresh();
   expect(f.getHours).not.toHaveBeenCalled();
-  await f.controller.start("ana", "venue", selection);
+  await f.controller.start("ana", selection);
   expect(f.snapshot()).toEqual({ view: view(), reading: false, readError: null });
-  expect(f.getHours.mock.calls[0]).toEqual([
-    "venue",
-    selection,
-    { signal: expect.any(AbortSignal) },
-  ]);
+  expect(f.getHours.mock.calls[0]).toEqual([selection, { signal: expect.any(AbortSignal) }]);
   await vi.advanceTimersByTimeAsync(120_000);
   expect(f.getHours).toHaveBeenCalledTimes(1);
   await f.controller.refresh();
   expect(f.getHours).toHaveBeenCalledTimes(2);
 });
-it("an old selection cannot replace a newer location/date or clear its reading state", async () => {
+it("an old selection cannot replace a newer date or clear its reading state", async () => {
   const f = await fixture();
-  await f.controller.start("ana", "venue", selection);
+  await f.controller.start("ana", selection);
   const a = deferred<PersonHours>(),
     b = deferred<PersonHours>();
   f.getHours.mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
   const old = f.controller.refresh();
-  const oldSignal = f.getHours.mock.calls.at(-1)![2]!.signal!;
+  const oldSignal = f.getHours.mock.calls.at(-1)![1]!.signal!;
   const selected = { kind: "month" as const, date: "2026-02-01" };
-  const current = f.controller.select("other", selected);
+  const current = f.controller.select(selected);
   expect(oldSignal.aborted).toBe(true);
   expect(f.snapshot()).toEqual({ view: null, reading: true, readError: null });
   a.resolve(view());
   await old;
   expect(f.snapshot()).toEqual({ view: null, reading: true, readError: null });
-  b.resolve(view("ana", "other", selected));
+  b.resolve(view("ana", selected));
   await current;
-  expect(f.snapshot().view).toEqual(view("ana", "other", selected));
+  expect(f.snapshot().view).toEqual(view("ana", selected));
 });
 it("a late refresh cannot replace a newer response or its refusal", async () => {
   const f = await fixture();
-  await f.controller.start("ana", "venue", selection);
+  await f.controller.start("ana", selection);
   const old = deferred<PersonHours>();
   f.getHours.mockReturnValueOnce(old.promise);
   const pending = f.controller.refresh();
@@ -110,16 +103,16 @@ it.each(["person", "same-person-session", "server-profile", "stop"] as const)(
   "%s teardown aborts and forgets every old read",
   async (kind) => {
     const f = await fixture();
-    await f.controller.start("ana", "venue", selection);
+    await f.controller.start("ana", selection);
     const pending = deferred<PersonHours>();
     f.getHours.mockReturnValueOnce(pending.promise);
     const old = f.controller.refresh();
-    const signal = f.getHours.mock.calls.at(-1)![2]!.signal!;
+    const signal = f.getHours.mock.calls.at(-1)![1]!.signal!;
     if (kind === "stop" || kind === "server-profile") f.controller.stop();
     else {
       const person = kind === "person" ? "bea" : "ana";
       f.getHours.mockResolvedValueOnce(view(person));
-      await f.controller.start(person, "venue", selection);
+      await f.controller.start(person, selection);
     }
     expect(signal.aborted).toBe(true);
     const current = f.snapshot();
@@ -130,31 +123,24 @@ it.each(["person", "same-person-session", "server-profile", "stop"] as const)(
       expect(current).toEqual({ view: null, reading: false, readError: null });
   },
 );
-it.each(["person", "location", "selection"] as const)(
-  "rejects a view for the wrong %s",
-  async (kind) => {
-    const f = await fixture();
-    f.getHours.mockResolvedValueOnce(
-      view(
-        kind === "person" ? "bea" : "ana",
-        kind === "location" ? "other" : "venue",
-        kind === "selection" ? { kind: "month" } : selection,
-      ),
-    );
-    await f.controller.start("ana", "venue", selection);
-    expect(f.snapshot()).toEqual({
-      view: null,
-      reading: false,
-      readError: { code: "attendance.read_failed" },
-    });
-  },
-);
+it.each(["person", "selection"] as const)("rejects a view for the wrong %s", async (kind) => {
+  const f = await fixture();
+  f.getHours.mockResolvedValueOnce(
+    view(kind === "person" ? "bea" : "ana", kind === "selection" ? { kind: "month" } : selection),
+  );
+  await f.controller.start("ana", selection);
+  expect(f.snapshot()).toEqual({
+    view: null,
+    reading: false,
+    readError: { code: "attendance.read_failed" },
+  });
+});
 it("times out a transport that ignores abort at25 seconds and permits retry", async () => {
   const f = await fixture();
   const held = deferred<PersonHours>();
   f.getHours.mockReturnValueOnce(held.promise);
-  const reading = f.controller.start("ana", "venue", selection);
-  const signal = f.getHours.mock.calls.at(-1)![2]!.signal!;
+  const reading = f.controller.start("ana", selection);
+  const signal = f.getHours.mock.calls.at(-1)![1]!.signal!;
   await vi.advanceTimersByTimeAsync(24_999);
   expect(f.snapshot().reading).toBe(true);
   await vi.advanceTimersByTimeAsync(1);
@@ -171,10 +157,10 @@ it("times out a transport that ignores abort at25 seconds and permits retry", as
 it("a selection is captured by value and a stopped changed callback prevents the transport", async () => {
   const f = await fixture();
   const selected = { ...selection };
-  await f.controller.start("ana", "venue", selected);
+  await f.controller.start("ana", selected);
   selected.date = "2026-02-01";
   await f.controller.refresh();
-  expect(f.getHours.mock.calls.at(-1)![1]).toEqual(selection);
+  expect(f.getHours.mock.calls.at(-1)![0]).toEqual(selection);
   f.changed.mockImplementation((value) => {
     if (value.reading) f.controller.stop();
   });

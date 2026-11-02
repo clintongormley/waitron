@@ -99,7 +99,6 @@ export function parseAttendanceCommand(
         "expectedRevision",
         "action",
         action === "request" ? "questionId" : "personId",
-        "locationId",
         "changes",
         "reason",
       ],
@@ -107,7 +106,6 @@ export function parseAttendanceCommand(
     );
     const common = {
       ...base,
-      locationId: uuid(body.locationId, "locationId"),
       changes: changes(body.changes),
       reason: reason(body.reason),
     };
@@ -150,20 +148,10 @@ function queryKeys(value: URLSearchParams, allowed: readonly string[]): void {
 export function parseAttendanceDayQuery(
   value: URLSearchParams,
   mode: "worker" | "manager",
-): { date: string; locationId: string; personId?: string } {
-  queryKeys(
-    value,
-    mode === "manager" ? ["date", "locationId", "personId"] : ["date", "locationId"],
-  );
-  const common = {
-    date: requirePeriod(value.get("date"), "date"),
-    locationId: uuid(value.get("locationId"), "locationId"),
-  };
+): { date: string; personId?: string } {
+  queryKeys(value, mode === "manager" ? ["date", "personId"] : ["date"]);
+  const date = requirePeriod(value.get("date"), "date");
   return mode === "manager"
-    ? { ...common, personId: uuid(value.get("personId"), "personId") }
-    : common;
-}
-export function parseAttendanceLocationQuery(value: URLSearchParams): { locationId: string } {
-  queryKeys(value, ["locationId"]);
-  return { locationId: uuid(value.get("locationId"), "locationId") };
+    ? { date, personId: uuid(value.get("personId"), "personId") }
+    : { date };
 }

@@ -30,7 +30,6 @@ it.each(["accept", "disagree"] as const)(
     const item = attendanceItem({ personId: "p1" });
     const prompt = attendancePrompt({
       personId: "p1",
-      locationId: "venue",
       kind: "proposal",
       itemId: item.id,
       questionId: null,
@@ -41,11 +40,9 @@ it.each(["accept", "disagree"] as const)(
       ...attendanceInbox([prompt], [item]),
       personId: "p1",
       revision: "proposal-revision",
-      locations: [{ id: "venue", name: "Deli", timeZone: "Europe/Madrid" }],
+      timeZone: "Europe/Madrid",
     });
-    f.api.getHours.mockImplementation(async (locationId, selection) =>
-      hoursView({ locationId, selection, pending }),
-    );
+    f.api.getHours.mockImplementation(async (selection) => hoursView({ selection, pending }));
     await open(f.el);
     await vi.waitFor(() => expect(screen(f.el)!.reading).toBe(false));
     await userEvent.click(
@@ -95,7 +92,6 @@ it("offers My hours only in the name menu and opens the server's current week wi
   await open(f.el);
   await vi.waitFor(() => expect(screen(f.el)!.view?.workedMinutes).toBe(480));
   expect(f.api.getHours).toHaveBeenCalledWith(
-    "venue",
     { kind: "week" },
     { signal: expect.any(AbortSignal) },
   );
@@ -118,7 +114,7 @@ it("a selected hours day reuses the existing calendar-day editor with authoritat
     screen(f.el)!.shadowRoot!.querySelector<HTMLElement>('[data-fix="2026-01-05"]')!,
   );
   await vi.waitFor(() =>
-    expect(f.api.getAttendanceDay).toHaveBeenCalledWith("2026-01-05", "venue", {
+    expect(f.api.getAttendanceDay).toHaveBeenCalledWith("2026-01-05", {
       signal: expect.any(AbortSignal),
     }),
   );
@@ -149,7 +145,7 @@ it("logout cancels a held hours read and a late completion cannot return the pre
   const held = deferred<PersonHours>();
   f.api.getHours.mockReturnValueOnce(held.promise);
   await open(f.el);
-  const signal = f.api.getHours.mock.calls.at(-1)![2]!.signal!;
+  const signal = f.api.getHours.mock.calls.at(-1)![1]!.signal!;
   await shellAction(f.el, ".logout");
   await vi.waitFor(() => expect(f.el.shadowRoot!.querySelector("till-lock-screen")).not.toBeNull());
   expect(signal.aborted).toBe(true);
@@ -169,14 +165,13 @@ it("explicit Refresh and a date selection replace the current scoped read withou
   await vi.waitFor(() => expect(f.api.getHours.mock.calls.length).toBeGreaterThan(calls));
   screen(f.el)!.dispatchEvent(
     new CustomEvent("hours-select", {
-      detail: { locationId: "venue", selection: { kind: "month", date: "2026-02-01" } },
+      detail: { selection: { kind: "month", date: "2026-02-01" } },
       bubbles: true,
       composed: true,
     }),
   );
   await vi.waitFor(() =>
     expect(f.api.getHours).toHaveBeenCalledWith(
-      "venue",
       { kind: "month", date: "2026-02-01" },
       { signal: expect.any(AbortSignal) },
     ),
@@ -200,14 +195,13 @@ it("hours responses use the current inbox revision and a later successful summar
   await working(f.el);
   const prompt = attendancePrompt({
     personId: "p1",
-    locationId: "venue",
     timeZone: "Europe/Madrid",
   });
   f.api.getAttendanceInbox.mockResolvedValue({
     ...attendanceInbox([prompt]),
     personId: "p1",
     revision: "fresh-inbox",
-    locations: [{ id: "venue", name: "Clock venue", timeZone: "Europe/Madrid" }],
+    timeZone: "Europe/Madrid",
   });
   f.api.sendAttendanceCommand.mockRejectedValueOnce({ code: "attendance.state_changed" });
   await open(f.el);
@@ -255,13 +249,12 @@ it("a known absent response can be retried from Hours with the same command iden
   await working(f.el);
   const prompt = attendancePrompt({
     personId: "p1",
-    locationId: "venue",
     timeZone: "Europe/Madrid",
   });
   const inbox = {
     ...attendanceInbox([prompt]),
     personId: "p1",
-    locations: [{ id: "venue", name: "Clock venue", timeZone: "Europe/Madrid" }],
+    timeZone: "Europe/Madrid",
   };
   f.api.getAttendanceInbox.mockResolvedValue(inbox);
   f.api.sendAttendanceCommand.mockRejectedValueOnce(new TypeError("answer lost"));
@@ -291,7 +284,7 @@ it("a known absent response can be retried from Hours with the same command iden
   expect(f.el.shadowRoot!.querySelector("till-attendance-questions")).toBeNull();
 });
 
-it("Hours recovers a missing initial clock location before starting its own read", async () => {
+it("Hours reads the week after a failed initial clock read", async () => {
   const f = await clockApp({ state: clockState("working", "in") });
   f.api.getClockState.mockRejectedValueOnce(new TypeError("initial clock offline"));
   await signIn(f.el);
@@ -304,16 +297,14 @@ it("Hours recovers a missing initial clock location before starting its own read
   await working(f.el);
   await open(f.el);
   await vi.waitFor(() => expect(screen(f.el)!.view?.workedMinutes).toBe(480));
-  expect(f.api.getClockState).toHaveBeenCalledTimes(2);
   expect(f.api.getHours).toHaveBeenCalledWith(
-    "venue",
     { kind: "week" },
     { signal: expect.any(AbortSignal) },
   );
   expect(f.api.clockIn).not.toHaveBeenCalled();
 });
 
-it("Refresh retries the missing clock location after its opening recovery also failed", async () => {
+it("Hours shows a failed clock read's message", async () => {
   const f = await clockApp({ state: clockState("working", "in") });
   f.api.getClockState
     .mockRejectedValueOnce(new TypeError("offline"))
@@ -327,10 +318,5 @@ it("Refresh retries the missing clock location after its opening recovery also f
   await userEvent.click(questions.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!);
   await working(f.el);
   await open(f.el);
-  await vi.waitFor(() => expect(f.api.getClockState).toHaveBeenCalledTimes(2));
   expect(screen(f.el)!.error).not.toBe("");
-  expect(f.api.getHours).not.toHaveBeenCalled();
-  await userEvent.click(screen(f.el)!.shadowRoot!.querySelector<HTMLElement>("[data-refresh]")!);
-  await vi.waitFor(() => expect(screen(f.el)!.view?.workedMinutes).toBe(480));
-  expect(f.api.getClockState).toHaveBeenCalledTimes(3);
 });

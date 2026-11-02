@@ -13,14 +13,12 @@ export type AttendanceCommandPayload =
   | {
       action: "request";
       questionId: string | null;
-      locationId: string;
       changes: AttendanceChange[];
       reason: string;
     }
   | {
       action: "propose";
       personId: string;
-      locationId: string;
       changes: AttendanceChange[];
       reason: string;
     }
@@ -67,10 +65,8 @@ export interface AttendancePrompt {
   questionId: string | null;
   itemId: string | null;
   personId: string;
-  locationId: string;
-  locationName: string;
   businessDay: string | null;
-  day: (AttendanceDay & { locationId: string }) | null;
+  day: AttendanceDay | null;
   kind: "automatic-out" | "missing-times" | "proposal";
   automaticEntryId: string | null;
   missingKinds: ClockEntryKind[];
@@ -82,11 +78,10 @@ export interface AttendanceInbox {
   revision: string;
   prompts: AttendancePrompt[];
   items: CorrectionItem[];
-  locations: { id: string; name: string; timeZone: string }[];
+  timeZone: string;
 }
 export interface AttendanceDayView {
   personId: string;
-  locationId: string;
   date: string;
   timeZone: string;
   revision: string;
@@ -94,13 +89,11 @@ export interface AttendanceDayView {
   items: CorrectionItem[];
 }
 export interface AttendanceManagerQueue {
-  locationId: string;
   items: CorrectionItem[];
 }
 
 export interface AttendanceLookups {
   viewer: { personId: string; canSelfApprove: boolean };
-  locations: { id: string; name: string; timeZone: string }[];
   people: { personId: string; displayName: string }[];
 }
 
@@ -131,7 +124,6 @@ export interface HoursClosure {
 }
 export interface PersonHours {
   personId: string;
-  locationId: string;
   selection: HoursSelection;
   period: Period;
   businessDay: string;
@@ -149,7 +141,6 @@ export interface PersonHours {
   closures: HoursClosure[];
 }
 export interface ManagerHours {
-  locationId: string;
   selection: HoursSelection;
   period: Period;
   businessDay: string;

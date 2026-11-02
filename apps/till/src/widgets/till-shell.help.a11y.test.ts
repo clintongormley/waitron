@@ -152,7 +152,6 @@ describe.each(looks)(
 
 const clockState = {
   personId: "ana",
-  locationId: "venue",
   businessDay: "2026-10-14",
   state: "working" as const,
   lastEntryId: "entry",

@@ -10,7 +10,6 @@ afterEach(cleanupWidgets);
 function view(): AttendanceDayView {
   return {
     personId: "worker",
-    locationId: "deli",
     date: "2026-10-14",
     timeZone: "Europe/Madrid",
     revision: "revision",
@@ -40,11 +39,6 @@ async function mount(props: Partial<AttendanceDayDialog> = {}) {
     open: true,
     view: view(),
     date: "2026-10-14",
-    locationId: "deli",
-    locations: [
-      { id: "deli", name: "The deli", timeZone: "Europe/Madrid" },
-      { id: "old", name: "Old location", timeZone: "Atlantic/Canary" },
-    ],
     ...props,
   });
   await mounted.el.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
@@ -158,7 +152,7 @@ describe("chosen-day attendance detail", () => {
     expect(el.shadowRoot!.textContent).toContain("Finished the stock count");
   });
 
-  it("date and location selectors request the exact selection and hide stale actions immediately", async () => {
+  it("the date selector requests the exact selection and hides stale actions immediately", async () => {
     const { el } = await mount();
     const days = watch(el, "attendance-day");
     const date = el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
@@ -170,23 +164,9 @@ describe("chosen-day attendance detail", () => {
       "2026-10-15",
     );
     await el.updateComplete;
-    expect(days.map((event) => event.detail)).toEqual([{ date: "2026-10-15", locationId: "deli" }]);
+    expect(days.map((event) => event.detail)).toEqual([{ date: "2026-10-15" }]);
     expect(el.shadowRoot!.querySelector("[data-fix-entry]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-approve]")).toBeNull();
-    const location = el.shadowRoot!.querySelector<import("@waitron/ui").WtCombobox>(
-      "wt-combobox[name=attendanceLocation]",
-    )!;
-    await location.updateComplete;
-    await userEvent.click(location.shadowRoot!.querySelector<HTMLElement>("button.trigger")!);
-    await userEvent.click(
-      [...location.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")].find((option) =>
-        option.textContent!.includes("Old location"),
-      )!,
-    );
-    expect(days.map((event) => event.detail)).toEqual([
-      { date: "2026-10-15", locationId: "deli" },
-      { date: "2026-10-15", locationId: "old" },
-    ]);
   });
 
   it("a successful read can show no entries and still offer missing times", async () => {

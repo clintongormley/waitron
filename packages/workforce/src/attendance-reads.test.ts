@@ -121,7 +121,6 @@ function request(end: string, at = "2026-01-05T18:00:00Z") {
   return send({
     action: "request",
     questionId: null,
-    locationId,
     changes: [{ target: { entryId: end }, at, offsetMinutes: 0 }],
     reason: "Left later",
   });
@@ -135,13 +134,32 @@ it("returns an empty own inbox and one compatible subject revision for day and i
     revision: await run((tx) => readAttendanceRevision(tx, personId)),
     prompts: [],
     items: [],
-    locations: await suite.db
-      .select({ id: locations.id, name: locations.name, timeZone: locations.timeZone })
-      .from(locations),
+    timeZone: (await suite.db.select({ timeZone: locations.timeZone }).from(locations))[0]!
+      .timeZone,
   });
-  expect(value.locations.map((l) => l.id)).toEqual([locationId]);
+  expect(value.timeZone).toBe("Europe/Madrid");
   expect((await day()).revision).toBe(value.revision);
-  expect(await queue()).toEqual({ locationId, items: [] });
+  expect(await queue()).toEqual({ items: [] });
+});
+it("gives the inbox the venue's zone and no place list", async () => {
+  await suite.db
+    .update(locations)
+    .set({ timeZone: "Atlantic/Canary" })
+    .where(eq(locations.id, locationId));
+  const id = await question();
+  const value = await inbox();
+  expect(value).toEqual({
+    personId,
+    revision: await run((tx) => readAttendanceRevision(tx, personId)),
+    prompts: [expect.objectContaining({ id })],
+    items: [],
+    timeZone: "Atlantic/Canary",
+  });
+  for (const prompt of value.prompts) {
+    expect(prompt).not.toHaveProperty("locationId");
+    expect(prompt).not.toHaveProperty("locationName");
+    expect(prompt.day).not.toHaveProperty("locationId");
+  }
 });
 it("keeps canonical active unanswered questions oldest first without exposing another worker or retired rows", async () => {
   const newer = await question({ date: "2026-01-06" });
@@ -161,11 +179,8 @@ it("keeps canonical active unanswered questions oldest first without exposing an
     questionId: older,
     itemId: null,
     personId,
-    locationId,
-    locationName: "Main",
     businessDay: "2026-01-05",
     day: {
-      locationId,
       businessDay: "2026-01-05",
       startAt: "2026-01-05T04:00:00.000Z",
       endAt: "2026-01-06T04:00:00.000Z",
@@ -206,7 +221,6 @@ it("uses saved business bounds and retains an automatic original outside the bus
   const prompt = (await inbox()).prompts[0]!;
   expect(prompt.id).toBe(id);
   expect(prompt.day).toEqual({
-    locationId,
     businessDay: "2026-01-05",
     startAt: "2026-01-05T04:00:00.000Z",
     endAt: "2026-01-06T04:00:00.000Z",
@@ -229,7 +243,6 @@ it("keeps a worker request as history while a manager proposal is a prompt with 
     {
       action: "propose",
       personId,
-      locationId,
       changes: [{ target: { entryId: end }, at: "2026-01-05T16:00:00Z", offsetMinutes: 60 }],
       reason: "Check departure",
     },
@@ -245,7 +258,6 @@ it("keeps a worker request as history while a manager proposal is a prompt with 
     questionId: null,
     itemId: proposal.entryIds[0],
     personId,
-    locationId,
     kind: "proposal",
     businessDay: null,
     day: null,
@@ -294,7 +306,6 @@ it("manager queue spans old dates and people and lists only outstanding or dispu
     {
       action: "propose",
       personId: other,
-      locationId,
       changes: [{ target: { entryId: second.end }, at: "2026-01-06T18:00:00Z", offsetMinutes: 0 }],
       reason: "Later end",
     },
@@ -324,7 +335,6 @@ it("selected days keep relevant pending missing pairs and omit unrelated days", 
   const value = await send({
     action: "request",
     questionId: null,
-    locationId,
     changes: [
       { target: { missingKind: "in" }, at: "2026-01-05T09:00:00Z", offsetMinutes: 0 },
       { target: { missingKind: "out" }, at: "2026-01-05T17:00:00Z", offsetMinutes: 0 },
@@ -335,7 +345,7 @@ it("selected days keep relevant pending missing pairs and omit unrelated days", 
   expect(selected.items.map((i) => i.id)).toEqual([value.commandId]);
   expect(selected.record.sessions).toEqual([]);
   expect((await day("2026-01-06")).items).toEqual([]);
-  expect((await inbox()).locations.map((l) => l.id)).toEqual([locationId]);
+  expect((await inbox()).timeZone).toBe("Europe/Madrid");
 });
 it.each(["", "2026-02-30", "2026-1-5", "9999-12-31"])(
   "refuses invalid or unrepresentable selected date %s",
@@ -349,7 +359,6 @@ it("a raw-library decline reopens a stored-resolved question with only its unans
   const requested = await send({
     action: "request",
     questionId,
-    locationId,
     changes: [
       { target: { missingKind: "in" }, at: "2026-01-05T09:00:00Z", offsetMinutes: 0 },
       { target: { missingKind: "out" }, at: "2026-01-05T17:00:00Z", offsetMinutes: 0 },
@@ -378,7 +387,6 @@ it("an overtaken proposal stays visible in day history but is absent from prompt
     {
       action: "propose",
       personId,
-      locationId,
       changes: [{ target: { entryId: end }, at: "2026-01-05T16:00:00Z", offsetMinutes: 0 }],
       reason: "Earlier end",
     },
@@ -400,7 +408,6 @@ it("keeps a blocked proposal available to disagree while checking competing late
     {
       action: "propose",
       personId,
-      locationId,
       changes: [{ target: { entryId: end }, at: "2026-01-05T19:00:00Z", offsetMinutes: 0 }],
       reason: "Check end",
     },
@@ -432,7 +439,6 @@ it("both split shifts remain visible after a delayed missing-shift approval", as
   const pair = await send({
     action: "request",
     questionId: null,
-    locationId,
     changes: [
       { target: { missingKind: "in" }, at: "2026-01-05T09:00:00Z", offsetMinutes: 0 },
       { target: { missingKind: "out" }, at: "2026-01-05T13:00:00Z", offsetMinutes: 0 },
@@ -443,7 +449,6 @@ it("both split shifts remain visible after a delayed missing-shift approval", as
   const evening = await send({
     action: "request",
     questionId: null,
-    locationId,
     changes: [
       { target: { missingKind: "in" }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
       { target: { missingKind: "out" }, at: "2026-01-05T22:00:00Z", offsetMinutes: 0 },
@@ -476,7 +481,6 @@ it("an approved missing out permits the next clock-in without closing a later ac
   const value = await send({
     action: "request",
     questionId: null,
-    locationId,
     changes: [{ target: { missingKind: "out" }, at: "2026-01-05T17:00:00Z", offsetMinutes: 0 }],
     reason: "Forgot to finish",
   });
@@ -520,7 +524,7 @@ it("refuses empty reader scopes rather than reading the venue", async () => {
   });
 });
 
-it("keeps recorded history scoped to the inbox subject even in a shared location", async () => {
+it("keeps recorded history scoped to the inbox subject even at a shared venue", async () => {
   const own = await shift();
   const ownRequest = await request(own.end);
   const foreign = await shift(other);
@@ -528,7 +532,6 @@ it("keeps recorded history scoped to the inbox subject even in a shared location
     {
       action: "request",
       questionId: null,
-      locationId,
       changes: [{ target: { entryId: foreign.end }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 }],
       reason: "Other worker's end",
     },
@@ -540,7 +543,7 @@ it("keeps recorded history scoped to the inbox subject even in a shared location
   expect(value.items.map((i) => i.id)).toEqual([ownRequest.entryIds[0]]);
   expect(value.items.every((i) => i.history.every((e) => e.personId === personId))).toBe(true);
 });
-it("selects calendar work dates from stored offsets after the location zone changes", async () => {
+it("selects calendar work dates from stored offsets after the venue's zone changes", async () => {
   await run((tx) =>
     backend.clockIn(tx, {
       nodeId,
@@ -581,7 +584,6 @@ it("reads a person's day at the venue without being told a location", async () =
   const value = await run((tx) => api.readAttendanceDay(tx, { personId, date: "2026-01-05" }));
   expect(value).toMatchObject({
     personId,
-    locationId,
     date: "2026-01-05",
     timeZone: "Atlantic/Canary",
   });
@@ -601,7 +603,6 @@ it("approves an older missing out behind a newer actual in without closing the c
   const historical = await send({
     action: "request",
     questionId: null,
-    locationId,
     changes: [
       { target: { missingKind: "in" }, at: "2026-01-05T09:00:00Z", offsetMinutes: 0 },
       { target: { missingKind: "out" }, at: "2026-01-05T17:00:00Z", offsetMinutes: 0 },
