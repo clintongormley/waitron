@@ -4,11 +4,9 @@ import {
   parseAttendanceExportOptions,
 } from "./attendance-export-request.js";
 
-const locationId = "A1B2C3D4-1234-4234-9234-123456789ABC";
 const personId = "B1B2C3D4-1234-4234-9234-123456789ABC";
 const valid = () =>
   new URLSearchParams({
-    locationId,
     from: "2020-01-01",
     before: "2026-02-01",
     format: "pdf",
@@ -19,7 +17,6 @@ describe("working-time export selection", () => {
   it("accepts arbitrary ranges over four years and normalizes references", () => {
     expect(parseAttendanceExportQuery(valid(), "own")).toEqual({
       selection: {
-        locationId: locationId.toLowerCase(),
         from: "2020-01-01",
         before: "2026-02-01",
         format: "pdf",
@@ -34,7 +31,6 @@ describe("working-time export selection", () => {
     query.set("locale", "es");
     expect(parseAttendanceExportQuery(query, "manager")).toEqual({
       selection: {
-        locationId: locationId.toLowerCase(),
         from: "2020-01-01",
         before: "2026-02-01",
         format: "csv",
@@ -64,7 +60,6 @@ describe("working-time export selection", () => {
     ["before", "2026-02-30", "before"],
     ["before", "not-a-date", "before"],
     ["before", "2026-2-1", "before"],
-    ["locationId", "not-a-uuid", "locationId"],
     ["format", "PDF", "format"],
     ["format", "xlsx", "format"],
     ["audience", "Standard", "audience"],
@@ -78,7 +73,7 @@ describe("working-time export selection", () => {
       expect.objectContaining({ code: "management.request_invalid", params: { field } }),
     );
   });
-  it.each(["locationId", "from", "before", "format", "audience", "locale"])(
+  it.each(["from", "before", "format", "audience", "locale"])(
     "refuses missing, blank and repeated %s",
     (key) => {
       const missing = valid();
@@ -113,6 +108,8 @@ describe("working-time export selection", () => {
       ["own", "personId"],
       ["manager", "override"],
       ["own", "nodeId"],
+      ["own", "locationId"],
+      ["manager", "locationId"],
     ] as const) {
       const q = valid();
       q.set(key, personId);
@@ -127,23 +124,11 @@ describe("working-time export selection", () => {
       expect.objectContaining({ code: "management.request_invalid", params: { field: "query" } }),
     );
   });
-  it("options accepts exactly one valid location reference", () => {
-    expect(parseAttendanceExportOptions(new URLSearchParams({ locationId }))).toBe(
-      locationId.toLowerCase(),
-    );
-    for (const raw of [
-      "",
-      `locationId=${locationId}&locationId=${locationId}`,
-      `locationId=${locationId}&personId=${personId}`,
-    ])
+  it("options takes no query", () => {
+    expect(() => parseAttendanceExportOptions(new URLSearchParams())).not.toThrow();
+    for (const raw of [`locationId=${personId}`, `personId=${personId}`])
       expect(() => parseAttendanceExportOptions(new URLSearchParams(raw))).toThrow(
         expect.objectContaining({ code: "management.request_invalid", params: { field: "query" } }),
       );
-    expect(() => parseAttendanceExportOptions(new URLSearchParams({ locationId: "bad" }))).toThrow(
-      expect.objectContaining({
-        code: "management.request_invalid",
-        params: { field: "locationId" },
-      }),
-    );
   });
 });

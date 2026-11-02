@@ -53,12 +53,16 @@ it("starts with the chosen person and period, and downloads Everyone as represen
   await click(m.dialog.shadowRoot!, "[data-test=export-download]");
   await expect.poll(() => anchor.mock.calls.length).toBe(1);
   expect(m.reads.find((r) => r.path.includes("/export?"))).toEqual({
-    path: "/management-api/attendance/export?locationId=shop&from=2026-01-01&before=2026-02-01&format=csv&audience=representatives&locale=en",
+    path: "/management-api/attendance/export?from=2026-01-01&before=2026-02-01&format=csv&audience=representatives&locale=en",
     passive: null,
   });
   expect(
-    m.reads.filter((r) => r.path.includes("export-options")).every((r) => r.passive === "1"),
-  ).toBe(true);
+    new Set(
+      m.reads
+        .filter((r) => r.path.includes("export-options"))
+        .map((r) => [r.path, r.passive].join(" ")),
+    ),
+  ).toEqual(new Set(["/management-api/me/attendance/export-options 1"]));
 });
 it.each([
   { available: false, canExportAll: false },
@@ -142,6 +146,20 @@ it("retries a failed availability read through Hours Refresh without losing the 
   await click(m.root, "[data-hours-refresh]");
   await expect.poll(() => m.root.querySelector("[data-export]")).toBeTruthy();
   expect(m.root.querySelector("[data-export-error]")).toBeNull();
+});
+it("offers export again after Retry recovers a failed lookups read", async () => {
+  const m = await open();
+  const request = m.el.request;
+  let attempts = 0;
+  m.el.request = (path, ...args) => {
+    if (path.endsWith("/lookups") && attempts++ === 0)
+      return Promise.reject({ code: "connection.lost" });
+    return request(path, ...args);
+  };
+  await expect.poll(() => m.root.querySelector("[data-retry-read]")).toBeTruthy();
+  await click(m.root, "[data-retry-read]");
+  await expect.poll(() => m.root.querySelector("dashboard-hours-record")?.view).toBeTruthy();
+  await expect.poll(() => m.root.querySelector("[data-export]")).toBeTruthy();
 });
 
 it.each(["light", "dark"] as const)(

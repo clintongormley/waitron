@@ -71,7 +71,6 @@ export class AttendanceExportDialog extends LitElement {
   @property({ attribute: false }) request!: DashboardRequest;
   @property() scopeKey = "";
   @property() mode: "own" | "manager" = "own";
-  @property() locationId = "";
   @property({ attribute: false }) period = { start: "", end: "" };
   @property({ attribute: false }) people: readonly { personId: string; displayName: string }[] = [];
   @property() personId?: string;
@@ -101,7 +100,6 @@ export class AttendanceExportDialog extends LitElement {
     return JSON.stringify([
       this.scopeKey,
       this.mode,
-      this.locationId,
       this.personId ?? "",
       this.period.start,
       this.period.end,
@@ -144,12 +142,7 @@ export class AttendanceExportDialog extends LitElement {
       if (this.#opened) this.#release();
       return;
     }
-    const identity = JSON.stringify([
-      this.scopeKey,
-      this.mode,
-      this.locationId,
-      this.personId ?? "",
-    ]);
+    const identity = JSON.stringify([this.scopeKey, this.mode, this.personId ?? ""]);
     if (this.#opened && (identity !== this.#identity || this.request !== this.#request))
       this.#release();
     if (!this.#opened) {
@@ -196,19 +189,17 @@ export class AttendanceExportDialog extends LitElement {
       this.#invalidate();
   }
   async #loadOptions() {
-    if (!this.scopeKey || !this.locationId || typeof this.request !== "function") return;
+    if (!this.scopeKey || typeof this.request !== "function") return;
     const generation = ++this.#readGeneration,
-      request = this.request,
-      locationId = this.locationId;
+      request = this.request;
     this.readError = "";
     try {
-      const options = await new AttendanceExportApi(request).options(locationId);
+      const options = await new AttendanceExportApi(request).options();
       if (
         !this.isConnected ||
         !this.open ||
         generation !== this.#readGeneration ||
-        request !== this.request ||
-        locationId !== this.locationId
+        request !== this.request
       )
         return;
       this.options = options;
@@ -273,7 +264,6 @@ export class AttendanceExportDialog extends LitElement {
     }
     const sent = { ...this.draft };
     const selection: AttendanceExportSelection = {
-      locationId: this.locationId,
       from: sent.from,
       before: sent.before,
       format: sent.format,
@@ -320,7 +310,6 @@ export class AttendanceExportDialog extends LitElement {
     const ready =
       !!this.scopeKey &&
       !!this.request &&
-      !!this.locationId &&
       this.options?.available &&
       (this.mode === "own" || this.options.canExportAll);
     const bottom = [

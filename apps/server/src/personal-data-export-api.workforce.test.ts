@@ -719,7 +719,6 @@ async function existingExport(locale: "en" | "es"): Promise<Uint8Array> {
     logger,
   );
   const query = new URLSearchParams({
-    locationId,
     from: FIRST_DAY,
     before: BEFORE,
     format: "csv",

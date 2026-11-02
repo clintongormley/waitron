@@ -27,7 +27,6 @@ class ExportLeaveTest extends LitElement {
         .open=${true}
         scopeKey="one:1"
         mode="own"
-        locationId="place"
         .period=${{ start: "2026-01-01", end: "2026-02-01" }}
       ></dashboard-attendance-export-dialog
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;

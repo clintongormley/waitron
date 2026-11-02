@@ -158,7 +158,6 @@ export interface ManagerHours {
 }
 
 export interface AttendanceExportSelection {
-  locationId: string;
   from: string;
   before: string;
   format: RecordExportFormat;

@@ -123,7 +123,6 @@ async function existingExport(from: string, before: string, locale: "en" | "es")
     logger,
   );
   const query = new URLSearchParams({
-    locationId,
     from,
     before,
     format: "csv",

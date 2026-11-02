@@ -7,17 +7,13 @@ import type {
 
 export class AttendanceExportApi {
   constructor(private readonly request: DashboardRequest) {}
-  options(locationId: string): Promise<AttendanceExportOptions> {
-    return this.request(
-      `/management-api/me/attendance/export-options?${new URLSearchParams({ locationId })}`,
-      "GET",
-      undefined,
-      { passive: true },
-    );
+  options(): Promise<AttendanceExportOptions> {
+    return this.request("/management-api/me/attendance/export-options", "GET", undefined, {
+      passive: true,
+    });
   }
   #query(selection: AttendanceExportSelection, personId?: string): string {
     return new URLSearchParams({
-      locationId: selection.locationId,
       from: selection.from,
       before: selection.before,
       format: selection.format,

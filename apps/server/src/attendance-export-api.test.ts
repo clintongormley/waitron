@@ -36,7 +36,7 @@ function mount(exporter: ModuleTimeRecordExport | undefined = provider) {
   );
   const deps = {
     db: suite.db,
-    cfg: { locationId: fixture.locationId, nodeId: fixture.nodeId },
+    cfg: { nodeId: fixture.nodeId },
     now: () => new Date(),
     exporter,
   };
@@ -61,7 +61,6 @@ const base = (mode: "own" | "manager") =>
   mode === "own" ? "/management-api/me/attendance/export" : "/management-api/attendance/export";
 function query(patch: Record<string, string> = {}) {
   return new URLSearchParams({
-    locationId: fixture.locationId,
     from: "2026-01-01",
     before: "2026-02-01",
     format: "csv",
@@ -196,7 +195,7 @@ describe("authenticated working-time downloads", () => {
       for (const path of [
         `${base("own")}?${query()}`,
         `${base("manager")}?${query()}`,
-        `${base("own")}-options?locationId=${fixture.locationId}`,
+        `${base("own")}-options`,
       ]) {
         const response = await app.request(path, {
           headers: { cookie: kind === "absent" ? "" : staffCookie },
@@ -215,8 +214,7 @@ describe("authenticated working-time downloads", () => {
       expect((await ask("manager", {}, managerCookie)).status).toBe(200);
     },
   );
-  it("refuses missing location or person after authority", async () => {
-    await fail(await ask("own", { locationId: crypto.randomUUID() }), 400, "attendance.invalid");
+  it("refuses a missing person after authority", async () => {
     await fail(
       await ask("manager", { personId: crypto.randomUUID() }, managerCookie),
       400,
@@ -237,6 +235,17 @@ describe("authenticated working-time downloads", () => {
     );
     expect(provider.prepare).not.toHaveBeenCalled();
     expect((await ask()).status).toBe(200);
+  });
+  it("refuses any query on the options route", async () => {
+    for (const search of [`locationId=${fixture.locationId}`, "anything=1"]) {
+      const response = await app.request(`${base("own")}-options?${search}`, {
+        headers: { cookie: staffCookie },
+      });
+      expect(response.status, search).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "query" } },
+      });
+    }
   });
   it("keeps all-person, selected-person and session-person live and frozen rows disjoint", async () => {
     const backend = new WorkforceBackend();
@@ -308,7 +317,7 @@ describe("authenticated working-time downloads", () => {
   it("keeps passive options from renewing inactivity while a deliberate download is active", async () => {
     const old = new Date(Date.now() - 60_000).toISOString();
     await suite.db.update(managementSessions).set({ lastSeenAt: old });
-    const response = await app.request(`${base("own")}-options?locationId=${fixture.locationId}`, {
+    const response = await app.request(`${base("own")}-options`, {
       headers: { cookie: staffCookie, "x-waitron-live": "1" },
     });
     expect(response.status).toBe(200);
@@ -316,7 +325,7 @@ describe("authenticated working-time downloads", () => {
     expect(
       (await suite.db.select().from(managementSessions)).every((s) => s.lastSeenAt === old),
     ).toBe(true);
-    const options = await app.request(`${base("own")}-options?locationId=${fixture.locationId}`, {
+    const options = await app.request(`${base("own")}-options`, {
       headers: { cookie: managerCookie, "x-waitron-live": "1" },
     });
     expect(await options.json()).toEqual({ available: true, canExportAll: true });
@@ -397,10 +406,9 @@ describe("authenticated working-time downloads", () => {
       },
       logger,
     );
-    const options = await missing.request(
-      `${base("own")}-options?locationId=${fixture.locationId}`,
-      { headers: { cookie: staffCookie } },
-    );
+    const options = await missing.request(`${base("own")}-options`, {
+      headers: { cookie: staffCookie },
+    });
     expect(await options.json()).toEqual({ available: false, canExportAll: false });
     const response = await ask("own", {}, staffCookie, missing);
     await fail(response, 404, "attendance.invalid");
@@ -510,7 +518,7 @@ it.each(["staff", "manager"] as const)(
     const old = new Date(Date.now() - 60_000).toISOString();
     await suite.db.update(managementSessions).set({ lastSeenAt: old });
     const auth = role === "staff" ? staffCookie : managerCookie;
-    const response = await app.request(`${base("own")}-options?locationId=${fixture.locationId}`, {
+    const response = await app.request(`${base("own")}-options`, {
       headers: { cookie: auth },
     });
     expect(response.status).toBe(200);

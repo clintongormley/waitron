@@ -117,10 +117,10 @@ for (const state of ["provider", "workforce-only", "disabled"] as const) {
               ...tls?.via,
               headers: { cookie: `${MANAGEMENT_COOKIE}=${session.token}`, "x-waitron-live": "1" },
             });
-          const selection = `locationId=${venue.cfg.locationId}&from=2020-01-01&before=2026-02-01&format=csv&audience=standard&locale=en`;
+          const selection = `from=2020-01-01&before=2026-02-01&format=csv&audience=standard&locale=en`;
           const own = `/management-api/me/attendance/export?${selection}`;
           const manager = `/management-api/attendance/export?${selection}`;
-          const optionsPath = `/management-api/me/attendance/export-options?locationId=${venue.cfg.locationId}`;
+          const optionsPath = "/management-api/me/attendance/export-options";
           const options = await get(optionsPath);
           if (state !== "disabled" && mode === "primary") {
             expect(options.status).toBe(200);

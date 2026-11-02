@@ -33,7 +33,6 @@ describe.each(["light", "dark"] as const)("export accessibility %s", (theme) => 
           open: true,
           scopeKey: "viewer:1",
           mode,
-          locationId: "place",
           period: { start: "2026-01-01", end: "2026-02-01" },
           people: [{ personId: "one", displayName: "María Muñoz" }],
         },

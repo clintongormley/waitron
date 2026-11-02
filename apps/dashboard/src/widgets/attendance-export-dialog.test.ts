@@ -37,7 +37,6 @@ async function fixture(
     open: true,
     scopeKey: "worker:1",
     mode: "own",
-    locationId: "place",
     period: { start: "2026-01-01", end: "2026-02-01" },
     ...props,
   });
@@ -82,8 +81,9 @@ it("uses a detached range and own PDF defaults, sends no roster and revokes the 
   await change(el, "exportFrom", "2020-01-01");
   await send(el);
   await expect.poll(() => clicked).toEqual(["time-record-2020-01-01-2026-02-01-standard.pdf"]);
+  expect(request.mock.calls[0]![0]).toBe("/management-api/me/attendance/export-options");
   expect(request.mock.calls[1]).toEqual([
-    "/management-api/me/attendance/export?locationId=place&from=2020-01-01&before=2026-02-01&format=pdf&audience=standard&locale=en",
+    "/management-api/me/attendance/export?from=2020-01-01&before=2026-02-01&format=pdf&audience=standard&locale=en",
     "GET",
     undefined,
     { as: "blob" },
@@ -106,7 +106,7 @@ it("offers manager Everyone or one person and representatives CSV", async () => 
   await send(el);
   await expect.poll(() => clicked).toHaveLength(1);
   expect(request.mock.calls[1]![0]).toBe(
-    "/management-api/attendance/export?locationId=place&from=2026-01-01&before=2026-02-01&format=csv&audience=representatives&locale=en",
+    "/management-api/attendance/export?from=2026-01-01&before=2026-02-01&format=csv&audience=representatives&locale=en",
   );
   expect(clicked).toEqual(["time-record-2026-01-01-2026-02-01-representatives.csv"]);
 });
@@ -163,7 +163,6 @@ it.each([
   "scopeKey",
   "request",
   "mode",
-  "locationId",
   "period",
   "personId",
   "locale",
@@ -185,7 +184,6 @@ it.each([
       canExportAll: true,
     })) as unknown as DashboardRequest;
   else if (kind === "mode") el.mode = "manager";
-  else if (kind === "locationId") el.locationId = "other-place";
   else if (kind === "period") el.period = { start: "2027-01-01", end: "2027-02-01" };
   else if (kind === "personId") el.personId = "other-person";
   else if (kind === "locale") setLocale("es-ES");
@@ -255,7 +253,6 @@ it("waits quietly for an options read and keeps manager export disabled without 
     open: true,
     scopeKey: "viewer:1",
     mode: "manager",
-    locationId: "place",
     period: { start: "2026-01-01", end: "2026-02-01" },
   });
   const button = () => el.shadowRoot!.querySelector<WtButton>("[data-test=export-download]")!;
@@ -280,7 +277,6 @@ it("does not read or submit until its session scope exists", async () => {
     request,
     open: true,
     scopeKey: "",
-    locationId: "place",
     period: { start: "2026-01-01", end: "2026-02-01" },
   });
   await new Promise(requestAnimationFrame);

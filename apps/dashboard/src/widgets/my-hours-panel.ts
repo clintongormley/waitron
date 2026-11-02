@@ -169,25 +169,23 @@ export class MyHoursPanel extends LitElement {
         this.#own = new OwnAttendanceApi(this.request, this.liveData);
         void this.#refresh();
       }
+      void this.#loadExportOptions();
     }
-    if (changed.has("locationId")) void this.#loadExportOptions();
   }
   async #loadExportOptions() {
     const read = ++this.#exportRead;
     const generation = this.#generation,
-      location = this.locationId,
       request = this.request;
     this.exportOpen = false;
     this.exportOptions = null;
     this.exportError = "";
-    if (!this.active || !location || !request) return;
+    if (!this.active || !this.personId || !request) return;
     try {
-      const options = await new AttendanceExportApi(request).options(location);
+      const options = await new AttendanceExportApi(request).options();
       if (
         this.isConnected &&
         read === this.#exportRead &&
         generation === this.#generation &&
-        location === this.locationId &&
         request === this.request
       )
         this.exportOptions = options;
@@ -533,7 +531,7 @@ export class MyHoursPanel extends LitElement {
       if (this.#pending) await this.#recover(this.#pending);
       else {
         await this.#refresh();
-        if (this.exportError) await this.#loadExportOptions();
+        if (generation === this.#generation && !this.exportOptions) await this.#loadExportOptions();
       }
     } finally {
       if (generation === this.#generation) this.busy = false;
@@ -706,7 +704,6 @@ export class MyHoursPanel extends LitElement {
         .open=${this.exportOpen}
         .request=${this.request}
         .scopeKey=${`${this.personId}:${this.#generation}`}
-        .locationId=${this.locationId}
         .period=${this.view?.period ?? { start: "", end: "" }}
         @export-close=${() => {
           this.exportOpen = false;

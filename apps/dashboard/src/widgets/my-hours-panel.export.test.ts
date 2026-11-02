@@ -1,6 +1,5 @@
 import type { AttendanceExportDialog } from "./attendance-export-dialog.js";
 import { afterEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
 import { createRequest, LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
@@ -22,6 +21,7 @@ async function mount(available = true, theme?: "light" | "dark") {
       { id: "old", name: "Former workplace", timeZone: "UTC" },
     ],
     available,
+    forbidden: false,
   };
   const file = deferred<Blob>();
   const request = createRequest({
@@ -30,6 +30,8 @@ async function mount(available = true, theme?: "light" | "dark") {
       if (path.includes("export-options"))
         return Response.json({ available: data.available, canExportAll: false });
       if (path.includes("/export?")) return new Response(await file.promise);
+      if (data.forbidden && path.includes("/hours?"))
+        return Response.json({ error: { code: "permission.denied" } }, { status: 403 });
       if (path.endsWith("/inbox"))
         return Response.json({
           personId: "p1",
@@ -84,12 +86,16 @@ it("exports the displayed own range with an editable start, no roster or person 
   await expect.poll(() => m.reads.some((r) => r.path.includes("/export?"))).toBe(true);
   const read = m.reads.find((r) => r.path.includes("/export?"))!;
   expect(read.path).toBe(
-    "/management-api/me/attendance/export?locationId=venue&from=2020-01-01&before=2026-01-12&format=pdf&audience=standard&locale=en",
+    "/management-api/me/attendance/export?from=2020-01-01&before=2026-01-12&format=pdf&audience=standard&locale=en",
   );
   expect(read.passive).toBeNull();
   expect(
-    m.reads.filter((r) => r.path.includes("export-options")).every((r) => r.passive === "1"),
-  ).toBe(true);
+    new Set(
+      m.reads
+        .filter((r) => r.path.includes("export-options"))
+        .map((r) => [r.path, r.passive].join(" ")),
+    ),
+  ).toEqual(new Set(["/management-api/me/attendance/export-options 1"]));
   expect(m.reads.some((r) => r.path.includes("lookups"))).toBe(false);
   m.file.resolve(new Blob(["own record"]));
   await expect.poll(() => anchor.mock.calls.length).toBe(1);
@@ -115,6 +121,18 @@ it("retains an edited range across a live Hours refresh", async () => {
     dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="exportFrom"]')!
       .value,
   ).toBe("2020-01-01");
+});
+it("offers export again after Refresh recovers from a refused Hours read", async () => {
+  const m = await mount();
+  await expect.poll(() => m.root.querySelector("[data-export]")).toBeTruthy();
+  m.data.forbidden = true;
+  m.liveData.invalidate([{ type: "time_entries" }]);
+  await expect.poll(() => m.root.querySelector("dashboard-hours-record")?.view).toBeFalsy();
+  expect(m.root.querySelector("[data-export]")).toBeNull();
+  m.data.forbidden = false;
+  await click(m.root, "[data-refresh]");
+  await expect.poll(() => m.root.querySelector("dashboard-hours-record")?.view).toBeTruthy();
+  await expect.poll(() => m.root.querySelector("[data-export]")).toBeTruthy();
 });
 it.each(["inactive", "person", "location-removed", "disconnect"])(
   "retires a held download after %s",
@@ -142,17 +160,6 @@ it.each(["inactive", "person", "location-removed", "disconnect"])(
     expect(created).not.toHaveBeenCalled();
   },
 );
-it("reads availability for the newly selected historical workplace", async () => {
-  const m = await mount();
-  await change(m.root, "hoursLocation", "old");
-  await expect
-    .poll(() => m.reads.some((r) => r.path.endsWith("export-options?locationId=old")))
-    .toBe(true);
-  const dialog = await open(m.root);
-  expect(dialog.locationId).toBe("old");
-  await userEvent.keyboard("{Escape}");
-});
-
 it.each(["light", "dark"] as const)(
   "own export attached to Hours has accessible controls in %s",
   async (theme) => {
