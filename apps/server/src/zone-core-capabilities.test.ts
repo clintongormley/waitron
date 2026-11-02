@@ -5,11 +5,11 @@ import {
   locations,
   sales,
   tenants,
-  workingOrders,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   recordSale,
@@ -164,16 +164,12 @@ describe("core-only callers prepare the saved writing zone", () => {
   );
   it("keeps F1's earlier bill-opening operation date out of the filed issue record", async () => {
     const full = await addSeries("full");
-    const [order] = await v.db
-      .insert(workingOrders)
-      .values({
-        ...v.cfg.origin,
-        nodeId: v.cfg.nodeId,
-        locationId: v.cfg.locationId,
-        orderNumber: 100,
-        openedAt: "2026-10-13T23:30:00.000Z",
-      })
-      .returning();
+    const order = await seedWorkingOrder(v.db, {
+      ...v.cfg.origin,
+      nodeId: v.cfg.nodeId,
+      orderNumber: 100,
+      openedAt: "2026-10-13T23:30:00.000Z",
+    });
     const issued = await withTransaction(v.db, async (tx) =>
       recordSale(
         tx,
@@ -182,7 +178,7 @@ describe("core-only callers prepare the saved writing zone", () => {
           seriesId: full,
           counterparty: recipient,
           recipientAddress: "1 Customer Street",
-          workingOrderId: workingOrderId(order!.id),
+          workingOrderId: workingOrderId(order.id),
         }),
       ),
     );

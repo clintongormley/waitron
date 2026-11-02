@@ -28,6 +28,7 @@ import {
   printJobs,
   products,
   ticketItems,
+  venueLocationId,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -35,7 +36,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { AllergenMap, Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -155,7 +156,6 @@ interface SeededVenue {
  * first park — and the suite is order-independent (CLAUDE.md §4).
  */
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue> {
-  await seedTenant(db);
   const eachUnitId = randomUUID();
   const kgUnitId = randomUUID();
   await db.insert(units).values([
@@ -180,14 +180,13 @@ async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue>
       hardwareUnit: "kg",
     },
   ]);
-  const locationId = randomUUID();
-  await db.insert(locations).values({
-    id: locationId,
+  await seedVenue(db, {
     name: "Barra",
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
 
   const { cafeId, aguaId, catalogueId, zoneId, cafeOfferId, premiumCafeOfferId } =
     await withTransaction(db, async (tx) => {

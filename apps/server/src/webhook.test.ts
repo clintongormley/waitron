@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, nodes, withTransaction, workingOrders } from "@waitron/db";
+import { CORE_MIGRATIONS, nodes, venueLocationId, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { PAYMENTS_MIGRATIONS, insertInitiated } from "@waitron/payments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { decimal, deviceOrigin } from "@waitron/shared";
-import { seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedTenant, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { createHealthState, healthApp } from "./health.js";
 import { provisionBillVenue, send, tabWith } from "./testing/bill-venue.js";
@@ -63,28 +63,19 @@ async function seedInitiated(
   db: Database,
   opts: { webhookSecret: string; secretKey?: string; amount?: string; sessionId?: string },
 ): Promise<SeededPayment> {
-  await seedTenant(db);
   const sessionId = opts.sessionId ?? `cs_${randomUUID()}`;
-  // Through the table definitions: `$defaultFn` generators and the locale list's write mapping are
-  // never reached by a raw insert.
-  const [loc] = await db
-    .insert(locations)
-    .values({ name: "Counter", invoiceLocales: ["es"], operationDescription: "Retail" })
-    .returning({ id: locations.id });
-  const { deviceId } = await seedDevice(db, { locationId: loc!.id });
+  await seedVenue(db, { name: "Counter", invoiceLocales: ["es"], operationDescription: "Retail" });
+  const { deviceId } = await seedDevice(db);
   await db.insert(nodes).values({
     id: "11111111-1111-4111-8111-111111111111",
-    locationId: loc!.id,
+    locationId: await venueLocationId(db),
     name: "Webhook node",
   });
-  const [wo] = await db
-    .insert(workingOrders)
-    .values({ source: "device", deviceId, locationId: loc!.id, orderNumber: 1 })
-    .returning({ id: workingOrders.id });
+  const wo = await seedWorkingOrder(db, { source: "device", deviceId, orderNumber: 1 });
   await withTransaction(db, (tx) =>
     insertInitiated(tx, {
       origin: deviceOrigin(deviceId),
-      workingOrderId: wo!.id,
+      workingOrderId: wo.id,
       provider: "stripe",
       paymentRef: randomUUID(),
       externalRef: sessionId,

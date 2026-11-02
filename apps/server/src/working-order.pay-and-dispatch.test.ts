@@ -15,6 +15,7 @@ import { asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -32,7 +33,6 @@ import { planVenue } from "@waitron/provisioning";
 import type { VenueResult } from "@waitron/provisioning";
 import {
   diningTables,
-  nodes,
   nowIso,
   orderAmendments,
   saleLines,
@@ -534,14 +534,8 @@ async function addDevice(cfg: DeviceRequestConfig): Promise<DeviceRequestConfig>
  * they are venue-wide (#259): a node reaches the venue's open tabs regardless of the
  * `node_id` they carry. `filing_module`/`tax_module` are nullable and unused for a listing-only node, so left out.
  */
-async function addNode(cfg: DeviceRequestConfig, name: string): Promise<DeviceRequestConfig> {
-  const id = randomUUID();
-  await withTransaction(suite.db, async (tx) => {
-    // Through the table, not a raw `insert`: `nodes.created_at` is a `$defaultFn` in JavaScript, not a
-    // SQL DEFAULT.
-    await tx.insert(nodes).values({ id, locationId: cfg.locationId, name });
-  });
-  return { ...cfg, nodeId: brandNodeId(id) };
+async function addNode(cfg: DeviceRequestConfig): Promise<DeviceRequestConfig> {
+  return { ...cfg, nodeId: await seedNode(suite.db) };
 }
 
 /**
@@ -1250,7 +1244,7 @@ describe("cross-till end-to-end", () => {
     const { cfg: nodeA, cafe, zoneId } = await setupVenue();
     // A second node under the SAME tenant. Reads are venue-wide, so both nodes see the order — a
     // promoted node inherits the venue's open tabs regardless of the `node_id` they carry.
-    const nodeB = await addNode(nodeA, "Servidor 2");
+    const nodeB = await addNode(nodeA);
 
     const orderId = randomUUID();
     await parkOrder({ db: suite.db }, nodeA, {
@@ -1268,7 +1262,7 @@ describe("cross-till end-to-end", () => {
     // A second register under the SAME tenant + location, differing only in node_id. Reads are
     // venue-wide, so every by-id lookup on node B reaches node A's order — a promoted node serves
     // the tabs it inherited (getHeldOrder/updateHeldOrder/abandonHeldOrder — the whole by-id family).
-    const nodeB = await addNode(nodeA, "Servidor 2");
+    const nodeB = await addNode(nodeA);
 
     const orderId = randomUUID();
     await parkOrder({ db: suite.db }, nodeA, {
@@ -2494,7 +2488,7 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
     // A second node under the SAME tenant + location, differing only in `node_id`. Reads are venue-wide, so BOTH nodes fire a genuine order and BOTH queues show
     // both — a measurement where each side holds two orders, not "one empty, one not" (CLAUDE.md §1).
     // Both nodes share the location's one default station.
-    const nodeB = await addNode(nodeA, "Servidor 2");
+    const nodeB = await addNode(nodeA);
     const station = await defaultStationId(nodeA);
 
     const idA = randomUUID();
@@ -2602,7 +2596,7 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
     // A second node under the SAME tenant + location. Reads are venue-wide, so
     // BOTH nodes fire a genuine order and BOTH expo boards show both — a measurement where each side
     // holds two orders, not "one empty, one not" (CLAUDE.md §1).
-    const nodeB = await addNode(nodeA, "Servidor 2");
+    const nodeB = await addNode(nodeA);
 
     const idA = randomUUID();
     await parkOrder({ db: suite.db }, nodeA, {

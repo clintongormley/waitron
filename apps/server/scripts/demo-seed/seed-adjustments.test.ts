@@ -1,7 +1,7 @@
 /** The adjustment reasons seed, against a database every module set has migrated. */
 
 import { describe, expect, it } from "vitest";
-import { locations, withTransaction } from "@waitron/db";
+import { venueLocationId, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -9,7 +9,7 @@ import {
   listAdjustmentReasons,
   STARTER_REASON_NAMES as expected,
 } from "@waitron/adjustments";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { seedAdjustmentReasons } from "./seed-adjustments.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
@@ -52,13 +52,13 @@ describe("seedAdjustmentReasons", () => {
   ] as const)(
     "does not repeat any reason provisioning gave a %s venue",
     async (locale, invoiceLocale) => {
-      await seedTenant(suite.db);
-      const [location] = await suite.db
-        .insert(locations)
-        .values({ name: "Venue", invoiceLocales: [invoiceLocale], operationDescription: "Demo" })
-        .returning({ id: locations.id });
-      const locationId = brandLocationId(location!.id);
-      const node = { locationId, nodeId: await seedNode(suite.db, locationId) };
+      await seedVenue(suite.db, {
+        name: "Venue",
+        invoiceLocales: [invoiceLocale],
+        operationDescription: "Demo",
+      });
+      const locationId = brandLocationId(await venueLocationId(suite.db));
+      const node = { locationId, nodeId: await seedNode(suite.db) };
       const reasons = await withTransaction(suite.db, async (tx) => {
         await ADJUSTMENTS_PROVISIONING.seed!.run(tx, node);
         await seedAdjustmentReasons(tx, {
@@ -74,13 +74,13 @@ describe("seedAdjustmentReasons", () => {
   );
 
   it("names a starter reason the demo lists in the demo's languages, keeping the starter's rules", async () => {
-    await seedTenant(suite.db);
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Venue", invoiceLocales: ["es-ES"], operationDescription: "Demo" })
-      .returning({ id: locations.id });
-    const locationId = brandLocationId(location!.id);
-    const node = { locationId, nodeId: await seedNode(suite.db, locationId) };
+    await seedVenue(suite.db, {
+      name: "Venue",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Demo",
+    });
+    const locationId = brandLocationId(await venueLocationId(suite.db));
+    const node = { locationId, nodeId: await seedNode(suite.db) };
     const [before, after] = await withTransaction(suite.db, async (tx) => {
       await ADJUSTMENTS_PROVISIONING.seed!.run(tx, node);
       const provisioned = await listAdjustmentReasons(tx);
@@ -173,13 +173,13 @@ describe("seedAdjustmentReasons", () => {
   });
 
   it("adds and changes nothing on a second run of a Spanish-only seed over the starter reasons", async () => {
-    await seedTenant(suite.db);
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Venue", invoiceLocales: ["es-ES"], operationDescription: "Demo" })
-      .returning({ id: locations.id });
-    const locationId = brandLocationId(location!.id);
-    const node = { locationId, nodeId: await seedNode(suite.db, locationId) };
+    await seedVenue(suite.db, {
+      name: "Venue",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Demo",
+    });
+    const locationId = brandLocationId(await venueLocationId(suite.db));
+    const node = { locationId, nodeId: await seedNode(suite.db) };
     const [once, twice] = await withTransaction(suite.db, async (tx) => {
       await ADJUSTMENTS_PROVISIONING.seed!.run(tx, node);
       const seed = () =>

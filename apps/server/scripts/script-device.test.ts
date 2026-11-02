@@ -1,8 +1,14 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, deviceProfiles, devices, locations, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  deviceProfiles,
+  devices,
+  venueLocationId,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { scriptSessionDevice } from "./script-device.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
@@ -18,11 +24,12 @@ async function profileOf(deviceId: string) {
 
 describe("scriptSessionDevice", () => {
   it("puts its device on the live profile of that name, never a retired one", async () => {
-    await seedTenant(suite.db);
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Bar", invoiceLocales: ["es"], operationDescription: "Hostelería" })
-      .returning({ id: locations.id });
+    await seedVenue(suite.db, {
+      name: "Bar",
+      invoiceLocales: ["es"],
+      operationDescription: "Hostelería",
+    });
+    const venueId = await venueLocationId(suite.db);
     const [retired] = await suite.db
       .insert(deviceProfiles)
       .values({
@@ -45,7 +52,7 @@ describe("scriptSessionDevice", () => {
       .from(devices)
       .where(eq(devices.id, deviceId));
     expect(device).toEqual({
-      venueId: location!.id,
+      venueId,
       label: "Script till",
       active: false,
       tokenHash: "unusable",

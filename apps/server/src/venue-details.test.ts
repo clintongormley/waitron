@@ -28,7 +28,6 @@ import {
   CORE_CHANGE_SOURCES,
   sales,
   saleVoids,
-  nodes,
   kitchenStations,
   diningTables,
   floorZones,
@@ -45,6 +44,7 @@ import { mountReportApi, resolveVenueClock } from "./report-api.js";
 import type { ResourceChange } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { venueFiscalSelection } from "@waitron/provisioning";
 import { ALL_MODULES } from "./modules.js";
@@ -1013,13 +1013,7 @@ describe("all retained sale rows lock venue clocks", () => {
     "does not exclude %s history from the policy",
     async (kind) => {
       const saleId = randomUUID();
-      const otherNode = randomUUID();
-      if (kind === "other_node")
-        await suite.db.insert(nodes).values({
-          id: otherNode,
-          locationId: venue.cfg.locationId,
-          name: "Retained other node",
-        });
+      const otherNode = kind === "other_node" ? await seedNode(suite.db) : randomUUID();
       const base = {
         source: "demo_seed" as const,
         deviceId: null,

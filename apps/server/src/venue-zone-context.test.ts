@@ -6,10 +6,11 @@ import {
   locations,
   locationBusinessDaySettings,
   locationDayCutoverChanges,
+  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId, type BusinessDayClock } from "@waitron/shared";
 import { CATALOGUE_MIGRATIONS, createCatalogue } from "@waitron/catalogue";
 import {
@@ -32,19 +33,15 @@ const suite = useVenueDb({
 const AT = new Date("2026-10-14T23:30:00.000Z");
 let scope: { nodeId: string; locationId: string };
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [row] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Test venue",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Restaurant service",
-      province: "Madrid",
-      timeZone: "Invalid/Zone",
-      dayCutover: "06:00:00",
-    })
-    .returning();
-  scope = { nodeId: await seedNode(suite.db, locationId(row!.id)), locationId: row!.id };
+  await seedVenue(suite.db, {
+    name: "Test venue",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Restaurant service",
+    province: "Madrid",
+    timeZone: "Invalid/Zone",
+    dayCutover: "06:00:00",
+  });
+  scope = { nodeId: await seedNode(suite.db), locationId: await venueLocationId(suite.db) };
 });
 afterEach(() => vi.restoreAllMocks());
 const read = () => withTransaction(suite.db, (tx) => readZoneContext(tx, scope));

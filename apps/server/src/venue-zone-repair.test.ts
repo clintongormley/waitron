@@ -7,15 +7,14 @@ import {
   incidents,
   locationBusinessDaySettings,
   locationDayCutoverChanges,
+  venueLocationId,
   withTransaction,
-  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
-import { locationId } from "@waitron/shared";
 import {
   ZONE_REPAIR_ALERT_CLAIM,
   confirmVenueZone,
@@ -39,19 +38,15 @@ let token: string;
 let actor: string;
 const body = { timeZone: "Europe/Madrid", expectedClockRevision: 0, confirmed: true };
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [row] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Counter",
-      province: "Madrid",
-      timeZone: RAW,
-      dayCutover: "06:00:00",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Restaurant service",
-    })
-    .returning();
-  scope = { locationId: row!.id, nodeId: await seedNode(suite.db, locationId(row!.id)) };
+  await seedVenue(suite.db, {
+    name: "Counter",
+    province: "Madrid",
+    timeZone: RAW,
+    dayCutover: "06:00:00",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Restaurant service",
+  });
+  scope = { locationId: await venueLocationId(suite.db), nodeId: await seedNode(suite.db) };
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: "Manager", role: "manager" })
@@ -102,9 +97,7 @@ describe("atomic unusable-zone confirmation", () => {
       { locationId: scope.locationId, effectiveBusinessDay: "2026-09-01", dayCutover: "05:00:00" },
       { locationId: scope.locationId, effectiveBusinessDay: "2026-11-01", dayCutover: "07:00:00" },
     ]);
-    await suite.db
-      .insert(workingOrders)
-      .values({ source: "operator_script", locationId: scope.locationId, orderNumber: 1 });
+    await seedWorkingOrder(suite.db, { source: "operator_script", orderNumber: 1 });
     const before = snapshot();
     const result = await confirm();
     expect(result).toEqual({ repaired: true, clockRevision: 1, admission: "restart_required" });
@@ -159,9 +152,7 @@ describe("atomic unusable-zone confirmation", () => {
     "refuses valid saved %s even with order history",
     async (timeZone) => {
       await suite.db.update(locations).set({ timeZone }).where(eq(locations.id, scope.locationId));
-      await suite.db
-        .insert(workingOrders)
-        .values({ source: "operator_script", locationId: scope.locationId, orderNumber: 1 });
+      await seedWorkingOrder(suite.db, { source: "operator_script", orderNumber: 1 });
       const before = snapshot();
       await expect(confirm()).rejects.toMatchObject({
         code: "venue.time_zone_repair_not_needed",

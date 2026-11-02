@@ -3,17 +3,17 @@ import {
   diningTables,
   floorZones,
   kitchenStations,
-  locations,
   nowIso,
   parties,
   partyTables,
   ticketItems,
   withTransaction,
+  venueLocationId,
   workingOrderLines,
   workingOrders,
   type Database,
 } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { locationId as brandLocationId } from "@waitron/shared";
@@ -23,7 +23,6 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { TradingContext } from "./trading-context.js";
 import { listTables } from "./tables.js";
 import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
-import { dashboardOrderAt } from "./testing/session-device.js";
 import { numberBill } from "./testing/bill-identities.js";
 
 /** The three kitchen/floor read models, run against a real migrated venue database. */
@@ -43,15 +42,13 @@ let tableId: string;
 
 beforeAll(async () => {
   db = suite.db;
-  await seedTenant(db);
-  const locationId = randomUUID();
-  await db.insert(locations).values({
-    id: locationId,
+  await seedVenue(db, {
     name: "Counter",
     invoiceLocales: [LOCALE],
     operationDescription: "In-store sales",
   });
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
   [{ id: stationId }] = await db
     .insert(kitchenStations)
     .values({ locationId, name: "Kitchen", isDefault: true })
@@ -62,9 +59,9 @@ beforeAll(async () => {
     .insert(parties)
     .values({ openedBy: randomUUID() })
     .returning({ id: parties.id });
-  await db.insert(workingOrders).values({
+  await seedWorkingOrder(db, {
     id: orderId,
-    ...dashboardOrderAt(locationId),
+    deviceId: null,
     nodeId,
     orderNumber: 1,
     status: "open",
@@ -240,9 +237,9 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
 
   it("removes an order with only a made-here item from expo", async () => {
     const orderId = randomUUID();
-    await db.insert(workingOrders).values({
+    await seedWorkingOrder(db, {
       id: orderId,
-      ...dashboardOrderAt(cfg.locationId),
+      deviceId: null,
       nodeId: cfg.nodeId,
       orderNumber: 2,
       status: "open",

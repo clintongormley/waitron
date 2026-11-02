@@ -3,12 +3,12 @@ import Stripe from "stripe";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction, workingOrders } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { PAYMENTS_MIGRATIONS, insertInitiated } from "@waitron/payments";
-import { decimal, deviceOrigin, locationId } from "@waitron/shared";
+import { decimal, deviceOrigin } from "@waitron/shared";
 import { TradingAdmission } from "./trading-admission.js";
 import { mountWebhook, settleWebhook, type WebhookDeps } from "./webhook.js";
 
@@ -33,27 +33,20 @@ function gate() {
 
 async function seed() {
   const db = suite.db;
-  await seedTenant(db);
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Counter",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Restaurant service",
-      timeZone: "Europe/Madrid",
-    })
-    .returning();
-  const nodeId = await seedNode(db, locationId(location!.id));
-  const { deviceId } = await seedDevice(db, { locationId: location!.id });
-  const [order] = await db
-    .insert(workingOrders)
-    .values({ source: "device", deviceId, locationId: location!.id, orderNumber: 1 })
-    .returning();
+  await seedVenue(db, {
+    name: "Counter",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Restaurant service",
+    timeZone: "Europe/Madrid",
+  });
+  const nodeId = await seedNode(db);
+  const { deviceId } = await seedDevice(db);
+  const order = await seedWorkingOrder(db, { source: "device", deviceId, orderNumber: 1 });
   const sessionId = `cs_${randomUUID()}`;
   await withTransaction(db, async (tx) => {
     await insertInitiated(tx, {
       origin: deviceOrigin(deviceId),
-      workingOrderId: order!.id,
+      workingOrderId: order.id,
       provider: "stripe",
       paymentRef: randomUUID(),
       externalRef: sessionId,
@@ -80,7 +73,7 @@ async function seed() {
   };
   const app = new Hono();
   mountWebhook(app, deps, log);
-  return { deps, admission, app, sessionId, locationId: location!.id };
+  return { deps, admission, app, sessionId, locationId: await venueLocationId(db) };
 }
 
 function event(sessionId: string, type = "checkout.session.completed") {
