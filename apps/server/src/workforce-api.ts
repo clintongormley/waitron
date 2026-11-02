@@ -393,8 +393,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
   app.get("/management-api/planned-vs-actual", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      // Validated and ignored: the dashboard still sends it (A1301 S15).
-      requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
       const from = requirePeriod(c.req.query("from"), "from");
       const to = requirePeriod(c.req.query("to"), "to");
       const rows = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>

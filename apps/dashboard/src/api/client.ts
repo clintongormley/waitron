@@ -4235,9 +4235,9 @@ export class DashboardApi {
 
   // ── Planned vs actual (worked-time comparison) ───────────────────────────────────────────────────
 
-  getPlannedVsActual(locationId: string, from: string, to: string): Promise<PlannedVsActualRow[]> {
+  getPlannedVsActual(from: string, to: string): Promise<PlannedVsActualRow[]> {
     return this.#request<PlannedVsActualRow[]>(
-      `/management-api/planned-vs-actual?locationId=${locationId}&from=${from}&to=${to}`,
+      `/management-api/planned-vs-actual?from=${from}&to=${to}`,
       "GET",
     );
   }

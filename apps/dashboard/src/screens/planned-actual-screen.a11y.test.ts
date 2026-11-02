@@ -15,11 +15,6 @@ const staff: PersonSummary[] = [
     email: null,
   },
 ];
-// Two locations, because `<dashboard-location-picker>` renders nothing for a single one.
-const locations = [
-  { id: "loc-1", name: "Main" },
-  { id: "loc-2", name: "Annex" },
-];
 const rows: PlannedVsActualRow[] = [
   {
     personId: "p1",
@@ -43,7 +38,6 @@ const rows: PlannedVsActualRow[] = [
 
 function stubApi(withRows: boolean): DashboardApi {
   return {
-    getLocations: vi.fn().mockResolvedValue(locations),
     listStaff: vi.fn().mockResolvedValue(staff),
     getPlannedVsActual: vi.fn().mockResolvedValue(withRows ? rows : []),
   } as unknown as DashboardApi;

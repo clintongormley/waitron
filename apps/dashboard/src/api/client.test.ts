@@ -1107,7 +1107,7 @@ describe("DashboardApi — approvals", () => {
 });
 
 describe("DashboardApi — planned vs actual", () => {
-  it("getPlannedVsActual GETs the planned-vs-actual route with locationId/from/to", async () => {
+  it("getPlannedVsActual GETs the planned-vs-actual route with from/to", async () => {
     const rows = [
       {
         personId: "p1",
@@ -1121,9 +1121,9 @@ describe("DashboardApi — planned vs actual", () => {
     ];
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(rows));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.getPlannedVsActual("loc-1", "2026-03-02", "2026-03-09")).toEqual(rows);
+    expect(await api.getPlannedVsActual("2026-03-02", "2026-03-09")).toEqual(rows);
     expect(fetchImpl).toHaveBeenCalledWith(
-      "/management-api/planned-vs-actual?locationId=loc-1&from=2026-03-02&to=2026-03-09",
+      "/management-api/planned-vs-actual?from=2026-03-02&to=2026-03-09",
       { method: "GET", credentials: "include", signal: expect.any(AbortSignal) },
     );
   });

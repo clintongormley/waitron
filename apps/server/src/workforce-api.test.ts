@@ -640,41 +640,27 @@ describe("mountWorkforceApi — planned-vs-actual", () => {
     const res = await send(
       mountApp(),
       "GET",
-      `/management-api/planned-vs-actual?locationId=${locationId}&from=2026-03-02&to=2026-03-09`,
+      "/management-api/planned-vs-actual?from=2026-03-02&to=2026-03-09",
     );
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([]);
   });
 
-  it("400s a non-UUID locationId (shared.invalid_id)", async () => {
-    const res = await send(
-      mountApp(),
-      "GET",
-      "/management-api/planned-vs-actual?locationId=not-a-uuid&from=2026-03-02&to=2026-03-09",
-    );
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "shared.invalid_id" },
-    });
-  });
-
-  it("400s a request with no locationId (shared.invalid_id)", async () => {
+  it("answers a request with no location", async () => {
     const res = await send(
       mountApp(),
       "GET",
       "/management-api/planned-vs-actual?from=2026-03-02&to=2026-03-09",
     );
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "shared.invalid_id" },
-    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
   });
 
   it("400s a malformed from/to (management.request_invalid)", async () => {
     const res = await send(
       mountApp(),
       "GET",
-      `/management-api/planned-vs-actual?locationId=${locationId}&from=nope&to=2026-03-09`,
+      "/management-api/planned-vs-actual?from=nope&to=2026-03-09",
     );
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -686,7 +672,7 @@ describe("mountWorkforceApi — planned-vs-actual", () => {
     const res = await send(
       mountApp(),
       "GET",
-      `/management-api/planned-vs-actual?locationId=${locationId}&from=2026-03-02&to=2026-03-09`,
+      "/management-api/planned-vs-actual?from=2026-03-02&to=2026-03-09",
       { cookie: staffCookie },
     );
     expect(res.status).toBe(403);

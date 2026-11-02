@@ -3,11 +3,9 @@ import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
-// This import also registers `<dashboard-location-picker>`.
-import { resolveLocationSelection } from "../widgets/location-picker.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type { DashboardApi, LocationSummary, PlannedVsActualRow } from "../api/client.js";
+import type { DashboardApi, PlannedVsActualRow } from "../api/client.js";
 import { MS_PER_DAY, mondayOf, today } from "../date-utils.js";
 import { personNameMap, resolvePersonName } from "../person-utils.js";
 
@@ -28,14 +26,6 @@ export class PlannedActualScreen extends LitElement {
         font-size: var(--wt-font-size-lg);
         color: var(--wt-color-text);
       }
-      .pickers {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--wt-space-4);
-      }
-      /* The bottom gap lives on the pickers themselves (not the pickers row) so the week picker here
-       * matches the shared dashboard-location-picker widget's own bottom margin and the two align in
-       * the flex row. */
       .picker {
         margin-bottom: var(--wt-space-4);
       }
@@ -74,13 +64,10 @@ export class PlannedActualScreen extends LitElement {
     },
   );
 
-  @state() private locations: LocationSummary[] = [];
-  @state() private locationId = "";
   @state() private weekMonday = mondayOf(today());
   @state() private rows: PlannedVsActualRow[] = [];
   @state() private errorKey: string | null = null;
   #names = new Map<string, string>();
-  #locationsLoaded = false;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -89,29 +76,13 @@ export class PlannedActualScreen extends LitElement {
 
   async #load(): Promise<void> {
     this.errorKey = null;
-    let initial = true;
     try {
       await Promise.all([
         this.#queries.watch("listStaff", [], (value) => {
           this.#names = personNameMap(value);
           this.requestUpdate();
         }),
-        this.#queries.watch("getLocations", [], async (locations) => {
-          this.#locationsLoaded = true;
-          this.locations = locations;
-          if (locations.length === 0) {
-            this.locationId = "";
-            this.#queries.release("getPlannedVsActual");
-            this.rows = [];
-            return;
-          }
-          const selected = resolveLocationSelection(locations, this.locationId);
-          if (initial || selected !== this.locationId) {
-            initial = false;
-            this.locationId = selected;
-            await this.#loadRows();
-          }
-        }),
+        this.#loadRows(),
       ]);
     } catch (error) {
       this.#fail(error);
@@ -121,7 +92,7 @@ export class PlannedActualScreen extends LitElement {
   async #loadRows(): Promise<void> {
     await this.#queries.watch(
       "getPlannedVsActual",
-      [this.locationId, this.weekMonday, weekEnd(this.weekMonday)],
+      [this.weekMonday, weekEnd(this.weekMonday)],
       (value) => {
         this.rows = value;
       },
@@ -130,17 +101,6 @@ export class PlannedActualScreen extends LitElement {
 
   #fail(error: unknown): void {
     this.errorKey = codeOf(error);
-  }
-
-  async #onSelectLocation(event: CustomEvent<{ locationId: string }>): Promise<void> {
-    event.stopPropagation();
-    this.locationId = event.detail.locationId;
-    this.errorKey = null;
-    try {
-      await this.#loadRows();
-    } catch (error) {
-      this.#fail(error);
-    }
   }
 
   async #onSelectWeek(event: CustomEvent<{ value: string }>): Promise<void> {
@@ -171,15 +131,8 @@ export class PlannedActualScreen extends LitElement {
   override render(): TemplateResult {
     return html`
       <h1>${t("planned.title")}</h1>
-      ${this.#renderMain()}
+      ${this.#renderBody()}
     `;
-  }
-
-  #renderMain(): TemplateResult {
-    if (this.locations.length > 0) return this.#renderBody();
-    // Until locations have loaded, an empty list means unknown, not none.
-    if (!this.#locationsLoaded && this.errorKey !== null) return this.#renderError(this.errorKey);
-    return html`<p class="muted" data-test="no-location">${t("planned.no_location")}</p>`;
   }
 
   #renderError(errorKey: string): TemplateResult {
@@ -188,24 +141,15 @@ export class PlannedActualScreen extends LitElement {
 
   #renderBody(): TemplateResult {
     return html`
-      <div class="pickers">
-        <dashboard-location-picker
-          .locations=${this.locations}
-          .selected=${this.locationId}
-          .label=${t("planned.location")}
-          @location-changed=${(e: CustomEvent<{ locationId: string }>) =>
-            void this.#onSelectLocation(e)}
-        ></dashboard-location-picker>
-        <wt-input
-          class="picker"
-          type="date"
-          data-test="week-picker"
-          name="week"
-          label=${t("planned.week")}
-          .value=${this.weekMonday}
-          @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#onSelectWeek(e)}
-        ></wt-input>
-      </div>
+      <wt-input
+        class="picker"
+        type="date"
+        data-test="week-picker"
+        name="week"
+        label=${t("planned.week")}
+        .value=${this.weekMonday}
+        @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#onSelectWeek(e)}
+      ></wt-input>
       ${
         this.rows.length === 0
           ? html`<p class="muted" data-test="empty">${t("planned.empty")}</p>`
