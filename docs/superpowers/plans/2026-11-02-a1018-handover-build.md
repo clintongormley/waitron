@@ -131,9 +131,8 @@ says which A1018 slice replaces or narrows each.
 
 ## Questions for the owner
 
-**Two questions. The build proceeds on each recommended default. Q1 gates only Slice 12b; Q2
-gates only Task 7.4b, which is built only if the owner picks Q2's second option.** Every other
-slice is the same under either answer.
+**Two questions, both answered (a) by the owner on 2 November 2026. Slice 12b is built; Task 7.4b
+is not.** Every other slice is the same under either answer.
 
 **Dropped from the draft: "may a returned invoice come back as a tax record only?"** The approved
 design already answers it. §5: "Do not replay orders, payments, cash, drawer, stock, printing or
@@ -146,6 +145,8 @@ separate store of returned records (Slice 11) is what the design implies, and it
 asking.
 
 ### Q1 — Do invoices that come back from the old box after an emergency count in the new box's VAT return (modelo 303)?
+
+**Owner answer, 2 November 2026: (a)** — count returned invoices in the modelo 303 as a separate line «Invoices returned from the old box», dated by each invoice's own issue date; never in a daily close (shown beside it). FISCAL: the owner lands Slice 12b; marked pending the venue's tax adviser.
 
 **What forces the question.** Slice 11 stores and files a returned invoice, but the VAT return
 Waitron prepares sums only the new box's own sales: `computeVatReturn` reads `sales.vat_breakdown`
@@ -181,10 +182,12 @@ append-only record (`packages/db/src/classification.ts:38`) whose hash covers it
 opens, and the close itself is unchanged (Task 12a.5). Putting them inside later closes would
 change the format of a hash-chained record; it is not built unless the owner asks.
 
-**Default built:** (a), in Slice 12b, which lands only after the owner and the adviser answer.
+**Built:** (a), in Slice 12b, which the owner lands; pending the venue's tax adviser.
 Slice 12a (the list and the lines beside the reports) is the same under either answer.
 
 ### Q2 — In an emergency, does the new box wait 90 to 150 seconds before naming its new invoice series, or take the next free minute?
+
+**Owner answer, 2 November 2026: (a)** — the next free minute, as A947's approved switch; no change to `hour-selection.ts`, CLAUDE.md §5 unchanged, so Task 7.4b is not built.
 
 **What forces the question.** The draft said an emergency takes the setup and restore wait,
 because the last copy might lack a name the old box took after it. The code lets only a setup, a
@@ -211,7 +214,7 @@ owner's approval of A947 §6.5 (rules 2–3, `docs/superpowers/specs/2026-10-21-
   recorded emergency declaration wait, a change to CLAUDE.md §5's "promotion does not" line, the
   owner lands it (Task 7.4b), and staff wait up to two and a half more minutes during an outage.
 
-**Default built:** (a). Task 7.4b exists only if the owner chooses (b).
+**Built:** (a). Task 7.4b is not built.
 
 **No third question.** The other choices this plan makes are builder's choices that follow from
 the approved designs; each is listed under "Decisions this plan makes" with its reason, open to
@@ -301,7 +304,7 @@ the owner.
    `confirmFreshSignIn`, `apps/server/src/fresh-sign-in.ts:45`), and the dashboard then opens M2's
    own handover page for the clock reading and the activation; in an emergency the person is on
    M2's page throughout.
-7. **The minute name:** the next free minute in both scenarios — pending Q2. A controlled
+7. **The minute name:** the next free minute in both scenarios (Q2, answered (a)). A controlled
    handover's final copy holds every name M1 ever used; for the emergency, see Q2.
 8. **The returned records reach M2 as a full-state batch for every chain M1 holds**: every
    filing-state row and every AEAT answer M1 holds (A947 §7.1's rule, "not only the rows the
@@ -592,7 +595,7 @@ and `git diff origin/main -- packages/fiscal-verifactu/src/write-path.e2e.test.t
 | 5a The relinquished fact | **FISCAL — LOUD** | adds a version 2 approval, written only by a promotion, to the append-only `fiscal_allocations` (`packages/fiscal-verifactu/src/classification.ts:10`, `schema/allocations.ts:26`); version 1 stays readable; also changes the generic module operation contract (`ModuleRecoveryFacts`, `packages/module/src/operation-preparation.ts:15-26`) and the server's promotion path (`apps/server/src/node-operation-preparation.ts`), a cross-package contract |
 | 5 Controlled, server | **FISCAL** | activates a fresh fiscal identity on M2; M2 then files M1's copied records |
 | 6 Controlled, screens | no, unless Task 6.4 must change `packages/fiscal-verifactu/src/setup/` (then FISCAL) | screens and guides; lands after 5 |
-| 7 Emergency, server | **FISCAL** | as 5, under a declaration; Task 7.4b, if built, changes `hour-selection.ts` |
+| 7 Emergency, server | **FISCAL** | as 5, under a declaration |
 | 8 Emergency, page | no | page and guides only; lands after 7 |
 | 9 Prototype re-run | no | a rig that imports no `@waitron/*` package |
 | 10 Return batch: evidence | **FISCAL** | writes `envios`, `acks`, `envio_flujo` and filing cases on M2; a new outside input to the drain's per-chain block |
@@ -774,13 +777,13 @@ full path.
 | 5a | The relinquished fact (crosses the module operation contract) | **yes, loud** | no | 5 | 0 | — |
 | 5 | Controlled handover, server | **yes** | yes (`venue.db`, new `handover` set) | 14 | 3, 4, 4b, 5a (real boxes: A947 3b) | — |
 | 6 | Controlled handover, screens and guide | no | no | 6 | 5 | — |
-| 7 | Emergency handover, server | **yes** | yes (`venue.db`, `handover` set) | 7 (+ 7.4b only if Q2 is (b)) | 5 (real boxes: A947 3b; continuous copy: 3c) | Q2, Task 7.4b only |
+| 7 | Emergency handover, server | **yes** | yes (`venue.db`, `handover` set) | 7 | 5 (real boxes: A947 3b; continuous copy: 3c) | — |
 | 8 | Emergency declaration page and guide | no | no | 4 | 6, 7 | — |
 | 9 | The S2 prototype re-run, fiscal-only | no | no | 3 | 0 | — |
 | 10 | Return batch: evidence, and the exchange both scenarios use | **yes** | no | 8 | 7, 9 | — |
 | 11 | Return batch: originals M2 never saw | **yes, loud** | yes (fiscal set) | 8 | 10 | — |
 | 12a | The reconciliation list, and lines beside the reports | no | no | 7 | 11 | — |
-| 12b | Returned invoices in the VAT return | **yes** | no | 2 | 12a | Q1 |
+| 12b | Returned invoices in the VAT return | **yes** | no | 2 | 12a | — (Q1 answered (a); pending the tax adviser) |
 | 13 | Archive, the wipe gates, and becoming the spare | **yes** | no | 7 | 11 | — |
 | 14 | A last copy from a selected backup | **yes** | no | 4 | 7, 8 | — |
 
@@ -805,7 +808,7 @@ under each heading it amends (§6.3, §6.4, §7, §7.1, §7.2, §11). History is
     the spare's `node.db` (A1018 Slice 7), and the declaration's audit fields are this plan's
     "Emergency declaration"; step 3's "starts filing … the old main box's records that reached it"
     is unchanged and now explicitly sole: the old box never files again. The minute name is the
-    next free one, as §6.5 already says for a switch (A1018 Q2's default).
+    next free one, as §6.5 already says for a switch (A1018 Q2, answered (a)).
   - **§6.4 (the hand-over):** replaced by A1018's controlled handover — a durable stepdown that
     survives a reboot, a final copy compared against a signed indicator, M2's durable acceptance,
     M1's relinquishment, then activation, whose approval records "relinquished", not "offline"
@@ -885,7 +888,7 @@ this plan's Slice 4b).
 
 - [ ] **Step 1:** Replace "Exact formats, compatible A947 amendments, separate build authority and
   physical runtime qualification remain open" with: formats local-only version 1 and the A947
-  amendment written (links), build authority given 2026-11-01, Q1 and Q2 open with their defaults,
+  amendment written (links), build authority given 2026-11-01, Q1 and Q2 answered (a) on 2026-11-02,
   physical qualification the owner's (this plan's last section). Add one line to the A947 section
   pointing at the amendment.
 - [ ] **Step 2: Commit** `git commit -s -m "docs(backlog): A1018 is planned; formats are local-only and the A947 amendment is written"`.
@@ -2662,7 +2665,7 @@ Task 5.7b's route (whose context, built from this operation's record, carries
 `oldMachineRelinquished: false`), and through the same
 `withPromotion` path with `context = { oldNodeNeutralised: true, noParallelRecovery: true,
 oldMachineRelinquished: false }`, so the module receives `oldMachineOffline: true`, justified by
-the recorded declaration; the next free minute (Q2's default). In the activation's own venue
+the recorded declaration; the next free minute (Q2, answered (a)). In the activation's own venue
 transaction, as Task 5.8 writes it: the `handover_activations` row with the declaration as evidence and a
 `handover_gap_items` row `{ kind: "unknown_interval", interval_from: lastChangeAtMs, interval_to: null }`;
 then `activated` in node.db. A restart between is finished by Task 5.8b.
@@ -2678,7 +2681,7 @@ then `activated` in node.db. A restart between is finished by Task 5.8b.
 - [ ] **Step 4: Run** it — PASS.
 - [ ] **Step 5: Commit** `git commit -s -m "server: the spare activates after a declaration and records the gap"`.
 
-#### Task 7.4b (only if the owner answers Q2 with (b)): the emergency waits as a restore does
+#### Task 7.4b (not built: the owner answered Q2 with (a)): the emergency waits as a restore does
 
 **FISCAL.** **Files:** `packages/fiscal-verifactu/src/hour-selection.ts:461` (a promotion whose
 binding carries a recorded emergency declaration settles, as `setup`, `restore` and
@@ -2721,7 +2724,7 @@ qualification).
 #### Task 7.7: Final checks for Slice 7
 
 - [ ] As Task 2.8, plus the root guards in Task 5.1's Step 4. PR first line: FISCAL; "reachable on
-  real boxes after A947 3b; continuous copy after 3c"; and whether Task 7.4b is in it.
+  real boxes after A947 3b; continuous copy after 3c".
 
 ---
 
@@ -3204,9 +3207,8 @@ by the close and cash-up screens when they open. `daily-close.ts`, `cash-up.ts`,
 
 ### Slice 12b — Returned invoices in the VAT return
 
-**FISCAL** (it changes the VAT figure Waitron prepares). The owner lands it, **after the owner
-and the venue's tax adviser answer Q1**. Built on Q1's default (a); under (b) this slice is not
-landed.
+**FISCAL** (it changes the VAT figure Waitron prepares). The owner lands it. Built on Q1's
+answer (a) (owner, 2 November 2026), pending the venue's tax adviser.
 
 #### Task 12b.1: The returned-invoices line
 
@@ -3224,7 +3226,7 @@ the period, bucketed by their own *fecha de expedición*, as a separate line in 
 #### Task 12b.2: Final checks for Slice 12b
 
 - [ ] As Task 2.8, plus `pnpm --filter @waitron/reporting exec vitest run`. PR first line: FISCAL;
-  "the VAT return counts returned invoices; owner and adviser answered Q1 on <date>".
+  "the VAT return counts returned invoices; owner answered Q1 on 2 November 2026; pending the venue's tax adviser".
 
 ---
 
@@ -3443,8 +3445,7 @@ the joint specification and Cloud's half.
 
 ## Still unsettled
 
-- **Q1** (above), before Slice 12b lands; pending the venue's tax adviser too.
-- **Q2** (above); Task 7.4b only if the owner picks (b).
+- **Q1** answered (a); Slice 12b pending the venue's tax adviser.
 - **Passkeys on the spare's page** wait for A947 4b/4d (decision 9).
 - **The last-activity time** of a mirror's copy is a proxy until A947 3c's follower reports its
   position (Task 7.2).
