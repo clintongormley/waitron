@@ -1,6 +1,6 @@
 import { and, asc, eq, ne } from "drizzle-orm";
-import { kitchenStations, type Transaction } from "@waitron/db";
-import { readLocationClock, venueMomentAt, type VenueMoment } from "@waitron/reporting";
+import { kitchenStations, readVenueClock, type Transaction } from "@waitron/db";
+import { venueMomentAt, type VenueMoment } from "@waitron/reporting";
 import { AppError, compareStationNames } from "@waitron/shared";
 import type { VenueScope } from "./operations.js";
 import { stationDayStates } from "./schema/station-times.js";
@@ -9,13 +9,13 @@ import "./errors.js";
 
 export async function venueMoment(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   at: Date,
 ): Promise<VenueMoment | null> {
-  return venueMomentAt(at, await readLocationClock(tx, cfg.locationId));
+  return venueMomentAt(at, await readVenueClock(tx));
 }
 
-async function requireStation(tx: Transaction, cfg: VenueScope, stationId: string) {
+async function requireStation(tx: Transaction, stationId: string) {
   const [station] = await tx
     .select({
       id: kitchenStations.id,
@@ -23,13 +23,7 @@ async function requireStation(tx: Transaction, cfg: VenueScope, stationId: strin
       isDefault: kitchenStations.isDefault,
     })
     .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.id, stationId),
-        eq(kitchenStations.locationId, cfg.locationId),
-        eq(kitchenStations.active, true),
-      ),
-    );
+    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
   if (station === undefined) throw new AppError("station.not_found", { stationId });
   return station;
 }
@@ -42,7 +36,7 @@ export async function setStationToday(
   at: Date,
   sendsToStationId?: string | null,
 ): Promise<void> {
-  await requireStation(tx, cfg, stationId);
+  await requireStation(tx, stationId);
   const moment = await venueMoment(tx, cfg, at);
   if (moment === null) throw new AppError("time_zone.unreadable", {});
   await tx
@@ -85,7 +79,7 @@ export async function stationDestinations(
   stationId: string,
   at: Date,
 ): Promise<readonly { id: string; name: string; isDefault: boolean }[]> {
-  await requireStation(tx, cfg, stationId);
+  await requireStation(tx, stationId);
   const stations = await tx
     .select({
       id: kitchenStations.id,
@@ -93,13 +87,7 @@ export async function stationDestinations(
       isDefault: kitchenStations.isDefault,
     })
     .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.locationId, cfg.locationId),
-        eq(kitchenStations.active, true),
-        ne(kitchenStations.id, stationId),
-      ),
-    )
+    .where(and(eq(kitchenStations.active, true), ne(kitchenStations.id, stationId)))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
   const model = await routingModel(tx, cfg, at);
   const open = new Set(
@@ -117,7 +105,7 @@ export async function closeStationForToday(
   sendsToStationId: string,
   at: Date,
 ): Promise<void> {
-  const station = await requireStation(tx, cfg, stationId);
+  const station = await requireStation(tx, stationId);
   if (station.isDefault) throw new AppError("station.always_open", { stationId });
   if (sendsToStationId === stationId)
     throw new AppError("station.destination_invalid", {
@@ -128,9 +116,7 @@ export async function closeStationForToday(
   const [destination] = await tx
     .select({ active: kitchenStations.active })
     .from(kitchenStations)
-    .where(
-      and(eq(kitchenStations.id, sendsToStationId), eq(kitchenStations.locationId, cfg.locationId)),
-    );
+    .where(eq(kitchenStations.id, sendsToStationId));
   if (destination === undefined)
     throw new AppError("station.destination_invalid", {
       stationId,
@@ -160,6 +146,6 @@ export async function openStationForToday(
   stationId: string,
   at: Date,
 ): Promise<void> {
-  await requireStation(tx, cfg, stationId);
+  await requireStation(tx, stationId);
   await setStationToday(tx, cfg, stationId, null, at);
 }

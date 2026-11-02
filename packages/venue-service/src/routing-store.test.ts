@@ -585,6 +585,18 @@ describe("stored preparation rules", () => {
       expect(model.stationTimes.map((times) => times.stationId)).toEqual([f.bar]);
     }));
 
+  // A1301: deleted with cfg in S18
+  it("routingModel lists the venue's zones whatever location the scope names", async () =>
+    scoped(async (tx) => {
+      const f = await fixture(tx);
+      const model = await routingModel(
+        tx,
+        { locationId: locationId(randomUUID()) },
+        new Date("2026-10-02T18:00:00Z"),
+      );
+      expect(model.zones).toEqual([{ id: f.terrace, name: "Terrace", departmentId: f.department }]);
+    }));
+
   it("the routing model's stations carry their colours", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);

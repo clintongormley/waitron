@@ -2729,29 +2729,6 @@ describe("routing cell route", () => {
     }
   });
 
-  it("keeps each location's cells to itself", async () => {
-    const fx = await fixture(),
-      other = await fixture();
-    expect(
-      (
-        await send(other.app, "PUT", `${base}/cell`, other.managerCookie, {
-          address: categoryCell(fx.categoryId),
-          target: noPrep,
-        })
-      ).status,
-    ).toBe(204);
-    expect(
-      (
-        await send(fx.app, "PUT", `${base}/cell`, fx.managerCookie, {
-          address: categoryCell(fx.categoryId),
-          target: null,
-        })
-      ).status,
-    ).toBe(204);
-    expect(await cellsOf(fx)).toEqual([]);
-    expect(await cellsOf(other)).toEqual([{ ...categoryCell(fx.categoryId), target: noPrep }]);
-  });
-
   it("refuses a malformed target: an array, a string, a station without its id, an unknown kind", async () => {
     const fx = await fixture();
     for (const target of [
@@ -3388,16 +3365,14 @@ describe("station service-times planning route", () => {
       error: { code: "management.request_invalid", params: { field } },
     });
   });
-  it("refuses unknown and foreign stations by the same domain code", async () => {
-    const f = await fixture(),
-      other = await fixture();
-    for (const id of [randomUUID(), other.stationId]) {
-      const response = await send(f.app, "GET", path(id), f.managerCookie);
-      expect(response.status).toBe(404);
-      expect(await response.json()).toMatchObject({
-        error: { code: "station.not_found", params: { stationId: id } },
-      });
-    }
+  it("refuses an unknown station as not found", async () => {
+    const f = await fixture();
+    const id = randomUUID();
+    const response = await send(f.app, "GET", path(id), f.managerCookie);
+    expect(response.status).toBe(404);
+    expect(await response.json()).toMatchObject({
+      error: { code: "station.not_found", params: { stationId: id } },
+    });
   });
 });
 it("the station planning route returns the configured period ranges for a non-default station", async () => {

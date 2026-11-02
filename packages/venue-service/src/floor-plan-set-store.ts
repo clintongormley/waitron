@@ -18,19 +18,13 @@ export type { FloorPlanSetsModel, PeriodFloorPlans };
 /** Gives a core floor plan set to a department under `name`; the department's first set is its default. */
 export async function linkFloorPlanSet(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   input: { setId: string; departmentId: string; name: string },
 ): Promise<void> {
   const [department] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(
-      and(
-        eq(departments.id, input.departmentId),
-        eq(departments.locationId, cfg.locationId),
-        eq(departments.active, true),
-      ),
-    );
+    .where(and(eq(departments.id, input.departmentId), eq(departments.active, true)));
   if (department === undefined)
     throw new AppError("department.not_found", { departmentId: input.departmentId });
   const held = await tx
@@ -62,24 +56,20 @@ async function insertLink(
 /** The sets of the venue's active departments, each department's default first, then by name. */
 export async function readFloorPlanSets(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   filter: { setIds?: readonly string[]; departmentId?: string } = {},
 ): Promise<FloorPlanSetSummary[]> {
   if (filter.setIds?.length === 0) return [];
-  const sets = await setRows(tx, cfg, filter);
+  const sets = await setRows(tx, filter);
   if (sets.length === 0) return [];
-  const zones = await departmentZones(tx, cfg, [...new Set(sets.map((s) => s.departmentId))]);
+  const zones = await departmentZones(tx, [...new Set(sets.map((s) => s.departmentId))]);
   return sets.map((set) => ({
     ...set,
     zoneIds: zones.filter((z) => z.departmentId === set.departmentId).map((z) => z.id),
   }));
 }
 
-function setRows(
-  tx: Transaction,
-  cfg: VenueScope,
-  filter: { setIds?: readonly string[]; departmentId?: string },
-) {
+function setRows(tx: Transaction, filter: { setIds?: readonly string[]; departmentId?: string }) {
   return tx
     .select({
       setId: departmentFloorPlanSets.setId,
@@ -91,7 +81,6 @@ function setRows(
     .innerJoin(departments, eq(departments.id, departmentFloorPlanSets.departmentId))
     .where(
       and(
-        eq(departments.locationId, cfg.locationId),
         eq(departments.active, true),
         filter.setIds === undefined
           ? undefined
@@ -111,7 +100,6 @@ function setRows(
 /** The active zones of `departmentIds`, in the order the venue lists its zones. */
 async function departmentZones(
   tx: Transaction,
-  cfg: VenueScope,
   departmentIds: readonly string[],
 ): Promise<{ id: string; name: string; departmentId: string }[]> {
   if (departmentIds.length === 0) return [];
@@ -125,7 +113,6 @@ async function departmentZones(
     .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
     .where(
       and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
         eq(floorZones.active, true),
         inArray(zoneServicePolicies.departmentId, [...departmentIds]),
       ),
@@ -141,8 +128,8 @@ export async function readFloorPlanSetsModel(
 ): Promise<FloorPlanSetsModel> {
   const departmentRows = await listDepartments(tx, cfg);
   const departmentIds = departmentRows.map((d) => d.id);
-  const sets = await setRows(tx, cfg, {});
-  const zones = await departmentZones(tx, cfg, departmentIds);
+  const sets = await setRows(tx, {});
+  const zones = await departmentZones(tx, departmentIds);
   const periods = await tx
     .select({
       id: menuPeriods.id,
@@ -200,7 +187,7 @@ export async function readPeriodFloorPlans(
   core: FloorPlanSets,
 ): Promise<PeriodFloorPlans> {
   const departmentIds = (await listDepartments(tx, cfg)).map((d) => d.id);
-  const zones = await departmentZones(tx, cfg, departmentIds);
+  const zones = await departmentZones(tx, departmentIds);
   if (zones.length === 0) return { departments: [] };
   const { tableCounts } = await core.readLayouts(
     tx,
@@ -271,13 +258,7 @@ export async function createFloorPlanSet(
   const [department] = await tx
     .select({ id: departments.id })
     .from(departments)
-    .where(
-      and(
-        eq(departments.id, input.departmentId),
-        eq(departments.locationId, cfg.locationId),
-        eq(departments.active, true),
-      ),
-    );
+    .where(and(eq(departments.id, input.departmentId), eq(departments.active, true)));
   if (department === undefined)
     throw new AppError("floor_plan_set.invalid", { field: "departmentId" });
   const held = await readFloorPlanSets(tx, cfg, { departmentId: input.departmentId });

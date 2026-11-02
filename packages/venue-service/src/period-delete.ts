@@ -1,6 +1,5 @@
 import { and, asc, eq, gte, inArray, isNotNull, ne, notExists } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, cutoverForBusinessDay, type BusinessDayClock } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
@@ -19,7 +18,6 @@ import {
   specialDayDates,
   specialDays,
 } from "./schema/seasons.js";
-import { departments } from "./schema/service.js";
 import { joinTouching } from "./season-weeks.js";
 import { rangeSpan, serviceMomentAt } from "./service-day.js";
 import { inForceClock } from "./service-day-context.js";
@@ -41,19 +39,14 @@ export interface PeriodDeleteImpact {
 }
 
 /** The business day holding `at`, or null when the venue's clock cannot be read. */
-async function businessDayAt(
-  tx: Transaction,
-  cfg: VenueScope,
-  at: Date,
-): Promise<LocalDate | null> {
-  return serviceMomentAt(at, await readLocationClock(tx, cfg.locationId))?.businessDay ?? null;
+async function businessDayAt(tx: Transaction, at: Date): Promise<LocalDate | null> {
+  return serviceMomentAt(at, await readVenueClock(tx))?.businessDay ?? null;
 }
 
 /** Every period of the venue, each with where it is painted. With no `today` (an unreadable
  *  clock) every special day painting a period is listed, past ones included. */
 async function paintedIn(
   tx: Transaction,
-  cfg: VenueScope,
   today: LocalDate | null,
   periodId?: string,
 ): Promise<Map<string, PaintedIn>> {
@@ -62,8 +55,7 @@ async function paintedIn(
   const periods = await tx
     .select({ id: menuPeriods.id })
     .from(menuPeriods)
-    .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
-    .where(and(eq(departments.locationId, cfg.locationId), onePeriod(menuPeriods.id)))
+    .where(onePeriod(menuPeriods.id))
     .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
   const painted = new Map<string, PaintedIn>(
     periods.map(({ id }) => [id, { seasons: [], specialDays: [] }]),
@@ -78,14 +70,7 @@ async function paintedIn(
     .from(departmentDayRanges)
     .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
     .innerJoin(seasons, eq(seasons.id, departmentDays.seasonId))
-    .innerJoin(departments, eq(departments.id, departmentDayRanges.departmentId))
-    .where(
-      and(
-        eq(departments.locationId, cfg.locationId),
-        isNotNull(departmentDayRanges.periodId),
-        onePeriod(departmentDayRanges.periodId),
-      ),
-    )
+    .where(and(isNotNull(departmentDayRanges.periodId), onePeriod(departmentDayRanges.periodId)))
     .orderBy(asc(seasons.startsOn), asc(seasons.id));
   for (const row of seasonPaint)
     painted.get(row.periodId!)!.seasons.push({ id: row.id, name: row.name });
@@ -100,14 +85,7 @@ async function paintedIn(
     .innerJoin(departmentDays, eq(departmentDays.id, departmentDayRanges.dayId))
     .innerJoin(specialDayDates, eq(specialDayDates.id, departmentDays.specialDayDateId))
     .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
-    .innerJoin(departments, eq(departments.id, departmentDayRanges.departmentId))
-    .where(
-      and(
-        eq(departments.locationId, cfg.locationId),
-        isNotNull(departmentDayRanges.periodId),
-        onePeriod(departmentDayRanges.periodId),
-      ),
-    )
+    .where(and(isNotNull(departmentDayRanges.periodId), onePeriod(departmentDayRanges.periodId)))
     .orderBy(asc(specialDays.name), asc(specialDays.id));
   const oneOffs = [
     ...new Set(specialDayPaint.filter((row) => !row.repeatsYearly).map((row) => row.id)),
@@ -138,11 +116,11 @@ async function paintedIn(
 /** Where each of the venue's periods, or only `periodId`, is painted, keyed by period id. */
 export async function readPaintedIn(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   at: Date,
   periodId?: string,
 ): Promise<Map<string, PaintedIn>> {
-  return paintedIn(tx, cfg, await businessDayAt(tx, cfg, at), periodId);
+  return paintedIn(tx, await businessDayAt(tx, at), periodId);
 }
 
 /** What the delete dialog shows for `periodId`: seasons and special days counted as Painted in
@@ -154,8 +132,8 @@ export async function periodDeleteImpact(
   at: Date,
 ): Promise<PeriodDeleteImpact> {
   const period = await requirePeriod(tx, cfg, periodId);
-  const today = await businessDayAt(tx, cfg, at);
-  const painted = (await paintedIn(tx, cfg, today, periodId)).get(periodId)!;
+  const today = await businessDayAt(tx, at);
+  const painted = (await paintedIn(tx, today, periodId)).get(periodId)!;
   const routingUses = (await readRoutingUses(tx, cfg, periodId)).get(periodId) ?? [];
   const replacements = await tx
     .select({ id: menuPeriods.id, name: menuPeriods.name })
@@ -196,7 +174,7 @@ export async function deletePeriod(
     if (replacement === undefined)
       throw new AppError("menu_period.invalid", { field: "replacementPeriodId" });
   }
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   await assertBusinessDayScheduleWrite(tx, cfg, "time", expectedClockRevision);
   const dayIds = (
     await tx

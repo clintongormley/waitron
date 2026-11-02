@@ -29,56 +29,36 @@ import { serviceSteps } from "./schema/service-steps.js";
 
 async function settings(
   tx: Transaction,
-  cfg: VenueScope,
   requestedZones: readonly string[],
   requestedDepartment: string | null,
 ) {
   const zones = await tx
     .select()
     .from(floorZones)
-    .where(
-      and(eq(floorZones.locationId, cfg.locationId), inArray(floorZones.id, [...requestedZones])),
-    );
+    .where(inArray(floorZones.id, [...requestedZones]));
   const zoneIds = zones.map((row) => row.id);
   const [department] = await tx
     .select()
     .from(departments)
-    .where(
-      and(
-        eq(departments.locationId, cfg.locationId),
-        eq(departments.id, requestedDepartment ?? ""),
-      ),
-    );
+    .where(eq(departments.id, requestedDepartment ?? ""));
   const departmentId = department?.id ?? null;
-  const cells = await tx
-    .select()
-    .from(routingCells)
-    .where(and(eq(routingCells.locationId, cfg.locationId), inArray(routingCells.zoneId, zoneIds)));
+  const cells = await tx.select().from(routingCells).where(inArray(routingCells.zoneId, zoneIds));
   const periods = await tx
     .select()
     .from(routingCellPeriods)
-    .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
     .where(
-      and(
-        eq(routingCells.locationId, cfg.locationId),
-        or(
-          inArray(
-            routingCellPeriods.cellId,
-            cells.map((row) => row.id),
-          ),
-          departmentId === null ? undefined : eq(routingCellPeriods.departmentId, departmentId),
+      or(
+        inArray(
+          routingCellPeriods.cellId,
+          cells.map((row) => row.id),
         ),
+        departmentId === null ? undefined : eq(routingCellPeriods.departmentId, departmentId),
       ),
     );
   const policies = await tx
     .select()
     .from(zoneServicePolicies)
-    .where(
-      and(
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        inArray(zoneServicePolicies.zoneId, zoneIds),
-      ),
-    );
+    .where(inArray(zoneServicePolicies.zoneId, zoneIds));
   const overrides = await tx
     .select()
     .from(zoneSalePolicies)
@@ -121,15 +101,7 @@ async function settings(
     .from(floorZones)
     .innerJoin(zoneServicePolicies, eq(zoneServicePolicies.zoneId, floorZones.id))
     .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
-    .where(
-      and(
-        eq(floorZones.locationId, cfg.locationId),
-        eq(zoneServicePolicies.locationId, cfg.locationId),
-        eq(departments.locationId, cfg.locationId),
-        eq(floorZones.active, true),
-        eq(departments.active, true),
-      ),
-    )
+    .where(and(eq(floorZones.active, true), eq(departments.active, true)))
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
   const surviving = candidates.filter(
     (row) => !zoneIds.includes(row.id) && row.departmentId !== departmentId,
@@ -237,7 +209,7 @@ async function settings(
     ? await tx
         .select({ id: departments.id, name: departments.name })
         .from(departments)
-        .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
+        .where(eq(departments.active, true))
         .orderBy(asc(departments.name), asc(departments.id))
         .then((rows) => rows.filter((row) => row.id !== departmentId))
     : [];
@@ -372,24 +344,24 @@ async function settings(
 
 export async function readServiceDeleteSettings(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   zoneIds: readonly string[],
   departmentId: string | null,
 ): Promise<DeleteImpactItem[]> {
-  return (await settings(tx, cfg, zoneIds, departmentId)).removes;
+  return (await settings(tx, zoneIds, departmentId)).removes;
 }
 
 export async function clearServiceDeleteSettings(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   zoneIds: readonly string[],
   departmentId: string | null,
 ): Promise<void> {
-  const selected = await settings(tx, cfg, zoneIds, departmentId);
+  const selected = await settings(tx, zoneIds, departmentId);
   await tx.delete(routingCellPeriods).where(
     inArray(
       routingCellPeriods.id,
-      selected.periods.map((row) => row.routing_cell_periods.id),
+      selected.periods.map((row) => row.id),
     ),
   );
   await tx.delete(routingCells).where(

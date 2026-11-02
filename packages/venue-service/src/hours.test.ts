@@ -46,9 +46,7 @@ interface Fixture {
   deli: HoursSubject;
   bar: HoursSubject;
   kitchen: HoursSubject;
-  otherDepartment: HoursSubject;
   departmentIds: { restaurant: string; deli: string };
-  otherStation: HoursSubject;
 }
 
 async function fixture(): Promise<Fixture> {
@@ -63,14 +61,6 @@ async function fixture(): Promise<Fixture> {
         dayCutover: "06:00:00",
       })
       .returning();
-    const [other] = await tx
-      .insert(locations)
-      .values({
-        name: `Other ${randomUUID()}`,
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-      })
-      .returning();
     const cfg = { locationId: locationId(location!.id) };
     const department = (location: string, name: string, isDefault = false) => ({
       locationId: location,
@@ -80,26 +70,20 @@ async function fixture(): Promise<Fixture> {
     });
     const [restaurant, deli] = await tx
       .insert(departments)
-      .values([
-        department(location!.id, "Restaurant", true),
-        department(location!.id, "Deli"),
-        department(other!.id, "Other restaurant", true),
-      ])
+      .values([department(location!.id, "Restaurant", true), department(location!.id, "Deli")])
       .returning();
-    const [bar, kitchen, otherStation] = await tx
+    const [bar, kitchen] = await tx
       .insert(kitchenStations)
       .values([
         { locationId: location!.id, name: "Bar" },
         { locationId: location!.id, name: "Kitchen", isDefault: true },
-        { locationId: other!.id, name: "Other bar" },
       ])
       .returning();
-    const [restaurantStation, deliStation, foreignStation] = await tx
+    const [restaurantStation, deliStation] = await tx
       .insert(kitchenStations)
       .values([
         { locationId: location!.id, name: "Pass" },
         { locationId: location!.id, name: "Grill" },
-        { locationId: other!.id, name: "Other pass" },
       ])
       .returning();
     const [calendarMenu] = await tx
@@ -129,8 +113,6 @@ async function fixture(): Promise<Fixture> {
       deli: { kind: "station", id: deliStation!.id },
       bar: { kind: "station", id: bar!.id },
       kitchen: { kind: "station", id: kitchen!.id },
-      otherDepartment: { kind: "station", id: foreignStation!.id },
-      otherStation: { kind: "station", id: otherStation!.id },
     };
   });
 }
@@ -707,16 +689,9 @@ describe("special-day station occurrences", () => {
     }
   });
 
-  it("applies a repeating leap-day Calendar closure only in leap years and only at its venue", async () => {
+  it("applies a repeating leap-day Calendar closure only in leap years", async () => {
     const f = await fixture();
     await closure(f, { date: "2024-02-29" });
-    const [otherStation] = await withTransaction(db, (tx) =>
-      tx
-        .select({ locationId: kitchenStations.locationId })
-        .from(kitchenStations)
-        .where(eq(kitchenStations.id, f.otherStation.id)),
-    );
-    await closure(f, { locationId: otherStation!.locationId, date: "2027-12-25" });
     expect((await calendar(f, "2027-02-28", "2027-03-01")).map((day) => day.tone)).toEqual([
       "standard",
       "standard",
@@ -727,7 +702,6 @@ describe("special-day station occurrences", () => {
       "standard",
     ]);
     expect((await calendar(f, "2028-02-29"))[0]!.closed).toBe(true);
-    expect((await calendar(f, "2027-12-25")).map((day) => day.tone)).toEqual(["standard"]);
   });
 
   it("reports a recurring Calendar closure even when its first date is before the requested range", async () => {

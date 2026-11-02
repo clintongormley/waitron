@@ -1,6 +1,14 @@
 import { serviceDayContext } from "./service-day-context.js";
 import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
-import { categories, floorZones, kitchenStations, products, type Transaction } from "@waitron/db";
+import {
+  categories,
+  floorZones,
+  kitchenStations,
+  products,
+  readVenueClock,
+  venueLocationId,
+  type Transaction,
+} from "@waitron/db";
 import {
   categoryDetails,
   documentOffers,
@@ -30,7 +38,6 @@ import {
   type RoutingRules,
   type RoutingMoment,
 } from "./routing.js";
-import { readLocationClock } from "@waitron/reporting";
 import { venueLocalMoment, type VenueLocalMoment } from "./hours-clock.js";
 import { stationDayStates } from "./schema/station-times.js";
 import type {
@@ -81,18 +88,17 @@ const readCell = (row: typeof routingCells.$inferSelect): RoutingCell => ({
 });
 
 /** Active zones in the grid's column order. */
-function activeZones(tx: Transaction, cfg: VenueScope) {
+function activeZones(tx: Transaction) {
   return tx
     .select({ id: floorZones.id, name: floorZones.name })
     .from(floorZones)
-    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
+    .where(eq(floorZones.active, true))
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
 }
 
 /** Refuses an address or target no ordinary write may store; returns the canonical spelling. */
 async function validateRoutingCell(
   tx: Transaction,
-  cfg: VenueScope,
   address: CellAddress,
   target: RouteTarget | null,
 ): Promise<{ address: CellAddress; target: RouteTarget | null; departmentId: string | null }> {
@@ -110,7 +116,6 @@ async function validateRoutingCell(
       .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
       .where(
         and(
-          eq(zoneServicePolicies.locationId, cfg.locationId),
           eq(zoneServicePolicies.zoneId, zoneId),
           eq(departments.active, true),
           eq(floorZones.active, true),
@@ -141,28 +146,18 @@ async function validateRoutingCell(
   }
   return {
     address: { row: canonicalRow, zoneId },
-    target: target === null ? null : await activeTarget(tx, cfg, target),
+    target: target === null ? null : await activeTarget(tx, target),
     departmentId,
   };
 }
 
-async function activeTarget(
-  tx: Transaction,
-  cfg: VenueScope,
-  target: RouteTarget,
-): Promise<RouteTarget> {
+async function activeTarget(tx: Transaction, target: RouteTarget): Promise<RouteTarget> {
   if (target.kind !== "station") return target;
   const stationId = normaliseUuid(target.stationId, "StationId");
   const [station] = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.locationId, cfg.locationId),
-        eq(kitchenStations.id, stationId),
-        eq(kitchenStations.active, true),
-      ),
-    );
+    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.active, true)));
   if (station === undefined) throw new AppError("route.station_inactive", { stationId });
   return { kind: "station", stationId };
 }
@@ -172,14 +167,13 @@ type StoredLine = PeriodLine & { departmentId: string };
 /** The cell's stored period lines, by period id. */
 async function storedLines(
   tx: Transaction,
-  cfg: VenueScope,
   address: CellAddress,
 ): Promise<Map<string, RouteTarget>> {
   const rows = await tx
     .select({ periodId: routingCellPeriods.periodId, stationId: routingCellPeriods.stationId })
     .from(routingCellPeriods)
     .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
-    .where(cellAt(cfg, address));
+    .where(cellAt(address));
   return new Map(rows.map((row) => [row.periodId, readTarget(row)]));
 }
 
@@ -228,20 +222,14 @@ async function validatePeriodLines(
         await tx
           .select({ id: kitchenStations.id })
           .from(kitchenStations)
-          .where(
-            and(
-              eq(kitchenStations.locationId, cfg.locationId),
-              inArray(kitchenStations.id, stationIds),
-              eq(kitchenStations.active, true),
-            ),
-          )
+          .where(and(inArray(kitchenStations.id, stationIds), eq(kitchenStations.active, true)))
       ).map((row) => row.id),
     );
     const inactive = stationIds.find((stationId) => !active.has(stationId));
     if (inactive !== undefined)
       throw new AppError("route.station_inactive", { stationId: inactive });
   }
-  const stored = await storedLines(tx, cfg, cell.address);
+  const stored = await storedLines(tx, cell.address);
   const unchecked = valid.filter(
     (line) => targetKey(stored.get(line.periodId) ?? null) !== targetKey(line.target),
   );
@@ -310,9 +298,8 @@ function activeProducts(tx: Transaction, routedId?: string) {
     );
 }
 
-function cellAt(cfg: VenueScope, { row, zoneId }: CellAddress) {
+function cellAt({ row, zoneId }: CellAddress) {
   return and(
-    eq(routingCells.locationId, cfg.locationId),
     row.kind === "category"
       ? eq(routingCells.categoryId, row.categoryId)
       : isNull(routingCells.categoryId),
@@ -332,14 +319,14 @@ export async function setRoutingCell(
   target: RouteTarget,
   periods?: readonly PeriodLine[],
 ): Promise<void> {
-  const valid = await validateRoutingCell(tx, cfg, address, target);
+  const valid = await validateRoutingCell(tx, address, target);
   const lines =
     periods === undefined ? undefined : await validatePeriodLines(tx, cfg, valid, periods);
   const stored = storedTarget(valid.target!);
   const [updated] = await tx
     .update(routingCells)
     .set(stored)
-    .where(cellAt(cfg, valid.address))
+    .where(cellAt(valid.address))
     .returning({ id: routingCells.id });
   const { row, zoneId } = valid.address;
   const cellId =
@@ -348,7 +335,7 @@ export async function setRoutingCell(
       await tx
         .insert(routingCells)
         .values({
-          locationId: cfg.locationId,
+          locationId: await venueLocationId(tx),
           categoryId: row.kind === "category" ? row.categoryId : null,
           productId: row.kind === "product" ? row.productId : null,
           noCategory: row.kind === "no_category",
@@ -373,18 +360,18 @@ export async function setRoutingCell(
 
 export async function clearRoutingCell(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   address: CellAddress,
 ): Promise<void> {
-  const valid = await validateRoutingCell(tx, cfg, address, null);
-  await tx.delete(routingCells).where(cellAt(cfg, valid.address));
+  const valid = await validateRoutingCell(tx, address, null);
+  await tx.delete(routingCells).where(cellAt(valid.address));
 }
 
-type VenueClock = Awaited<ReturnType<typeof readLocationClock>>;
+type VenueClock = Awaited<ReturnType<typeof readVenueClock>>;
 
 /** The venue's clock, read once, and its wall-clock moment at `at`, or null when unreadable. */
-async function clockAt(tx: Transaction, cfg: VenueScope, at: Date) {
-  const clock: VenueClock = await readLocationClock(tx, cfg.locationId);
+async function clockAt(tx: Transaction, at: Date) {
+  const clock: VenueClock = await readVenueClock(tx);
   return { clock, moment: venueLocalMoment(at, clock) };
 }
 
@@ -398,22 +385,16 @@ function scopeAt(moment: VenueLocalMoment | null): SnapshotScope {
   return { businessDay: moment?.businessDay ?? null };
 }
 
-async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope = UNTIMED) {
+async function snapshot(tx: Transaction, scope: SnapshotScope = UNTIMED) {
   const businessDay = scope.businessDay;
-  const cellRows = await tx
-    .select()
-    .from(routingCells)
-    .where(eq(routingCells.locationId, cfg.locationId))
-    .orderBy(asc(routingCells.id));
+  const cellRows = await tx.select().from(routingCells).orderBy(asc(routingCells.id));
   const periodRows = await tx
     .select({
       cellId: routingCellPeriods.cellId,
       periodId: routingCellPeriods.periodId,
       stationId: routingCellPeriods.stationId,
     })
-    .from(routingCellPeriods)
-    .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
-    .where(eq(routingCells.locationId, cfg.locationId));
+    .from(routingCellPeriods);
   const folders = await tx
     .select({ id: categories.id, name: categories.name, parentId: categoryDetails.parentId })
     .from(categories)
@@ -428,7 +409,6 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
       colour: kitchenStations.colour,
     })
     .from(kitchenStations)
-    .where(eq(kitchenStations.locationId, cfg.locationId))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
   stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
   const stationIds = stations.map((row) => row.id);
@@ -480,10 +460,10 @@ async function snapshot(tx: Transaction, cfg: VenueScope, scope: SnapshotScope =
 
 export async function loadRoutingRules(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   businessDay: string | null,
 ): Promise<RoutingRules> {
-  return (await snapshot(tx, cfg, { businessDay })).rules;
+  return (await snapshot(tx, { businessDay })).rules;
 }
 
 export async function previewRoutingChange(
@@ -491,8 +471,8 @@ export async function previewRoutingChange(
   cfg: VenueScope,
   change: RoutingChange,
 ): Promise<RoutingMove[]> {
-  const { rules } = await snapshot(tx, cfg);
-  const valid = await validateRoutingCell(tx, cfg, change.address, change.target);
+  const { rules } = await snapshot(tx);
+  const valid = await validateRoutingCell(tx, change.address, change.target);
   const { address, target } = valid;
   const lines =
     change.periods === undefined
@@ -506,7 +486,7 @@ export async function previewRoutingChange(
   else if (lines !== undefined)
     cellPeriods.set(key, new Map(lines.map((line) => [line.periodId, line.target])));
   const after: RoutingRules = { ...rules, cells: Object.freeze(cells), cellPeriods };
-  const zones = await activeZones(tx, cfg);
+  const zones = await activeZones(tx);
   const productsToCheck = await activeProducts(tx);
   const reach = changeReach(rules.parentOf, address);
   const zoneList = (zones.length ? zones : [{ id: null, name: null }]).filter((zone) =>
@@ -631,7 +611,7 @@ async function periodsDeciding(
   }
   const periods = await readPeriods(tx, cfg);
   const departmentOf = new Map(periods.map((period) => [period.id, period.departmentId]));
-  const zoneDepartment = await zoneDepartments(tx, cfg);
+  const zoneDepartment = await zoneDepartments(tx);
   const named = new Set<string>();
   for (const zone of zoneList) {
     const departmentId = zone.id === null ? undefined : zoneDepartment.get(zone.id);
@@ -650,7 +630,7 @@ async function periodsDeciding(
       }
   }
   if (named.size === 0) return [];
-  const { clock, moment } = await clockAt(tx, cfg, new Date());
+  const { clock, moment } = await clockAt(tx, new Date());
   const dayCutover =
     moment === null ? clock.dayCutover : serviceDayContext(clock, moment.businessDay).dayCutover;
   const ordered = await inPeriodOrder(
@@ -679,11 +659,10 @@ function during(rules: RoutingRules, periodId: string): RoutingRules {
   return { ...rules, cells: Object.freeze(cells), cellPeriods: undefined };
 }
 
-async function zoneDepartments(tx: Transaction, cfg: VenueScope): Promise<Map<string, string>> {
+async function zoneDepartments(tx: Transaction): Promise<Map<string, string>> {
   const rows = await tx
     .select({ zoneId: zoneServicePolicies.zoneId, departmentId: zoneServicePolicies.departmentId })
-    .from(zoneServicePolicies)
-    .where(eq(zoneServicePolicies.locationId, cfg.locationId));
+    .from(zoneServicePolicies);
   return new Map(rows.map((row) => [row.zoneId, row.departmentId]));
 }
 
@@ -844,8 +823,8 @@ export async function routingAt(
       (await resolveDepartmentService(tx, cfg, departmentId, at)).periodId,
   }: { runningPeriod?: (departmentId: string) => Promise<string | null> } = {},
 ): Promise<MakerResolver> {
-  const { moment } = await clockAt(tx, cfg, at);
-  const snapshotted = await snapshot(tx, cfg, scopeAt(moment));
+  const { moment } = await clockAt(tx, at);
+  const snapshotted = await snapshot(tx, scopeAt(moment));
   const { stations } = snapshotted;
   const zoneDepartment = new Map<string, string>();
   const periods = new Map<string, string | null>();
@@ -983,11 +962,11 @@ function stationTodayState(
 
 export async function stationStates(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   at: Date,
 ): Promise<ReadonlyMap<string, StationTodayState>> {
-  const { moment } = await clockAt(tx, cfg, at);
-  const { rules, stations } = await snapshot(tx, cfg, scopeAt(moment));
+  const { moment } = await clockAt(tx, at);
+  const { rules, stations } = await snapshot(tx, scopeAt(moment));
   return new Map(
     stations
       .filter((station) => station.active)
@@ -1020,7 +999,7 @@ export async function describeMakers(
   const rules = await loadRoutingRules(tx, cfg, null);
   // A zone no cell names routes every product as Every zone does.
   const zoned = new Set(rules.cells.map((cell) => cell.zoneId));
-  const zones = (await activeZones(tx, cfg)).filter(({ id }) => zoned.has(id));
+  const zones = (await activeZones(tx)).filter(({ id }) => zoned.has(id));
   const rows = await tx
     .select({
       id: products.id,
@@ -1064,12 +1043,12 @@ export async function routingModel(
   cfg: VenueScope,
   at: Date,
 ): Promise<RoutingModel> {
-  const { clock, moment } = await clockAt(tx, cfg, at);
-  const { rules, folders, stations } = await snapshot(tx, cfg, scopeAt(moment));
+  const { clock, moment } = await clockAt(tx, at);
+  const { rules, folders, stations } = await snapshot(tx, scopeAt(moment));
   const context = moment === null ? null : serviceDayContext(clock, moment.businessDay);
   const cutover = context?.dayCutover ?? clock.dayCutover;
-  const zoneDepartment = await zoneDepartments(tx, cfg);
-  const zones = (await activeZones(tx, cfg)).map((zone) => ({
+  const zoneDepartment = await zoneDepartments(tx);
+  const zones = (await activeZones(tx)).map((zone) => ({
     ...zone,
     departmentId: zoneDepartment.get(zone.id) ?? null,
   }));

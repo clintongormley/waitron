@@ -1480,6 +1480,20 @@ describe("a profile save narrowing its devices", () => {
     expect((await shown(venue, elsewhere))[0]!.stations).toEqual([slot(venue.pastry, "Pastry")]);
   });
 
+  it("narrows every device on the profile in one save", async () => {
+    const { venue, line, all } = await narrowing();
+
+    await expect(
+      set(venue, venue.kds, { station: { stationIds: [venue.grill, venue.cold], zoneIds: null } }),
+    ).resolves.toEqual([
+      lost(all, "All", { stations: [named(venue.pastry, "Pastry")] }),
+      lost(line, "Line", { stations: [named(venue.pastry, "Pastry")] }),
+    ]);
+    for (const device of [line, all]) {
+      expect((await removalsOf(device)).map(({ stationId }) => stationId)).toEqual([venue.pastry]);
+    }
+  });
+
   /** Marks the device deleted and removes its kitchen screens: what `deleteDevice` (in
    *  apps/server, out of this package's reach) leaves in these tables. */
   async function deleted(deviceId: string) {

@@ -1,19 +1,11 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, isNull } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import {
-  diningTables,
-  floorResetTables,
-  floorZones,
-  floorTodayTables,
-  locations,
-  partyTables,
-} from "@waitron/db";
+import { diningTables, floorResetTables, partyTables } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
@@ -268,49 +260,6 @@ describe("seating one party at several tables", () => {
 
     expect(await holders(f1, f2)).toEqual([partyId, partyId]);
     expect(await heldRows(f2)).toBe(1);
-  });
-
-  it("refuses a table of another venue as not found, and seats nobody", async () => {
-    const { a: f1 } = await threeTables(true);
-    const elsewhere = randomUUID();
-    const id = randomUUID();
-    await inTx(v, async (tx) => {
-      await tx.insert(locations).values({
-        id: elsewhere,
-        name: "Other",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurant",
-      });
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ locationId: elsewhere, name: "Other tables" })
-        .returning({ id: floorZones.id });
-      await tx.insert(diningTables).values({
-        id,
-        locationId: elsewhere,
-        zoneId: zone!.id,
-        label: `Elsewhere ${id.slice(0, 6)}`,
-      });
-      await tx.insert(floorTodayTables).values({
-        tableId: id,
-        seats: 4,
-        x: 0,
-        y: 0,
-        width: 8,
-        height: 8,
-        shape: "rect",
-        rotation: 0,
-      });
-    });
-
-    expect(
-      await refusal(post(`/api/tables/${f1}/seat`, { guestCount: 2, withTableIds: [id] })),
-    ).toEqual({
-      status: 404,
-      body: { error: { code: "table.not_found", params: { tableId: id } } },
-    });
-    expect(await heldRows(f1)).toBe(0);
-    expect(await heldRows(id)).toBe(0);
   });
 
   it("seats one party at two tables in one request", async () => {

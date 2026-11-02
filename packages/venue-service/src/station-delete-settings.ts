@@ -23,31 +23,21 @@ async function settings(tx: Transaction, cfg: VenueScope, id: string) {
   const [station] = await tx
     .select({ id: kitchenStations.id })
     .from(kitchenStations)
-    .where(
-      and(
-        eq(kitchenStations.id, id),
-        eq(kitchenStations.locationId, cfg.locationId),
-        eq(kitchenStations.active, true),
-      ),
-    );
+    .where(and(eq(kitchenStations.id, id), eq(kitchenStations.active, true)));
   if (station === undefined) throw new AppError("station.not_found", { stationId: id });
   const cells = await tx
     .select({ id: routingCells.id })
     .from(routingCells)
-    .where(and(eq(routingCells.locationId, cfg.locationId), eq(routingCells.stationId, id)));
+    .where(eq(routingCells.stationId, id));
   const periods = await tx
     .select({ id: routingCellPeriods.id })
     .from(routingCellPeriods)
-    .innerJoin(routingCells, eq(routingCells.id, routingCellPeriods.cellId))
     .where(
-      and(
-        eq(routingCells.locationId, cfg.locationId),
-        or(
-          eq(routingCellPeriods.stationId, id),
-          inArray(
-            routingCellPeriods.cellId,
-            cells.map((row) => row.id),
-          ),
+      or(
+        eq(routingCellPeriods.stationId, id),
+        inArray(
+          routingCellPeriods.cellId,
+          cells.map((row) => row.id),
         ),
       ),
     );
@@ -82,13 +72,7 @@ async function settings(tx: Transaction, cfg: VenueScope, id: string) {
     .select({ id: devices.id, name: devices.label })
     .from(devices)
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
-    .where(
-      and(
-        eq(devices.locationId, cfg.locationId),
-        isNull(devices.deletedAt),
-        eq(deviceProfiles.formFactor, "kds"),
-      ),
-    );
+    .where(and(isNull(devices.deletedAt), eq(deviceProfiles.formFactor, "kds")));
   const bound: DeleteTarget[] = [];
   const resolved = await readDevicesKitchenScreens(
     tx,
