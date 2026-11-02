@@ -6561,6 +6561,17 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `_cfg` until S18. `saveHolidayArea` reads the venue row twice (for the address, then for its id)
   because `readVenue`'s `Venue` carries no id; S18 can drop the second read when `venueLocationId`
   goes.
+  S11 landed (#2411): orders, bills, find-a-bill, kitchen and station settings, station printers,
+  the pass board, refunds and stuck refunds, receipt preview, reports and the adjustments module
+  no longer filter or check by location; `nextStationColour` takes the transaction alone, and the
+  adjustments routes answer 400 `venue.not_found` when no venue row exists. Left for S12a: the
+  device admission checks in `order-kitchen-note-api.ts`, `party-allergy-api.ts`,
+  `line-cancel-api.ts`, `tender-refund-api.ts` and `tender-refund-authorization.ts`, and the bill
+  move route's source-bill location check in `till-api.ts` (an allergy move), whose case
+  "move refuses a source bill from another location" in `till-api.allergy-move.test.ts` is deleted
+  with it. Left for S18: the unread `_cfg` in `kitchen.ts`, `dead-ends.ts` and
+  `kitchen-allergy.ts`, the `VENUE_SERVICE.stationStates` scopes in `kitchen.ts` and
+  `station-move.ts`, the floor annotator's `cfg`, and `receipt-guests.ts`'s `cfg`.
   F2 landed (#2410): every package's tests other than `packages/db`'s seed the venue, nodes,
   devices and working orders through F1's helpers; local helpers that seeded more were renamed for
   what they seed (`seedVenueWithSeries`, `seedVenueWithNode`, `seedVenueWithStaff`). The lines left
@@ -6591,6 +6602,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `/management-api/venue/…`, as the A1301 plan chose, while the other venue routes are one
   hyphenated segment (`/management-api/venue-details`, `/venue-defaults`). Pick one shape before
   go-live.
+
+- **The adjustments routes refuse a missing venue with 400, the venue-settings routes with 409.**
+  Both answer `venue.not_found`; adjustments falls to the shared error boundary's 400 because its
+  status table does not name the code (A1301 S11, #2411). Only a bug reaches it (setup writes the
+  venue and its people in one transaction). Pick one status before go-live.
 
 - **`seedVenue` checks for a venue, then inserts it, in two steps.** Two calls running at once on
   one database can both write a venue (found by finish-branch's second Codex review on #2383, not
