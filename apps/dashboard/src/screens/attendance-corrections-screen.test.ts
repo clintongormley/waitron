@@ -93,10 +93,6 @@ const day: AttendanceDayView = {
 };
 const lookups: AttendanceLookups = {
   viewer: { personId: "manager", canSelfApprove: false },
-  locations: [
-    { id: "shop", name: "Deli", timeZone: "Europe/Madrid" },
-    { id: "bar", name: "Bar", timeZone: "Europe/Madrid" },
-  ],
   people: [
     { personId: "worker", displayName: "Ana Worker" },
     { personId: "manager", displayName: "Morgan Manager" },

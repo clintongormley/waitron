@@ -71,7 +71,6 @@ export function hoursView(patch: Partial<PersonHours> = {}): PersonHours {
       prompts: [
         attendancePrompt({
           personId,
-          locationId,
           businessDay: "2026-01-05",
           history: [entry],
           timeZone: "Europe/Madrid",

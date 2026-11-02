@@ -16,10 +16,6 @@ async function mount(available = true, theme?: "light" | "dark") {
   setLocale("en-GB");
   const reads: { path: string; passive: string | null }[] = [];
   const data = {
-    locations: [
-      { id: "venue", name: "Deli", timeZone: "Europe/Madrid" },
-      { id: "old", name: "Former workplace", timeZone: "UTC" },
-    ],
     available,
     forbidden: false,
   };
@@ -36,7 +32,7 @@ async function mount(available = true, theme?: "light" | "dark") {
         return Response.json({
           personId: "p1",
           revision: "r",
-          locations: data.locations,
+          timeZone: "Europe/Madrid",
           items: [],
           prompts: [],
         });

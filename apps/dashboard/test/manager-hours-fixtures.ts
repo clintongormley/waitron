@@ -78,10 +78,6 @@ export async function mountManagerHours(
     exportOptions: options.exportOptions ?? { available: false, canExportAll: false },
     lookups: {
       viewer: { personId: "manager", canSelfApprove: false },
-      locations: [
-        { id: "shop", name: "Deli", timeZone: "Europe/Madrid" },
-        { id: "bar", name: "Bar", timeZone: "Europe/Madrid" },
-      ],
       people: [{ personId: "worker", displayName: "Ana Worker" }],
     } satisfies AttendanceLookups,
   };

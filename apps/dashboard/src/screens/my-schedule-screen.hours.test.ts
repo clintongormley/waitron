@@ -27,7 +27,7 @@ async function mount(
             revision: "r",
             prompts: [],
             items: [],
-            locations: [{ id: "venue", name: "Deli", timeZone: "Europe/Madrid" }],
+            timeZone: "Europe/Madrid",
           }
         : hoursView({ selection: { kind: "week" } })) as T,
   );

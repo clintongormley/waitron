@@ -62,14 +62,13 @@ async function mount(modules: string[], permissions: string[], role = "superviso
           revision: "r",
           prompts: [],
           items: [],
-          locations: [{ id: "venue", name: "Deli", timeZone: "Europe/Madrid" }],
+          timeZone: "Europe/Madrid",
         });
       if (path.includes("/me/attendance/hours?"))
         return Response.json(hoursView({ personId: "boss", selection: { kind: "week" } }));
       if (path.endsWith("/lookups"))
         return Response.json({
           viewer: { personId: "boss", canSelfApprove: false },
-          locations: [{ id: "shop", name: "Deli", timeZone: "Europe/Madrid" }],
           people: [{ personId: "worker", displayName: "Ana" }],
         });
       if (path.includes("/me/attendance/day?"))

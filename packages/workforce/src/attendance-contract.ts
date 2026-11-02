@@ -65,10 +65,8 @@ export interface AttendancePrompt {
   questionId: string | null;
   itemId: string | null;
   personId: string;
-  locationId: string;
-  locationName: string;
   businessDay: string | null;
-  day: (AttendanceDay & { locationId: string }) | null;
+  day: AttendanceDay | null;
   kind: "automatic-out" | "missing-times" | "proposal";
   automaticEntryId: string | null;
   missingKinds: ClockEntryKind[];
@@ -80,7 +78,7 @@ export interface AttendanceInbox {
   revision: string;
   prompts: AttendancePrompt[];
   items: CorrectionItem[];
-  locations: { id: string; name: string; timeZone: string }[];
+  timeZone: string;
 }
 export interface AttendanceDayView {
   personId: string;
@@ -98,7 +96,6 @@ export interface AttendanceManagerQueue {
 
 export interface AttendanceLookups {
   viewer: { personId: string; canSelfApprove: boolean };
-  locations: { id: string; name: string; timeZone: string }[];
   people: { personId: string; displayName: string }[];
 }
 

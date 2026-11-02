@@ -174,9 +174,6 @@ it("offers the configured workplace for a first correction before any clock hist
   expect(inbox.personId).toBe(worker!.id);
   expect(inbox.items).toEqual([]);
   expect(inbox.prompts).toEqual([]);
-  expect(inbox.locations).toEqual([
-    { id: venue.cfg.locationId, name: "Clock venue", timeZone: "Europe/Madrid" },
-  ]);
   const day = await request(
     `day?date=2026-01-04&locationId=${venue.cfg.locationId}`,
     undefined,
@@ -203,7 +200,6 @@ it("offers the configured workplace for a first correction before any clock hist
   const result = (await submitted.json()) as AttendanceCommandResult;
   expect(result.entryIds).toHaveLength(2);
   const refreshed = (await (await request("inbox", undefined, cookie)).json()) as AttendanceInbox;
-  expect(refreshed.locations).toEqual(inbox.locations);
   expect(refreshed.items).toMatchObject([
     { personId: worker!.id, status: "waiting-manager", requestEntryIds: result.entryIds },
   ]);

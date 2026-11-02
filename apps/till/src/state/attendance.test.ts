@@ -26,7 +26,7 @@ function inbox(personId = "ana", revision = "r1"): AttendanceInbox {
     revision,
     prompts: [],
     items: [],
-    locations: [{ id: "venue", name: "Local", timeZone: "Europe/Madrid" }],
+    timeZone: "Europe/Madrid",
   };
 }
 function day(date = "2026-10-14", personId = "ana", locationId = "venue"): AttendanceDayView {

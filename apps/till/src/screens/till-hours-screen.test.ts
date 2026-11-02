@@ -239,7 +239,6 @@ it("a proposal can be accepted only when ready, while disagreement and missing-t
   const proposal = attendancePrompt({
     id: "proposal-prompt",
     personId: "p1",
-    locationId: "venue",
     kind: "proposal",
     itemId: item.id,
     questionId: null,
@@ -248,7 +247,6 @@ it("a proposal can be accepted only when ready, while disagreement and missing-t
   const missing = attendancePrompt({
     id: "missing-prompt",
     personId: "p1",
-    locationId: "venue",
     kind: "missing-times",
   });
   const view = hoursView({

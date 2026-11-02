@@ -29,12 +29,9 @@ export function attendancePrompt(patch: Partial<AttendancePrompt> = {}): Attenda
     questionId: "question",
     itemId: null,
     personId: "worker",
-    locationId: "deli",
-    locationName: "The deli",
     businessDay: "2026-10-13",
     day: {
       businessDay: "2026-10-13",
-      locationId: "deli",
       startAt: "2026-10-13T03:00:00.000Z",
       endAt: "2026-10-14T03:00:00.000Z",
     },
@@ -48,7 +45,6 @@ export function attendancePrompt(patch: Partial<AttendancePrompt> = {}): Attenda
   prompt.history = prompt.history.map((entry) => ({
     ...entry,
     personId: prompt.personId,
-    locationId: prompt.locationId,
     recordedByPersonId:
       entry.recordedByPersonId === "worker" ? prompt.personId : entry.recordedByPersonId,
   }));
@@ -118,7 +114,7 @@ export function attendanceInbox(
     revision: "revision",
     prompts,
     items,
-    locations: [{ id: "deli", name: "The deli", timeZone: "America/New_York" }],
+    timeZone: "America/New_York",
   };
 }
 

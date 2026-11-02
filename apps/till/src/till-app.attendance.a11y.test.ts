@@ -27,12 +27,11 @@ describe.each(["light", "dark"] as const)("real attendance flow accessibility in
       f.api.getAttendanceInbox.mockResolvedValue({
         ...attendanceInbox(
           [
-            attendancePrompt({ personId: "p1", locationId: "venue", timeZone: "Europe/Madrid" }),
+            attendancePrompt({ personId: "p1", timeZone: "Europe/Madrid" }),
             attendancePrompt({
               id: "missing",
               questionId: "missing",
               personId: "p1",
-              locationId: "venue",
               timeZone: "Europe/Madrid",
               kind: "missing-times",
               history: [],
@@ -43,7 +42,6 @@ describe.each(["light", "dark"] as const)("real attendance flow accessibility in
               questionId: null,
               itemId: proposal.id,
               personId: "p1",
-              locationId: "venue",
               timeZone: "Europe/Madrid",
               kind: "proposal",
               history: proposal.history,
@@ -52,7 +50,7 @@ describe.each(["light", "dark"] as const)("real attendance flow accessibility in
           [proposal],
         ),
         personId: "p1",
-        locations: [{ id: "venue", name: "Clock venue", timeZone: "Europe/Madrid" }],
+        timeZone: "Europe/Madrid",
       });
       await signIn(f.el);
       await vi.waitFor(() =>

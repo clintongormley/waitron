@@ -134,13 +134,32 @@ it("returns an empty own inbox and one compatible subject revision for day and i
     revision: await run((tx) => readAttendanceRevision(tx, personId)),
     prompts: [],
     items: [],
-    locations: await suite.db
-      .select({ id: locations.id, name: locations.name, timeZone: locations.timeZone })
-      .from(locations),
+    timeZone: (await suite.db.select({ timeZone: locations.timeZone }).from(locations))[0]!
+      .timeZone,
   });
-  expect(value.locations.map((l) => l.id)).toEqual([locationId]);
+  expect(value.timeZone).toBe("Europe/Madrid");
   expect((await day()).revision).toBe(value.revision);
   expect(await queue()).toEqual({ locationId, items: [] });
+});
+it("gives the inbox the venue's zone and no place list", async () => {
+  await suite.db
+    .update(locations)
+    .set({ timeZone: "Atlantic/Canary" })
+    .where(eq(locations.id, locationId));
+  const id = await question();
+  const value = await inbox();
+  expect(value).toEqual({
+    personId,
+    revision: await run((tx) => readAttendanceRevision(tx, personId)),
+    prompts: [expect.objectContaining({ id })],
+    items: [],
+    timeZone: "Atlantic/Canary",
+  });
+  for (const prompt of value.prompts) {
+    expect(prompt).not.toHaveProperty("locationId");
+    expect(prompt).not.toHaveProperty("locationName");
+    expect(prompt.day).not.toHaveProperty("locationId");
+  }
 });
 it("keeps canonical active unanswered questions oldest first without exposing another worker or retired rows", async () => {
   const newer = await question({ date: "2026-01-06" });
@@ -160,11 +179,8 @@ it("keeps canonical active unanswered questions oldest first without exposing an
     questionId: older,
     itemId: null,
     personId,
-    locationId,
-    locationName: "Main",
     businessDay: "2026-01-05",
     day: {
-      locationId,
       businessDay: "2026-01-05",
       startAt: "2026-01-05T04:00:00.000Z",
       endAt: "2026-01-06T04:00:00.000Z",
@@ -205,7 +221,6 @@ it("uses saved business bounds and retains an automatic original outside the bus
   const prompt = (await inbox()).prompts[0]!;
   expect(prompt.id).toBe(id);
   expect(prompt.day).toEqual({
-    locationId,
     businessDay: "2026-01-05",
     startAt: "2026-01-05T04:00:00.000Z",
     endAt: "2026-01-06T04:00:00.000Z",
@@ -243,7 +258,6 @@ it("keeps a worker request as history while a manager proposal is a prompt with 
     questionId: null,
     itemId: proposal.entryIds[0],
     personId,
-    locationId,
     kind: "proposal",
     businessDay: null,
     day: null,
@@ -331,7 +345,7 @@ it("selected days keep relevant pending missing pairs and omit unrelated days", 
   expect(selected.items.map((i) => i.id)).toEqual([value.commandId]);
   expect(selected.record.sessions).toEqual([]);
   expect((await day("2026-01-06")).items).toEqual([]);
-  expect((await inbox()).locations.map((l) => l.id)).toEqual([locationId]);
+  expect((await inbox()).timeZone).toBe("Europe/Madrid");
 });
 it.each(["", "2026-02-30", "2026-1-5", "9999-12-31"])(
   "refuses invalid or unrepresentable selected date %s",

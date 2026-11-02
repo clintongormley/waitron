@@ -142,11 +142,10 @@ describe("attendance questions before work", () => {
   });
 
   it("holds the supplied oldest-first order and does not turn a pending request into a question", async () => {
-    const first = attendancePrompt({ locationName: "First location" });
+    const first = attendancePrompt();
     const next = attendancePrompt({
       id: "next",
       questionId: "next",
-      locationName: "Second location",
     });
     const { el } = await mount({
       inbox: attendanceInbox(

@@ -30,7 +30,6 @@ it.each(["accept", "disagree"] as const)(
     const item = attendanceItem({ personId: "p1" });
     const prompt = attendancePrompt({
       personId: "p1",
-      locationId: "venue",
       kind: "proposal",
       itemId: item.id,
       questionId: null,
@@ -41,7 +40,7 @@ it.each(["accept", "disagree"] as const)(
       ...attendanceInbox([prompt], [item]),
       personId: "p1",
       revision: "proposal-revision",
-      locations: [{ id: "venue", name: "Deli", timeZone: "Europe/Madrid" }],
+      timeZone: "Europe/Madrid",
     });
     f.api.getHours.mockImplementation(async (selection) => hoursView({ selection, pending }));
     await open(f.el);
@@ -196,14 +195,13 @@ it("hours responses use the current inbox revision and a later successful summar
   await working(f.el);
   const prompt = attendancePrompt({
     personId: "p1",
-    locationId: "venue",
     timeZone: "Europe/Madrid",
   });
   f.api.getAttendanceInbox.mockResolvedValue({
     ...attendanceInbox([prompt]),
     personId: "p1",
     revision: "fresh-inbox",
-    locations: [{ id: "venue", name: "Clock venue", timeZone: "Europe/Madrid" }],
+    timeZone: "Europe/Madrid",
   });
   f.api.sendAttendanceCommand.mockRejectedValueOnce({ code: "attendance.state_changed" });
   await open(f.el);
@@ -251,13 +249,12 @@ it("a known absent response can be retried from Hours with the same command iden
   await working(f.el);
   const prompt = attendancePrompt({
     personId: "p1",
-    locationId: "venue",
     timeZone: "Europe/Madrid",
   });
   const inbox = {
     ...attendanceInbox([prompt]),
     personId: "p1",
-    locations: [{ id: "venue", name: "Clock venue", timeZone: "Europe/Madrid" }],
+    timeZone: "Europe/Madrid",
   };
   f.api.getAttendanceInbox.mockResolvedValue(inbox);
   f.api.sendAttendanceCommand.mockRejectedValueOnce(new TypeError("answer lost"));

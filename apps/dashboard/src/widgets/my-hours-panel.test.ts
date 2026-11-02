@@ -20,16 +20,10 @@ function deferred<T>() {
   return { promise, resolve };
 }
 const inbox = () => ({
-  ...attendanceInbox(
-    [attendancePrompt({ personId: "p1", locationId: "venue", businessDay: "2026-01-05" })],
-    [],
-  ),
+  ...attendanceInbox([attendancePrompt({ personId: "p1", businessDay: "2026-01-05" })], []),
   personId: "p1",
   revision: "inbox-current",
-  locations: [
-    { id: "venue", name: "Deli", timeZone: "Europe/Madrid" },
-    { id: "old", name: "Old workplace", timeZone: "UTC" },
-  ],
+  timeZone: "Europe/Madrid",
 });
 const day = (): AttendanceDayView => ({
   personId: "p1",
@@ -359,7 +353,6 @@ it("uses only a current proposal for acceptance or reasoned disagreement", async
     attendancePrompt({
       id: "current-proposal",
       personId: "p1",
-      locationId: "venue",
       businessDay: "2026-01-05",
       kind: "proposal",
       questionId: null,

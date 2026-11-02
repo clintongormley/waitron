@@ -124,7 +124,6 @@ it("provides minimal lookups, own viewer eligibility, an empty queue and a day f
   expect(lookups.status).toBe(200);
   expect(await lookups.json()).toEqual({
     viewer: { personId: managerId, canSelfApprove: true },
-    locations: [{ id: venue.cfg.locationId, name: "Clock venue", timeZone: "Europe/Madrid" }],
     people: expect.arrayContaining([
       { personId: managerId, displayName: "Owner" },
       { personId: venue.personId, displayName: "Ana" },

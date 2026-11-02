@@ -46,7 +46,7 @@ export async function readAttendanceInbox(
         isNull(attendanceQuestions.canonicalQuestionId),
       ),
     );
-  const venue = await venueInfo(tx);
+  const { timeZone } = await readVenue(tx);
   const byId = new Map(entries.map((e) => [e.entryId, e]));
   const prompts: { at: string; prompt: AttendancePrompt }[] = [];
   for (const question of questions) {
@@ -73,11 +73,8 @@ export async function readAttendanceInbox(
         questionId: question.id,
         itemId: null,
         personId,
-        locationId: venue.id,
-        locationName: venue.name,
         businessDay: question.businessDay,
         day: {
-          locationId: venue.id,
           businessDay: question.businessDay,
           startAt: question.startAt,
           endAt: question.endAt,
@@ -85,7 +82,7 @@ export async function readAttendanceInbox(
         kind: question.kind,
         automaticEntryId: question.automaticEntryId,
         missingKinds: answer.missingKinds,
-        timeZone: venue.timeZone,
+        timeZone,
         history: entries
           .filter((e) => roots.has(recordRoot(e, byId).entryId))
           .sort(compareRecording),
@@ -101,14 +98,12 @@ export async function readAttendanceInbox(
         questionId: null,
         itemId: item.id,
         personId,
-        locationId: venue.id,
-        locationName: venue.name,
         businessDay: null,
         day: null,
         kind: "proposal",
         automaticEntryId: null,
         missingKinds: [],
-        timeZone: venue.timeZone,
+        timeZone,
         history: item.history,
       },
     });
@@ -119,7 +114,7 @@ export async function readAttendanceInbox(
     revision: await readAttendanceRevision(tx, personId),
     prompts: prompts.map((p) => p.prompt),
     items,
-    locations: [venue],
+    timeZone,
   };
 }
 export async function readAttendanceDay(

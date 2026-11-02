@@ -140,9 +140,7 @@ for (const enabled of [true, false]) {
             const own = await get(paths[1]!);
             expect(own.status).toBe(200);
             const inbox = (await own.json()) as AttendanceInbox;
-            expect(inbox.locations).toEqual([
-              { id: venue.cfg.locationId, name: "Clock venue", timeZone: "Europe/Madrid" },
-            ]);
+            expect(inbox.timeZone).toBe("Europe/Madrid");
             for (const path of [paths[0]!, paths[2]!]) {
               const response = await get(path);
               expect(response.status, path).toBe(200);

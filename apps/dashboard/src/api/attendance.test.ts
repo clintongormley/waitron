@@ -27,7 +27,6 @@ const saved = {
 };
 const lookups: AttendanceLookups = {
   viewer: { personId: manager, canSelfApprove: false },
-  locations: [{ id: locationId, name: "The deli", timeZone: "Europe/Madrid" }],
   people: [
     { personId: worker, displayName: "Ana" },
     { personId: manager, displayName: "Marta" },
@@ -202,7 +201,7 @@ describe("dashboard attendance wire and live reads", () => {
       "location_day_cutover_changes",
       "location_business_day_settings",
     ].map((type) => ({ type }));
-    expect(lookup.dependencies).toEqual([{ type: "persons" }, { type: "locations" }]);
+    expect(lookup.dependencies).toEqual([{ type: "persons" }]);
     expect(queue.dependencies).toEqual(expected);
     expect(selectedDay.dependencies).toEqual(expected);
     expect(selectedDay.key).not.toBe(api.dayQuery(manager, "2026-10-13").key);
@@ -313,7 +312,7 @@ it.each([
   selectedDay.unsubscribe();
 });
 
-it.each(["persons", "locations"] as const)(
+it.each(["persons"] as const)(
   "a %s event refreshes mounted lookups for eligibility or edit zones",
   async (type) => {
     const cache = new LiveData();
@@ -329,10 +328,6 @@ it.each(["persons", "locations"] as const)(
                 type === "persons"
                   ? [{ personId: worker, displayName: "Alicia" }, lookups.people[1]!]
                   : lookups.people,
-              locations:
-                type === "locations"
-                  ? [{ ...lookups.locations[0]!, timeZone: "Atlantic/Canary" }]
-                  : lookups.locations,
             }
           : lookups,
       cache,
@@ -345,10 +340,7 @@ it.each(["persons", "locations"] as const)(
     if (type === "persons") {
       await expect.poll(() => watched.snapshot.value?.viewer.canSelfApprove).toBe(true);
       expect(watched.snapshot.value?.people[0]!.displayName).toBe("Alicia");
-    } else
-      await expect
-        .poll(() => watched.snapshot.value?.locations[0]!.timeZone)
-        .toBe("Atlantic/Canary");
+    }
     watched.unsubscribe();
   },
 );

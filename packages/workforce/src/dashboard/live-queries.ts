@@ -10,7 +10,7 @@ const record = [
 ] as const;
 
 export const QUERY_DEPENDENCIES = {
-  lookups: ["persons", "locations"],
+  lookups: ["persons"],
   queue: record,
   day: record,
   hours: [...record, "pay_period_settings"],

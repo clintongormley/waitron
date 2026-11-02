@@ -42,13 +42,12 @@ function inbox(): AttendanceInbox {
     ...attendanceInbox([
       attendancePrompt({
         personId: "p1",
-        locationId: "venue",
         timeZone: "Europe/Madrid",
         history: [entry],
       }),
     ]),
     personId: "p1",
-    locations: [{ id: "venue", name: "Clock venue", timeZone: "Europe/Madrid" }],
+    timeZone: "Europe/Madrid",
   };
 }
 const empty = (): AttendanceInbox => ({ ...inbox(), prompts: [], items: [] });
@@ -87,7 +86,6 @@ describe("till attendance sign-in flow", () => {
       questionId: null,
       itemId: item.id,
       personId: "p1",
-      locationId: "venue",
       history: item.history,
     });
     f.api.getAttendanceInbox
@@ -345,7 +343,6 @@ describe("till correction editors and manager PIN", () => {
     const missing = attendancePrompt({
       kind: "missing-times",
       personId: "p1",
-      locationId: "venue",
       timeZone: "Europe/Madrid",
       automaticEntryId: null,
       history: [],
@@ -392,7 +389,6 @@ describe("till correction editors and manager PIN", () => {
             kind: "proposal",
             itemId: item.id,
             questionId: null,
-            locationId: "venue",
             personId: "p1",
             history: item.history,
           }),

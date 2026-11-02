@@ -43,18 +43,15 @@ describe("attendance client", () => {
     const body: AttendanceInbox = {
       personId: "ana",
       revision: "r1",
-      locations: [{ id: "venue", name: "Local", timeZone: "Europe/Madrid" }],
+      timeZone: "Europe/Madrid",
       prompts: [
         {
           id: "prompt",
           questionId: "question",
           itemId: "proposal",
           personId: "ana",
-          locationId: "venue",
-          locationName: "Local",
           businessDay: "2026-10-14",
           day: {
-            locationId: "venue",
             businessDay: "2026-10-14",
             startAt: "2026-10-14T02:00:00Z",
             endAt: "2026-10-15T02:00:00Z",
@@ -114,7 +111,7 @@ describe("attendance client", () => {
       "getAttendanceInbox",
       [],
       "/api/attendance/inbox",
-      { personId: "ana", revision: "r1", prompts: [], items: [], locations: [] },
+      { personId: "ana", revision: "r1", prompts: [], items: [], timeZone: "Europe/Madrid" },
     ],
     [
       "getAttendanceDay",

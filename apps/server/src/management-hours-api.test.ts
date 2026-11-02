@@ -132,7 +132,6 @@ it("ordinary staff read only their own record and configured workplace without t
   expect(inbox.status).toBe(200);
   expect(await inbox.json()).toMatchObject({
     personId: venue.personId,
-    locations: [{ id: venue.cfg.locationId, name: "Clock venue", timeZone: "Europe/Madrid" }],
   });
   const day = await ask(own + `day?locationId=${venue.cfg.locationId}&date=2026-01-05`);
   expect(day.status).toBe(200);

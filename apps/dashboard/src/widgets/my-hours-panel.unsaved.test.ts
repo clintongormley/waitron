@@ -45,7 +45,7 @@ async function mount(failedRefresh = false) {
         ? {
             personId: "p1",
             revision: "r",
-            locations: [{ id: "venue", name: "Deli", timeZone: "Europe/Madrid" }],
+            timeZone: "Europe/Madrid",
             prompts: [],
             items: [],
           }
