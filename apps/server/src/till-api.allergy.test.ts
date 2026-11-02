@@ -28,7 +28,7 @@ import { listDepartments, readPartyAllergy, setProfileServiceAccess } from "@wai
 import type { PartyAllergyRead } from "@waitron/module";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
 import type { TradingContext } from "./trading-context.js";
-import { SESSION_COOKIE } from "./till-session.js";
+import { sessionCookieForTest } from "./testing/session-device.js";
 import { createZone } from "./testing/service-zone.js";
 import { createTable } from "./testing/live-table.js";
 
@@ -40,6 +40,7 @@ let tableZoneId: string;
 let personId: string;
 let sessionId: string;
 let token: string;
+let requestCookie: string;
 let orderId: string;
 let partyId: string;
 let billId: string;
@@ -71,6 +72,7 @@ beforeEach(async () => {
     .values({ deviceId, personId, tokenHash: hashSessionToken(token) })
     .returning();
   sessionId = session!.id;
+  requestCookie = await sessionCookieForTest(suite.db, token);
   const [party] = await suite.db.insert(parties).values({ openedBy: personId }).returning();
   partyId = party!.id;
   const zone = await createZone(suite.db, cfg, { name: "Tables" });
@@ -142,7 +144,7 @@ function request(method: string, url = path(), body?: unknown, cookie = true) {
     method,
     headers: {
       "content-type": "application/json",
-      ...(cookie ? { cookie: `${SESSION_COOKIE}=${token}` } : {}),
+      ...(cookie ? { cookie: requestCookie } : {}),
     },
     ...(method === "GET" ? {} : { body: JSON.stringify(body) }),
   });
@@ -477,7 +479,7 @@ describe("A669 allergy routes", () => {
       });
       const raw = new Request(`http://localhost${path()}`, {
         method: "PUT",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+        headers: { "content-type": "application/json", cookie: requestCookie },
         body: JSON.stringify(command()),
       });
       const text = raw.text.bind(raw);

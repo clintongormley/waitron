@@ -218,7 +218,10 @@ async function signInOn(
     body: JSON.stringify({ personId: await person(role), pin: "5555" }),
   });
   expect(login.status).toBe(200);
-  return { cookie: login.headers.get("set-cookie")!.split(";")[0]!, deviceId: device.deviceId };
+  return {
+    cookie: `${login.headers.get("set-cookie")!.split(";")[0]!}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+    deviceId: device.deviceId,
+  };
 }
 
 /** A kitchen display bound to the station, whose profile lists `capabilities`. */

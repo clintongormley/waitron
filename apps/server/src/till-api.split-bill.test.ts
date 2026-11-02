@@ -51,7 +51,11 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { BASIC_ACTIONS, seedSessionDevice } from "./testing/session-device.js";
+import {
+  BASIC_ACTIONS,
+  seedSessionDevice,
+  sessionCookieForTest,
+} from "./testing/session-device.js";
 
 // The HTTP surface of the split, un-join and merge routes: the session guard, the malformed-`:id`/`tableId`
 // screens, the result shapes and the STATUS mapping for `table.not_joined`. The successful merge case also
@@ -188,7 +192,7 @@ async function setupTabApp(
   const app = new Hono();
   const d = deps(suite.db);
   mountTillApi(app, d, collect([]));
-  const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+  const cookie = await sessionCookieForTest(suite.db, await openSession(suite.db));
   const { tabA, tableA } = await withTransaction(suite.db, async (tx) => {
     const a = await createTable(tx, cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
     const tabAResult = await openPartyTab(tx, cfg, {
@@ -360,7 +364,7 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
     const app = new Hono();
     const d = deps(suite.db);
     mountTillApi(app, d, collect([]));
-    const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+    const cookie = await sessionCookieForTest(suite.db, await openSession(suite.db));
     const post = async (path: string, body: unknown) =>
       app.request(path, {
         method: "POST",

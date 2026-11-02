@@ -110,13 +110,14 @@ beforeEach(async () => {
       .returning({ id: persons.id });
     return person!.id;
   });
+  const deviceCookie = await enrolTill();
   const login = await app.request("/api/session", {
     method: "POST",
-    headers: { "content-type": "application/json", cookie: await enrolTill() },
+    headers: { "content-type": "application/json", cookie: deviceCookie },
     body: JSON.stringify({ personId: operatorId, pin: "5555" }),
   });
   expect(login.status).toBe(200);
-  session = login.headers.get("set-cookie")!;
+  session = `${login.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
   const [burger] = await inTx(v, (tx) =>
     tx
       .select({ catalogueId: products.catalogueId })

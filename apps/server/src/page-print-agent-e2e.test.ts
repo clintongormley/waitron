@@ -380,7 +380,7 @@ async function tillSession(
   });
   expect(login.status).toBe(200);
   return {
-    tillCookie: login.headers.get("set-cookie")!.split(";")[0]!,
+    tillCookie: `${login.headers.get("set-cookie")!.split(";")[0]!}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
     tillProfileId: profile!.id,
   };
 }

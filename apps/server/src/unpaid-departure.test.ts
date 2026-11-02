@@ -61,6 +61,7 @@ import {
   BASIC_ACTIONS,
   revokedDeviceSessionCookie,
   seedSessionDevice,
+  sessionCookieForTest,
 } from "./testing/session-device.js";
 import "./errors.js";
 import { watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
@@ -136,7 +137,7 @@ useVenueDb({
     const staff = await inTx(venue, (tx) =>
       loginWithPin(tx, { deviceId: staffDeviceId, personId: venue.operatorId, pin: "5555" }),
     );
-    staffSessionCookie = `${SESSION_COOKIE}=${staff.token}`;
+    staffSessionCookie = await sessionCookieForTest(db, staff.token);
   },
 });
 

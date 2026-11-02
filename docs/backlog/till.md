@@ -979,18 +979,43 @@ the bill-specific draft handles that race.
   — the draft now lives on the party, on the server and in `DraftSync`, so nothing is carried
   between tabs — and was not re-run against the new code.
 
-## Refuse a request from a device that is not enrolled
+## Till route-to-profile checks and printer identity
 
-- **Refuse a request from a device that is not enrolled** (owner design of 2026-08-30, deferred
-  until after the demo: [design](../superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md)).
-  Tills enrol, selling needs an enrolled device, and a device profile's capabilities gate some
-  actions (`assertDeviceCapability`). But a request that carries NO device still passes
-  `assertDeviceCapability` (`apps/server/src/device-session.ts`). Left: refuse a request with no device, one table of which
-  device kinds may do what with a guard that walks the routes, and printer identity (the design's
-  sub-project C). It sits on the sale and cash path, so it takes the full review. Since B29 (#1011)
-  a handheld places, collects and cancels like a till, and since A238 no refusal is for being a
-  handheld: taking cash, the drawer, integrated card payment and printing each follow the device
-  profile's capability. The design's table is out of date on those rows.
+Keep a maintained route-to-profile-action table with a guard that walks the routes. Printer
+identity remains sub-project C of the
+[device enrolment design](../superpowers/specs/2026-08-30-device-auth-enrolment-fail-closed-design.md).
+Handheld actions follow the profile: placing, collecting, cancelling, cash, the drawer, integrated
+card payment and printing need their respective current profile actions.
+
+## Session-only writes without a profile-action gate
+
+The A941 whole-branch review found three writes without a profile-action gate, outside its
+profile/capability-route audit: `POST /api/sales/:id/receipt/handover`,
+`POST /api/tables/:id/cleared` and `PUT /api/service-zones/:zoneId/zone-extension`.
+A separate loopback HTTP probe on A941 head `d70bfe71cb` returned, respectively,
+`404 working_order.not_found`, `404 table.not_found` and `403 authorization.not_permitted`
+with only a real staff-session cookie. Adding its enrolled-device cookie gave the same answers;
+removing the staff cookie gave `401 session.required`. This proves admission to the later checks,
+not a successful write. The candidate probe's three expected `401 device.unauthorized` checks
+failed. These handlers are unchanged from the captured main `fe080412c5`; their admission calls
+trace to October commits in `git blame`.
+
+Next, decide and test request-device admission for those routes without weakening their existing
+permission, zone or business checks. Also probe device active-profile/zones/equipment writes,
+box-clock challenge/confirmation and schedule writes through their real mounts. The review's
+harness did not mount the device and clock APIs; their request-device admission is unverified.
+These are pending audits, not deliberate session-only exceptions. A941 changes neither these
+handlers nor their contracts.
+
+## Malformed sale and cancellation bodies
+
+A941's 2026-10-21 loopback HTTP probe on `dc1772c4dd147e65ff2c46251b0dfe6d5f60a644`
+observed `500 server.internal` for `POST /api/sales` with `{}` or `{"lines": []}`, and for
+`POST /api/working-orders/:id/cancel` with `{}` and a syntactically valid unknown order id.
+The requests carried a real PIN session whose enrolled profile permitted the actions. These
+were malformed-body probes, not successful payment or cancellation attempts. Next: reproduce
+with a focused route test, validate the missing fields, and assert the domain error code.
+A941 does not change these handlers' request validation.
 
 ## Screen faults seen during menus Task 9's look on 2026-09-27
 
@@ -1470,6 +1495,11 @@ while 4 and 5 needed moving, so Leave it here only makes it last until the next 
 whether those reads should follow today's map once a group is left.
 
 ## Decisions and deliberate limits
+
+- **Request-device proof on profile-gated till actions, payments, refunds and printing (A941,
+  device enrolment design).** Authenticate the enrolled device and match it to the PIN session. Keep management order reprints and invoice delivery
+  available through their management session without a device cookie. Request-device proof is
+  passive; session resolution owns whether the request records activity.
 
 - **Splitting sent dishes (owner, 2026-09-26).** A partial split gives the moved row its own
   ticket item and reduces the original ticket quantity by that part. A dish the kitchen has

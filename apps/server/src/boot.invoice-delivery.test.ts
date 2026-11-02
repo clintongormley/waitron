@@ -24,7 +24,7 @@ import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
-import { SESSION_COOKIE } from "./till-session.js";
+import { sessionCookieForTest } from "./testing/session-device.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { recordSale } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
@@ -706,6 +706,7 @@ describe("invoice-choice email context at trading boot", () => {
       const session = await withTransaction(suite.db, (tx) =>
         loginWithPin(tx, { deviceId: device.deviceId, personId: person!.id, pin: "5555" }),
       );
+      const cookie = await sessionCookieForTest(suite.db, session.token);
       const [order] = await suite.db
         .insert(workingOrders)
         .values({ source: "dashboard", nodeId: ctx.node, locationId: ctx.location, orderNumber: 1 })
@@ -742,7 +743,7 @@ describe("invoice-choice email context at trading boot", () => {
             method: "PUT",
             headers: {
               "content-type": "application/json",
-              cookie: `${SESSION_COOKIE}=${session.token}`,
+              cookie,
             },
             body: JSON.stringify({
               revision: 0,

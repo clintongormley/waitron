@@ -1,3 +1,4 @@
+import { sessionCookieForTest } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -30,7 +31,6 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import { applyPartyAllergyPatch, allergyTargets, readPartyAllergyView } from "./party-allergy.js";
 import { mountTillApi } from "./till-api.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import { readBillEditState } from "./bill-editing.js";
 import { createStation } from "./kitchen.js";
 import { routeProductTo } from "./testing/zone-offers.js";
@@ -84,7 +84,7 @@ beforeEach(async () => {
     .update(sessions)
     .set({ tokenHash: hashSessionToken(token) })
     .where(eq(sessions.id, v.operator.sessionId));
-  cookie = `${SESSION_COOKIE}=${token}`;
+  cookie = await sessionCookieForTest(v.db, token);
   const [station] = await v.db
     .select()
     .from(kitchenStations)

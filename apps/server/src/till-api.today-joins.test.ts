@@ -23,7 +23,6 @@ import { and, asc, eq, ne } from "drizzle-orm";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import { partyRevision } from "./parties.js";
 import { inTx, setupPartyVenue, tableRow, type PartyVenue } from "./testing/party-venue.js";
 import {
@@ -34,7 +33,7 @@ import {
   withRevision,
   zoneRevisionOf,
 } from "./testing/floor-today-venue.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -80,7 +79,7 @@ beforeAll(async () => {
       .returning({ id: persons.id });
     return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
   });
-  cookie = `${SESSION_COOKIE}=${session.token}`;
+  cookie = await sessionCookieForTest(v.db, session.token);
 });
 
 /** A POST; a change to today's floor carries the room's revision unless the body names one. */

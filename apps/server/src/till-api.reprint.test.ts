@@ -18,14 +18,13 @@ import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import type { TradingContext } from "./trading-context.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 
 // The HTTP shape of the reprint route: the `requireSession` guard, the `requireUuidId` screen, and
 // that `reprintOrderTickets` re-enqueues through the SAME outbox path the fire uses. The verb's logic
@@ -149,7 +148,7 @@ async function enrolTillDeviceCookie(db: Database): Promise<string> {
 beforeAll(async () => {
   app = new Hono();
   mountTillApi(app, deps(suite.db), noopLog);
-  cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+  cookie = await sessionCookieForTest(suite.db, await openSession(suite.db));
   tillDeviceCookie = await enrolTillDeviceCookie(suite.db);
 });
 

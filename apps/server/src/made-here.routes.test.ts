@@ -967,13 +967,9 @@ describe("made-here route wiring", () => {
     const table = await inTx(venue, (tx) =>
       createTable(tx, venue.cfg, { label: `Arrival ${randomUUID()}`, zoneId: venue.zoneId }),
     );
-    const moved = await send(
-      venue.app,
-      venue.cookie.split(";")[0]!,
-      "POST",
-      `/api/bills/${orderId}/move`,
-      { to: { tableId: table.id } },
-    );
+    const moved = await send(venue.app, venue.cookie, "POST", `/api/bills/${orderId}/move`, {
+      to: { tableId: table.id },
+    });
     expect(moved.status).toBe(200);
     const groups = await send(
       venue.app,

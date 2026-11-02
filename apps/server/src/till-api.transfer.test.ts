@@ -21,7 +21,6 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import type { OriginConfig } from "./trading-context.js";
 import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -30,7 +29,7 @@ import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { writeGroupedLines } from "./testing/grouped-counter-order.js";
 import { createOpenOrder } from "./working-order.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 
 // The HTTP surface of the transfer route: the session guard, the malformed-`:id`/`toBillId` screens
 // and the STATUS mapping for the transfer codes. The transfer's write behaviour is pinned in
@@ -156,7 +155,7 @@ async function setupTabsApp(
   const app = new Hono();
   const d = deps(suite.db);
   mountTillApi(app, d, collect([]));
-  const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+  const cookie = await sessionCookieForTest(suite.db, await openSession(suite.db));
   const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
     const a = await createTable(tx, cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
     // Its line is stored grouped, as a line written before portions: the route moves part of it.

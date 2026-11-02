@@ -12,7 +12,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { KitchenAllergyBlock } from "@waitron/module";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { freePorts } from "./testing/free-ports.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import {
   kitchenCallers,
   kitchenCommand,
@@ -138,7 +137,7 @@ describe("A669 atomic fresh server processes", () => {
         ) =>
           fetch(`http://127.0.0.1:${port}${path}`, {
             method,
-            headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${f.token}` },
+            headers: { "content-type": "application/json", cookie: f.cookie },
             ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             signal: AbortSignal.timeout(10_000),
           });

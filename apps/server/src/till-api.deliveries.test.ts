@@ -1,6 +1,7 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
+import { serve } from "@hono/node-server";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -59,6 +60,7 @@ import type { TradingContext } from "./trading-context.js";
 import { createOpenOrder } from "./working-order.js";
 import { decodeTicket, opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { freePorts } from "./testing/free-ports.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { readInvoiceDeliveries } from "./invoice-delivery-status.js";
@@ -286,7 +288,7 @@ async function till(
     body: JSON.stringify({ personId: v.staffId, pin: "5555" }),
   });
   expect(login.status).toBe(200);
-  return login.headers.get("set-cookie")!.split(";")[0]!;
+  return `${login.headers.get("set-cookie")!.split(";")[0]!}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
 }
 
 /** A synthetic invoice for a new working order; full unless `full` is false. */
@@ -424,6 +426,106 @@ const toReceipt = (
 const refusal = (status: number, code: string) => ({
   status,
   body: { error: expect.objectContaining({ code }) },
+});
+
+const deviceProofDeliveries = [
+  "receipt-retry",
+  "print",
+  "email",
+  "to-receipt",
+  "email-retry",
+] as const;
+type DeviceProofDelivery = (typeof deviceProofDeliveries)[number];
+
+async function deliveryDeviceRequest(v: Venue, kind: DeviceProofDelivery) {
+  const { orderId, saleId } = await invoice(v, kind !== "receipt-retry");
+  if (kind === "receipt-retry") {
+    expect((await send(v, "POST", `/api/sales/${orderId}/receipt`, {})).status).toBe(200);
+    await suite.db
+      .update(printJobs)
+      .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
+      .where(eq(printJobs.saleId, saleId));
+    return { path: `/api/sales/${orderId}/receipt/retry`, body: {}, saleId };
+  }
+  const body = { requestKey: randomUUID() };
+  if (kind === "print") {
+    return {
+      path: `/api/sales/${orderId}/deliveries`,
+      body: { ...body, medium: "print", printerId: v.officeId },
+      saleId,
+    };
+  }
+  if (kind === "email") {
+    return {
+      path: `/api/sales/${orderId}/deliveries`,
+      body: { ...body, medium: "email", recipient: "guest@example.test" },
+      saleId,
+    };
+  }
+  const delivery =
+    kind === "email-retry"
+      ? await endedEmail(v, orderId, "failed")
+      : ((await printInvoice(v, orderId)).body!.id as string);
+  return {
+    path: `/api/sales/${orderId}/deliveries/${delivery}/${kind === "email-retry" ? "retry" : "to-receipt"}`,
+    body,
+    saleId,
+  };
+}
+
+async function deliveryOverHttp(v: Venue, path: string, body: unknown, cookie: string) {
+  const [port] = await freePorts(1);
+  const server = serve({ fetch: v.app.fetch, hostname: "127.0.0.1", port: port! });
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify(body),
+    });
+    return { status: response.status, body: (await response.json()) as Record<string, unknown> };
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error === undefined ? resolve() : reject(error)));
+    });
+  }
+}
+
+describe("invoice delivery request device proof over HTTP", () => {
+  it.each(deviceProofDeliveries)(
+    "refuses %s without device proof and changes nothing",
+    async (kind) => {
+      const v = await venue();
+      const request = await deliveryDeviceRequest(v, kind);
+      const before = {
+        deliveries: await deliveryRows(request.saleId),
+        jobs: await jobsOf(request.saleId),
+      };
+      expect(
+        await deliveryOverHttp(v, request.path, request.body, v.cookie.split(";")[0]!),
+      ).toEqual(refusal(401, "device.unauthorized"));
+      expect({
+        deliveries: await deliveryRows(request.saleId),
+        jobs: await jobsOf(request.saleId),
+      }).toEqual(before);
+    },
+  );
+
+  it.each(deviceProofDeliveries)("serves %s with the matching enrolled device", async (kind) => {
+    const v = await venue();
+    const request = await deliveryDeviceRequest(v, kind);
+    const answer = await deliveryOverHttp(v, request.path, request.body, v.cookie);
+    expect(answer.status).toBe(200);
+    if (kind === "receipt-retry") {
+      const jobs = await jobsOf(request.saleId);
+      expect(jobs).toHaveLength(2);
+      expect(jobs[0]).toMatchObject({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
+      expect(jobs[1]).toMatchObject({ id: answer.body.jobId, status: "queued", attempts: 0 });
+    } else {
+      const rows = await deliveryRows(request.saleId);
+      expect(rows.at(-1)).toMatchObject({ status: "queued", personId: v.staffId });
+      expect(answer.body.id).toBe(rows.at(-1)!.id);
+    }
+  });
 });
 
 async function deliveryRows(saleId: string) {

@@ -11,6 +11,7 @@ import {
   deviceBindingColumns,
   assertProfileAction,
   deviceProfileJoin,
+  requireDeviceProof,
   recordSighting,
   sightingDue,
   toDeviceBinding,
@@ -87,11 +88,12 @@ export async function signedInPersonOn(
  * and a logged-out session fail as a missing cookie does. A session whose device has been revoked
  * throws `device.unauthorized`. Login and logout deliberately do not call this. With `permission`,
  * the session's person must also hold it (`authorize`, no override), checked in the same
- * transaction; with `action`, the device's active profile must permit it (`assertProfileAction`).
+ * transaction; with `action`, the device's active profile must permit it (`assertProfileAction`)
+ * and the request must prove that same device.
  * When a full disk refuses that transaction, the same checks run outside it and nothing is stamped.
  */
 export async function requireSession(
-  deps: { db: Database },
+  deps: { db: Database; devMode?: boolean },
   c: Context,
   options: { permission?: Permission; action?: ProfileAction; passive?: boolean } = {},
 ): Promise<{ personId: string; sessionId: string; deviceId: DeviceId; device: DeviceBinding }> {
@@ -132,12 +134,25 @@ export async function requireSession(
     if (!diskFullIn(error)) throw error;
     row = await check(deps.db, false);
   }
+  if (options.action !== undefined) {
+    await assertRequestDevice(deps, c, row);
+  }
   return {
     personId: row.personId,
     sessionId: row.id,
     deviceId: brandDeviceId(row.deviceId),
     device: toDeviceBinding(row.deviceId, row),
   };
+}
+
+export async function assertRequestDevice(
+  deps: { db: Database; devMode?: boolean },
+  c: Context,
+  session: { deviceId: string },
+): Promise<void> {
+  // Session resolution owns the activity stamp, including whether this request is passive.
+  const proven = await requireDeviceProof(deps, c, { passive: true });
+  if (proven.device.deviceId !== session.deviceId) throw new AppError("device.unauthorized", {});
 }
 
 /** Inside a write's own transaction: `sessionId` is still `personId`'s open session on `deviceId`

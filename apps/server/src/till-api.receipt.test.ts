@@ -410,7 +410,7 @@ async function login(app: Hono, cfg: TradingContext, operatorId: string): Promis
   return loginOnDevice(app, await enrolTillCookie(cfg, capabilities), operatorId);
 }
 
-/** Log in as `operatorId` (PIN "5555") on `deviceCookie`'s device; answers the Set-Cookie. */
+/** Log in as `operatorId` (PIN "5555") on `deviceCookie`'s device. */
 async function loginOnDevice(app: Hono, deviceCookie: string, operatorId: string): Promise<string> {
   const res = await app.request("/api/session", {
     method: "POST",
@@ -418,7 +418,7 @@ async function loginOnDevice(app: Hono, deviceCookie: string, operatorId: string
     body: JSON.stringify({ personId: operatorId, pin: "5555" }),
   });
   expect(res.status).toBe(200);
-  return res.headers.get("set-cookie")!;
+  return `${res.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
 }
 
 /** `POST /api/sales` resolves its till from the enrolled device. */
@@ -427,8 +427,6 @@ async function enrolTillCookie(
   cfg: TradingContext,
   capabilities: string[] = ["take-cash"],
 ): Promise<string> {
-  // A login plus a sale both enrol a till device in the SAME database, so the profile name AND the
-  // device name must be unique per call — both carry a unique index.
   tillDeviceCounter += 1;
   const n = tillDeviceCounter;
   const [profile] = await suite.db
@@ -487,16 +485,15 @@ function deviceIn(cookie: string): string {
 /** Ring a cash sale under a KNOWN client-minted `workingOrderId` (the reprint route keys on it). */
 async function ringSale(
   app: Hono,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   cookie: string,
   menuItemId: string,
   method: "cash" | "card" = "cash",
 ): Promise<string> {
-  const deviceCookie = await enrolTillCookie(cfg);
   const workingOrderId = randomUUID();
   const res = await app.request("/api/sales", {
     method: "POST",
-    headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+    headers: { "content-type": "application/json", cookie },
     body: JSON.stringify({
       workingOrderId,
       lines: [{ menuItemId, quantity: "1" }],
@@ -2884,8 +2881,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
       },
       noopLog,
     );
-    const signIn = async (deviceCookie: string) =>
-      (await loginOnDevice(app, deviceCookie, venue.operatorId)).split(";")[0]!;
+    const signIn = (deviceCookie: string) => loginOnDevice(app, deviceCookie, venue.operatorId);
     return { ...venue, app, signIn, r1: r1!, r2: r2!, s1: s1! };
   }
 

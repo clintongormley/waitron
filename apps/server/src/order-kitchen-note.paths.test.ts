@@ -1,3 +1,4 @@
+import { sessionCookieForTest } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -13,7 +14,6 @@ import { SimulatorPaymentProvider } from "@waitron/payments/src/simulator.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
 import { recordTillSale, payWorkingOrderIntegrated } from "./testing/whole-payment-fixture.js";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import {
   counterOrder,
   floorRow,
@@ -63,10 +63,11 @@ describe("initial kitchen notes on ordering paths", () => {
         } as TillApiDeps,
         () => {},
       );
+      const requestCookie = await sessionCookieForTest(suite.db, token);
       const id = randomUUID();
       const response = await app.request(url, {
         method: "POST",
-        headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+        headers: { "content-type": "application/json", cookie: requestCookie },
         body: JSON.stringify({
           id,
           workingOrderId: id,

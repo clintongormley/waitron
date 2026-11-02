@@ -1,3 +1,4 @@
+import { sessionCookieForTest } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -30,7 +31,6 @@ import {
 } from "@waitron/venue-service";
 import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import {
   OPERATOR,
   counterOrder,
@@ -116,7 +116,10 @@ async function fixture(existing = false) {
     () => {},
   );
   const url = `/api/bills/${billId}/move`;
-  const headers = { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` };
+  const headers = {
+    "content-type": "application/json",
+    cookie: await sessionCookieForTest(v.db, token),
+  };
   const request = (suffix = "/allergy-preview", packet: unknown = body, authenticated = true) =>
     app.request(url + suffix, {
       method: "POST",

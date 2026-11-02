@@ -39,7 +39,7 @@ import { placeGroups } from "./testing/group-submit-fixture.js";
 import { mountDeviceApi } from "./device-api.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { createPairingMode } from "./pairing-mode.js";
-import { enrolDeviceForTest } from "./testing/enrol.js";
+import { enrolDeviceForTest, deviceCookieForTest } from "./testing/enrol.js";
 import { createStation } from "./kitchen.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -114,6 +114,7 @@ beforeEach(async () => {
     return [`${SESSION_COOKIE}=${a.token}`, `${SESSION_COOKIE}=${b.token}`];
   });
   [managerCookie, staffCookie] = cookies as [string, string];
+  staffCookie += `; ${await deviceCookieForTest(suite.db, staffDevice)}`;
   app = new Hono();
   mountTillApi(
     app,
@@ -932,7 +933,7 @@ describe("the kitchen display's station day", () => {
         ...close(),
         override: { personId: manager, pin: "1234" },
       },
-      `${SESSION_COOKIE}=${login.token}`,
+      `${SESSION_COOKIE}=${login.token}; ${deviceCookie}`,
     );
     expect(till.status).toBe(429);
     expect(till.json).toMatchObject({ code: "pin.throttled" });
