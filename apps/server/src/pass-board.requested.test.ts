@@ -169,6 +169,26 @@ describe("A773 pass board: reads", () => {
     });
   });
 
+  it("ages an order and its dishes against one reading of the clock", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      const placed = await burgerAndWater(tx, venue);
+      const tenMinutes = Date.parse(AT) + 10 * 60_000;
+      const now = vi
+        .spyOn(Date, "now")
+        .mockReturnValueOnce(tenMinutes - 1)
+        .mockReturnValue(tenMinutes);
+      try {
+        const [order] = await readPassBoard(tx, venue.cfg.locationId, onOrder(venue.party.tabId));
+        const burger = order!.groups[0]!.items.find((item) => item.id === placed.burgerItem)!;
+        expect([order!.openedMinutes, burger.band]).toEqual([9, "warm"]);
+      } finally {
+        now.mockRestore();
+      }
+    });
+  });
+
   it("gives each row the facts the pass card and its release read", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
@@ -182,7 +202,12 @@ describe("A773 pass board: reads", () => {
         .select({ createdAt: orderGroups.createdAt, requestKind: orderGroups.requestKind })
         .from(orderGroups)
         .where(eq(orderGroups.id, placed.groupId));
-      const rows = await readPassRows(tx, venue.cfg.locationId, onOrder(venue.party.tabId));
+      const rows = await readPassRows(
+        tx,
+        venue.cfg.locationId,
+        onOrder(venue.party.tabId),
+        Date.now(),
+      );
       expect(rows.map((row) => row.lineId)).toEqual([placed.burgerLine, placed.waterLine]);
       expect(rows[0]).toMatchObject({
         item: { id: placed.burgerItem, name: "BURG", firedAt: null },
@@ -229,7 +254,7 @@ describe("A773 pass board: reads", () => {
       const chipsLine = await lineIdOf(tx, venue.party.tabId, "Chips");
       const secondBurger = second.groups[0]!.lineIds.find((id) => id !== chipsLine)!;
       const extras = (
-        await readPassRows(tx, venue.cfg.locationId, onOrder(venue.party.tabId))
+        await readPassRows(tx, venue.cfg.locationId, onOrder(venue.party.tabId), Date.now())
       ).filter((row) => row.group?.id === second.groups[0]!.id);
       expect(extras.map((row) => [row.lineId, row.extra])).toEqual([
         [secondBurger, false],
@@ -500,6 +525,26 @@ describe("A773 pass board: scoped", () => {
       expect(left.item.stationClosed).toBe(false);
       expect(left.card.releaseTicketItemIds).toEqual([placed.burgerItem]);
       expect(left.card.releaseContext).toMatch(/^[0-9a-f]{64}$/);
+    });
+  });
+
+  it("judges a dish's station closed at the instant the board ages it", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      const placed = await burgerAndWater(tx, venue);
+      const twoDaysBefore = Date.parse(AT) - 2 * 24 * 60 * 60_000;
+      await setStationToday(tx, venue.cfg, venue.stations.grill, "closed", new Date(twoDaysBefore));
+      const now = vi.spyOn(Date, "now").mockReturnValueOnce(twoDaysBefore);
+      try {
+        const { toFire } = await readScopedPassBoard(tx, venue.cfg, EVERY);
+        expect(toFire).toHaveLength(1);
+        expect(toFire[0]!.items.find((item) => item.id === placed.burgerItem)!.stationClosed).toBe(
+          true,
+        );
+      } finally {
+        now.mockRestore();
+      }
     });
   });
 

@@ -126,6 +126,7 @@ export async function readScopedPassBoard(
   scope: PassScope,
   display?: { showNonPassStations: boolean },
 ): Promise<PassBoard> {
+  const nowMs = Date.now();
   const kept = await scopedItems(tx, cfg, scope);
   const groupIds = [...new Set(kept.flatMap((item) => item.groupId ?? []))];
   const billIds = [
@@ -135,7 +136,7 @@ export async function readScopedPassBoard(
   if (groupIds.length > 0) keys.push(inArray(workingOrderLines.groupId, groupIds));
   if (billIds.length > 0)
     keys.push(and(inArray(workingOrders.id, billIds), isNull(workingOrderLines.groupId))!);
-  const rows = keys.length === 0 ? [] : await readCardRows(tx, cfg, or(...keys)!);
+  const rows = keys.length === 0 ? [] : await readCardRows(tx, cfg, or(...keys)!, nowMs);
   return buildPassBoard(rows, scope, display);
 }
 
@@ -151,11 +152,17 @@ export async function readPassCardRows(
     target.kind === "group"
       ? and(eq(workingOrderLines.groupId, target.groupId), eq(orderGroups.partyId, target.partyId))!
       : and(eq(workingOrders.id, target.workingOrderId), isNull(workingOrderLines.groupId))!,
+    Date.now(),
   );
 }
 
-async function readCardRows(tx: Transaction, cfg: TradingContext, cards: SQL): Promise<PassRow[]> {
-  const read = await readPassRows(tx, cfg.locationId, and(liveKitchenDishAt(cfg), cards)!);
+async function readCardRows(
+  tx: Transaction,
+  cfg: TradingContext,
+  cards: SQL,
+  nowMs: number,
+): Promise<PassRow[]> {
+  const read = await readPassRows(tx, cfg.locationId, and(liveKitchenDishAt(cfg), cards)!, nowMs);
   if (read.length === 0) return [];
   const zones = await rowsWatchZones(tx, cfg, read);
   const phase = (row: Pick<PassRow, "requestedAt" | "firedAt" | "item">) =>
@@ -164,7 +171,7 @@ async function readCardRows(tx: Transaction, cfg: TradingContext, cards: SQL): P
     tx,
     read.filter((row) => phase(row) === "held").map((row) => row.stationId),
   );
-  const states = await VENUE_SERVICE.stationStates(tx, cfg, new Date());
+  const states = await VENUE_SERVICE.stationStates(tx, cfg, new Date(nowMs));
   return read.map(
     ({
       stationChosenAt,
@@ -174,6 +181,8 @@ async function readCardRows(tx: Transaction, cfg: TradingContext, cards: SQL): P
       deliveryTableId,
       ...row
     }) => {
+      void servedAt;
+      void deliveryTableId;
       const state = states.get(row.stationId);
       const rowPhase = phase(row);
       return {

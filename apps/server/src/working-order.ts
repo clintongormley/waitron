@@ -8502,7 +8502,6 @@ export type PassRowRead = Omit<PassRow, "zoneId" | "stationWaitsNow" | "stationC
   makeAtStationId: string | null;
   /** Read only to leave a served line out of the board's `worstBand`. */
   servedAt: string | null;
-  /** Read only to find the order's watched zone. */
   deliveryTableId: string | null;
 };
 
@@ -8511,6 +8510,7 @@ export async function readPassRows(
   tx: Transaction,
   _locationId: string,
   scope: SQL,
+  nowMs: number,
 ): Promise<PassRowRead[]> {
   const rows = await tx
     .select({
@@ -8609,7 +8609,6 @@ export async function readPassRows(
     })),
   );
 
-  const nowMs = Date.now();
   return rows.map((row) => {
     const thresholds: StationThresholds = {
       warmAfterMinutes: row.warmAfterMinutes,
@@ -8701,8 +8700,8 @@ export async function readPassBoard(
   locationId: string,
   scope: SQL,
 ): Promise<ExpoOrder[]> {
-  const rows = await readPassRows(tx, locationId, scope);
   const nowMs = Date.now();
+  const rows = await readPassRows(tx, locationId, scope, nowMs);
   // Maps keep insertion order, so the SQL order survives the grouping.
   const orders = new Map<string, ExpoOrder>();
   const sectionMaps = new Map<string, Map<string, ExpoCourse | ExpoGroup>>();
