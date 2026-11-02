@@ -264,24 +264,6 @@ it("keeps a worker request as history while a manager proposal is a prompt with 
     proposal.entryIds[0],
   ]);
 });
-it("retains historical locations and their current named zones, excluding locations belonging only to others", async () => {
-  const historic = await seedLocation(suite.db);
-  await suite.db
-    .update(locations)
-    .set({ name: "Old venue", timeZone: "America/New_York" })
-    .where(eq(locations.id, historic));
-  await question({ location: historic });
-  await shift(other);
-  const value = await inbox();
-  expect(value.locations).toEqual([
-    { id: historic, name: "Old venue", timeZone: "America/New_York" },
-  ]);
-  expect(value.prompts[0]).toMatchObject({
-    locationId: historic,
-    locationName: "Old venue",
-    timeZone: "America/New_York",
-  });
-});
 it("keeps all scoped original and response history when a correction crosses a month", async () => {
   const { end } = await shift(personId, "2026-01-31");
   const response = await request(end, "2026-02-01T00:30:00Z");

@@ -16,7 +16,7 @@ const now = new Date("2026-01-07T06:00:00.000Z");
 let id: string, questionId: string;
 beforeEach(async () => {
   await seedTenant(suite.db);
-  const locationId = await seedLocation(suite.db);
+  await seedLocation(suite.db);
   const [person] = await suite.db.insert(persons).values({ displayName: "Worker" }).returning();
   questionId = await withTransaction(suite.db, (tx) =>
     upsertAttendanceQuestion(
@@ -24,7 +24,6 @@ beforeEach(async () => {
       {
         personId: person!.id,
         day: {
-          locationId,
           businessDay: "2026-01-05",
           startAt: "2026-01-05T04:00:00.000Z",
           endAt: "2026-01-06T04:00:00.000Z",

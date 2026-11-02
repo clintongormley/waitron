@@ -32,7 +32,6 @@ let locationId: string,
   versionId: string,
   shiftId: string;
 const day = () => ({
-  locationId,
   businessDay: "2026-01-05",
   startAt: "2026-01-05T04:00:00.000Z",
   endAt: "2026-01-06T04:00:00.000Z",
@@ -166,7 +165,7 @@ describe("obsolete rota attendance obligations", () => {
       });
     },
   );
-  it.each(["deleted", "detached", "draft", "other-location", "before-day", "at-end"])(
+  it.each(["deleted", "detached", "draft", "before-day", "at-end"])(
     "retires a question when its shift becomes %s",
     async (change) => {
       await run((tx) => upsertAttendanceQuestion(tx, input(), now));
@@ -178,11 +177,6 @@ describe("obsolete rota attendance obligations", () => {
           .update(rosterVersions)
           .set({ status: "draft", publishedAt: null })
           .where(eq(rosterVersions.id, versionId));
-      else if (change === "other-location")
-        await suite.db
-          .update(shifts)
-          .set({ locationId: await seedLocation(suite.db) })
-          .where(eq(shifts.id, shiftId));
       else
         await suite.db
           .update(shifts)
@@ -205,8 +199,7 @@ describe("obsolete rota attendance obligations", () => {
     expect((await own()).map((q) => q.id)).toEqual([id]);
     expect(await suite.db.select().from(attendanceMail)).toEqual(before);
   });
-  it("leaves other days, locations, actual clock starts and unscheduled activity alone", async () => {
-    const elsewhere = await seedLocation(suite.db);
+  it("leaves other days, actual clock starts and unscheduled activity alone", async () => {
     await run((tx) =>
       backend.clockIn(tx, {
         personId,
@@ -230,11 +223,6 @@ describe("obsolete rota attendance obligations", () => {
             endAt: day().startAt,
           },
         },
-        now,
-      );
-      await upsertAttendanceQuestion(
-        tx,
-        { ...input(), day: { ...day(), locationId: elsewhere } },
         now,
       );
       await upsertAttendanceQuestion(

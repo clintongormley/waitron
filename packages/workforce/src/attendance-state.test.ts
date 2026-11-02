@@ -18,7 +18,6 @@ const suite = useVenueDb({
 });
 let locationId: string;
 const day = () => ({
-  locationId,
   businessDay: "2026-01-05",
   startAt: "2026-01-05T04:00:00.000Z",
   endAt: "2026-01-06T04:00:00.000Z",
@@ -58,15 +57,17 @@ describe("durable attendance day work", () => {
       },
     ]);
   });
-  it("keeps the same business date at two locations separate", async () => {
-    const other = await seedLocation(suite.db);
-    await withTransaction(suite.db, async (tx) => {
-      await enqueueAttendanceDay(tx, day());
-      await enqueueAttendanceDay(tx, { ...day(), locationId: other });
-    });
-    expect(
-      (await suite.db.select().from(attendanceDayWork)).map((r) => r.locationId).sort(),
-    ).toEqual([locationId, other].sort());
+  it("saves the venue's day from a day with no location", async () => {
+    await withTransaction(suite.db, (tx) =>
+      enqueueAttendanceDay(tx, {
+        businessDay: "2026-01-05",
+        startAt: "2026-01-05T04:00:00.000Z",
+        endAt: "2026-01-06T04:00:00.000Z",
+      }),
+    );
+    expect(await suite.db.select().from(attendanceDayWork)).toMatchObject([
+      { locationId, businessDay: "2026-01-05" },
+    ]);
   });
   it("refuses changed saved historical bounds without altering the work", async () => {
     await withTransaction(suite.db, (tx) => enqueueAttendanceDay(tx, day()));
@@ -83,7 +84,6 @@ describe("durable attendance day work", () => {
     { businessDay: "" },
     { startAt: "bad" },
     { endAt: "2026-01-05T04:00:00.000Z" },
-    { locationId: "" },
   ])("refuses malformed day %j before writing", async (bad) => {
     await expect(
       withTransaction(suite.db, (tx) => enqueueAttendanceDay(tx, { ...day(), ...bad })),

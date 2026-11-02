@@ -1,5 +1,5 @@
 import { beforeEach } from "vitest";
-import { CORE_MIGRATIONS, newId, type Transaction, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, type Transaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
@@ -13,16 +13,10 @@ export function attendanceFixture() {
   });
   const backend = new api.WorkforceBackend();
   const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
-  let locationId: string,
-    elsewhere: string,
-    personId: string,
-    other: string,
-    manager: string,
-    nodeId: string;
+  let locationId: string, personId: string, other: string, manager: string, nodeId: string;
   beforeEach(async () => {
     await seedTenant(suite.db);
     locationId = await seedLocation(suite.db);
-    elsewhere = newId();
     nodeId = await seedNode(suite.db, brandLocationId(locationId));
     const rows = await suite.db
       .insert(persons)
@@ -37,7 +31,6 @@ export function attendanceFixture() {
     await run((tx) => api.enqueueAttendanceDay(tx, day()));
   });
   const day = (): api.AttendanceDay => ({
-    locationId,
     businessDay: "2026-01-05",
     startAt: "2026-01-05T04:00:00.000Z",
     endAt: "2026-01-06T04:00:00.000Z",
@@ -53,7 +46,6 @@ export function attendanceFixture() {
     source: "order",
     key,
     personId,
-    locationId,
     kind: "order",
     at,
     offsetMinutes: 0,
@@ -61,7 +53,6 @@ export function attendanceFixture() {
   const plan = (id: string, startsAt: string, endsAt: string): api.PlannedAttendanceShift => ({
     id,
     personId,
-    locationId,
     startsAt,
     endsAt,
     rosterVersionId: "published",
@@ -123,9 +114,6 @@ export function attendanceFixture() {
     },
     get locationId() {
       return locationId;
-    },
-    get elsewhere() {
-      return elsewhere;
     },
     get nodeId() {
       return nodeId;

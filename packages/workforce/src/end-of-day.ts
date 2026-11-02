@@ -77,7 +77,6 @@ async function retainQuestion(
     .where(
       and(
         eq(attendanceQuestions.personId, input.personId),
-        eq(attendanceQuestions.locationId, input.day.locationId),
         eq(attendanceQuestions.shiftKey, input.shiftKey),
       ),
     );
@@ -124,28 +123,17 @@ export async function processAttendanceDay(
   const [work] = await tx
     .select()
     .from(attendanceDayWork)
-    .where(
-      and(
-        eq(attendanceDayWork.locationId, day.locationId),
-        eq(attendanceDayWork.businessDay, day.businessDay),
-      ),
-    );
+    .where(eq(attendanceDayWork.businessDay, day.businessDay));
   if (!work || work.startAt !== startAt || work.endAt !== endAt)
     throw invalid("saved attendance day mismatch");
   const facts = input.facts
-    .filter((f) => f.locationId === day.locationId)
     .map((f) => ({
       ...f,
       at: recordInstant(f.at, f.offsetMinutes, "attendance"),
     }))
     .filter((f) => f.at >= startAt && f.at < endAt);
   const planned = input.planned
-    .filter(
-      (p) =>
-        p.locationId === day.locationId &&
-        instant(p.startsAt) >= instant(startAt) &&
-        instant(p.startsAt) < instant(endAt),
-    )
+    .filter((p) => instant(p.startsAt) >= instant(startAt) && instant(p.startsAt) < instant(endAt))
     .sort(
       (a, b) =>
         instant(a.startsAt) - instant(b.startsAt) ||
@@ -189,7 +177,6 @@ export async function processAttendanceDay(
       .where(
         and(
           eq(attendanceQuestions.personId, personId),
-          eq(attendanceQuestions.locationId, day.locationId),
           eq(attendanceQuestions.businessDay, day.businessDay),
           sql`${attendanceQuestions.resolvedByEntryId} is null`,
         ),
@@ -269,7 +256,6 @@ export async function processAttendanceDay(
           .where(
             and(
               eq(attendanceQuestions.personId, personId),
-              eq(attendanceQuestions.locationId, day.locationId),
               eq(attendanceQuestions.businessDay, day.businessDay),
               eq(attendanceQuestions.active, true),
               eq(attendanceQuestions.kind, "missing-times"),
@@ -305,7 +291,6 @@ export async function processAttendanceDay(
           kind: "break",
           key: e.entryId,
           personId,
-          locationId: day.locationId,
           at: e.eventAt,
           offsetMinutes: e.offsetMinutes,
         }));
@@ -367,7 +352,6 @@ export async function processAttendanceDay(
           .where(
             and(
               eq(attendanceQuestions.personId, personId),
-              eq(attendanceQuestions.locationId, day.locationId),
               eq(attendanceQuestions.shiftKey, `rota:${p.id}`),
               eq(attendanceQuestions.active, true),
               sql`${attendanceQuestions.resolvedByEntryId} is null`,
@@ -380,7 +364,6 @@ export async function processAttendanceDay(
             .where(
               and(
                 eq(attendanceQuestions.personId, personId),
-                eq(attendanceQuestions.locationId, day.locationId),
                 eq(attendanceQuestions.shiftKey, `in:${match.start.entryId}`),
               ),
             );
