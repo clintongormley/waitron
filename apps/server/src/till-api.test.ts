@@ -130,7 +130,7 @@ let ana: { id: string };
 // the value read back here, not a hardcoded one.
 let abel: { id: string };
 let venueTaxId: string;
-// The one product seeded into the counter location's DEFAULT catalogue.
+// The one product seeded into the venue's DEFAULT catalogue.
 let aguaProduct: { id: string; catalogueId: string };
 let eachUnit: {
   id: string;
@@ -162,7 +162,7 @@ const suite = useVenueDb({
     );
     venueTaxId = tenant.rows[0]!.tax_id;
     // The products are authored under the BARE `es` key; `priceOrderLines` re-keys their
-    // descriptions to the location's `es-ES` before the working-order-line insert fires
+    // descriptions to the venue's `es-ES` before the working-order-line insert fires
     // `check_locales`, which demands the keys match EXACTLY.
     await seedVenue(db, {
       name: "Counter",
@@ -1358,7 +1358,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     expect(body).toEqual({
       locale: "es-ES",
       clockingAvailable: false,
-      // The RECEIPT locale — the location's first `invoice_locales` entry, DISTINCT from the UI `locale`
+      // The RECEIPT locale — the venue's first `invoice_locales` entry, DISTINCT from the UI `locale`
       // above (both es-ES for this ES venue, but sourced from different fields — the decoupling test below
       // drives them apart).
       invoiceLocale: "es-ES",
@@ -1367,7 +1367,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       onboardingIntent: "prepare",
       venueName: "Test SL",
       nif: venueTaxId,
-      // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the seeded location has none, so `[]` reaches
+      // The venue's ACTIVE kitchen courses (KDS-2 §5b) — the seeded venue has none, so `[]` reaches
       // the wire (the tab course picker offers nothing then).
       courses: [],
       // Cookieless: no device → no reader to resolve → `none`; the venue has no readers configured.
@@ -1440,14 +1440,14 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     }
   });
 
-  it("GET /api/till DECOUPLES the UI locale (venueLocale) from the receipt invoiceLocale (the location's language)", async () => {
-    // Drive the location's saved receipt language, `cfg.locale` and `venueLocale` (display) APART to
+  it("GET /api/till DECOUPLES the UI locale (venueLocale) from the receipt invoiceLocale (the venue's receipt language)", async () => {
+    // Drive the venue's saved receipt language, `cfg.locale` and `venueLocale` (display) APART to
     // prove the route reads each from its own source: the wire `locale` (UI) must follow
     // `venueLocale`, and `invoiceLocale` (the printed legal receipt's language) must follow the
-    // location's first `invoice_locales` entry — NEVER the venue default.
+    // venue's first `invoice_locales` entry — NEVER the UI's venue default.
     // A supported `ca-ES` is dropped by the UI venue-default derivation to `es-ES`, so binding the
     // receipt to `venueLocale` would flip a Catalan receipt to Spanish. Restored in `finally`, as the
-    // location is shared.
+    // venue row is shared.
     await suite.db.execute(
       sql`update locations set invoice_locales = '["ca-ES"]' where id = ${cfg.locationId}`,
     );
@@ -1631,7 +1631,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
   it("GET /api/till echoes the venue's ACTIVE kitchen courses in display order (KDS-2 §5b)", async () => {
     // Seed two courses out of display order, plus a deactivated one, to prove the boot read
     // returns the ACTIVE ones sorted by `display_order` (the coursing sequence the tab picker
-    // offers) and drops the retired one. Cleaned up in `finally` so the shared-location default `[]`
+    // offers) and drops the retired one. Cleaned up in `finally` so the shared venue's default `[]`
     // case stays order-independent.
     await suite.db.insert(kitchenCourses).values([
       { locationId: cfg.locationId, name: "Postres", displayOrder: 2, active: true },
@@ -2166,7 +2166,7 @@ describe("zone-offer catalogue routes", () => {
     expect(await res.json()).toMatchObject({ error: { code: "session.required" } });
   });
 
-  it("reads the location's accessible menus and product values", async () => {
+  it("reads the venue's accessible menus and product values", async () => {
     const catalogue = await withTransaction(suite.db, async (tx) => ({
       menus: await listAccessibleCatalogues(tx),
       products: (await listAvailableProducts(tx)).products,
