@@ -908,7 +908,8 @@ calendar.
 ## The tables `scripts/write-path-tables.json` lists are read-only to the application, and one guard is the whole of the enforcement
 
 `venue.db`'s `tenants`, `nodes` and `deployment`, and `node.db`'s `node_mode`, `node_mirror_link`,
-`node_primary_key`, `node_recovery_key` and `node_signing_key`. NOTHING BUT
+`node_primary_key`, `node_recovery_key`, `node_signing_key`, `node_handover_operations`,
+`node_handover_events` and `node_handover_restriction`. NOTHING BUT
 `scripts/write-path-tables.test.ts` REFUSES THEM.
 SQLite has no roles and no grants, and every path, request and provisioning alike, shares the one
 venue handle and the one node handle a process opens (`ownerDb` is a name, not a separate handle).
@@ -922,7 +923,7 @@ records the removal of the old matrix and the restrictions still awaiting indivi
 
 Real code does write them, legitimately: the setup-mode provision route reaches `tenants`,
 `nodes` and `deployment`; joining as a spare (`apps/server/src/adopt.ts`) reaches `deployment` and
-all five `node.db` tables; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
+every non-handover `node.db` table; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
 `node_mode`; first setup and replacing the recovery key reach `node_recovery_key`; first setup and
 `waitron-credentials rotate` reach `node_signing_key`; and the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) reaches `tenants` through
@@ -1517,7 +1518,7 @@ open under Task 1b. _2026-10-04 (A238):_ `tills` is gone; `sessions.device_id` n
 
 **What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
 which of three ties it uses: a `node_id` column every read and write names (`join_requests`,
-`node_sealed_state`, `recovery_packs`; the five `node.db` tables carry one too, though a key-ring
+`node_sealed_state`, `recovery_packs`; every `node.db` table carries one too, though a key-ring
 rotation reads `node_signing_key` whole), a seal only a box holding the key ring opens
 (`tenant_credentials`, whose ring a joining spare receives from the main box), or rows the
 transaction that wrote them deletes (`change_log`). Identity has no `local` table: slice-2

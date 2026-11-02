@@ -3,9 +3,13 @@ import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { getTableName } from "drizzle-orm";
+import { getTableConfig, type SQLiteTable } from "drizzle-orm/sqlite-core";
 import { lockVenueDatabase } from "@waitron/db";
 import {
   NODE_MIGRATIONS,
+  nodeHandoverEvents,
+  nodeHandoverOperations,
+  nodeHandoverRestriction,
   nodeMirrorLink,
   nodeMode,
   nodePrimaryKey,
@@ -449,31 +453,51 @@ export async function clearStartAgainMarker(venueDir: string): Promise<void> {
  * The most rows a first setup attempt may leave in each node.db table, each of them the attempt's
  * own node's: its recovery-key check (`installStagedNodeKey`) and its signing key (publication).
  */
-export const NODE_ROWS_A_FIRST_SETUP_WRITES: Readonly<Record<string, number>> = {
-  [getTableName(nodeMode)]: 0,
-  [getTableName(nodeMirrorLink)]: 0,
-  [getTableName(nodePrimaryKey)]: 0,
-  [getTableName(nodeRecoveryKey)]: 1,
-  [getTableName(nodeSigningKey)]: 1,
-};
+const NODE_TABLES: readonly (readonly [SQLiteTable, number])[] = [
+  [nodeMode, 0],
+  [nodeMirrorLink, 0],
+  [nodePrimaryKey, 0],
+  [nodeRecoveryKey, 1],
+  [nodeSigningKey, 1],
+  [nodeHandoverOperations, 0],
+  [nodeHandoverEvents, 0],
+  [nodeHandoverRestriction, 0],
+];
+
+export const NODE_ROWS_A_FIRST_SETUP_WRITES: Readonly<Record<string, number>> = Object.fromEntries(
+  NODE_TABLES.map(([table, most]) => [getTableName(table), most]),
+);
+
+/** The node set's own declared indexes, each with the table it must be on. */
+export const NODE_INDEXES: readonly { readonly name: string; readonly table: string }[] =
+  NODE_TABLES.flatMap(([table]) =>
+    getTableConfig(table).indexes.map((index) => ({
+      name: index.config.name,
+      table: getTableName(table),
+    })),
+  );
 
 /**
  * Why Start again may not delete this node.db, or null: it holds nothing, or exactly the node
- * migration set's tables and journal with no more rows than a first setup attempt writes, all of
- * them `nodeId`'s.
+ * migration set's tables, indexes and journal with no more rows than a first setup attempt writes,
+ * all of them `nodeId`'s.
  */
 function nodeRefusal(connection: DatabaseSync, nodeId: string | undefined): string | null {
   const objects = connection
-    .prepare("select type, name from sqlite_schema where name not like 'sqlite\\_%' escape '\\'")
-    .all() as { type: string; name: string }[];
+    .prepare(
+      "select type, name, tbl_name from sqlite_schema where name not like 'sqlite\\_%' escape '\\'",
+    )
+    .all() as { type: string; name: string; tbl_name: string }[];
   if (objects.length === 0) return null;
-  const expected = [
-    NODE_MIGRATIONS.migrationsTable,
-    ...Object.keys(NODE_ROWS_A_FIRST_SETUP_WRITES),
-  ];
-  if (!objects.every((found) => found.type === "table" && expected.includes(found.name)))
-    return "node.db holds a table";
-  if (objects.length !== expected.length) return "node.db lacks the node tables";
+  const tables = [NODE_MIGRATIONS.migrationsTable, ...Object.keys(NODE_ROWS_A_FIRST_SETUP_WRITES)];
+  const ours = (found: (typeof objects)[number]) =>
+    found.type === "table"
+      ? tables.includes(found.name)
+      : found.type === "index" &&
+        NODE_INDEXES.some((index) => index.name === found.name && index.table === found.tbl_name);
+  if (!objects.every(ours)) return "node.db holds a table";
+  if (objects.length !== tables.length + NODE_INDEXES.length)
+    return "node.db lacks the node tables";
   // SQLite counts from the smallest index unless told not to; a damaged index alone must not
   // make a readable table count as empty.
   const count = (name: string, where = "", ...values: string[]) =>
