@@ -11,6 +11,7 @@ import {
 import { AppError } from "@waitron/shared";
 import { admitRecordRemedy, REMEDY_KINDS, type RemedyKind } from "./record-remedy.js";
 import { applyCorrectedRecordFacts } from "./record-remedy-http.js";
+import { applyAbsentOriginalCancellation } from "./record-remedy-absent.js";
 
 // Legal enablement belongs to server policy; a client request cannot grant it.
 const ENABLED_REMEDIES: ReadonlySet<RemedyKind> = new Set();
@@ -58,9 +59,19 @@ export function mountRecordRemedies(
       const kind = body.kind as RemedyKind;
       const result = await withTransaction(ctx.db, async (tx) => {
         await admitRecordRemedy(tx, token, kind, enabledRemedies);
-        if (kind !== "record-correction" || ctx.recordGeneration === undefined)
+        if (ctx.recordGeneration === undefined)
           throw new AppError("fiscal.remedy_disabled", { kind });
-        return applyCorrectedRecordFacts(tx, ctx.recordGeneration, token, enabledRemedies, body);
+        if (kind === "record-correction")
+          return applyCorrectedRecordFacts(tx, ctx.recordGeneration, token, enabledRemedies, body);
+        if (kind === "absent-original-cancellation")
+          return applyAbsentOriginalCancellation(
+            tx,
+            ctx.recordGeneration,
+            token,
+            enabledRemedies,
+            body,
+          );
+        throw new AppError("fiscal.remedy_disabled", { kind });
       });
       return c.json(result, 200);
     }),

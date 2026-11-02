@@ -793,7 +793,7 @@ async function pendingWasSendable(
  * `rechazado` with one and the same code. A held row becomes `detenido` with `incidencia`, so
  * every later claimed row of its chain is held with it.
  *
- * A cancellation whose current alta (same chain, same invoice identity) is `rechazado` is set aside
+ * An ordinary cancellation whose current alta (same chain, same invoice identity) is `rechazado` is set aside
  * instead (`setAside`): `retenido`, with an incident and a filing case of its own
  * (`fiscal.anulacion_retenida`) for a person to resolve, never sent, and holding nothing behind it.
  *
@@ -802,7 +802,7 @@ async function pendingWasSendable(
  * added after it: they are sent with its retry, and a later row is held only once the refusals
  * immediately before it make a run of the limit.
  *
- * A held cancellation is set aside only after its current alta is `rechazado`
+ * A held ordinary cancellation is set aside only after its current alta is `rechazado`
  * (`setAsideHeldCancellations`).
  *
  * Short of such a run, a `rechazado` row holds nothing behind it (design §7.1,
@@ -879,11 +879,11 @@ async function haltOpenChainClaims(
   return kept;
 }
 
-/** True when `record`, the alias in the enclosing query, is a cancellation whose current alta
- * (same chain, same invoice identity) is `rechazado`. */
+// SinRegistroPrevio=S is the separate absent-original operation, not an ordinary cancellation.
 function cancelsRefusedOriginal(record: "r"): SQL {
   const alias = sql.raw(record);
-  return sql`(${alias}.tipo_registro = 'anulacion' and exists (
+  return sql`(${alias}.tipo_registro = 'anulacion'
+    and ${alias}.sin_registro_previo is not 'S' and exists (
     select 1 from registros_facturacion original
     join envios original_envio on original_envio.registro_id = original.id
     where original.tipo_registro = 'alta'
@@ -899,7 +899,7 @@ function cancelsRefusedOriginal(record: "r"): SQL {
   ))`;
 }
 
-/** Sets a cancellation of a refused current alta aside: `retenido`, never sent, with an incident and a
+/** Sets an ordinary cancellation of a refused current alta aside: `retenido`, never sent, with an incident and a
  * filing case of its own for a person to resolve. */
 async function setAside(
   tx: Transaction,
@@ -924,7 +924,7 @@ async function setAside(
   });
 }
 
-/** Sets aside each `detenido` cancellation whose current alta has since been refused, as
+/** Sets aside each `detenido` ordinary cancellation whose current alta has since been refused, as
  * `haltOpenChainClaims` does at claim time. Already counted halted when it was held. */
 async function setAsideHeldCancellations(
   tx: Transaction,

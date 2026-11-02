@@ -403,8 +403,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   invoice references. Invoice identity and generation facts remain server-owned; retries compare
   the complete decision and return the saved result after clock or delivery changes. Explicit
   accepted-with-errors decisions require the matching stored case and delivery and retain S/N
-  markers. Corrective-invoice and absent-original-cancellation workflows, held-record release,
-  accounting/refund qualification remain unfinished. The 2 November AEAT TEST run accepted
+  markers. The separately gated synthetic absent-original operation appends a cancellation with
+  `SinRegistroPrevio=S` only for a matching definitive rejection, with no existing cancellation or
+  later correction. It preserves the issued origin and accounting rows; retries return the saved
+  result. Corrective-invoice workflows, resolution of existing held cancellations, brake release
+  and staff accounting/refund qualification remain unfinished. The 2 November AEAT TEST run accepted
   an original and two successive S/N description corrections as `Correcto`; consultation matched
   the second correction's fingerprint. This one-identity probe does not enable production remedies.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).

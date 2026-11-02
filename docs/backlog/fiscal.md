@@ -490,9 +490,25 @@ version cases and report a malformed predecessor without rewriting it.
 The public `POST /management-api/fiscal-records/remedy` route refuses every remedy kind.
 Client-supplied enablement and operator fields cannot grant authority. No production action is
 enabled. The HTTP adapter covers synthetic corrections to stored invoice facts for rejected records
-and records accepted with errors. Corrective-invoice and absent-original-cancellation workflows,
-held-record release, staff cancellation/refund qualification and the live second-correction probe
-remain Task 8 work.
+and records accepted with errors. The separately gated synthetic absent-original operation is
+described below. Corrective-invoice workflows, resolution of existing held cancellations, brake
+release and staff cancellation/refund qualification remain Task 8 work. The live second-correction
+prerequisite is recorded in the dated entry below.
+
+**2 November 2026, Task 8 synthetic absent-original cancellation.** An administrator explicitly
+selects the operation for a current rejected alta with matching case evidence. Unknown outcomes,
+duplicate conflicts, a different case, an existing cancellation and a superseded version are
+refused. The new immutable cancellation keeps the invoice identity and issued origin, carries
+`SinRegistroPrevio=S` and joins the current chain head. Its delivery and resolution event commit
+together. A retry compares the complete decision and returns its saved result without another
+append. These checks leave sales and earlier fiscal rows unchanged; they do not qualify a staff
+refund or resolve an already generated unsuitable cancellation.
+
+The filing loop distinguishes this stored absent-original operation from an ordinary cancellation
+of a rejected original. Synthetic filing tests send the former and retain the ordinary hold.
+The production enabled set stays empty. This is an engineering path under the plan's synthetic
+gate, not an adviser answer or a new live AEAT receipt. Historical descriptions of ordinary
+cancellation holds below retain their original scope.
 
 **2 November 2026, Task 8 live second-correction prerequisite.** Verifactu
 [#150](https://github.com/waitron-io/verifactu/pull/150) adds the manual `double-correction`
