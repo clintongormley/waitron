@@ -35,7 +35,7 @@ import {
 import { readBillEditState } from "./bill-editing.js";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { recallToDraft } from "./draft-recall.js";
-import { fireGroup } from "./order-groups.js";
+import { correctJoin, fireGroup } from "./order-groups.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem } from "./line-cancel.js";
 import { cancelLine, cancelReasonId, GIVE_AWAY_REASON } from "./testing/cancel-line.js";
@@ -889,6 +889,38 @@ describe("A773 hold paper: added work", () => {
 
   const addedBurger = changed("Grill", "+1.000 x BURG");
 
+  const comp = async (tx: Transaction, venue: Venue, lineId: string) => {
+    await tx
+      .insert(persons)
+      .values({ id: OPERATOR, displayName: "Operator", role: "supervisor" })
+      .onConflictDoNothing({ target: persons.id });
+    const [reason] = await tx
+      .select({ id: adjustmentReasons.id })
+      .from(adjustmentReasons)
+      .where(eq(adjustmentReasons.name, GIVE_AWAY_REASON.name));
+    const [order] = await tx
+      .select({ revision: workingOrders.revision })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, venue.party.tabId));
+    await applyAdjustment(
+      tx,
+      venue.cfg,
+      {
+        admission: testTradingAdmission(),
+        orderId: venue.party.tabId,
+        expectedEdit: await readBillEditState(tx, venue.party.tabId),
+        submissionId: randomUUID(),
+        expectedRevision: order!.revision,
+        lineId,
+        reasonId: reason?.id ?? (await createAdjustmentReason(tx, GIVE_AWAY_REASON)).id,
+        action: "comp",
+        note: null,
+        operatorId: OPERATOR,
+      },
+      venue.cfg.locale,
+    );
+  };
+
   it("adding onion rings to a Requested burger tells Grill and Fryer on their HOLD paper", async () => {
     const venue = await fresh();
     await withTransaction(db, async (tx) => {
@@ -944,6 +976,141 @@ describe("A773 hold paper: added work", () => {
     });
   });
 
+  it("adding onion rings to a Requested burger tells only Fryer, the waiting station with HOLD paper", async () => {
+    const venue = await fresh();
+    await withTransaction(db, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.fryer]);
+      const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [burger(venue, true)], release: "hold" }],
+      });
+      const hold = await slips(tx, venue);
+      expect(hold.grill).toEqual([]);
+      for (const name of ["fryer", "pass"])
+        expect(hold[name]!.map((slip) => slip[0])).toEqual(["*** HOLD ***"]);
+      await setStationsWaitForPass(tx, true, [venue.stations.grill, venue.stations.fryer]);
+      await fireGroup(
+        tx,
+        venue.cfg,
+        venue.party.partyId,
+        placed.groups[0]!.id,
+        await partyArgs(tx, venue),
+      );
+      const before = await slips(tx, venue);
+      const grillNotices = await noticesAt(tx, venue.stations.grill);
+      vi.setSystemTime(new Date(LATER));
+
+      await edit(tx, venue, 1, {
+        extras: [
+          {
+            listId: venue.lists.burger,
+            picks: [
+              { productId: venue.products.chips, quantity: 1 },
+              { productId: venue.products.onionRings, quantity: 1 },
+            ],
+          },
+        ],
+      });
+
+      const after = await slips(tx, venue);
+      const added = (name: string) => after[name]!.slice(before[name]!.length);
+      const fryer = [
+        changed("Fryer", "-1.000 x CHIPS", "  > for BURG at Grill"),
+        changed("Fryer", "+1.000 x CHIPS", "  > for BURG at Grill"),
+        changed("Fryer", "+1.000 x RINGS", "  > for BURG at Grill"),
+      ];
+      expect(added("fryer")).toEqual(fryer);
+      expect(added("pass")).toEqual(fryer);
+      for (const name of ["grill", "kitchen", "bar"]) expect(added(name)).toEqual([]);
+      expect(await noticesAt(tx, venue.stations.grill)).toEqual(grillNotices);
+    });
+  });
+
+  it.each([
+    ["held", "raised"],
+    ["fired", "raised"],
+    ["held", "comped"],
+    ["fired", "comped"],
+  ] as const)(
+    "raising a water whose Requested chips wait at Fryer tells Fryer on its HOLD paper, its group %s, the water %s",
+    async (state, shape) => {
+      const venue = await fresh();
+      await withTransaction(db, async (tx) => {
+        await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.fryer]);
+        const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
+          operatorId: OPERATOR,
+          groups: [
+            {
+              lines: [
+                {
+                  menuItemId: venue.tables.offerFor(venue.products.water),
+                  quantity: "1",
+                  extras: [
+                    {
+                      listId: venue.lists.water,
+                      picks: [{ productId: venue.products.chips, quantity: 1 }],
+                    },
+                  ],
+                },
+              ],
+              release: "hold",
+            },
+          ],
+        });
+        const hold = await slips(tx, venue);
+        for (const name of ["fryer", "pass"])
+          expect(hold[name]!.map((slip) => slip[0])).toEqual(["*** HOLD ***"]);
+        await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
+        if (state === "fired")
+          await fireGroup(
+            tx,
+            venue.cfg,
+            venue.party.partyId,
+            placed.groups[0]!.id,
+            await partyArgs(tx, venue),
+          );
+        if (shape === "comped") {
+          const [water] = await tx
+            .select({ id: workingOrderLines.id })
+            .from(workingOrderLines)
+            .where(
+              and(
+                eq(workingOrderLines.workingOrderId, venue.party.tabId),
+                eq(workingOrderLines.productId, venue.products.water),
+              ),
+            );
+          await comp(tx, venue, water!.id);
+        }
+        const before = await slips(tx, venue);
+        vi.setSystemTime(new Date(LATER));
+
+        await edit(tx, venue, 1, { quantity: "2" });
+
+        const chips = await tx
+          .select({
+            stationId: ticketItems.stationId,
+            requestedAt: ticketItems.requestedAt,
+            firedAt: ticketItems.firedAt,
+          })
+          .from(ticketItems)
+          .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+          .where(eq(ticketItems.workingOrderId, venue.party.tabId))
+          .orderBy(workingOrderLines.lineNo);
+        const requestedAt = (at: string) => (state === "fired" ? at : null);
+        expect(chips).toEqual([
+          { stationId: venue.stations.fryer, requestedAt: requestedAt(AT), firedAt: null },
+          { stationId: venue.stations.fryer, requestedAt: requestedAt(LATER), firedAt: null },
+        ]);
+        const after = await slips(tx, venue);
+        const added = (name: string) => after[name]!.slice(before[name]!.length);
+        const addedChips = changed("Fryer", "+1.000 x CHIPS", "  > for H2O, no preparation");
+        expect(added("fryer")).toEqual([addedChips]);
+        expect(added("pass")).toEqual([addedChips]);
+        for (const name of ["grill", "kitchen", "bar"]) expect(added(name)).toEqual([]);
+      });
+    },
+  );
+
   it("raising a Requested burger's line by a portion tells Grill on its HOLD paper", async () => {
     const venue = await fresh();
     await withTransaction(db, async (tx) => {
@@ -984,35 +1151,7 @@ describe("A773 hold paper: added work", () => {
     const venue = await fresh();
     await withTransaction(db, async (tx) => {
       const line = await firedFromHold(tx, venue, false);
-      await tx
-        .insert(persons)
-        .values({ id: OPERATOR, displayName: "Operator", role: "supervisor" })
-        .onConflictDoNothing({ target: persons.id });
-      const [reason] = await tx
-        .select({ id: adjustmentReasons.id })
-        .from(adjustmentReasons)
-        .where(eq(adjustmentReasons.name, GIVE_AWAY_REASON.name));
-      const [order] = await tx
-        .select({ revision: workingOrders.revision })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, venue.party.tabId));
-      await applyAdjustment(
-        tx,
-        venue.cfg,
-        {
-          admission: testTradingAdmission(),
-          orderId: venue.party.tabId,
-          expectedEdit: await readBillEditState(tx, venue.party.tabId),
-          submissionId: randomUUID(),
-          expectedRevision: order!.revision,
-          lineId: line.id,
-          reasonId: reason?.id ?? (await createAdjustmentReason(tx, GIVE_AWAY_REASON)).id,
-          action: "comp",
-          note: null,
-          operatorId: OPERATOR,
-        },
-        venue.cfg.locale,
-      );
+      await comp(tx, venue, line.id);
       const before = await slips(tx, venue);
       vi.setSystemTime(new Date(LATER));
 
@@ -1043,6 +1182,78 @@ describe("A773 hold paper: added work", () => {
       expect(added("grill")).toEqual([addedBurger]);
       expect(added("pass")).toEqual([addedBurger]);
       for (const name of ["fryer", "kitchen", "bar"]) expect(added(name)).toEqual([]);
+    });
+  });
+
+  // A select is known by the fields it names.
+  const readsOf = (selects: { mock: { calls: unknown[][] } }, fields: string[]) =>
+    selects.mock.calls.filter(
+      ([named]) =>
+        named !== undefined &&
+        Object.keys(named as object)
+          .sort()
+          .join() === [...fields].sort().join(),
+    ).length;
+  const groupPaperRead = ["id", "state", "displayNumber", "holdPrintedAt"];
+  const printedGroupRead = ["id", "displayNumber"];
+  const joinedItemsRead = [
+    "workingOrderId",
+    "workingOrderLineId",
+    "stationId",
+    "quantity",
+    "requestedAt",
+    "firedAt",
+    "madeHere",
+  ];
+
+  it("raising a burger in a held group whose HOLD never printed reads no joined items", async () => {
+    const venue = await fresh();
+    await withTransaction(db, async (tx) => {
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [burger(venue, true)], release: "hold" }],
+      });
+      const selects = vi.spyOn(tx, "select");
+      try {
+        await edit(tx, venue, 1, { quantity: "2" });
+        expect(readsOf(selects, joinedItemsRead)).toBe(0);
+      } finally {
+        selects.mockRestore();
+      }
+    });
+  });
+
+  it("correcting two joins to a held group whose HOLD printed reads its HOLD paper once", async () => {
+    const venue = await fresh();
+    await withTransaction(db, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.grill]);
+      const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [burger(venue, false), burger(venue, false)], release: "hold" }],
+      });
+      const groupId = placed.groups[0]!.id;
+      const lines = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, venue.party.tabId))
+        .orderBy(workingOrderLines.lineNo);
+      const before = await slips(tx, venue);
+      vi.setSystemTime(new Date(LATER));
+      const selects = vi.spyOn(tx, "select");
+      try {
+        await correctJoin(
+          tx,
+          venue.cfg,
+          lines.map((line) => ({ groupId, lineIds: [line.id] })),
+        );
+        expect(readsOf(selects, groupPaperRead)).toBe(1);
+        expect(readsOf(selects, printedGroupRead)).toBe(0);
+        expect(readsOf(selects, joinedItemsRead)).toBe(2);
+      } finally {
+        selects.mockRestore();
+      }
+      const after = await slips(tx, venue);
+      expect(after.grill!.slice(before.grill!.length)).toEqual([addedBurger, addedBurger]);
     });
   });
 });

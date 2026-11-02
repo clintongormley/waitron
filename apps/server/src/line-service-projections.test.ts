@@ -374,7 +374,9 @@ describe("charged cancellation read projections", () => {
         .set({ holdPrintedAt: AT })
         .where(eq(orderGroups.id, order.parent.groupId!));
       await recordHeldPaper(tx, order.parent.groupId!, new Set([venue.stationId, extraStationId]));
-      await correctJoin(tx, venue.cfg, order.parent.groupId!, [order.parent.id]);
+      await correctJoin(tx, venue.cfg, [
+        { groupId: order.parent.groupId!, lineIds: [order.parent.id] },
+      ]);
     });
     const notices = await inTx(venue, async (tx) => {
       const parentNotices = await listStationNotices(tx, venue.cfg, venue.stationId);

@@ -439,14 +439,14 @@ export async function placeGroups(
       { routing },
     );
     if (group.joinGroupId !== undefined) {
-      await correctJoin(
-        tx,
-        cfg,
-        groupId,
-        inserted
-          .filter((row) => row.groupId === groupId && row.parentLineId == null)
-          .map((row) => row.id!),
-      );
+      await correctJoin(tx, cfg, [
+        {
+          groupId,
+          lineIds: inserted
+            .filter((row) => row.groupId === groupId && row.parentLineId == null)
+            .map((row) => row.id!),
+        },
+      ]);
     } else if (!fire) {
       await printHoldTickets(tx, cfg, [groupId]);
     }
@@ -2218,6 +2218,12 @@ export interface HoldPaperItem {
   firedAt: string | null;
 }
 
+export interface HoldPaper {
+  (groupId: string, item: HoldPaperItem): number | undefined;
+  /** Whether the group has HOLD paper that any item could be corrected on. */
+  has(groupId: string): boolean;
+}
+
 /**
  * The HOLD paper number an unfired item is corrected under, or undefined for none (plan D56). A
  * held group whose HOLD ticket printed corrects every unfired item; a fired group corrects only a
@@ -2227,8 +2233,8 @@ export interface HoldPaperItem {
 export async function holdPaperFor(
   tx: Transaction,
   groupIds: readonly string[],
-): Promise<(groupId: string, item: HoldPaperItem) => number | undefined> {
-  if (groupIds.length === 0) return () => undefined;
+): Promise<HoldPaper> {
+  if (groupIds.length === 0) return Object.assign(() => undefined, { has: () => false });
   const ids = [...new Set(groupIds)];
   const rows = await tx
     .select({
@@ -2244,7 +2250,7 @@ export async function holdPaperFor(
     tx,
     rows.filter((row) => row.state === "fired").map((row) => row.id),
   );
-  return (groupId, item) => {
+  const judge = (groupId: string, item: HoldPaperItem) => {
     const group = groups.get(groupId);
     if (group === undefined || item.firedAt !== null) return undefined;
     if (group.state === "held")
@@ -2253,6 +2259,13 @@ export async function holdPaperFor(
       return undefined;
     return paper.get(groupId)?.has(item.stationId) === true ? group.displayNumber : undefined;
   };
+  return Object.assign(judge, {
+    has: (groupId: string) => {
+      const group = groups.get(groupId);
+      if (group?.state === "held") return group.holdPrintedAt !== null;
+      return group?.state === "fired" && (paper.get(groupId)?.size ?? 0) > 0;
+    },
+  });
 }
 
 /** Changed held work on a queued HOLD ticket, identified by its permanent group number. */
@@ -2339,44 +2352,49 @@ async function heldItemsOf(
 }
 
 /**
- * `+N` for dish lines that just joined this group, at the stations that have its HOLD paper
- * ({@link recordJoiningStations}); nothing when its HOLD ticket was never queued.
+ * `+N` for dish lines that just joined each group, at the stations that have its HOLD paper
+ * ({@link recordJoiningStations}), for each item {@link holdPaperFor} corrects there. The paper is
+ * read once for every join: recording a joining station never changes its answers, since a held
+ * group's do not depend on stations and a fired group's take only items at stations already
+ * recorded.
  */
 export async function correctJoin(
   tx: Transaction,
   cfg: TradingContext,
-  groupId: string,
-  lineIds: readonly string[],
+  joins: readonly { groupId: string; lineIds: readonly string[] }[],
 ): Promise<void> {
-  const held = (await printedHeldGroups(tx, [groupId])).get(groupId);
-  const holdPaper = await holdPaperFor(tx, [groupId]);
-  const joined = await tx
-    .select({
-      workingOrderId: ticketItems.workingOrderId,
-      workingOrderLineId: ticketItems.workingOrderLineId,
-      stationId: ticketItems.stationId,
-      quantity: firedQuantity,
-      requestedAt: ticketItems.requestedAt,
-      firedAt: ticketItems.firedAt,
-      madeHere: ticketItems.madeHere,
-    })
-    .from(ticketItems)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(onDishesOrTheirExtras(tx, lineIds))
-    .orderBy(asc(workingOrderLines.lineNo));
-  // A held group's printed paper takes every joined item, made-here ones included; a fired
-  // group's takes only the Requested items holdPaperFor accepts.
-  const changes = joined.flatMap(({ requestedAt, ...item }) => {
-    const group = held ?? holdPaper(groupId, { ...item, requestedAt });
-    return group === undefined ? [] : [{ ...item, groupId, group }];
-  });
-  if (changes.length === 0) return;
-  // Made-here work is fired at once and gets no slip, so it never puts a station on paper.
-  await recordJoiningStations(
+  const holdPaper = await holdPaperFor(
     tx,
-    changes.filter((change) => change.firedAt === null && !change.madeHere),
+    joins.map((join) => join.groupId),
   );
-  await correctHoldTickets(tx, cfg, changes, { kind: "HOLD CHANGED", direction: "added" });
+  for (const { groupId, lineIds } of joins) {
+    if (!holdPaper.has(groupId)) continue;
+    const joined = await tx
+      .select({
+        workingOrderId: ticketItems.workingOrderId,
+        workingOrderLineId: ticketItems.workingOrderLineId,
+        stationId: ticketItems.stationId,
+        quantity: firedQuantity,
+        requestedAt: ticketItems.requestedAt,
+        firedAt: ticketItems.firedAt,
+        madeHere: ticketItems.madeHere,
+      })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(onDishesOrTheirExtras(tx, lineIds))
+      .orderBy(asc(workingOrderLines.lineNo));
+    const changes = joined.flatMap((item) => {
+      const group = holdPaper(groupId, item);
+      return group === undefined ? [] : [{ ...item, groupId, group }];
+    });
+    if (changes.length === 0) continue;
+    // Made-here work is fired at once and gets no slip, so it never puts a station on paper.
+    await recordJoiningStations(
+      tx,
+      changes.filter((change) => change.firedAt === null && !change.madeHere),
+    );
+    await correctHoldTickets(tx, cfg, changes, { kind: "HOLD CHANGED", direction: "added" });
+  }
 }
 
 /** Whether `quantity` is exactly the line's stored quantity; a malformed one is not. */

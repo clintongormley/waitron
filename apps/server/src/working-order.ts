@@ -5600,16 +5600,19 @@ interface EditableOrder {
   firedCourseIds: Set<string>;
 }
 
+/** Whether the dish or any of its extras is Requested: sent by the waiter and not yet fired. */
+function hasRequestedPart(parent: EditableParent): boolean {
+  return [parent, ...parent.children].some(
+    ({ ticket }) => ticket !== null && ticket.firedAt === null && ticket.requestedAt !== null,
+  );
+}
+
 /**
  * What a line the kitchen has not fired is waiting for, in {@link EditableOrder.newWork}'s terms: a
  * Requested item was sent by the waiter; a held or recalled item waits to be sent; a line with no
  * item was released when it was stamped sent, waits in its held group when it has one, and is
  * otherwise a line nothing has sent.
  */
-function isRequested(ticket: EditableLine["ticket"]): boolean {
-  return ticket !== null && ticket.firedAt === null && ticket.requestedAt !== null;
-}
-
 function kitchenStateOf(line: EditableLine): EditableOrder["newWork"] {
   if (line.ticket !== null) return initiatedAt(line.ticket) === null ? "hold" : "fire";
   if (line.sentAt !== null) return "fire";
@@ -6575,7 +6578,7 @@ async function applyLineEdits(
         });
       }
       nextOrdinal.set(cohortId, ordinal);
-      if ((kitchen === "hold" || isRequested(parent.ticket)) && parent.groupId !== null)
+      if ((kitchen === "hold" || hasRequestedPart(parent)) && parent.groupId !== null)
         joinedHeld.push({ groupId: parent.groupId, lineIds: copyIds });
     }
   }
@@ -6594,7 +6597,7 @@ async function applyLineEdits(
     if (
       as.joins !== undefined &&
       groupId !== null &&
-      (as.kitchen === "hold" || isRequested(as.joins.ticket))
+      (as.kitchen === "hold" || hasRequestedPart(as.joins))
     ) {
       joinedHeld.push({
         groupId,
@@ -6736,7 +6739,7 @@ async function applyLineEdits(
   const heldGroup = newGroups.get("hold");
   if (heldGroup !== undefined) await printHoldTickets(tx, cfg, [heldGroup]);
   // As a raise of the line itself would: `+N` at the stations that have its group's HOLD paper.
-  for (const { groupId, lineIds } of joinedHeld) await correctJoin(tx, cfg, groupId, lineIds);
+  await correctJoin(tx, cfg, joinedHeld);
   await refreshKitchenAllergyClashes(
     tx,
     cfg,
