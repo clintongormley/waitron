@@ -27,6 +27,7 @@ import {
   type GroupRelease,
 } from "./order-groups.js";
 import { submitGroups } from "./testing/group-submit-fixture.js";
+import { cancelLine } from "./testing/cancel-line.js";
 import { addTabRound, sendLines, updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { OPERATOR } from "./testing/party-venue.js";
@@ -180,7 +181,7 @@ describe("A773 request kind", () => {
     });
   });
 
-  it("gives an edit's Fire now group added when the party's only group is held (D57)", async () => {
+  it("gives an edit's Fire now group new_order when the party's only group is held (D57)", async () => {
     const submitted = await submit([{ release: "hold", lines: [burger()] }]);
     const tabId = split.party.tabId;
     // A dish the legacy tab Send fired outside any group is what lets the edit fire new work.
@@ -215,7 +216,62 @@ describe("A773 request kind", () => {
           ne(orderGroups.id, submitted.groups[0]!.id),
         ),
       );
-    expect(after).toEqual([{ state: "fired", requestKind: "added" }]);
+    expect(after).toEqual([{ state: "fired", requestKind: "new_order" }]);
+  });
+
+  describe("A773 request kind — first food", () => {
+    async function groupRow(id: string) {
+      const [row] = await suite.db
+        .select({ state: orderGroups.state, requestKind: orderGroups.requestKind })
+        .from(orderGroups)
+        .where(eq(orderGroups.id, id));
+      return row;
+    }
+
+    async function lineNoOf(lineId: string) {
+      const [row] = await suite.db
+        .select({ lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, lineId));
+      return row!.lineNo;
+    }
+
+    it("gives starters sent after held mains new_order, and the mains keep next_course when fired", async () => {
+      const mains = (await submit([{ release: "hold", lines: [burger()] }])).groups[0]!.id;
+      const starters = (await submit([{ release: "fire", lines: [water()] }])).groups[0]!.id;
+      expect(await kinds([mains, starters])).toEqual({
+        [mains]: "next_course",
+        [starters]: "new_order",
+      });
+      const partyId = split.party.partyId;
+      const args = await command(partyId);
+      await inTx((tx) => fireGroup(tx, split.cfg, partyId, mains, args));
+      expect(await groupRow(mains)).toEqual({ state: "fired", requestKind: "next_course" });
+    });
+
+    it("gives a send after a fired group whose dishes were all cancelled added", async () => {
+      const first = (await submit([{ release: "fire", lines: [water()] }])).groups[0]!;
+      const lineNo = await lineNoOf(first.lineIds[0]!);
+      await inTx((tx) => cancelLine(tx, split.cfg, split.party.tabId, lineNo));
+      expect(await groupRow(first.id)).toEqual({ state: "fired", requestKind: "new_order" });
+      const next = (await submit([{ release: "fire", lines: [burger()] }])).groups[0]!.id;
+      expect(await kinds([next])).toEqual({ [next]: "added" });
+    });
+
+    it("gives a send after an emptied held group new_order", async () => {
+      const held = (await submit([{ release: "hold", lines: [burger()] }])).groups[0]!;
+      const lineNo = await lineNoOf(held.lineIds[0]!);
+      await inTx((tx) => cancelLine(tx, split.cfg, split.party.tabId, lineNo));
+      expect(await groupRow(held.id)).toEqual({ state: "removed", requestKind: "next_course" });
+      const next = (await submit([{ release: "fire", lines: [water()] }])).groups[0]!.id;
+      expect(await kinds([next])).toEqual({ [next]: "new_order" });
+    });
+
+    it("gives a first Fire now send new_order and a second added", async () => {
+      const first = (await submit([{ release: "fire", lines: [water()] }])).groups[0]!.id;
+      const second = (await submit([{ release: "fire", lines: [burger()] }])).groups[0]!.id;
+      expect(await kinds([first, second])).toEqual({ [first]: "new_order", [second]: "added" });
+    });
   });
 
   it("writes no group for a counter order", async () => {

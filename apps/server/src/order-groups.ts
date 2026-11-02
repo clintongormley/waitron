@@ -1379,7 +1379,7 @@ export async function nextFireKind(
   const [group] = await tx
     .select({ id: orderGroups.id })
     .from(orderGroups)
-    .where(and(eq(orderGroups.partyId, partyId), ne(orderGroups.state, "removed")))
+    .where(and(eq(orderGroups.partyId, partyId), eq(orderGroups.state, "fired")))
     .limit(1);
   return group === undefined ? "new_order" : "added";
 }
