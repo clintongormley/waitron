@@ -286,13 +286,7 @@ export async function readDeviceEquipment(
           printerInfo,
           state.role === "cash_drawer" || state.role === "invoice" ? null : printerHolder,
           printerEquipment.listed
-            .filter(
-              (p) =>
-                p.profileId === device.profileId &&
-                p.locationId === device.locationId &&
-                p.role === state.role &&
-                p.active,
-            )
+            .filter((p) => p.profileId === device.profileId && p.role === state.role && p.active)
             .map((p) => p.id),
         ),
       ),
@@ -367,17 +361,16 @@ export async function selectDeviceEquipment(
       .select({
         pickupRoles: printers.pickupRoles,
         active: printers.active,
-        locationId: printers.locationId,
       })
       .from(printers)
       .where(and(eq(printers.id, input.selection.id), isNull(printers.deletedAt)));
     if (printer === undefined) throw new AppError("printer.not_found", { id: input.selection.id });
     const [device] = await tx
-      .select({ locationId: devices.locationId, profileId: devices.deviceProfileId })
+      .select({ profileId: devices.deviceProfileId })
       .from(devices)
       .where(eq(devices.id, input.deviceId));
     const field = FIELD[printer.pickupRoles[0] ?? "receipt"];
-    if (!printer.active || device?.locationId !== printer.locationId) {
+    if (!printer.active || device === undefined) {
       throw new AppError("device.binding_invalid", { field });
     }
     if (printer.pickupRoles.length === 0) {

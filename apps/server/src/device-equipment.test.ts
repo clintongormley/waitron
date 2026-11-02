@@ -6,7 +6,6 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   devices,
-  locations,
   printerHolders,
   printJobs,
   printers,
@@ -581,30 +580,15 @@ describe("a device's equipment as it joins, switches profile and is revoked", ()
 });
 
 describe("readDeviceEquipment", () => {
-  it("offers the listed printers in list order, leaving out those switched off or at another location", async () => {
+  it("offers the listed printers in list order, leaving out those switched off", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
     const here = await seedPrinter(venue, "Aquí", { hasCashDrawer: true });
     const counter = await seedPrinter(venue, "Mostrador");
     const off = await seedPrinter(venue, "Apagada");
-    const [away] = await suite.db
-      .insert(locations)
-      .values({ name: "Otra", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
-      .returning({ id: locations.id });
-    const [far] = await suite.db
-      .insert(printers)
-      .values({
-        locationId: away!.id,
-        name: "Fuera",
-        transport: "network_tcp",
-        host: "10.0.0.8",
-        hasCashDrawer: true,
-      })
-      .returning({ id: printers.id });
     await printerLists(profile, {
-      receiptPrinterIds: [far!.id, counter, off, here],
-      paymentSlipPrinterIds: [far!.id],
-      cashDrawerPrinterIds: [far!.id, here],
+      receiptPrinterIds: [counter, off, here],
+      cashDrawerPrinterIds: [here],
     });
     const a = await enrol(venue, "Caja A", profile);
     await suite.db.update(printers).set({ active: false }).where(eq(printers.id, off));
@@ -943,20 +927,12 @@ describe("printer pick-up sets", () => {
     expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
   });
 
-  it("an empty pick-up set refuses foreign-location and deleted printers", async () => {
+  it("an empty pick-up set refuses a deleted printer", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
     const printer = await seedPrinter(venue, "Handheld", { portable: true });
     await printerLists(profile, { receiptPrinterIds: [printer] });
     const a = await enrol(venue, "A", profile);
-    const [otherLocation] = await suite.db
-      .insert(locations)
-      .values({ name: "Other", invoiceLocales: ["en-GB"], operationDescription: "Restaurant" })
-      .returning({ id: locations.id });
-    await suite.db
-      .update(printers)
-      .set({ pickupRoles: [], locationId: otherLocation!.id })
-      .where(eq(printers.id, printer));
     const pickUp = () =>
       inTx((tx) =>
         selectDeviceEquipment(tx, {
@@ -966,17 +942,9 @@ describe("printer pick-up sets", () => {
           via: "scan",
         }),
       );
-    await expect(pickUp()).rejects.toMatchObject({
-      code: "device.binding_invalid",
-      params: { field: "receiptPrinterId" },
-    });
     await suite.db
       .update(printers)
-      .set({
-        locationId: venue.cfg.locationId,
-        active: false,
-        deletedAt: "2026-10-13T10:00:00.000Z",
-      })
+      .set({ pickupRoles: [], active: false, deletedAt: "2026-10-13T10:00:00.000Z" })
       .where(eq(printers.id, printer));
     await expect(pickUp()).rejects.toMatchObject({
       code: "printer.not_found",

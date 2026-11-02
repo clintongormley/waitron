@@ -289,14 +289,14 @@ describe("which printer each of a device's roles resolves to", () => {
     expect(await inTx((tx) => readProfilePrinterLists(tx, profile))).toEqual(next);
   });
 
-  it.each(["at another location", "unlisted", "switched off"] as const)(
+  it.each(["unlisted", "switched off"] as const)(
     "refuses a printer %s as not_permitted, leaving the device unchanged",
     async (shape) => {
       await inTx((tx) =>
         setProfilePrinterLists(tx, profile, lists({ receiptPrinterIds: [away, f1] })),
       );
       if (shape === "switched off") await setActive(f1, false);
-      const target = shape === "at another location" ? away : shape === "unlisted" ? f2 : f1;
+      const target = shape === "unlisted" ? f2 : f1;
       expect(await choose(a, "receipt", { id: target })).toEqual({
         ok: false,
         refusal: "not_permitted",
@@ -375,16 +375,8 @@ describe("which printer each of a device's roles resolves to", () => {
         lists({ receiptPrinterIds: [f2], receiptPrinterDefaultId: f2 }),
       ),
     );
-    // Its profile's default is a fixed printer at another location, so it resolves None.
-    const awayTill = (
-      await seedDevice(suite.db, {
-        locationId: elsewhere,
-        label: "Away",
-        profileId: other.profileId,
-      })
-    ).deviceId;
     const unknown = "00000000-0000-4000-8000-000000000000";
-    const ids = [a, b, other.deviceId, awayTill];
+    const ids = [a, b, other.deviceId];
 
     const batch = await inTx((tx) => resolveDevicePrinterIds(tx, [...ids, unknown], "receipt"));
 
@@ -396,7 +388,6 @@ describe("which printer each of a device's roles resolves to", () => {
         [a, p1],
         [b, null],
         [other.deviceId, f2],
-        [awayTill, null],
       ]),
     );
     expect(await inTx((tx) => resolveDevicePrinterIds(tx, [], "receipt"))).toEqual(new Map());
@@ -427,7 +418,6 @@ describe("which printer each of a device's roles resolves to", () => {
     expect(read.devices.find((device) => device.id === a)).toEqual({
       id: a,
       profileId: profile,
-      locationId: loc,
     });
     expect(read.roles.get(a)).toEqual(await inTx((tx) => readPrinterRoles(tx, a)));
     expect(read.roles.get(b)).toEqual(await inTx((tx) => readPrinterRoles(tx, b)));
@@ -436,7 +426,6 @@ describe("which printer each of a device's roles resolves to", () => {
         profileId: profile,
         role: "receipt",
         id: away,
-        locationId: elsewhere,
         active: true,
         isDefault: false,
       },
@@ -444,7 +433,6 @@ describe("which printer each of a device's roles resolves to", () => {
         profileId: profile,
         role: "receipt",
         id: p1,
-        locationId: loc,
         active: true,
         isDefault: true,
       },
@@ -452,7 +440,6 @@ describe("which printer each of a device's roles resolves to", () => {
         profileId: profile,
         role: "receipt",
         id: f1,
-        locationId: loc,
         active: false,
         isDefault: false,
       },
@@ -462,7 +449,6 @@ describe("which printer each of a device's roles resolves to", () => {
         profileId: profile,
         role: "cash_drawer",
         id: drawer,
-        locationId: loc,
         active: true,
         isDefault: false,
       },
@@ -470,7 +456,6 @@ describe("which printer each of a device's roles resolves to", () => {
     expect(read.printers.get(p1)).toEqual({
       id: p1,
       name: "Handheld",
-      locationId: loc,
       kind: "receipt",
       portable: true,
       active: true,
@@ -1074,15 +1059,6 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
   );
 
   it.each(["page", "receipt"] as const)(
-    "resolves None when the default %s printer is at another location",
-    async (kind) => {
-      const away = kind === "page" ? awayPage : awayPrinter;
-      await listInvoices([away], away);
-      expect(await resolve(a, "invoice")).toBeNull();
-    },
-  );
-
-  it.each(["page", "receipt"] as const)(
     "a switched-off %s printer choice stays chosen and resolves to it, with no fallback to the default",
     async (kind) => {
       const chosen = kind === "page" ? page : receiptPrinter;
@@ -1103,7 +1079,6 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
 
   it.each([
     ["an unlisted page printer", () => page, () => listInvoices([receiptPrinter])],
-    ["a page printer at another location", () => awayPage, () => listInvoices([awayPage])],
     [
       "a switched-off page printer",
       () => page,
@@ -1218,7 +1193,7 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
   });
 
   it("reads the invoice role with each listed printer and its kind", async () => {
-    await listInvoices([page, receiptPrinter, awayPage], page);
+    await listInvoices([page, receiptPrinter], page);
 
     const read = await inTx((tx) => readPrinterEquipment(tx, [a], { lists: true }));
 
@@ -1233,7 +1208,6 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
         profileId: profile,
         role: "invoice",
         id: page,
-        locationId: loc,
         active: true,
         isDefault: true,
       },
@@ -1241,15 +1215,6 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
         profileId: profile,
         role: "invoice",
         id: receiptPrinter,
-        locationId: loc,
-        active: true,
-        isDefault: false,
-      },
-      {
-        profileId: profile,
-        role: "invoice",
-        id: awayPage,
-        locationId: elsewhere,
         active: true,
         isDefault: false,
       },
@@ -1257,14 +1222,12 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
     expect(read.printers.get(page)).toEqual({
       id: page,
       name: "Office",
-      locationId: loc,
       kind: "a4",
       portable: false,
       active: true,
       holderDeviceId: null,
     });
     expect(read.printers.get(receiptPrinter)).toMatchObject({ kind: "receipt" });
-    expect(read.printers.get(awayPage)).toMatchObject({ locationId: elsewhere });
     const unlisted = await inTx((tx) => readPrinterEquipment(tx, [a], { lists: false }));
     expect([...unlisted.printers.keys()]).toEqual([page]);
   });

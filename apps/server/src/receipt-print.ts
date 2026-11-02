@@ -106,21 +106,19 @@ export async function resolvePaymentSlipPrinter(
 export type InvoicePrinter = { kind: "a4" | "receipt"; id: string; name: string };
 
 /**
- * The printer the device's full invoices resolve to: its own choice, else its profile's default at
- * its location. `undefined` when it resolves to none, the printer is switched off or, given `at`, is
- * at another location, or the origin is not a device; no other printer stands in.
+ * The printer the device's full invoices resolve to: its own choice, else its profile's default.
+ * `undefined` when it resolves to none, the printer is switched off, or the origin is not a device;
+ * no other printer stands in.
  */
 export async function resolveInvoicePrinter(
   tx: Transaction,
   origin: Origin,
-  at?: { locationId: string },
 ): Promise<InvoicePrinter | undefined> {
   if (origin.source !== "device") return undefined;
   const equipment = await readPrinterEquipment(tx, [origin.deviceId], { lists: false });
   const role = equipment.roles.get(origin.deviceId)?.find((state) => state.role === "invoice");
   const printer = role?.resolvedId == null ? undefined : equipment.printers.get(role.resolvedId);
   if (printer === undefined || !printer.active) return undefined;
-  if (at !== undefined && printer.locationId !== at.locationId) return undefined;
   return { kind: printer.kind, id: printer.id, name: printer.name };
 }
 
@@ -617,7 +615,6 @@ export async function enqueueTenderRefundDrawer(
         eq(tenderRefunds.method, "cash"),
         eq(tenderRefunds.deviceId, cfg.origin.deviceId),
         eq(tenderRefunds.nodeId, cfg.nodeId),
-        eq(tenderRefunds.locationId, cfg.locationId),
       ),
     );
   if (refund === undefined) return;
