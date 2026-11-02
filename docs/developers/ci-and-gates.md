@@ -806,10 +806,10 @@ session) to each test page as files start, and leaves it attached for the rest o
 the run. It records, for every file, when the file last reported anything: its start,
 its collection, a case starting or ending, or a hook starting or ending. Every 5
 seconds it looks for files that have been silent for longer than 60 seconds plus the
-longest the current step may legitimately run: the running case's own `timeout` (or,
+running case's own `timeout` (or,
 with none, the project's `testTimeout`) plus the project's `hookTimeout`, because a
 case's `onTestFinished` callbacks run under `hookTimeout` before the case reports its
-result. A timeout missing from the configuration counts as 0. A timeout of exactly 0
+result. A timeout missing from the configuration adds nothing to that sum. A timeout of exactly 0
 means Vitest bounds nothing, so such a file is never paused; it gets one `stack:` line
 saying `a time limit of 0 bounds nothing, so its page is not paused`. How long a file
 has run overall is not the trigger: a healthy file can run for minutes.
@@ -824,8 +824,8 @@ sampled, and never again. Each sampled page gives one of these:
   experiment below). The positions are in the code the browser was served, after
   Vite's transform, so they can differ from the source file's lines.
 - `no JavaScript paused within 3s and the page answers`: no pause arrived within 3
-  seconds, and the page answered a one-line evaluation (`Runtime.evaluate` of `0`)
-  within 2 seconds.
+  seconds, and the page answered `Debugger.disable`, `Debugger.enable` and a one-line
+  evaluation (`Runtime.evaluate` of `0`), all within 2 seconds.
 - `no JavaScript paused within 3s and the page did not answer in 2s`: neither came
   back.
 - `the pause request was refused (<message>); the page answers`, or the same ending
@@ -869,6 +869,8 @@ Experiments, 1 November 2026, in headless Chromium:
   (`its page was running JavaScript:` and one frame, `raf`); the file's 3 tests
   passed.
 
+These ran the reporter as it was before A1307, which timed a sample from the file's start.
+
 Cost: whole-shard cost was not measured. A local script ran that same Vitest command
 (default thresholds, so no page was paused) six times, interleaved, three with the
 debugger attached and three with a subclass skipping the attach. The means of the whole command's wall-clock time, start-up included, were
@@ -889,8 +891,7 @@ the case "A461 visual Menus Structure 390 'en-GB' 'dark'" in
 `apps/dashboard/src/screens/menus-screen.test.ts` failed with "Hook timed out in
 30000ms": its `onTestFinished(() => page.viewport(1280, 844))` hook hung from the same
 instant the reporter, then pausing any file that had run 60 seconds, printed a stack
-for that file at 112.5 seconds. The file was healthy; it runs about four minutes of
-short cases. Locally in `apps/dashboard`, a scratch test calling `page.viewport` 300
+for that file at 112.5 seconds. The file was healthy. On 2 November 2026, locally in `apps/dashboard`, a scratch test calling `page.viewport` 300
 times while a scratch reporter sent `Debugger.pause` every 25 ms and resumed every
 pause at once hung a call for over 5 seconds in 3 of 3 runs (at rounds 42, 35 and
 10); without the pausing reporter, 3 runs of 300 calls never hung. Which step of
