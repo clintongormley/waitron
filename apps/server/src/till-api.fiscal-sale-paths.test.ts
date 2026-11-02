@@ -414,7 +414,7 @@ async function loginSession(
     body: JSON.stringify({ personId: operatorId, pin: "5555" }),
   });
   expect(login.status).toBe(200);
-  return login.headers.get("set-cookie")!;
+  return `${login.headers.get("set-cookie")!.split(";")[0]!}; ${deviceCookie}`;
 }
 
 /** Create a till profile with the reader, drawer and cash capabilities needed by payment tests. */
