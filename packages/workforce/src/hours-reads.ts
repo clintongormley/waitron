@@ -1,5 +1,5 @@
 import { asc } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { type Transaction, venueLocationId } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError, businessDayAt, type BusinessDayClock } from "@waitron/shared";
 import type {
@@ -20,7 +20,6 @@ import { readRecordedEntries, readTimeRecord } from "./record-reads.js";
 import "./errors.js";
 
 interface HoursInput {
-  locationId: string;
   selection: HoursSelection;
   clock: BusinessDayClock;
   now: Date;
@@ -41,8 +40,6 @@ async function windowFor(
   input: HoursInput,
 ): Promise<{ period: Period; businessDay: string }> {
   if (
-    typeof input.locationId !== "string" ||
-    !input.locationId ||
     input.selection === null ||
     typeof input.selection !== "object" ||
     !["week", "month", "pay-period"].includes(input.selection.kind) ||
@@ -96,8 +93,9 @@ async function personInWindow(
   tx: Transaction,
   input: HoursInput & { personId: string },
   window: { period: Period; businessDay: string },
+  locationId: string,
 ): Promise<PersonHours> {
-  const { personId, locationId } = input;
+  const { personId } = input;
   if (typeof personId !== "string" || !personId) throw invalid();
   const { period, businessDay } = window;
   const entries = await readRecordedEntries(tx, { personId });
@@ -106,7 +104,7 @@ async function personInWindow(
   const fullRecord = projectTimeRecord(entries);
   const openShifts = openShiftsFor(entries);
   const pending = {
-    prompts: inbox.prompts.filter((p) => p.locationId === locationId),
+    prompts: inbox.prompts,
     items: inbox.items.filter((i) =>
       ["waiting-manager", "waiting-worker", "disputed"].includes(i.status),
     ),
@@ -178,10 +176,11 @@ export async function readPersonHours(
   tx: Transaction,
   input: HoursInput & { personId: string },
 ): Promise<PersonHours> {
-  return personInWindow(tx, input, await windowFor(tx, input));
+  return personInWindow(tx, input, await windowFor(tx, input), await venueLocationId(tx));
 }
 export async function readManagerHours(tx: Transaction, input: HoursInput): Promise<ManagerHours> {
   const window = await windowFor(tx, input);
+  const locationId = await venueLocationId(tx);
   const rows = await tx
     .select({ personId: persons.id, displayName: persons.displayName })
     .from(persons)
@@ -190,10 +189,10 @@ export async function readManagerHours(tx: Transaction, input: HoursInput): Prom
   for (const row of rows)
     people.push({
       ...row,
-      hours: await personInWindow(tx, { ...input, personId: row.personId }, window),
+      hours: await personInWindow(tx, { ...input, personId: row.personId }, window, locationId),
     });
   return {
-    locationId: input.locationId,
+    locationId,
     selection: { ...input.selection },
     ...window,
     asOf: input.now.toISOString(),

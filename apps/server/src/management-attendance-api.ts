@@ -217,8 +217,8 @@ export function mountManagementAttendanceApi(
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           await authorize(tx, token);
-          const scope = parseAttendanceLocationQuery(new URL(c.req.url).searchParams);
-          return readAttendanceManagerQueue(tx, scope.locationId);
+          parseAttendanceLocationQuery(new URL(c.req.url).searchParams);
+          return readAttendanceManagerQueue(tx);
         }),
       );
     }),
