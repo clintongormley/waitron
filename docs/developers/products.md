@@ -359,6 +359,15 @@ does not change the 20-language Cloud contract documented in the open Translate 
 
 ## Content languages per region
 
+When you copy a Prepare configuration into a fresh Live venue, the imported content-language
+setting must keep the languages required by the bundle's country and province enabled. You can
+still choose another enabled language as the default. The catalogue checks the saved setting
+before staging replaces an earlier artifact. Before the import replaces database rows, it also
+checks the destination venue's country and province, which may differ from the bundle's.
+Malformed saved language lists and defaults are refused as `content.languages_invalid`;
+a missing required language is `content.language_required`. The regional and retained-artifact cases run in
+`packages/provisioning/src/configuration-transfer.content-languages.test.ts` (A989).
+
 **2026-10-17, A682:** Spanish stays enabled throughout Spain, including the Basque Country,
 Navarre and an unknown province. This is an enabled-language rule: you can save blank Spanish
 customer text and it remains a gap. Other regional defaults, additional enabled languages,

@@ -1678,6 +1678,16 @@ tables, caught by hand in review.
 
 ### Retiring configuration tables also retires their export format
 
+**Check imported settings against the destination's retained configuration too.** A989's
+run-it review imported a Barcelona bundle into a venue configured for Madrid and observed that
+the destination kept Madrid. Checking only the bundle therefore cannot establish the
+destination's language requirements. Modules can use `configurationTransfer.beforeImport`
+to read the destination in the import transaction before any transferred table is replaced.
+The source-Madrid/destination-Barcelona case in
+`packages/provisioning/src/configuration-transfer.content-languages.test.ts` refuses the copy
+without Catalan and retains the destination setting; its accepting control imports Catalan
+without changing the province. The same suite checks that a module's hook sees the old rows.
+
 Implementation pointer, 2026-10-17: the configuration staging and transfer services now live in
 `packages/provisioning/src/configuration-import.ts` and `configuration-transfer.ts`. Their server
 entry points forward to those implementations. The owned setup command uses the same allowlisted

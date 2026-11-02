@@ -1,5 +1,8 @@
 import { VAT_CLASSES, type VatClass } from "./vat-rates.js";
-import { AppError } from "@waitron/shared";
+import { AppError, type ContentLanguages } from "@waitron/shared";
+import { resolveInstalledContentLanguageRules } from "@waitron/country-packs";
+import { readTenant, readVenue, type Transaction } from "@waitron/db";
+import { checkedContentLanguages } from "./content-languages.js";
 import { colorOrNull } from "./color-inheritance.js";
 import { HOME_DEVICES, homeDisplayProblem } from "./device-home.js";
 import { checkIncludeFolderRows } from "./include-folder.js";
@@ -74,7 +77,49 @@ function sharedName(names: readonly string[]): string | undefined {
   return firstNewClash(names.map((name) => ({ name, changed: true })))?.name.trim();
 }
 
-export function validateCatalogueConfiguration(tables: Readonly<Record<string, Rows>>): void {
+function checkContentLanguages(
+  rows: Rows | undefined,
+  geography?: { readonly country: string; readonly area: string | null },
+): void {
+  if (rows === undefined) return;
+  if (geography === undefined) throw new AppError("setup.request_invalid", { field: "venue" });
+  const { required } = resolveInstalledContentLanguageRules(geography);
+  if (rows.length === 0) {
+    if (required[0] !== undefined)
+      throw new AppError("content.language_required", { language: required[0] });
+    return;
+  }
+  if (rows.length !== 1) throw new AppError("content.languages_invalid", {});
+  const row = rows[0]!;
+  if (row.id !== 1) throw new AppError("content.languages_invalid", {});
+  let config: ContentLanguages;
+  try {
+    const languages: unknown =
+      typeof row.languages === "string" ? JSON.parse(row.languages) : undefined;
+    if (
+      typeof row.default_language !== "string" ||
+      !Array.isArray(languages) ||
+      languages.some((language) => typeof language !== "string")
+    )
+      throw new AppError("content.languages_invalid", {});
+    config = checkedContentLanguages({ defaultLanguage: row.default_language, languages });
+    // Imports store the raw row, so accept only the codes the normal writer stores.
+    if (
+      config.defaultLanguage !== row.default_language ||
+      languages.some((language) => !config.languages.includes(language))
+    )
+      throw new AppError("content.languages_invalid", {});
+  } catch {
+    throw new AppError("content.languages_invalid", {});
+  }
+  checkedContentLanguages(config, required);
+}
+
+export function validateCatalogueConfiguration(
+  tables: Readonly<Record<string, Rows>>,
+  geography?: { readonly country: string; readonly area: string | null },
+): void {
+  checkContentLanguages(tables.content_languages, geography);
   for (const row of tables.units ?? []) {
     for (const [column, field] of [
       ["staff_name", "staffName"],
@@ -177,5 +222,13 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     { name: "menu_details" },
   ],
   validate: validateCatalogueConfiguration,
+  async beforeImport(tx: Transaction, tables: Readonly<Record<string, Rows>>): Promise<void> {
+    const country = (await readTenant(tx))?.country;
+    if (country === undefined) throw new AppError("setup.request_invalid", { field: "venue" });
+    checkContentLanguages(tables.content_languages, {
+      country,
+      area: (await readVenue(tx)).province,
+    });
+  },
   afterImport: storeProductNameKeys,
 } as const;

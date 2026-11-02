@@ -631,6 +631,8 @@ export function validateConfigurationBundle(
     createdAt: new Date(bundle.createdAt),
     timeZone,
     dayCutover: bundle.venue.location.dayCutover.slice(0, 5),
+    country: bundle.venue.country,
+    area: bundle.venue.location.province,
   };
   for (const module of modules) {
     const contribution = module.configurationTransfer;
@@ -647,6 +649,10 @@ export async function importConfigurationTables(
   targetVersions: Readonly<Record<string, number>>,
 ): Promise<void> {
   validateConfigurationBundle(bundle, modules, targetVersions);
+  for (const module of modules) {
+    const contribution = module.configurationTransfer;
+    if (contribution?.kind === "tables") await contribution.beforeImport?.(tx, bundle.tables);
+  }
   const incoming = checkedRows(bundle, modules);
   const incomingStations =
     incoming.find(([declaration]) => declaration.name === "kitchen_stations")?.[1] ?? [];
