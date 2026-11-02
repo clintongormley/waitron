@@ -6480,7 +6480,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   consumer slices. S2 landed (#2384): invoice inputs, documents and receipt readers use the venue.
   F1 landed (#2383): `@waitron/db/testing/seed.js` has `seedVenue` and `seedWorkingOrder`,
   `packages/db`'s tests seed through them, and `scripts/a1301-seed-codemod.mjs` rewrites the common
-  shapes and reports the rest, so F2–F5 can start. S5 landed (#2386): the default and extra menus
+  shapes and reports the rest, so F2–F5 can start. F5 landed (#2403): `apps/server`'s `s`–`z`
+  tests, its test helpers, its `test/` and `scripts/` tests and the root `behavioural-triggers`
+  seed use those helpers; the lines left (fixed ids the helpers cannot keep, second-location cases
+  and standby copies) are listed with their owning slice in its commit messages. Two raw
+  `insert into working_orders` statements are not among them (`working-order.test.ts`'s
+  `seedForeignNodeOrder`, `station-order-migration.test.ts`): the schema slice that drops
+  `working_orders.location_id` changes them. S5 landed (#2386): the default and extra menus
   and the receipt languages are read from the one venue (`readVenueInvoiceLocales` in `@waitron/db`
   reads the languages alone), the menu routes moved to `/management-api/venue/…`, and
   `location.not_found` is gone. S3 removes the fiscal module's location checks,
@@ -6521,8 +6527,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [working-time plan](superpowers/plans/2026-11-02-a1301-working-time-slices.md)
 
 - **A1301 S5 left "location" in files other slices own.** Wording to change:
-  `apps/server/src/testing/zone-offers.ts` and a
-  `till-api.test.ts` comment (F5), `apps/server/scripts/demo-seed/seed-catalogue.ts` (S19), and the
+  `apps/server/scripts/demo-seed/seed-catalogue.ts` (S19), and the
   English and Spanish guide `content-and-images.md`, whose receipt-language paragraph still speaks
   of "the location's default".
 
