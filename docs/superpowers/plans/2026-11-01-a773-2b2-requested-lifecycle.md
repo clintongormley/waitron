@@ -1360,6 +1360,9 @@ Each run separately; read exit status and a nonzero `Tests` count.
   draft recall, the remove-charge cancel and a station move, built on `heldPaperStations` for fired
   groups beside B3.4's FIRE marking. Today only the keep-charge cancel corrects it. When B3 builds
   the fired-group HOLD corrections it may change B2.6b case 5's "no HOLD CHANGED" pin, and says so.
+- **An edit that cuts or removes a Requested dish whose station already printed HOLD paper**
+  (D26) now prints nothing (removal was already silent). B3 decides the slip, beside the HOLD
+  corrections above.
 - **The made-here extras mapping** (D36): which pass card and column shows the Requested extras of
   a made-here dish in a held group, and whether HOLD paper lists them (`printHoldTickets`,
   `heldItemsOf`, `correctJoin`, `readOnHoldTickets`, `enqueueOrderKitchenNoteChange` all read
@@ -1374,6 +1377,9 @@ Each run separately; read exit status and a nonzero `Tests` count.
   check); B3.4/B3.5 pin what the release does with it.
 - **A release to a station whose output is down** (D34): whether the pass is warned before
   pressing Fire, since the closed-station printer-down alert rises only once the dish is released.
+- **The dark-pass alert's one-hour window for Requested work** (D34): `firedPassDishes`
+  (`pass-board.ts`) stops counting a dish once it has waited for the pass more than an hour, though
+  it cannot move until the pass sends it. B3 confirms the window is wanted for Requested work.
 - **The rest of the order's wording** (D33, Owner question 4): if the owner chooses no "(on hold)" mark
   for a dish waiting for the pass, B3.3 or B4 changes `rest-of-order.ts:72` and inverts B2.6a
   case 6.

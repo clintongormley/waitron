@@ -250,8 +250,6 @@ const readyHere = {
   state: "ready",
 } as const;
 
-// The rules this mirrors: `unsentDishLines`, `isReleased` and `takesExtras` in working-order.ts,
-// and `heldExtras` in order-groups.ts.
 describe("dishCounts", () => {
   it("counts a dish with no kitchen item, group or send as unsent", () => {
     expect(dishCounts(dish({ sentAt: null, ticket: null }), [], false)).toEqual({

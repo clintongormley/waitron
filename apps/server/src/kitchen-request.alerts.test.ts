@@ -70,6 +70,7 @@ async function items(tx: Transaction, orderId: string) {
       lineId: ticketItems.workingOrderLineId,
       productId: workingOrderLines.productId,
       stationId: ticketItems.stationId,
+      quantity: ticketItems.quantity,
       requestedAt: ticketItems.requestedAt,
       firedAt: ticketItems.firedAt,
       groupId: workingOrderLines.groupId,
@@ -221,7 +222,7 @@ describe("A773 requested lifecycle: alerts and slips", () => {
       await addTabRound(tx, venue.cfg, venue.party.tabId, [dish(venue, "burger", "2", 1)]);
       const rows = await items(tx, venue.party.tabId);
       const burger = rows.find((row) => row.productId === venue.products.burger)!;
-      expect(burger).toMatchObject({ requestedAt: AT, firedAt: null });
+      expect(burger).toMatchObject({ quantity: 2000, requestedAt: AT, firedAt: null });
       expect(rows.find((row) => row.productId === venue.products.chips)).toMatchObject({
         stationId: venue.stations.fryer,
         firedAt: AT,
@@ -237,6 +238,9 @@ describe("A773 requested lifecycle: alerts and slips", () => {
       expect(fryer[0]).toContain("CHIPS");
       // The pass prints a copy of Fryer's void and nothing of the burger's own.
       expect(newSince(before, after, "pass")).toEqual(fryer);
+      // With no void, the pass's later release works from this reduced quantity.
+      const cut = (await items(tx, venue.party.tabId)).find((row) => row.id === burger.id);
+      expect(cut).toMatchObject({ quantity: 1000, requestedAt: AT, firedAt: null });
     });
   });
 
