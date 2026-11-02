@@ -1571,6 +1571,8 @@ still reachable (a Spanish venue with no province requires nothing), so it stays
 - **The Prepare-to-Live configuration copy still skips the required-language check**
   (`packages/catalogue/src/configuration-transfer.ts`), as before; it stays in the backlog when
   Task 6 closes the rest of "Product languages are hard-coded at setup".
+  _2026-11-02, A989: superseded by the import check described in
+  [Content languages per region](../../developers/products.md#content-languages-per-region)._
 - **A fallback demo in an area that requires languages** lists every required language under
   Missing translations, because its text is English only (Task 2). No pack reaches this today.
   _2026-10-07, as built (W109-2): wrong — the seed writes the data set's own text in every enabled

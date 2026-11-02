@@ -1619,6 +1619,8 @@ export type ModuleConfigurationTransfer =
           readonly createdAt: Date;
           readonly timeZone: string;
           readonly dayCutover: string;
+          readonly country: string;
+          readonly area: string | null;
         },
       ) => void;
       /** Runs in the import's transaction after every module's rows are inserted, each module's in

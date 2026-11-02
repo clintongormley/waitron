@@ -157,11 +157,10 @@ export function contentLanguagesOr(
   return { defaultLanguage, languages: [defaultLanguage] };
 }
 
-export async function writeContentLanguages(
-  tx: Transaction,
+export function checkedContentLanguages(
   config: ContentLanguages,
   requiredLanguages: readonly string[] = [],
-): Promise<void> {
+): ContentLanguages {
   const defaultLanguage = contentLanguageCode(config.defaultLanguage);
   const languages = config.languages.map(contentLanguageCode);
   if (
@@ -173,10 +172,18 @@ export async function writeContentLanguages(
   }
   const missing = requiredLanguages.find((language) => !languages.includes(language));
   if (missing !== undefined) throw new AppError("content.language_required", { language: missing });
-  const values = {
+  return {
     defaultLanguage,
     languages: [defaultLanguage, ...languages.filter((language) => language !== defaultLanguage)],
   };
+}
+
+export async function writeContentLanguages(
+  tx: Transaction,
+  config: ContentLanguages,
+  requiredLanguages: readonly string[] = [],
+): Promise<void> {
+  const values = checkedContentLanguages(config, requiredLanguages);
   await tx
     .insert(contentLanguages)
     .values(values)

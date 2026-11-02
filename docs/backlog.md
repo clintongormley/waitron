@@ -969,11 +969,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Products list, which tells them to try again later**, because a refused read counts as a failed
   one, and trying again changes nothing for them. Left open by W86 (#1203) and A655.
 
-- **One writer still skips the required-language check (`content.language_required`) — OPEN.**
-  The Prepare-to-Live configuration copy (`packages/catalogue/src/configuration-transfer.ts`)
-  copies the saved row as it is, unplanned. The demo seed
-  (`apps/server/scripts/demo-seed/seed-catalogue.ts`) runs the check since W109-4 (#1322).
-
 - **Translate all: an Edit translations dialog left open anywhere clears the "Translations ready"
   notice.**
   [Detail](backlog/catalogue.md#translate-all-an-edit-translations-dialog-left-open-anywhere-clears-the-translations-ready-notice)

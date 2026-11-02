@@ -631,6 +631,8 @@ export function validateConfigurationBundle(
     createdAt: new Date(bundle.createdAt),
     timeZone,
     dayCutover: bundle.venue.location.dayCutover.slice(0, 5),
+    country: bundle.venue.country,
+    area: bundle.venue.location.province,
   };
   for (const module of modules) {
     const contribution = module.configurationTransfer;
