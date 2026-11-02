@@ -1,15 +1,14 @@
 import { randomUUID } from "node:crypto";
 import {
   invoiceSeries,
-  locations,
-  nodes,
   sales,
   tenants,
+  venueLocationId,
   type Database,
   type Transaction,
 } from "@waitron/db";
 import { cadenas, envios, registroSif, registrosFacturacion } from "@waitron/fiscal-verifactu";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { sql } from "drizzle-orm";
 
 // Every row is written through its table definition, never raw SQL, so each column's `$defaultFn`
@@ -58,7 +57,8 @@ export function freshFiscalIds(overrides: Partial<FiscalIds> = {}): FiscalIds {
 }
 
 export interface SeedParentsOptions {
-  /** Reuse a fixed FK closure (e.g. to seed the SAME parents on two databases). Unset → all random. */
+  /** Fixed ids for the closure. Unless `reuseExistingParents`, the venue and node are seeded here and
+   * their ids replace any given. Unset → all random. */
   ids?: Partial<FiscalIds>;
   /** registro_sif.numero_instalacion. Default: deterministic-unique per call. */
   numeroInstalacion?: number;
@@ -108,14 +108,14 @@ export async function seedFiscalParents(
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId, legalName: "Waitron SL" })
       .onConflictDoNothing({ target: tenants.id });
-    await db.insert(locations).values({
-      id: ids.locationId,
+    await seedVenue(db, {
       name: "Local principal",
       invoiceLocales: ["es"],
       operationDescription: "Venta en establecimiento",
     });
-    await seedDevice(db, { locationId: ids.locationId });
-    await db.insert(nodes).values({ id: ids.nodeId, locationId: ids.locationId, name: "Node 1" });
+    ids.locationId = await venueLocationId(db);
+    await seedDevice(db);
+    ids.nodeId = await seedNode(db);
     await db.insert(invoiceSeries).values({ id: ids.seriesId, nodeId: ids.nodeId, code: "A" });
   }
   if (!opts.skipSale) await insertFiscalSale(db, ids);
@@ -221,8 +221,7 @@ export interface SeedFiscalRegistroOptions extends SeedParentsOptions, RegistroO
 }
 
 /**
- * Seeds the FK closure AND the registro (optionally its `cadenas`/`envios` companions). A caller that
- * needs the same parents on two databases composes {@link seedFiscalParents} + {@link insertFiscalRegistro}.
+ * Seeds the FK closure AND the registro (optionally its `cadenas`/`envios` companions).
  */
 export async function seedFiscalRegistro(
   db: Database,
