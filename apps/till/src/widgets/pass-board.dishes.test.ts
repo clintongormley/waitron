@@ -1,5 +1,6 @@
 import { page } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { setContentLanguages } from "@waitron/ui";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
@@ -426,6 +427,96 @@ describe("A773 pass board widget: dishes", () => {
     const dish = el.shadowRoot!.querySelector('[data-item-allergens="burger"]')!;
     expect(dish.textContent).toContain(allergenName("gluten", currentLocale()));
     expect(dish.textContent).not.toContain(milk);
+  });
+
+  it.each([
+    ["en-GB", [28], "#27 (was 28)"],
+    ["es-ES", [28], "#27 (antes 28)"],
+    ["en-GB", [], "#27"],
+    ["en-GB", undefined, "#27"],
+  ] as const)(
+    "heads a card with the numbers its dishes were sent under (%s, %j)",
+    async (locale, formerNumbers, text) => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const el = await inProgress([passItem()], {
+          orders: [
+            {
+              orderId: "order-1",
+              orderNumber: 27,
+              ...(formerNumbers === undefined ? {} : { formerNumbers: [...formerNumbers] }),
+              tableLabel: "T1",
+              kitchenNote: null,
+            },
+          ],
+        });
+        expect(
+          el.shadowRoot!.querySelector(".ticket-head .number")!.textContent!.replace(/\s+/g, " "),
+        ).toBe(text);
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
+
+  it("keeps a dish's and its extras' receipt snapshots with an unrelated content default", async () => {
+    const previous = currentLocale();
+    setLocale("en-GB");
+    setContentLanguages({ defaultLanguage: "ca", languages: ["ca"] });
+    try {
+      const el = await inProgress([
+        passItem({
+          id: "bread",
+          name: "Pan",
+          qty: "1.000",
+          modifiers: [{ descriptions: { "es-ES": "Mantequilla" } }],
+        }),
+      ]);
+      expect(names(el)).toEqual(["1× Pan"]);
+      expect(itemOf(el, "bread").querySelector(".item-modifiers")!.textContent).toContain(
+        "+ Mantequilla",
+      );
+    } finally {
+      setLocale(previous);
+    }
+  });
+
+  it("draws a fractional dish with its frozen unit", async () => {
+    const el = await inProgress([
+      passItem({ name: "Pan", qty: "0.375", unitName: { "es-ES": "kg" }, unitPrecision: 3 }),
+    ]);
+    expect(names(el)).toEqual(["0.375 kg× Pan"]);
+  });
+
+  it("leaves the unit out for a dish sold in Each, and keeps it for every other unit", async () => {
+    const el = await inProgress([
+      passItem({
+        id: "ti-each",
+        name: "Croqueta",
+        qty: "2.000",
+        unitName: { "es-ES": "ud" },
+        unitPrecision: 0,
+        soldInEach: true,
+      }),
+      passItem({
+        id: "ti-kg",
+        name: "Pulpo",
+        qty: "0.500",
+        unitName: { "es-ES": "kg" },
+        unitPrecision: 3,
+        soldInEach: false,
+      }),
+      passItem({
+        id: "ti-g",
+        name: "Almendras",
+        qty: "200.000",
+        unitName: { "es-ES": "g" },
+        unitPrecision: 0,
+        soldInEach: false,
+      }),
+    ]);
+    expect(names(el)).toEqual(["2× Croqueta", "0.5 kg× Pulpo", "200 g× Almendras"]);
   });
 
   it("draws no allergy marker and no kitchen note on a card without them", async () => {

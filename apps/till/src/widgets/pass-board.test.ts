@@ -473,6 +473,30 @@ describe("A773 pass board widget", () => {
     expect(cardOf(still, "forgotten").classList.contains("flash")).toBe(false);
   });
 
+  it("keeps a ready dish's lateness: its Forgotten mark, its card's colour and the overdue count", async () => {
+    const ready = passCard({
+      key: "ready",
+      readyAt: minutesAgo(1),
+      allReady: true,
+      items: [
+        passItem({
+          id: "ready-item",
+          phase: "ready",
+          state: "ready",
+          readyAt: minutesAgo(1),
+          queuedAt: minutesAgo(20),
+          band: "fresh",
+        }),
+      ],
+    });
+    const el = await mountBoard({ board: passBoard({ ready: [ready] }) });
+    expect(itemOf(el, "ready-item").querySelector("[data-forgotten]")).not.toBeNull();
+    expect(cardOf(el, "ready").classList.contains("age-forgotten")).toBe(true);
+    expect(root(el).querySelector("[data-overdue-count]")!.textContent!.trim()).toBe(
+      `1 ${t("station.overdue_count")}`,
+    );
+  });
+
   const overviewFacts: OverviewFact[] = [
     {
       lineId: "o-1",

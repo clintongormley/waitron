@@ -14,8 +14,7 @@ import type {
   TillApi,
 } from "../api/client.js";
 import { PASS_NOW, passBoard, passCard, passItem } from "../../test/pass-board-fixtures.js";
-import type { TillPassScreen } from "./till-pass-screen.js";
-import "./till-pass-screen.js";
+import { TillPassScreen } from "./till-pass-screen.js";
 import type { TillStationScreen } from "./till-station-screen.js";
 import "./till-station-screen.js";
 
@@ -260,6 +259,144 @@ describe("A773 pass screen", () => {
         expect(boardOf(el)!.mode).toBe("all_stations");
         expect(cardKeys(el)).toEqual([]);
       }));
+
+    const goneLine = () => kitchenScreenNoticeText({ kind: "unavailable", screen: "pass" });
+    const unavailableLines = (el: TillPassScreen) =>
+      [...el.shadowRoot!.querySelectorAll("[data-unavailable]")].map((line) =>
+        line.textContent!.trim(),
+      );
+    const boardButtons = (el: TillPassScreen) =>
+      boardOf(el)!.shadowRoot!.querySelectorAll(
+        "[data-pass-fire], [data-group-ready], [data-ready], [data-reprint]",
+      );
+
+    it("shows the pass board again when the pass screen is given back while its line shows", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi();
+        api.getDeviceIdentity
+          .mockResolvedValueOnce(identity([chosen("pass", false)]))
+          .mockResolvedValue(identity([chosen("pass")]));
+        const el = await mount({ api });
+        expect(unavailableLines(el)).toEqual([goneLine()]);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        expect(unavailableLines(el)).toEqual([]);
+        expect(cardKeys(el)).toEqual(["bill:a"]);
+      }));
+
+    it("keeps its line when reading the choice again fails", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi();
+        api.getDeviceIdentity
+          .mockResolvedValueOnce(identity([chosen("pass", false)]))
+          .mockRejectedValue({ code: "server.internal" });
+        const el = await mount({ api });
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        expect(unavailableLines(el)).toEqual([goneLine()]);
+        expect(api.getExpoBoard).not.toHaveBeenCalled();
+        expect(boardOf(el)).toBeNull();
+      }));
+
+    it("ignores an older choice read that answers after a newer one", () =>
+      withFakeTimers(async () => {
+        const late = deferred<DeviceIdentity>();
+        const api = fakeApi();
+        api.getDeviceIdentity
+          .mockResolvedValueOnce(identity([chosen("pass", false)]))
+          .mockReturnValueOnce(late.promise)
+          .mockResolvedValue(identity([chosen("pass")]));
+        const el = await mount({ api });
+        await vi.advanceTimersByTimeAsync(30_000);
+        await flush(el);
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(3);
+        expect(cardKeys(el)).toEqual(["bill:a"]);
+        late.resolve(identity([chosen("pass", false)]));
+        await flush(el);
+        expect(unavailableLines(el)).toEqual([]);
+        expect(cardKeys(el)).toEqual(["bill:a"]);
+      }));
+
+    it("leaves the pass for the pass monitor at the next refresh when the choice is now a monitor", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          getDevicePassMonitorBoard: vi.fn().mockResolvedValue(deviceBoard(boardB)),
+        });
+        const el = await mount({ api });
+        expect(cardKeys(el)).toEqual(["bill:a"]);
+        expect(boardButtons(el).length).toBeGreaterThan(0);
+        api.getDeviceIdentity.mockResolvedValue(identity([chosen("pass_monitor")]));
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(api.getDevicePassMonitorBoard).toHaveBeenCalledOnce();
+        expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+        expect(boardOf(el)!.mode).toBe("monitor");
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+        expect(boardButtons(el)).toHaveLength(0);
+      }));
+
+    it("marks its pass board out of date, reading no other board, when a refresh is refused device.unauthorized and the choice is unchanged", () =>
+      listening((reboot) =>
+        withFakeTimers(async () => {
+          const api = fakeApi({
+            getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          });
+          const el = await mount({ api });
+          api.getDevicePassBoard.mockRejectedValue({ code: "device.unauthorized" });
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el);
+          expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+          expect(api.getDevicePassMonitorBoard).not.toHaveBeenCalled();
+          expect(api.getExpoBoard).not.toHaveBeenCalled();
+          expect(el.shadowRoot!.querySelector(".stale[data-stale]")).not.toBeNull();
+          expect(cardKeys(el)).toEqual(["bill:a"]);
+          expect(reboot).not.toHaveBeenCalled();
+        }),
+      ));
+
+    it.each([
+      ["pass", "getDevicePassBoard", "pass", true],
+      ["pass_monitor", "getDevicePassMonitorBoard", "monitor", false],
+    ] as const)(
+      "leaves All stations for a %s chosen while it is open, and keeps reading it",
+      (kind, read, mode, buttons) =>
+        withFakeTimers(async () => {
+          const api = fakeApi({
+            getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(boardB)),
+            getDevicePassMonitorBoard: vi.fn().mockResolvedValue(deviceBoard(boardB)),
+          });
+          const el = await mount({ api });
+          expect(api.getExpoBoard).toHaveBeenCalledOnce();
+          api.getDeviceIdentity.mockResolvedValue(identity([chosen(kind)]));
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el);
+          expect(api.getExpoBoard).toHaveBeenCalledOnce();
+          expect(api[read]).toHaveBeenCalledOnce();
+          expect(boardOf(el)!.mode).toBe(mode);
+          expect(cardKeys(el)).toEqual(["bill:b"]);
+          expect(boardButtons(el).length > 0).toBe(buttons);
+          await vi.advanceTimersByTimeAsync(15_000);
+          expect(api.getDeviceIdentity).toHaveBeenCalledTimes(3);
+          expect(api[read]).toHaveBeenCalledTimes(2);
+        }),
+    );
+
+    it("refreshes All stations every fifteen seconds at a till with no pass choice", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi();
+        const el = await mount({ api });
+        expect(cardKeys(el)).toEqual(["bill:a"]);
+        await vi.advanceTimersByTimeAsync(15_000);
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
+      }));
+  });
+
+  it("registers as a custom element", () => {
+    expect(customElements.get("till-pass-screen")).toBe(TillPassScreen);
   });
 
   it("never lets a late read replace a newer one", () =>
