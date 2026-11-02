@@ -6476,7 +6476,17 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   S18; the schema changes remain for S20–S28. S9 landed (#2389): bookings and staffing read the venue; staffing's season,
   day-plan and month reads still hand venue-service a `{ locationId }` scope, which S6 and S8 leave as
   an ignored `_cfg` and S18 removes, and its rota verbs keep theirs for the workforce roster calls S13
-  changes. The working-time slices have their
+  changes. S10 landed: printing serves the venue. Any of the box's print agents may claim a
+  network printer's job, new print jobs, printers, page printers and the demo printer take the
+  venue's id, `@waitron/printing` no longer exports `PrintConfig` or `PrintAgentConfig`, and
+  `@waitron/layouts`' printer types carry no location. It leaves location reads for their owners:
+  `attachPrinterToStation`'s scope in `print-api.ts` and the local `PrintConfig` type in
+  `station-printers.ts` (S11b), the station screens read's scope in `station-outputs-down.ts` and
+  `receipt-print.ts`'s `cfg` handed to `readPrintedDepartmentReceipt` (both S18, with the module
+  contract's scope). Until the schema
+  slices drop `print_jobs.location_id`, `enqueuePrintJob` takes the venue id as an optional
+  `venueId`, so a sale, a kitchen send or a payment's slips read it once, and the demo printer's
+  boot lookup keeps its venue condition for `printers_local_key_key`. The working-time slices have their
   own plan, written against A1268's merged diff (#2375): S13, S14, S15 (three pull requests) and
   S12d, lane B's, landed in that order. S18 waits for S2–S17, and the schema
   slices S20–S28 get a plan of their own, which first settles what the venue id sent to Cloud and

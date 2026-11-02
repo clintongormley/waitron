@@ -646,11 +646,11 @@ async function printerFor(billId: string): Promise<string> {
   );
   expect(stations.length).toBeGreaterThan(0);
   return inTx(v, async (tx) => {
-    const { id } = await createPrinter(
-      tx,
-      { locationId: v.cfg.locationId },
-      { name: `Kitchen ${randomUUID()}`, transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-    );
+    const { id } = await createPrinter(tx, {
+      name: `Kitchen ${randomUUID()}`,
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
     for (const { stationId } of stations)
       await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId, printerId: id });
     return id;

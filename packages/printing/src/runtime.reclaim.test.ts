@@ -8,7 +8,7 @@ import { claimPrintJobs, runAgentOnce } from "./runtime.js";
 import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import { FakeSink } from "@waitron/print-agent";
-import type { PrintConfig } from "./printers.js";
+type PrintConfig = { locationId: string };
 
 // `claimed_at` is compared as a string, so every aged stamp below is written in the one ISO-8601
 // spelling the cutoff uses.
@@ -49,14 +49,14 @@ async function jobRow(jobId: string): Promise<{
   return row!;
 }
 
-async function seedPrinterAndJob(cfg: PrintConfig): Promise<string> {
+async function seedPrinterAndJob(): Promise<string> {
   return withTransaction(suite.db, async (tx: Transaction) => {
-    const printer = await createPrinter(tx, cfg, {
+    const printer = await createPrinter(tx, {
       name: "Kitchen",
       transport: "network_tcp",
       host: "10.0.0.9",
     });
-    const { jobId } = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([0x41]));
+    const { jobId } = await enqueuePrintJob(tx, printer.id, new Uint8Array([0x41]));
     return jobId;
   });
 }
@@ -65,12 +65,12 @@ describe("print-job lease reclaim", () => {
   it("stamps claimed_at on claim, then RECLAIMS a stuck printing job once the lease has expired", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
-    const jobId = await seedPrinterAndJob(cfg);
+    const jobId = await seedPrinterAndJob();
 
     // The agent CLAIMS the job (queued → printing, claimed_at stamped) in its own committed transaction,
     // then "dies": it never reports, so the row is left committed in `printing`.
     const claimed = await withTransaction(suite.db, (tx: Transaction) =>
-      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+      claimPrintJobs(tx, agentId, { visibleKeys: [] }),
     );
     expect(claimed).toHaveLength(1);
     expect(claimed[0]!.id).toBe(jobId);
@@ -90,7 +90,6 @@ describe("print-job lease reclaim", () => {
       runAgentOnce({
         tx,
         agentId,
-        locationId: cfg.locationId,
         visibleKeys: [],
         transport: sink,
       }),
@@ -108,7 +107,7 @@ describe("print-job lease reclaim", () => {
   it("RECLAIMS an anomalous printing job whose claimed_at is NULL (no live lease)", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
-    const jobId = await seedPrinterAndJob(cfg);
+    const jobId = await seedPrinterAndJob();
 
     // Force the row into the anomalous state the lease's own guarantee must cover: `printing` with NO
     // `claimed_at`. The claim UPDATE stamps `status='printing'` and `claimed_at` atomically and is
@@ -133,7 +132,6 @@ describe("print-job lease reclaim", () => {
       runAgentOnce({
         tx,
         agentId,
-        locationId: cfg.locationId,
         visibleKeys: [],
         transport: sink,
       }),
@@ -149,17 +147,17 @@ describe("print-job lease reclaim", () => {
   it("does NOT steal a live claim: a freshly-claimed printing job (lease not expired) is not re-selected", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
-    const jobId = await seedPrinterAndJob(cfg);
+    const jobId = await seedPrinterAndJob();
 
     const claimed = await withTransaction(suite.db, (tx: Transaction) =>
-      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+      claimPrintJobs(tx, agentId, { visibleKeys: [] }),
     );
     expect(claimed).toHaveLength(1);
     const firstClaimedAt = (await jobRow(jobId)).claimedAt;
     expect(firstClaimedAt).not.toBeNull();
 
     const second = await withTransaction(suite.db, (tx: Transaction) =>
-      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+      claimPrintJobs(tx, agentId, { visibleKeys: [] }),
     );
     expect(second).toEqual([]);
 

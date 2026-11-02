@@ -180,16 +180,12 @@ interface Till {
 async function freshTill(): Promise<Till> {
   const cfg = await deviceRequestCfg(suite.db, venue.cfg);
   const printer = await inTx((tx) =>
-    createPrinter(
-      tx,
-      { locationId: cfg.locationId },
-      {
-        name: `Recibos ${randomUUID().slice(0, 8)}`,
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-        hasCashDrawer: true,
-      },
-    ),
+    createPrinter(tx, {
+      name: `Recibos ${randomUUID().slice(0, 8)}`,
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+      hasCashDrawer: true,
+    }),
   );
   await suite.db
     .update(devices)

@@ -1623,11 +1623,10 @@ export function mountManagementApi(
   app.get("/management-api/stations/outputs-down", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const cfg = requireVenueCfg(deps);
       const now = new Date();
       const result = await withVenueAuth(deps, sessionId, async (tx) => ({
-        printersDown: await stationPrintersDown(tx, cfg.locationId, now),
-        screensDark: await stationScreensDark(tx, cfg.locationId, now),
+        printersDown: await stationPrintersDown(tx, now),
+        screensDark: await stationScreensDark(tx, now),
       }));
       return c.json(result);
     }),

@@ -217,11 +217,11 @@ async function setupVenue(): Promise<Venue> {
       { row: { kind: "product", productId: productId.water }, zoneId: null },
       { kind: "no_preparation" },
     );
-    const { id: printerId } = await createPrinter(
-      tx,
-      { locationId: cfg.locationId },
-      { name: "Cocina", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-    );
+    const { id: printerId } = await createPrinter(tx, {
+      name: "Cocina",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
     await attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId });
     return {
       cfg,
@@ -4523,15 +4523,11 @@ describe("advance HOLD tickets (Task 6)", () => {
       const v = await setupVenue();
       await printHeldWork(true);
       const secondPrinter = await inTx(async (tx) => {
-        const printer = await createPrinter(
-          tx,
-          { locationId: v.cfg.locationId },
-          {
-            name: "Held second",
-            transport: "cloud_poll",
-            pollId: `poll-${randomUUID()}`,
-          },
-        );
+        const printer = await createPrinter(tx, {
+          name: "Held second",
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+        });
         await attachPrinterToStation(tx, {
           locationId: v.cfg.locationId,
           stationId: v.stationId,
@@ -5179,11 +5175,11 @@ describe("advance HOLD tickets (Task 6)", () => {
           { row: { kind: "product", productId: v.productId.fish }, zoneId: null },
           { kind: "station", stationId: barId },
         );
-        const printer = await createPrinter(
-          tx,
-          { locationId: v.cfg.locationId },
-          { name: "Barra", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-        );
+        const printer = await createPrinter(tx, {
+          name: "Barra",
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+        });
         await attachPrinterToStation(tx, {
           locationId: v.cfg.locationId,
           stationId: barId,
@@ -5333,11 +5329,11 @@ describe("advance HOLD tickets (Task 6)", () => {
               { row: { kind: "product", productId: v.productId[dish] }, zoneId: null },
               { kind: "station", stationId },
             );
-          const printer = await createPrinter(
-            tx,
-            { locationId: v.cfg.locationId },
-            { name: "Barra", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-          );
+          const printer = await createPrinter(tx, {
+            name: "Barra",
+            transport: "cloud_poll",
+            pollId: `poll-${randomUUID()}`,
+          });
           await attachPrinterToStation(tx, {
             locationId: v.cfg.locationId,
             stationId: barId,

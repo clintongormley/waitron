@@ -17,11 +17,7 @@ import {
   stationPrinters,
   type Transaction,
 } from "@waitron/db";
-import {
-  endDeletedPrinterJobs,
-  readPrinterDeleteJobIds,
-  type PrintConfig,
-} from "@waitron/printing";
+import { endDeletedPrinterJobs, readPrinterDeleteJobIds } from "@waitron/printing";
 import { readPrinterEquipment } from "@waitron/layouts";
 import { named } from "./delete-impact.js";
 import { endInvoicePrintDeliveries } from "./invoice-print.js";
@@ -36,10 +32,9 @@ const ROLES = [
 type Rules = { impact: DeleteImpact; jobIds: string[]; invoiceJobIds: string[] };
 
 /** The impact read and the delete both call this, so the delete acts on exactly what it reports. */
-async function printerDeleteRules(tx: Transaction, cfg: PrintConfig, id: string): Promise<Rules> {
-  void cfg;
+async function printerDeleteRules(tx: Transaction, id: string): Promise<Rules> {
   const [printer] = await tx
-    .select({ id: printers.id, name: printers.name, locationId: printers.locationId })
+    .select({ id: printers.id, name: printers.name })
     .from(printers)
     .where(and(eq(printers.id, id), isNull(printers.deletedAt)));
   if (printer === undefined) throw new AppError("printer.not_found", { id });
@@ -98,7 +93,7 @@ async function printerDeleteRules(tx: Transaction, cfg: PrintConfig, id: string)
       .filter((row) => row.role === role && (!defaultOnly || row.isDefault))
       .map(({ id: profileId, name }) => ({ id: profileId, name }));
 
-  // Devices whose profile defaults to the printer at its location, then the product's own resolver
+  // Devices whose profile defaults to the printer, then the product's own resolver
   // decides which of them it serves: a portable printer serves only the device holding it.
   const candidates = await tx
     .selectDistinct({ id: devices.id, name: devices.label })
@@ -111,7 +106,7 @@ async function printerDeleteRules(tx: Transaction, cfg: PrintConfig, id: string)
         eq(deviceProfilePrinters.isDefault, true),
       ),
     )
-    .where(and(eq(devices.locationId, printer.locationId), isNull(devices.deletedAt)));
+    .where(isNull(devices.deletedAt));
   const equipment = await readPrinterEquipment(
     tx,
     candidates.map((device) => device.id),
@@ -157,12 +152,8 @@ async function printerDeleteRules(tx: Transaction, cfg: PrintConfig, id: string)
 }
 
 /** What deleting the printer would end and remove now; `printer.not_found` once it is deleted. */
-export async function readPrinterDeleteImpact(
-  tx: Transaction,
-  cfg: PrintConfig,
-  id: string,
-): Promise<DeleteImpact> {
-  return (await printerDeleteRules(tx, cfg, id)).impact;
+export async function readPrinterDeleteImpact(tx: Transaction, id: string): Promise<DeleteImpact> {
+  return (await printerDeleteRules(tx, id)).impact;
 }
 
 /**
@@ -172,11 +163,10 @@ export async function readPrinterDeleteImpact(
  */
 export async function deletePrinter(
   tx: Transaction,
-  cfg: PrintConfig,
   id: string,
   now = new Date(),
 ): Promise<DeleteImpact> {
-  const rules = await printerDeleteRules(tx, cfg, id);
+  const rules = await printerDeleteRules(tx, id);
   await endDeletedPrinterJobs(tx, id);
   await endInvoicePrintDeliveries(tx, rules.invoiceJobIds, now);
   for (const { column } of ROLES) {

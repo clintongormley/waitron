@@ -77,11 +77,11 @@ useVenueDb({
       const stationId = bar!.id;
       const deviceId = venue.cookie.match(/waitron_device=([0-9a-f-]+)\./)![1]!;
       await tx.insert(deviceMadeHereStations).values({ deviceId, stationId });
-      const printer = await createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        { name: "Bar", transport: "cloud_poll", pollId: randomUUID() },
-      );
+      const printer = await createPrinter(tx, {
+        name: "Bar",
+        transport: "cloud_poll",
+        pollId: randomUUID(),
+      });
       barPrinterId = printer.id;
       await attachPrinterToStation(tx, {
         locationId: venue.cfg.locationId,
@@ -95,15 +95,11 @@ useVenueDb({
         .from(products)
         .where(eq(products.name, "Paella"));
       await routeProductTo(tx, venue.cfg, paella!.id, grill.id);
-      const grillPrinter = await createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        {
-          name: "Grill",
-          transport: "cloud_poll",
-          pollId: randomUUID(),
-        },
-      );
+      const grillPrinter = await createPrinter(tx, {
+        name: "Grill",
+        transport: "cloud_poll",
+        pollId: randomUUID(),
+      });
       grillPrinterId = grillPrinter.id;
       await attachPrinterToStation(tx, {
         locationId: venue.cfg.locationId,

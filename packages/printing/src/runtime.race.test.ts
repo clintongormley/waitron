@@ -10,7 +10,7 @@ import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import { FakeSink } from "@waitron/print-agent";
 import type { PrinterTarget, Transport } from "@waitron/print-agent";
-import type { PrintConfig } from "./printers.js";
+type PrintConfig = { locationId: string };
 
 /**
  * Two agents pulling one venue's queue deliver each job at most once.
@@ -97,14 +97,14 @@ describe("double-pull race", () => {
     // topology.
     const agentId = await seedAgent(cfg, "Kitchen");
     const printerId = await withTransaction(suite.db, (tx: Transaction) =>
-      createPrinter(tx, cfg, {
+      createPrinter(tx, {
         name: "Kitchen",
         transport: "network_tcp",
         host: "10.0.0.9",
       }).then((p) => p.id),
     );
     const { jobId } = await withTransaction(suite.db, (tx: Transaction) =>
-      enqueuePrintJob(tx, cfg, printerId, new Uint8Array([0x41])),
+      enqueuePrintJob(tx, printerId, new Uint8Array([0x41])),
     );
 
     const gated = new GatedSink();
@@ -115,7 +115,6 @@ describe("double-pull race", () => {
         runAgentOnce({
           tx,
           agentId,
-          locationId: cfg.locationId,
           visibleKeys: [],
           transport: gated,
         }),
@@ -125,7 +124,6 @@ describe("double-pull race", () => {
         runAgentOnce({
           tx,
           agentId,
-          locationId: cfg.locationId,
           visibleKeys: [],
           transport: sinkB,
         }),
@@ -152,13 +150,13 @@ describe("double-pull race", () => {
     const agentA = await seedAgent(cfg, "Kitchen A");
     const agentB = await seedAgent(cfg, "Kitchen B");
     const printerId = await withTransaction(suite.db, (tx: Transaction) =>
-      createPrinter(tx, cfg, { name: "Kitchen", transport: "network_tcp", host: "10.0.0.9" }).then(
+      createPrinter(tx, { name: "Kitchen", transport: "network_tcp", host: "10.0.0.9" }).then(
         (p) => p.id,
       ),
     );
     const N = 8;
     await withTransaction(suite.db, async (tx: Transaction) => {
-      for (let i = 0; i < N; i++) await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([i]));
+      for (let i = 0; i < N; i++) await enqueuePrintJob(tx, printerId, new Uint8Array([i]));
     });
 
     let releaseA!: () => void;
@@ -169,7 +167,6 @@ describe("double-pull race", () => {
     const [aResult, bResult] = await parkedThenRelease<ClaimedJob[], ClaimedJob[]>(
       async (tx) => {
         const claimed = await claimPrintJobs(tx, agentA, {
-          locationId: cfg.locationId,
           visibleKeys: [],
         });
         aClaimedResolve();
@@ -178,7 +175,7 @@ describe("double-pull race", () => {
       },
       aClaimed,
       () => releaseA(),
-      (tx) => claimPrintJobs(tx, agentB, { locationId: cfg.locationId, visibleKeys: [] }),
+      (tx) => claimPrintJobs(tx, agentB, { visibleKeys: [] }),
     );
 
     expect(aResult).toHaveLength(1);
@@ -187,7 +184,6 @@ describe("double-pull race", () => {
     for (let pull = 2; pull < N; pull += 1) {
       const next = await withTransaction(suite.db, (tx) =>
         claimPrintJobs(tx, pull % 2 === 0 ? agentA : agentB, {
-          locationId: cfg.locationId,
           visibleKeys: [],
         }),
       );
@@ -197,9 +193,7 @@ describe("double-pull race", () => {
     expect(new Set(claimedIds).size).toBe(claimedIds.length);
     expect(claimedIds).toHaveLength(N);
     expect(
-      await withTransaction(suite.db, (tx) =>
-        claimPrintJobs(tx, agentA, { locationId: cfg.locationId, visibleKeys: [] }),
-      ),
+      await withTransaction(suite.db, (tx) => claimPrintJobs(tx, agentA, { visibleKeys: [] })),
     ).toEqual([]);
 
     const rows = await suite.db

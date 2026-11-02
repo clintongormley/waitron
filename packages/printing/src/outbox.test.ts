@@ -18,7 +18,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { createPrinter, deactivatePrinter } from "./printers.js";
 import { canResendPrintJob, enqueuePrintJob, resendPrintJob } from "./outbox.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
-import type { PrintConfig } from "./printers.js";
+type PrintConfig = { locationId: string };
 import "./errors.js";
 
 // The central assertion is the NEVER-BLOCK invariant (CLAUDE.md §5): enqueue opens NO socket.
@@ -64,17 +64,35 @@ function spyOnNoSocketOpened() {
 }
 
 describe("enqueuePrintJob (never-block outbox)", () => {
-  it("enqueues a queued job with no socket I/O", async () => {
+  it("files a job under the venue id its caller read once for several jobs, reading only the printer", async () => {
     const cfg = await setup();
     await withTransaction(suite.db, async (tx) => {
-      const p = await createPrinter(tx, cfg, {
+      const p = await createPrinter(tx, { name: "Bar", transport: "usb", localKey: "SER-ONCE" });
+      const selects = vi.spyOn(suite.db, "select");
+      const { jobId } = await enqueuePrintJob(tx, p.id, new Uint8Array([1]), "document", {
+        venueId: cfg.locationId,
+      });
+      expect(selects).toHaveBeenCalledTimes(1);
+      selects.mockRestore();
+      const [row] = await tx
+        .select({ locationId: printJobs.locationId })
+        .from(printJobs)
+        .where(eq(printJobs.id, jobId));
+      expect(row).toEqual({ locationId: cfg.locationId });
+    });
+  });
+
+  it("enqueues a queued job with no socket I/O", async () => {
+    await setup();
+    await withTransaction(suite.db, async (tx) => {
+      const p = await createPrinter(tx, {
         name: "Kitchen",
         transport: "network_tcp",
         host: "10.0.0.9",
         port: 9100,
       });
       const noNet = spyOnNoSocketOpened();
-      const { jobId } = await enqueuePrintJob(tx, cfg, p.id, new Uint8Array([1, 2, 3]));
+      const { jobId } = await enqueuePrintJob(tx, p.id, new Uint8Array([1, 2, 3]));
 
       const row = await jobRow(tx, jobId);
       expect(row.status).toBe("queued");
@@ -84,11 +102,11 @@ describe("enqueuePrintJob (never-block outbox)", () => {
   });
 
   it("throws printer.not_found for an absent printer, still opening no socket", async () => {
-    const cfg = await setup();
+    await setup();
     const noNet = spyOnNoSocketOpened();
     const code = await withTransaction(suite.db, async (tx) => {
       try {
-        await enqueuePrintJob(tx, cfg, randomUUID(), new Uint8Array([9]));
+        await enqueuePrintJob(tx, randomUUID(), new Uint8Array([9]));
         return undefined;
       } catch (error) {
         return (error as { code?: string }).code;
@@ -101,19 +119,19 @@ describe("enqueuePrintJob (never-block outbox)", () => {
   it("throws printer.not_found for a DEACTIVATED printer (disabled, not merely soft-hidden)", async () => {
     // The active-printer enqueue in the same block is the control: the ONLY difference between the
     // two calls is the `active` flag.
-    const cfg = await setup();
+    await setup();
     const code = await withTransaction(suite.db, async (tx) => {
-      const p = await createPrinter(tx, cfg, {
+      const p = await createPrinter(tx, {
         name: "Kitchen",
         transport: "network_tcp",
         host: "10.0.0.9",
       });
-      const { jobId } = await enqueuePrintJob(tx, cfg, p.id, new Uint8Array([1]));
+      const { jobId } = await enqueuePrintJob(tx, p.id, new Uint8Array([1]));
       expect((await jobRow(tx, jobId)).status).toBe("queued");
 
-      await deactivatePrinter(tx, cfg, p.id);
+      await deactivatePrinter(tx, p.id);
       try {
-        await enqueuePrintJob(tx, cfg, p.id, new Uint8Array([2]));
+        await enqueuePrintJob(tx, p.id, new Uint8Array([2]));
         return undefined;
       } catch (error) {
         return (error as { code?: string }).code;
@@ -125,16 +143,15 @@ describe("enqueuePrintJob (never-block outbox)", () => {
 
 describe("resendPrintJob", () => {
   it.each(["done", "failed"] as const)("refuses a terminal %s drawer command", async (status) => {
-    const cfg = await setup();
+    await setup();
     await withTransaction(suite.db, async (tx) => {
-      const printer = await createPrinter(tx, cfg, {
+      const printer = await createPrinter(tx, {
         name: "Drawer",
         transport: "network_tcp",
         host: "printer.local",
       });
       const original = await enqueuePrintJob(
         tx,
-        cfg,
         printer.id,
         new Uint8Array([27, 112, 0, 25, 250]),
         "drawer",
@@ -158,13 +175,13 @@ describe("resendPrintJob", () => {
     async (status) => {
       const cfg = await setup();
       await withTransaction(suite.db, async (tx) => {
-        const printer = await createPrinter(tx, cfg, {
+        const printer = await createPrinter(tx, {
           name: "Resend",
           transport: "network_tcp",
           host: "printer.local",
         });
         const payload = new Uint8Array([0, 27, 64, 255, 29, 86, 0]);
-        const original = await enqueuePrintJob(tx, cfg, printer.id, payload);
+        const original = await enqueuePrintJob(tx, printer.id, payload);
         await tx
           .update(printJobs)
           .set({
@@ -200,14 +217,14 @@ describe("resendPrintJob", () => {
   );
 
   it("names the original job a resend copies, and a resend of that resend names the same original", async () => {
-    const cfg = await setup();
+    await setup();
     await withTransaction(suite.db, async (tx) => {
-      const printer = await createPrinter(tx, cfg, {
+      const printer = await createPrinter(tx, {
         name: "Resend",
         transport: "network_tcp",
         host: "printer.local",
       });
-      const original = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
+      const original = await enqueuePrintJob(tx, printer.id, new Uint8Array([1]));
       const exhausted = { status: "failed", attempts: 5 } as const;
       await tx.update(printJobs).set(exhausted).where(eq(printJobs.id, original.jobId));
       const first = await resendPrintJob(tx, original.jobId);
@@ -225,15 +242,15 @@ describe("resendPrintJob", () => {
   it.each([false, true, null] as const)(
     "preserves receiptCopy=%s across two queue resends",
     async (receiptCopy) => {
-      const cfg = await setup();
+      await setup();
       await withTransaction(suite.db, async (tx) => {
-        const printer = await createPrinter(tx, cfg, {
+        const printer = await createPrinter(tx, {
           name: "Receipts",
           transport: "network_tcp",
           host: "printer.local",
         });
         const payload = new Uint8Array([27, 64, 29, 86, 0]);
-        const first = await enqueuePrintJob(tx, cfg, printer.id, payload, "document", {
+        const first = await enqueuePrintJob(tx, printer.id, payload, "document", {
           receiptCopy,
         });
         const exhausted = { status: "failed", attempts: 5 } as const;
@@ -246,7 +263,7 @@ describe("resendPrintJob", () => {
           expect(row!.receiptCopy).toBe(receiptCopy);
           expect([...row!.payload]).toEqual([...payload]);
         }
-        const unrelated = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
+        const unrelated = await enqueuePrintJob(tx, printer.id, new Uint8Array([1]));
         const [row] = await tx.select().from(printJobs).where(eq(printJobs.id, unrelated.jobId));
         expect(row!.receiptCopy).toBeNull();
       });
@@ -282,15 +299,15 @@ describe("resendPrintJob", () => {
           fiscalState: "not_applicable",
         })
         .returning({ id: sales.id });
-      const printer = await createPrinter(tx, cfg, {
+      const printer = await createPrinter(tx, {
         name: "Receipts",
         transport: "network_tcp",
         host: "printer.local",
       });
-      const receipt = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]), "document", {
+      const receipt = await enqueuePrintJob(tx, printer.id, new Uint8Array([1]), "document", {
         saleId: sale!.id,
       });
-      const unlinked = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([2]));
+      const unlinked = await enqueuePrintJob(tx, printer.id, new Uint8Array([2]));
       const exhausted = { status: "failed", attempts: 5 } as const;
       await tx.update(printJobs).set(exhausted).where(eq(printJobs.id, receipt.jobId));
       const first = await resendPrintJob(tx, receipt.jobId);
@@ -311,14 +328,14 @@ describe("resendPrintJob", () => {
     ["printing", 0],
     ["failed", 4],
   ] as const)("refuses a %s job that can still print automatically", async (status, attempts) => {
-    const cfg = await setup();
+    await setup();
     await withTransaction(suite.db, async (tx) => {
-      const printer = await createPrinter(tx, cfg, {
+      const printer = await createPrinter(tx, {
         name: "Pending",
         transport: "network_tcp",
         host: "printer.local",
       });
-      const original = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
+      const original = await enqueuePrintJob(tx, printer.id, new Uint8Array([1]));
       await tx.update(printJobs).set({ status, attempts }).where(eq(printJobs.id, original.jobId));
       await expect(resendPrintJob(tx, original.jobId)).rejects.toMatchObject({
         code: "print_job.not_resendable",
@@ -330,19 +347,19 @@ describe("resendPrintJob", () => {
   });
 
   it("refuses unknown jobs and disabled printers", async () => {
-    const cfg = await setup();
+    await setup();
     await withTransaction(suite.db, async (tx) => {
-      const printer = await createPrinter(tx, cfg, {
+      const printer = await createPrinter(tx, {
         name: "Disabled",
         transport: "network_tcp",
         host: "printer.local",
       });
-      const original = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
+      const original = await enqueuePrintJob(tx, printer.id, new Uint8Array([1]));
       await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, original.jobId));
       await expect(resendPrintJob(tx, randomUUID())).rejects.toMatchObject({
         code: "print_job.not_found",
       });
-      await deactivatePrinter(tx, cfg, printer.id);
+      await deactivatePrinter(tx, printer.id);
       await expect(resendPrintJob(tx, original.jobId)).rejects.toMatchObject({
         code: "printer.not_found",
       });
@@ -351,15 +368,15 @@ describe("resendPrintJob", () => {
 });
 
 describe("a deleted printer's jobs", () => {
-  async function deletedPrinterWithJobs(cfg: PrintConfig) {
+  async function deletedPrinterWithJobs() {
     return withTransaction(suite.db, async (tx) => {
-      const printer = await createPrinter(tx, cfg, {
+      const printer = await createPrinter(tx, {
         name: "Deleted",
         transport: "network_tcp",
         host: "printer.local",
       });
-      const done = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]));
-      const ended = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([2]));
+      const done = await enqueuePrintJob(tx, printer.id, new Uint8Array([1]));
+      const ended = await enqueuePrintJob(tx, printer.id, new Uint8Array([2]));
       await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, done.jobId));
       await tx
         .update(printJobs)
@@ -382,8 +399,8 @@ describe("a deleted printer's jobs", () => {
   });
 
   it("answers printer.not_found to a resend of any of them, before its eligibility, and adds no job", async () => {
-    const cfg = await setup();
-    const { printerId, done, ended } = await deletedPrinterWithJobs(cfg);
+    await setup();
+    const { printerId, done, ended } = await deletedPrinterWithJobs();
     const before = await suite.db.select().from(printJobs);
 
     for (const jobId of [done, ended]) {
@@ -395,14 +412,14 @@ describe("a deleted printer's jobs", () => {
   });
 
   it("answers printer.not_found to a new job for a deleted printer, even one left marked active", async () => {
-    const cfg = await setup();
-    const { printerId } = await deletedPrinterWithJobs(cfg);
+    await setup();
+    const { printerId } = await deletedPrinterWithJobs();
     // Not a state the delete leaves; it isolates the deleted-row check from the active one.
     await suite.db.update(printers).set({ active: true }).where(eq(printers.id, printerId));
     const before = await suite.db.select().from(printJobs);
 
     await expect(
-      withTransaction(suite.db, (tx) => enqueuePrintJob(tx, cfg, printerId, new Uint8Array([3]))),
+      withTransaction(suite.db, (tx) => enqueuePrintJob(tx, printerId, new Uint8Array([3]))),
     ).rejects.toMatchObject({ code: "printer.not_found", params: { id: printerId } });
     expect(await suite.db.select().from(printJobs)).toEqual(before);
   });
@@ -412,14 +429,14 @@ describe("completed invoice receipt resends", () => {
   it.each([false, true, null] as const)(
     "resends completed documents only when receiptCopy=%s is not an original",
     async (receiptCopy) => {
-      const cfg = await setup();
+      await setup();
       const job = await withTransaction(suite.db, async (tx) => {
-        const printer = await createPrinter(tx, cfg, {
+        const printer = await createPrinter(tx, {
           name: "Receipt",
           transport: "network_tcp",
           host: "printer.test",
         });
-        const job = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1, 2]), "document", {
+        const job = await enqueuePrintJob(tx, printer.id, new Uint8Array([1, 2]), "document", {
           receiptCopy,
         });
         await tx.update(printJobs).set({ status: "done" }).where(eq(printJobs.id, job.jobId));
@@ -472,12 +489,12 @@ it.each(["same original", "same copy", "other original"] as const)(
         { ...invoice, id: saleId, invoiceNumber: 1 },
         { ...invoice, id: otherSaleId, invoiceNumber: 2 },
       ]);
-      const printer = await createPrinter(tx, cfg, {
+      const printer = await createPrinter(tx, {
         name: "Receipt",
         transport: "network_tcp",
         host: "printer.test",
       });
-      const first = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]), "document", {
+      const first = await enqueuePrintJob(tx, printer.id, new Uint8Array([1]), "document", {
         saleId,
         receiptCopy: false,
       });
@@ -488,7 +505,7 @@ it.each(["same original", "same copy", "other original"] as const)(
       const completed =
         completedKind === "same original"
           ? await resendPrintJob(tx, first.jobId)
-          : await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([2]), "document", {
+          : await enqueuePrintJob(tx, printer.id, new Uint8Array([2]), "document", {
               saleId: completedKind === "other original" ? otherSaleId : saleId,
               receiptCopy: completedKind === "same copy",
             });
@@ -539,12 +556,12 @@ it.each(["queued", "printing", "failed"] as const)(
           fiscalState: "not_applicable",
         })
         .returning();
-      const printer = await createPrinter(tx, cfg, {
+      const printer = await createPrinter(tx, {
         name: "Receipt",
         transport: "network_tcp",
         host: "printer.test",
       });
-      const job = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]), "document", {
+      const job = await enqueuePrintJob(tx, printer.id, new Uint8Array([1]), "document", {
         saleId: sale!.id,
         receiptCopy: false,
       });

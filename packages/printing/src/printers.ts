@@ -2,7 +2,7 @@
 import "./errors.js";
 import { and, eq, isNull } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { UNIQUE_VIOLATION, checkFailed, isRefusal, printers } from "@waitron/db";
+import { UNIQUE_VIOLATION, checkFailed, isRefusal, printers, venueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { PrintTransport } from "@waitron/print-agent";
 import type { PaperWidth, Resolution } from "./layout.js";
@@ -21,11 +21,6 @@ function translatePrinterWriteError(error: unknown, localKey: string | undefined
     throw new AppError("printer.invalid_config", { reason: "transport_fields" });
   }
   throw error;
-}
-
-/** The venue scope, resolved by the route and never derived from client input. */
-export interface PrintConfig {
-  locationId: string;
 }
 
 /** How a printer is reached — the `print_transport` column; the union lives in `@waitron/print-agent`. */
@@ -58,7 +53,6 @@ const REQUIRED_FIELDS: Record<PrintTransport, readonly (keyof CreatePrinterInput
 
 export async function createPrinter(
   tx: Transaction,
-  cfg: PrintConfig,
   input: CreatePrinterInput,
 ): Promise<{ id: string }> {
   const missing = REQUIRED_FIELDS[input.transport].find((field) => input[field] === undefined);
@@ -72,7 +66,7 @@ export async function createPrinter(
     const [row] = await tx
       .insert(printers)
       .values({
-        locationId: cfg.locationId,
+        locationId: await venueLocationId(tx),
         name: input.name,
         transport: input.transport,
         // drizzle omits an undefined field, so it takes its column default.
@@ -124,14 +118,11 @@ export interface PrinterRow {
   active: boolean;
 }
 
-/** One tenant per database, so the id alone selects the row. */
 export async function updatePrinter(
   tx: Transaction,
-  cfg: PrintConfig,
   id: string,
   patch: UpdatePrinterInput,
 ): Promise<void> {
-  void cfg;
   const liveId = and(eq(printers.id, id), isNull(printers.deletedAt));
   // Undefined keys are dropped here so a `{ name: undefined }` patch still takes the empty-patch path.
   const set: Record<string, unknown> = Object.fromEntries(
@@ -158,12 +149,7 @@ export async function updatePrinter(
  * Disable keeps the id, and Enable brings the printer back. A deactivated printer refuses new jobs
  * and its queued ones wait, unclaimed, until it is reactivated.
  */
-export async function deactivatePrinter(
-  tx: Transaction,
-  cfg: PrintConfig,
-  id: string,
-): Promise<void> {
-  void cfg;
+export async function deactivatePrinter(tx: Transaction, id: string): Promise<void> {
   const updated = await tx
     .update(printers)
     .set({ active: false })
@@ -173,8 +159,7 @@ export async function deactivatePrinter(
 }
 
 /** Includes deactivated printers, so the dashboard can show and reactivate them; never deleted ones. */
-export async function listPrinters(tx: Transaction, cfg: PrintConfig): Promise<PrinterRow[]> {
-  void cfg;
+export async function listPrinters(tx: Transaction): Promise<PrinterRow[]> {
   const rows = await tx
     .select({
       id: printers.id,

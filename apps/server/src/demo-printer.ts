@@ -12,6 +12,7 @@ import {
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { readProfilePrinterLists, setProfilePrinterLists } from "@waitron/layouts";
 import { PULL_BATCH_LIMIT } from "@waitron/printing";
@@ -27,16 +28,17 @@ export interface DemoPrinterIdentity {
 
 export async function configureDemoPrinter(
   db: Database,
-  locationId: string,
   practiceMode: boolean,
 ): Promise<DemoPrinterIdentity | null> {
   return withTransaction(db, async (tx) => {
+    // The venue condition keeps the lookup on `printers_local_key_key`, which leads with it.
+    const venueId = await venueLocationId(tx);
     const [existing] = await tx
       .select({ id: printers.id })
       .from(printers)
       .where(
         and(
-          eq(printers.locationId, locationId),
+          eq(printers.locationId, venueId),
           eq(printers.localKey, DEMO_PRINTER_KEY),
           isNull(printers.deletedAt),
         ),
@@ -55,7 +57,7 @@ export async function configureDemoPrinter(
         await tx
           .insert(printers)
           .values({
-            locationId,
+            locationId: venueId,
             name: "Demo printer",
             transport: "usb",
             localKey: DEMO_PRINTER_KEY,
@@ -69,19 +71,14 @@ export async function configureDemoPrinter(
     const [agent] = await tx
       .select({ id: printAgents.id })
       .from(printAgents)
-      .where(
-        and(
-          eq(printAgents.locationId, locationId),
-          eq(printAgents.tokenHash, DEMO_AGENT_TOKEN_HASH),
-        ),
-      );
+      .where(eq(printAgents.tokenHash, DEMO_AGENT_TOKEN_HASH));
     const agentId =
       agent?.id ??
       (
         await tx
           .insert(printAgents)
           .values({
-            locationId,
+            locationId: venueId,
             name: "Demo printer",
             tokenHash: DEMO_AGENT_TOKEN_HASH,
             active: false,
@@ -89,7 +86,7 @@ export async function configureDemoPrinter(
           .returning({ id: printAgents.id })
       )[0]!.id;
 
-    await routeToDemoPrinter(tx, locationId, printerId);
+    await routeToDemoPrinter(tx, printerId);
     return { printerId, agentId };
   });
 }
@@ -123,14 +120,10 @@ async function unlistDemoPrinter(tx: Transaction, printerId: string): Promise<vo
  * Lists the printer last on every live profile's receipt, payment slip and invoice lists and makes
  * it the default of each that has none; while the printer has a cash drawer it does the same on the
  * cash drawer list, so devices on Use default print and open the drawer on it. Gives it to every
- * preparation station there. A device's own choice, a profile's own default and a listing the
+ * preparation station. A device's own choice, a profile's own default and a listing the
  * profile already has stay. Safe to repeat.
  */
-export async function routeToDemoPrinter(
-  tx: Transaction,
-  locationId: string,
-  printerId: string,
-): Promise<void> {
+export async function routeToDemoPrinter(tx: Transaction, printerId: string): Promise<void> {
   const [printer] = await tx
     .select({ hasCashDrawer: printers.hasCashDrawer })
     .from(printers)
@@ -172,10 +165,7 @@ export async function routeToDemoPrinter(
         lists.cashDrawerPrinterDefaultId ?? (opensDrawer ? printerId : null),
     });
   }
-  const stations = await tx
-    .select({ id: kitchenStations.id })
-    .from(kitchenStations)
-    .where(eq(kitchenStations.locationId, locationId));
+  const stations = await tx.select({ id: kitchenStations.id }).from(kitchenStations);
   for (const station of stations) {
     await tx
       .insert(stationPrinters)
@@ -186,14 +176,12 @@ export async function routeToDemoPrinter(
 
 export async function deliverDemoPrinterJobs(
   db: Database,
-  locationId: string,
   identity: DemoPrinterIdentity,
 ): Promise<number> {
   let delivered = 0;
   for (let pull = 0; pull < PULL_BATCH_LIMIT; pull += 1) {
     const jobs = await withTransaction(db, (tx) =>
       claimInvoicePrintJobs(tx, identity.agentId, {
-        locationId,
         visibleKeys: [DEMO_PRINTER_KEY],
         printerId: identity.printerId,
       }),
@@ -216,7 +204,6 @@ export async function deliverDemoPrinterJobs(
 
 export function startDemoPrinterLoop(
   db: Database,
-  locationId: string,
   identity: DemoPrinterIdentity,
   intervalMs = 500,
   onError: (error: unknown) => void = () => {},
@@ -225,7 +212,7 @@ export function startDemoPrinterLoop(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inFlight: Promise<void> = Promise.resolve();
   const tick = () => {
-    inFlight = deliverDemoPrinterJobs(db, locationId, identity)
+    inFlight = deliverDemoPrinterJobs(db, identity)
       .then(() => {})
       .catch(onError)
       .finally(() => {

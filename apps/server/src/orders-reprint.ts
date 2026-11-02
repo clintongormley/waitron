@@ -23,13 +23,7 @@ export async function reprintOrderReceipt(
   const [printer] = await tx
     .select({ id: printers.id, paperWidth: printers.paperWidth, resolution: printers.resolution })
     .from(printers)
-    .where(
-      and(
-        eq(printers.id, printerId),
-        eq(printers.locationId, deps.tradingContext.locationId),
-        eq(printers.active, true),
-      ),
-    );
+    .where(and(eq(printers.id, printerId), eq(printers.active, true)));
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
   const ticket = await readSettledTicket(deps.backend, tx, deps.tradingContext, billId);
   const copy = await enqueueReceiptCopy(

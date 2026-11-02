@@ -369,10 +369,10 @@ describe("print-agent end to end", () => {
     const networkPayload = esc(WIDE).line("Table 4").cut().bytes();
     const usbPayload = esc(WIDE).line("Bar 2").cut().bytes();
     const { jobId } = await withTransaction(suite.db, async (tx) => {
-      return enqueuePrintJob(tx, { locationId }, printerId, networkPayload);
+      return enqueuePrintJob(tx, printerId, networkPayload);
     });
     const { jobId: usbJobId } = await withTransaction(suite.db, async (tx) => {
-      return enqueuePrintJob(tx, { locationId }, usbPrinterId, usbPayload);
+      return enqueuePrintJob(tx, usbPrinterId, usbPayload);
     });
 
     await agent.runOnce();
@@ -396,7 +396,7 @@ describe("print-agent end to end", () => {
     expect(await host.token()).toBeNull();
 
     const enqueuedAfterRevoke = await withTransaction(suite.db, async (tx) => {
-      return enqueuePrintJob(tx, { locationId }, printerId, esc(WIDE).line("Ignored").bytes());
+      return enqueuePrintJob(tx, printerId, esc(WIDE).line("Ignored").bytes());
     });
     await agent.runOnce();
     expect(agent.status.phase).toBe("unauthorized");
@@ -756,7 +756,7 @@ describe("a printer deleted while its agent is sending", () => {
         await agent.runOnce();
         const enqueue = (printerId: string) =>
           withTransaction(suite.db, (tx) =>
-            enqueuePrintJob(tx, { locationId }, printerId, esc(WIDE).line(n).cut().bytes()),
+            enqueuePrintJob(tx, printerId, esc(WIDE).line(n).cut().bytes()),
           );
         const { jobId } = await enqueue(targetId);
         const { jobId: keepJobId } = await enqueue(keepId);
@@ -1011,7 +1011,7 @@ describe("a printer deleted over real HTTP", () => {
       const enqueue = async (printerId: string, text: string) => {
         const payload = esc(WIDE).line(text).cut().bytes();
         const { jobId } = await withTransaction(suite.db, (tx) =>
-          enqueuePrintJob(tx, { locationId }, printerId, payload),
+          enqueuePrintJob(tx, printerId, payload),
         );
         return { jobId, payload: Buffer.from(payload) };
       };

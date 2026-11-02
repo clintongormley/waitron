@@ -9,6 +9,7 @@ import {
   stationPrinters,
   ticketItems,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { PRINTER_UNPAIRED } from "@waitron/printing";
 import { printJobInTrouble } from "./print-job-trouble.js";
@@ -49,7 +50,6 @@ export interface PrintersDownOptions {
 
 export function stationPrintersDownQuery(
   tx: Transaction,
-  locationId: string,
   now: Date,
   stationIds?: readonly string[],
   options: PrintersDownOptions = {},
@@ -68,7 +68,6 @@ export function stationPrintersDownQuery(
     .innerJoin(printJobs, eq(printJobs.printerId, printers.id))
     .where(
       and(
-        eq(kitchenStations.locationId, locationId),
         options.withSwitchedOff === true ? undefined : eq(kitchenStations.active, true),
         stationIds === undefined ? undefined : inArray(kitchenStations.id, [...stationIds]),
         eq(printers.active, true),
@@ -88,13 +87,12 @@ export function stationPrintersDownQuery(
 
 export async function stationPrintersDown(
   tx: Transaction,
-  locationId: string,
   now: Date,
   stationIds?: readonly string[],
   options: PrintersDownOptions = {},
 ): Promise<DownPrinter[]> {
   if (stationIds?.length === 0) return [];
-  const rows = await stationPrintersDownQuery(tx, locationId, now, stationIds, options);
+  const rows = await stationPrintersDownQuery(tx, now, stationIds, options);
   return rows
     .sort(
       (a, b) =>
@@ -103,12 +101,7 @@ export async function stationPrintersDown(
     .map((r) => ({ ...r, since: r.since! }));
 }
 
-export function waitingDishesQuery(
-  tx: Transaction,
-  locationId: string,
-  now: Date,
-  stationIds?: readonly string[],
-) {
+export function waitingDishesQuery(tx: Transaction, now: Date, stationIds?: readonly string[]) {
   const since = new Date(now.getTime() - WAITING_WINDOW_MS).toISOString();
   return tx
     .selectDistinct({ stationId: kitchenStations.id })
@@ -116,7 +109,6 @@ export function waitingDishesQuery(
     .innerJoin(ticketItems, eq(ticketItems.stationId, kitchenStations.id))
     .where(
       and(
-        eq(kitchenStations.locationId, locationId),
         stationIds === undefined ? undefined : inArray(kitchenStations.id, [...stationIds]),
         inArray(ticketItems.state, ["queued", "preparing"]),
         gte(ticketItems.firedAt, since),
@@ -126,25 +118,18 @@ export function waitingDishesQuery(
 
 export async function stationsWithWaitingDishes(
   tx: Transaction,
-  locationId: string,
   now: Date,
   stationIds?: readonly string[],
 ): Promise<ReadonlySet<string>> {
   if (stationIds?.length === 0) return new Set();
-  return new Set(
-    (await waitingDishesQuery(tx, locationId, now, stationIds)).map((r) => r.stationId),
-  );
+  return new Set((await waitingDishesQuery(tx, now, stationIds)).map((r) => r.stationId));
 }
 
-export async function stationScreensDark(
-  tx: Transaction,
-  venueLocationId: string,
-  now: Date,
-): Promise<DarkScreen[]> {
+export async function stationScreensDark(tx: Transaction, now: Date): Promise<DarkScreen[]> {
   const darkBefore = new Date(now.getTime() - SCREEN_DARK_MS).toISOString();
   const screens = await VENUE_SERVICE.readStationScreens(
     tx,
-    { locationId: brandLocationId(venueLocationId) },
+    { locationId: brandLocationId(await venueLocationId(tx)) },
     { withSwitchedOff: true },
   );
   if (screens.length === 0) return [];
@@ -178,7 +163,6 @@ export async function stationScreensDark(
   if (dark.length === 0) return [];
   const waiting = await stationsWithWaitingDishes(
     tx,
-    venueLocationId,
     now,
     dark.map(([stationId]) => stationId),
   );
@@ -213,7 +197,6 @@ export async function passScreensDark(
     .innerJoin(deviceProfiles, eq(deviceProfiles.id, devices.deviceProfileId))
     .where(
       and(
-        eq(devices.locationId, cfg.locationId),
         eq(devices.active, true),
         eq(deviceProfiles.formFactor, "kds"),
         or(isNull(devices.lastSeenAt), lt(devices.lastSeenAt, darkBefore)),

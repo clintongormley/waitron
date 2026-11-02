@@ -84,7 +84,6 @@ import type { TicketState } from "./working-order.js";
 import { ticketLinesFrom } from "./receipt-lines.js";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
-import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import {
@@ -3046,9 +3045,8 @@ async function attachedPrinter(
   station: { name: string; isDefault?: boolean },
   printerName: string,
 ): Promise<{ station: Awaited<ReturnType<typeof createStation>>; printerId: string }> {
-  const printCfg: PrintConfig = { locationId: cfg.locationId };
   const created = await createStation(tx, cfg, station);
-  const { id: printerId } = await createPrinter(tx, printCfg, {
+  const { id: printerId } = await createPrinter(tx, {
     name: printerName,
     transport: "cloud_poll",
     pollId: `poll-${randomUUID()}`,

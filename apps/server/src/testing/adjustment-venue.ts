@@ -366,11 +366,11 @@ export async function provisionAdjustmentVenue(
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
       .where(eq(kitchenStations.isDefault, true));
-    const printer = await createPrinter(
-      tx,
-      { locationId: cfg.locationId },
-      { name: "Kitchen printer", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-    );
+    const printer = await createPrinter(tx, {
+      name: "Kitchen printer",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
     await attachPrinterToStation(tx, {
       locationId: cfg.locationId,
       stationId: station!.id,

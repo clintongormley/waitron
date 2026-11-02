@@ -229,15 +229,11 @@ async function printerFor(billId: string): Promise<string> {
   const stations = v.db.all<{ stationId: string }>(sql`
     select distinct station_id as stationId from ticket_items where working_order_id = ${billId}`);
   return inTx(v, async (tx) => {
-    const { id } = await createPrinter(
-      tx,
-      { locationId: v.cfg.locationId },
-      {
-        name: `P-${randomUUID().slice(0, 8)}`,
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-      },
-    );
+    const { id } = await createPrinter(tx, {
+      name: `P-${randomUUID().slice(0, 8)}`,
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
     for (const { stationId } of stations)
       await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId, printerId: id });
     return id;
@@ -1194,15 +1190,11 @@ describe("A773 waiter request", () => {
     const active = stations.filter((station) => station.active).map((station) => station.id);
     const printerId = await inTx(v, async (tx) => {
       await setStationsWaitForPass(tx, true, stationIds);
-      const { id } = await createPrinter(
-        tx,
-        { locationId: v.cfg.locationId },
-        {
-          name: `P-${randomUUID().slice(0, 8)}`,
-          transport: "cloud_poll",
-          pollId: `poll-${randomUUID()}`,
-        },
-      );
+      const { id } = await createPrinter(tx, {
+        name: `P-${randomUUID().slice(0, 8)}`,
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
       for (const stationId of active)
         await attachPrinterToStation(tx, {
           locationId: v.cfg.locationId,

@@ -2144,18 +2144,10 @@ async function bootServer(
       invoiceEmailController.abort();
       await invoiceEmailLoop;
     });
-    const demoPrinter = await configureDemoPrinter(
-      db,
-      tradingContext.locationId,
-      tradingContext.practiceMode === true,
-    );
+    const demoPrinter = await configureDemoPrinter(db, tradingContext.practiceMode === true);
     if (demoPrinter !== null) {
-      demoPrinterLoop = startDemoPrinterLoop(
-        db,
-        tradingContext.locationId,
-        demoPrinter,
-        500,
-        (error) => log("error", "demo_printer.delivery_failed", { errorCode: codeOf(error) }),
+      demoPrinterLoop = startDemoPrinterLoop(db, demoPrinter, 500, (error) =>
+        log("error", "demo_printer.delivery_failed", { errorCode: codeOf(error) }),
       );
       undoOnFailure.push(() => demoPrinterLoop!.stop());
     }
@@ -2187,7 +2179,7 @@ async function bootServer(
             },
             setsToMigrate,
           ),
-          deviceSources: devicePrinterNoticeSources({ now, locationId: tradingContext.locationId }),
+          deviceSources: devicePrinterNoticeSources({ now }),
           clock: tillClock,
           filing: () => ({ enabled: filesRecords() }),
         },

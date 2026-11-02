@@ -90,26 +90,13 @@ async function agent(locationId: string, name: string): Promise<string> {
   return row!.id;
 }
 
-/** Another location, with an agent of its own: an agent registers printers only in its location. */
-async function otherLocation(): Promise<{ id: string; agentId: string }> {
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Terrace", invoiceLocales: ["es-ES"], operationDescription: "Sale" })
-    .returning({ id: locations.id });
-  return { id: location!.id, agentId: await agent(location!.id, "Terrace agent") };
-}
-
 function entry(agentId: string, extra: Partial<PagePrinterDiscovery> = {}): PagePrinterDiscovery {
   return { agentId, host: "192.0.2.40", office: pdfReport, lastSeenAt: NOW - 1_000, ...extra };
 }
 
-function register(
-  locationId: string,
-  discovery: PagePrinterDiscovery | undefined,
-  window = closed,
-) {
+function register(discovery: PagePrinterDiscovery | undefined, window = closed) {
   return withTransaction(suite.db, (tx) =>
-    registerPagePrinter(tx, locationId, { name: "Back office", entry: discovery }, window),
+    registerPagePrinter(tx, { name: "Back office", entry: discovery }, window),
   );
 }
 
@@ -187,7 +174,6 @@ describe("registering a page printer from discovery", () => {
   it("adds a printer at the report's IPP queue with its capabilities and the reporting agent", async () => {
     const v = await venue();
     const result = await register(
-      v.locationId,
       entry(v.agentOne, { office: { ...pdfReport, port: 8631, resourcePath: "/ipp/office" } }),
     );
     expect(result.outcome).toBe("created");
@@ -213,7 +199,6 @@ describe("registering a page printer from discovery", () => {
     const v = await venue();
     await expect(
       register(
-        v.locationId,
         entry(v.agentOne, {
           office: {
             port: 631,
@@ -225,33 +210,32 @@ describe("registering a page printer from discovery", () => {
         }),
       ),
     ).rejects.toMatchObject({ code: "page_printer.not_printable" });
-    await expect(
-      register(v.locationId, entry(v.agentOne, { office: undefined })),
-    ).rejects.toMatchObject({ code: "page_printer.not_printable" });
+    await expect(register(entry(v.agentOne, { office: undefined }))).rejects.toMatchObject({
+      code: "page_printer.not_printable",
+    });
     expect(await printerRows()).toEqual([]);
   });
 
   it("refuses an absent or stale discovery entry and writes nothing", async () => {
     const v = await venue();
-    await expect(register(v.locationId, undefined)).rejects.toMatchObject({
+    await expect(register(undefined)).rejects.toMatchObject({
       code: "page_printer.not_found",
     });
-    await expect(
-      register(v.locationId, entry(v.agentOne, { lastSeenAt: NOW - 15_001 })),
-    ).rejects.toMatchObject({ code: "page_printer.not_found" });
+    await expect(register(entry(v.agentOne, { lastSeenAt: NOW - 15_001 }))).rejects.toMatchObject({
+      code: "page_printer.not_found",
+    });
     // While a discovery window is open the list keeps an entry for 45 s, so registration does too.
     const open = { now: NOW, discoveryUntil: NOW + 60_000 };
     await expect(
-      register(v.locationId, entry(v.agentOne, { lastSeenAt: NOW - 45_001 }), open),
+      register(entry(v.agentOne, { lastSeenAt: NOW - 45_001 }), open),
     ).rejects.toMatchObject({ code: "page_printer.not_found" });
     expect(await printerRows()).toEqual([]);
   });
 
   it("accepts an entry exactly at the discovered list's bound, with and without a window open", async () => {
     const v = await venue();
-    const first = await register(v.locationId, entry(v.agentOne, { lastSeenAt: NOW - 15_000 }));
+    const first = await register(entry(v.agentOne, { lastSeenAt: NOW - 15_000 }));
     const second = await register(
-      v.locationId,
       entry(v.agentOne, { host: "192.0.2.41", lastSeenAt: NOW - 45_000 }),
       { now: NOW, discoveryUntil: NOW + 60_000 },
     );
@@ -260,9 +244,9 @@ describe("registering a page printer from discovery", () => {
 
   it("re-enables a disabled printer at the same address under its id with fresh capabilities and agent", async () => {
     const v = await venue();
-    const { id } = await register(v.locationId, entry(v.agentOne));
-    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, v.locationId, id));
-    const result = await register(v.locationId, entry(v.agentTwo, { office: urfReport }));
+    const { id } = await register(entry(v.agentOne));
+    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, id));
+    const result = await register(entry(v.agentTwo, { office: urfReport }));
     expect(result).toEqual({ id, outcome: "enabled" });
     expect(await printerRows()).toEqual([
       expect.objectContaining({
@@ -280,11 +264,10 @@ describe("registering a page printer from discovery", () => {
 
   it("re-points an active printer to a new agent's fresh report, keeping its id and name", async () => {
     const v = await venue();
-    const { id } = await register(v.locationId, entry(v.agentOne));
+    const { id } = await register(entry(v.agentOne));
     const result = await withTransaction(suite.db, (tx) =>
       registerPagePrinter(
         tx,
-        v.locationId,
         { name: "Another name", entry: entry(v.agentTwo, { office: urfReport }) },
         closed,
       ),
@@ -305,8 +288,8 @@ describe("registering a page printer from discovery", () => {
 
   it("matches an existing printer's host without regard to case", async () => {
     const v = await venue();
-    const { id } = await register(v.locationId, entry(v.agentOne, { host: "HP-Office.local" }));
-    const result = await register(v.locationId, entry(v.agentTwo, { host: "hp-office.local" }));
+    const { id } = await register(entry(v.agentOne, { host: "HP-Office.local" }));
+    const result = await register(entry(v.agentTwo, { host: "hp-office.local" }));
     expect(result).toEqual({ id, outcome: "repointed" });
     expect(await printerRows()).toEqual([
       expect.objectContaining({ id, host: "HP-Office.local", agentId: v.agentTwo }),
@@ -315,39 +298,26 @@ describe("registering a page printer from discovery", () => {
 
   it("leaves an active printer untouched when the new agent's entry is stale or absent", async () => {
     const v = await venue();
-    await register(v.locationId, entry(v.agentOne));
+    await register(entry(v.agentOne));
     const before = await printerRows();
     await expect(
-      register(v.locationId, entry(v.agentTwo, { office: urfReport, lastSeenAt: NOW - 15_001 })),
+      register(entry(v.agentTwo, { office: urfReport, lastSeenAt: NOW - 15_001 })),
     ).rejects.toMatchObject({ code: "page_printer.not_found" });
-    await expect(register(v.locationId, undefined)).rejects.toMatchObject({
+    await expect(register(undefined)).rejects.toMatchObject({
       code: "page_printer.not_found",
     });
     expect(await printerRows()).toEqual(before);
-  });
-
-  it("adds a separate printer in another location at the same address", async () => {
-    const v = await venue();
-    const terrace = await otherLocation();
-    const here = await register(v.locationId, entry(v.agentOne));
-    const there = await register(terrace.id, entry(terrace.agentId));
-    expect(there.outcome).toBe("created");
-    expect(there.id).not.toBe(here.id);
   });
 });
 
 describe("which queue and which agent a registration may name", () => {
   it("adds a printer for each IPP queue on one host: another path, or another port", async () => {
     const v = await venue();
-    const first = await register(v.locationId, entry(v.agentOne));
+    const first = await register(entry(v.agentOne));
     const otherPath = await register(
-      v.locationId,
       entry(v.agentTwo, { office: { ...pdfReport, resourcePath: "/ipp/print2" } }),
     );
-    const otherPort = await register(
-      v.locationId,
-      entry(v.agentTwo, { office: { ...pdfReport, port: 8631 } }),
-    );
+    const otherPort = await register(entry(v.agentTwo, { office: { ...pdfReport, port: 8631 } }));
     expect([first.outcome, otherPath.outcome, otherPort.outcome]).toEqual([
       "created",
       "created",
@@ -361,34 +331,29 @@ describe("which queue and which agent a registration may name", () => {
     });
   });
 
-  it("refuses an entry from a revoked agent or another location's agent, changing nothing", async () => {
+  it("refuses an entry from a revoked agent, changing nothing", async () => {
     const v = await venue();
-    const terrace = await otherLocation();
-    const { id } = await register(v.locationId, entry(v.agentOne));
+    const { id } = await register(entry(v.agentOne));
     await suite.db.update(printAgents).set({ active: false }).where(eq(printAgents.id, v.agentTwo));
     const before = await printerRows();
-    for (const agentId of [v.agentTwo, terrace.agentId]) {
-      // Re-pointing the existing printer, and adding one at a new address, are both refused.
-      for (const host of ["192.0.2.40", "192.0.2.44"]) {
-        await expect(register(v.locationId, entry(agentId, { host }))).rejects.toMatchObject({
-          code: "page_printer.not_found",
-        });
-      }
+    // Re-pointing the existing printer, and adding one at a new address, are both refused.
+    for (const host of ["192.0.2.40", "192.0.2.44"]) {
+      await expect(register(entry(v.agentTwo, { host }))).rejects.toMatchObject({
+        code: "page_printer.not_found",
+      });
     }
     expect(await printerRows()).toEqual(before);
     await suite.db.update(printAgents).set({ active: true }).where(eq(printAgents.id, v.agentTwo));
-    expect(await register(v.locationId, entry(v.agentTwo))).toEqual({ id, outcome: "repointed" });
+    expect(await register(entry(v.agentTwo))).toEqual({ id, outcome: "repointed" });
   });
 });
 
 describe("listing and renaming page printers", () => {
-  it("lists the location's printers, disabled ones included, with their recorded agent", async () => {
+  it("lists the venue's printers, disabled ones included, with their recorded agent", async () => {
     const v = await venue();
-    const terrace = await otherLocation();
-    const office = await register(v.locationId, entry(v.agentOne));
-    const upstairs = await register(v.locationId, entry(v.agentTwo, { host: "192.0.2.41" }));
-    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, v.locationId, upstairs.id));
-    await register(terrace.id, entry(terrace.agentId, { host: "192.0.2.42" }));
+    const office = await register(entry(v.agentOne));
+    const upstairs = await register(entry(v.agentTwo, { host: "192.0.2.41" }));
+    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, upstairs.id));
     const unattached = randomUUID();
     await suite.db.insert(pagePrinters).values({
       id: unattached,
@@ -403,10 +368,8 @@ describe("listing and renaming page printers", () => {
       resolutionDpi: 300,
       active: false,
     });
-    await withTransaction(suite.db, (tx) =>
-      renamePagePrinter(tx, v.locationId, upstairs.id, "Upstairs"),
-    );
-    const listed = await withTransaction(suite.db, (tx) => listPagePrinters(tx, v.locationId));
+    await withTransaction(suite.db, (tx) => renamePagePrinter(tx, upstairs.id, "Upstairs"));
+    const listed = await withTransaction(suite.db, (tx) => listPagePrinters(tx));
     expect(listed).toEqual([
       expect.objectContaining({
         id: office.id,
@@ -426,16 +389,11 @@ describe("listing and renaming page printers", () => {
     ]);
   });
 
-  it("refuses to rename a printer of another location or an unknown id", async () => {
-    const v = await venue();
-    const terrace = await otherLocation();
-    const there = await register(terrace.id, entry(terrace.agentId));
+  it("refuses to rename an unknown id", async () => {
+    await venue();
     const before = await printerRows();
     await expect(
-      withTransaction(suite.db, (tx) => renamePagePrinter(tx, v.locationId, there.id, "Mine")),
-    ).rejects.toMatchObject({ code: "page_printer.not_found" });
-    await expect(
-      withTransaction(suite.db, (tx) => renamePagePrinter(tx, v.locationId, randomUUID(), "Mine")),
+      withTransaction(suite.db, (tx) => renamePagePrinter(tx, randomUUID(), "Mine")),
     ).rejects.toMatchObject({ code: "page_printer.not_found" });
     expect(await printerRows()).toEqual(before);
   });
@@ -444,8 +402,8 @@ describe("listing and renaming page printers", () => {
 describe("disabling a page printer", () => {
   it("fails its waiting A4 deliveries and leaves a sending one uncertain", async () => {
     const v = await venue();
-    const office = await register(v.locationId, entry(v.agentOne));
-    const other = await register(v.locationId, entry(v.agentOne, { host: "192.0.2.41" }));
+    const office = await register(entry(v.agentOne));
+    const other = await register(entry(v.agentOne, { host: "192.0.2.41" }));
     const queued = await reserveA4(await fullInvoice(v.nodeId), office.id);
     const sending = await reserveA4(await fullInvoice(v.nodeId), office.id);
     const claim = await withTransaction(suite.db, (tx) =>
@@ -464,9 +422,7 @@ describe("disabling a page printer", () => {
     );
     const before = new Map((await deliveryRows()).map((row) => [row.id, row]));
 
-    await withTransaction(suite.db, (tx) =>
-      disablePagePrinter(tx, v.locationId, office.id, new Date(NOW)),
-    );
+    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, office.id, new Date(NOW)));
 
     expect((await printerRows()).find((row) => row.id === office.id)).toMatchObject({
       active: false,
@@ -489,14 +445,12 @@ describe("disabling a page printer", () => {
 
   it("still accepts a late success from the claim it ended", async () => {
     const v = await venue();
-    const office = await register(v.locationId, entry(v.agentOne));
+    const office = await register(entry(v.agentOne));
     const sending = await reserveA4(await fullInvoice(v.nodeId), office.id);
     const claim = await withTransaction(suite.db, (tx) =>
       claimInvoiceDelivery(tx, sending.id, v.agentOne, new Date(NOW - 5_000)),
     );
-    await withTransaction(suite.db, (tx) =>
-      disablePagePrinter(tx, v.locationId, office.id, new Date(NOW)),
-    );
+    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, office.id, new Date(NOW)));
     const result = await withTransaction(suite.db, (tx) =>
       reportInvoiceDelivery(tx, claim!, { status: "sent" }, new Date(NOW + 1_000)),
     );
@@ -510,11 +464,11 @@ describe("disabling a page printer", () => {
 
   it("is not undone by re-enabling: the failed delivery stays failed and nothing is queued", async () => {
     const v = await venue();
-    const office = await register(v.locationId, entry(v.agentOne));
+    const office = await register(entry(v.agentOne));
     const queued = await reserveA4(await fullInvoice(v.nodeId), office.id);
-    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, v.locationId, office.id));
+    await withTransaction(suite.db, (tx) => disablePagePrinter(tx, office.id));
     const failed = await deliveryRows();
-    const again = await register(v.locationId, entry(v.agentOne));
+    const again = await register(entry(v.agentOne));
     expect(again).toEqual({ id: office.id, outcome: "enabled" });
     expect(await deliveryRows()).toEqual(failed);
     expect(failed).toEqual([
@@ -522,16 +476,11 @@ describe("disabling a page printer", () => {
     ]);
   });
 
-  it("refuses a printer of another location or an unknown id and changes nothing", async () => {
-    const v = await venue();
-    const terrace = await otherLocation();
-    const there = await register(terrace.id, entry(terrace.agentId));
+  it("refuses an unknown id and changes nothing", async () => {
+    await venue();
     const before = await printerRows();
     await expect(
-      withTransaction(suite.db, (tx) => disablePagePrinter(tx, v.locationId, there.id)),
-    ).rejects.toMatchObject({ code: "page_printer.not_found" });
-    await expect(
-      withTransaction(suite.db, (tx) => disablePagePrinter(tx, v.locationId, randomUUID())),
+      withTransaction(suite.db, (tx) => disablePagePrinter(tx, randomUUID())),
     ).rejects.toMatchObject({ code: "page_printer.not_found" });
     expect(await printerRows()).toEqual(before);
   });

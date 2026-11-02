@@ -559,13 +559,7 @@ describe("startServer, against a migrated venue directory", () => {
         .where(eq(printers.localKey, "WAITRON-DEMO-PRINTER"));
       expect(printer?.active).toBe(true);
       const { jobId } = await liveFixture(httpPort(), (tx) =>
-        enqueuePrintJob(
-          tx,
-          { locationId: TILL_LOCATION_ID },
-          printer!.id,
-          esc().kick().bytes(),
-          "drawer",
-        ),
+        enqueuePrintJob(tx, printer!.id, esc().kick().bytes(), "drawer"),
       );
       await vi.waitFor(async () => {
         const [job] = await sharedDb

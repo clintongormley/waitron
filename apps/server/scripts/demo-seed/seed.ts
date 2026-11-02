@@ -84,17 +84,13 @@ export async function seedDemoRestaurant(
       dataSet,
     });
     const { languages } = await readContentLanguages(tx, locale);
-    const demoPrinter = await createPrinter(
-      tx,
-      { locationId },
-      {
-        name: demoPlainText(dataSet.printerName, dataSet, locale),
-        transport: "usb",
-        localKey: DEMO_PRINTER_KEY,
-        hasCashDrawer: true,
-      },
-    );
-    await routeToDemoPrinter(tx, locationId, demoPrinter.id);
+    const demoPrinter = await createPrinter(tx, {
+      name: demoPlainText(dataSet.printerName, dataSet, locale),
+      transport: "usb",
+      localKey: DEMO_PRINTER_KEY,
+      hasCashDrawer: true,
+    });
+    await routeToDemoPrinter(tx, demoPrinter.id);
     await seedOptionLists(tx, { productsByImage, locale, dataSet, languages });
     await seedExtraLists(tx, { productsByImage, locale, dataSet, languages });
     await seedFloor(tx, { locationId, locale, departmentTradingNames, dataSet, menuIds });

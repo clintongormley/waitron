@@ -14,7 +14,7 @@ import {
 } from "./runtime.js";
 import { createPrinter, deactivatePrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
-import type { PrintConfig } from "./printers.js";
+type PrintConfig = { locationId: string };
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -52,22 +52,17 @@ async function jobRow(jobId: string) {
 }
 
 async function printer(
-  cfg: PrintConfig,
   localKey = MAC,
   transport: "bluetooth" | "usb" = "bluetooth",
 ): Promise<string> {
   return withTransaction(suite.db, async (tx: Transaction) => {
-    return (await createPrinter(tx, cfg, { name: localKey, transport, localKey })).id;
+    return (await createPrinter(tx, { name: localKey, transport, localKey })).id;
   });
 }
 
-async function job(
-  cfg: PrintConfig,
-  printerId: string,
-  kind: "document" | "drawer" = "document",
-): Promise<string> {
+async function job(printerId: string, kind: "document" | "drawer" = "document"): Promise<string> {
   return withTransaction(suite.db, async (tx: Transaction) => {
-    return (await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([0x41]), kind)).jobId;
+    return (await enqueuePrintJob(tx, printerId, new Uint8Array([0x41]), kind)).jobId;
   });
 }
 
@@ -81,12 +76,12 @@ describe("endUnpairedPrinterJobs", () => {
   it("ends every waiting job of the unpaired printer, and this agent's own claims, failed with no attempts left", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Box");
-    const printerId = await printer(cfg);
-    const queued = await job(cfg, printerId);
-    const failedUnderCap = await job(cfg, printerId);
-    const lapsed = await job(cfg, printerId);
-    const unstamped = await job(cfg, printerId);
-    const ownLive = await job(cfg, printerId);
+    const printerId = await printer();
+    const queued = await job(printerId);
+    const failedUnderCap = await job(printerId);
+    const lapsed = await job(printerId);
+    const unstamped = await job(printerId);
+    const ownLive = await job(printerId);
     await suite.db
       .update(printJobs)
       .set({ status: "failed", attempts: 2, lastError: "device gone" })
@@ -116,9 +111,7 @@ describe("endUnpairedPrinterJobs", () => {
     }
     // Final: an agent that can print to the address again claims none of them.
     expect(
-      await withTransaction(suite.db, (tx) =>
-        claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [MAC] }),
-      ),
+      await withTransaction(suite.db, (tx) => claimPrintJobs(tx, agentId, { visibleKeys: [MAC] })),
     ).toEqual([]);
   });
 
@@ -126,13 +119,13 @@ describe("endUnpairedPrinterJobs", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Box");
     const otherAgent = await seedAgent(cfg, "Other box");
-    const printerId = await printer(cfg);
-    const othersLive = await job(cfg, printerId);
-    const done = await job(cfg, printerId);
-    const givenUp = await job(cfg, printerId);
-    const otherAddress = await job(cfg, await printer(cfg, "11:22:33:44:55:66"));
+    const printerId = await printer();
+    const othersLive = await job(printerId);
+    const done = await job(printerId);
+    const givenUp = await job(printerId);
+    const otherAddress = await job(await printer("11:22:33:44:55:66"));
     // A USB printer whose key is given as an address is not a Bluetooth printer.
-    const usb = await job(cfg, await printer(cfg, "BB:BB:BB:BB:BB:BB", "usb"));
+    const usb = await job(await printer("BB:BB:BB:BB:BB:BB", "usb"));
     await suite.db
       .update(printJobs)
       .set({ status: "printing", claimedBy: otherAgent, claimedAt: new Date().toISOString() })
@@ -142,7 +135,7 @@ describe("endUnpairedPrinterJobs", () => {
       .update(printJobs)
       .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS, lastError: "device gone" })
       .where(eq(printJobs.id, givenUp));
-    const failedDrawer = await job(cfg, printerId, "drawer");
+    const failedDrawer = await job(printerId, "drawer");
     await suite.db
       .update(printJobs)
       .set({ status: "failed", attempts: 1, lastError: "uncertain pulse" })
@@ -161,7 +154,7 @@ describe("endUnpairedPrinterJobs", () => {
   it("ends a waiting drawer kick", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Box");
-    const kick = await job(cfg, await printer(cfg), "drawer");
+    const kick = await job(await printer(), "drawer");
 
     expect(await end(agentId, [MAC])).toEqual([kick]);
     expect(await jobRow(kick)).toMatchObject(ENDED);
@@ -171,13 +164,13 @@ describe("endUnpairedPrinterJobs", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Box");
     const jobId = await withTransaction(suite.db, async (tx: Transaction) => {
-      const created = await createPrinter(tx, cfg, {
+      const created = await createPrinter(tx, {
         name: "Off",
         transport: "bluetooth",
         localKey: MAC,
       });
-      const { jobId } = await enqueuePrintJob(tx, cfg, created.id, new Uint8Array([0x41]));
-      await deactivatePrinter(tx, cfg, created.id);
+      const { jobId } = await enqueuePrintJob(tx, created.id, new Uint8Array([0x41]));
+      await deactivatePrinter(tx, created.id);
       return jobId;
     });
 
@@ -188,9 +181,9 @@ describe("endUnpairedPrinterJobs", () => {
   it("ends more waiting jobs than one pull claims, in one call", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Box");
-    const printerId = await printer(cfg);
+    const printerId = await printer();
     const jobs: string[] = [];
-    for (let i = 0; i <= PULL_BATCH_LIMIT; i++) jobs.push(await job(cfg, printerId));
+    for (let i = 0; i <= PULL_BATCH_LIMIT; i++) jobs.push(await job(printerId));
 
     const ended = await end(agentId, [MAC]);
 
@@ -200,7 +193,7 @@ describe("endUnpairedPrinterJobs", () => {
   it("changes nothing when no address is given", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Box");
-    const jobId = await job(cfg, await printer(cfg));
+    const jobId = await job(await printer());
 
     expect(await end(agentId, [])).toEqual([]);
     expect(await jobRow(jobId)).toMatchObject({ status: "queued", attempts: 0, lastError: null });

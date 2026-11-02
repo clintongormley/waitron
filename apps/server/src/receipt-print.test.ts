@@ -77,7 +77,6 @@ import {
   resendPrintJob,
   updatePrinter,
 } from "@waitron/printing";
-import type { PrintConfig } from "@waitron/printing";
 import { NetworkTcpTransport, UsbTransport } from "@waitron/print-agent";
 import {
   locationId as brandLocationId,
@@ -210,10 +209,6 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
   };
 }
 
-function printCfg(cfg: DeviceRequestConfig): PrintConfig {
-  return { locationId: cfg.locationId };
-}
-
 /**
  * A fresh chained venue and a one-`each`-product catalogue (1.50 gross, general/21 %), offered in
  * the counter zone under `orderFlow`.
@@ -306,18 +301,14 @@ async function storeDepartmentReceipt(
  * printer is driven by neither adapter, so the spy would be vacuous. `192.0.2.1` is TEST-NET-1 (RFC
  * 5737, unroutable).
  */
-async function makePrinter(
-  cfg: DeviceRequestConfig,
-  {
-    active = true,
-    transport = "cloud_poll" as "cloud_poll" | "network_tcp",
-    hasCashDrawer = true,
-  } = {},
-): Promise<string> {
+async function makePrinter({
+  active = true,
+  transport = "cloud_poll" as "cloud_poll" | "network_tcp",
+  hasCashDrawer = true,
+} = {}): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const { id } = await createPrinter(
       tx,
-      printCfg(cfg),
       transport === "network_tcp"
         ? { name: "Recibos", transport: "network_tcp", host: "192.0.2.1", hasCashDrawer }
         : {
@@ -327,7 +318,7 @@ async function makePrinter(
             hasCashDrawer,
           },
     );
-    if (!active) await deactivatePrinter(tx, printCfg(cfg), id);
+    if (!active) await deactivatePrinter(tx, id);
     return id;
   });
 }
@@ -478,7 +469,7 @@ const deps = () => ({ db: suite.db, backend, clock });
 describe("the words around a receipt's QR come from the venue's fiscal backend", () => {
   async function sellOnce(backendForSale: FiscalBackend) {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "auto", printerId });
     const ticket = await recordTillSale(
       { admission: testTradingAdmission(), db: suite.db, backend: backendForSale, clock },
@@ -528,7 +519,7 @@ it.each(["en-GB", "ca-ES"])(
   async (locale) => {
     const { cfg: original, each, zoneId } = await setupVenue("ticket_then_pay");
     const cfg = { ...original, locale };
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
     await suite.db.execute(sql`
     update department_sale_policies
@@ -555,7 +546,7 @@ it.each(["en-GB", "ca-ES"])(
 
 it("prints one non-fiscal numbered collection ticket when a pay-on-collection order is placed", async () => {
   const { cfg, each, zoneId } = await setupVenue("ticket_then_pay");
-  const printerId = await makePrinter(cfg);
+  const printerId = await makePrinter();
   await configureReceipt(cfg, { printerId });
   await suite.db.execute(sql`
     update department_sale_policies
@@ -604,7 +595,7 @@ it("prints one non-fiscal numbered collection ticket when a pay-on-collection or
 
 it("a counter order paid at collection records its flow but prints no collection ticket when numbering is off", async () => {
   const { cfg, each, zoneId } = await setupVenue("ticket_then_pay");
-  const printerId = await makePrinter(cfg);
+  const printerId = await makePrinter();
   await configureReceipt(cfg, { printerId });
   await suite.db.execute(
     sql`update department_sale_policies set order_start = 'counter', paid_when = 'ticket_then_pay', collection_number = 'none' where department_id = (select department_id from zone_service_policies where zone_id = ${zoneId})`,
@@ -630,7 +621,7 @@ it("a counter order paid at collection records its flow but prints no collection
 
 it("prints a separate numbered collection ticket when a prepaid order is paid", async () => {
   const { cfg, each, zoneId } = await setupVenue("prepay");
-  const printerId = await makePrinter(cfg);
+  const printerId = await makePrinter();
   await configureReceipt(cfg, { printerId });
   await suite.db.execute(sql`
     update department_sale_policies
@@ -675,7 +666,7 @@ it("prints a separate numbered collection ticket when a prepaid order is paid", 
 
 it("a prepaid cash sale reads the device's printers once for its collection ticket, receipt and drawer", async () => {
   const { cfg, each, zoneId } = await setupVenue("prepay");
-  const printerId = await makePrinter(cfg);
+  const printerId = await makePrinter();
   await configureReceipt(cfg, { mode: "auto", printerId });
   async function collectionNumber(value: "numbered" | "none"): Promise<void> {
     await suite.db.execute(sql`
@@ -714,14 +705,15 @@ it("a prepaid cash sale reads the device's printers once for its collection tick
   const receiptOnly = await readsOfSale(undefined);
 
   expect(await drawerOpensFor(cfg)).toHaveLength(2);
-  // The collection document also reads the saved frame language; the device-printer lookup stays cached.
+  // The collection document also reads the saved frame language; the device-printer lookup and the
+  // venue id its jobs are filed under are each read once per sale.
   expect(all - noDrawer).toBe(1);
   expect(noDrawer - receiptOnly).toBe(2);
 });
 
 it("a cash bill payment that pays the bill in full reads the device's printers once for its drawer and receipt", async () => {
   const { cfg, each } = await setupVenue();
-  const printerId = await makePrinter(cfg);
+  const printerId = await makePrinter();
   await configureReceipt(cfg, { mode: "auto", printerId });
   const tabId = await withTransaction(suite.db, async (tx) => {
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
@@ -780,7 +772,7 @@ describe("receipt grouping after table changes", () => {
     async (orderFlow) => {
       const base = await setupVenue(orderFlow === "issued" ? "ticket_then_pay" : orderFlow);
       const cfg = base.cfg;
-      const printerId = await makePrinter(cfg);
+      const printerId = await makePrinter();
       await configureReceipt(cfg, { mode: "auto", printerId });
       // A tab opens only in a table_tab zone, so the order that carries the table here is a counter
       // order in a zone of this flow, delivered to the table.
@@ -877,7 +869,7 @@ describe("receipt grouping after table changes", () => {
 describe("receipt original and copy tracking", () => {
   it("distinguishes the F2 original, manual copy and drawer job without changing the sale", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
     const workingOrderId = randomUUID();
     await recordTillSale(
@@ -929,7 +921,7 @@ describe("simplified invoice original requests", () => {
     "retains the F2 original and its bytes while it is %s",
     async (status) => {
       const { cfg, each, zoneId } = await setupVenue();
-      const printerId = await makePrinter(cfg);
+      const printerId = await makePrinter();
       await configureReceipt(cfg, { printerId });
       const workingOrderId = randomUUID();
       await recordTillSale(
@@ -978,7 +970,7 @@ describe("simplified invoice original requests", () => {
       OPERATOR,
     );
     expect(await suite.db.select().from(printJobs)).toEqual([]);
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
     await Promise.all([
       printSaleReceipt(deps(), cfg, workingOrderId, false),
@@ -999,7 +991,7 @@ describe("simplified invoice original requests", () => {
 describe("cash payment drawer separation", () => {
   it("prints a cash receipt without a drawer command or audit when its printer has no drawer", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg, { hasCashDrawer: false });
+    const printerId = await makePrinter({ hasCashDrawer: false });
     await configureReceipt(cfg, { mode: "auto", printerId });
     const result = await recordTillSale(
       { ...deps(), admission: testTradingAdmission() },
@@ -1024,7 +1016,7 @@ describe("cash payment drawer separation", () => {
     "%s mode keeps cash payment separate from document printing",
     async (mode) => {
       const { cfg, each, zoneId } = await setupVenue();
-      const printerId = await makePrinter(cfg);
+      const printerId = await makePrinter();
       await configureReceipt(cfg, { mode, printerId });
       await recordTillSale(
         { ...deps(), admission: testTradingAdmission() },
@@ -1053,7 +1045,7 @@ describe("cash payment drawer separation", () => {
 describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbox)", () => {
   it("uses the zone's automatic receipt policy when the department setting is on request", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "on_request", printerId });
     await withTransaction(suite.db, async (tx) => {
       await tx
@@ -1083,9 +1075,9 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
   it("lays the automatic receipt out for the device printer's paper width and resolution", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await withTransaction(suite.db, async (tx) => {
-      await updatePrinter(tx, printCfg(cfg), printerId, {
+      await updatePrinter(tx, printerId, {
         paperWidth: "58mm",
         resolution: "203dpi",
       });
@@ -1122,7 +1114,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   it("auto + printer + CASH: enqueues separate receipt and drawer jobs, records the drawer open, never blocks filing", async () => {
     const { cfg, each, zoneId } = await setupVenue();
     // network_tcp, so the transport spy is not vacuous (see `makePrinter`).
-    const printerId = await makePrinter(cfg, { transport: "network_tcp" });
+    const printerId = await makePrinter({ transport: "network_tcp" });
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     const result = await recordTillSale(
@@ -1172,7 +1164,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
   it("ignores the venue footer while printing the filed invoice", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg, { transport: "network_tcp" });
+    const printerId = await makePrinter({ transport: "network_tcp" });
     await configureReceipt(cfg, { mode: "auto", printerId });
     await withTransaction(suite.db, async (tx) => {
       // Through the table definition: `receipt` is a JSON column whose write mapping encodes the
@@ -1203,7 +1195,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   it("marks an automatically printed practice sale as simulated", async () => {
     const base = await setupVenue();
     const cfg = { ...base.cfg, practiceMode: true };
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     await recordTillSale(
@@ -1224,7 +1216,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
   it("auto + printer + hand-keyed CARD: the receipt carries NO kick; a separate drawer job opens the drawer for the card slip", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     await recordTillSale(
@@ -1262,7 +1254,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
   it("hand-keyed CARD on a device that may not open the drawer: the receipt prints, and no drawer job or audit row", async () => {
     const { cfg: base, each, zoneId } = await setupVenue();
     const cfg = await deviceWithout(base, "open-cash-drawer");
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     await recordTillSale(
@@ -1284,7 +1276,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
   it("hand-keyed CARD at a till whose printer has no drawer: the receipt prints, and no drawer job or audit row", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg, { hasCashDrawer: false });
+    const printerId = await makePrinter({ hasCashDrawer: false });
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     await recordTillSale(
@@ -1306,7 +1298,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
   it("hand-keyed CARD but NO operator: prints the receipt, but no kick and no audit row", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
@@ -1323,7 +1315,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
   it("hand-keyed CARD in mode 'on_request': files the sale and enqueues only the drawer job for the card slip", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "on_request", printerId });
 
     await recordTillSale(
@@ -1352,7 +1344,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
   it("mode 'on_request': files the sale and enqueues only the cash drawer job", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "on_request", printerId });
 
     await recordTillSale(
@@ -1373,7 +1365,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
   it("mode 'on_request': files the sale and enqueues only the cash drawer job", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "on_request", printerId });
 
     await recordTillSale(
@@ -1415,7 +1407,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     const { cfg, each, zoneId } = await setupVenue();
     // The hook's active filter drops a deactivated printer, so `enqueuePrintJob`'s
     // `printer.not_found` throw, which would abort the sale (§5), stays unreachable.
-    const printerId = await makePrinter(cfg, { active: false });
+    const printerId = await makePrinter({ active: false });
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     const result = await recordTillSale(
@@ -1437,7 +1429,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
   it("auto + printer + CASH but NO operator: prints the receipt, but no kick and no audit row", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "auto", printerId });
 
     // No operator: the kick and its audit row are skipped; the customer receipt still prints.
@@ -1459,7 +1451,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     async (mode) => {
       const base = await setupVenue("ticket_then_pay");
       const { cfg } = base;
-      const printerId = await makePrinter(cfg);
+      const printerId = await makePrinter();
       await configureReceipt(cfg, { mode, printerId });
       const id = randomUUID();
       await parkOrder({ db: suite.db }, cfg, {
@@ -1482,7 +1474,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
     async (mode) => {
       const base = await setupVenue("ticket_then_pay");
       const { cfg } = base;
-      const printerId = await makePrinter(cfg);
+      const printerId = await makePrinter();
       await configureReceipt(cfg, { mode, printerId });
 
       const id = randomUUID();
@@ -1586,7 +1578,7 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
     const base = await setupVenue(orderFlow);
     const cfg = await deviceRequestCfg(suite.db, { ...base.cfg });
     const other = await addNode(cfg, "Caja 2", otherCapabilities);
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "auto", printerId });
     await configureReceipt(other, { printerId });
     return {
@@ -1757,8 +1749,8 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
   async function venue(opts: { receiptHasDrawer: boolean }) {
     const base = await setupVenue();
     const cfg = base.cfg;
-    const drawer = await makePrinter(cfg);
-    const receipt = await makePrinter(cfg, { hasCashDrawer: opts.receiptHasDrawer });
+    const drawer = await makePrinter();
+    const receipt = await makePrinter({ hasCashDrawer: opts.receiptHasDrawer });
     await configureReceipt(cfg, { mode: "auto", printerId: receipt });
     await withTransaction(suite.db, (tx) =>
       tx
@@ -1776,7 +1768,7 @@ describe("the drawer follows the device's drawer choice, not its receipt printer
 
   it("a device switching to a portable receipt printer without a drawer still opens its chosen drawer on a cash sale", async () => {
     const { cfg, drawer, product } = await venue({ receiptHasDrawer: true });
-    const portable = await makePrinter(cfg, { hasCashDrawer: false });
+    const portable = await makePrinter({ hasCashDrawer: false });
     await withTransaction(suite.db, async (tx) => {
       await tx.update(printers).set({ portable: true }).where(eq(printers.id, portable));
       await tx
@@ -1964,7 +1956,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
   /** An auto-printed card sale's receipt that ran out of attempts, then the till's reprint of it. */
   async function failedThenReprinted() {
     const venue = await setupVenue();
-    const printerId = await makePrinter(venue.cfg, NO_DRAWER);
+    const printerId = await makePrinter(NO_DRAWER);
     await configureReceipt(venue.cfg, { mode: "auto", printerId });
     const sale = await sell(venue);
     const [original] = await jobs();
@@ -1977,7 +1969,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 
   it("records the sale on its original and duplicate receipts, and not on its drawer job", async () => {
     const venue = await setupVenue();
-    const printerId = await makePrinter(venue.cfg, { hasCashDrawer: true });
+    const printerId = await makePrinter({ hasCashDrawer: true });
     await configureReceipt(venue.cfg, { mode: "on_request", printerId });
     const sale = await sell(venue, "cash");
     await printSaleReceipt({ db: suite.db, backend }, venue.cfg, sale.workingOrderId, false);
@@ -1994,7 +1986,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
     const venue = await setupVenue();
     await configureReceipt(venue.cfg, {
       mode: "auto",
-      printerId: await makePrinter(venue.cfg, NO_DRAWER),
+      printerId: await makePrinter(NO_DRAWER),
     });
     const sale = await sell(venue);
 
@@ -2013,7 +2005,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 
   it("drops a failed resend of the receipt from the Printers screen once the till's reprint has printed", async () => {
     const venue = await setupVenue();
-    const printerId = await makePrinter(venue.cfg, NO_DRAWER);
+    const printerId = await makePrinter(NO_DRAWER);
     await configureReceipt(venue.cfg, { mode: "auto", printerId });
     const sale = await sell(venue);
     const [original] = await jobs();
@@ -2036,7 +2028,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 
   it("counts a reprint that runs out of attempts after the original printed", async () => {
     const venue = await setupVenue();
-    const printerId = await makePrinter(venue.cfg, NO_DRAWER);
+    const printerId = await makePrinter(NO_DRAWER);
     await configureReceipt(venue.cfg, { mode: "auto", printerId });
     const sale = await sell(venue);
     const [original] = await jobs();
@@ -2049,12 +2041,12 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 
   it("keeps counting a failed receipt when the reprint prints on another printer", async () => {
     const venue = await setupVenue();
-    const first = await makePrinter(venue.cfg, NO_DRAWER);
+    const first = await makePrinter(NO_DRAWER);
     await configureReceipt(venue.cfg, { mode: "auto", printerId: first });
     const sale = await sell(venue);
     const [original] = await jobs();
     await setJobs([original!.id], exhausted);
-    const second = await makePrinter(venue.cfg, NO_DRAWER);
+    const second = await makePrinter(NO_DRAWER);
     await configureReceipt(venue.cfg, { printerId: second });
     await reprintSale({ db: suite.db, backend }, venue.cfg, sale.workingOrderId);
     const reprint = (await jobs()).at(-1)!;
@@ -2067,7 +2059,7 @@ describe("a receipt reprint and the printer's alert (A167)", () => {
 
   it("keeps counting another sale's failed receipt when this sale's reprint prints", async () => {
     const venue = await setupVenue();
-    const printerId = await makePrinter(venue.cfg, NO_DRAWER);
+    const printerId = await makePrinter(NO_DRAWER);
     await configureReceipt(venue.cfg, { mode: "auto", printerId });
     await sell(venue);
     const other = await sell(venue);
@@ -2086,7 +2078,7 @@ describe("a record with no device prints nothing", () => {
     "finds no receipt or payment slip printer for the %s source",
     async (source) => {
       const { cfg } = await setupVenue();
-      await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+      await configureReceipt(cfg, { printerId: await makePrinter() });
       const found = await withTransaction(suite.db, async (tx) => [
         await resolveReceiptPrinter(tx, jobOrigin(source)),
         await resolvePaymentSlipPrinter(tx, jobOrigin(source)),
@@ -2131,7 +2123,7 @@ describe("the device's invoice printer", () => {
   const resolve = (origin: Parameters<typeof resolveInvoicePrinter>[1]) =>
     withTransaction(suite.db, (tx) => resolveInvoicePrinter(tx, origin));
 
-  it("resolves the profile's default A4 printer at the device's location", async () => {
+  it("resolves the profile's default A4 printer", async () => {
     const { cfg } = await setupVenue();
     const office = await officePrinter(cfg);
     await withTransaction(suite.db, async (tx) =>
@@ -2148,7 +2140,7 @@ describe("the device's invoice printer", () => {
   it("resolves the device's own receipt-printer choice over the profile's default", async () => {
     const { cfg } = await setupVenue();
     const office = await officePrinter(cfg);
-    const receipt = await makePrinter(cfg);
+    const receipt = await makePrinter();
     await withTransaction(suite.db, async (tx) => {
       const profileId = await profileOf(cfg);
       await listInvoicePrinter(tx, { profileId, pagePrinterId: office, isDefault: true });
@@ -2191,7 +2183,7 @@ describe("the device's invoice printer", () => {
 describe("receipt issuer", () => {
   it("keeps a department's printed trading name on reprint after its settings change", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter() });
     await withTransaction(suite.db, (tx) =>
       tx.execute(
         sql`update departments set trading_name = 'Deli Counter' where location_id = ${cfg.locationId}`,
@@ -2230,7 +2222,7 @@ describe("receipt issuer", () => {
 
   it("leaves a manual till reprint unqueued when its taxpayer row is missing", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter() });
     const filed = await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
       zoneId,
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
@@ -2247,7 +2239,7 @@ describe("receipt issuer", () => {
 
   it("prints the taxpayer's own name and NIF when the ticket carries no filed issuer", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter() });
     const filed = await recordTillSale({ ...deps(), admission: testTradingAdmission() }, cfg, {
       zoneId,
       lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
@@ -2291,7 +2283,7 @@ describe("a party's receipt names the party and its tables (spec §8)", () => {
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
     await storeDepartmentReceipt(departmentId!, { operationDescription: "Restaurante" });
-    await configureReceipt(v.cfg, { mode: "auto", printerId: await makePrinter(v.cfg) });
+    await configureReceipt(v.cfg, { mode: "auto", printerId: await makePrinter() });
     const mesa4 = await v.table("Mesa 4");
     const mesa5 = await v.table("Mesa 5");
     const { partyId, tabId } = await seat(v, mesa4);
@@ -2357,7 +2349,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
       .from(zoneServicePolicies)
       .where(eq(zoneServicePolicies.zoneId, v.tables.zoneId));
     await storeDepartmentReceipt(departmentId!, { operationDescription: "Restaurante" });
-    await configureReceipt(v.cfg, { mode: "auto", printerId: await makePrinter(v.cfg) });
+    await configureReceipt(v.cfg, { mode: "auto", printerId: await makePrinter() });
     const { partyId, tabId } = await seat(v, await v.table("Mesa 12"), guests);
     await orderForParty(v, partyId, ["Burger"], tabId);
 
@@ -2386,7 +2378,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
    */
   async function partyWithStoredGuests(stored: number | null) {
     const v = await setupPartyVenue(suite.db);
-    const printerId = await makePrinter(v.cfg);
+    const printerId = await makePrinter();
     await configureReceipt(v.cfg, { mode: "on_request", printerId });
     const { partyId, tabId } = await seat(v, await v.table("Mesa 13"), 4);
     await orderForParty(v, partyId, ["Burger"], tabId);
@@ -2460,7 +2452,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
    */
   async function partiesPaying() {
     const v = await setupPartyVenue(suite.db);
-    const printerId = await makePrinter(v.cfg);
+    const printerId = await makePrinter();
     await configureReceipt(v.cfg, { mode: "auto", printerId });
     const deps = { db: v.db, backend: v.backend };
     const pays = async (table: string, ...chosen: [] | [number | null]) => {
@@ -2646,7 +2638,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
 
   it("prints the stored logo for the printer's paper, then the location's address, phone and email", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "auto", printerId });
     await storeReceipt({
       printAddress: true,
@@ -2676,7 +2668,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
 
   it("a photo replacement refreshes both papers and retained department logos while queued receipt bytes stay fixed", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter() });
     await suite.db.insert(departments).values({
       locationId: cfg.locationId,
       name: "Retained logo department",
@@ -2760,7 +2752,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
 
   it("prints no address when the receipt switches it off", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter() });
     await storeReceipt({ printAddress: false });
 
     await sellOne(cfg, each, zoneId);
@@ -2775,7 +2767,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     ["ten million characters of data", "A".repeat(10_000_000)],
   ])("files and prints the sale without a logo when the stored picture has %s", async (_, data) => {
     const { cfg, each, zoneId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter() });
     await storeReceipt({
       printAddress: true,
       logo: LOGO,
@@ -2798,7 +2790,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
     ["a word for the address switch, which omits the address", { printAddress: "no" }],
   ])("files and prints the sale without a trim field stored as %s", async (_, trim) => {
     const { cfg, each, zoneId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter() });
     await storeReceipt(trim);
 
     const result = await sellOne(cfg, each, zoneId);
@@ -2814,7 +2806,7 @@ describe("the receipt's top block: logo, address, phone and email", () => {
 
   it("reprints with the trim saved since, as it does the slogan", async () => {
     const { cfg, each, zoneId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "auto", printerId: await makePrinter() });
     const filed = await sellOne(cfg, each, zoneId);
     const saleId = await onlySaleId(cfg);
     await storeReceipt({
@@ -2849,7 +2841,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
     ) => Promise<void>,
   ) {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode, printerId });
     return withTransaction(suite.db, async (tx) => {
       await tx.update(tenants).set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" });
@@ -3440,7 +3432,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
 
   it("queues no delivery for an automatic original without an active receipt printer", async () => {
     const { cfg, printerId, saleId, ticket } = await issued("auto");
-    await withTransaction(suite.db, (tx) => deactivatePrinter(tx, printCfg(cfg), printerId));
+    await withTransaction(suite.db, (tx) => deactivatePrinter(tx, printerId));
     await withTransaction(suite.db, (tx) => enqueueSaleReceipt(tx, cfg, ticket, saleId));
     expect(await suite.db.select().from(printJobs)).toEqual([]);
     expect(await suite.db.select().from(invoiceDeliveries)).toEqual([]);
@@ -3450,7 +3442,7 @@ describe("automatic F1 receipt delivery enrollment", () => {
 describe("department receipt presentation on thermal jobs", () => {
   async function setupReceipt() {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
     const [{ departmentId }] = await suite.db
       .select({ departmentId: zoneServicePolicies.departmentId })
@@ -3852,7 +3844,7 @@ describe("department receipt presentation on thermal jobs", () => {
 describe("the theme's logo on thermal receipts", () => {
   async function setupReceipt(paperWidth: "58mm" | "80mm" = "80mm") {
     const { cfg, each, zoneId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
     await suite.db
       .update(printers)
@@ -4076,7 +4068,7 @@ describe("the theme's logo on thermal receipts", () => {
 
 it("keeps the original history after printer deletion and prints a marked copy on its replacement", async () => {
   const { cfg, each, zoneId } = await setupVenue();
-  const firstPrinter = await makePrinter(cfg);
+  const firstPrinter = await makePrinter();
   await configureReceipt(cfg, { printerId: firstPrinter });
   const workingOrderId = randomUUID();
   const ticket = await recordTillSale(
@@ -4092,8 +4084,8 @@ it("keeps the original history after printer deletion and prints a marked copy o
   );
   const fiscal = await suite.db.select().from(registrosFacturacion);
   const drawer = await suite.db.select().from(drawerOpens);
-  await withTransaction(suite.db, (tx) => deletePrinter(tx, printCfg(cfg), firstPrinter));
-  const replacement = await makePrinter(cfg);
+  await withTransaction(suite.db, (tx) => deletePrinter(tx, firstPrinter));
+  const replacement = await makePrinter();
   await configureReceipt(cfg, { printerId: replacement });
   await printSaleReceipt(deps(), cfg, workingOrderId, false);
   await reprintSale(deps(), cfg, workingOrderId);
@@ -4122,7 +4114,7 @@ describe("A964 collection language", () => {
     async (mode) => {
       const v = await setupVenue(mode);
       const cfg = { ...v.cfg, locale: "de-DE" };
-      const printerId = await makePrinter(cfg);
+      const printerId = await makePrinter();
       await configureReceipt(cfg, { printerId });
       await suite.db.execute(
         sql`update department_sale_policies set order_start = 'counter', paid_when = ${mode}, collection_number = 'numbered' where department_id = (select department_id from zone_service_policies where zone_id = ${v.zoneId})`,

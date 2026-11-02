@@ -483,6 +483,12 @@ function no longer reads the scope. It fails before the change. It is marked
   (`packages/staffing/src/staff-roles.ts`) keeps the condition for `staff_roles_location_name_key`.
   The staff-role, department, station and roster-version lists it also changed now scan, but their
   old plans searched on `location_id` alone, which matches every row on a box with one venue.
+  S10 did the same for the demo printer: `configureDemoPrinter` (`apps/server/src/demo-printer.ts`)
+  keeps `location_id = venueLocationId(tx)` for `printers_local_key_key`, pinned by "finds its
+  printer on the venue and local-key index, not a scan" in `demo-printer.test.ts`; the slice that
+  drops `printers.location_id` re-keys that index on `local_key` and deletes the condition. The
+  same slice for `print_jobs` removes `enqueuePrintJob`'s `venueId` option
+  (`packages/printing/src/outbox.ts`) and the callers that read the venue id once to pass it.
 - **The live-query table names** (`location_day_cutover_changes`, `{ type: "locations" }`) and the
   unique-index column lists (`columns: ["location_id", "name"]`) named as leftovers below go with
   S23 and S24.

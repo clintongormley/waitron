@@ -42,11 +42,11 @@ useVenueDb({
         .select({ id: kitchenStations.id })
         .from(kitchenStations)
         .where(eq(kitchenStations.isDefault, true));
-      const { id: printerId } = await createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        { name: "Cocina", transport: "bluetooth", localKey: MAC },
-      );
+      const { id: printerId } = await createPrinter(tx, {
+        name: "Cocina",
+        transport: "bluetooth",
+        localKey: MAC,
+      });
       await attachPrinterToStation(tx, {
         locationId: venue.cfg.locationId,
         stationId: station!.id,

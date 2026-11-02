@@ -310,16 +310,11 @@ describe("invoice delivery reservation", () => {
 
   it("refuses a receipt printer as an A4 destination without reserving a delivery", async () => {
     const sale = await issue();
-    const [location] = await suite.db.select().from(locations);
-    const receipt = await createPrinter(
-      suite.db,
-      { locationId: location!.id },
-      {
-        name: "Receipt only",
-        transport: "network_tcp",
-        host: "192.0.2.10",
-      },
-    );
+    const receipt = await createPrinter(suite.db, {
+      name: "Receipt only",
+      transport: "network_tcp",
+      host: "192.0.2.10",
+    });
     const request = { ...email(), medium: "a4" as const, pagePrinterId: receipt.id };
     await expect(
       withTransaction(suite.db, (tx) => reserveInvoiceDelivery(tx, sale.saleId, request)),
@@ -701,21 +696,16 @@ describe("existing F1 receipt delivery", () => {
     receiptCopy = false,
     kind: "document" | "drawer" = "document",
   ) {
-    const [location] = await suite.db.select().from(locations);
     return withTransaction(suite.db, async (tx) => {
-      const printer = await createPrinter(
-        tx,
-        { locationId: location!.id },
-        { name: "Receipt", transport: "network_tcp", host: "printer.test" },
-      );
-      const job = await enqueuePrintJob(
-        tx,
-        { locationId: location!.id },
-        printer.id,
-        new Uint8Array([27, 64]),
-        kind,
-        { saleId, receiptCopy },
-      );
+      const printer = await createPrinter(tx, {
+        name: "Receipt",
+        transport: "network_tcp",
+        host: "printer.test",
+      });
+      const job = await enqueuePrintJob(tx, printer.id, new Uint8Array([27, 64]), kind, {
+        saleId,
+        receiptCopy,
+      });
       await tx.update(printJobs).set({ status, attempts }).where(eq(printJobs.id, job.jobId));
       return job;
     });
@@ -785,21 +775,16 @@ describe("receipt delivery reservation", () => {
     receiptCopy: boolean | null = false,
     kind: "document" | "drawer" = "document",
   ) {
-    const [location] = await suite.db.select().from(locations);
     return withTransaction(suite.db, async (tx) => {
-      const printer = await createPrinter(
-        tx,
-        { locationId: location!.id },
-        { name: "Receipt", transport: "network_tcp", host: "printer.test" },
-      );
-      return enqueuePrintJob(
-        tx,
-        { locationId: location!.id },
-        printer.id,
-        new Uint8Array([27, 64]),
-        kind,
-        { saleId, receiptCopy },
-      );
+      const printer = await createPrinter(tx, {
+        name: "Receipt",
+        transport: "network_tcp",
+        host: "printer.test",
+      });
+      return enqueuePrintJob(tx, printer.id, new Uint8Array([27, 64]), kind, {
+        saleId,
+        receiptCopy,
+      });
     });
   }
   const request = (printJobId: string) => ({
@@ -843,7 +828,7 @@ describe("receipt delivery reservation", () => {
       .returning();
     const now = new Date();
     const [claimed] = await withTransaction(suite.db, (tx) =>
-      claimInvoicePrintJobs(tx, agent!.id, { locationId: location!.id, visibleKeys: [] }, now),
+      claimInvoicePrintJobs(tx, agent!.id, { visibleKeys: [] }, now),
     );
     expect(claimed!.invoiceClaim).toMatchObject({ deliveryId: delivery.id, generation: 1 });
     await withTransaction(suite.db, (tx) =>
@@ -894,12 +879,7 @@ describe("receipt delivery reservation", () => {
         await tx.execute(
           sql`update invoice_deliveries set next_attempt_at = ${nextAttemptAt.toISOString()} where id = ${delivery.id}`,
         );
-        return claimInvoicePrintJobs(
-          tx,
-          agent!.id,
-          { locationId: location!.id, visibleKeys: [] },
-          start,
-        );
+        return claimInvoicePrintJobs(tx, agent!.id, { visibleKeys: [] }, start);
       });
     expect(await pick(new Date(start.getTime() + 600_000))).toEqual([]);
     const [claimed] = await pick(new Date(start.getTime() + 400 * 86_400_000));
@@ -1025,20 +1005,15 @@ describe("receipt delivery reservation", () => {
     const sale = await issue();
     await expect(
       withTransaction(suite.db, async (tx) => {
-        const [location] = await tx.select().from(locations);
-        const printer = await createPrinter(
-          tx,
-          { locationId: location!.id },
-          { name: "Receipt", transport: "network_tcp", host: "printer.test" },
-        );
-        const job = await enqueuePrintJob(
-          tx,
-          { locationId: location!.id },
-          printer.id,
-          new Uint8Array([27, 64]),
-          "document",
-          { saleId: sale.saleId, receiptCopy: false },
-        );
+        const printer = await createPrinter(tx, {
+          name: "Receipt",
+          transport: "network_tcp",
+          host: "printer.test",
+        });
+        const job = await enqueuePrintJob(tx, printer.id, new Uint8Array([27, 64]), "document", {
+          saleId: sale.saleId,
+          receiptCopy: false,
+        });
         await reserveInvoiceDelivery(tx, sale.saleId, request(job.jobId));
         throw new Error("Caller refused");
       }),
@@ -1089,7 +1064,6 @@ describe("receipt delivery reservation", () => {
   async function pulled(ctx: Awaited<ReturnType<typeof receiptClaimSetup>>) {
     return withTransaction(suite.db, (tx) =>
       claimPrintJobs(tx, ctx.agentId, {
-        locationId: ctx.locationId,
         visibleKeys: [],
         invoiceReceiptsAt: start.toISOString(),
       }),
@@ -1124,7 +1098,6 @@ describe("receipt delivery reservation", () => {
     const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, other.jobId));
     await withTransaction(suite.db, (tx) =>
       claimPrintJobs(tx, ctx.agentId, {
-        locationId: ctx.locationId,
         visibleKeys: [],
         invoiceReceiptsAt: start.toISOString(),
         printerId: job!.printerId,
@@ -1366,12 +1339,7 @@ describe("receipt delivery reservation", () => {
     async (status) => {
       const ctx = await receiptClaimSetup();
       const [pulledJob] = await withTransaction(suite.db, (tx) =>
-        claimInvoicePrintJobs(
-          tx,
-          ctx.agentId,
-          { locationId: ctx.locationId, visibleKeys: [] },
-          start,
-        ),
+        claimInvoicePrintJobs(tx, ctx.agentId, { visibleKeys: [] }, start),
       );
       const held = { ...pulledJob!.invoiceClaim!, holder: ctx.agentId };
       await deleteReceiptPrinter(ctx.job.jobId);
@@ -1430,12 +1398,7 @@ describe("receipt delivery reservation", () => {
   it("ends a live receipt whose job had already printed, leaves that job as it was, and refuses its late report", async () => {
     const ctx = await receiptClaimSetup();
     const [pulledJob] = await withTransaction(suite.db, (tx) =>
-      claimInvoicePrintJobs(
-        tx,
-        ctx.agentId,
-        { locationId: ctx.locationId, visibleKeys: [] },
-        start,
-      ),
+      claimInvoicePrintJobs(tx, ctx.agentId, { visibleKeys: [] }, start),
     );
     const held = { ...pulledJob!.invoiceClaim!, holder: ctx.agentId };
     // A job finished while its receipt still says sending: not a state the routes leave, which is
@@ -1660,19 +1623,15 @@ describe("invoice email automatic retries", () => {
       })
       .returning();
     const delivery = await withTransaction(suite.db, async (tx) => {
-      const printer = await createPrinter(
-        tx,
-        { locationId: location!.id },
-        { name: "Receipt", transport: "network_tcp", host: "printer.test" },
-      );
-      const job = await enqueuePrintJob(
-        tx,
-        { locationId: location!.id },
-        printer.id,
-        new Uint8Array([27, 64]),
-        "document",
-        { saleId: sale.saleId, receiptCopy: false },
-      );
+      const printer = await createPrinter(tx, {
+        name: "Receipt",
+        transport: "network_tcp",
+        host: "printer.test",
+      });
+      const job = await enqueuePrintJob(tx, printer.id, new Uint8Array([27, 64]), "document", {
+        saleId: sale.saleId,
+        receiptCopy: false,
+      });
       return reserveInvoiceDelivery(tx, sale.saleId, {
         requestKey: randomUUID(),
         personId: "staff-one",

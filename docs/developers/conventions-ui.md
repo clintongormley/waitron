@@ -1907,7 +1907,7 @@ names the owners whose check failed on the box; the till keeps what each of thos
 and drops every other owner's old notices (`nextNotices`, `apps/till/src/state/staff-notices.ts`),
 then orders them errors, warnings, then the rest, in the box's order within each. The box's order is
 its own source (`box`), the enabled modules', then the per-device printer source (`printers`,
-`deviceSources` in `apps/server/src/device-api.ts`), which reads its location's printers in trouble
+`deviceSources` in `apps/server/src/device-api.ts`), which reads the box's printers in trouble
 at most once per ten seconds for every device together, and names a printer only while it is stuck
 (no later document on it has printed): a kitchen printer for every device, another only for the
 devices whose receipts, payment slips or full invoices resolve to it (`printerStaffNoticeSource`,

@@ -220,16 +220,12 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
         },
       ])
       .returning({ id: deviceProfiles.id });
-    const printer = await createPrinter(
-      tx,
-      { locationId: cfg.locationId },
-      {
-        name: "Recibos",
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-        hasCashDrawer: true,
-      },
-    );
+    const printer = await createPrinter(tx, {
+      name: "Recibos",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+      hasCashDrawer: true,
+    });
     const readers = await tx
       .insert(cardReaders)
       .values([

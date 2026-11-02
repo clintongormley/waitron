@@ -154,7 +154,7 @@ export async function setProfilePrinterLists(
 /**
  * Refuses with `printer.not_found` the first id on a list or default that names a deleted printer,
  * then the first listed id that names no printer its list may hold, and returns the invoice list's
- * ids that name a page printer. The lookup is by id alone: location and switched-off state are
+ * ids that name a page printer. The lookup is by id alone: switched-off state is
  * judged where a device resolves the role.
  */
 async function refuseUnknownPrinters(

@@ -2227,7 +2227,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const queue = await withTransaction(deps.db, async (tx) => ({
         items: await listStationQueue(tx, id),
         notices: await VENUE_SERVICE.listStationNotices(tx, deps.cfg, id),
-        printersDown: (await stationPrintersDown(tx, deps.cfg.locationId, new Date(), [id])).map(
+        printersDown: (await stationPrintersDown(tx, new Date(), [id])).map(
           ({ printerId, printerName, since }) => ({ printerId, printerName, since }),
         ),
       }));
@@ -2469,7 +2469,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }
     const state = (await readInvoiceDeliveryState(tx, sale.id, {
       emailAvailable: false,
-      printers: (located) => tillInvoicePrinters(tx, session, located),
+      printers: () => tillInvoicePrinters(tx, session),
     }))!;
     return { receipt: state.receipt, withdrawn: state.receiptPrinterWithdrawn };
   }
@@ -2489,16 +2489,12 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     return sale.id;
   }
 
-  /**
-   * The one printer the till may print a full invoice on: its own invoice printer, when it is at the
-   * sale's location.
-   */
+  /** The one printer the till may print a full invoice on: its own invoice printer. */
   async function tillInvoicePrinters(
     tx: Transaction,
     session: { deviceId: string },
-    sale: { locationId: string },
   ): Promise<OfferedPrinter[]> {
-    const printer = await resolveInvoicePrinter(tx, requestCfg(deps.cfg, session).origin, sale);
+    const printer = await resolveInvoicePrinter(tx, requestCfg(deps.cfg, session).origin);
     return printer === undefined ? [] : [printer];
   }
 
@@ -2512,7 +2508,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         await expireInvoiceDeliveryClaims(tx);
         return readInvoiceDeliveries(tx, saleId, {
           emailAvailable: (sale) => canEmailInvoice(tx, sale.id, transport),
-          printers: (sale) => tillInvoicePrinters(tx, session, sale),
+          printers: () => tillInvoicePrinters(tx, session),
         });
       });
       return c.json(status);
@@ -2541,7 +2537,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             tx,
             { backend: deps.backend, cfg: requestCfg(deps.cfg, session) },
             { id: await zonedSale(tx, session, id), workingOrderId: id },
-            (sale) => tillInvoicePrinters(tx, session, sale),
+            () => tillInvoicePrinters(tx, session),
             { ...request, printerId },
           ),
         );
@@ -2581,7 +2577,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           tx,
           { backend: deps.backend, cfg },
           { id: saleId, workingOrderId: id },
-          (sale) => tillInvoicePrinters(tx, session, sale),
+          () => tillInvoicePrinters(tx, session),
           deliveryId,
           { requestKey, personId: session.personId },
         );

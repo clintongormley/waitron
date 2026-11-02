@@ -11,7 +11,6 @@ import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/catalogue";
 import { createPrinter } from "@waitron/printing";
-import type { PrintConfig } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger } from "./logger.js";
@@ -125,10 +124,6 @@ function deps(db: Database): TillApiDeps {
   };
 }
 
-function printCfg(): PrintConfig {
-  return { locationId: cfg.locationId };
-}
-
 async function openSession(db: Database): Promise<string> {
   const deviceId = await seedSessionDevice(db, cfg);
   const session = await withTransaction(db, async (tx) => {
@@ -182,7 +177,7 @@ async function placeAndFire(): Promise<string> {
 /** Create a live cloud_poll printer and attach it to the default station. */
 async function attachPrinterToDefaultStation(): Promise<string> {
   return withTransaction(suite.db, async (tx: Transaction) => {
-    const { id } = await createPrinter(tx, printCfg(), {
+    const { id } = await createPrinter(tx, {
       name: `Cocina ${randomUUID()}`,
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,

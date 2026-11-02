@@ -106,12 +106,8 @@ export interface PrinterInTrouble {
 }
 
 /** Every active printer with a job in trouble at `now` ({@link printJobInTrouble}), leaving out jobs
- * an Unpair ended; given `locationId`, only that location's printers. */
-export async function printersInTrouble(
-  tx: Transaction,
-  now: Date,
-  options: { locationId?: string } = {},
-): Promise<PrinterInTrouble[]> {
+ * an Unpair ended. */
+export async function printersInTrouble(tx: Transaction, now: Date): Promise<PrinterInTrouble[]> {
   const rows = await tx
     .select({
       id: printers.id,
@@ -130,7 +126,6 @@ export async function printersInTrouble(
         printJobInTrouble(now),
         // Ended on purpose by an Unpair, not a fault to fix.
         or(isNull(printJobs.lastError), ne(printJobs.lastError, PRINTER_UNPAIRED)),
-        options.locationId === undefined ? undefined : eq(printers.locationId, options.locationId),
       ),
     )
     .groupBy(printers.id, printers.name);

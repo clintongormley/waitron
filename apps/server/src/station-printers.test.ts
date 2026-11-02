@@ -13,7 +13,10 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { createPrinter, updatePrinter } from "@waitron/printing";
-import type { PrintConfig } from "@waitron/printing";
+
+interface PrintConfig {
+  locationId: string;
+}
 import type { TradingContext } from "./trading-context.js";
 import { createStation } from "./kitchen.js";
 import { eq } from "drizzle-orm";
@@ -75,7 +78,7 @@ function station(cfg: TradingContext, name: string): Promise<string> {
 /** `cloud_poll` needs only a `poll_id`, no agent to seed. */
 function printer(cfg: TradingContext, name: string): Promise<string> {
   return asApp(cfg, (tx) =>
-    createPrinter(tx, printCfg(cfg), { name, transport: "cloud_poll", pollId: `poll-${name}` }),
+    createPrinter(tx, { name, transport: "cloud_poll", pollId: `poll-${name}` }),
   ).then((r) => r.id);
 }
 
@@ -208,7 +211,7 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
   it("refuses attaching, detaching and listing by it with printer.not_found, changing nothing", async () => {
     const { cfg, s1, gone } = await venueWithLinks();
     const s2 = await station(cfg, "Griddle");
-    await asApp(cfg, (tx) => deletePrinter(tx, printCfg(cfg), gone));
+    await asApp(cfg, (tx) => deletePrinter(tx, gone));
     const before = await allLinks();
 
     for (const run of [
@@ -246,7 +249,7 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
 
   it("still replaces a list without it, after the delete", async () => {
     const { cfg, s1, gone, kept } = await venueWithLinks();
-    await asApp(cfg, (tx) => deletePrinter(tx, printCfg(cfg), gone));
+    await asApp(cfg, (tx) => deletePrinter(tx, gone));
 
     await asApp(cfg, (tx) => replaceStationPrinters(tx, printCfg(cfg), s1, []));
     expect(await allLinks()).toEqual([]);
@@ -256,7 +259,7 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
 
   it("still lists, keeps and detaches a switched-off printer's links", async () => {
     const { cfg, s1, gone, kept } = await venueWithLinks();
-    await asApp(cfg, (tx) => updatePrinter(tx, printCfg(cfg), gone, { active: false }));
+    await asApp(cfg, (tx) => updatePrinter(tx, gone, { active: false }));
 
     expect(
       await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg), { printerId: gone })),
@@ -270,40 +273,13 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
   });
 });
 
-it("refuses station mapping operations through another location", async () => {
+it("configuration printer lists hide removed stations", async () => {
   const cfg = await setupVenue();
-  const other = await setupVenue();
-  const stationId = await station(cfg, "Scoped station");
-  const printerId = await printer(cfg, "Scoped printer");
-  await expect(
-    asApp(cfg, (tx) =>
-      attachPrinterToStation(tx, { stationId, printerId, locationId: other.locationId } as never),
-    ),
-  ).rejects.toMatchObject({ code: "station.not_found", params: { stationId } });
-  for (const operation of [
-    () => asApp(cfg, (tx) => listStationPrinters(tx, printCfg(other), { stationId })),
-    () =>
-      asApp(cfg, (tx) => detachPrinterFromStation(tx, printCfg(other), { stationId, printerId })),
-    () => asApp(cfg, (tx) => replaceStationPrinters(tx, printCfg(other), stationId, [])),
-  ])
-    await expect(operation()).rejects.toMatchObject({
-      code: "station.not_found",
-      params: { stationId },
-    });
-  expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(cfg), { stationId }))).toEqual(
-    [],
-  );
-});
-
-it("configuration printer lists hide removed and other-location stations", async () => {
-  const cfg = await setupVenue();
-  const other = await setupVenue();
   const stationId = await station(cfg, "Removed mapping");
   const printerId = await printer(cfg, "Removed mapping printer");
   await asApp(cfg, (tx) =>
     attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId }),
   );
-  expect(await asApp(cfg, (tx) => listStationPrinters(tx, printCfg(other)))).toEqual([]);
   await asApp(cfg, (tx) =>
     tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, stationId)),
   );

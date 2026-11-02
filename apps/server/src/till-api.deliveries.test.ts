@@ -190,11 +190,11 @@ async function venue(): Promise<Venue> {
       .insert(printAgents)
       .values({ locationId: cfg.locationId, name: "Back office agent", tokenHash: "scrypt$x" })
       .returning({ id: printAgents.id });
-    const receiptPrinter = await createPrinter(
-      tx,
-      { locationId: cfg.locationId },
-      { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-    );
+    const receiptPrinter = await createPrinter(tx, {
+      name: "Recibos",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
     const [office] = await tx
       .insert(pagePrinters)
       .values({
@@ -468,14 +468,10 @@ async function receiptOriginal(
   set: Partial<typeof printJobs.$inferInsert> = {},
 ): Promise<string> {
   const job = await withTransaction(suite.db, (tx) =>
-    enqueuePrintJob(
-      tx,
-      { locationId: v.cfg.locationId },
-      v.receiptPrinterId,
-      new Uint8Array([27, 64]),
-      "document",
-      { saleId, receiptCopy: false },
-    ),
+    enqueuePrintJob(tx, v.receiptPrinterId, new Uint8Array([27, 64]), "document", {
+      saleId,
+      receiptCopy: false,
+    }),
   );
   if (Object.keys(set).length > 0) {
     await suite.db.update(printJobs).set(set).where(eq(printJobs.id, job.jobId));
@@ -845,16 +841,12 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
 /** A 58mm receipt printer listed on every till profile and chosen by every till for invoices. */
 async function invoiceReceiptPrinter(v: Venue): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const printer = await createPrinter(
-      tx,
-      { locationId: v.cfg.locationId },
-      {
-        name: "Facturas mostrador",
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-        paperWidth: "58mm",
-      },
-    );
+    const printer = await createPrinter(tx, {
+      name: "Facturas mostrador",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+      paperWidth: "58mm",
+    });
     for (const { profileId } of await tx
       .selectDistinct({ profileId: devices.deviceProfileId })
       .from(devices)
@@ -1155,9 +1147,7 @@ describe("a receipt printer as the till's invoice printer", () => {
     const counter = await invoiceReceiptPrinter(v);
     const original = await failedOriginalOn(v, orderId, saleId, counter);
     const upstairs = await withdraw(v, counter);
-    await withTransaction(suite.db, (tx) =>
-      deletePrinter(tx, { locationId: v.cfg.locationId }, counter),
-    );
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, counter));
     expect((await send(v, "GET", `/api/sales/${orderId}/receipt`)).body).toEqual({
       status: "failed",
       jobId: original.id,
@@ -1198,11 +1188,11 @@ describe("a receipt printer as the till's invoice printer", () => {
       attempts: MAX_DELIVERY_ATTEMPTS,
     });
     const replacement = await withTransaction(suite.db, (tx) =>
-      createPrinter(
-        tx,
-        { locationId: v.cfg.locationId },
-        { name: "Recibos nuevos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-      ),
+      createPrinter(tx, {
+        name: "Recibos nuevos",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      }),
     );
     await suite.db
       .update(devices)

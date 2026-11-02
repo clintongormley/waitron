@@ -406,7 +406,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           deps.venueLocale,
         );
         const payload = formatCategorySalesPage({ ...req, report, locale, printer });
-        return enqueuePrintJob(tx, { locationId: deps.cfg.locationId }, printerId, payload);
+        return enqueuePrintJob(tx, printerId, payload);
       });
       return c.json(queued, 202);
     }),

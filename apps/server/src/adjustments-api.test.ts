@@ -109,15 +109,11 @@ describe("corrections through order actions on a station's printers", () => {
   it("sends HOLD CHANGED and HOLD CANCELLED through the order edit routes", async () => {
     const printerId = await inTx(venue, async (tx) => {
       await setStationPrinting(tx, { printHeldWork: true });
-      const printer = await createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        {
-          name: `Held ${randomUUID()}`,
-          transport: "cloud_poll",
-          pollId: randomUUID(),
-        },
-      );
+      const printer = await createPrinter(tx, {
+        name: `Held ${randomUUID()}`,
+        transport: "cloud_poll",
+        pollId: randomUUID(),
+      });
       await attachPrinterToStation(tx, {
         locationId: venue.cfg.locationId,
         stationId: venue.stationId,
@@ -207,15 +203,11 @@ describe("corrections through order actions on a station's printers", () => {
         ["Both", [venue.stationId, bar.id]],
         ["Grill only", [venue.stationId]],
       ] as const) {
-        const printer = await createPrinter(
-          tx,
-          { locationId: venue.cfg.locationId },
-          {
-            name: `${label} ${randomUUID()}`,
-            transport: "cloud_poll",
-            pollId: randomUUID(),
-          },
-        );
+        const printer = await createPrinter(tx, {
+          name: `${label} ${randomUUID()}`,
+          transport: "cloud_poll",
+          pollId: randomUUID(),
+        });
         for (const stationId of stationIds)
           await attachPrinterToStation(tx, {
             locationId: venue.cfg.locationId,

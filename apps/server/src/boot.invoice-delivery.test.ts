@@ -143,16 +143,12 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
       recipientAddress: "Saved customer address",
     }),
   );
-  const identity = (await configureDemoPrinter(suite.db, location!.id, true))!;
+  const identity = (await configureDemoPrinter(suite.db, true))!;
   const { jobId } = await withTransaction(suite.db, (tx) =>
-    enqueuePrintJob(
-      tx,
-      { locationId: location!.id },
-      identity.printerId,
-      esc().init().bytes(),
-      "document",
-      { saleId: sale.saleId, receiptCopy: false },
-    ),
+    enqueuePrintJob(tx, identity.printerId, esc().init().bytes(), "document", {
+      saleId: sale.saleId,
+      receiptCopy: false,
+    }),
   );
   const paper = await withTransaction(suite.db, (tx) =>
     reserveInvoiceDelivery(tx, sale.saleId, {
@@ -166,7 +162,7 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
     claimInvoicePrintJobs(
       tx,
       identity.agentId,
-      { locationId: location!.id, visibleKeys: [DEMO_PRINTER_KEY] },
+      { visibleKeys: [DEMO_PRINTER_KEY] },
       new Date(Date.now() + 1000),
     ),
   );
@@ -209,13 +205,7 @@ describe("invoice delivery recovery at trading boot", () => {
   it("marks a fresh inherited receipt claim unknown before printing resumes, while ordinary jobs still print", async () => {
     const ctx = await fixture();
     const { jobId: ordinary } = await withTransaction(suite.db, (tx) =>
-      enqueuePrintJob(
-        tx,
-        { locationId: ctx.location },
-        ctx.identity.printerId,
-        esc().init().bytes(),
-        "document",
-      ),
+      enqueuePrintJob(tx, ctx.identity.printerId, esc().init().bytes(), "document"),
     );
     let server: StartedServer | undefined;
     try {

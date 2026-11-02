@@ -6,11 +6,6 @@ import { nowIso, printAgents, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { verifySecretAsync } from "@waitron/identity";
 
-/** The venue scope, resolved by the route and never derived from client input. */
-export interface PrintAgentConfig {
-  locationId: string;
-}
-
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** How stale a recorded sighting has to be before auth writes a fresh one. */

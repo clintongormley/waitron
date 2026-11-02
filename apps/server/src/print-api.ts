@@ -16,13 +16,13 @@ import {
   deviceProfilePrinters,
   deviceProfiles,
   drawerOpens,
-  locations,
   printAgents,
   printJobs,
   printPaperWidth,
   printResolution,
   printers,
   printTransport,
+  readVenue,
   withTransaction,
   type Database,
   type Transaction,
@@ -576,7 +576,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
   );
 
   // A usb/bluetooth printer is claimed only by a box whose `visible` report lists its `local_key`;
-  // a network_tcp printer by any box at the printer's location. A box that says it cannot print
+  // a network_tcp printer by any box. A box that says it cannot print
   // over Bluetooth has its paired Bluetooth printers' due jobs ended failed instead, unless another
   // box reported it can print to that printer within `DISCOVERED_TTL_MS`. The jobs are ended anyway
   // when that report is older than the window or, being held in memory, lost to a server restart.
@@ -645,7 +645,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
 
       // The claim commits within this request: no transaction is held across the agent's socket write,
       // and the agent reports the outcome in a separate request.
-      // TODO(multi-location): this is the server's location, not the agent's `print_agents.location_id`.
       const claimed = await withTransaction(deps.db, async (tx) => {
         if (host !== undefined || setupUrl !== undefined || setupPort !== undefined) {
           await tx
@@ -708,7 +707,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           tx,
           agentId,
           {
-            locationId: deps.cfg.locationId,
             visibleKeys,
           },
           deps.now?.(),
@@ -1041,7 +1039,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     app,
     {
       db: deps.db,
-      locationId: deps.cfg.locationId,
       findDiscovery: findPagePrinterDiscovery,
       discoveryWindow: () => {
         const now = Date.now();
@@ -1056,7 +1053,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     app,
     {
       db: deps.db,
-      locationId: deps.cfg.locationId,
       readInvoiceDocument: deps.readInvoiceDocument,
       testPages,
       ...(deps.receiptQrText === undefined ? {} : { receiptQrText: deps.receiptQrText }),
@@ -1105,7 +1101,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         ) {
           throw new AppError("printer.office_printer", {});
         }
-        return createPrinter(tx, deps.cfg, input);
+        return createPrinter(tx, input);
       });
       return c.json(created, 201);
     }),
@@ -1115,7 +1111,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const rows = await gated(sessionId, async (tx) => {
-        const configured = await listPrinters(tx, deps.cfg);
+        const configured = await listPrinters(tx);
         const holders = await readPrinterHolders(tx);
         // Aggregated over the full history, unlike the job list's bounded completed history.
         // `max(delivered_at)` is the latest instant only because every writer stores the canonical
@@ -1198,7 +1194,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             if (stored !== key) patch.localKey = stored;
           }
         }
-        await updatePrinter(tx, deps.cfg, id, patch);
+        await updatePrinter(tx, id, patch);
         if (patch.active === false)
           await endDeactivatedInvoicePrintDeliveries(tx, id, deps.now?.());
         if (portable !== undefined) await setPrinterPortable(tx, id, portable);
@@ -1212,7 +1208,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
       await gated(sessionId, async (tx) => {
-        await deactivatePrinter(tx, deps.cfg, id);
+        await deactivatePrinter(tx, id);
         await endDeactivatedInvoicePrintDeliveries(tx, id, deps.now?.());
       });
       return c.body(null, 204);
@@ -1223,7 +1219,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
-      return c.json(await gated(sessionId, (tx) => readPrinterDeleteImpact(tx, deps.cfg, id)));
+      return c.json(await gated(sessionId, (tx) => readPrinterDeleteImpact(tx, id)));
     }),
   );
 
@@ -1231,7 +1227,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
-      return c.json(await gated(sessionId, (tx) => deletePrinter(tx, deps.cfg, id, deps.now?.())));
+      return c.json(await gated(sessionId, (tx) => deletePrinter(tx, id, deps.now?.())));
     }),
   );
 
@@ -1244,7 +1240,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           managementSessionId: sessionId,
           permission: "cash.drawer",
         });
-        const queued = await enqueuePrintJob(tx, deps.cfg, id, esc().kick().bytes(), "drawer");
+        const queued = await enqueuePrintJob(tx, id, esc().kick().bytes(), "drawer");
         await tx.insert(drawerOpens).values({
           printerId: id,
           personId: authorizedBy,
@@ -1286,7 +1282,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           throw new AppError(kind === "printer" ? "printer.not_found" : "reader.not_found", { id });
         return enqueuePrintJob(
           tx,
-          deps.cfg,
           printerId,
           formatEquipmentLabel(target, { kind, id, name: label.name }),
           "document",
@@ -1307,7 +1302,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           c.req.header("Accept-Language"),
           deps.venueLocale,
         );
-        return enqueuePrintJob(tx, deps.cfg, id, formatTestPage({ locale }));
+        return enqueuePrintJob(tx, id, formatTestPage({ locale }));
       });
       return c.json(result, 202);
     }),
@@ -1328,10 +1323,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           .from(printers)
           .where(and(eq(printers.id, id), eq(printers.active, true)));
         if (printer === undefined) throw new AppError("printer.not_found", { id });
-        const [venue] = await tx
-          .select({ timeZone: locations.timeZone })
-          .from(locations)
-          .where(eq(locations.id, deps.cfg.locationId));
+        const venue = await readVenue(tx);
         const locale = await resolveSessionLocale(
           tx,
           sessionId,
@@ -1343,9 +1335,9 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           printer: { paperWidth: printer.paperWidth, resolution: printer.resolution },
           printerName: printer.name,
           now: (deps.now ?? (() => new Date()))(),
-          timeZone: venue!.timeZone,
+          timeZone: venue.timeZone,
         });
-        return enqueuePrintJob(tx, deps.cfg, id, payload);
+        return enqueuePrintJob(tx, id, payload);
       });
       return c.json(result, 202);
     }),
@@ -1364,7 +1356,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const result = await gated(sessionId, async (tx) => {
         const { locale } = await readReceiptLanguage(tx);
         const payload = formatSampleReceipt(printer, deps.receiptQrText, locale);
-        return enqueuePrintJob(tx, deps.cfg, id, payload);
+        return enqueuePrintJob(tx, id, payload);
       });
       return c.json(result, 202);
     }),
@@ -1387,13 +1379,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               })
               .from(printJobs)
               .innerJoin(printers, eq(printJobs.printerId, printers.id))
-              .where(
-                and(
-                  eq(printers.locationId, deps.cfg.locationId),
-                  eq(printers.localKey, DEMO_PRINTER_KEY),
-                  eq(printJobs.status, "done"),
-                ),
-              )
+              .where(and(eq(printers.localKey, DEMO_PRINTER_KEY), eq(printJobs.status, "done")))
               .orderBy(desc(printJobs.createdAt), sql`print_jobs.rowid desc`)
               .limit(RECENT_JOBS_LIMIT),
           ),

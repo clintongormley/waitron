@@ -882,11 +882,11 @@ describe("an arriving held group's advance HOLD ticket", () => {
     if (printerId === undefined) {
       const station = await defaultStation();
       printerId = await inTx(v, async (tx) => {
-        const { id } = await createPrinter(
-          tx,
-          { locationId: v.cfg.locationId },
-          { name: "Cocina", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-        );
+        const { id } = await createPrinter(tx, {
+          name: "Cocina",
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+        });
         await attachPrinterToStation(tx, {
           locationId: v.cfg.locationId,
           stationId: station.id,
@@ -1074,15 +1074,11 @@ describe("A773 requested lifecycle: arrival", () => {
     const printerId = await inTx(v, async (tx) => {
       await setStationsWaitForPass(tx, true, stationIds);
       await setStationPrinting(tx, { printHeldWork: true });
-      const { id } = await createPrinter(
-        tx,
-        { locationId: v.cfg.locationId },
-        {
-          name: `P-${randomUUID().slice(0, 8)}`,
-          transport: "cloud_poll",
-          pollId: `poll-${randomUUID()}`,
-        },
-      );
+      const { id } = await createPrinter(tx, {
+        name: `P-${randomUUID().slice(0, 8)}`,
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
       for (const stationId of active)
         await attachPrinterToStation(tx, {
           locationId: v.cfg.locationId,

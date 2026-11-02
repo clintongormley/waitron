@@ -273,23 +273,12 @@ describe("settled-tender refund audited drawer", () => {
     await enqueue(row.id, { ...cfg, origin: jobOrigin("dashboard") });
     await empty();
   });
-  it.each(["node", "location"] as const)(
-    "does not enqueue under a different %s provenance",
-    async (which) => {
-      const row = await refund();
-      const [place] = await store.db
-        .insert(locations)
-        .values({ name: "Elsewhere", invoiceLocales: ["en"], operationDescription: "Meals" })
-        .returning();
-      const placeId = locationId(place!.id);
-      const node = await seedNode(store.db, placeId);
-      await enqueue(
-        row.id,
-        which === "node" ? { ...cfg, nodeId: node } : { ...cfg, locationId: placeId },
-      );
-      await empty();
-    },
-  );
+  it("does not enqueue under a different node provenance", async () => {
+    const row = await refund();
+    const node = await seedNode(store.db, cfg.locationId);
+    await enqueue(row.id, { ...cfg, nodeId: node });
+    await empty();
+  });
   it("queues a refund's audited kick once even across simultaneous transactions", async () => {
     const row = await refund();
     await Promise.all([enqueue(row.id), enqueue(row.id)]);

@@ -110,7 +110,7 @@ beforeEach(async () => {
 });
 async function printer() {
   return inTx(v, async (tx) => {
-    const p = await createPrinter(tx, v.cfg, {
+    const p = await createPrinter(tx, {
       name: "Allergy printer",
       transport: "cloud_poll",
       pollId: randomUUID(),

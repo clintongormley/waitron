@@ -80,18 +80,18 @@ useVenueDb({
       bar = (await createStation(tx, venue.cfg, { name: "Bar", isDefault: true })).id;
       grill = (await createStation(tx, venue.cfg, { name: "Grill" })).id;
       barPrinter = (
-        await createPrinter(
-          tx,
-          { locationId: venue.cfg.locationId },
-          { name: "Bar printer", transport: "cloud_poll", pollId: randomUUID() },
-        )
+        await createPrinter(tx, {
+          name: "Bar printer",
+          transport: "cloud_poll",
+          pollId: randomUUID(),
+        })
       ).id;
       grillPrinter = (
-        await createPrinter(
-          tx,
-          { locationId: venue.cfg.locationId },
-          { name: "Grill printer", transport: "cloud_poll", pollId: randomUUID() },
-        )
+        await createPrinter(tx, {
+          name: "Grill printer",
+          transport: "cloud_poll",
+          pollId: randomUUID(),
+        })
       ).id;
       await attachPrinterToStation(tx, {
         locationId: venue.cfg.locationId,
@@ -180,11 +180,7 @@ const heldBurger = () => heldDish("Burger");
 
 /** A new printer with a cash drawer, listed on each of `stationIds`. */
 async function stationPrinter(tx: Transaction, name: string, stationIds: readonly string[]) {
-  const { id } = await createPrinter(
-    tx,
-    { locationId: venue.cfg.locationId },
-    { name, transport: "cloud_poll", pollId: randomUUID() },
-  );
+  const { id } = await createPrinter(tx, { name, transport: "cloud_poll", pollId: randomUUID() });
   await tx.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, id));
   for (const stationId of stationIds)
     await attachPrinterToStation(tx, {
@@ -936,15 +932,11 @@ describe("release", () => {
         kind: "station",
         stationId: grill,
       });
-      const printer = await createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        {
-          name: `Bar and Grill ${randomUUID()}`,
-          transport: "cloud_poll",
-          pollId: randomUUID(),
-        },
-      );
+      const printer = await createPrinter(tx, {
+        name: `Bar and Grill ${randomUUID()}`,
+        transport: "cloud_poll",
+        pollId: randomUUID(),
+      });
       for (const stationId of [bar, grill])
         await attachPrinterToStation(tx, {
           locationId: venue.cfg.locationId,
@@ -2954,11 +2946,11 @@ describe("moveDishesToStation", () => {
     split.cfg.locale = "en-GB";
     const downstairs = await splitTx(async (tx) => {
       const station = await createStation(tx, split.cfg, { name: "Downstairs grill" });
-      const printer = await createPrinter(
-        tx,
-        { locationId: split.cfg.locationId },
-        { name: "Downstairs printer", transport: "cloud_poll", pollId: randomUUID() },
-      );
+      const printer = await createPrinter(tx, {
+        name: "Downstairs printer",
+        transport: "cloud_poll",
+        pollId: randomUUID(),
+      });
       await attachPrinterToStation(tx, {
         locationId: split.cfg.locationId,
         stationId: station.id,
@@ -3072,11 +3064,11 @@ describe("moveDishesToStation", () => {
     const fryer = await inTx(venue, async (tx) => {
       const station = await createStation(tx, venue.cfg, { name: `Fryer ${randomUUID()}` });
       await routeProductTo(tx, venue.cfg, venue.productId("Vino"), station.id);
-      const printer = await createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        { name: "Fryer printer", transport: "cloud_poll", pollId: randomUUID() },
-      );
+      const printer = await createPrinter(tx, {
+        name: "Fryer printer",
+        transport: "cloud_poll",
+        pollId: randomUUID(),
+      });
       await attachPrinterToStation(tx, {
         locationId: venue.cfg.locationId,
         stationId: station.id,
@@ -3138,11 +3130,11 @@ describe("moveDishesToStation", () => {
         kitchen = (await createStation(tx, venue.cfg, { name: kitchenName })).id;
         screen = (await createStation(tx, venue.cfg, { name: screenName })).id;
         kitchenPrinter = (
-          await createPrinter(
-            tx,
-            { locationId: venue.cfg.locationId },
-            { name: `${kitchenName} printer`, transport: "cloud_poll", pollId: randomUUID() },
-          )
+          await createPrinter(tx, {
+            name: `${kitchenName} printer`,
+            transport: "cloud_poll",
+            pollId: randomUUID(),
+          })
         ).id;
         await attachPrinterToStation(tx, {
           locationId: venue.cfg.locationId,

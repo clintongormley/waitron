@@ -40,7 +40,7 @@ const isOut = (page: PageTestPage | null | undefined): boolean =>
   page?.status === "waiting" || page?.status === "printing";
 
 /**
- * The location's office printers (A4 printers), with rename, disable and a test page. `reload` reads
+ * The venue's office printers (A4 printers), with rename, disable and a test page. `reload` reads
  * the list again after a write and rejects when that read fails; the rows come back through `rows`.
  */
 @customElement("dashboard-page-printers-panel")

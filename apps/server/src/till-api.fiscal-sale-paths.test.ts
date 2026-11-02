@@ -2282,7 +2282,7 @@ describe("handheld sales and device capability gates", () => {
     const sessionPair = await loginOperator(app, cfg, operatorId, deviceCookie);
     // The handheld's own receipt and drawer printer has a drawer; only its profile keeps it shut.
     await withTransaction(suite.db, async (tx) => {
-      const printer = await createPrinter(tx, cfg, {
+      const printer = await createPrinter(tx, {
         name: "Counter",
         transport: "network_tcp",
         host: "192.0.2.1",
@@ -2818,7 +2818,7 @@ it("files an extras pick and an options answer through cash checkout and reprint
   const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
   const headers = { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` };
   const printerId = await withTransaction(suite.db, async (tx) => {
-    const printer = await createPrinter(tx, cfg, {
+    const printer = await createPrinter(tx, {
       name: "Modifier receipts",
       transport: "cloud_poll",
       pollId: `modifiers-${randomUUID()}`,
@@ -3280,12 +3280,11 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
   /** A new printer, with or without a drawer, set as `deviceCookie`'s device's own receipt and drawer
    *  printer, printing receipts automatically. */
   async function deviceReceiptPrinter(
-    cfg: TradingContext,
     deviceCookie: string,
     hasCashDrawer: boolean,
   ): Promise<string> {
     return withTransaction(suite.db, async (tx) => {
-      const printer = await createPrinter(tx, cfg, {
+      const printer = await createPrinter(tx, {
         name: `Recibos ${randomUUID().slice(0, 8)}`,
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
@@ -3301,7 +3300,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
   /** Another device's receipt and drawer printer here, with a drawer that device may open: the
    *  printer a lookup by location rather than by device would pick. */
   const otherDevicesDrawerPrinter = async (cfg: TradingContext) =>
-    deviceReceiptPrinter(cfg, await enrolDrawerTill(cfg), true);
+    deviceReceiptPrinter(await enrolDrawerTill(cfg), true);
 
   /** A till device whose profile allows the drawer. */
   async function enrolDrawerTill(cfg: TradingContext): Promise<string> {
@@ -3381,7 +3380,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     const { cfg, each, app, on, operatorId } = await venueWithTill();
     const deviceCookie = await enrolDrawerTill(cfg);
     const deviceId = deviceIdOf(deviceCookie);
-    const printerId = await deviceReceiptPrinter(cfg, deviceCookie, true);
+    const printerId = await deviceReceiptPrinter(deviceCookie, true);
     const workingOrderId = randomUUID();
 
     const first = await cardSale(app, await on(deviceCookie), {
@@ -3425,7 +3424,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       profileId,
     });
     const handheldCookie = `${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
-    await deviceReceiptPrinter(cfg, handheldCookie, true);
+    await deviceReceiptPrinter(handheldCookie, true);
 
     const res = await cardSale(app, await on(handheldCookie), {
       workingOrderId: randomUUID(),
@@ -3456,7 +3455,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
         profileId,
       });
       const handheldCookie = `${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
-      const printerId = await deviceReceiptPrinter(cfg, handheldCookie, true);
+      const printerId = await deviceReceiptPrinter(handheldCookie, true);
       const session = (await loginSession(app, cfg, supervisor!.id, handheldCookie)).split(";")[0]!;
       const cookie = `${session}; ${handheldCookie}`;
 
@@ -3491,7 +3490,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
     const { cfg, each, app, on } = await venueWithTill();
     await otherDevicesDrawerPrinter(cfg);
     const deviceCookie = await enrolDrawerTill(cfg);
-    await deviceReceiptPrinter(cfg, deviceCookie, false);
+    await deviceReceiptPrinter(deviceCookie, false);
 
     const res = await cardSale(app, await on(deviceCookie), {
       workingOrderId: randomUUID(),
@@ -3511,7 +3510,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       const { cfg, each, app, cookie, on, operatorId } = await venueWithTill(orderFlow);
       const deviceCookie = await enrolDrawerTill(cfg);
       const deviceId = deviceIdOf(deviceCookie);
-      const printerId = await deviceReceiptPrinter(cfg, deviceCookie, true);
+      const printerId = await deviceReceiptPrinter(deviceCookie, true);
       const both = await on(deviceCookie);
 
       const workingOrderId = randomUUID();
@@ -3578,7 +3577,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
         profileId,
       });
       const handheldCookie = `${DEVICE_COOKIE}=${handheld.deviceId}.${handheld.token}`;
-      await deviceReceiptPrinter(cfg, handheldCookie, true);
+      await deviceReceiptPrinter(handheldCookie, true);
       const both = await on(handheldCookie);
 
       const workingOrderId = randomUUID();
@@ -3613,7 +3612,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
   it("a cash sale at the device with the drawer still opens it as a cash sale", async () => {
     const { cfg, each, app, on } = await venueWithTill();
     const deviceCookie = await enrolDrawerTill(cfg);
-    await deviceReceiptPrinter(cfg, deviceCookie, true);
+    await deviceReceiptPrinter(deviceCookie, true);
     const workingOrderId = randomUUID();
 
     const res = await app.request("/api/sales", {

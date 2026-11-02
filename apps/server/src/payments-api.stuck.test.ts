@@ -1701,11 +1701,11 @@ describe("POST /management-api/payments/bill-payments/:id/attest", () => {
     const orderId = await openOrder(v);
     const id = await strandBillPayment(v, orderId, { kind: "failed" });
     const printerId = await withTransaction(suite.db, async (tx) => {
-      const printer = await createPrinter(
-        tx,
-        { locationId: v.cfg.locationId },
-        { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-      );
+      const printer = await createPrinter(tx, {
+        name: "Recibos",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
       await tx
         .update(devices)
         .set({ receiptPrinterId: printer.id })

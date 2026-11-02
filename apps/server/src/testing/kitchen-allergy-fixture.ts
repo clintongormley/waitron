@@ -79,7 +79,7 @@ export async function kitchenFixture(db: Database) {
     .where(eq(ticketItems.workingOrderId, party.tabId));
   const ticket = tickets[0];
   await inTx(v, async (tx) => {
-    const printer = await createPrinter(tx, v.cfg, {
+    const printer = await createPrinter(tx, {
       name: "Atomic printer",
       transport: "cloud_poll",
       pollId: randomUUID(),

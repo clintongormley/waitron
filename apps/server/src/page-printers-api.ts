@@ -35,7 +35,6 @@ export interface PagePrinterQueue {
 
 export interface PagePrintersApiDeps {
   db: Database;
-  locationId: string;
   /** The agent's held discovery entry for that queue, fresh or not; `registerPagePrinter` judges freshness. */
   findDiscovery: (queue: PagePrinterQueue) => PagePrinterDiscovery | undefined;
   discoveryWindow: () => DiscoveryWindow;
@@ -83,7 +82,7 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
   app.get("/management-api/page-printers", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const rows = await gated(sessionId, (tx) => listPagePrinters(tx, deps.locationId));
+      const rows = await gated(sessionId, (tx) => listPagePrinters(tx));
       return c.json(
         rows.map((row) => ({
           id: row.id,
@@ -117,7 +116,6 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
         const named = body.name === undefined ? "" : requireString(body.name, "name").trim();
         return registerPagePrinter(
           tx,
-          deps.locationId,
           {
             name: named === "" ? host : named,
             entry: deps.findDiscovery({ agentId, host, port, resourcePath }),
@@ -137,13 +135,7 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
         const [printer] = await tx
           .select({ agentId: pagePrinters.agentId })
           .from(pagePrinters)
-          .where(
-            and(
-              eq(pagePrinters.id, id),
-              eq(pagePrinters.locationId, deps.locationId),
-              eq(pagePrinters.active, true),
-            ),
-          );
+          .where(and(eq(pagePrinters.id, id), eq(pagePrinters.active, true)));
         if (printer === undefined) throw new AppError("page_printer.not_found", {});
         if (printer.agentId === null) throw new AppError("page_printer.no_agent", {});
         const { locale } = await readReceiptLanguage(tx);
@@ -164,7 +156,7 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
         const [printer] = await tx
           .select({ id: pagePrinters.id })
           .from(pagePrinters)
-          .where(and(eq(pagePrinters.id, id), eq(pagePrinters.locationId, deps.locationId)));
+          .where(eq(pagePrinters.id, id));
         if (printer === undefined) throw new AppError("page_printer.not_found", {});
       });
       return c.json(deps.testPages.read(id));
@@ -187,8 +179,8 @@ export function mountPagePrintersApi(app: Hono, deps: PagePrintersApiDeps, log: 
         if (name === undefined && body.active === undefined) {
           throw new AppError("management.request_invalid", { field: "name" });
         }
-        if (name !== undefined) await renamePagePrinter(tx, deps.locationId, id, name);
-        if (body.active === false) await disablePagePrinter(tx, deps.locationId, id, deps.now?.());
+        if (name !== undefined) await renamePagePrinter(tx, id, name);
+        if (body.active === false) await disablePagePrinter(tx, id, deps.now?.());
       });
       return c.body(null, 204);
     }),

@@ -29,30 +29,16 @@ async function fixture(kind: "document" | "drawer", separatePrinter = false) {
     ])
     .returning({ id: printAgents.id });
   const ids = await withTransaction(suite.db, async (tx) => {
-    const printer = await createPrinter(
-      tx,
-      { locationId },
-      {
-        name: "Kitchen",
-        transport: "network_tcp",
-        host: "10.0.0.9",
-      },
-    );
-    const first = await enqueuePrintJob(tx, { locationId }, printer.id, new Uint8Array([1]));
+    const printer = await createPrinter(tx, {
+      name: "Kitchen",
+      transport: "network_tcp",
+      host: "10.0.0.9",
+    });
+    const first = await enqueuePrintJob(tx, printer.id, new Uint8Array([1]));
     const tailPrinter = separatePrinter
-      ? await createPrinter(
-          tx,
-          { locationId },
-          { name: "Other", transport: "network_tcp", host: "10.0.0.10" },
-        )
+      ? await createPrinter(tx, { name: "Other", transport: "network_tcp", host: "10.0.0.10" })
       : printer;
-    const tail = await enqueuePrintJob(
-      tx,
-      { locationId },
-      tailPrinter.id,
-      new Uint8Array([2]),
-      kind,
-    );
+    const tail = await enqueuePrintJob(tx, tailPrinter.id, new Uint8Array([2]), kind);
     await tx
       .update(printJobs)
       .set({ createdAt: "2026-10-11T00:00:00.000Z" })
@@ -72,9 +58,7 @@ describe("aged print batches", () => {
     async (kind) => {
       const ctx = await fixture(kind);
       const pull = (agentId: string) =>
-        withTransaction(suite.db, (tx) =>
-          claimPrintJobs(tx, agentId, { locationId: ctx.locationId, visibleKeys: [] }),
-        );
+        withTransaction(suite.db, (tx) => claimPrintJobs(tx, agentId, { visibleKeys: [] }));
       const firstBatch = await pull(ctx.a);
       const sent = new FakeSink();
       const send = async (agentId: string, job: (typeof firstBatch)[number]) => {
@@ -119,7 +103,6 @@ describe("aged print batches", () => {
     );
     const pulled = await withTransaction(suite.db, (tx) =>
       claimPrintJobs(tx, ctx.a, {
-        locationId: ctx.locationId,
         visibleKeys: [],
       }),
     );
@@ -144,7 +127,6 @@ describe("aged print batches", () => {
     );
     const reclaimed = await withTransaction(suite.db, (tx) =>
       claimPrintJobs(tx, ctx.b, {
-        locationId: ctx.locationId,
         visibleKeys: [],
       }),
     );
@@ -170,7 +152,6 @@ describe("aged print batches", () => {
     for (const agentId of [ctx.a, ctx.b]) {
       const pulled = await withTransaction(suite.db, (tx) =>
         claimPrintJobs(tx, agentId, {
-          locationId: ctx.locationId,
           visibleKeys: [],
         }),
       );
@@ -206,7 +187,6 @@ describe("aged print batches", () => {
     const pull = () =>
       withTransaction(suite.db, (tx) =>
         claimPrintJobs(tx, ctx.a, {
-          locationId: ctx.locationId,
           visibleKeys: [],
         }),
       );
@@ -232,7 +212,6 @@ describe("aged print batches", () => {
       const pull = () =>
         withTransaction(suite.db, (tx) =>
           claimPrintJobs(tx, ctx.a, {
-            locationId: ctx.locationId,
             visibleKeys: [],
           }),
         );

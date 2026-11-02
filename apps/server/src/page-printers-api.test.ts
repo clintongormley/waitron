@@ -6,7 +6,6 @@ import {
   CORE_MIGRATIONS,
   locations,
   pagePrinters,
-  printAgents,
   stationPrinters,
   withTransaction,
 } from "@waitron/db";
@@ -669,22 +668,5 @@ describe("a page printer is never a receipt printer", () => {
     expect(await attach.json()).toMatchObject({ error: { code: "printer.not_found" } });
     expect(await suite.db.select().from(stationPrinters)).toEqual([]);
     expect(await stored(id)).toMatchObject({ name: "Oficina", active: true });
-  });
-
-  it("refuses an entry reported by an agent of another location", async () => {
-    const app = mountApp();
-    const agent = await joinAgent(app, "Office agent");
-    await scan(app, agent.token, [officeEntry("10.61.12.1")]);
-    const [elsewhere] = await suite.db
-      .insert(locations)
-      .values({ name: "Terraza", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
-      .returning({ id: locations.id });
-    await suite.db
-      .update(printAgents)
-      .set({ locationId: elsewhere!.id })
-      .where(eq(printAgents.id, agent.agentId));
-    const res = await register(app, target(agent.agentId, "10.61.12.1"));
-    expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: { code: "page_printer.not_found", params: {} } });
   });
 });

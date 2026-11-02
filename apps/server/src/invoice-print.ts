@@ -59,7 +59,7 @@ export async function resendInvoicePrintJob(
 export async function claimInvoicePrintJobs(
   tx: Transaction,
   agentId: string,
-  ctx: { locationId: string; visibleKeys: string[]; printerId?: string },
+  ctx: { visibleKeys: string[]; printerId?: string },
   now = new Date(),
 ): Promise<InvoicePrintJob[]> {
   await expireInvoiceDeliveryClaims(tx, now);

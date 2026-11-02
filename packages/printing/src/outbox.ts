@@ -2,34 +2,38 @@
 import "./errors.js";
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
-import { printJobs, printers } from "@waitron/db";
+import { printJobs, printers, venueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import type { PrintConfig } from "./printers.js";
 import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
 
 /**
- * The whole of what a caller does to print: one read and one insert, with no socket and no wait on
- * hardware, so a slow, broken or absent printer can never delay the caller (CLAUDE.md §5).
- * `saleId` names the sale a receipt prints.
+ * The whole of what a caller does to print: a printer check, a venue read unless the caller passes
+ * `venueId`, and one insert, with no socket and no wait on hardware, so a slow, broken or absent
+ * printer can never delay the caller (CLAUDE.md §5). `saleId` names the sale a receipt prints. A
+ * caller queuing several jobs reads the venue's id once and passes it to each as `venueId`.
  */
 export async function enqueuePrintJob(
   tx: Transaction,
-  cfg: PrintConfig,
   printerId: string,
   payload: Uint8Array,
   kind: "document" | "drawer" = "document",
   {
     saleId = null,
     receiptCopy = null,
-  }: { saleId?: string | null; receiptCopy?: boolean | null } = {},
+    venueId,
+  }: { saleId?: string | null; receiptCopy?: boolean | null; venueId?: string } = {},
 ): Promise<{ jobId: string }> {
-  return insertPrintJob(tx, cfg, printerId, payload, kind, { resendOf: null, saleId, receiptCopy });
+  return insertPrintJob(tx, printerId, payload, kind, {
+    resendOf: null,
+    saleId,
+    receiptCopy,
+    venueId,
+  });
 }
 
 async function insertPrintJob(
   tx: Transaction,
-  cfg: PrintConfig,
   printerId: string,
   payload: Uint8Array,
   kind: "document" | "drawer",
@@ -37,10 +41,12 @@ async function insertPrintJob(
     resendOf,
     saleId,
     receiptCopy,
+    venueId,
   }: {
     resendOf: string | null;
     saleId: string | null;
     receiptCopy: boolean | null;
+    venueId?: string;
   },
 ): Promise<{ jobId: string }> {
   // A deactivated or deleted printer is reported as `printer.not_found`, not a code of its own.
@@ -53,7 +59,7 @@ async function insertPrintJob(
   const [job] = await tx
     .insert(printJobs)
     .values({
-      locationId: cfg.locationId,
+      locationId: venueId ?? (await venueLocationId(tx)),
       printerId,
       payload,
       kind,
@@ -82,7 +88,7 @@ export function canResendPrintJob(job: {
 }
 
 /**
- * Resend the opaque document to its original printer and location, preserving delivery history. The
+ * Resend the opaque document to its original printer, preserving delivery history. The
  * copy names the first job of its chain, which `printJobInTrouble` (apps/server/src/print-job-trouble.ts)
  * reads to clear a failed job once a later copy has printed, and carries the receipt's sale.
  */
@@ -114,12 +120,9 @@ export async function resendPrintJob(tx: Transaction, jobId: string): Promise<{ 
       .limit(1);
     if (reserved !== undefined) throw new AppError("print_job.not_resendable", { id: jobId });
   }
-  return insertPrintJob(
-    tx,
-    { locationId: job.locationId },
-    job.printerId,
-    job.payload,
-    "document",
-    { resendOf: job.resendOf ?? job.id, saleId: job.saleId, receiptCopy: job.receiptCopy },
-  );
+  return insertPrintJob(tx, job.printerId, job.payload, "document", {
+    resendOf: job.resendOf ?? job.id,
+    saleId: job.saleId,
+    receiptCopy: job.receiptCopy,
+  });
 }

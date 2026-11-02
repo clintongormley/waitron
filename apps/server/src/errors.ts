@@ -40,7 +40,7 @@ declare module "@waitron/shared" {
     "invoice_delivery.receipt_unavailable": Record<string, never>;
     /** The agent's A4 claim is no longer the delivery's current one, or this process never handed it out. */
     "invoice_delivery.claim_lost": Record<string, never>;
-    /** No page printer with that id in this location, or no discovery entry an agent reported
+    /** No page printer with that id, or no discovery entry an agent reported
      * recently enough for the discovered list to show it. */
     "page_printer.not_found": Record<string, never>;
     /** The discovery entry carries no office report, or one whose printer cannot print an A4 invoice. */
@@ -952,7 +952,7 @@ declare module "@waitron/shared" {
     "receipt.not_printed": Record<string, never>;
     /**
      * A request named equipment the device may not newly choose: unknown, not on its profile's list
-     * for the role, at another location, switched off, or a disabled or unpaired reader
+     * for the role, switched off, or a disabled or unpaired reader
      * (`selectDeviceEquipment`). `field` carries the FIELD NAME only, never the id value.
      */
     "device.binding_invalid": { field: EquipmentField };

@@ -642,7 +642,7 @@ describe("a deleted printer and report printing", () => {
         .insert(printers)
         .values({ locationId, name: "Old reports", transport: "network_tcp", host: "10.0.9.9" })
         .returning({ id: printers.id });
-      await deletePrinter(tx, { locationId }, row!.id);
+      await deletePrinter(tx, row!.id);
       return row!.id;
     });
     const offered = await request("/management-api/reports/printers", {

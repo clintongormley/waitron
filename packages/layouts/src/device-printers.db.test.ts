@@ -96,21 +96,17 @@ async function setActive(printerId: string, active: boolean): Promise<void> {
 
 describe("a profile's printer lists and each device's current printers", () => {
   let loc: LocationId;
-  let elsewhere: LocationId;
   let p1: string;
   let p2: string;
   let p3: string;
-  let away: string;
 
   // `useVenueDb` empties every table after each test.
   beforeEach(async () => {
     await seedTenant(suite.db);
     loc = await seedLocation("Here");
-    elsewhere = await seedLocation("Elsewhere");
     p1 = await seedPrinter(loc, "Bar");
     p2 = await seedPrinter(loc, "Counter");
     p3 = await seedPrinter(loc, "Portable");
-    away = await seedPrinter(elsewhere, "Other venue");
   });
 
   it("stores both lists in the order given and reads them back", async () => {
@@ -352,43 +348,6 @@ describe("a profile's printer lists and each device's current printers", () => {
     }
   });
 
-  it("returns devices on one profile at two locations to Use default when their printers leave the list", async () => {
-    const here = await seedDevice(suite.db, { locationId: loc });
-    const there = await seedDevice(suite.db, { locationId: elsewhere, profileId: here.profileId });
-    await inTx(async (tx) => {
-      await setProfilePrinterLists(
-        tx,
-        here.profileId,
-        lists({
-          receiptPrinterIds: [p1, away, p2],
-          paymentSlipPrinterIds: [],
-        }),
-      );
-      await selectDevicePrinter(tx, {
-        deviceId: here.deviceId,
-        role: "receipt",
-        selection: { id: p1 },
-        via: "list",
-      });
-      await selectDevicePrinter(tx, {
-        deviceId: there.deviceId,
-        role: "receipt",
-        selection: { id: away },
-        via: "list",
-      });
-      await setProfilePrinterLists(
-        tx,
-        here.profileId,
-        lists({
-          receiptPrinterIds: [p2],
-          paymentSlipPrinterIds: [],
-        }),
-      );
-    });
-    expect((await devicePrinters(here.deviceId))?.receiptPrinterId).toBeNull();
-    expect((await devicePrinters(there.deviceId))?.receiptPrinterId).toBeNull();
-  });
-
   it("leaves devices on other profiles untouched", async () => {
     const mine = await seedDevice(suite.db, { locationId: loc });
     const other = await seedDevice(suite.db, { locationId: loc });
@@ -528,31 +487,6 @@ describe("a profile's printer lists and each device's current printers", () => {
         selectDevicePrinter(tx, { deviceId, role: "receipt", selection: "default", via: "list" }),
       ),
     ).toEqual({ ok: true, previousHolderDeviceId: null });
-    expect((await devicePrinters(deviceId))?.receiptPrinterId).toBeNull();
-  });
-
-  it("never accepts a listed printer at another location", async () => {
-    const { deviceId, profileId } = await seedDevice(suite.db, { locationId: loc });
-    await inTx((tx) =>
-      setProfilePrinterLists(
-        tx,
-        profileId,
-        lists({
-          receiptPrinterIds: [away, p1],
-          paymentSlipPrinterIds: [away],
-        }),
-      ),
-    );
-    expect(
-      await inTx((tx) =>
-        selectDevicePrinter(tx, {
-          deviceId,
-          role: "receipt",
-          selection: { id: away },
-          via: "list",
-        }),
-      ),
-    ).toEqual({ ok: false, refusal: "not_permitted" });
     expect((await devicePrinters(deviceId))?.receiptPrinterId).toBeNull();
   });
 

@@ -74,11 +74,11 @@ useVenueDb({
     await inTx(v, async (tx) => {
       const grill = await createStation(tx, v.cfg, { name: "Grill" });
       kitchenPrinter = (
-        await createPrinter(
-          tx,
-          { locationId: v.cfg.locationId },
-          { name: "Grill printer", transport: "cloud_poll", pollId: randomUUID() },
-        )
+        await createPrinter(tx, {
+          name: "Grill printer",
+          transport: "cloud_poll",
+          pollId: randomUUID(),
+        })
       ).id;
       await attachPrinterToStation(tx, {
         locationId: v.cfg.locationId,

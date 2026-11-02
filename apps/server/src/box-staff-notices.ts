@@ -131,16 +131,11 @@ export function printerStaffNoticeSource(deps: {
   };
 }
 
-/** One source per device, all reading the box location's printers in trouble through one cache. */
+/** One source per device, all reading the box's printers in trouble through one cache. */
 export function devicePrinterNoticeSources(deps: {
   now: () => Date;
-  locationId: string;
   cacheMs?: number;
-  trouble?: (
-    tx: Transaction,
-    now: Date,
-    options: { locationId: string },
-  ) => Promise<readonly PrinterInTrouble[]>;
+  trouble?: (tx: Transaction, now: Date) => Promise<readonly PrinterInTrouble[]>;
   documentPrinters?: (tx: Transaction, deviceId: string) => Promise<ReadonlySet<string>>;
 }): (deviceId: string) => readonly OwnedStaffNoticeSource[] {
   const trouble = deps.trouble ?? printersInTrouble;
@@ -153,8 +148,7 @@ export function devicePrinterNoticeSources(deps: {
       owner: PRINTER_NOTICE_OWNER,
       source: printerStaffNoticeSource({
         deviceId,
-        trouble: (tx, at) =>
-          cache.get("all", () => trouble(tx, at, { locationId: deps.locationId })),
+        trouble: (tx, at) => cache.get("all", () => trouble(tx, at)),
         documentPrinters: deps.documentPrinters,
       }),
     },

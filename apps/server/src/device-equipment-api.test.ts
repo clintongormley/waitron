@@ -10,7 +10,6 @@ import {
   billPayments,
   devices,
   kitchenStations,
-  locations,
   pagePrinters,
   printerHolders,
   printers,
@@ -609,7 +608,6 @@ describe("paying only on a reader this device holds, with no other device's paym
 describe("what a device may newly choose", () => {
   it.each([
     "unlisted printer",
-    "printer at another location",
     "switched-off printer",
     "unknown printer",
     "disabled reader",
@@ -619,14 +617,7 @@ describe("what a device may newly choose", () => {
     const reader = shape.endsWith("reader");
     let id: string;
     if (shape === "unlisted printer") id = await seedPrinter("Sin lista");
-    else if (shape === "printer at another location") {
-      const [away] = await suite.db
-        .insert(locations)
-        .values({ name: "Otra", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
-        .returning({ id: locations.id });
-      id = await seedPrinter("Fuera", { locationId: away!.id });
-      await printerLists({ receiptPrinterIds: [fp, pp, id] });
-    } else if (shape === "switched-off printer") {
+    else if (shape === "switched-off printer") {
       await suite.db.update(printers).set({ active: false }).where(eq(printers.id, fp));
       id = fp;
     } else if (shape === "unknown printer") id = randomUUID();
@@ -1081,7 +1072,7 @@ describe("the invoice role, which names a receipt printer or an A4 printer", () 
 });
 
 describe("a deleted printer named by a stale choice", () => {
-  const removePrinter = (id: string) => inTx((tx) => deletePrinter(tx, venue.cfg, id));
+  const removePrinter = (id: string) => inTx((tx) => deletePrinter(tx, id));
 
   async function deviceState(deviceId: string) {
     const [row] = await suite.db
@@ -1613,7 +1604,6 @@ describe("GET /api/device/equipment's notices", () => {
       noticeApp([], {
         deviceSources: devicePrinterNoticeSources({
           now: () => READING.instant,
-          locationId: venue.cfg.locationId,
           cacheMs: 0,
         }),
       });

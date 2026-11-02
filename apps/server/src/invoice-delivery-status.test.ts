@@ -174,25 +174,20 @@ async function invoice(nodeId: string, full = true): Promise<string> {
 }
 
 async function receiptJob(
-  v: Venue,
   saleId: string,
   set: Partial<typeof printJobs.$inferInsert> = {},
   receiptCopy = false,
 ): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const printer = await createPrinter(
-      tx,
-      { locationId: v.locationId },
-      { name: "Receipt", transport: "network_tcp", host: `receipt-${hostCounter++}.test` },
-    );
-    const job = await enqueuePrintJob(
-      tx,
-      { locationId: v.locationId },
-      printer.id,
-      new Uint8Array([27, 64]),
-      "document",
-      { saleId, receiptCopy },
-    );
+    const printer = await createPrinter(tx, {
+      name: "Receipt",
+      transport: "network_tcp",
+      host: `receipt-${hostCounter++}.test`,
+    });
+    const job = await enqueuePrintJob(tx, printer.id, new Uint8Array([27, 64]), "document", {
+      saleId,
+      receiptCopy,
+    });
     if (Object.keys(set).length > 0) {
       await tx.update(printJobs).set(set).where(eq(printJobs.id, job.jobId));
     }
@@ -201,7 +196,6 @@ async function receiptJob(
 }
 
 async function reserve(
-  v: Venue,
   saleId: string,
   medium: Medium,
   pagePrinterId?: string,
@@ -216,7 +210,7 @@ async function reserve(
             requestKey,
             personId: "staff-one",
             medium,
-            printJobId: await receiptJob(v, saleId),
+            printJobId: await receiptJob(saleId),
           };
   const delivery = await withTransaction(suite.db, (tx) =>
     reserveInvoiceDelivery(tx, saleId, input),
@@ -259,7 +253,7 @@ async function attempt(
   status: Status,
   pagePrinterId?: string,
 ): Promise<InvoiceDelivery> {
-  const delivery = await reserve(v, saleId, medium, pagePrinterId);
+  const delivery = await reserve(saleId, medium, pagePrinterId);
   if (status !== "queued") {
     const held = await claim(v, delivery);
     if (status === "sent") await report(held, { status: "sent" });
@@ -376,7 +370,7 @@ describe("readInvoiceDeliveries", () => {
   describe("what the printer holds an A4 for", () => {
     /** An A4 original whose agent renewed its claim reporting `paper_out`, then taken to `status`. */
     async function heldA4(v: Venue, saleId: string, status: Status, office: string) {
-      const delivery = await reserve(v, saleId, "a4", office);
+      const delivery = await reserve(saleId, "a4", office);
       const held = await claim(v, delivery);
       expect(
         await withTransaction(suite.db, (tx) =>
@@ -437,7 +431,7 @@ describe("readInvoiceDeliveries", () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
       const office = await pagePrinter(v.locationId);
-      await receiptJob(v, saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
+      await receiptJob(saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
       await heldA4(v, saleId, "sending", office);
 
       const result = await read(saleId);
@@ -456,7 +450,7 @@ describe("readInvoiceDeliveries", () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
     const office = await pagePrinter(v.locationId);
-    const delivery = await reserve(v, saleId, "a4", office);
+    const delivery = await reserve(saleId, "a4", office);
     await report(await claim(v, delivery), { status: "unknown", failureCode: "printer_aborted" });
 
     const result = await read(saleId);
@@ -473,7 +467,7 @@ describe("readInvoiceDeliveries", () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
     const office = await pagePrinter(v.locationId);
-    const delivery = await reserve(v, saleId, "a4", office);
+    const delivery = await reserve(saleId, "a4", office);
     const held = await claim(v, delivery);
     await expire();
     await report(
@@ -589,7 +583,7 @@ describe("readInvoiceDeliveries", () => {
       const saleId = await invoice(v.nodeId);
       const office = await pagePrinter(v.locationId);
       await attempt(v, saleId, "a4", "failed", office);
-      const jobId = await receiptJob(v, saleId, { status: "done" });
+      const jobId = await receiptJob(saleId, { status: "done" });
 
       expect((await read(saleId))!.originalPrinterId).toBe(await jobPrinter(jobId));
     });
@@ -667,7 +661,7 @@ describe("readInvoiceDeliveries", () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
     const office = await pagePrinter(v.locationId);
-    const first = await reserve(v, saleId, "a4", office);
+    const first = await reserve(saleId, "a4", office);
     const held = await claim(v, first);
     await expire();
     const second = await attempt(v, saleId, "a4", "failed", office);
@@ -774,7 +768,7 @@ describe("readInvoiceDeliveries", () => {
       const saleId = await invoice(v.nodeId);
       const office = await pagePrinter(v.locationId);
       const delivered = "2026-10-12T10:00:30.000Z";
-      const jobId = await receiptJob(v, saleId, { status: "done", deliveredAt: delivered });
+      const jobId = await receiptJob(saleId, { status: "done", deliveredAt: delivered });
       const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
 
       const result = await read(saleId);
@@ -809,7 +803,7 @@ describe("readInvoiceDeliveries", () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
       const office = await pagePrinter(v.locationId);
-      await receiptJob(v, saleId, { status: "done" });
+      await receiptJob(saleId, { status: "done" });
       const duplicate = await attempt(v, saleId, "a4", "sent", office);
 
       const result = await read(saleId);
@@ -828,7 +822,7 @@ describe("readInvoiceDeliveries", () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
       await pagePrinter(v.locationId);
-      await receiptJob(v, saleId, set);
+      await receiptJob(saleId, set);
 
       const result = await read(saleId);
 
@@ -844,7 +838,7 @@ describe("readInvoiceDeliveries", () => {
     it("offers a receipt retry for an exhausted one", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      await receiptJob(v, saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
+      await receiptJob(saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
 
       const result = await read(saleId);
 
@@ -862,7 +856,7 @@ describe("readInvoiceDeliveries", () => {
       const saleId = await invoice(v.nodeId);
       const office = await pagePrinter(v.locationId);
       await attempt(v, saleId, "a4", "failed", office);
-      await receiptJob(v, saleId);
+      await receiptJob(saleId);
 
       const result = await read(saleId);
 
@@ -878,8 +872,8 @@ describe("readInvoiceDeliveries", () => {
     it("ignores paper copies", async () => {
       const v = await venue();
       const saleId = await invoice(v.nodeId);
-      await receiptJob(v, saleId, { status: "done" }, true);
-      await receiptJob(v, saleId, {}, true);
+      await receiptJob(saleId, { status: "done" }, true);
+      await receiptJob(saleId, {}, true);
 
       const result = await read(saleId);
 
@@ -918,7 +912,7 @@ describe("readInvoiceDeliveries", () => {
   it("reports a deleted printer's exhausted untracked original with the printer-deleted code", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const jobId = await receiptJob(v, saleId, {
+    const jobId = await receiptJob(saleId, {
       status: "failed",
       attempts: MAX_DELIVERY_ATTEMPTS,
     });
@@ -1004,7 +998,7 @@ describe("readInvoiceDeliveries", () => {
   it("marks a success reported after the receipt's printer was deleted, keeping the status", async () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId);
-    const delivery = await reserve(v, saleId, "receipt");
+    const delivery = await reserve(saleId, "receipt");
     const held = await claim(v, delivery);
     await deleteReceiptPrinter(delivery.printJobId!);
     await report(held, { status: "sent" });
@@ -1021,7 +1015,7 @@ describe("readInvoiceDeliveries", () => {
     const v = await venue();
     const saleId = await invoice(v.nodeId, false);
     await pagePrinter(v.locationId);
-    await receiptJob(v, saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
+    await receiptJob(saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
 
     expect(await read(saleId)).toBeNull();
   });
@@ -1058,11 +1052,11 @@ describe("readInvoiceDeliveries", () => {
     await attempt(v, printed, "receipt", "sent");
     await attempt(v, printed, "email", "unknown");
     const untracked = await invoice(terraceNode);
-    await receiptJob(v, untracked, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
+    await receiptJob(untracked, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
     const fresh = await invoice(terraceNode);
     const simplified = await invoice(v.nodeId, false);
     const queuedReceipt = await invoice(v.nodeId);
-    await receiptJob(v, queuedReceipt);
+    await receiptJob(queuedReceipt);
     const missing = randomUUID();
     const ids = [failedA4, printed, untracked, fresh, simplified, queuedReceipt];
 

@@ -142,13 +142,8 @@ async function setupVenue(): Promise<Venue> {
     await assignCatalogueToVenue(tx, catalogue.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const printer = async (name: string) =>
-      (
-        await createPrinter(
-          tx,
-          { locationId: cfg.locationId },
-          { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-        )
-      ).id;
+      (await createPrinter(tx, { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}` }))
+        .id;
     const kitchenPrinterId = await printer("Kitchen printer");
     const barPrinterId = await printer("Bar printer");
     const receiptPrinter = await printer("Receipt printer");
@@ -673,7 +668,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     const v = await setupVenue();
     const table4 = await firedTable(v, "Table 4");
     const { jobId } = await inTx((tx) =>
-      enqueuePrintJob(tx, { locationId: v.cfg.locationId }, v.receiptPrinter, Uint8Array.from([1])),
+      enqueuePrintJob(tx, v.receiptPrinter, Uint8Array.from([1])),
     );
     await setJob(jobId, { ...exhausted, createdAt: "2026-01-01T00:00:00.000Z" });
 
@@ -848,12 +843,7 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
     const v = await setupVenue();
     await firedTable(v, "Table 4");
     const { jobId } = await inTx((tx) =>
-      enqueuePrintJob(
-        tx,
-        { locationId: v.cfg.locationId },
-        v.kitchenPrinterId,
-        Uint8Array.from([1]),
-      ),
+      enqueuePrintJob(tx, v.kitchenPrinterId, Uint8Array.from([1])),
     );
     await setJob(jobId, exhausted);
 
@@ -1265,9 +1255,8 @@ describe("a printing problem a Reprint would print nothing for", () => {
     const table4 = await firedTable(v, "Table 4", ["burger", "beer"]);
     const failed = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(failed, exhausted);
-    const printerCfg = { locationId: v.cfg.locationId };
 
-    await inTx((tx) => deactivatePrinter(tx, printerCfg, v.kitchenPrinterId));
+    await inTx((tx) => deactivatePrinter(tx, v.kitchenPrinterId));
 
     const problem = {
       workingOrderId: table4.tabId,
@@ -1288,7 +1277,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
     await setJob(whileOff[0]!.printJobId, { status: "done" });
     expect(await problemsOf(table4.partyId)).toEqual([problem]);
 
-    await inTx((tx) => updatePrinter(tx, printerCfg, v.kitchenPrinterId, { active: true }));
+    await inTx((tx) => updatePrinter(tx, v.kitchenPrinterId, { active: true }));
     await reprintPrinted(v, table4.tabId);
     expect(await problemsOf(table4.partyId)).toEqual([]);
     expect(await stationSees(v.kitchenStationId, table4.tabId)).toBe(false);
@@ -1641,11 +1630,11 @@ describe("a printing problem on a printer two stations share (A366)", () => {
   /** A station printer Kitchen and Bar both list, beside each one's own. */
   async function sharedPrinter(v: Venue): Promise<string> {
     return inTx(async (tx) => {
-      const { id } = await createPrinter(
-        tx,
-        { locationId: v.cfg.locationId },
-        { name: "Shared printer", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-      );
+      const { id } = await createPrinter(tx, {
+        name: "Shared printer",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
       await attachPrinterToStation(tx, {
         locationId: v.cfg.locationId,
         stationId: v.kitchenStationId,

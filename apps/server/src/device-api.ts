@@ -562,7 +562,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         const now = new Date();
         // An Every screen can still hold ready dishes at a deleted station.
         const states = await (await VENUE_SERVICE.routingAt(tx, cfg, now)).stations();
-        const down = await stationPrintersDown(tx, deps.cfg.locationId, now, live, {
+        const down = await stationPrintersDown(tx, now, live, {
           withSwitchedOff: true,
         });
         const notices = await VENUE_SERVICE.listStationsNotices(tx, cfg, live);
