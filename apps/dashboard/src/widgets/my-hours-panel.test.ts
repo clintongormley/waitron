@@ -301,6 +301,44 @@ it("has no Location field and reads hours once the inbox arrives", async () => {
   expect(inboxRead).toBeGreaterThanOrEqual(0);
   expect(hoursRead).toBeGreaterThan(inboxRead);
 });
+it("waits for the inbox before reading a chosen window or date, then reads the summary once", async () => {
+  const held = deferred<unknown>();
+  const { el, paths } = await mount({
+    fetch: async (url) => {
+      if (url.endsWith("/inbox")) return held.promise;
+      const params = new URL(url, location.origin).searchParams;
+      return hoursView({
+        selection: {
+          kind: params.get("kind") as "week" | "month",
+          ...(params.has("date") ? { date: params.get("date")! } : {}),
+        },
+      });
+    },
+  });
+  await vi.waitFor(() => expect(paths.some((p) => p.endsWith("/inbox"))).toBe(true));
+  const control = (name: string) =>
+    el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[name="${name}"]`)!;
+  const disabledBefore = [control("hoursWindow").disabled, control("hoursDate").disabled];
+  for (const [name, value] of [
+    ["hoursWindow", "month"],
+    ["hoursDate", "2026-01-07"],
+  ] as const)
+    control(name).dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+    );
+  await el.updateComplete;
+  await new Promise((r) => requestAnimationFrame(r));
+  const hoursReadsBefore = paths.filter((p) => p.includes("/hours?"));
+  held.resolve(inbox());
+  await ready(el);
+  await new Promise((r) => requestAnimationFrame(r));
+  expect(paths.filter((p) => p.includes("/hours?"))).toEqual([
+    "/management-api/me/attendance/hours?kind=week",
+  ]);
+  expect(hoursReadsBefore).toEqual([]);
+  expect(disabledBefore).toEqual([true, true]);
+  expect([control("hoursWindow").disabled, control("hoursDate").disabled]).toEqual([false, false]);
+});
 it("heads a pending question card by its work day alone", async () => {
   const { el } = await mount();
   await ready(el);

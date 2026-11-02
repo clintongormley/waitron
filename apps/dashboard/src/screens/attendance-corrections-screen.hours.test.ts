@@ -245,3 +245,25 @@ it("a replacement session cannot receive a prior session's held Hours", async ()
   expect(m.root.textContent).not.toContain("Old pending hours");
   expect(m.root.querySelector("[data-day]")).toBeNull();
 });
+it("waits for the lookups before reading a chosen pay period, then reads the period once", async () => {
+  const lookups = deferred<unknown>();
+  const m = await mountManagerHours({ hold: { match: "/lookups", promise: lookups.promise } });
+  await expect.poll(() => m.reads.some((r) => r.path.endsWith("/lookups"))).toBe(true);
+  const dateDisabledBefore = m.root.querySelector<HTMLInputElement>(
+    '[name="hoursPeriodDate"]',
+  )!.disabled;
+  await change(m.root, "hoursPeriodDate", "2026-02-10");
+  await m.el.updateComplete;
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  const hoursReadsBefore = m.reads.filter((r) => r.path.includes("/hours?")).map((r) => r.path);
+  m.release();
+  lookups.resolve(m.data.lookups);
+  await record(m.root);
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  expect(m.reads.filter((r) => r.path.includes("/hours?")).map((r) => r.path)).toEqual([
+    "/management-api/attendance/hours?kind=pay-period",
+  ]);
+  expect(hoursReadsBefore).toEqual([]);
+  expect(dateDisabledBefore).toBe(true);
+  expect(m.root.querySelector<HTMLInputElement>('[name="hoursPeriodDate"]')!.disabled).toBe(false);
+});

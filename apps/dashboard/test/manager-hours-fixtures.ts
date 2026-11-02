@@ -67,6 +67,7 @@ export async function mountManagerHours(
     theme?: "light" | "dark";
     fail?: boolean;
     held?: Promise<ManagerHours>;
+    hold?: { match: string; promise: Promise<unknown> };
     exportOptions?: { available: boolean; canExportAll: boolean };
   } = {},
 ) {
@@ -84,7 +85,9 @@ export async function mountManagerHours(
     refusal = "",
     receipt: unknown = null,
     receiptFailure = false;
-  let held = options.held ? { match: "/hours?", promise: options.held as Promise<unknown> } : null;
+  let held = options.held
+    ? { match: "/hours?", promise: options.held as Promise<unknown> }
+    : (options.hold ?? null);
   let revision = "authoritative-day";
   const request = createRequest({
     fetchImpl: async (path, init) => {

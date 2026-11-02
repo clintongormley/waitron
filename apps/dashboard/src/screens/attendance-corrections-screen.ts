@@ -297,7 +297,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
     }
   }
   #period(date: string): void {
-    if (!this.isConnected || this.#blocked || this.editorOpen) return;
+    if (!this.isConnected || this.#blocked || this.editorOpen || !this.lookups) return;
     this.periodDate = date;
     this.hours = null;
     this.queue = [];
@@ -313,7 +313,7 @@ export class AttendanceCorrectionsScreen extends LitElement {
           type="date"
           .label=${t("hours.window")}
           .value=${this.periodDate}
-          .disabled=${disabled}
+          .disabled=${disabled || !this.lookups}
           @wt-change=${(event: CustomEvent<{ value: string }>) => {
             event.stopPropagation();
             this.#period(event.detail.value);

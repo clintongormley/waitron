@@ -259,7 +259,7 @@ export class MyHoursPanel extends LitElement {
   }
   async #select(event: CustomEvent<{ value: string }>, field: "kind" | "date") {
     event.stopPropagation();
-    if (this.#blocked || this.editorOpen || !this.isConnected) return;
+    if (this.#blocked || this.editorOpen || !this.isConnected || !this.inbox) return;
     const value = event.detail.value;
     if (field === "kind") {
       if (value !== "week" && value !== "month") return;
@@ -544,7 +544,7 @@ export class MyHoursPanel extends LitElement {
             { value: "week", label: t("hours.week") },
             { value: "month", label: t("hours.month") },
           ]}
-          .disabled=${disabled}
+          .disabled=${disabled || !this.inbox}
           @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#select(e, "kind")}
         ></wt-combobox>
         <wt-input
@@ -552,7 +552,7 @@ export class MyHoursPanel extends LitElement {
           type="date"
           label=${t("attendance.date")}
           .value=${this.selection.date ?? this.view?.businessDay ?? ""}
-          .disabled=${disabled}
+          .disabled=${disabled || !this.inbox}
           @wt-change=${(e: CustomEvent<{ value: string }>) => void this.#select(e, "date")}
         ></wt-input>
         <wt-button
