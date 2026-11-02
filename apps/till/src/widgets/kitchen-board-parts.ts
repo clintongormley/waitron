@@ -1,14 +1,19 @@
 import { registerIcons, visuallyHiddenStyles } from "@waitron/ui";
-import { type TemplateResult, css, html, nothing } from "lit";
+import { type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { ExpoItem } from "../api/client.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { currentLocale, t } from "../i18n/t.js";
-import type { BoardMeasure } from "../state/kitchen-board-fit.js";
+import {
+  type BoardMeasure,
+  CARD_COLUMN_TEXT_WIDTHS,
+  OVERVIEW_COLUMN_REMS,
+} from "../state/kitchen-board-fit.js";
 import type { ColumnKey } from "../state/kitchen-columns.js";
 import type { OverviewRow } from "../state/kitchen-overview.js";
 import { extraNutrition } from "./diet-badges.js";
 import { snapshotDescriptionFor, trimQuantity } from "./dish-format.js";
+import { PHONE_WIDTH } from "./language-chooser-styles.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { extraCount } from "./queue-crossrefs.js";
 
@@ -17,10 +22,42 @@ registerIcons({
   "column-closed": "M5.4 2 4 3.4 8.6 8 4 12.6 5.4 14 11.4 8Z",
 });
 
-/** The column headings and Overview a kitchen board (the station's and the pass's) draws. */
+/** The columns, their headings and Overview a kitchen board (the station's and the pass's) draws. */
 export const kitchenBoardStyles = css`
   .visually-hidden {
     ${visuallyHiddenStyles}
+  }
+
+  .column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--wt-space-2);
+    min-width: 0;
+  }
+
+  .kanban .column {
+    flex: 1 1 ${unsafeCSS(`${OVERVIEW_COLUMN_REMS}rem`)};
+  }
+
+  .kanban .column-overview {
+    flex-grow: 0;
+  }
+
+  .kanban .column.collapsed {
+    flex: 0 0 var(--wt-tap-min);
+  }
+
+  /* A tab panel or the narrow list spans the board, so a name would sit across the screen from its count. */
+  .tab-panel .overview,
+  .list .overview {
+    max-width: calc(${unsafeCSS(CARD_COLUMN_TEXT_WIDTHS)} * var(--wt-font-size-md));
+  }
+
+  @media ${unsafeCSS(PHONE_WIDTH)} {
+    .tab-panel .overview,
+    .list .overview {
+      max-width: none;
+    }
   }
 
   .overview {

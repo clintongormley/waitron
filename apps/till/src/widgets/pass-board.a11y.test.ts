@@ -124,6 +124,18 @@ async function mountBoard(theme: Theme, columns: ColumnState) {
   return { el, host };
 }
 
+/** Columns drawn side by side share a top edge and run left to right; the narrow list stacks them. */
+function expectSideBySide(el: TillPassBoard): void {
+  const rects = [...el.shadowRoot!.querySelectorAll("[data-column]")].map((section) =>
+    section.getBoundingClientRect(),
+  );
+  expect(rects.length).toBeGreaterThan(1);
+  for (let i = 1; i < rects.length; i++) {
+    expect(rects[i]!.top).toBe(rects[0]!.top);
+    expect(rects[i]!.left).toBeGreaterThanOrEqual(rects[i - 1]!.right);
+  }
+}
+
 describe("A773 pass board widget: accessibility", () => {
   for (const theme of ["light", "dark"] as const) {
     for (const [width, layout] of [
@@ -136,6 +148,7 @@ describe("A773 pass board widget: accessibility", () => {
         const { el, host } = await mountBoard(theme, allShown);
         expect(el.shadowRoot!.querySelector("[data-overview]")).not.toBeNull();
         expect(el.shadowRoot!.querySelector("[data-dimmed]")).not.toBeNull();
+        if (layout === "wide") expectSideBySide(el);
         await expectNoA11yViolations(host);
       });
     }
@@ -143,6 +156,7 @@ describe("A773 pass board widget: accessibility", () => {
     it(`has no axe violations with a collapsed column in the ${theme} theme`, async () => {
       await page.viewport(1280, 900);
       const { el, host } = await mountBoard(theme, { ...allShown, collapsed: ["toFire"] });
+      expectSideBySide(el);
       expect(
         el
           .shadowRoot!.querySelector('[data-column-toggle="toFire"]')!

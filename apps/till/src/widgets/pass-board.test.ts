@@ -1,7 +1,8 @@
 import { page, userEvent } from "vitest/browser";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
+import { CARD_COLUMN_TEXT_WIDTHS, OVERVIEW_COLUMN_REMS } from "../state/kitchen-board-fit.js";
 import { type ColumnKey, PASS_COLUMNS } from "../state/kitchen-columns.js";
 import { overviewRows, rowsToMake } from "../state/kitchen-overview.js";
 import { passOverviewDishes } from "../state/pass-view.js";
@@ -147,6 +148,16 @@ const readyCard = passCard({
   items: [passItem({ id: "ready-1", orderId: "order-7", phase: "ready", state: "ready" })],
 });
 
+/** Columns drawn side by side share a top edge and run left to right; the narrow list stacks them. */
+function expectSideBySide(sections: readonly HTMLElement[]): void {
+  expect(sections.length).toBeGreaterThan(1);
+  const rects = sections.map((section) => section.getBoundingClientRect());
+  for (let i = 1; i < rects.length; i++) {
+    expect(rects[i]!.top).toBe(rects[0]!.top);
+    expect(rects[i]!.left).toBeGreaterThanOrEqual(rects[i - 1]!.right);
+  }
+}
+
 describe("A773 pass board widget", () => {
   it("draws one column per shown key in the chosen order, headed by its word and card count", async () => {
     expect(window.innerWidth).toBe(1280);
@@ -165,6 +176,7 @@ describe("A773 pass board widget", () => {
       "inProgress",
       "ready",
     ]);
+    expectSideBySide(columns);
     const words = {
       held: "pass.column.held",
       toFire: "pass.column.to_fire",
@@ -580,6 +592,7 @@ describe("A773 pass board widget", () => {
       collapsed: [],
     };
     const wide = await mountBoard({ board, columns });
+    expectSideBySide([...root(wide).querySelectorAll<HTMLElement>("[data-column]")]);
     const wideCards = [...root(wide).querySelectorAll<HTMLElement>("[data-card]")].map(
       (card) => card.dataset.card,
     );
@@ -622,5 +635,146 @@ describe("A773 pass board widget", () => {
     const opened = eventsOf(el, "open-columns");
     await userEvent.click(columnsButton);
     expect(opened).toEqual([{ opener: columnsButton }]);
+  });
+
+  const sectionsOf = (el: TillPassBoard) => [
+    ...root(el).querySelectorAll<HTMLElement>("[data-column]"),
+  ];
+  const sectionOf = (el: TillPassBoard, key: string) =>
+    root(el).querySelector<HTMLElement>(`[data-column="${key}"]`)!;
+  const tokenPx = (el: TillPassBoard, token: string) =>
+    parseFloat(getComputedStyle(el).getPropertyValue(token));
+  const everyColumnBoard = passBoard({
+    held: [heldCard],
+    toFire: [toFireCard],
+    inProgress: [billInProgress],
+    ready: [readyCard],
+    overview: overviewFacts,
+  });
+
+  it("keeps Overview within the width the fit check budgets for it, however long a dish's name", async () => {
+    await page.viewport(1920, 900);
+    const longName = "Arroz meloso de bogavante con alcachofas, ajos tiernos y su sofrito";
+    const board = passBoard({
+      ...everyColumnBoard,
+      overview: [{ ...overviewFacts[0]!, name: longName }],
+    });
+    const el = await mountBoard({ board, columns: allShown });
+    const sections = sectionsOf(el);
+    expectSideBySide(sections);
+    const remPx = parseFloat(getComputedStyle(document.documentElement).fontSize);
+    expect(sectionOf(el, "overview").getBoundingClientRect().width).toBeLessThanOrEqual(
+      OVERVIEW_COLUMN_REMS * remPx + 0.5,
+    );
+    const cardWidths = sections
+      .filter((section) => section.dataset.column !== "overview")
+      .map((section) => section.getBoundingClientRect().width);
+    for (const width of cardWidths) expect(width).toBeCloseTo(cardWidths[0]!, 0);
+  });
+
+  it("draws a collapsed column on a wide board as a strip one tap wide", async () => {
+    const el = await mountBoard({
+      board: everyColumnBoard,
+      columns: { ...allShown, collapsed: ["toFire"] },
+    });
+    expectSideBySide(sectionsOf(el));
+    expect(sectionOf(el, "toFire").getBoundingClientRect().width).toBe(tokenPx(el, "--wt-tap-min"));
+  });
+
+  it("counts a collapsed column as its strip when deciding whether the columns fit", async () => {
+    await page.viewport(900, 900);
+    const open = await mountBoard({ board: everyColumnBoard, columns: allShown });
+    expect(root(open).querySelector(".list")).not.toBeNull();
+    cleanupWidgets();
+
+    const el = await mountBoard({
+      board: everyColumnBoard,
+      columns: { ...allShown, collapsed: ["held", "toFire", "ready"] },
+    });
+    expect(root(el).querySelector(".kanban")).not.toBeNull();
+    expectSideBySide(sectionsOf(el));
+  });
+
+  it("draws a collapsed section in the narrow list as a full-width heading, not a strip", async () => {
+    await page.viewport(390, 844);
+    const el = await mountBoard({
+      board: everyColumnBoard,
+      columns: { ...allShown, collapsed: ["toFire"] },
+    });
+    const section = sectionOf(el, "toFire");
+    const toggle = section.querySelector<HTMLElement>("[data-column-toggle]")!;
+    expect(getComputedStyle(toggle).writingMode).toBe("horizontal-tb");
+    expect(toggle.getBoundingClientRect().width).toBe(section.getBoundingClientRect().width);
+  });
+
+  it("keeps the narrow list's Overview as narrow as a card column on a till, and full width on a phone", async () => {
+    await page.viewport(900, 900);
+    const till = await mountBoard({ board: everyColumnBoard, columns: allShown });
+    expect(root(till).querySelector(".list")).not.toBeNull();
+    const tillOverview = sectionOf(till, "overview").querySelector<HTMLElement>("[data-overview]")!;
+    expect(tillOverview.getBoundingClientRect().width).toBeLessThanOrEqual(
+      CARD_COLUMN_TEXT_WIDTHS * tokenPx(till, "--wt-font-size-md") + 0.5,
+    );
+    cleanupWidgets();
+
+    await page.viewport(390, 844);
+    const phone = await mountBoard({ board: everyColumnBoard, columns: allShown });
+    const section = sectionOf(phone, "overview");
+    expect(section.querySelector("[data-overview]")!.getBoundingClientRect().width).toBe(
+      section.getBoundingClientRect().width,
+    );
+  });
+
+  it("turns to the narrow list when the screen narrows, also after it is moved", async () => {
+    const el = await mountBoard({ board: everyColumnBoard, columns: allShown });
+    expect(root(el).querySelector(".kanban")).not.toBeNull();
+    await page.viewport(390, 844);
+    await vi.waitFor(() => expect(root(el).querySelector(".list")).not.toBeNull());
+
+    await page.viewport(1280, 900);
+    await vi.waitFor(() => expect(root(el).querySelector(".kanban")).not.toBeNull());
+    const parent = el.parentElement!;
+    el.remove();
+    parent.appendChild(el);
+    await page.viewport(390, 844);
+    await vi.waitFor(() => expect(root(el).querySelector(".list")).not.toBeNull());
+  });
+
+  it("puts the screen's lead in its header row before the overdue count and Columns, and its status under that row", async () => {
+    const overdue = passCard({
+      key: "late",
+      items: [passItem({ id: "late-item", queuedAt: minutesAgo(12), band: "fresh" })],
+    });
+    const el = await mountBoard({ board: passBoard({ inProgress: [overdue] }) });
+    const lead = document.createElement("h1");
+    lead.slot = "lead";
+    lead.textContent = "Pass";
+    const status = document.createElement("p");
+    status.slot = "status";
+    status.textContent = "Not updated since 12:00";
+    el.append(lead, status);
+    await el.updateComplete;
+
+    const head = root(el).querySelector<HTMLElement>("[data-board-head]")!;
+    const leadSlot = head.querySelector<HTMLSlotElement>('slot[name="lead"]');
+    expect(leadSlot?.assignedElements()).toEqual([lead]);
+    const statusSlot = root(el).querySelector<HTMLSlotElement>('slot[name="status"]');
+    expect(statusSlot?.assignedElements()).toEqual([status]);
+    expect(head.contains(statusSlot)).toBe(false);
+
+    const [leadBox, countBox, columnsBox] = [
+      lead,
+      head.querySelector("[data-overdue-count]")!,
+      head.querySelector("[data-columns-open]")!,
+    ].map((node) => node.getBoundingClientRect());
+    for (const box of [countBox!, columnsBox!]) {
+      expect(box.top).toBeLessThan(leadBox!.bottom);
+      expect(box.bottom).toBeGreaterThan(leadBox!.top);
+    }
+    expect(leadBox!.right).toBeLessThanOrEqual(countBox!.left);
+    expect(countBox!.right).toBeLessThanOrEqual(columnsBox!.left);
+    const statusBox = status.getBoundingClientRect();
+    expect(statusBox.top).toBeGreaterThanOrEqual(head.getBoundingClientRect().bottom);
+    expect(statusBox.bottom).toBeLessThanOrEqual(sectionsOf(el)[0]!.getBoundingClientRect().top);
   });
 });

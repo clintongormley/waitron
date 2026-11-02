@@ -102,22 +102,6 @@ export class TillPassBoard extends LitElement {
         gap: var(--wt-space-3);
       }
 
-      .column {
-        display: flex;
-        flex: 1 1 0;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        min-width: 0;
-      }
-
-      .kanban .column-overview {
-        flex: 0 0 auto;
-      }
-
-      .kanban .column.collapsed {
-        flex: 0 0 var(--wt-tap-min);
-      }
-
       /* A collapsed section in the list is a full-width heading, not a strip. */
       .list .collapsed .column-toggle {
         padding: 0 var(--wt-space-2);
@@ -392,7 +376,7 @@ export class TillPassBoard extends LitElement {
       this.#measured === undefined || columnsFit(this.#measured, shown, this.columns.collapsed);
     return html`<div class="width-probe"></div>
       <div class="board-head" data-board-head>
-        ${
+        <slot name="lead"></slot>${
           overdue === 0
             ? nothing
             : html`<p class="overdue-count" data-overdue-count>
@@ -406,6 +390,7 @@ export class TillPassBoard extends LitElement {
           >${t("station.columns")}</wt-button
         >
       </div>
+      <slot name="status"></slot>
       <div class=${fits ? "kanban" : "list"}>
         ${shown.map((key) => this.#column(key, views.get(key) ?? []))}
       </div>`;

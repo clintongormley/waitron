@@ -6,7 +6,7 @@ import {
 import { groupName } from "./group-name.js";
 import { queueCrossRefs } from "./queue-crossrefs.js";
 import { ContentLanguageController } from "@waitron/ui";
-import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles, registerIcons } from "@waitron/ui";
 import { type TimingBand, classifyBand, thousandthsToDecimal } from "@waitron/shared";
@@ -29,12 +29,7 @@ import {
 } from "../state/kitchen-cards.js";
 import { overviewRows, rowsToMake } from "../state/kitchen-overview.js";
 import { type ColumnKey, type ColumnState, STATION_COLUMNS } from "../state/kitchen-columns.js";
-import {
-  type BoardMeasure,
-  CARD_COLUMN_TEXT_WIDTHS,
-  columnsFit,
-} from "../state/kitchen-board-fit.js";
-import { PHONE_WIDTH } from "./language-chooser-styles.js";
+import { type BoardMeasure, columnsFit } from "../state/kitchen-board-fit.js";
 import {
   columnHeading,
   dishAllergens,
@@ -161,33 +156,6 @@ export class TillStationQueue extends LitElement {
         flex-wrap: wrap;
         align-items: stretch;
         gap: var(--wt-space-3);
-      }
-
-      .column {
-        display: flex;
-        flex: 1 1 11rem;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        min-width: 0;
-      }
-
-      .column-overview {
-        flex-grow: 0;
-      }
-
-      .column.collapsed {
-        flex: 0 0 var(--wt-tap-min);
-      }
-
-      /* A tab panel spans the board, so a name would sit across the screen from its count. */
-      .tab-panel .overview {
-        max-width: calc(${unsafeCSS(CARD_COLUMN_TEXT_WIDTHS)} * var(--wt-font-size-md));
-      }
-
-      @media ${unsafeCSS(PHONE_WIDTH)} {
-        .tab-panel .overview {
-          max-width: none;
-        }
       }
 
       .column-tab[data-late] {
