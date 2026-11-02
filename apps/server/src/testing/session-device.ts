@@ -25,7 +25,7 @@ export const BASIC_ACTIONS = [
  */
 export async function seedSessionDevice(
   db: Database,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the device is at the venue, whatever `_cfg` names
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
   _cfg: { locationId: string },
 ): Promise<string> {
   return (

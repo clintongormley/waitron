@@ -65,9 +65,9 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedLegacySellingUnits(db);
     // invoice_locales is `es-ES` (full-tag, fiscal). The products are authored under the BARE `es`
-    // key; `priceOrderLines` re-keys their descriptions to the location's `es-ES` before the park/place
+    // key; `priceOrderLines` re-keys their descriptions to the venue's `es-ES` before the park/place
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
-    // location's locales exactly.
+    // venue's locales exactly.
     await seedVenue(db, {
       name: "Counter",
       invoiceLocales: ["es-ES"],

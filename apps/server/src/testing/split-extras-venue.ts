@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { venueLocationId, workingOrderLines, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -41,7 +41,6 @@ export interface Venue {
 
 /** A fresh location, till, node and assigned catalogue, returning the till's config. */
 export async function setupVenue(): Promise<Venue> {
-  await seedTenant(db);
   await seedLegacySellingUnits(db);
   await seedVenue(db, {
     name: "Main bar",

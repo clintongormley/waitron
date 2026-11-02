@@ -523,7 +523,7 @@ async function asTenant<T>(
  * A SECOND register on the SAME node — a `cfg` that shares `cfg`'s node, series and location, on a
  * device of its own.
  */
-/** `cfg` as a request from a second device at its location. */
+/** `cfg` as a request from a second device at the venue. */
 async function addDevice(cfg: DeviceRequestConfig): Promise<DeviceRequestConfig> {
   return deviceRequestCfg(suite.db, cfg);
 }

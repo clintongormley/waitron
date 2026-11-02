@@ -1,7 +1,7 @@
 import type { RecordExportDocument } from "@waitron/shared";
 import { jobOrigin } from "@waitron/shared";
 import { venueLocationId, withTransaction, type Database } from "@waitron/db";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
 import { WorkforceBackend, closePayPeriod } from "@waitron/workforce";
 import { prepareTimeRecordExport } from "@waitron/workforce-es";
@@ -10,7 +10,6 @@ export const longReason = `${Array.from({ length: 90 }, (_, i) => `Paragraph ${i
 export const longToken = "LONGTOKEN".repeat(100);
 
 export async function seedAttendanceExport(db: Database) {
-  await seedTenant(db);
   await seedVenue(db, {
     name: "Charcutería",
     invoiceLocales: ["es"],

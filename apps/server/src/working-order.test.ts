@@ -1338,13 +1338,13 @@ async function setStatus(id: string, status: "settled" | "abandoned"): Promise<v
 }
 
 /**
- * Insert an open order on ANOTHER node at the same location. The row exists to prove reads are
+ * Insert an open order on ANOTHER node at the venue. The row exists to prove reads are
  * venue-wide (#259): a promoted node inherits the venue's open tabs even though they are
  * tagged with the dead node's id (swap spec §4.3). `node_id` is the foreign node's on purpose.
  */
 async function seedForeignNodeOrder(cfg: DeviceRequestConfig): Promise<string> {
   const id = randomUUID();
-  const otherNode = await seedNode(db, cfg.locationId);
+  const otherNode = await seedNode(db);
   await db.execute(sql`
     insert into working_orders (id, source, device_id, location_id, node_id, order_number, status, opened_at)
     values (${id}, 'device', ${cfg.origin.deviceId}, ${cfg.locationId}, ${otherNode}, 1, 'open', ${nowIso()})`);
@@ -3263,9 +3263,9 @@ describe("createOpenOrder's catalogue reads (perf)", () => {
     expect(locationRead).toHaveBeenCalledTimes(1);
   });
 
-  // The line's customer text is keyed by the LOCATION's invoice locales, read at pricing time —
+  // The line's customer text is keyed by the VENUE's invoice locales, read at pricing time —
   // not by the till's `cfg.invoiceLocales`, which this case leaves at one locale.
-  it("keys each stored line's customer text by the location's invoice locales", async () => {
+  it("keys each stored line's customer text by the venue's invoice locales", async () => {
     const { cfg, cafeId } = await setupVenue();
     const offers = await counterOffers(cfg);
     await db

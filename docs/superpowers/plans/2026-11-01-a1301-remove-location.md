@@ -4267,6 +4267,10 @@ F4d1 and F4d2 split the first draft's F4d (`r*`, 29 files; review 1b, M4). Every
 
 ## F5 — `apps/server` `s`–`z`, `src/testing/*`, server scripts and test folders, and the root raw-SQL seed
 
+> 2026-11-02, F5 as built: `seedVenue` and `seedNode` take no id, so `boot-harness.ts`,
+> `backup-verification-fixture.ts` and `dormant-contract.ts` keep their inserts (listed in F5a's
+> commit), and the done-check also prints the fixed-id and re-insert lines each F5 commit lists.
+
 - **Goal / area.** The design gives F5 "78 `apps/server` files plus the rest". At `abfe271663` it is
   **67** test files under `apps/server/src/[s-z]*` that insert (40 `t*`, 27 `s*`/`v*`/`w*`;
   `src/testing/` holds no inserting test), plus 4 `apps/server/scripts/` tests and the helpers. The

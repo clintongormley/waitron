@@ -39,7 +39,7 @@ let cfg: OriginConfig;
 let ana: { id: string };
 // One product, offered in a table zone, so a tab can open with a real line to transfer — `openTab`
 // prices it and the `check_locales` trigger demands its `es-ES` description key match the
-// location's `es-ES` locale. Both tabs' tables sit in that zone, so a transfer joins like modes.
+// venue's `es-ES` locale. Both tabs' tables sit in that zone, so a transfer joins like modes.
 let cafeId: string;
 let cafeOffer: string;
 let tablesZoneId: string;

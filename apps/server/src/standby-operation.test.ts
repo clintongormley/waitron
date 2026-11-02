@@ -31,7 +31,7 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { establishReservedStandbyIdentity, generateStandbyIdentity } from "./reserved-identity.js";
@@ -73,7 +73,6 @@ afterAll(async () => {
 });
 beforeEach(async () => {
   modules.length = 0;
-  await seedTenant(suite.db);
   await seedVenue(suite.db, {
     name: "Restaurant",
     invoiceLocales: ["es"],

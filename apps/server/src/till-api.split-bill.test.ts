@@ -62,7 +62,7 @@ import { BASIC_ACTIONS, seedSessionDevice } from "./testing/session-device.js";
 let cfg: OriginConfig;
 let ana: { id: string };
 // One product so a tab can open with a real line to split/carry across an un-join — `openTab` prices it
-// and the `check_locales` trigger demands its `es-ES` description key match the location's `es-ES` locale.
+// and the `check_locales` trigger demands its `es-ES` description key match the venue's `es-ES` locale.
 let cafeId: string;
 // The café's offer, and the table_tab zone offering it, where every table here sits.
 let cafeMenuItemId: string;

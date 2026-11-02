@@ -287,9 +287,7 @@ describe("settled-tender refund authorization before reservation", () => {
         part === "device"
           ? {
               ...cfg,
-              origin: deviceOrigin(
-                (await seedDevice(store.db, { locationId: cfg.locationId })).deviceId,
-              ),
+              origin: deviceOrigin((await seedDevice(store.db)).deviceId),
             }
           : cfg;
       await refused(t, "session.required", request(t.tenderId), config, op);

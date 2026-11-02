@@ -41,9 +41,9 @@ let cfg: TradingContext;
 let ana: { id: string };
 /** A supervisor, who holds the refund permission a sent dish's cancel needs. */
 let sara: { id: string };
-// The one product seeded into the counter location's catalogue, so a tab can open with a real line
+// The one product seeded into the venue's catalogue, so a tab can open with a real line
 // (`openTab`/`addTabRound` price it and the `check_locales` trigger demands its `es-ES` description
-// key match the location's `es-ES` locale).
+// key match the venue's `es-ES` locale).
 let productId: string;
 // The product's offer, and the table_tab zone offering it: a tab's table sits in that zone, and its
 // lines name the offer.
@@ -51,7 +51,7 @@ let menuItemId: string;
 let tablesZoneId: string;
 // A second product routed to no preparation, so its line has no kitchen record.
 let noPreparationMenuItemId: string;
-// A real `floor_zones` row in the counter location: a table's `zoneId` is a FK to `floor_zones`.
+// A real `floor_zones` row at the venue: a table's `zoneId` is a FK to `floor_zones`.
 let seededZoneId: string;
 
 const suite = useVenueDb({
@@ -61,9 +61,9 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedLegacySellingUnits(db);
     // invoice_locales is `es-ES` (full-tag, fiscal). The product is authored under the BARE `es` key;
-    // `priceOrderLines` re-keys its descriptions to the location's `es-ES` before the tab
+    // `priceOrderLines` re-keys its descriptions to the venue's `es-ES` before the tab
     // line-insert fires `check_locales`, which demands a line's `descriptions` keys equal the
-    // location's locales exactly.
+    // venue's locales exactly.
     await seedVenue(db, {
       name: "Counter",
       invoiceLocales: ["es-ES"],

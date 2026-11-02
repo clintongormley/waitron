@@ -15,7 +15,7 @@ import {
 } from "@waitron/db";
 import { NODE_MIGRATIONS, readNodeMode, setNodeMode } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing } from "@waitron/credentials";
 import { IDENTITY_MIGRATIONS, hashPassword, persons } from "@waitron/identity";
 import { generateNodeKeyPair } from "@waitron/membership";
@@ -76,7 +76,6 @@ beforeEach(async () => {
   retained = undefined;
   observedOperator = undefined;
   replaceKey = false;
-  await seedTenant(suite.db);
   await seedVenue(suite.db, {
     name: "Restaurant",
     invoiceLocales: ["es"],

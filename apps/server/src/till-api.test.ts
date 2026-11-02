@@ -145,7 +145,7 @@ let hiddenAguaOfferId: string;
 // An enrolled `till` device's cookie, which a happy-path place/sale call carries to reach the
 // route body.
 let tillDeviceCookie: string;
-// The device `openSession` opens Ana's shift on: at `cfg`'s location, allowed every capability.
+// The device `openSession` opens Ana's shift on: at the venue, allowed every capability.
 let sessionDeviceId: string;
 
 const suite = useVenueDb({
