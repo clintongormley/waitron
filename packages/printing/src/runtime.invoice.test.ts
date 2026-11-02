@@ -13,7 +13,6 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
 import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import { claimPrintJobs, reportPrintJob } from "./runtime.js";
@@ -27,7 +26,7 @@ async function setup() {
     operationDescription: "Sale on premises",
   });
   const venueId = await venueLocationId(suite.db);
-  const nodeId = await seedNode(suite.db, locationId(venueId));
+  const nodeId = await seedNode(suite.db);
   const [agent] = await suite.db
     .insert(printAgents)
     .values({ locationId: venueId, name: "Agent", tokenHash: "fixture" })

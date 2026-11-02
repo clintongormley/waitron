@@ -1,17 +1,10 @@
 import { randomUUID } from "node:crypto";
-import {
-  kitchenStations,
-  locations,
-  venueLocationId,
-  withTransaction,
-  type Database,
-} from "@waitron/db";
+import { kitchenStations, venueLocationId, withTransaction, type Database } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
 import { departments, seasons } from "@waitron/venue-service";
 
-/** The venue with two staff, a department, a prep station and a season. A second call writes a
- * second location, for the cross-location cases A1301's code slices delete. */
+/** The venue with two staff, a department, a prep station and a season. */
 export async function seedVenueWithStaff(db: Database) {
   return withTransaction(db, async (tx) => {
     const venue = {
@@ -19,15 +12,8 @@ export async function seedVenueWithStaff(db: Database) {
       invoiceLocales: ["es-ES"],
       operationDescription: "Restaurant",
     };
-    const [existing] = await tx.select({ id: locations.id }).from(locations).limit(1);
-    let locationId: string;
-    if (existing === undefined) {
-      await seedVenue(tx, venue);
-      locationId = await venueLocationId(tx);
-    } else {
-      const [location] = await tx.insert(locations).values(venue).returning({ id: locations.id });
-      locationId = location!.id;
-    }
+    await seedVenue(tx, venue);
+    const locationId = await venueLocationId(tx);
     const person = async (displayName: string) => {
       const [row] = await tx
         .insert(persons)

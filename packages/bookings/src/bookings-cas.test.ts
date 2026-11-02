@@ -35,9 +35,8 @@ async function setupVenue(
     invoiceLocales: [LOCALE],
     operationDescription: "Restaurant service",
   });
-  const venueId = await venueLocationId(db);
-  const locationId = venueId;
-  await seedNode(db, brandLocationId(locationId));
+  const locationId = await venueLocationId(db);
+  await seedNode(db);
   return { cfg: { locationId: brandLocationId(locationId) }, createdBy: crypto.randomUUID() };
 }
 

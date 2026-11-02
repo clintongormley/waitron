@@ -47,7 +47,7 @@ async function newBill(party: string | null = partyId): Promise<string> {
     orderNumber: nextOrderNumber++,
     source: "dashboard",
   });
-  return order!.id;
+  return order.id;
 }
 
 function identify(values: typeof billIdentities.$inferInsert) {

@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, tenantReceipts, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   createDepartment,
   deleteDepartment,
@@ -22,7 +22,6 @@ const suite = useVenueDb({
 const photo = await samplePreparedImage({ width: 19 });
 
 it("counts only department logos and protects each until cleared despite retired venue values", async () => {
-  await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await seedVenue(tx, {
       name: "Dining room",
@@ -87,7 +86,6 @@ it("counts only department logos and protects each until cleared despite retired
 it.each(["{", "null", "[]", "123", '{"logo":null}', '{"logo":[]}', '{"logo":{}}'])(
   "ignores malformed imported department receipt %s beside a valid explicit use",
   async (bad) => {
-    await seedTenant(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await seedVenue(tx, {
         name: "Restaurant",
@@ -123,7 +121,6 @@ it.each(["{", "null", "[]", "123", '{"logo":null}', '{"logo":[]}', '{"logo":{}}'
 );
 
 it("protects a deleted department's retained receipt logo after its name is reused", async () => {
-  await seedTenant(suite.db);
   await withTransaction(suite.db, async (tx) => {
     await seedVenue(tx, {
       name: "Restaurant",

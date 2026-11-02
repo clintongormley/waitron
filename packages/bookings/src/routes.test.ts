@@ -52,9 +52,8 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: ["es-ES"],
     operationDescription: "Restaurant service",
   });
-  const venueId = await venueLocationId(db);
-  const locationId = venueId;
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
 
   const { managerSid, staffSid } = await withTransaction(db, async (tx: Transaction) => {
     const [mgr] = await tx

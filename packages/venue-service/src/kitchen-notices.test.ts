@@ -23,7 +23,7 @@ import {
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { AppError, locationId as brandLocationId, thousandthsToDecimal } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -335,7 +335,7 @@ async function seedOrder(
     label,
   });
   const line = {
-    workingOrderId: order!.id,
+    workingOrderId: order.id,
     quantity: 2000,
     unitPriceGross: 1100,
     vatClass: "reduced",
@@ -370,7 +370,7 @@ async function seedOrder(
     })
     .returning({ id: workingOrderLines.id });
   return {
-    orderId: order!.id,
+    orderId: order.id,
     burgerLineId: burger!.id,
     lemonadeLineId: lemonade!.id,
     pizzaLineId: pizza!.id,
@@ -378,7 +378,6 @@ async function seedOrder(
 }
 
 async function venue() {
-  await seedTenant(db);
   const locationId = await seedLocation("Venue");
   const grill = await seedStation(locationId, "Grill");
   const bar = await seedStation(locationId, "Bar");

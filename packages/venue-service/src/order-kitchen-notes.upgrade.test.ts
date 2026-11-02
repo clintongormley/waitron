@@ -94,7 +94,7 @@ it("adds order instructions to a populated predecessor without changing its dish
   const [line] = await suite.db
     .insert(workingOrderLines)
     .values({
-      workingOrderId: order!.id,
+      workingOrderId: order.id,
       lineNo: 1,
       name: "Burger",
       kitchenName: "BRGR",
@@ -108,7 +108,7 @@ it("adds order instructions to a populated predecessor without changing its dish
     .returning();
   await suite.db.execute(sql`insert into kitchen_notices
     (id, station_id, working_order_id, order_label, kind, line_name, quantity, note, created_at)
-    values ('existing-notice', ${station!.id}, ${order!.id}, '#42', 'recalled', 'BRGR', 1000, 'No onions', '2026-10-15T12:00:00Z')`);
+    values ('existing-notice', ${station!.id}, ${order.id}, '#42', 'recalled', 'BRGR', 1000, 'No onions', '2026-10-15T12:00:00Z')`);
   const tables = new Set(
     suite.db
       .all<{ name: string }>(sql`select name from sqlite_master where type = 'table'`)
@@ -164,7 +164,7 @@ it("adds order instructions to a populated predecessor without changing its dish
   expect(
     suite.db.all(sql`select name, sql from sqlite_master where type = 'trigger' order by name`),
   ).toEqual(triggers);
-  const scope = { workingOrderId: order!.id };
+  const scope = { workingOrderId: order.id };
   expect(
     await withTransaction(suite.db, (tx) => writeKitchenNote(tx, scope, 0, "All together")),
   ).toEqual({ note: "All together", revision: 1 });

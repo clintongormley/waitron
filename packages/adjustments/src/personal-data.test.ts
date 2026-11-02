@@ -52,7 +52,7 @@ async function seedOrders(db: Database): Promise<Record<41 | 42 | 43, string>> {
   const orders = {} as Record<41 | 42 | 43, string>;
   for (const orderNumber of [41, 42, 43] as const) {
     const order = await seedWorkingOrder(db, { source: "dashboard", deviceId: null, orderNumber });
-    orders[orderNumber] = order!.id;
+    orders[orderNumber] = order.id;
   }
   return orders;
 }

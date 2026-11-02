@@ -16,7 +16,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { applyMigrationSet, useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "./party-allergy.js";
@@ -72,7 +72,6 @@ const suite = useVenueDb({
 });
 
 it("upgrades a populated predecessor with change-feed triggers, preserving every seeded row and trigger", async () => {
-  await seedTenant(suite.db);
   const actor = "aaaaaaaa-1111-4111-8111-111111111111";
   await seedVenue(suite.db, {
     name: "Before allergy",
@@ -92,7 +91,7 @@ it("upgrades a populated predecessor with change-feed triggers, preserving every
   const [dish] = await suite.db
     .insert(workingOrderLines)
     .values({
-      workingOrderId: order!.id,
+      workingOrderId: order.id,
       lineNo: 1,
       name: "Original dish",
       descriptions: { en: "Customer dish" },

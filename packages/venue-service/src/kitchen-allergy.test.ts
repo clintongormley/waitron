@@ -14,7 +14,6 @@ import {
 } from "@waitron/db";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_CONFIGURATION_TRANSFER } from "./configuration-transfer.js";
 import { VENUE_SERVICE_CLASSIFICATION, VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
@@ -47,7 +46,7 @@ beforeEach(async () => {
     operationDescription: "Restaurant",
   });
   const venueId = await venueLocationId(suite.db);
-  const nodeId = await seedNode(suite.db, locationId(venueId));
+  const nodeId = await seedNode(suite.db);
   const [station] = await suite.db
     .insert(kitchenStations)
     .values({
@@ -63,7 +62,7 @@ beforeEach(async () => {
     orderNumber: 1,
     source: "dashboard",
   });
-  orderId = order!.id;
+  orderId = order.id;
   const [line] = await suite.db
     .insert(workingOrderLines)
     .values({

@@ -8,14 +8,12 @@ import {
   captureError,
   deviceProfiles,
   isRefusal,
-  tenants,
   withTransaction,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { PAYMENTS_MIGRATIONS } from "../migrations.js";
-import { freshNif } from "../../test/seed.js";
 import { cardReaders } from "./card-readers.js";
 import { deviceCardReaders } from "./device-card-readers.js";
 
@@ -29,11 +27,6 @@ interface Seeded {
 /** Through the table definitions rather than raw SQL: `id` and `created_at` are `$defaultFn`
  * generators only the insert BUILDER runs. */
 async function seedDeviceAndReader(db: Database): Promise<Seeded> {
-  // One `tenants` row so the database looks like a provisioned one; nothing below references it.
-  await db
-    .insert(tenants)
-    .values({ id: 1, country: "ES", taxId: freshNif(), legalName: "Test SL" })
-    .onConflictDoNothing({ target: tenants.id });
   await seedVenue(db, {
     name: "Counter",
     invoiceLocales: ["es"],
@@ -44,12 +37,11 @@ async function seedDeviceAndReader(db: Database): Promise<Seeded> {
     .values({ name: "Profile", formFactor: "till" })
     .returning({ id: deviceProfiles.id });
   const { deviceId } = await seedDevice(db, { profileId: profile!.id, label: "Counter till" });
-  const device = { id: deviceId };
   const [reader] = await db
     .insert(cardReaders)
-    .values({ provider: "sumup", providerRef: `rdr_${device!.id}`, name: "Counter" })
+    .values({ provider: "sumup", providerRef: `rdr_${deviceId}`, name: "Counter" })
     .returning({ id: cardReaders.id });
-  return { deviceId: device!.id, readerId: reader!.id };
+  return { deviceId, readerId: reader!.id };
 }
 
 describe("device_card_readers", () => {

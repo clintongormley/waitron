@@ -39,7 +39,7 @@ async function provisionedNode({
   });
   const venueId = await venueLocationId(db);
   const locationId = brandLocationId(venueId);
-  return { locationId, nodeId: await seedNode(db, locationId) };
+  return { locationId, nodeId: await seedNode(db) };
 }
 
 function reasons() {

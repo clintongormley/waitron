@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, locations, nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { AppError, locationId } from "@waitron/shared";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { AppError } from "@waitron/shared";
 import {
   createTrustedClock,
   prepareIssueClock,
@@ -17,17 +17,12 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const AT = "2026-10-14T23:30:00.000Z";
 let scope: IssueScope;
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [row] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Test venue",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Restaurant service",
-      timeZone: "Europe/Madrid",
-    })
-    .returning();
-  scope = { nodeId: await seedNode(suite.db, locationId(row!.id)) };
+  await seedVenue(suite.db, {
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Restaurant service",
+    timeZone: "Europe/Madrid",
+  });
+  scope = { nodeId: await seedNode(suite.db) };
 });
 afterEach(() => vi.restoreAllMocks());
 const source = (instant = new Date(AT)) =>

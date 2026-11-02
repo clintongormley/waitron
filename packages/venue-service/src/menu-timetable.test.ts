@@ -1489,7 +1489,7 @@ describe("a zone moved to another department", () => {
 
 /** Adds Tortilla to Desayunos, republishes it, and records one Sala order line from it. */
 async function recordedLine(v: Timed) {
-  const nodeId = await seedNode(db, v.locationId);
+  const nodeId = await seedNode(db);
   await db.execute(sql`
     insert into units (id, seed_key, staff_name, staff_abbreviation, name, abbreviation, precision, hardware_unit)
     values (${randomUUID()}, 'each', 'Each', 'ea', '{"en":"each"}', '{"en":"ea"}', 0, null)`);

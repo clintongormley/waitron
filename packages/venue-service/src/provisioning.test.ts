@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { readHolidays, readHolidayAreaModel } from "./holidays.js";
 import { readSpecialDaysModel } from "./named-days.js";
@@ -47,7 +47,6 @@ beforeAll(() => {
 
 describe("VENUE_SERVICE_PROVISIONING", () => {
   it("places Open once and preserves its authored ranges on a second seed", async () => {
-    await seedTenant(db);
     const [menu] = await db
       .insert(catalogues)
       .values({ name: "First menu" })
@@ -60,7 +59,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
-    const node = { locationId, nodeId: await seedNode(db, locationId) };
+    const node = { locationId, nodeId: await seedNode(db) };
     const seed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const rows = () =>
       db.execute(
@@ -92,7 +91,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
   });
 
   it("names the default department after the venue", async () => {
-    await seedTenant(db);
     const [menu] = await db
       .insert(catalogues)
       .values({ name: "First menu" })
@@ -105,7 +103,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
-    const node = { locationId, nodeId: await seedNode(db, locationId) };
+    const node = { locationId, nodeId: await seedNode(db) };
 
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
@@ -139,7 +137,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       await seedVenue(db, { name, invoiceLocales: ["en-GB"], operationDescription: "Hospitality" });
       const venueId = await venueLocationId(db);
       const locationId = brandLocationId(venueId);
-      const node = { locationId, nodeId: await seedNode(db, locationId) };
+      const node = { locationId, nodeId: await seedNode(db) };
       return {
         locationId,
         seed: () => withTransaction(db, (tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node)),
@@ -203,7 +201,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
-    const node = { locationId, nodeId: await seedNode(db, locationId) };
+    const node = { locationId, nodeId: await seedNode(db) };
 
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
@@ -224,7 +222,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
-    const node = { locationId, nodeId: await seedNode(db, locationId) };
+    const node = { locationId, nodeId: await seedNode(db) };
 
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
@@ -272,7 +270,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
-    const nodeId = await seedNode(db, locationId);
+    const nodeId = await seedNode(db);
     const node = { locationId, nodeId };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
@@ -307,7 +305,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
   });
 
   it("seeds the location's Open period and preserves authored name, colour and staff order on a re-run", async () => {
-    await seedTenant(db);
     const [menu] = await db
       .insert(catalogues)
       .values({ name: "Carta" })
@@ -320,7 +317,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
-    const node = { locationId, nodeId: await seedNode(db, locationId) };
+    const node = { locationId, nodeId: await seedNode(db) };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const listed = async () =>
       (
@@ -365,7 +362,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     });
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
-    const node = { locationId, nodeId: await seedNode(db, locationId) };
+    const node = { locationId, nodeId: await seedNode(db) };
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     expect(
       (
@@ -388,7 +385,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const venueId = await venueLocationId(db);
     const locationId = brandLocationId(venueId);
     const cfg = { locationId };
-    const node = { locationId, nodeId: await seedNode(db, locationId) };
+    const node = { locationId, nodeId: await seedNode(db) };
     const runSeed = () => db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
     const stored = async () =>
       (
@@ -452,7 +449,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       });
       const venueId = await venueLocationId(db);
       const locationId = brandLocationId(venueId);
-      const node = { locationId, nodeId: await seedNode(db, locationId) };
+      const node = { locationId, nodeId: await seedNode(db) };
       const profile = async (
         formFactor: "till" | "phone-portrait" | "tablet-landscape" | "kds",
         capabilities: string[],
@@ -568,7 +565,7 @@ it("seeds a new Counter id while retaining a deleted Counter", async () => {
   });
   const venueId = await venueLocationId(db);
   const locationId = brandLocationId(venueId);
-  const node = { locationId, nodeId: await seedNode(db, locationId) };
+  const node = { locationId, nodeId: await seedNode(db) };
   const [old] = await db
     .insert(floorZones)
     .values({ locationId, name: "Counter", active: false })

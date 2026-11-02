@@ -1319,7 +1319,7 @@ describe("free default choice with incomplete catalogue and image text", () => {
       });
       const order = await seedWorkingOrder(tx, { source: "dashboard", orderNumber: 17 });
       await tx.insert(workingOrderLines).values({
-        workingOrderId: order!.id,
+        workingOrderId: order.id,
         lineNo: 1,
         name: "Recorded staff potatoes",
         descriptions: { en: "Recorded potatoes" },

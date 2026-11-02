@@ -46,10 +46,6 @@ export function freshNif(): string {
 /**
  * Seeds the tenant, the venue (on first use), a node, a till device and an open working order,
  * and returns their ids.
- *
- * Written through the table definitions rather than as raw SQL: `id` and `created_at` are
- * `$defaultFn` generators only the insert BUILDER runs, and `invoice_locales` is a list the
- * column's own mapping encodes.
  */
 export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise<Seeded> {
   await db

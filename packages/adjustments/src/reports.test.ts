@@ -10,7 +10,7 @@ import {
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedVenue as seedVenueRow, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import {
   addDecimal,
@@ -70,7 +70,7 @@ async function bill(
 ): Promise<{ id: string; orderNumber: number }> {
   const [location] = await db.select({ id: locations.id }).from(locations);
   if (location === undefined)
-    await seedVenueRow(db, {
+    await seedVenue(db, {
       name: "Sala",
       invoiceLocales: ["es"],
       operationDescription: "Restaurante",
@@ -82,7 +82,7 @@ async function bill(
     orderNumber,
     openedAt: opts.openedAt ?? EVENING,
   });
-  return { id: order!.id, orderNumber };
+  return { id: order.id, orderNumber };
 }
 
 /** A line still on `billId`: `quantity` at `unit`, first priced at `list` when an adjustment

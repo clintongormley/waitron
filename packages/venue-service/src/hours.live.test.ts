@@ -135,7 +135,7 @@ it("refreshes Calendar and routing from special days, clock and daily station st
   const unrelated = await announced((tx) =>
     tx.insert(kitchenNotices).values({
       stationId: kitchen,
-      workingOrderId: order!.id,
+      workingOrderId: order.id,
       orderLabel: "1",
       kind: "void",
       lineName: "Soup",

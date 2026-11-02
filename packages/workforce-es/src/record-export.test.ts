@@ -1,15 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction, type Transaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import {
-  jobOrigin,
-  locationId as brandLocationId,
-  type RecordExportDocument,
-  type RecordExportInput,
-} from "@waitron/shared";
+import { jobOrigin, type RecordExportDocument, type RecordExportInput } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
@@ -34,15 +29,14 @@ afterEach(() => vi.useRealTimers());
 const origin = jobOrigin("dashboard");
 const period = { start: "2026-01-01", end: "2026-02-01" };
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
-let worker: string, other: string, manager: string, nodeId: string, locationId: string;
+let worker: string, other: string, manager: string, nodeId: string;
 beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Deli",
     invoiceLocales: ["en"],
     operationDescription: "Sale on premises",
   });
-  locationId = await venueLocationId(suite.db);
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  nodeId = await seedNode(suite.db);
   const rows = await suite.db
     .insert(persons)
     .values([
@@ -286,7 +280,7 @@ it("keeps the captured record, names and input after later writes", async () => 
   });
 });
 it("exports a shift begun on one node and ended on another as one session", async () => {
-  const otherNode = await seedNode(suite.db, brandLocationId(locationId));
+  const otherNode = await seedNode(suite.db);
   await run((tx) => backend.clockIn(tx, event("2026-01-05T09:00:00Z")));
   await run((tx) => backend.clockOut(tx, { ...event("2026-01-05T17:00:00Z"), nodeId: otherNode }));
   await close();

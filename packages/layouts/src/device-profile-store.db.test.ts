@@ -534,7 +534,6 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("frees a retired profile's printer lists", async () => {
-    await seedTenant(suite.db);
     const session = await seedSession("manager");
     await seedVenue(suite.db, {
       name: "Loc",
@@ -636,7 +635,6 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("stores a profile's printer lists on create, keeps them on an update that names none, and replaces them on one that does", async () => {
-    await seedTenant(suite.db);
     const session = await seedSession("manager");
     await seedVenue(suite.db, {
       name: "Loc",
@@ -705,7 +703,6 @@ describe("device-profile store against a real migrated database", () => {
   });
 
   it("lists a page printer on a profile's invoice list by its id, never as null", async () => {
-    await seedTenant(suite.db);
     const session = await seedSession("manager");
     await seedVenue(suite.db, {
       name: "Loc",

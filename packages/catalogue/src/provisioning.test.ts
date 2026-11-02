@@ -227,7 +227,7 @@ describe("catalogue provisioning", () => {
       .set({ name: { en: "piece" } })
       .where(eq(units.seedKey, "g"));
     await suite.db.delete(units).where(eq(units.seedKey, "mg"));
-    const otherNode = await seedNode(suite.db, node.locationId);
+    const otherNode = await seedNode(suite.db);
     await run(otherNode);
     expect((await storedUnits()).find((unit) => unit.seed_key === "g")?.name).toEqual({
       en: "piece",

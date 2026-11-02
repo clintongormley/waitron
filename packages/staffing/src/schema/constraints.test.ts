@@ -3,7 +3,7 @@ import { expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { CORE_MIGRATIONS, kitchenStations, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import {
   VENUE_SERVICE_MIGRATIONS,
@@ -29,7 +29,6 @@ const suite = useVenueDb({
 });
 
 async function venue() {
-  await seedTenant(suite.db);
   return withTransaction(suite.db, async (tx) => {
     await seedVenue(tx, {
       name: "Main",

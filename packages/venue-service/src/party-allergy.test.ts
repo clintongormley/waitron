@@ -101,7 +101,7 @@ async function workingLine(id = partyId, parentLineId?: string) {
   const [line] = await suite.db
     .insert(workingOrderLines)
     .values({
-      workingOrderId: order!.id,
+      workingOrderId: order.id,
       lineNo: 1,
       name: "Dish",
       descriptions: { en: "Dish" },

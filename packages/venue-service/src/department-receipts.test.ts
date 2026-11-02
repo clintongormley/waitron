@@ -519,21 +519,21 @@ describe("receipt department lookups", () => {
       orderNumber: 1,
     });
     expect(
-      await scoped((tx) => receipts.receiptDepartmentForOrder(tx, f.cfg, order!.id)),
+      await scoped((tx) => receipts.receiptDepartmentForOrder(tx, f.cfg, order.id)),
     ).toBeNull();
     const [zone] = await suite.db
       .insert(floorZones)
       .values({ locationId: f.cfg.locationId, name: "Bar" })
       .returning();
     await suite.db.insert(orderServiceContexts).values({
-      workingOrderId: order!.id,
+      workingOrderId: order.id,
       locationId: f.cfg.locationId,
       zoneId: zone!.id,
       departmentId: f.id,
       serviceMode: "prepay",
     });
     expect(
-      await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForOrder(tx, f.cfg, order!.id)),
+      await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForOrder(tx, f.cfg, order.id)),
     ).toBe(f.id);
   });
   it("ignores a deleted designated default", async () => {

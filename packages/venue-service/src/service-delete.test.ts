@@ -568,13 +568,13 @@ describe("service deletion", () => {
     const orderId = await run(async (tx) => {
       const order = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 4 });
       await tx.insert(orderServiceContexts).values({
-        workingOrderId: order!.id,
+        workingOrderId: order.id,
         locationId: f.cfg.locationId,
         zoneId: f.alpha,
         departmentId: f.dining,
         serviceMode: "prepay",
       });
-      return order!.id;
+      return order.id;
     });
     expect(
       await refusal(run((tx) => serviceDelete.deleteZone(tx, f.cfg, noFloor, f.alpha, NOW))),
@@ -587,7 +587,7 @@ describe("service deletion", () => {
       const [request] = await tx
         .insert(departmentTransferRequests)
         .values({
-          tabId: order!.id,
+          tabId: order.id,
           sourceDepartmentId: f.bar,
           destinationDepartmentId: f.dining,
           destinationZoneId: f.alpha,

@@ -9,7 +9,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { esc } from "./escpos.js";
 import {
   claimPrintJobs,
@@ -40,7 +40,6 @@ async function seedLocation(name: string): Promise<string> {
 }
 
 async function setup(): Promise<PrintConfig> {
-  await seedTenant(suite.db);
   return { locationId: await seedLocation("Bar") };
 }
 

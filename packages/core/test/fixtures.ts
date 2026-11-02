@@ -25,8 +25,8 @@ function freshNif(): string {
 }
 
 /**
- * Makes sure the one taxpayer row is there, then seeds location -> till device -> node ->
- * invoice series.
+ * Makes sure the one taxpayer row is there, then seeds the venue (first call only), a till device,
+ * a node and that node's invoice series "A".
  * Each call mints its own node, so a second call gives a series owned by a different node.
  */
 export async function seedTenant(db: Database): Promise<SeededTenant> {

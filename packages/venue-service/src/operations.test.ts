@@ -790,7 +790,7 @@ describe("venue service routing", () => {
     const location = await seedLocation("Venue");
     const locationId = brandLocationId(location);
     const zone = await seedZone(locationId, "Deli counter");
-    const nodeId = await seedNode(db, locationId);
+    const nodeId = await seedNode(db);
 
     await scoped(async (tx) => {
       const department = await createDepartment(
@@ -1007,7 +1007,7 @@ describe("venue service routing", () => {
     const location = await seedLocation("Venue");
     const locationId = brandLocationId(location);
     const zone = await seedZone(locationId, "Deli counter");
-    const nodeId = await seedNode(db, locationId);
+    const nodeId = await seedNode(db);
 
     await scoped(async (tx) => {
       const department = await createDepartment(
@@ -1883,7 +1883,7 @@ async function seedSellingVenue() {
   const cfg = { locationId };
   const diningZone = await seedZone(locationId, "Dining room");
   const barZone = await seedZone(locationId, "Bar");
-  const nodeId = await seedNode(db, locationId);
+  const nodeId = await seedNode(db);
   return scoped(async (tx) => {
     const restaurant = await createDepartment(tx, cfg, {
       name: "Restaurant",

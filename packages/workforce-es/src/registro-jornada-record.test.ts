@@ -1,10 +1,10 @@
 import { beforeEach, expect, it, vi, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, withTransaction, type Transaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { jobOrigin, locationId as brandedLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
@@ -19,15 +19,14 @@ const backend = new WorkforceBackend(),
   origin = jobOrigin("dashboard"),
   period = { start: "2026-01-01", end: "2026-02-01" };
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
-let worker: string, manager: string, nodeId: string, locationId: string;
+let worker: string, manager: string, nodeId: string;
 beforeEach(async () => {
   await seedVenue(suite.db, {
     name: "Deli",
     invoiceLocales: ["en"],
     operationDescription: "Sale on premises",
   });
-  locationId = await venueLocationId(suite.db);
-  nodeId = await seedNode(suite.db, brandedLocationId(locationId));
+  nodeId = await seedNode(suite.db);
   const people = await suite.db
     .insert(persons)
     .values([

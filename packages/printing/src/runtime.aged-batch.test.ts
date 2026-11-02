@@ -22,8 +22,7 @@ async function fixture(kind: "document" | "drawer", separatePrinter = false) {
     invoiceLocales: ["es-ES"],
     operationDescription: "Sale on premises",
   });
-  const venueId = await venueLocationId(suite.db);
-  const locationId = venueId;
+  const locationId = await venueLocationId(suite.db);
   const agents = await suite.db
     .insert(printAgents)
     .values([

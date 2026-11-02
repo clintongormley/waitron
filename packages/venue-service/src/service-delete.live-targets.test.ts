@@ -307,7 +307,7 @@ describe("deleted service targets", () => {
       ),
     ).rejects.toThrow(/UNIQUE constraint failed: departments.location_id/);
     expect(await snapshot()).toEqual(beforeClash);
-    const nodeId = await seedNode(suite.db, f.cfg.locationId);
+    const nodeId = await seedNode(suite.db);
     await run((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, { ...f.cfg, nodeId }));
     const ds = await run((tx) =>
       tx.select().from(departments).where(eq(departments.locationId, f.cfg.locationId)),

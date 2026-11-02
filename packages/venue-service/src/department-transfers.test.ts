@@ -85,8 +85,8 @@ async function venue() {
       startingZoneId: bz.id,
     });
     const tab = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 1 });
-    await recordOrderServiceContext(tx, cfg, tab!.id, az.id);
-    return { cfg, a: a.id, b: b.id, az: az.id, bz: bz.id, profile: profile!.id, tab: tab!.id };
+    await recordOrderServiceContext(tx, cfg, tab.id, az.id);
+    return { cfg, a: a.id, b: b.id, az: az.id, bz: bz.id, profile: profile!.id, tab: tab.id };
   });
 }
 
