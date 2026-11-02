@@ -21,6 +21,19 @@ were answered (a) by the owner on 2026-11-02: Q1, returned invoices count in mod
 qualification on real boxes remains the owner's, after A947 3b/3c
 ([owner task](../superpowers/plans/2026-11-02-a1018-handover-build.md#owner-task-physical-qualification-on-real-boxes)).
 
+**Built so far:** Slice 0 (docs, main `b0e22a9feb`) and Slice 1 (#2417: `@waitron/handover`, the
+handover tables in `node.db`, the server's handover store and signer). Nothing calls Slice 1's code
+yet. Left for the slices that add the callers:
+- `beginHandover` stores the role it is given even when the binding names this box as the other
+  side; the first caller must check the role against the binding.
+- A delayed `waitHandover` can overwrite the waiting reason a later step recorded.
+- `currentBinding` (no taxpayer row, no held chart) and `waitHandover` (unknown operation) treat a
+  missing row as a fault in Waitron; each caller must refuse those cases first with a coded answer.
+- A restriction already recorded is never rewritten (`handover.restriction_conflict`), so Slice 3
+  and Task 10.3 skip the write when one exists.
+- `@waitron/membership` checks the endorsement count twice (`src/verify.ts`); deleting either
+  check alone fails no test.
+
 **Amended Cloud agreement published, 2026-10-23 (D133):**
 [Cloud #323](https://github.com/waitron-io/waitron-cloud/pull/323), signed
 `08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec`, publishes the
