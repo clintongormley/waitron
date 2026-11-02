@@ -257,7 +257,7 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
   it("refuses the swap + absence + planned-vs-actual routes to a staff-role session — 403", async () => {
     // Three separate gate mechanisms stand behind these five routes: the shared `gated` helper and the
     // inline swap-decide and absence-decide composes.
-    const { locationId, staffCookie } = await setupVenue();
+    const { staffCookie } = await setupVenue();
     const app = mountApp();
     const missing = "00000000-0000-0000-0000-000000000000";
     const expect403 = async (res: Response) => {
@@ -282,13 +282,13 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
       await send(
         app,
         "GET",
-        `/management-api/planned-vs-actual?locationId=${locationId}&from=2026-03-02&to=2026-03-09`,
+        "/management-api/planned-vs-actual?from=2026-03-02&to=2026-03-09",
         staffCookie,
       ),
     );
   });
 
-  it("assembles planned-vs-actual for the tenant's own location", async () => {
+  it("assembles the venue's planned-vs-actual", async () => {
     // Seed one shift on a PUBLISHED roster version — the planned side is published-only, so a
     // null-version draft would be excluded — and assert it comes back as a no-show. The windowing and
     // scoping logic itself is covered in `workforce-api.test.ts`.
@@ -316,7 +316,7 @@ describe("Workforce API — the schedule.manage gates, the decider columns, plan
     const res = await send(
       mountApp(),
       "GET",
-      `/management-api/planned-vs-actual?locationId=${v.locationId}&from=2026-03-02&to=2026-03-09`,
+      "/management-api/planned-vs-actual?from=2026-03-02&to=2026-03-09",
       v.managerCookie,
     );
     expect(res.status).toBe(200);

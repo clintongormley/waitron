@@ -1,11 +1,12 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { DashboardApi, PersonSummary, PlannedVsActualRow } from "../api/client.js";
 import { PlannedActualScreen } from "./planned-actual-screen.js";
+import { MS_PER_DAY, mondayOf, today } from "../date-utils.js";
 import type { WtInput } from "@waitron/ui";
 
 const staff: PersonSummary[] = [
@@ -19,7 +20,6 @@ const staff: PersonSummary[] = [
     email: null,
   },
 ];
-const locations = [{ id: "loc-1", name: "Main", timeZone: "UTC" }];
 const rows: PlannedVsActualRow[] = [
   {
     personId: "p1",
@@ -34,7 +34,6 @@ const rows: PlannedVsActualRow[] = [
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return {
-    getLocations: vi.fn().mockResolvedValue(locations),
     listStaff: vi.fn().mockResolvedValue(staff),
     getPlannedVsActual: vi.fn().mockResolvedValue(rows),
     ...overrides,
@@ -43,19 +42,6 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
 async function flush(el: PlannedActualScreen): Promise<void> {
   await new Promise((r) => setTimeout(r, 0));
   await el.updateComplete;
-}
-// The location dropdown is inside `<dashboard-location-picker>`'s shadow root.
-const locationSelect = (el: PlannedActualScreen) =>
-  el
-    .shadowRoot!.querySelector("dashboard-location-picker")!
-    .shadowRoot!.querySelector<HTMLElement & { value: string; updateComplete: Promise<unknown> }>(
-      "[data-test=location-select]",
-    )!;
-/** What the closed location dropdown shows on its trigger, not what its properties say it holds. */
-async function shownLocation(el: PlannedActualScreen): Promise<string | undefined> {
-  const box = locationSelect(el);
-  await box.updateComplete;
-  return box.shadowRoot!.querySelector(".trigger .value")?.textContent?.trim();
 }
 afterEach(cleanupWidgets);
 
@@ -67,17 +53,17 @@ function chooseWeek(week: HTMLElement, value: string): void {
 }
 
 describe("planned-actual-screen", () => {
-  it("loads locations, staff and the week's rows on connect, resolving the person name", async () => {
-    const api = stubApi();
+  it("loads staff and the week's rows on connect, resolving the person name", async () => {
+    const api = stubApi({ getLocations: vi.fn() });
     const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
       api,
     });
     await flush(el);
-    expect(api.getLocations).toHaveBeenCalledTimes(1);
+    expect(api.getLocations).not.toHaveBeenCalled();
+    const monday = mondayOf(today());
     expect(api.getPlannedVsActual).toHaveBeenCalledWith(
-      "loc-1",
-      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
-      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+      monday,
+      new Date(Date.parse(`${monday}T00:00:00Z`) + 7 * MS_PER_DAY).toISOString().slice(0, 10),
     );
     expect(el.shadowRoot!.textContent).toContain("Ana");
     expect(el.shadowRoot!.textContent).toContain("240");
@@ -92,28 +78,7 @@ describe("planned-actual-screen", () => {
     const week = el.shadowRoot!.querySelector<WtInput>("[data-test=week-picker]")!;
     chooseWeek(week, "2026-04-08"); // a Wednesday → Monday 2026-04-06, to 2026-04-13
     await flush(el);
-    expect(api.getPlannedVsActual).toHaveBeenLastCalledWith("loc-1", "2026-04-06", "2026-04-13");
-  });
-
-  it("reloads on a location change", async () => {
-    const api = stubApi({
-      getLocations: vi.fn().mockResolvedValue([
-        { id: "loc-1", name: "Main", timeZone: "UTC" },
-        { id: "loc-2", name: "Annex", timeZone: "UTC" },
-      ]),
-    });
-    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
-      api,
-    });
-    await flush(el);
-    const select = locationSelect(el);
-    await chooseOption(select, "loc-2");
-    await flush(el);
-    expect(api.getPlannedVsActual).toHaveBeenLastCalledWith(
-      "loc-2",
-      expect.any(String),
-      expect.any(String),
-    );
+    expect(api.getPlannedVsActual).toHaveBeenLastCalledWith("2026-04-06", "2026-04-13");
   });
 
   it("shows the empty prompt when the week has no rows", async () => {
@@ -125,14 +90,43 @@ describe("planned-actual-screen", () => {
     expect(el.shadowRoot!.querySelector("[data-test=empty]")).not.toBeNull();
   });
 
-  it("shows the no-location prompt when the tenant has no locations", async () => {
-    const api = stubApi({ getLocations: vi.fn().mockResolvedValue([]) });
+  it("shows no empty prompt while the opening rows read is still pending", async () => {
+    const api = stubApi({ getPlannedVsActual: vi.fn(() => new Promise<never>(() => {})) });
     const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
       api,
     });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=no-location]")).not.toBeNull();
-    expect(api.getPlannedVsActual).not.toHaveBeenCalled();
+    expect(api.getPlannedVsActual).toHaveBeenCalledTimes(1);
+    expect(el.shadowRoot!.querySelector("[data-test=week-picker]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=empty]")).toBeNull();
+  });
+
+  it("shows the error banner and no empty prompt when the opening rows read fails, and the empty prompt once a read answers with no rows", async () => {
+    const liveData = new LiveData();
+    const api = Object.assign(
+      stubApi({
+        getPlannedVsActual: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "connection.failed" })
+          .mockResolvedValue([]),
+      }),
+      { liveData },
+    );
+    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
+      api,
+    });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=error]")?.textContent?.trim()).toBe(
+        codeMessage("connection.failed"),
+      ),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=week-picker]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=empty]")).toBeNull();
+    liveData.refresh();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=empty]")).not.toBeNull(),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=error]")).toBeNull();
   });
 
   it("shows the error banner when a load rejects", async () => {
@@ -183,27 +177,6 @@ describe("planned-actual-screen", () => {
     expect(api.getPlannedVsActual).toHaveBeenCalledTimes(1);
   });
 
-  it("surfaces a rejected location change as the error banner", async () => {
-    const api = stubApi({
-      getLocations: vi.fn().mockResolvedValue([
-        { id: "loc-1", name: "Main", timeZone: "UTC" },
-        { id: "loc-2", name: "Annex", timeZone: "UTC" },
-      ]),
-      getPlannedVsActual: vi
-        .fn()
-        .mockResolvedValueOnce(rows) // initial connect load succeeds
-        .mockRejectedValue({ code: "convenio.not_found" }), // the location-change load rejects
-    });
-    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
-      api,
-    });
-    await flush(el);
-    const select = locationSelect(el);
-    await chooseOption(select, "loc-2");
-    await flush(el);
-    expect((el as unknown as { errorKey: string | null }).errorKey).toBe("convenio.not_found");
-  });
-
   it("surfaces a rejected week change as the error banner", async () => {
     const api = stubApi({
       getPlannedVsActual: vi
@@ -222,43 +195,12 @@ describe("planned-actual-screen", () => {
   });
 
   it("falls back to server.internal when a thrown error carries no code", async () => {
-    const api = stubApi({ getLocations: vi.fn().mockRejectedValue(new Error("network down")) });
+    const api = stubApi({ listStaff: vi.fn().mockRejectedValue(new Error("network down")) });
     const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
       api,
     });
     await flush(el);
     expect((el as unknown as { errorKey: string | null }).errorKey).toBe("server.internal");
-  });
-
-  it("preserves the selected location across a disconnect/reconnect", async () => {
-    // Keeping a still-valid selection is reachable only across a reconnect: on the first connect
-    // there is no selection yet.
-    const api = stubApi({
-      getLocations: vi.fn().mockResolvedValue([
-        { id: "loc-1", name: "Main", timeZone: "UTC" },
-        { id: "loc-2", name: "Annex", timeZone: "UTC" },
-      ]),
-    });
-    const { el, host } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
-      api,
-    });
-    await flush(el);
-    const select = locationSelect(el);
-    await chooseOption(select, "loc-2");
-    await flush(el);
-
-    el.remove(); // disconnectedCallback
-    host.appendChild(el); // connectedCallback → #load re-runs with loc-2 still selected
-    await flush(el);
-
-    expect(api.getPlannedVsActual).toHaveBeenLastCalledWith(
-      "loc-2",
-      expect.any(String),
-      expect.any(String),
-    );
-    const reselect = locationSelect(el);
-    expect(reselect.value).toBe("loc-2");
-    expect(await shownLocation(el)).toBe("Annex");
   });
 });
 
@@ -275,75 +217,6 @@ it("refreshes displayed rows when their data changes elsewhere", async () => {
   liveData.invalidate([{ type: "shifts", id: "changed-elsewhere" }]);
   await vi.waitFor(() => expect(rows()).toEqual([]));
   expect(api.getPlannedVsActual).toHaveBeenCalledTimes(2);
-});
-
-describe("planned-actual-screen — location refreshes", () => {
-  const twoLocations = [
-    { id: "loc-1", name: "Main", timeZone: "UTC" },
-    { id: "loc-2", name: "Annex", timeZone: "UTC" },
-  ];
-
-  it("moves to a remaining location when a refresh removes the selected one", async () => {
-    const liveData = new LiveData();
-    const api = Object.assign(stubApi({ getLocations: vi.fn().mockResolvedValue(twoLocations) }), {
-      liveData,
-    });
-    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
-      api,
-    });
-    await flush(el);
-    const select = locationSelect(el);
-    await chooseOption(select, "loc-2");
-    await flush(el);
-    expect(api.getPlannedVsActual).toHaveBeenLastCalledWith(
-      "loc-2",
-      expect.any(String),
-      expect.any(String),
-    );
-    vi.mocked(api.getLocations).mockResolvedValue([
-      { id: "loc-1", name: "Main", timeZone: "UTC" },
-      { id: "loc-3", name: "Terrace", timeZone: "UTC" },
-    ]);
-    liveData.invalidate([{ type: "locations", id: "loc-2" }]);
-    await vi.waitFor(() =>
-      expect(api.getPlannedVsActual).toHaveBeenLastCalledWith(
-        "loc-1",
-        expect.any(String),
-        expect.any(String),
-      ),
-    );
-    expect(locationSelect(el).value).toBe("loc-1");
-    expect(await shownLocation(el)).toBe("Main");
-  });
-
-  // The rows query depends on locations itself, so the refresh re-reads it once on its own; the
-  // screen must not start a second load for a location it already shows.
-  it("keeps the selected location, re-reading its rows once, when a refresh still lists it", async () => {
-    const liveData = new LiveData();
-    const api = Object.assign(stubApi({ getLocations: vi.fn().mockResolvedValue(twoLocations) }), {
-      liveData,
-    });
-    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
-      api,
-    });
-    await flush(el);
-    const select = locationSelect(el);
-    await chooseOption(select, "loc-2");
-    await flush(el);
-    const rowLoads = vi.mocked(api.getPlannedVsActual).mock.calls.length;
-    vi.mocked(api.getLocations).mockResolvedValue([
-      ...twoLocations,
-      { id: "loc-3", name: "Terrace", timeZone: "UTC" },
-    ]);
-    liveData.invalidate([{ type: "locations", id: "loc-3" }]);
-    await vi.waitFor(() => expect(api.getLocations).toHaveBeenCalledTimes(2));
-    await flush(el);
-    await flush(el);
-    const since = vi.mocked(api.getPlannedVsActual).mock.calls.slice(rowLoads);
-    expect(since.map(([locationId]) => locationId)).toEqual(["loc-2"]);
-    expect(locationSelect(el).value).toBe("loc-2");
-    expect(await shownLocation(el)).toBe("Annex");
-  });
 });
 
 describe("planned-actual-screen week field", () => {
@@ -371,7 +244,22 @@ describe("planned-actual-screen week field", () => {
       }),
     );
     await flush(el);
-    expect(api.getPlannedVsActual).toHaveBeenLastCalledWith("loc-1", "2026-04-06", "2026-04-13");
+    expect(api.getPlannedVsActual).toHaveBeenLastCalledWith("2026-04-06", "2026-04-13");
+  });
+
+  it("keeps the week field at its own width on a wide screen", async () => {
+    const [width, height] = [window.innerWidth, window.innerHeight];
+    await page.viewport(1280, 800);
+    try {
+      const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
+        api: stubApi(),
+      });
+      await flush(el);
+      const week = el.shadowRoot!.querySelector("wt-input[data-test=week-picker]")!;
+      expect(week.getBoundingClientRect().width).toBeLessThan(el.getBoundingClientRect().width / 2);
+    } finally {
+      await page.viewport(width, height);
+    }
   });
 });
 
@@ -394,19 +282,20 @@ describe("planned-actual-screen — recovery after the server answers again", ()
       api,
     });
     await vi.waitFor(() => expect(errorText(el)).toBe(codeMessage("connection.failed")));
+    expect(el.shadowRoot!.querySelector("[data-test=empty]")).toBeNull();
     liveData.refresh();
     await vi.waitFor(() => expect(errorText(el)).toBeUndefined());
     expect(el.shadowRoot!.textContent).toContain("240");
   });
 
-  it("reads the week's rows once the locations read that failed on opening succeeds", async () => {
+  it("shows the staff names once the staff read that failed on opening succeeds", async () => {
     const liveData = new LiveData();
     const api = Object.assign(
       stubApi({
-        getLocations: vi
+        listStaff: vi
           .fn()
           .mockRejectedValueOnce({ code: "connection.failed" })
-          .mockResolvedValue(locations),
+          .mockResolvedValue(staff),
       }),
       { liveData },
     );
@@ -416,54 +305,9 @@ describe("planned-actual-screen — recovery after the server answers again", ()
     await vi.waitFor(() =>
       expect((el as unknown as { errorKey: string | null }).errorKey).toBe("connection.failed"),
     );
-    expect(api.getPlannedVsActual).not.toHaveBeenCalled();
     liveData.refresh();
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("240"));
-    expect(el.shadowRoot!.textContent).toContain("Ana");
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Ana"));
+    expect(el.shadowRoot!.textContent).toContain("240");
     await vi.waitFor(() => expect(errorText(el)).toBeUndefined());
-  });
-
-  it("shows a failed locations read's message, not the no-location prompt, until it succeeds", async () => {
-    const liveData = new LiveData();
-    const api = Object.assign(
-      stubApi({
-        getLocations: vi
-          .fn()
-          .mockRejectedValueOnce({ code: "connection.failed" })
-          .mockResolvedValue(locations),
-      }),
-      { liveData },
-    );
-    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
-      api,
-    });
-    await vi.waitFor(() => expect(errorText(el)).toBe(codeMessage("connection.failed")));
-    expect(el.shadowRoot!.querySelector("[data-test=no-location]")).toBeNull();
-
-    liveData.refresh();
-
-    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("240"));
-    expect(el.shadowRoot!.querySelector("[data-test=no-location]")).toBeNull();
-    await vi.waitFor(() => expect(errorText(el)).toBeUndefined());
-  });
-
-  it("keeps the no-location prompt for a list that loaded empty when a later read fails", async () => {
-    const liveData = new LiveData();
-    const api = Object.assign(stubApi({ getLocations: vi.fn().mockResolvedValue([]) }), {
-      liveData,
-    });
-    const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
-      api,
-    });
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=no-location]")).not.toBeNull(),
-    );
-    vi.mocked(api.getLocations).mockRejectedValue({ code: "connection.failed" });
-    liveData.refresh();
-    await vi.waitFor(() =>
-      expect((el as unknown as { errorKey: string | null }).errorKey).toBe("connection.failed"),
-    );
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("[data-test=no-location]")).not.toBeNull();
   });
 });
