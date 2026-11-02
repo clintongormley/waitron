@@ -6525,6 +6525,12 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   contexts, receipts, transfers, provisioning, kitchen screens and notices, station times, routing,
   floor layouts and the delete paths) no longer narrows by location; its exported functions keep
   their scope parameter as an unread `_cfg` until S18 removes it.
+  S8 landed (#2405): seasons, season weeks, special days, holidays, opening hours, the
+  business-day schedule, the menu timetable and the starter staff language read the venue, and
+  rows still written with a `location_id` take `venueLocationId`; exported readers keep an unread
+  `_cfg` until S18. `saveHolidayArea` reads the venue row twice (for the address, then for its id)
+  because `readVenue`'s `Venue` carries no id; S18 can drop the second read when `venueLocationId`
+  goes.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](superpowers/plans/2026-11-01-a1301-remove-location.md),
   [working-time plan](superpowers/plans/2026-11-02-a1301-working-time-slices.md)
