@@ -6494,7 +6494,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `venueId`, so a sale, a kitchen send or a payment's slips read it once, and the demo printer's
   boot lookup keeps its venue condition for `printers_local_key_key`. The working-time slices have their
   own plan, written against A1268's merged diff (#2375): S13, S14, S15 (three pull requests) and
-  S12d, lane B's, landed in that order. S18 waits for S2–S17, and the schema
+  S12d, lane B's, landed in that order. S13 landed (#2397): working-time rules, rotas, roster
+  versions, shifts and attendance read and write the venue, and the own-workplace attendance check
+  is gone. Routes still accept and ignore the `locationId` the clients send, and answers still
+  carry one filled from the venue, until S15; the attendance recorder keeps an unread optional
+  `locationId` for S18. S14, S15 and S12d remain. S18 waits for S2–S17, and the schema
   slices S20–S28 get a plan of their own, which first settles what the venue id sent to Cloud and
   naming the backup folder becomes. S4 landed (#2388): standby establishment
   refuses with `mirror.venue_not_copied` before a node write when no venue row exists, including
