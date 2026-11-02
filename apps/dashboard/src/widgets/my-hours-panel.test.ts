@@ -309,6 +309,13 @@ it("has no Location field and reads hours once the inbox arrives", async () => {
   expect(inboxRead).toBeGreaterThanOrEqual(0);
   expect(hoursRead).toBeGreaterThan(inboxRead);
 });
+it("heads a pending question card by its work day alone", async () => {
+  const { el } = await mount();
+  await ready(el);
+  const headings = [...el.shadowRoot!.querySelectorAll("section article h3")];
+  expect(headings.map((h) => h.textContent!.trim())).toEqual(["2026-01-05"]);
+  expect(el.shadowRoot!.querySelector("section")!.textContent).not.toContain("The deli");
+});
 it("month selections retire a held older summary", async () => {
   const held = deferred<unknown>();
   const { el, paths } = await mount({
