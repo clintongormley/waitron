@@ -3468,3 +3468,122 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   `apps/server/src/hour-recovery-placement-1.test.ts`, `apps/server/src/hour-recovery-placement-2.test.ts`
   and `apps/server/src/hour-promotion.test.ts`, weaker than the rule: those children only. Receipt:
   [testing-guide.md](testing-guide.md#a-child-process-that-freezes-date-freezes-performancenow-with-it).
+
+## Root receipts moved on 2026-11-02
+
+These excerpts retain the root instruction receipts from `CLAUDE.md` at
+`1d03a7c42142478f6ecabc834f08ffd58bd04d07`. They are not new measurements.
+
+### Chunked inserts for orders that grow
+
+- **An insert whose rows grow with an order must go through `insertInChunks` or `statementChunks`**;
+  the table round's `insertTabRound` does not yet, and no sweep has read every insert (see the backlog).
+  Cost: a 2,001-dish order passed locally and failed CI. Guard: the bound-value case in
+  `packages/store/src/index.test.ts`, weaker than the rule: it proves the store's connections, not
+  that growing inserts are chunked. [Runtime limits and receipt](testing-guide.md#root-receipts-moved-on-2026-10-31).
+
+### The venue watchdog's real timer turn
+
+- **Synchronous `node:sqlite` tests need a real timer turn for the venue watchdog; `useVenueDb`
+  yields after each test.** Guards: `packages/db/src/testing/venue-db.test.ts` and
+  `packages/store/src/venue-liveness.test.ts`, weaker than the rule: only the helper/default options
+  and store loaded before fake clocks; manually opened folders get no helper turn.
+
+### Containers in tests and the label pnpm reap reads
+
+- **No test suite under `packages/` or `apps/` starts a container; the rigs under `bench/` do.**
+  **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, and with it off an INTERRUPTED run
+  leaks containers; `pnpm reap` removes them by label and age — but not every rig stamps the label.
+  Never a blanket `docker volume prune`, and `docker volume inspect` before any manual `rm`.
+
+### Pinned Litestream and versitygw for the stream tests
+
+- **Install pinned Litestream and versitygw before stream loop/pause tests:**
+  `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. S3 rehearsal/send-gate/
+  interrupt suites need versitygw alone. Missing binaries skip locally and fail CI. Guard:
+  `scripts/ci-workflow.test.mjs`, weaker than its name: text reads accept commented or disabled setup.
+
+### Full-disk test filesystems and attached macOS images
+
+- **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
+  needs `WAITRON_FULL_DISK_DIR`, otherwise skips locally and fails CI. Interrupted macOS images
+  can remain attached; `pnpm reap` does not detach them. Guard: `scripts/ci-workflow.test.mjs`,
+  weaker than its name: reads workflow text. [Separate filesystems and variables](testing-guide.md#root-receipts-moved-on-2026-10-31).
+
+### Where a project's browser reads connectTimeout
+
+- **On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the
+  OUTER config's `test.browser` block**; the command-line flag and that project's own `browser`
+  block are ignored without a word. Nothing guards it. Receipt:
+  [testing-guide.md](testing-guide.md#vitest-reads-a-browsers-connecttimeout-from-the-outer-config-only).
+
+### How pnpm reap finds orphaned vitest workers
+
+- **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
+  `pnpm reap` sweeps these, scoped by ppid 1 AND the shapes vitest leaves in `ps`, never a bare `vitest` match.
+
+### The browser diagnostic pause and its page.viewport hang
+
+- **A diagnostic pauses a browser test page only after its file has been silent for 60 seconds
+  beyond its running cases' time limits and the project's hook time limit, and cancels a pause left
+  waiting**: a `page.viewport` call hung until its 30-second hook timeout from the instant of a
+  pause, and repeated pauses reproduced the hang locally (A1307). Guard:
+  `scripts/vitest-file-progress.test.mjs`, weaker than its name: this reporter only, fake pages, not
+  Chromium. Receipt: [ci-and-gates.md](ci-and-gates.md#a-browser-file-silent-past-its-time-limits-gets-a-stack-sample).
+
+### Locating the unfinished package in a silent shard
+
+- **Locate the unfinished package before diagnosing a silent shard as database contention.** A
+  Vitest test timer does not bound a browser whose event loop has stopped; use an outer deadline,
+  and never a retry as proof of repair. Browser shards use the diagnostic deadline wrapper; guard:
+  `scripts/ci-workflow.test.mjs`, weaker than its name — reads text, never runs the deadline.
+
+### A project's own maxWorkers and its guard
+
+- **On Vitest 4.1.12 a project's own `maxWorkers` wins, and the outer config's is only the fallback**.
+  **A cap that must apply to every project still belongs on the outer config.** Guard:
+  `scripts/fiscal-test-budget.test.ts`, weaker than its name — it pins one arrangement, not how
+  Vitest resolves the limit.
+
+### Summed waits and the spawn timeout budget guard
+
+- **A test's timeout must exceed the SUM of its waits plus untimed work.** Guard:
+  `scripts/spawn-timeout-budget.test.ts`, weaker than its name: text scan of `scripts/` only,
+  checks only the largest single wait; packages/apps unguarded.
+
+### Passkey tests and already-loaded modules
+
+- **Browser passkey tests stub `navigator.credentials`, keeping the WebAuthn library real.** A
+  module mock cannot replace an already-loaded browser ES module.
+
+### Source scanners and screenshot directories
+
+- **Source scanners select files, not just paths ending in `.ts`.** A failing browser test creates a
+  screenshot DIRECTORY named `*.test.ts`; `sourceFilesIn` checks `isFile()`.
+
+### Whole-tree guards and the root-guards job
+
+- **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the
+  `root-guards` job runs unless main reuses verified equal-tree PR CI; the hook runs it on every
+  non-docs push. The root project does
+  not typecheck, and a module tested only from there must be in the root `coverage.include` to be
+  measured at all, and excluded from its own package's.
+
+### Vitest 4's missing default coverage excludes
+
+- **Vitest 4 ships no default coverage excludes at all.** What scopes a package's report now is its
+  own `coverage.include`. `include`/`exclude` still replace rather than merge, and a config
+  measuring nothing still exits 0 with the thresholds intact, so read the per-file table rather than
+  the exit code.
+
+### The coverage include guard's limits
+
+- **A package config names its own source tree in `coverage.include`.** Guard:
+  `scripts/coverage-thresholds.test.ts`, weaker than its name: looks for one exact string;
+  include paths are not package-anchored.
+
+### Checks inside every database test's hooks
+
+- **Code every database test runs — `useVenueDb`'s hooks — never checks something already
+  guaranteed**: that check's mutants change nothing, so each runs every test that reaches it, up to every database
+  test, and on CI's runners some ran to Stryker's per-mutant timeout. Nothing guards it. [Receipt](ci-and-gates.md#dbs-mutation-shards-are-packed-by-estimated-cost).

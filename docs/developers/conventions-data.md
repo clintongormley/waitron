@@ -5859,3 +5859,74 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 - **A full disk is not one error code; code 14 also names a missing folder.**
   `fullDiskFailure` in `apps/server/src/boot-failure.ts` classifies 13 always, 14/4874/`ENOSPC` only
   under 16 MiB free. Guard: its test suite, weaker than the rule: stubbed errors, no real `ENOSPC` case.
+
+### The drawer rule's guard limits
+
+- **Printing never opens the drawer. Cash and hand-keyed card enqueue separate audited `drawer`
+  jobs; documents contain no drawer commands and connected-card payments open nothing.** Device drawer
+  choice precedes profile default, never follows receipt printer; require active printer with drawer
+  and profile `open-cash-drawer`. Taking cash separately requires `take-cash` through `assertTakesCash`.
+  Manual open needs an active device/session plus `cash.drawer` or the PIN of someone holding it and uses that same
+  drawer; dashboard calibration is the exception. Never manually resend drawer jobs.
+  Guards, weaker than the rule: named drawer/cash/refund/calibration/resend suites only; new routes
+  unguarded. [Detail](conventions-ui.md).
+
+### No external dependency on the sale path, and the planned failover
+
+- **Nothing EXTERNAL may block a sale — and a till needs the venue's PRIMARY.** AEAT, the card network
+  and the internet are never on the sale path of whichever node is primary: records chain locally and
+  the outbox drains later; a card falls back to 4G, a standalone terminal or cash. The till follows
+  the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
+  inline. TODAY a venue has ONE node and no failover at all; the intended failover is in
+  `docs/backlog.md` → _Replication, membership & failover — residuals_. Detail:
+  [conventions-data.md](conventions-data.md).
+
+### The bucket stream's guard limits
+
+- **The bucket stream never waits on the bucket to sell or fails `/health`; its local checkpoint
+  can hold the write lock and delay sales.** Fifteen minutes behind raises `backup.stream_behind`
+  unless a stopped/refused/unusable-settings alert explains it. Guards: stream loop/pause e2e and
+  health bucket-copy cases, weaker than the rule: named cases only; stream cases skip without binaries.
+
+### The fiscal record table's triggers and the append-only watch
+
+- **`registros_facturacion` is immutable: never work around its append-only update/delete triggers.**
+  Triggers are the whole enforcement and cannot prevent `DROP TABLE`. Boot restores missing triggers
+  on existing tables; boot and the trading watch refuse changed/missing triggers. `append-only-watch`
+  is weaker than its name: stored text only, only tables migrated at start.
+
+### The clock-behind stop, clock confirmation and the box clock
+
+- **More than a minute behind the latest fiscal record, write no record and take/refund no new
+  money unless a clock confirmation covers it.** After replay, call `refuseWhileClockBehind` before
+  reader/refund/drawer work; pause both refund recovery loops. Recheck card-refund send/outcome in
+  their dating transaction after provider waits. Still store money already moved.
+  **Clock confirmation lifts the stop for one step back, with no gap limit; once a record is written
+  under it, readings stay within a minute of the latest record written since.** Sources: AEAT, two
+  agreeing devices at different addresses (not while the stop found at start-up lasts), an
+  administrator's own device, or a till's time confirmed on it by an administrator at any time or,
+  during a stop found at start-up once AEAT has not answered or cannot be asked, by a staff member
+  signed in on it (owner, 2026-10-31); never a box device outside development. Guards: clock-behind-stop, payments clock-behind, fiscal
+  chain/restart/confirmation, clock-confirm route and `apps/server/src/clock-watch.start-up.test.ts`
+  suites, weaker than the rule: only named routes/readings/requests; new money routes unguarded.
+  **The box sets its clock only through the host service, from AEAT, a till's time (a staff
+  member's during start-up, an administrator's at any time) or an administrator's own device — never from devices alone and never while it keeps time
+  over the internet — and every step it verifies, or sees move the clock by over a second, is
+  alerted and emailed.** Guards: `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
+  `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the
+  rule: the handler's suite runs stubs, not systemd; the route suites cover the named routes only.
+  [Detail](conventions-data.md#the-box-sets-its-own-clock).
+
+### New installation names on restore and promotion, and the countdown pages
+
+- **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion use five symbols for the box's UTC minute,
+  after another machine's clock agrees within 30 seconds (no confirmation); a minute whose name is
+  already in a history the box reads is not taken (the box waits for the next free one if it starts within 150 seconds, and otherwise
+  refuses with when it can; the setup and restore pages count that down and check again by themselves; owner, 2026-10-30, A1207), and no
+  other name or record refuses or moves it (owner, 2026-10-29, A1207), except that an attempt whose
+  own pick is ahead of the box's clock is refused until the clock reaches it. Start again keeps no record of the names it deletes (owner, 2026-10-29,
+  A1206): a box and the machine confirming its clock, wrong by the same amount, can repeat a name. Setup/restore wait
+  90–150 seconds; promotion does not. [Detail](conventions-data.md). Only preproduction throwaway
+  skips second-clock/history checks; refuse it outside preproduction. Restore takes one source;
+  working-time chain continues from its head. Guards: hour-selection/hour-clock/minute-selection-
+  unknown-name suites (the last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`.
