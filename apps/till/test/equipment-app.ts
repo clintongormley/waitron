@@ -5,6 +5,7 @@ import "../src/till-app.js";
 import { TillApi } from "../src/api/client.js";
 import { mountWidget } from "../src/widgets/test-helpers.js";
 import { NFC_EQUIPMENT } from "./equipment-nfc.js";
+import { passBoard } from "./pass-board-fixtures.js";
 
 export function emit(source: Element, name: string, detail?: unknown): void {
   source.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
@@ -83,7 +84,7 @@ export async function mountEquipmentApp(
     listCounterWaiting: vi.fn().mockResolvedValue([]),
     listStations: vi.fn().mockResolvedValue([]),
     getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
-    getExpoQueue: vi.fn().mockResolvedValue([]),
+    getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard() }),
     getTablesState: vi.fn().mockResolvedValue([]),
     listZones: vi.fn().mockResolvedValue([]),
     listSentDepartmentTransfers: vi.fn().mockResolvedValue({ requests: [] }),

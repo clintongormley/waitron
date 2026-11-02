@@ -193,7 +193,7 @@ import type { HoldReloadDetail } from "./screens/till-station-screen.js";
 import { CROSS_ICON_PATH } from "./widgets/station-queue.js";
 import "./screens/till-enrol-screen.js";
 import "./screens/till-device-chooser.js";
-import "./screens/till-expo-screen.js";
+import "./screens/till-pass-screen.js";
 import "./widgets/supervisor-override-dialog.js";
 import type { OverrideConfirmDetail } from "./widgets/supervisor-override-dialog.js";
 import { CarriedApproval, type CarriedApprover } from "./state/carried-approval.js";
@@ -341,8 +341,7 @@ import type {
   CounterWaitingOrder,
   UnpaidDepartureRequest,
   DeviceStationScreen,
-  DevicePassMonitor,
-  DevicePassScreen,
+  DevicePassBoard,
   DeadEndAnswer,
   DraftSubmission,
   FloorZone,
@@ -2677,8 +2676,8 @@ export class TillApp extends LitElement {
   }
   /** Prefetched by the boot probe, so the station screen does not read `GET /api/device/station` again. */
   @state() private initialDeviceStation?: DeviceStationScreen;
-  @state() private initialDevicePass?: DevicePassScreen;
-  @state() private initialDevicePassMonitor?: DevicePassMonitor;
+  @state() private initialDevicePass?: DevicePassBoard;
+  @state() private initialDevicePassMonitor?: DevicePassBoard;
   @state() private kitchenScreenNotice?: KitchenScreenNotice;
   /** The screen a kitchen display switched to after a refused press, shown for a while. */
   @state() private kitchenScreenSwitched?: KitchenScreenKind;
@@ -4488,11 +4487,11 @@ export class TillApp extends LitElement {
       return () => (this.initialDeviceStation = board);
     }
     if (screen.kind === "pass") {
-      const board = await this.api.getDevicePassScreen();
+      const board = await this.api.getDevicePassBoard();
       return () => (this.initialDevicePass = board);
     }
     if (screen.kind === "pass_monitor") {
-      const board = await this.api.getDevicePassMonitor();
+      const board = await this.api.getDevicePassMonitorBoard();
       return () => (this.initialDevicePassMonitor = board);
     }
     return () => (this.kitchenScreenNotice = screen.notice);
@@ -19162,25 +19161,29 @@ export class TillApp extends LitElement {
         .notice=${this.kitchenScreenNotice}
       ></till-kitchen-screen-notice>`;
     if (this.initialDevicePassMonitor)
-      return html`<till-expo-screen
+      return html`<till-pass-screen
         .operatorSession=${this.#operatorSession}
         embedded
         monitor
         .api=${this.api}
         .deviceMode=${this.deviceMode}
         .deviceName=${this.deviceName}
-        .initialDevicePassMonitor=${this.initialDevicePassMonitor}
-      ></till-expo-screen>`;
+        .deviceId=${this.deviceId}
+        .serverOrigin=${this.#serverOrigin()}
+        .initialBoard=${this.initialDevicePassMonitor}
+      ></till-pass-screen>`;
     return this.initialDevicePass
-      ? html`<till-expo-screen
+      ? html`<till-pass-screen
           .operatorSession=${this.#operatorSession}
           embedded
           .api=${this.api}
           .runsPass=${this.capabilities.includes("run-the-pass")}
           .deviceMode=${this.deviceMode}
           .deviceName=${this.deviceName}
-          .initialDevicePass=${this.initialDevicePass}
-        ></till-expo-screen>`
+          .deviceId=${this.deviceId}
+          .serverOrigin=${this.#serverOrigin()}
+          .initialBoard=${this.initialDevicePass}
+        ></till-pass-screen>`
       : html`<till-station-screen
           .operatorSession=${this.#operatorSession}
           embedded
@@ -19392,12 +19395,14 @@ export class TillApp extends LitElement {
           .serverOrigin=${this.#serverOrigin()}
         ></till-station-screen>`;
       case "expo":
-        return html`<till-expo-screen
+        return html`<till-pass-screen
           .operatorSession=${this.#operatorSession}
           slot="drill"
           .api=${this.api}
           .runsPass=${this.capabilities.includes("run-the-pass")}
-        ></till-expo-screen>`;
+          .deviceId=${this.deviceId}
+          .serverOrigin=${this.#serverOrigin()}
+        ></till-pass-screen>`;
       case undefined:
         return nothing;
     }
