@@ -66,11 +66,9 @@ it.each([
           request: {
             ...ownerRequest,
             legalName: "Retained company",
-            location: {
-              ...ownerRequest.location,
-              name: "Retained venue",
-              operationDescription: "Restaurant",
-            },
+
+            name: "Retained venue",
+            operationDescription: "Restaurant",
           },
         },
         randomBytes(32).toString("base64url"),

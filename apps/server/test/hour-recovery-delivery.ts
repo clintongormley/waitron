@@ -22,7 +22,7 @@ export async function keepHourRecoveryDocument(
       environment: state.frozen.environment,
     },
     taxpayerName: state.frozen.request.legalName,
-    venueName: state.frozen.request.location.name,
+    venueName: state.frozen.request.name,
     createdAt: new Date().toISOString(),
     nodeKey: { nodeId: staged.key.nodeId, name: staged.key.name },
   };

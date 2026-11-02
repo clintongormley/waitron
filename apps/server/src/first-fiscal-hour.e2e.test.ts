@@ -271,7 +271,7 @@ it.each([
             request.legalName,
             "--taxpayer-domicile",
             "Mayor 1, Madrid",
-            "--location-name",
+            "--venue-name",
             "Olivo",
             "--territory",
             "ES-common",

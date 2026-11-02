@@ -83,7 +83,7 @@ async function fixture(environment: "production" | "preproduction") {
       devMode: environment === "preproduction",
       firstFiscal: host,
       runFiscalTest: async ({ request: req, contribution, secret }) => {
-        const selected = venueFiscalSelection(ALL_MODULES, req.venue.location.fiscalTerritory);
+        const selected = venueFiscalSelection(ALL_MODULES, req.venue.fiscalTerritory);
         const modules = enabledModules(ALL_MODULES, selected.config);
         const input = fiscalReadinessInput({
           venue: req.venue,
@@ -208,7 +208,7 @@ async function preparedActivation(environment: "production" | "preproduction") {
           database: "synthetic-hour-readiness",
           moduleConfig: venueModuleConfig(
             parseModuleConfig({}, f.modules),
-            req.venue.location.fiscalTerritory,
+            req.venue.fiscalTerritory,
           ),
           beforeTransaction,
         },

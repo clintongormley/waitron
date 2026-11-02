@@ -95,7 +95,7 @@ async function fixture(certificate?: { pfxBase64: string; passphrase: string; ce
           database: "synthetic",
           moduleConfig: venueModuleConfig(
             parseModuleConfig({}, f.modules),
-            req.venue.location.fiscalTerritory,
+            req.venue.fiscalTerritory,
           ),
           beforeTransaction,
         },

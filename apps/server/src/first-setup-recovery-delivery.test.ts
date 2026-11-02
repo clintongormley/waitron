@@ -137,7 +137,7 @@ async function fixture(publicDocumentSeat = true) {
           database: "synthetic",
           moduleConfig: venueModuleConfig(
             parseModuleConfig({}, modules),
-            req.venue.location.fiscalTerritory,
+            req.venue.fiscalTerritory,
           ),
           beforeTransaction,
         },
@@ -200,7 +200,7 @@ async function documentFixture() {
     version: 1,
     scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
     taxpayerName: request.legalName,
-    venueName: request.location.name,
+    venueName: request.name,
     createdAt: "2026-10-16T11:40:00.000Z",
     nodeKey: { nodeId: staged.key.nodeId, name: staged.key.name },
   };

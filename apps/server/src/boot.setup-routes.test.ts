@@ -1613,7 +1613,8 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             ...body,
             legalName: "Nueva Empresa SL",
             taxpayerDomicile: "Calle Nueva 3, 28013 Madrid",
-            location: { ...body.location, operationDescription: "Comida para llevar" },
+
+            operationDescription: "Comida para llevar",
             seriesCode: "B",
             fullSeriesCode: "FB",
             rectificativeSeriesCode: "RB",

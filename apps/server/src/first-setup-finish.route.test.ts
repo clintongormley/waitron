@@ -116,7 +116,7 @@ async function fixture(realEntry = false, withoutBookings = false) {
             database: "synthetic",
             moduleConfig: venueModuleConfig(
               f.moduleConfig ?? parseModuleConfig({}, f.modules),
-              req.venue.location.fiscalTerritory,
+              req.venue.fiscalTerritory,
             ),
             beforeTransaction,
           },

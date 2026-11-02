@@ -263,7 +263,7 @@ it.each(["direct", "supervised"])(
         version: 1,
         scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "preproduction" },
         taxpayerName: request.legalName,
-        venueName: request.location.name,
+        venueName: request.name,
         createdAt: new Date().toISOString(),
         nodeKey: { nodeId: staged.stage.nodeId, name: staged.stage.name },
       };
@@ -399,7 +399,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     "Mayor 1, Madrid",
     "--address-line2",
     "",
-    "--location-name",
+    "--venue-name",
     "Olivo",
     "--territory",
     "ES-common",

@@ -157,7 +157,7 @@ async function fixture() {
           database: "synthetic",
           moduleConfig: venueModuleConfig(
             parseModuleConfig({}, host.modules),
-            request.location.fiscalTerritory,
+            request.fiscalTerritory,
           ),
           beforeTransaction,
         },
