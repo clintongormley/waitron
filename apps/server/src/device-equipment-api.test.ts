@@ -1081,7 +1081,7 @@ describe("the invoice role, which names a receipt printer or an A4 printer", () 
 });
 
 describe("a deleted printer named by a stale choice", () => {
-  const removePrinter = (id: string) => inTx((tx) => deletePrinter(tx, venue.cfg, id));
+  const removePrinter = (id: string) => inTx((tx) => deletePrinter(tx, id));
 
   async function deviceState(deviceId: string) {
     const [row] = await suite.db

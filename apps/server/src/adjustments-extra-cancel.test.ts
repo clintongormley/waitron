@@ -253,15 +253,11 @@ async function noticesDuring(act: () => Promise<void>) {
 describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
   it("sends EXTRA CANCELLED from the adjustment action to a printer on the dish's station", async () => {
     const printerId = await inTx(venue, async (tx) => {
-      const printer = await createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        {
-          name: `Extra ${randomUUID()}`,
-          transport: "cloud_poll",
-          pollId: randomUUID(),
-        },
-      );
+      const printer = await createPrinter(tx, {
+        name: `Extra ${randomUUID()}`,
+        transport: "cloud_poll",
+        pollId: randomUUID(),
+      });
       await attachPrinterToStation(tx, {
         locationId: venue.cfg.locationId,
         stationId: venue.stationId,
@@ -584,11 +580,11 @@ describe("cancelling an extra of a held dish (B11g)", () => {
     const { barId, screenId, barPrinterId, offers } = await inTx(venue, async (tx) => {
       const barId = (await createStation(tx, venue.cfg, { name: `Bar-${randomUUID()}` })).id;
       const screenId = (await createStation(tx, venue.cfg, { name: `Screen-${randomUUID()}` })).id;
-      const printer = await createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        { name: `Bar ${randomUUID()}`, transport: "cloud_poll", pollId: randomUUID() },
-      );
+      const printer = await createPrinter(tx, {
+        name: `Bar ${randomUUID()}`,
+        transport: "cloud_poll",
+        pollId: randomUUID(),
+      });
       await attachPrinterToStation(tx, {
         locationId: venue.cfg.locationId,
         stationId: barId,

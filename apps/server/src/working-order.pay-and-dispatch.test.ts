@@ -72,7 +72,6 @@ import {
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
 import { setRoutingCell } from "@waitron/venue-service";
-import type { PrintConfig } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -2653,15 +2652,11 @@ async function setDefaultStationActive(cfg: DeviceRequestConfig, active: boolean
 async function kitchenPrinter(cfg: DeviceRequestConfig): Promise<string> {
   const station = await defaultStationId(cfg);
   return withTransaction(suite.db, async (tx) => {
-    const { id } = await createPrinter(
-      tx,
-      { locationId: cfg.locationId },
-      {
-        name: "P-Cocina",
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-      },
-    );
+    const { id } = await createPrinter(tx, {
+      name: "P-Cocina",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
     await attachPrinterToStation(tx, {
       locationId: cfg.locationId,
       stationId: station,
@@ -3064,8 +3059,7 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
     // fired line enqueues a RECALLED correction slip — the paper trail the no-lost-update invariant reads.
     const station = await defaultStationId(cfg);
     await withTransaction(suite.db, async (tx) => {
-      const printCfg: PrintConfig = { locationId: cfg.locationId };
-      const { id: printerId } = await createPrinter(tx, printCfg, {
+      const { id: printerId } = await createPrinter(tx, {
         name: "P-Cocina",
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
@@ -3196,8 +3190,7 @@ describe("coursing editing verbs — recallLines racing selected line release", 
       const { cfg, cafe } = await setupVenue();
       const station = await defaultStationId(cfg);
       await withTransaction(suite.db, async (tx) => {
-        const printCfg: PrintConfig = { locationId: cfg.locationId };
-        const { id: printerId } = await createPrinter(tx, printCfg, {
+        const { id: printerId } = await createPrinter(tx, {
           name: "Kitchen printer",
           transport: "cloud_poll",
           pollId: `poll-${randomUUID()}`,

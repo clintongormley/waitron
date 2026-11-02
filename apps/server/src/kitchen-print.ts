@@ -31,7 +31,7 @@ import {
 import type { Decimal, TicketGrouping } from "@waitron/shared";
 import { kitchenPresentationName, optionSnapshotLabels } from "@waitron/catalogue";
 import { enqueuePrintJob } from "@waitron/printing";
-import type { EscSetting, PaperWidth, PrintConfig, Resolution } from "@waitron/printing";
+import type { EscSetting, PaperWidth, Resolution } from "@waitron/printing";
 import {
   arrangeTicketItems,
   crossRefText,
@@ -792,14 +792,12 @@ function foldWholePortions(
 /** Enqueue each job with its bill, station and line links. */
 async function enqueueKitchenJobs(
   tx: Transaction,
-  cfg: TradingContext,
   orderId: string,
   jobs: readonly KitchenJob[],
   reprint: boolean,
 ): Promise<void> {
-  const printCfg: PrintConfig = { locationId: cfg.locationId };
   for (const job of jobs) {
-    const { jobId } = await enqueuePrintJob(tx, printCfg, job.printerId, job.bytes);
+    const { jobId } = await enqueuePrintJob(tx, job.printerId, job.bytes);
     await linkKitchenJob(tx, jobId, orderId, job.stationIds, reprint);
     await insertInChunks(
       tx,
@@ -830,7 +828,7 @@ export async function enqueueKitchenTickets(
     fire,
     from,
   });
-  await enqueueKitchenJobs(tx, cfg, orderId, jobs, false);
+  await enqueueKitchenJobs(tx, orderId, jobs, false);
   return new Set(jobs.flatMap((job) => job.stationIds));
 }
 
@@ -1301,7 +1299,6 @@ async function printCorrectionSlips(
     printersByStation.set(mapping.stationId, bucket);
   }
 
-  const printCfg: PrintConfig = { locationId: cfg.locationId };
   const at = new Date().toISOString();
 
   if (change.kind === "ORDER NOTE CHANGED") {
@@ -1355,7 +1352,7 @@ async function printCorrectionSlips(
         route.printers[0]!,
       );
       for (const printer of route.printers) {
-        await enqueuePrintJob(tx, printCfg, printer.printerId, bytes);
+        await enqueuePrintJob(tx, printer.printerId, bytes);
       }
     }
     return;
@@ -1422,7 +1419,7 @@ async function printCorrectionSlips(
         group[0]!,
       );
       for (const printer of group) {
-        await enqueuePrintJob(tx, printCfg, printer.printerId, bytes);
+        await enqueuePrintJob(tx, printer.printerId, bytes);
       }
     }
   }
@@ -1683,7 +1680,7 @@ async function notifyMoved(
     if (printing === null || slipItems.length === 0) continue;
     const partyName = after.partyId === null ? before.places.partyName : after.sittingWith;
     const toNumber = after.places.orderNumber;
-    await printMovedSlips(tx, cfg, printing, slipItems, {
+    await printMovedSlips(tx, printing, slipItems, {
       kitchenNote:
         kitchenNotes.get(to)!.note === null
           ? undefined
@@ -1757,7 +1754,6 @@ async function readMovedSlipPrinting(
  */
 async function printMovedSlips(
   tx: Transaction,
-  cfg: TradingContext,
   { byStation, itemsByLine, stationNames, language }: MovedSlipPrinting,
   items: readonly MovedItem[],
   slip: Pick<
@@ -1766,7 +1762,6 @@ async function printMovedSlips(
   >,
 ): Promise<void> {
   const stationIds = [...new Set(items.map((item) => item.stationId))];
-  const printCfg: PrintConfig = { locationId: cfg.locationId };
   const at = new Date().toISOString();
 
   for (const stationId of stationIds) {
@@ -1811,7 +1806,7 @@ async function printMovedSlips(
         },
         group[0]!,
       );
-      for (const printer of group) await enqueuePrintJob(tx, printCfg, printer.printerId, bytes);
+      for (const printer of group) await enqueuePrintJob(tx, printer.printerId, bytes);
     }
   }
 }
@@ -2047,7 +2042,7 @@ export async function reprintOrderTickets(
     same.stationIds = [...new Set([...same.stationIds, ...hold.stationIds])];
     same.lineIds = [...new Set([...same.lineIds, ...hold.lineIds])];
   }
-  await enqueueKitchenJobs(tx, cfg, orderId, jobs, true);
+  await enqueueKitchenJobs(tx, orderId, jobs, true);
 }
 
 /**

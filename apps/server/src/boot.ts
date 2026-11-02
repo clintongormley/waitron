@@ -2150,12 +2150,8 @@ async function bootServer(
       tradingContext.practiceMode === true,
     );
     if (demoPrinter !== null) {
-      demoPrinterLoop = startDemoPrinterLoop(
-        db,
-        tradingContext.locationId,
-        demoPrinter,
-        500,
-        (error) => log("error", "demo_printer.delivery_failed", { errorCode: codeOf(error) }),
+      demoPrinterLoop = startDemoPrinterLoop(db, demoPrinter, 500, (error) =>
+        log("error", "demo_printer.delivery_failed", { errorCode: codeOf(error) }),
       );
       undoOnFailure.push(() => demoPrinterLoop!.stop());
     }

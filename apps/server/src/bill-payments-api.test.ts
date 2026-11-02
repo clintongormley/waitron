@@ -318,16 +318,12 @@ async function provision(db: typeof suite.db): Promise<Venue> {
         capabilities: [...DEFAULT_PROFILE_CAPABILITIES["phone-portrait"], "open-cash-drawer"],
       })
       .returning({ id: deviceProfiles.id });
-    const printer = await createPrinter(
-      tx,
-      { locationId: cfg.locationId },
-      {
-        name: "Recibos",
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-        hasCashDrawer: true,
-      },
-    );
+    const printer = await createPrinter(tx, {
+      name: "Recibos",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+      hasCashDrawer: true,
+    });
     return {
       productIds,
       offers,
@@ -805,11 +801,12 @@ describe("a contribution (design §8 test 2)", () => {
         })
         .returning({ id: deviceProfiles.id });
       const printer = (name: string) =>
-        createPrinter(
-          tx,
-          { locationId: venue.cfg.locationId },
-          { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}`, hasCashDrawer: true },
-        );
+        createPrinter(tx, {
+          name,
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+          hasCashDrawer: true,
+        });
       const receipt = await printer("Recibos caja");
       const drawer = await printer("Cajón caja");
       return { profileId: profile!.id, receiptId: receipt.id, drawerId: drawer.id };
@@ -2139,11 +2136,11 @@ describe("the invoice at full payment (design §8 test 8)", () => {
 
     it("answers no invoice printer while the device's invoice printer is a receipt printer, and the A4 printer it chooses instead", async () => {
       const receipt = await inTx((tx) =>
-        createPrinter(
-          tx,
-          { locationId: venue.cfg.locationId },
-          { name: "Barra", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-        ),
+        createPrinter(tx, {
+          name: "Barra",
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+        }),
       );
       await inTx((tx) =>
         listInvoicePrinter(tx, {
@@ -5204,16 +5201,12 @@ describe("a hand-keyed card bill payment and the cash drawer", () => {
           capabilities: [...BASIC_ACTIONS, "open-cash-drawer"],
         })
         .returning({ id: deviceProfiles.id });
-      const printer = await createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        {
-          name: "Recibos terraza",
-          transport: "cloud_poll",
-          pollId: `poll-${randomUUID()}`,
-          hasCashDrawer: false,
-        },
-      );
+      const printer = await createPrinter(tx, {
+        name: "Recibos terraza",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+        hasCashDrawer: false,
+      });
       return { profileId: profile!.id, printerId: printer.id };
     });
     const device = await enrolDeviceForTest(suite.db, venue.cfg, {

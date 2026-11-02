@@ -6,7 +6,10 @@ import { refuseDeletedPrinters } from "@waitron/layouts";
 import { kitchenStations, printers, stationPrinters } from "@waitron/db";
 import type { SQL } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
-import type { PrintConfig } from "@waitron/printing";
+
+interface PrintConfig {
+  locationId: string;
+}
 
 // The station → printer mapping verbs. The `printer.manage` gate is applied at the route, not here.
 

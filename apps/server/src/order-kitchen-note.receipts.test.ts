@@ -55,11 +55,7 @@ describe("whole-order instructions and issued customer documents", () => {
       };
       expect(before.sales).toHaveLength(1);
       const p = await inTx(v, (tx) =>
-        createPrinter(
-          tx,
-          { locationId: v.cfg.locationId },
-          { name: "Receipts", transport: "cloud_poll", pollId: randomUUID() },
-        ),
+        createPrinter(tx, { name: "Receipts", transport: "cloud_poll", pollId: randomUUID() }),
       );
       const receipt = async () => {
         const queued = await inTx(v, (tx) =>

@@ -194,9 +194,9 @@ async function createUsbPrinter(app: Hono, localKey: string, name: string): Prom
   return ((await res.json()) as { id: string }).id;
 }
 
-async function enqueue(tenant: Tenant, printerId: string, payload: Uint8Array): Promise<string> {
+async function enqueue(printerId: string, payload: Uint8Array): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const { jobId } = await enqueuePrintJob(tx, tenant, printerId, payload);
+    const { jobId } = await enqueuePrintJob(tx, printerId, payload);
     return jobId;
   });
 }
@@ -241,7 +241,7 @@ describe("Print API — the agent lifecycle end to end", () => {
     const app = mountApp(tenantA);
     const { agentId, token } = await joinAndAccept(app, "Cocina");
     const printerId = await createPrinter(app, agentId, "Cocina real");
-    const jobId = await enqueue(tenantA, printerId, new Uint8Array([0x41, 0x42]));
+    const jobId = await enqueue(printerId, new Uint8Array([0x41, 0x42]));
 
     const claim = await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
     expect(claim.status).toBe(200);
@@ -271,7 +271,7 @@ describe("Print API — the agent lifecycle end to end", () => {
     const mine = await joinAndAccept(app, "Mine");
     const serial = `SN-${randomUUID()}`;
     const usbPrinter = await createUsbPrinter(app, serial, "Other USB");
-    const jobId = await enqueue(tenantA, usbPrinter, new Uint8Array([1]));
+    const jobId = await enqueue(usbPrinter, new Uint8Array([1]));
 
     const res = await send(app, "POST", "/print-api/agent/jobs", {
       bearer: mine.token,
@@ -811,7 +811,7 @@ it("delivers enqueue and agent completion events with fresh printer aggregates",
   };
   try {
     expect(await printer()).toMatchObject({ pendingJobs: 0, lastPrintAt: null });
-    const jobId = await enqueue(tenantA, printerId, new Uint8Array([65]));
+    const jobId = await enqueue(printerId, new Uint8Array([65]));
     await vi.waitFor(() => expect(changes.length).toBeGreaterThan(0));
     expect(changes[0]).toContain(printerId);
     expect(changes[0]).not.toContain("payload");
@@ -841,11 +841,7 @@ describe("print job resend", () => {
   it("requires print.resend and copies the original bytes without changing its history", async () => {
     const app = mountApp(tenantA);
     const printerId = await createUsbPrinter(app, randomUUID(), "Resend");
-    const originalId = await enqueue(
-      tenantA,
-      printerId,
-      new Uint8Array([0, 255, 27, 64, 29, 86, 0]),
-    );
+    const originalId = await enqueue(printerId, new Uint8Array([0, 255, 27, 64, 29, 86, 0]));
     await suite.db
       .update(printJobs)
       .set({ status: "done", deliveredAt: nowIso() })
@@ -1083,7 +1079,7 @@ describe("printer delete routes (printer.manage)", () => {
       })
       .returning({ id: devices.id });
     await suite.db.insert(printerHolders).values({ printerId, deviceId: device!.id });
-    const jobId = await enqueue(tenantA, printerId, new Uint8Array([1]));
+    const jobId = await enqueue(printerId, new Uint8Array([1]));
     const device_ = { id: device!.id, name: deviceLabel };
     const profile_ = { id: profile!.id, name: profileName };
     return {
@@ -1119,7 +1115,7 @@ describe("printer delete routes (printer.manage)", () => {
     expect(read.status).toBe(200);
     expect(await read.json()).toEqual(p.impact(1));
 
-    const later = await enqueue(tenantA, p.printerId, new Uint8Array([2]));
+    const later = await enqueue(p.printerId, new Uint8Array([2]));
     const deleted = await send(app, "DELETE", `/management-api/printers/${p.printerId}`, {
       cookie: managerCookie,
     });

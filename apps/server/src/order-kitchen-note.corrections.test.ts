@@ -64,11 +64,12 @@ afterEach(() => vi.restoreAllMocks());
 
 async function printer(paperWidth: "58mm" | "80mm" = "80mm") {
   return inTx(v, async (tx) => {
-    const p = await createPrinter(
-      tx,
-      { locationId: v.cfg.locationId },
-      { name: "Kitchen", transport: "cloud_poll", pollId: randomUUID(), paperWidth },
-    );
+    const p = await createPrinter(tx, {
+      name: "Kitchen",
+      transport: "cloud_poll",
+      pollId: randomUUID(),
+      paperWidth,
+    });
     await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId, printerId: p.id });
     return p.id;
   });
@@ -287,11 +288,7 @@ describe("saved kitchen note corrections", () => {
         const { id } = await createStation(tx, v.cfg, { name });
         await routeProductTo(tx, v.cfg, v.productId(dish), id);
         if (!withPrinter) return { id, printerId: null };
-        const p = await createPrinter(
-          tx,
-          { locationId: v.cfg.locationId },
-          { name, transport: "cloud_poll", pollId: randomUUID() },
-        );
+        const p = await createPrinter(tx, { name, transport: "cloud_poll", pollId: randomUUID() });
         await attachPrinterToStation(tx, {
           locationId: v.cfg.locationId,
           stationId: id,
@@ -543,13 +540,8 @@ it("gives a shared instruction one slip at the printer and one notice at the sta
 it("A807 prints one slip per printer for stations that share one", async () => {
   const s = await inTx(v, async (tx) => {
     const newPrinter = async (name: string, paperWidth: "58mm" | "80mm") =>
-      (
-        await createPrinter(
-          tx,
-          { locationId: v.cfg.locationId },
-          { name, transport: "cloud_poll", pollId: randomUUID(), paperWidth },
-        )
-      ).id;
+      (await createPrinter(tx, { name, transport: "cloud_poll", pollId: randomUUID(), paperWidth }))
+        .id;
     const shared = await newPrinter("P", "80mm");
     const own = await newPrinter("Q", "58mm");
     const station = async (name: string, dish: string, printerId: string) => {

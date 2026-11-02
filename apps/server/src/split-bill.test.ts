@@ -446,15 +446,11 @@ async function revisionOf(orderId: string): Promise<number> {
 /** A cloud-poll printer attached to the station, so a fire or a correction there prints. */
 async function printerAt(cfg: OriginConfig, stationId: string): Promise<string> {
   return asApp(cfg, async (tx) => {
-    const { id } = await createPrinter(
-      tx,
-      { locationId: cfg.locationId },
-      {
-        name: `P-${randomUUID().slice(0, 8)}`,
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-      },
-    );
+    const { id } = await createPrinter(tx, {
+      name: `P-${randomUUID().slice(0, 8)}`,
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
     await attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId: id });
     return id;
   });

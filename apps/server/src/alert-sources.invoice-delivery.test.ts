@@ -78,24 +78,19 @@ function invoice(v: Venue, full = true): Promise<{ saleId: string; number: strin
 
 let hostCounter = 0;
 async function receiptJob(
-  v: Venue,
   saleId: string,
   set: Partial<typeof printJobs.$inferInsert> = {},
 ): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const printer = await createPrinter(
-      tx,
-      { locationId: v.locationId },
-      { name: "Receipt", transport: "network_tcp", host: `receipt-${hostCounter++}.test` },
-    );
-    const job = await enqueuePrintJob(
-      tx,
-      { locationId: v.locationId },
-      printer.id,
-      new Uint8Array([27, 64]),
-      "document",
-      { saleId, receiptCopy: false },
-    );
+    const printer = await createPrinter(tx, {
+      name: "Receipt",
+      transport: "network_tcp",
+      host: `receipt-${hostCounter++}.test`,
+    });
+    const job = await enqueuePrintJob(tx, printer.id, new Uint8Array([27, 64]), "document", {
+      saleId,
+      receiptCopy: false,
+    });
     if (Object.keys(set).length > 0) {
       await tx.update(printJobs).set(set).where(eq(printJobs.id, job.jobId));
     }
@@ -122,7 +117,7 @@ async function attempt(
             requestKey,
             personId: "staff-one",
             medium,
-            printJobId: await receiptJob(v, saleId),
+            printJobId: await receiptJob(saleId),
           };
   const reserved = await withTransaction(suite.db, (tx) =>
     reserveInvoiceDelivery(tx, saleId, input),
@@ -360,7 +355,7 @@ describe("invoiceDeliveryAlertSource", () => {
   it("raises for an F1 whose receipt original no delivery row tracks ran out of attempts", async () => {
     const v = await venue();
     const sale = await invoice(v);
-    await receiptJob(v, sale.saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
+    await receiptJob(sale.saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
 
     expect(await alerts()).toEqual([
       expect.objectContaining({
@@ -373,7 +368,7 @@ describe("invoiceDeliveryAlertSource", () => {
   it("raises nothing for a simplified invoice whose receipt failed", async () => {
     const v = await venue();
     const sale = await invoice(v, false);
-    await receiptJob(v, sale.saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
+    await receiptJob(sale.saleId, { status: "failed", attempts: MAX_DELIVERY_ATTEMPTS });
 
     expect(await alerts()).toEqual([]);
   });

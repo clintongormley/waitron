@@ -7005,9 +7005,7 @@ describe("a deleted printer in a configuration transfer", () => {
     await suite.db
       .insert(drawerOpens)
       .values({ printerId: ids.old, personId: "admin", reason: "calibration" });
-    await withTransaction(suite.db, (tx) =>
-      deletePrinter(tx, { locationId: source.locationId }, ids.old),
-    );
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, ids.old));
     await suite.db.insert(stationPrinters).values({ stationId: ids.station, printerId: ids.old });
     await suite.db.insert(deviceProfilePrinters).values({
       deviceProfileId: ids.profile,

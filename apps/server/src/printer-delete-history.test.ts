@@ -131,7 +131,7 @@ async function seedDeletedAndReplaced() {
     reprint: false,
   });
 
-  await withTransaction(suite.db, (tx) => deletePrinter(tx, { locationId }, old!.id, DELETED_AT));
+  await withTransaction(suite.db, (tx) => deletePrinter(tx, old!.id, DELETED_AT));
   const [replacement] = await suite.db
     .insert(printers)
     .values({ locationId, name: "New kitchen", transport: "network_tcp", host: "10.0.4.1" })

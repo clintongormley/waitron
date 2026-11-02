@@ -377,16 +377,12 @@ async function preparationTicketCount(workingOrderId: string): Promise<number> {
 
 async function makeReceiptPrinter(cfg: DeviceRequestConfig): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const { id } = await createPrinter(
-      tx,
-      { locationId: cfg.locationId },
-      {
-        name: "Recibos",
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-        hasCashDrawer: true,
-      },
-    );
+    const { id } = await createPrinter(tx, {
+      name: "Recibos",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+      hasCashDrawer: true,
+    });
     tx.run(
       sql`update devices set receipt_printer_id = ${id}, cash_drawer_printer_id = ${id} where id = ${cfg.origin.deviceId}`,
     );

@@ -314,7 +314,7 @@ async function pull(
 
 async function enqueue(printerId: string, payload: Uint8Array): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const { jobId } = await enqueuePrintJob(tx, { locationId }, printerId, payload);
+    const { jobId } = await enqueuePrintJob(tx, printerId, payload);
     return jobId;
   });
 }
@@ -444,13 +444,7 @@ describe("remote agents with an aged print queue", () => {
       const printerId = await createPrinterVia(app, a.agentId);
       const first = await enqueue(printerId, new Uint8Array([1]));
       const tail = await withTransaction(suite.db, async (tx) => {
-        const queued = await enqueuePrintJob(
-          tx,
-          { locationId },
-          printerId,
-          new Uint8Array([2]),
-          kind,
-        );
+        const queued = await enqueuePrintJob(tx, printerId, new Uint8Array([2]), kind);
         await tx
           .update(printJobs)
           .set({ createdAt: "2026-01-01T00:00:00.000Z" })
@@ -529,7 +523,7 @@ describe("remote agents with an aged print queue", () => {
     const b = await joinAndAccept(app, "Agent B");
     const printerId = await createPrinterVia(app, a.agentId);
     const job = await withTransaction(suite.db, (tx) =>
-      enqueuePrintJob(tx, { locationId }, printerId, new Uint8Array([7]), kind),
+      enqueuePrintJob(tx, printerId, new Uint8Array([7]), kind),
     );
     const sink = new FakeSink();
     const serverUrl = "http://box.test";
@@ -590,7 +584,7 @@ describe("remote agents with an aged print queue", () => {
       const b = await joinAndAccept(app, "Agent B");
       const printerId = await createPrinterVia(app, a.agentId);
       const pulse = await withTransaction(suite.db, (tx) =>
-        enqueuePrintJob(tx, { locationId }, printerId, esc().kick().bytes(), "drawer"),
+        enqueuePrintJob(tx, printerId, esc().kick().bytes(), "drawer"),
       );
       const sink = new FakeSink();
       const serverUrl = "http://box.test";
@@ -709,13 +703,7 @@ describe("remote agents with an aged print queue", () => {
     const ids: string[] = [];
     await withTransaction(suite.db, async (tx) => {
       for (let i = 0; i < 101; i += 1) {
-        const job = await enqueuePrintJob(
-          tx,
-          { locationId },
-          printerId,
-          new Uint8Array([7]),
-          "drawer",
-        );
+        const job = await enqueuePrintJob(tx, printerId, new Uint8Array([7]), "drawer");
         ids.push(job.jobId);
         await tx
           .update(printJobs)
@@ -2647,10 +2635,10 @@ describe("mountPrintApi — management: recent jobs", () => {
     await enqueue(printerId, esc(WIDE).line("Kitchen ticket").bytes());
     await enqueue(printerId, esc(WIDE).line("Receipt").bytes());
     await withTransaction(suite.db, (tx) =>
-      enqueuePrintJob(tx, { locationId }, printerId, esc().kick().bytes(), "drawer"),
+      enqueuePrintJob(tx, printerId, esc().kick().bytes(), "drawer"),
     );
     const demo = await configureDemoPrinter(suite.db, locationId, true);
-    await deliverDemoPrinterJobs(suite.db, locationId, demo!);
+    await deliverDemoPrinterJobs(suite.db, demo!);
 
     const path = "/management-api/demo-printer/jobs";
     const response = await send(app, "GET", path, { cookie: managerCookie });
@@ -4457,13 +4445,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       const mac = randomMac();
       const printerId = await registerBluetooth(app, mac);
       const kick = await withTransaction(suite.db, async (tx) => {
-        const { jobId } = await enqueuePrintJob(
-          tx,
-          { locationId },
-          printerId,
-          esc().kick().bytes(),
-          "drawer",
-        );
+        const { jobId } = await enqueuePrintJob(tx, printerId, esc().kick().bytes(), "drawer");
         return jobId;
       });
       const id = await queueUnpair(app, agentId, token, mac);

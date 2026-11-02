@@ -1231,8 +1231,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       return id;
     }
 
-    const removePrinter = (id: string) =>
-      withTransaction(suite.db, (tx) => deletePrinter(tx, venueCfg, id));
+    const removePrinter = (id: string) => withTransaction(suite.db, (tx) => deletePrinter(tx, id));
 
     const ROLES = [
       ["receiptPrinterIds", "receiptPrinterDefaultId"],

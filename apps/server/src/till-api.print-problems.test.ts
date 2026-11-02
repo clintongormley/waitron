@@ -32,11 +32,11 @@ useVenueDb({
         .select({ id: kitchenStations.id })
         .from(kitchenStations)
         .where(eq(kitchenStations.isDefault, true));
-      const { id: printerId } = await createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        { name: "Cocina", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-      );
+      const { id: printerId } = await createPrinter(tx, {
+        name: "Cocina",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
       await attachPrinterToStation(tx, {
         locationId: venue.cfg.locationId,
         stationId: station!.id,

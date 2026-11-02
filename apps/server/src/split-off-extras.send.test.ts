@@ -401,11 +401,11 @@ describe("sending split-off extras", () => {
         { kind: "no_preparation" },
       );
       await routeCategoryTo(tx, cfg, sides.id, fryer.id);
-      const printer = await createPrinter(
-        tx,
-        { locationId: cfg.locationId },
-        { name: "Fryer printer", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-      );
+      const printer = await createPrinter(tx, {
+        name: "Fryer printer",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: fryer.id,
@@ -515,11 +515,11 @@ describe("sending split-off extras", () => {
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
       const fryer = await createStation(tx, cfg, { name: "Fryer" });
-      const printer = await createPrinter(
-        tx,
-        { locationId: cfg.locationId },
-        { name: "Fryer printer", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-      );
+      const printer = await createPrinter(tx, {
+        name: "Fryer printer",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: fryer.id,

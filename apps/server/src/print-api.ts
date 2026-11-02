@@ -708,7 +708,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           tx,
           agentId,
           {
-            locationId: deps.cfg.locationId,
             visibleKeys,
           },
           deps.now?.(),
@@ -1105,7 +1104,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
         ) {
           throw new AppError("printer.office_printer", {});
         }
-        return createPrinter(tx, deps.cfg, input);
+        return createPrinter(tx, input);
       });
       return c.json(created, 201);
     }),
@@ -1115,7 +1114,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const rows = await gated(sessionId, async (tx) => {
-        const configured = await listPrinters(tx, deps.cfg);
+        const configured = await listPrinters(tx);
         const holders = await readPrinterHolders(tx);
         // Aggregated over the full history, unlike the job list's bounded completed history.
         // `max(delivered_at)` is the latest instant only because every writer stores the canonical
@@ -1198,7 +1197,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
             if (stored !== key) patch.localKey = stored;
           }
         }
-        await updatePrinter(tx, deps.cfg, id, patch);
+        await updatePrinter(tx, id, patch);
         if (patch.active === false)
           await endDeactivatedInvoicePrintDeliveries(tx, id, deps.now?.());
         if (portable !== undefined) await setPrinterPortable(tx, id, portable);
@@ -1212,7 +1211,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
       await gated(sessionId, async (tx) => {
-        await deactivatePrinter(tx, deps.cfg, id);
+        await deactivatePrinter(tx, id);
         await endDeactivatedInvoicePrintDeliveries(tx, id, deps.now?.());
       });
       return c.body(null, 204);
@@ -1223,7 +1222,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
-      return c.json(await gated(sessionId, (tx) => readPrinterDeleteImpact(tx, deps.cfg, id)));
+      return c.json(await gated(sessionId, (tx) => readPrinterDeleteImpact(tx, id)));
     }),
   );
 
@@ -1231,7 +1230,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const id = requireUuidParam(c.req.param("id"), "PrinterId");
-      return c.json(await gated(sessionId, (tx) => deletePrinter(tx, deps.cfg, id, deps.now?.())));
+      return c.json(await gated(sessionId, (tx) => deletePrinter(tx, id, deps.now?.())));
     }),
   );
 
@@ -1244,7 +1243,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           managementSessionId: sessionId,
           permission: "cash.drawer",
         });
-        const queued = await enqueuePrintJob(tx, deps.cfg, id, esc().kick().bytes(), "drawer");
+        const queued = await enqueuePrintJob(tx, id, esc().kick().bytes(), "drawer");
         await tx.insert(drawerOpens).values({
           printerId: id,
           personId: authorizedBy,
@@ -1286,7 +1285,6 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           throw new AppError(kind === "printer" ? "printer.not_found" : "reader.not_found", { id });
         return enqueuePrintJob(
           tx,
-          deps.cfg,
           printerId,
           formatEquipmentLabel(target, { kind, id, name: label.name }),
           "document",
@@ -1307,7 +1305,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           c.req.header("Accept-Language"),
           deps.venueLocale,
         );
-        return enqueuePrintJob(tx, deps.cfg, id, formatTestPage({ locale }));
+        return enqueuePrintJob(tx, id, formatTestPage({ locale }));
       });
       return c.json(result, 202);
     }),
@@ -1345,7 +1343,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
           now: (deps.now ?? (() => new Date()))(),
           timeZone: venue!.timeZone,
         });
-        return enqueuePrintJob(tx, deps.cfg, id, payload);
+        return enqueuePrintJob(tx, id, payload);
       });
       return c.json(result, 202);
     }),
@@ -1364,7 +1362,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
       const result = await gated(sessionId, async (tx) => {
         const { locale } = await readReceiptLanguage(tx);
         const payload = formatSampleReceipt(printer, deps.receiptQrText, locale);
-        return enqueuePrintJob(tx, deps.cfg, id, payload);
+        return enqueuePrintJob(tx, id, payload);
       });
       return c.json(result, 202);
     }),

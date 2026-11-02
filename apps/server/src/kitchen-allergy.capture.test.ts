@@ -179,7 +179,7 @@ function expectCopies(orderId: string, block: unknown = wanted) {
 }
 async function printer() {
   return inTx(v, async (tx) => {
-    const result = await createPrinter(tx, v.cfg, {
+    const result = await createPrinter(tx, {
       name: "Kitchen paper",
       transport: "cloud_poll",
       pollId: randomUUID(),
@@ -468,7 +468,7 @@ describe("A669 capture", () => {
       if (release === "hold") {
         await printer();
         await inTx(v, async (tx) => {
-          const result = await createPrinter(tx, v.cfg, {
+          const result = await createPrinter(tx, {
             name: "Side paper",
             transport: "cloud_poll",
             pollId: randomUUID(),

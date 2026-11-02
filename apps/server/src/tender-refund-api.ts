@@ -229,13 +229,7 @@ export function mountTenderRefundApi(
           language ?? sale!.locale,
           printer,
         );
-        const job = await enqueuePrintJob(
-          tx,
-          { locationId: cfg.locationId },
-          printer.id,
-          payload,
-          "document",
-        );
+        const job = await enqueuePrintJob(tx, printer.id, payload, "document");
         await tx
           .insert(receiptReprints)
           .values({ saleId: row.saleId, printJobId: job.jobId, personId: session.personId });

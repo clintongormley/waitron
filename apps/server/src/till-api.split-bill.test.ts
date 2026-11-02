@@ -226,15 +226,11 @@ describe("POST /api/bills/:id/merge of a check back into the tab it was split fr
       offerProducts(tx, cfg, { zone: "tables" }),
     );
     const printerId = await withTransaction(suite.db, async (tx) => {
-      const { id } = await createPrinter(
-        tx,
-        { locationId: cfg.locationId },
-        {
-          name: `P-${randomUUID().slice(0, 8)}`,
-          transport: "cloud_poll",
-          pollId: `poll-${randomUUID()}`,
-        },
-      );
+      const { id } = await createPrinter(tx, {
+        name: `P-${randomUUID().slice(0, 8)}`,
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
       await attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId: id });
       return id;
     });

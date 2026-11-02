@@ -17,9 +17,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/catalogue";
 import { createPrinter, deactivatePrinter } from "@waitron/printing";
-import type { PrintConfig } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
-import type { OriginConfig, TradingContext } from "./trading-context.js";
+import type { OriginConfig } from "./trading-context.js";
 import { createStation } from "./kitchen.js";
 import { createOpenOrder } from "./working-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -75,10 +74,6 @@ async function parkedThenRelease<A, B>(
   return settled;
 }
 
-function printCfg(cfg: TradingContext): PrintConfig {
-  return { locationId: cfg.locationId };
-}
-
 describe("print-on-fire concurrency — the write queue around the mapping read", () => {
   it("a concurrent deactivatePrinter runs only after the fire commits, and never aborts it", async () => {
     // ---- Setup, committed before the two contending transactions are staged ----
@@ -109,7 +104,7 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
         const cat = await createCatalogue(tx, { name: "Menu" });
         await assignCatalogueToVenue(tx, cat.id);
         const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
-        const { id: printerId } = await createPrinter(tx, printCfg(cfg), {
+        const { id: printerId } = await createPrinter(tx, {
           name: "Kitchen printer",
           transport: "cloud_poll",
           pollId: `poll-${randomUUID()}`,
@@ -162,7 +157,7 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
       readDone.passed,
       releaseA.open,
       async (txB) => {
-        await deactivatePrinter(txB, printCfg(cfg), printerId);
+        await deactivatePrinter(txB, printerId);
         deactivateDone = true;
       },
     );

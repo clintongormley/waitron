@@ -1218,8 +1218,7 @@ describe("a deleted receipt printer in the receipt preview", () => {
           .from(printers)
           .where(inArray(printers.name, ["Printer Bar", "Printer Till 1"]));
         await withTransaction(suite.db, async (tx) => {
-          for (const { id } of narrow)
-            await deletePrinter(tx, { locationId: venue.cfg.locationId }, id);
+          for (const { id } of narrow) await deletePrinter(tx, id);
         });
         expect(await widths()).toEqual([["80mm"], "80mm"]);
       },

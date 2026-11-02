@@ -761,15 +761,11 @@ describe("party Recall to draft", () => {
     "prints HOLD CANCELLED with permanent identity and quantity (colliding origins: %s)",
     async (collision) => {
       const printer = await inTx(venue, (tx) =>
-        createPrinter(
-          tx,
-          { locationId: venue.cfg.locationId },
-          {
-            name: `Recall-${randomUUID()}`,
-            transport: "cloud_poll",
-            pollId: randomUUID(),
-          },
-        ),
+        createPrinter(tx, {
+          name: `Recall-${randomUUID()}`,
+          transport: "cloud_poll",
+          pollId: randomUUID(),
+        }),
       );
       await inTx(venue, (tx) =>
         attachPrinterToStation(tx, {
@@ -1306,11 +1302,11 @@ describe("party Recall to draft", () => {
         [kitchenPrinter, stationId],
         [barPrinterName, barId],
       ] as const) {
-        const printer = await createPrinter(
-          tx,
-          { locationId: venue.cfg.locationId },
-          { name, transport: "cloud_poll", pollId: randomUUID() },
-        );
+        const printer = await createPrinter(tx, {
+          name,
+          transport: "cloud_poll",
+          pollId: randomUUID(),
+        });
         await attachPrinterToStation(tx, {
           locationId: venue.cfg.locationId,
           stationId: station,

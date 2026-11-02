@@ -54,17 +54,16 @@ async function setup() {
         counterpartyTaxId: "synthetic-customer",
       })
       .returning();
-    const cfg = { locationId: location!.id };
-    const printer = await createPrinter(tx, cfg, {
+    const printer = await createPrinter(tx, {
       name: "Receipt",
       transport: "network_tcp",
       host: "printer.test",
     });
-    const managed = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([1]), "document", {
+    const managed = await enqueuePrintJob(tx, printer.id, new Uint8Array([1]), "document", {
       saleId: sale!.id,
       receiptCopy: false,
     });
-    const ordinary = await enqueuePrintJob(tx, cfg, printer.id, new Uint8Array([2]), "drawer");
+    const ordinary = await enqueuePrintJob(tx, printer.id, new Uint8Array([2]), "drawer");
     const [delivery] = await tx
       .insert(invoiceDeliveries)
       .values({
@@ -92,7 +91,6 @@ describe("generic print runtime's invoice boundary", () => {
     const ctx = await setup();
     await withTransaction(suite.db, async (tx) => {
       const jobs = await claimPrintJobs(tx, ctx.agentId, {
-        locationId: ctx.locationId,
         visibleKeys: [],
       });
       expect(jobs.map((job) => job.id)).toEqual([ctx.ordinary]);
@@ -111,13 +109,11 @@ describe("generic print runtime's invoice boundary", () => {
     const ctx = await setup();
     await withTransaction(suite.db, async (tx) => {
       const jobs = await claimPrintJobs(tx, ctx.agentId, {
-        locationId: ctx.locationId,
         visibleKeys: [],
         invoiceReceiptsAt: now,
       });
       expect(jobs.map((job) => job.id)).toEqual([ctx.managed]);
       const next = await claimPrintJobs(tx, ctx.agentId, {
-        locationId: ctx.locationId,
         visibleKeys: [],
         invoiceReceiptsAt: now,
       });
@@ -145,7 +141,6 @@ describe("generic print runtime's invoice boundary", () => {
         .where(eq(invoiceDeliveries.id, ctx.deliveryId));
       const jobs = await withTransaction(suite.db, (tx) =>
         claimPrintJobs(tx, ctx.agentId, {
-          locationId: ctx.locationId,
           visibleKeys: [],
           invoiceReceiptsAt: now,
         }),
@@ -156,28 +151,27 @@ describe("generic print runtime's invoice boundary", () => {
       ).toMatchObject({ status: "queued", claimedBy: null });
     },
   );
-  it("gives the adapter a receipt queued further ahead than the bound it names, as after a backward step", async () => {
-    for (const [aheadAt, claimed] of [
-      [now, false],
-      ["2026-11-30T23:59:59.999Z", true],
-    ] as const) {
+  it.each([
+    [now, false],
+    ["2026-11-30T23:59:59.999Z", true],
+  ] as const)(
+    "gives the adapter a receipt queued further ahead than the bound it names, as after a backward step (ahead bound %s)",
+    async (aheadAt, claimed) => {
       const ctx = await setup();
       const jobs = await withTransaction(suite.db, (tx) =>
         claimPrintJobs(tx, ctx.agentId, {
-          locationId: ctx.locationId,
           visibleKeys: [],
           invoiceReceiptsAt: "2026-11-30T23:00:00.000Z",
           invoiceReceiptsAheadAt: aheadAt,
         }),
       );
       expect(jobs.map((job) => job.id).includes(ctx.managed)).toBe(claimed);
-    }
-  });
+    },
+  );
   it("does not consume a future invoice claim before its due time", async () => {
     const ctx = await setup();
     const jobs = await withTransaction(suite.db, (tx) =>
       claimPrintJobs(tx, ctx.agentId, {
-        locationId: ctx.locationId,
         visibleKeys: [],
         invoiceReceiptsAt: "2026-11-30T23:59:59.999Z",
       }),
@@ -204,21 +198,12 @@ describe("generic print runtime's invoice boundary", () => {
           .update(printJobs)
           .set({ createdAt: "2026-01-01T00:00:01.000Z" })
           .where(eq(printJobs.id, ctx.ordinary));
-        const other = await createPrinter(
-          tx,
-          { locationId: ctx.locationId },
-          {
-            name: "Other",
-            transport: "network_tcp",
-            host: "other-printer.test",
-          },
-        );
-        const queued = await enqueuePrintJob(
-          tx,
-          { locationId: ctx.locationId },
-          other.id,
-          new Uint8Array([3]),
-        );
+        const other = await createPrinter(tx, {
+          name: "Other",
+          transport: "network_tcp",
+          host: "other-printer.test",
+        });
+        const queued = await enqueuePrintJob(tx, other.id, new Uint8Array([3]));
         await tx
           .update(printJobs)
           .set({ createdAt: "2026-01-01T00:00:02.000Z" })
@@ -226,7 +211,6 @@ describe("generic print runtime's invoice boundary", () => {
         expect(
           (
             await claimPrintJobs(tx, ctx.agentId, {
-              locationId: ctx.locationId,
               visibleKeys: [],
               ...(invoiceReceiptsAt === undefined ? {} : { invoiceReceiptsAt }),
             })

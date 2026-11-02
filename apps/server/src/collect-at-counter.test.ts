@@ -337,11 +337,11 @@ describe("releaseHeldWorkOf", () => {
 let salads: Promise<{ stationId: string; printerId: string }> | undefined;
 function saladStation() {
   salads ??= inTx(venue, async (tx) => {
-    const printer = await createPrinter(
-      tx,
-      { locationId: venue.cfg.locationId },
-      { name: "Fríos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-    );
+    const printer = await createPrinter(tx, {
+      name: "Fríos",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
     const station = await createStation(tx, venue.cfg, {
       name: "Salads",
       printerIds: [printer.id],

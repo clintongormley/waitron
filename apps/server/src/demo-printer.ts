@@ -186,14 +186,12 @@ export async function routeToDemoPrinter(
 
 export async function deliverDemoPrinterJobs(
   db: Database,
-  locationId: string,
   identity: DemoPrinterIdentity,
 ): Promise<number> {
   let delivered = 0;
   for (let pull = 0; pull < PULL_BATCH_LIMIT; pull += 1) {
     const jobs = await withTransaction(db, (tx) =>
       claimInvoicePrintJobs(tx, identity.agentId, {
-        locationId,
         visibleKeys: [DEMO_PRINTER_KEY],
         printerId: identity.printerId,
       }),
@@ -216,7 +214,6 @@ export async function deliverDemoPrinterJobs(
 
 export function startDemoPrinterLoop(
   db: Database,
-  locationId: string,
   identity: DemoPrinterIdentity,
   intervalMs = 500,
   onError: (error: unknown) => void = () => {},
@@ -225,7 +222,7 @@ export function startDemoPrinterLoop(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inFlight: Promise<void> = Promise.resolve();
   const tick = () => {
-    inFlight = deliverDemoPrinterJobs(db, locationId, identity)
+    inFlight = deliverDemoPrinterJobs(db, identity)
       .then(() => {})
       .catch(onError)
       .finally(() => {

@@ -483,15 +483,11 @@ async function printerAtStationOf(billId: string, lineNo: number): Promise<strin
     where t.working_order_line_id = (
       select id from working_order_lines where working_order_id = ${billId} and line_no = ${lineNo})`);
   return inTx(v, async (tx) => {
-    const { id } = await createPrinter(
-      tx,
-      { locationId: v.cfg.locationId },
-      {
-        name: `P-${randomUUID().slice(0, 8)}`,
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-      },
-    );
+    const { id } = await createPrinter(tx, {
+      name: `P-${randomUUID().slice(0, 8)}`,
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
     await attachPrinterToStation(tx, {
       locationId: v.cfg.locationId,
       stationId: station!.stationId,
@@ -1054,15 +1050,11 @@ describe("sent work moved between a party's bills at two of its tables", () => {
       select distinct station_id as stationId from ticket_items where working_order_id = ${billId}`);
     expect(stations).toHaveLength(1);
     return inTx(v, async (tx) => {
-      const { id } = await createPrinter(
-        tx,
-        { locationId: v.cfg.locationId },
-        {
-          name: `P-${randomUUID().slice(0, 8)}`,
-          transport: "cloud_poll",
-          pollId: `poll-${randomUUID()}`,
-        },
-      );
+      const { id } = await createPrinter(tx, {
+        name: `P-${randomUUID().slice(0, 8)}`,
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
       await attachPrinterToStation(tx, {
         locationId: v.cfg.locationId,
         stationId: stations[0]!.stationId,

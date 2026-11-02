@@ -11,7 +11,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { PRINTER_DELETED, canResendPrintJob, enqueuePrintJob, esc } from "@waitron/printing";
-import type { EscSetting, PrintConfig } from "@waitron/printing";
+import type { EscSetting } from "@waitron/printing";
 import { profileAllows, readPrinterEquipment, readPrinterRoles } from "@waitron/layouts";
 import type { ProfilePrinterRole } from "@waitron/layouts";
 import { readKitchenLanguage } from "./kitchen-language.js";
@@ -38,10 +38,6 @@ import type { TillSaleResult } from "./till-sale.js";
 
 /** Drawer commands are separate from documents, so printing and resending never open the drawer. */
 export const DRAWER_KICK: Uint8Array = esc().kick().bytes();
-
-function printConfig(cfg: Pick<TradingContext, "locationId">): PrintConfig {
-  return { locationId: cfg.locationId };
-}
 
 /** One of a device's current printers, when active, and the settings it lays documents out for. */
 export interface DevicePrinter extends EscSetting {
@@ -295,7 +291,7 @@ export async function enqueueCollectionTicket(
   if (printer === undefined) return;
   const language = await readKitchenLanguage(tx);
   const bytes = formatOrderNumberSlip({ orderNumber, language }, printer);
-  await enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document");
+  await enqueuePrintJob(tx, printer.id, bytes, "document");
 }
 
 /**
@@ -329,7 +325,7 @@ export async function enqueueReceiptCopy(
 ): Promise<{ jobId: string } | undefined> {
   const bytes = await buildReceiptBytes(tx, cfg, ticket, saleId, true, printer, language);
   if (bytes === undefined) return undefined;
-  const job = await enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document", {
+  const job = await enqueuePrintJob(tx, printer.id, bytes, "document", {
     saleId,
     receiptCopy: true,
   });
@@ -355,7 +351,7 @@ export async function enqueueInvoiceReceipt(
   /* v8 ignore start -- issuer row structurally always present (buildReceiptBytes) */
   if (bytes === undefined) throw new Error("Cannot build a receipt without the taxpayer");
   /* v8 ignore stop */
-  const job = await enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document", {
+  const job = await enqueuePrintJob(tx, printer.id, bytes, "document", {
     saleId,
     receiptCopy: duplicate,
   });
@@ -406,7 +402,7 @@ export async function enqueueManualDrawerOpen(
     authorizedBy,
     viaOverride,
   });
-  await enqueuePrintJob(tx, printConfig(cfg), printerId, DRAWER_KICK, "drawer");
+  await enqueuePrintJob(tx, printerId, DRAWER_KICK, "drawer");
 }
 
 export type OriginalReceiptPrint =
@@ -524,14 +520,10 @@ export async function enqueueOriginalReceipt(
   if (original !== undefined) return;
   const resolved = await resolvePrinterAndReceipt(tx, cfg, ticket, saleId, false, printers);
   if (resolved === undefined) return;
-  const job = await enqueuePrintJob(
-    tx,
-    printConfig(cfg),
-    resolved.printer.id,
-    resolved.receiptBytes,
-    "document",
-    { saleId, receiptCopy: false },
-  );
+  const job = await enqueuePrintJob(tx, resolved.printer.id, resolved.receiptBytes, "document", {
+    saleId,
+    receiptCopy: false,
+  });
   await enrollExplicitInvoiceReceipt(tx, ticket, saleId, job.jobId, personId, requestKey);
 }
 
@@ -554,7 +546,7 @@ async function enqueueBillDrawer(
     billPaymentId,
     ...(authorization ?? {}),
   });
-  await enqueuePrintJob(tx, printConfig(cfg), printer.id, DRAWER_KICK, "drawer");
+  await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer");
 }
 
 /**
@@ -645,7 +637,7 @@ export async function enqueueTenderRefundDrawer(
     reason: "tender_refund",
     ...authorization,
   });
-  await enqueuePrintJob(tx, printConfig(cfg), printer.id, DRAWER_KICK, "drawer");
+  await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer");
 }
 
 /**
@@ -671,5 +663,5 @@ export async function enqueueSaleDrawer(
     reason: method === "cash" ? "cash_sale" : "card_slip",
     saleId,
   });
-  await enqueuePrintJob(tx, printConfig(cfg), printer.id, DRAWER_KICK, "drawer");
+  await enqueuePrintJob(tx, printer.id, DRAWER_KICK, "drawer");
 }

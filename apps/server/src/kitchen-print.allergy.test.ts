@@ -33,7 +33,7 @@ beforeEach(async () => {
       and(eq(kitchenStations.locationId, v.cfg.locationId), eq(kitchenStations.isDefault, true)),
     );
   await inTx(v, async (tx) => {
-    const printer = await createPrinter(tx, v.cfg, {
+    const printer = await createPrinter(tx, {
       name: "Allergy paper",
       transport: "cloud_poll",
       pollId: randomUUID(),

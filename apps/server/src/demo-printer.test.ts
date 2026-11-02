@@ -110,21 +110,19 @@ describe("the Demo printer", () => {
         .returning({ id: printers.id });
       await enqueuePrintJob(
         tx,
-        { locationId },
         demo!.printerId,
         esc({ paperWidth: "80mm", resolution: "180dpi" }).line("Receipt").bytes(),
       );
-      await enqueuePrintJob(tx, { locationId }, demo!.printerId, esc().kick().bytes(), "drawer");
+      await enqueuePrintJob(tx, demo!.printerId, esc().kick().bytes(), "drawer");
       await enqueuePrintJob(
         tx,
-        { locationId },
         other!.id,
         esc({ paperWidth: "80mm", resolution: "180dpi" }).line("Other").bytes(),
       );
       return other!.id;
     });
 
-    expect(await deliverDemoPrinterJobs(suite.db, locationId, demo!)).toBe(2);
+    expect(await deliverDemoPrinterJobs(suite.db, demo!)).toBe(2);
     const jobs = await suite.db
       .select({ printerId: printJobs.printerId, kind: printJobs.kind, status: printJobs.status })
       .from(printJobs);
@@ -147,14 +145,13 @@ describe("the Demo printer", () => {
     await withTransaction(suite.db, (tx) =>
       enqueuePrintJob(
         tx,
-        { locationId },
         demo!.printerId,
         esc({ paperWidth: "80mm", resolution: "180dpi" }).line("Old").bytes(),
       ),
     );
 
     expect(await configureDemoPrinter(suite.db, locationId, false)).toBeNull();
-    expect(await deliverDemoPrinterJobs(suite.db, locationId, demo!)).toBe(0);
+    expect(await deliverDemoPrinterJobs(suite.db, demo!)).toBe(0);
     const [printer] = await suite.db
       .select({ active: printers.active })
       .from(printers)
@@ -185,7 +182,7 @@ describe("the Demo printer", () => {
   it("after its printer is deleted, a Demo boot adds a new one rather than bringing it back", async () => {
     const { locationId, deviceId, profileId } = await venue();
     const first = await configureDemoPrinter(suite.db, locationId, true);
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, { locationId }, first!.printerId));
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, first!.printerId));
     const deletedRow = await suite.db
       .select()
       .from(printers)
@@ -213,7 +210,7 @@ describe("the Demo printer", () => {
       .returning({ id: locations.id });
     const locationId = location!.id;
     const gone = await realPrinter(locationId, "Gone");
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, { locationId }, gone));
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, gone));
 
     await expect(
       withTransaction(suite.db, (tx) => routeToDemoPrinter(tx, locationId, gone)),
@@ -224,7 +221,7 @@ describe("the Demo printer", () => {
     const { locationId, profileId } = await venue();
     await suite.db.insert(kitchenStations).values({ locationId, name: "Grill" });
     const gone = await realPrinter(locationId, "Gone");
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, { locationId }, gone));
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, gone));
     const lists = await profileLists(profileId);
 
     await expect(
@@ -240,7 +237,7 @@ describe("the Demo printer", () => {
   it("a Live boot after its printer is deleted leaves the deleted row as it is", async () => {
     const { locationId } = await venue();
     const first = await configureDemoPrinter(suite.db, locationId, true);
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, { locationId }, first!.printerId));
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, first!.printerId));
     const before = await suite.db.select().from(printers);
 
     expect(await configureDemoPrinter(suite.db, locationId, false)).toBeNull();
@@ -379,7 +376,7 @@ describe("the Demo printer", () => {
     const { locationId, profileId } = await venue();
     const demo = await configureDemoPrinter(suite.db, locationId, true);
     await withTransaction(suite.db, (tx) =>
-      updatePrinter(tx, { locationId }, demo!.printerId, { hasCashDrawer: false }),
+      updatePrinter(tx, demo!.printerId, { hasCashDrawer: false }),
     );
     await configureDemoPrinter(suite.db, locationId, false);
 
@@ -401,7 +398,7 @@ describe("the Demo printer", () => {
     const { locationId, profileId } = await venue();
     const demo = await configureDemoPrinter(suite.db, locationId, true);
     await withTransaction(suite.db, (tx) =>
-      updatePrinter(tx, { locationId }, demo!.printerId, { hasCashDrawer: false }),
+      updatePrinter(tx, demo!.printerId, { hasCashDrawer: false }),
     );
 
     expect(await configureDemoPrinter(suite.db, locationId, true)).toEqual(demo);
@@ -487,9 +484,9 @@ describe("the Demo printer", () => {
     const { locationId } = await venue();
     const demo = await configureDemoPrinter(suite.db, locationId, true);
     const job = await withTransaction(suite.db, (tx) =>
-      enqueuePrintJob(tx, { locationId }, demo!.printerId, esc().kick().bytes(), "drawer"),
+      enqueuePrintJob(tx, demo!.printerId, esc().kick().bytes(), "drawer"),
     );
-    const loop = startDemoPrinterLoop(suite.db, locationId, demo!, 10);
+    const loop = startDemoPrinterLoop(suite.db, demo!, 10);
     await loop.stop();
     const [row] = await suite.db
       .select({ status: printJobs.status })
@@ -501,10 +498,10 @@ describe("the Demo printer", () => {
   it("delivers after the sale enqueues, and stops before closing the store", async () => {
     const { locationId } = await venue();
     const demo = await configureDemoPrinter(suite.db, locationId, true);
-    const loop = startDemoPrinterLoop(suite.db, locationId, demo!, 10);
+    const loop = startDemoPrinterLoop(suite.db, demo!, 10);
     try {
       const first = await withTransaction(suite.db, (tx) =>
-        enqueuePrintJob(tx, { locationId }, demo!.printerId, esc().kick().bytes(), "drawer"),
+        enqueuePrintJob(tx, demo!.printerId, esc().kick().bytes(), "drawer"),
       );
       await vi.waitFor(async () => {
         const [job] = await suite.db
@@ -517,7 +514,7 @@ describe("the Demo printer", () => {
       await loop.stop();
     }
     const second = await withTransaction(suite.db, (tx) =>
-      enqueuePrintJob(tx, { locationId }, demo!.printerId, esc().kick().bytes(), "drawer"),
+      enqueuePrintJob(tx, demo!.printerId, esc().kick().bytes(), "drawer"),
     );
     await new Promise((resolve) => setTimeout(resolve, 30));
     const [job] = await suite.db

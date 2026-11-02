@@ -147,21 +147,16 @@ async function setup(bluetooth = false) {
   const printer = await withTransaction(suite.db, (tx) =>
     createPrinter(
       tx,
-      { locationId: location!.id },
       bluetooth
         ? { name: "Receipt", transport: "bluetooth", localKey: MAC }
         : { name: "Receipt", transport: "network_tcp", host: "printer.test" },
     ),
   );
   const job = await withTransaction(suite.db, (tx) =>
-    enqueuePrintJob(
-      tx,
-      { locationId: location!.id },
-      printer.id,
-      new Uint8Array([27, 64]),
-      "document",
-      { saleId: sale.saleId, receiptCopy: false },
-    ),
+    enqueuePrintJob(tx, printer.id, new Uint8Array([27, 64]), "document", {
+      saleId: sale.saleId,
+      receiptCopy: false,
+    }),
   );
   const delivery = await withTransaction(suite.db, (tx) =>
     reserveInvoiceDelivery(tx, sale.saleId, {
@@ -249,7 +244,6 @@ async function setup(bluetooth = false) {
 async function held(ctx: Awaited<ReturnType<typeof setup>>) {
   await withTransaction(suite.db, (tx) =>
     claimPrintJobs(tx, ctx.agentId, {
-      locationId: ctx.locationId,
       visibleKeys: [],
       invoiceReceiptsAt: ctx.now().toISOString(),
     }),
@@ -287,13 +281,7 @@ describe("invoice receipt API attempt boundary", () => {
       .set({ nextAttemptAt: new Date(ctx.now().getTime() + 60000).toISOString() })
       .where(eq(invoiceDeliveries.id, ctx.delivery.id));
     const ordinary = await withTransaction(suite.db, (tx) =>
-      enqueuePrintJob(
-        tx,
-        { locationId: ctx.locationId },
-        ctx.printer.id,
-        new Uint8Array([1]),
-        "drawer",
-      ),
+      enqueuePrintJob(tx, ctx.printer.id, new Uint8Array([1]), "drawer"),
     );
     expect((await ctx.pull()).map((j) => j.id)).toEqual([ordinary.jobId]);
     expect(await ctx.jobRow()).toMatchObject({ status: "queued", claimedBy: null });
@@ -358,7 +346,6 @@ describe("invoice receipt API attempt boundary", () => {
         runAgentOnce({
           tx,
           agentId: ctx.agentId,
-          locationId: ctx.locationId,
           visibleKeys: [],
           transport: sink,
         }),
@@ -370,7 +357,7 @@ describe("invoice receipt API attempt boundary", () => {
   it("the demo printer completes a correlated receipt through the same boundary", async () => {
     const ctx = await setup();
     expect(
-      await deliverDemoPrinterJobs(suite.db, ctx.locationId, {
+      await deliverDemoPrinterJobs(suite.db, {
         agentId: ctx.agentId,
         printerId: ctx.printer.id,
       }),
@@ -410,11 +397,9 @@ describe("invoice receipt API attempt boundary", () => {
       if (wrong === "generation") claim.generation++;
       if (wrong === "delivery") claim.deliveryId = randomUUID();
       const other = await withTransaction(suite.db, (tx) =>
-        enqueuePrintJob(tx, { locationId: ctx.locationId }, ctx.printer.id, new Uint8Array([2])),
+        enqueuePrintJob(tx, ctx.printer.id, new Uint8Array([2])),
       );
-      await withTransaction(suite.db, (tx) =>
-        claimPrintJobs(tx, ctx.agentId, { locationId: ctx.locationId, visibleKeys: [] }),
-      );
+      await withTransaction(suite.db, (tx) => claimPrintJobs(tx, ctx.agentId, { visibleKeys: [] }));
       expect(
         (
           await ctx.result(
@@ -575,13 +560,7 @@ describe("invoice receipt API attempt boundary", () => {
   it("reports an ordinary drawer without an invoice token and does not retry it", async () => {
     const ctx = await setup();
     const ordinary = await withTransaction(suite.db, (tx) =>
-      enqueuePrintJob(
-        tx,
-        { locationId: ctx.locationId },
-        ctx.printer.id,
-        new Uint8Array([1]),
-        "drawer",
-      ),
+      enqueuePrintJob(tx, ctx.printer.id, new Uint8Array([1]), "drawer"),
     );
     const first = await ctx.pull();
     expect(first.map((job) => job.id)).toEqual([ctx.job.jobId]);
@@ -608,13 +587,7 @@ describe("invoice receipt API attempt boundary", () => {
   it("retries and completes an ordinary document without an invoice token", async () => {
     const ctx = await setup();
     const ordinary = await withTransaction(suite.db, (tx) =>
-      enqueuePrintJob(
-        tx,
-        { locationId: ctx.locationId },
-        ctx.printer.id,
-        new Uint8Array([3]),
-        "document",
-      ),
+      enqueuePrintJob(tx, ctx.printer.id, new Uint8Array([3]), "document"),
     );
     expect((await ctx.pull()).map((job) => job.id)).toEqual([ctx.job.jobId]);
     const pulled = await ctx.pull();
@@ -730,7 +703,6 @@ describe("management invoice receipt resends", () => {
     const copy = await withTransaction(suite.db, async (tx) => {
       const job = await enqueuePrintJob(
         tx,
-        { locationId: ctx.locationId },
         ctx.printer.id,
         new Uint8Array([68, 85, 80]),
         "document",
@@ -966,23 +938,15 @@ describe("invoice receipt terminal Bluetooth endings", () => {
     const ctx = await setup(true);
     const otherSale = await issue();
     const unrelated = await withTransaction(suite.db, async (tx) => {
-      const usb = await createPrinter(
-        tx,
-        { locationId: ctx.locationId },
-        {
-          name: "Other invoice printer",
-          transport: "usb",
-          localKey: "other-usb",
-        },
-      );
-      const job = await enqueuePrintJob(
-        tx,
-        { locationId: ctx.locationId },
-        usb.id,
-        new Uint8Array([27, 64]),
-        "document",
-        { saleId: otherSale.saleId, receiptCopy: false },
-      );
+      const usb = await createPrinter(tx, {
+        name: "Other invoice printer",
+        transport: "usb",
+        localKey: "other-usb",
+      });
+      const job = await enqueuePrintJob(tx, usb.id, new Uint8Array([27, 64]), "document", {
+        saleId: otherSale.saleId,
+        receiptCopy: false,
+      });
       return reserveInvoiceDelivery(tx, otherSale.saleId, {
         requestKey: randomUUID(),
         personId: "staff",
@@ -1110,13 +1074,7 @@ describe("invoice receipt printer deactivation", () => {
       const ctx = await setup();
       if (status === "sending") await ctx.pull();
       const ordinary = await withTransaction(suite.db, (tx) =>
-        enqueuePrintJob(
-          tx,
-          { locationId: ctx.locationId },
-          ctx.printer.id,
-          new Uint8Array([1]),
-          "document",
-        ),
+        enqueuePrintJob(tx, ctx.printer.id, new Uint8Array([1]), "document"),
       );
       const command = await manager(ctx);
       expect(
@@ -1372,11 +1330,7 @@ describe("invoice receipt printer deletion", () => {
     await deletePrinterNow(ctx);
     expect((await bluetoothPull(ctx)).jobs).toEqual([]);
     const replacement = await withTransaction(suite.db, (tx) =>
-      createPrinter(
-        tx,
-        { locationId: ctx.locationId },
-        { name: "Receipt again", transport: "bluetooth", localKey: MAC },
-      ),
+      createPrinter(tx, { name: "Receipt again", transport: "bluetooth", localKey: MAC }),
     );
     const [tombstone] = await suite.db
       .select()
@@ -1409,7 +1363,6 @@ describe("completed receipt original management actions", () => {
       const original = await withTransaction(suite.db, async (tx) => {
         const job = await enqueuePrintJob(
           tx,
-          { locationId: ctx.locationId },
           ctx.printer.id,
           new Uint8Array([27, 64]),
           "document",

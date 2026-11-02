@@ -518,8 +518,8 @@ describe("the loop's own edges", () => {
 describe("the invoice a finished card payment issues", () => {
   it("prints its receipt on the receipt printer of the device that started the payment", async () => {
     const [r1, r2] = await inTx(venue, async (tx) => [
-      await createPrinter(tx, { locationId: venue.cfg.locationId }, receiptPrinter("R1")),
-      await createPrinter(tx, { locationId: venue.cfg.locationId }, receiptPrinter("R2")),
+      await createPrinter(tx, receiptPrinter("R1")),
+      await createPrinter(tx, receiptPrinter("R2")),
     ]);
     const a = { deviceId: venue.deviceId };
     const b = { deviceId: venue.device2Id };
@@ -573,9 +573,7 @@ describe("the guests a finished card payment's receipt prints", () => {
   }
 
   it("stores the party's count when the loop files it, and a Reprint after a change prints that count", async () => {
-    const r = await inTx(venue, (tx) =>
-      createPrinter(tx, { locationId: venue.cfg.locationId }, receiptPrinter("Comensales")),
-    );
+    const r = await inTx(venue, (tx) => createPrinter(tx, receiptPrinter("Comensales")));
     const held = venue.db.all<{ id: string; receipt_printer_id: string | null }>(
       sql`select id, receipt_printer_id from devices where id = ${venue.cfg.origin.deviceId}`,
     );

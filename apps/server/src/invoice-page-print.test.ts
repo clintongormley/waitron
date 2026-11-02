@@ -662,14 +662,13 @@ describe("reporting an A4 delivery", () => {
             recipient: "customer@example.test",
           });
         }
-        const receiptPrinter = await createPrinter(
-          tx,
-          { locationId: v.locationId },
-          { name: "Receipt", transport: "network_tcp", host: "printer.test" },
-        );
+        const receiptPrinter = await createPrinter(tx, {
+          name: "Receipt",
+          transport: "network_tcp",
+          host: "printer.test",
+        });
         const receipt = await enqueuePrintJob(
           tx,
-          { locationId: v.locationId },
           receiptPrinter.id,
           new Uint8Array([27, 64]),
           "document",

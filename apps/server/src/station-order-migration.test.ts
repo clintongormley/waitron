@@ -134,11 +134,11 @@ async function populate(db: Database) {
     await tx.execute(
       sql`insert into kitchen_station_timing (station_id, warm_after_minutes) values (${stationId}, 3)`,
     );
-    const printer = await createPrinter(
-      tx,
-      { locationId },
-      { name: "Cocina", transport: "network_tcp", host: "10.0.0.9" },
-    );
+    const printer = await createPrinter(tx, {
+      name: "Cocina",
+      transport: "network_tcp",
+      host: "10.0.0.9",
+    });
     await tx.insert(stationPrinters).values({ stationId, printerId: printer.id });
     const [person] = await tx
       .insert(persons)

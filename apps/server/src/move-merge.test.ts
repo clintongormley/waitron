@@ -366,11 +366,11 @@ async function kitchenPrinter(v: PartyVenue): Promise<string> {
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
       .where(eq(kitchenStations.locationId, v.cfg.locationId));
-    const { id } = await createPrinter(
-      tx,
-      { locationId: v.cfg.locationId },
-      { name: "Cocina", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-    );
+    const { id } = await createPrinter(tx, {
+      name: "Cocina",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
     await attachPrinterToStation(tx, {
       locationId: v.cfg.locationId,
       stationId: station!.id,
@@ -546,11 +546,11 @@ describe("a table action tells the kitchen of every bill of the party", () => {
 async function stationWithPrinter(v: PartyVenue, name: string, dishes: string[]): Promise<string> {
   return inTx(v, async (tx) => {
     const station = await createStation(tx, v.cfg, { name });
-    const { id } = await createPrinter(
-      tx,
-      { locationId: v.cfg.locationId },
-      { name: `${name} printer`, transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-    );
+    const { id } = await createPrinter(tx, {
+      name: `${name} printer`,
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
     await attachPrinterToStation(tx, {
       locationId: v.cfg.locationId,
       stationId: station.id,

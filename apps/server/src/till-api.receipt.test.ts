@@ -58,7 +58,6 @@ import {
   departments,
   routingCells,
 } from "@waitron/venue-service";
-import type { PrintConfig } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -168,10 +167,6 @@ function tillConfigFromVenue(venue: VenueResult): TradingContext {
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
-}
-
-function printCfg(cfg: TradingContext): PrintConfig {
-  return { locationId: cfg.locationId };
 }
 
 /** Stand up a fresh chained venue + a one-`each`-product catalogue (1.50 gross, general/21 %), a
@@ -289,9 +284,9 @@ function apiDeps(cfg: TradingContext): TillApiDeps {
 }
 
 /** Create a `cloud_poll` receipt printer (the enqueue is a pure INSERT, so no transport is touched). */
-async function makePrinter(cfg: TradingContext, hasCashDrawer = true): Promise<string> {
+async function makePrinter(hasCashDrawer = true): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
-    const { id } = await createPrinter(tx, printCfg(cfg), {
+    const { id } = await createPrinter(tx, {
       name: "Recibos",
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
@@ -530,7 +525,7 @@ beforeAll(() => {
 describe("GET /api/sales/:id (filed ticket recovery)", () => {
   it("reopens a filed ticket from another device without payment, filing, printing or drawer writes", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -617,7 +612,7 @@ describe("GET /api/sales/:id/receipt (original print status)", () => {
     const missing = await get();
     expect(missing.status).toBe(200);
     expect(await missing.json()).toEqual({ status: "not_queued" });
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
     const queued = await app.request(`/api/sales/${orderId}/receipt`, {
       method: "POST",
@@ -654,7 +649,7 @@ describe("GET /api/sales/:id/receipt (original print status)", () => {
 describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
   it("persists the first staff confirmation without refiling or changing original bytes and print status", async () => {
     const { cfg, each, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -729,7 +724,7 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
       });
     };
     await refused();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
     expect(
       (
         await app.request(`/api/sales/${orderId}/reprint`, {
@@ -756,7 +751,7 @@ describe("POST /api/sales/:id/receipt/handover (customer confirmation)", () => {
 
   it("requires an active session and refuses unknown order ids before recording handover", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -785,7 +780,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
     "enrolls a synthetic full invoice's %s original retry with the authenticated staff member",
     async (status) => {
       const { cfg, operatorId } = await setupVenue();
-      const printerId = await makePrinter(cfg);
+      const printerId = await makePrinter();
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
       const cookie = await login(app, cfg, operatorId);
@@ -828,14 +823,10 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
           settlement: { kind: "deferred" },
           operatorId,
         });
-        const job = await enqueuePrintJob(
-          tx,
-          printCfg(cfg),
-          printerId,
-          new Uint8Array([27, 64]),
-          "document",
-          { saleId: sale.saleId, receiptCopy: false },
-        );
+        const job = await enqueuePrintJob(tx, printerId, new Uint8Array([27, 64]), "document", {
+          saleId: sale.saleId,
+          receiptCopy: false,
+        });
         if (status === "unknown") {
           const delivery = await reserveInvoiceDelivery(tx, sale.saleId, {
             requestKey: job.jobId,
@@ -900,7 +891,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
 
   it("resends exhausted originals with the same bytes and printer without refiling or opening the drawer", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -911,7 +902,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
       .update(printJobs)
       .set({ status: "failed", attempts: 5 })
       .where(eq(printJobs.id, original!.id));
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
     const retry = () =>
       app.request(`/api/sales/${orderId}/receipt/retry`, { method: "POST", headers: { cookie } });
     const responses = await Promise.all([retry(), retry()]);
@@ -953,7 +944,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
     expect(absent.status).toBe(404);
     expect(absent.headers.get("content-type")).toContain("application/json");
     expect(await absent.json()).toMatchObject({ error: { code: "print_job.not_found" } });
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
     expect(
       (await app.request(`/api/sales/${orderId}/receipt`, { method: "POST", headers: { cookie } }))
         .status,
@@ -1008,7 +999,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
 
   it("requires a session and the device's printing capability before retrying", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -1044,8 +1035,8 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
 });
 
 describe("an original receipt whose printer was deleted", () => {
-  async function deleteVia(cfg: TradingContext, printerId: string): Promise<void> {
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, printCfg(cfg), printerId));
+  async function deleteVia(printerId: string): Promise<void> {
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, printerId));
   }
 
   async function snapshot() {
@@ -1068,7 +1059,7 @@ describe("an original receipt whose printer was deleted", () => {
     menuItemId: string;
   }> {
     const { cfg, each, operatorId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1083,14 +1074,14 @@ describe("an original receipt whose printer was deleted", () => {
   ] as const)(
     "explains a failed original that %s and refuses its retry, writing nothing",
     async (_label, earlierError) => {
-      const { app, cfg, orderId, cookie, printerId } = await open();
+      const { app, orderId, cookie, printerId } = await open();
       const [original] = await suite.db.select().from(printJobs);
       if (earlierError !== null)
         await suite.db
           .update(printJobs)
           .set({ status: "failed", attempts: 5, lastError: earlierError })
           .where(eq(printJobs.id, original!.id));
-      await deleteVia(cfg, printerId);
+      await deleteVia(printerId);
 
       const status = await app.request(`/api/sales/${orderId}/receipt`, { headers: { cookie } });
       expect(status.status).toBe(200);
@@ -1128,14 +1119,14 @@ describe("an original receipt whose printer was deleted", () => {
   });
 
   it("still reads a completed original and its handover, with no failure explained", async () => {
-    const { app, cfg, orderId, cookie, printerId } = await open();
+    const { app, orderId, cookie, printerId } = await open();
     await suite.db.update(printJobs).set({ status: "done" });
     const confirmed = await app.request(`/api/sales/${orderId}/receipt/handover`, {
       method: "POST",
       headers: { cookie },
     });
     const facts = (await confirmed.json()) as Record<string, unknown>;
-    await deleteVia(cfg, printerId);
+    await deleteVia(printerId);
 
     const status = await app.request(`/api/sales/${orderId}/receipt`, { headers: { cookie } });
     expect(await status.json()).toEqual(facts);
@@ -1145,7 +1136,7 @@ describe("an original receipt whose printer was deleted", () => {
 
   it("leaves the device with no receipt printer, as if none were set: a new sale queues no paper and a reprint answers as with none", async () => {
     const { app, cfg, cookie, printerId, menuItemId } = await open();
-    await deleteVia(cfg, printerId);
+    await deleteVia(printerId);
     const jobsBefore = await suite.db.select().from(printJobs);
 
     const orderId = await ringSale(app, cfg, cookie, menuItemId);
@@ -1170,7 +1161,7 @@ describe("an original receipt whose printer was deleted", () => {
   });
 
   it("keeps a completed original first when a later resend to the deleted printer was ended", async () => {
-    const { app, cfg, orderId, cookie, printerId } = await open();
+    const { app, orderId, cookie, printerId } = await open();
     const [original] = await suite.db.select().from(printJobs);
     await suite.db.update(printJobs).set({ status: "done" });
     await suite.db.insert(printJobs).values({
@@ -1182,7 +1173,7 @@ describe("an original receipt whose printer was deleted", () => {
       receiptCopy: false,
       resendOf: original!.id,
     });
-    await deleteVia(cfg, printerId);
+    await deleteVia(printerId);
 
     const status = await app.request(`/api/sales/${orderId}/receipt`, { headers: { cookie } });
     expect(await status.json()).toEqual({ status: "done", jobId: original!.id, canRetry: false });
@@ -1201,7 +1192,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
       });
       await publishWorkingMenu(tx, each.catalogueId);
     });
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "on_request", printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1300,7 +1291,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
     await suite.db.execute(
       sql`update department_sale_policies set print_trading_name = 1 where department_id in (select id from departments where location_id = ${cfg.locationId})`,
     );
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "on_request", printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1375,7 +1366,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
 
   it("re-enqueues the filed receipt to the device's printer WITHOUT re-filing, bypassing the print mode", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     // mode 'on_request' so the SALE itself auto-enqueues nothing — the reprint's job is the only one, and a
     // reprint working under 'on_request' shows it bypasses the print-mode gate.
     await configureReceipt(cfg, { mode: "on_request", printerId });
@@ -1415,7 +1406,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
 
   it("reprints again on a second request, still filing nothing (each reprint is paper only)", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { mode: "on_request", printerId });
 
     const app = new Hono();
@@ -1438,7 +1429,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
 
   it("is a 200 no-op when the id names no filed sale (unknown / never-settled order)", async () => {
     const { cfg, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1499,7 +1490,7 @@ describe("POST /api/sales/:id/reprint (manual receipt reprint over HTTP)", () =>
 describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", () => {
   it("enqueues a KICK-ONLY job to the device's printer and records drawer_opens('manual')", async () => {
     const { cfg, supervisorId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
 
     const app = new Hono();
@@ -1549,7 +1540,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
 
   it("refuses an unattached cash drawer without writing a command or audit", async () => {
     const { cfg, supervisorId } = await setupVenue();
-    const printerId = await makePrinter(cfg, false);
+    const printerId = await makePrinter(false);
     await configureReceipt(cfg, { printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1573,7 +1564,7 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
 
   it("refuses an operator session whose device has been revoked with device.unauthorized, writing nothing", async () => {
     const { cfg, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1642,7 +1633,7 @@ describe("POST /api/drawer/open from a device opens its own chosen drawer", () =
   it("opens the pressing device's own chosen drawer, and the row names that device", async () => {
     const { cfg, supervisorId, press } = await venueWithAuthorizedOperator();
     const till = await enrolDrawerTill(cfg);
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await setDevicePrinter(till.deviceId, printerId);
 
     const res = await press(till.cookie);
@@ -1667,10 +1658,10 @@ describe("POST /api/drawer/open from a device opens its own chosen drawer", () =
 
   it("a device with its own drawer printer opens its own drawer, not the one the venue's other devices use", async () => {
     const { cfg, press } = await venueWithAuthorizedOperator();
-    const boxPrinter = await makePrinter(cfg);
+    const boxPrinter = await makePrinter();
     await configureReceipt(cfg, { printerId: boxPrinter });
     const till = await enrolDrawerTill(cfg);
-    const ownPrinter = await makePrinter(cfg);
+    const ownPrinter = await makePrinter();
     await setDevicePrinter(till.deviceId, ownPrinter);
 
     const res = await press(till.cookie);
@@ -1686,7 +1677,7 @@ describe("POST /api/drawer/open from a device opens its own chosen drawer", () =
     const { cfg, press } = await venueWithAuthorizedOperator();
     const first = await enrolDrawerTill(cfg);
     const second = await enrolDrawerTill(cfg);
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     for (const till of [first, second]) await setDevicePrinter(till.deviceId, printerId);
 
     for (const till of [first, second]) expect((await press(till.cookie)).status).toBe(200);
@@ -1708,7 +1699,7 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
     ["suspended supervisor", "suspended", 401, "pin.invalid"],
   ] as const)("refuses %s without a drawer command or audit", async (_, kind, status, code) => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1747,7 +1738,7 @@ describe("POST /api/drawer/open — manual opens always require authorization", 
     "records only drawer facts when supervisor override is %s",
     async (viaOverride) => {
       const { cfg, operatorId, supervisorId } = await setupVenue();
-      const printerId = await makePrinter(cfg);
+      const printerId = await makePrinter();
       await configureReceipt(cfg, { printerId });
 
       const app = new Hono();
@@ -1832,7 +1823,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("a supervisor opens directly (holds cash.drawer) — via_override false, authorized_by self", async () => {
     const { cfg, supervisorId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
 
     const app = new Hono();
@@ -1855,7 +1846,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("a staff operator opens with a VALID supervisor override — via_override true, authorized_by the supervisor", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
 
     const app = new Hono();
@@ -1887,7 +1878,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("a staff operator with NO override is refused (403 authorization.not_permitted) and writes nothing", async () => {
     const { cfg, operatorId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
 
     const app = new Hono();
@@ -1920,7 +1911,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("a WRONG override PIN is 401 pin.invalid (valid supervisor id, bad PIN) and writes nothing", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1942,7 +1933,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("an override by a VALID staff credential (correct PIN, lacks cash.drawer) is 403 — proves the PERMISSION is checked", async () => {
     const { cfg, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1965,7 +1956,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("a malformed override.personId (not a UUID) is 401 pin.invalid", async () => {
     const { cfg, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -1984,7 +1975,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("an override with a NON-STRING pin is 401 pin.invalid — never reaches verifyPin", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -2006,7 +1997,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("a well-formed-but-unknown override.personId is 401 pin.invalid", async () => {
     const { cfg, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -2025,7 +2016,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("an override that cannot sign in gets one answer, whether the person is unknown, suspended, malformed or gave a wrong PIN", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
     const [suspended] = await suite.db
       .insert(persons)
       .values({
@@ -2064,7 +2055,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
   it("a well-formed body with NO override, sent by staff, is still 403 (an empty body is no override)", async () => {
     const { cfg, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
 
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -2118,7 +2109,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
 
   it("after four wrong PINs even the right one is 429 pin.throttled and writes nothing, until the wait is over", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
     const { app, clockAt } = throttledApp(cfg);
     const cookie = await loginAtTill(app, cfg, operatorId);
 
@@ -2146,7 +2137,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
 
   it("a right PIN before the limit opens the drawer and starts the count again", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
     const { app } = throttledApp(cfg);
     const cookie = await loginAtTill(app, cfg, operatorId);
     const wrongThrice = async () => {
@@ -2165,7 +2156,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
 
   it("signing in again on the same till does not start the count again", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
     const { app } = throttledApp(cfg);
     const device = await enrolConfiguredTillCookie(cfg);
     const first = await loginOn(app, device, operatorId);
@@ -2184,7 +2175,7 @@ describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
 
   it("an override sent by an operator who may open the drawer is never checked, so it neither counts nor clears", async () => {
     const { cfg, operatorId, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
     const { app } = throttledApp(cfg);
     const device = await enrolConfiguredTillCookie(cfg);
     const staff = await loginOn(app, device, operatorId);
@@ -2260,7 +2251,7 @@ afterEach(async () => {
 describe("original receipt and payment slip actions", () => {
   it("prints an original then a marked duplicate without additional fiscal records", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2324,7 +2315,7 @@ describe("payment slip persisted capture facts", () => {
       await withTransaction(suite.db, (tx) =>
         writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es", "ca", "en"] }),
       );
-      await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+      await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter() });
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
       const cookie = await login(app, cfg, operatorId);
@@ -2383,7 +2374,7 @@ describe("payment slip persisted capture facts", () => {
     "prints an integrated capture with card facts=%s and preserves fiscal rows",
     async (withCard) => {
       const { cfg, each, operatorId } = await setupVenue();
-      await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+      await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter() });
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
       const cookie = await login(app, cfg, operatorId);
@@ -2414,7 +2405,7 @@ describe("payment slip persisted capture facts", () => {
     "reader automatic slip=%s excludes only its own Waitron payment slip",
     async (automatic) => {
       const { cfg, each, operatorId } = await setupVenue();
-      await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+      await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter() });
       const app = new Hono();
       mountTillApi(app, apiDeps(cfg), noopLog);
       const cookie = await login(app, cfg, operatorId);
@@ -2438,7 +2429,7 @@ describe("payment slip persisted capture facts", () => {
 
   it("does not print a manual card slip", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2451,9 +2442,9 @@ describe("payment slip persisted capture facts", () => {
   });
   it("lays the payment slip out for the device printer's paper width and resolution", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await withTransaction(suite.db, async (tx) => {
-      await updatePrinter(tx, printCfg(cfg), printerId, {
+      await updatePrinter(tx, printerId, {
         paperWidth: "58mm",
         resolution: "203dpi",
       });
@@ -2508,7 +2499,7 @@ describe("payment slip with nothing to print", () => {
 
   it("prints nothing for a capture that records no settlement instant", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2569,7 +2560,7 @@ describe("persisted cash receipt facts", () => {
 
   it("replays and reprints the original cash handed over and change", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);
@@ -2608,7 +2599,7 @@ describe("persisted cash receipt facts", () => {
 
 it("duplicates use the filed issuer identity while optional trim follows the current layout", async () => {
   const { cfg, each, operatorId } = await setupVenue();
-  await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+  await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter() });
   const app = new Hono();
   mountTillApi(app, apiDeps(cfg), noopLog);
   const cookie = await login(app, cfg, operatorId);
@@ -2700,7 +2691,7 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
   /** A staff operator signed in at the configured till, whose printer has a drawer. */
   async function staffAtDrawerTill(pinThrottle = createPinThrottle()) {
     const venue = await setupVenue();
-    await configureReceipt(venue.cfg, { printerId: await makePrinter(venue.cfg) });
+    await configureReceipt(venue.cfg, { printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, { ...apiDeps(venue.cfg), pinThrottle }, noopLog);
     const cookie = await loginAtTill(app, venue.cfg, venue.operatorId);
@@ -2766,7 +2757,7 @@ describe("the till's sign-in and drawer override derive the PIN's key outside th
 
   it("derives no key for an override sent by an operator who holds cash.drawer", async () => {
     const { cfg, supervisorId } = await setupVenue();
-    await configureReceipt(cfg, { printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await loginAtTill(app, cfg, supervisorId);
@@ -2886,9 +2877,9 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     await configureReceipt(venue.cfg, { mode: "on_request" });
     // No drawers, so a cash sale on these printers queues documents only.
     const [r1, r2, s1] = [
-      await makePrinter(venue.cfg, false),
-      await makePrinter(venue.cfg, false),
-      await makePrinter(venue.cfg, false),
+      await makePrinter(false),
+      await makePrinter(false),
+      await makePrinter(false),
     ];
     const app = new Hono();
     mountTillApi(app, apiDeps(venue.cfg), noopLog);
@@ -3002,8 +2993,8 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
 
   it("opens no drawer on a cash sale when the device's drawer printer no longer has one, whatever its receipt printer has", async () => {
     const { cfg, each, app, signIn } = await venueWithPrinters();
-    const detached = await makePrinter(cfg);
-    const receipt = await makePrinter(cfg);
+    const detached = await makePrinter();
+    const receipt = await makePrinter();
     const device = await enrolPrintingDevice(cfg, {
       capabilities: ["open-cash-drawer", "take-cash"],
       receipt: [receipt],
@@ -3020,7 +3011,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
 
   it("opens a handheld's drawer on a cash sale when its profile allows the drawer", async () => {
     const { cfg, each, app, signIn, operatorId } = await venueWithPrinters();
-    const drawer = await makePrinter(cfg);
+    const drawer = await makePrinter();
     const handheld = await enrolPrintingDevice(cfg, {
       formFactor: "phone-portrait",
       capabilities: ["open-cash-drawer", "take-cash"],
@@ -3041,7 +3032,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
 
   it("opens no drawer on a cash sale at a till whose profile does not allow the drawer", async () => {
     const { cfg, each, app, signIn } = await venueWithPrinters();
-    const drawer = await makePrinter(cfg);
+    const drawer = await makePrinter();
     const till = await enrolPrintingDevice(cfg, {
       capabilities: ["take-cash"],
       receipt: [drawer],
@@ -3057,7 +3048,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
 
   it("opens the drawer by hand from a handheld whose profile allows it", async () => {
     const { cfg, app, signIn, operatorId, supervisorId } = await venueWithPrinters();
-    const drawer = await makePrinter(cfg);
+    const drawer = await makePrinter();
     const handheld = await enrolPrintingDevice(cfg, {
       formFactor: "phone-portrait",
       capabilities: ["open-cash-drawer"],
@@ -3082,7 +3073,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
   it("refuses the drawer by hand from a profile that does not allow it", async () => {
     const { cfg, app, signIn } = await venueWithPrinters();
 
-    const drawer = await makePrinter(cfg);
+    const drawer = await makePrinter();
     const handheld = await enrolPrintingDevice(cfg, {
       formFactor: "phone-portrait",
       capabilities: [],
@@ -3103,8 +3094,8 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
 
   it("opens the drawer by hand on the device's drawer printer, not its receipt printer", async () => {
     const { cfg, app, signIn, supervisorId } = await venueWithPrinters();
-    const receipt = await makePrinter(cfg);
-    const drawer = await makePrinter(cfg);
+    const receipt = await makePrinter();
+    const drawer = await makePrinter();
     const device = await enrolPrintingDevice(cfg, {
       capabilities: ["open-cash-drawer"],
       receipt: [receipt],
@@ -3131,7 +3122,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     const { cfg, app, signIn, supervisorId } = await venueWithPrinters();
     const device = await enrolPrintingDevice(cfg, {
       capabilities: ["open-cash-drawer"],
-      receipt: [await makePrinter(cfg)],
+      receipt: [await makePrinter()],
       slip: [],
     });
 
@@ -3153,7 +3144,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
 describe("explicit F1 receipt delivery enrollment", () => {
   async function issued() {
     const { cfg, each, operatorId, supervisorId } = await setupVenue();
-    const printerId = await makePrinter(cfg);
+    const printerId = await makePrinter();
     await configureReceipt(cfg, { printerId });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
@@ -3375,7 +3366,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
 
   it("keeps an F2 explicit receipt outside invoice delivery tracking", async () => {
     const { cfg, each, operatorId } = await setupVenue();
-    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter(cfg) });
+    await configureReceipt(cfg, { mode: "on_request", printerId: await makePrinter() });
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const cookie = await login(app, cfg, operatorId);

@@ -14,7 +14,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { claimPrintJobs, PRINT_JOB_LEASE_MS } from "./runtime.js";
 import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
-import type { PrintConfig } from "./printers.js";
+type PrintConfig = { locationId: string };
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -57,24 +57,24 @@ describe("claimPrintJobs respects printers.active", () => {
     // Both jobs are enqueued while ACTIVE (enqueue itself rejects an inactive printer), then one
     // printer is deactivated.
     const seeded = await withTransaction(suite.db, async (tx: Transaction) => {
-      const active = await createPrinter(tx, cfg, {
+      const active = await createPrinter(tx, {
         name: "Active",
         transport: "network_tcp",
         host: "10.0.0.1",
       });
-      const dead = await createPrinter(tx, cfg, {
+      const dead = await createPrinter(tx, {
         name: "Dead",
         transport: "network_tcp",
         host: "10.0.0.2",
       });
-      const { jobId: activeJobId } = await enqueuePrintJob(tx, cfg, active.id, new Uint8Array([1]));
-      const { jobId: deadJobId } = await enqueuePrintJob(tx, cfg, dead.id, new Uint8Array([2]));
+      const { jobId: activeJobId } = await enqueuePrintJob(tx, active.id, new Uint8Array([1]));
+      const { jobId: deadJobId } = await enqueuePrintJob(tx, dead.id, new Uint8Array([2]));
       return { dead: dead.id, activeJobId, deadJobId };
     });
     await deactivate(seeded.dead);
 
     const claimed = await withTransaction(suite.db, (tx: Transaction) =>
-      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+      claimPrintJobs(tx, agentId, { visibleKeys: [] }),
     );
 
     expect(claimed.map((j) => j.id)).toEqual([seeded.activeJobId]);
@@ -87,19 +87,19 @@ describe("claimPrintJobs respects printers.active", () => {
     const agentId = await seedAgent(cfg);
 
     const jobId = await withTransaction(suite.db, async (tx: Transaction) => {
-      const p = await createPrinter(tx, cfg, {
+      const p = await createPrinter(tx, {
         name: "Kitchen",
         transport: "network_tcp",
         host: "10.0.0.9",
       });
-      const { jobId } = await enqueuePrintJob(tx, cfg, p.id, new Uint8Array([0x41]));
+      const { jobId } = await enqueuePrintJob(tx, p.id, new Uint8Array([0x41]));
       return jobId;
     });
 
     // The agent CLAIMS the job (queued → printing, claimed_at stamped) in its own committed transaction,
     // then "dies": the row is left committed in `printing`.
     const claimed = await withTransaction(suite.db, (tx: Transaction) =>
-      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+      claimPrintJobs(tx, agentId, { visibleKeys: [] }),
     );
     expect(claimed).toHaveLength(1);
     const printerId = claimed[0]!.printer_id;
@@ -114,7 +114,7 @@ describe("claimPrintJobs respects printers.active", () => {
     await deactivate(printerId);
 
     const reclaimed = await withTransaction(suite.db, (tx: Transaction) =>
-      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+      claimPrintJobs(tx, agentId, { visibleKeys: [] }),
     );
     expect(reclaimed).toEqual([]);
     expect(await jobStatus(jobId)).toBe("printing");
@@ -130,16 +130,16 @@ describe("a print job's claim stamped ahead of the clock", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     const jobId = await withTransaction(suite.db, async (tx: Transaction) => {
-      const p = await createPrinter(tx, cfg, {
+      const p = await createPrinter(tx, {
         name: "Kitchen",
         transport: "network_tcp",
         host: "10.0.0.9",
       });
-      const { jobId } = await enqueuePrintJob(tx, cfg, p.id, new Uint8Array([0x41]));
+      const { jobId } = await enqueuePrintJob(tx, p.id, new Uint8Array([0x41]));
       return jobId;
     });
     const claimed = await withTransaction(suite.db, (tx: Transaction) =>
-      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+      claimPrintJobs(tx, agentId, { visibleKeys: [] }),
     );
     expect(claimed).toHaveLength(1);
     await suite.db
@@ -150,11 +150,11 @@ describe("a print job's claim stamped ahead of the clock", () => {
   }
 
   it("claims again a job whose claim lies 400 days ahead", async () => {
-    const { cfg, agentId, jobId } = await claimedJobStampedAt(
+    const { agentId, jobId } = await claimedJobStampedAt(
       new Date(Date.now() + 400 * 24 * 60 * 60 * 1000),
     );
     const reclaimed = await withTransaction(suite.db, (tx: Transaction) =>
-      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+      claimPrintJobs(tx, agentId, { visibleKeys: [] }),
     );
     expect(reclaimed.map((j) => j.id)).toEqual([jobId]);
   });
@@ -172,11 +172,9 @@ describe("a print job's claim stamped ahead of the clock", () => {
       it(`${claimedAgain ? "claims again" : "leaves"} a job whose claim lies ${aheadMs} ms ahead`, async () => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(NOW);
-        const { cfg, agentId, jobId } = await claimedJobStampedAt(
-          new Date(NOW.getTime() + aheadMs),
-        );
+        const { agentId, jobId } = await claimedJobStampedAt(new Date(NOW.getTime() + aheadMs));
         const reclaimed = await withTransaction(suite.db, (tx: Transaction) =>
-          claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+          claimPrintJobs(tx, agentId, { visibleKeys: [] }),
         );
         expect(reclaimed.map((j) => j.id)).toEqual(claimedAgain ? [jobId] : []);
       });
@@ -185,9 +183,9 @@ describe("a print job's claim stamped ahead of the clock", () => {
 
   // The claim reads the clock after this stamp, so the stamp is at most the lease ahead of it.
   it("leaves a job whose claim lies at most the lease ahead", async () => {
-    const { cfg, agentId } = await claimedJobStampedAt(new Date(Date.now() + PRINT_JOB_LEASE_MS));
+    const { agentId } = await claimedJobStampedAt(new Date(Date.now() + PRINT_JOB_LEASE_MS));
     const reclaimed = await withTransaction(suite.db, (tx: Transaction) =>
-      claimPrintJobs(tx, agentId, { locationId: cfg.locationId, visibleKeys: [] }),
+      claimPrintJobs(tx, agentId, { visibleKeys: [] }),
     );
     expect(reclaimed).toEqual([]);
   });

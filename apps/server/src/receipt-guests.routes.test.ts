@@ -171,16 +171,12 @@ async function venue(db: Database): Promise<Venue> {
       .insert(persons)
       .values({ displayName: "Cajera", pinHash: hashPin("5555"), role: "staff" })
       .returning({ id: persons.id });
-    const { id: printerId } = await createPrinter(
-      tx,
-      { locationId: cfg.locationId },
-      {
-        name: "Recibos",
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-        hasCashDrawer: true,
-      },
-    );
+    const { id: printerId } = await createPrinter(tx, {
+      name: "Recibos",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+      hasCashDrawer: true,
+    });
     const [profile] = await tx
       .insert(deviceProfiles)
       .values({

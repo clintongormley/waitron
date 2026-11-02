@@ -26,7 +26,7 @@ import {
 } from "./printer-delete-jobs.js";
 import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
-import type { PrintConfig } from "./printers.js";
+type PrintConfig = { locationId: string };
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
@@ -55,24 +55,19 @@ async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {
 }
 
 async function printer(
-  cfg: PrintConfig,
   localKey = USB_KEY,
   transport: "usb" | "bluetooth" = "usb",
 ): Promise<string> {
   return withTransaction(
     suite.db,
-    async (tx) => (await createPrinter(tx, cfg, { name: localKey, transport, localKey })).id,
+    async (tx) => (await createPrinter(tx, { name: localKey, transport, localKey })).id,
   );
 }
 
-async function job(
-  cfg: PrintConfig,
-  printerId: string,
-  kind: "document" | "drawer" = "document",
-): Promise<string> {
+async function job(printerId: string, kind: "document" | "drawer" = "document"): Promise<string> {
   return withTransaction(
     suite.db,
-    async (tx) => (await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([0x41]), kind)).jobId,
+    async (tx) => (await enqueuePrintJob(tx, printerId, new Uint8Array([0x41]), kind)).jobId,
   );
 }
 
@@ -104,23 +99,23 @@ describe("endDeletedPrinterJobs", () => {
     const cfg = await setup();
     const agent = await seedAgent(cfg, "Box");
     const other = await seedAgent(cfg, "Other box");
-    const printerId = await printer(cfg);
-    const keptPrinter = await printer(cfg, "USB-SERIAL-2");
+    const printerId = await printer();
+    const keptPrinter = await printer("USB-SERIAL-2");
 
-    const queued = await job(cfg, printerId);
-    const queuedDrawer = await job(cfg, printerId, "drawer");
-    const freshLease = await job(cfg, printerId);
-    const expiredLease = await job(cfg, printerId);
-    const nullLease = await job(cfg, printerId);
-    const otherAgentLease = await job(cfg, printerId, "drawer");
-    const failedNone = await job(cfg, printerId);
-    const failedFour = await job(cfg, printerId, "drawer");
-    const failedDocumentFour = await job(cfg, printerId);
+    const queued = await job(printerId);
+    const queuedDrawer = await job(printerId, "drawer");
+    const freshLease = await job(printerId);
+    const expiredLease = await job(printerId);
+    const nullLease = await job(printerId);
+    const otherAgentLease = await job(printerId, "drawer");
+    const failedNone = await job(printerId);
+    const failedFour = await job(printerId, "drawer");
+    const failedDocumentFour = await job(printerId);
     await setJob(failedDocumentFour, { status: "failed", attempts: 4, lastError: "paper" });
-    const exhausted = await job(cfg, printerId);
-    const done = await job(cfg, printerId);
-    const doneDrawer = await job(cfg, printerId, "drawer");
-    const keptQueued = await job(cfg, keptPrinter);
+    const exhausted = await job(printerId);
+    const done = await job(printerId);
+    const doneDrawer = await job(printerId, "drawer");
+    const keptQueued = await job(keptPrinter);
     await setJob(freshLease, { status: "printing", claimedBy: agent, claimedAt: FRESH });
     await setJob(expiredLease, { status: "printing", claimedBy: agent, claimedAt: EXPIRED });
     await setJob(nullLease, { status: "printing", claimedBy: null, claimedAt: null });
@@ -172,10 +167,10 @@ describe("endDeletedPrinterJobs", () => {
   });
 
   it("ends more jobs than one pull's batch in one call", async () => {
-    const cfg = await setup();
-    const printerId = await printer(cfg);
+    await setup();
+    const printerId = await printer();
     const queued: string[] = [];
-    for (let i = 0; i < PULL_BATCH_LIMIT + 5; i += 1) queued.push(await job(cfg, printerId));
+    for (let i = 0; i < PULL_BATCH_LIMIT + 5; i += 1) queued.push(await job(printerId));
 
     const ended = await deletePrinterRow(printerId);
 
@@ -190,13 +185,13 @@ describe("a deleted printer's late work", () => {
     const cfg = await setup();
     const agent = await seedAgent(cfg, "Box");
     const other = await seedAgent(cfg, "Other box");
-    const printerId = await printer(cfg);
-    const livePrinter = await printer(cfg, "USB-SERIAL-2");
-    const deletedJob = await job(cfg, printerId);
-    const liveJob = await job(cfg, livePrinter);
+    const printerId = await printer();
+    const livePrinter = await printer("USB-SERIAL-2");
+    const deletedJob = await job(printerId);
+    const liveJob = await job(livePrinter);
 
     const claimed = await withTransaction(suite.db, (tx) =>
-      claimPrintJobs(tx, agent, { locationId: cfg.locationId, visibleKeys: [USB_KEY] }),
+      claimPrintJobs(tx, agent, { visibleKeys: [USB_KEY] }),
     );
     expect(claimed.map((row) => row.id)).toEqual([deletedJob]);
     await deletePrinterRow(printerId);
@@ -216,7 +211,6 @@ describe("a deleted printer's late work", () => {
 
     const live = await withTransaction(suite.db, (tx) =>
       claimPrintJobs(tx, agent, {
-        locationId: cfg.locationId,
         visibleKeys: [USB_KEY, "USB-SERIAL-2"],
       }),
     );
@@ -232,18 +226,16 @@ describe("a deleted printer's late work", () => {
   it("hands out only the new registration's jobs once the same device key is added again, and an old report touches neither", async () => {
     const cfg = await setup();
     const agent = await seedAgent(cfg, "Box");
-    const oldPrinter = await printer(cfg);
-    const oldJob = await job(cfg, oldPrinter);
-    await withTransaction(suite.db, (tx) =>
-      claimPrintJobs(tx, agent, { locationId: cfg.locationId, visibleKeys: [USB_KEY] }),
-    );
+    const oldPrinter = await printer();
+    const oldJob = await job(oldPrinter);
+    await withTransaction(suite.db, (tx) => claimPrintJobs(tx, agent, { visibleKeys: [USB_KEY] }));
     await deletePrinterRow(oldPrinter);
-    const newPrinter = await printer(cfg);
+    const newPrinter = await printer();
     expect(newPrinter).not.toBe(oldPrinter);
-    const newJob = await job(cfg, newPrinter);
+    const newJob = await job(newPrinter);
 
     const pulled = await withTransaction(suite.db, (tx) =>
-      claimPrintJobs(tx, agent, { locationId: cfg.locationId, visibleKeys: [USB_KEY] }),
+      claimPrintJobs(tx, agent, { visibleKeys: [USB_KEY] }),
     );
     expect(pulled.map((row) => [row.id, row.printer_id])).toEqual([[newJob, newPrinter]]);
 
@@ -259,7 +251,7 @@ describe("a deleted printer's late work", () => {
   it("never claims a deleted printer's job, even one left waiting on a row still marked active", async () => {
     const cfg = await setup();
     const agent = await seedAgent(cfg, "Box");
-    const printerId = await printer(cfg);
+    const printerId = await printer();
     await deletePrinterRow(printerId);
     // Neither state is one the delete leaves; each isolates the deleted-row predicate.
     await suite.db.update(printers).set({ active: true }).where(eq(printers.id, printerId));
@@ -270,7 +262,7 @@ describe("a deleted printer's late work", () => {
 
     expect(
       await withTransaction(suite.db, (tx) =>
-        claimPrintJobs(tx, agent, { locationId: cfg.locationId, visibleKeys: [USB_KEY] }),
+        claimPrintJobs(tx, agent, { visibleKeys: [USB_KEY] }),
       ),
     ).toEqual([]);
     expect((await rows([seeded!.id]))[seeded!.id]).toMatchObject({ status: "queued" });
@@ -279,7 +271,7 @@ describe("a deleted printer's late work", () => {
   it("leaves a deleted Bluetooth printer's jobs alone when its address is reported unpaired", async () => {
     const cfg = await setup();
     const agent = await seedAgent(cfg, "Box");
-    const oldPrinter = await printer(cfg, MAC, "bluetooth");
+    const oldPrinter = await printer(MAC, "bluetooth");
     await deletePrinterRow(oldPrinter);
     await suite.db.update(printers).set({ active: true }).where(eq(printers.id, oldPrinter));
     const [seeded] = await suite.db
@@ -290,10 +282,10 @@ describe("a deleted printer's late work", () => {
         payload: new Uint8Array([0x41]),
       })
       .returning({ id: printJobs.id });
-    const newPrinter = await printer(cfg, MAC, "bluetooth");
+    const newPrinter = await printer(MAC, "bluetooth");
     const before = await rows([seeded!.id]);
 
-    const unpaired = await job(cfg, newPrinter);
+    const unpaired = await job(newPrinter);
     expect(
       await withTransaction(suite.db, (tx) => endUnpairedPrinterJobs(tx, agent, [MAC])),
     ).toEqual([unpaired]);

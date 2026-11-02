@@ -507,7 +507,7 @@ describe("the printer delete impact", () => {
     const v = await seedVenue();
     const before = await snapshot();
 
-    const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, v.P));
+    const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.P));
 
     expect(impact).toEqual(expectedImpactOfP(v));
     expect(await snapshot()).toEqual(before);
@@ -521,7 +521,7 @@ describe("the printer delete impact", () => {
       .set({ receiptPrinterId: null, paymentSlipPrinterId: null })
       .where(eq(devices.id, v.ana));
 
-    const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, v.P));
+    const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.P));
 
     expect(impact.removes.filter((item) => item.key.startsWith("device_"))).toEqual([
       { key: "device_receipt", count: 1, targets: [{ id: v.oldHandheld, name: "Old handheld" }] },
@@ -550,12 +550,13 @@ describe("the printer delete impact", () => {
   it("answers an empty impact for a printer nothing refers to, and for a switched-off one only its own work", async () => {
     const v = await seedVenue();
 
-    expect(
-      await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, v.Z)),
-    ).toEqual({ target: { id: v.Z, name: "Spare printer" }, refusals: [], ends: [], removes: [] });
-    expect(
-      await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, v.D)),
-    ).toEqual({
+    expect(await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.Z))).toEqual({
+      target: { id: v.Z, name: "Spare printer" },
+      refusals: [],
+      ends: [],
+      removes: [],
+    });
+    expect(await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.D))).toEqual({
       target: { id: v.D, name: "Old printer" },
       refusals: [],
       ends: [{ key: "print_jobs", count: 1, targets: [] }],
@@ -574,7 +575,7 @@ describe("the printer delete impact", () => {
         receiptPrinterId: v.Z,
       });
 
-    const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, v.Z));
+    const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.Z));
 
     expect(impact.removes.map((item) => item.targets.map((target) => target.name))).toEqual([
       ["Till 2", "till 3", "Till 10"],
@@ -583,11 +584,11 @@ describe("the printer delete impact", () => {
 
   it("answers printer.not_found for a deleted or unknown printer", async () => {
     const v = await seedVenue();
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.Z, NOW));
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.Z, NOW));
 
     for (const id of [v.Z, randomUUID()]) {
       await expect(
-        withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, id)),
+        withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, id)),
       ).rejects.toMatchObject({ code: "printer.not_found", params: { id } });
     }
   });
@@ -631,7 +632,7 @@ describe("the printer delete impact", () => {
     const spare = await deliDevice("Deli spare");
     await withTransaction(suite.db, (tx) => deleteDevice(tx, tillCfg, gone, NOW));
 
-    const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, v.Z));
+    const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.Z));
 
     expect(impact.removes.find((item) => item.key === "device_receipt_default")).toEqual({
       key: "device_receipt_default",
@@ -642,7 +643,7 @@ describe("the printer delete impact", () => {
       (await suite.db.execute(sql`select * from devices where id = ${gone}`)).rows;
     const kept = await goneRow();
     expect(kept).toHaveLength(1);
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.Z, NOW));
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.Z, NOW));
     expect(await goneRow()).toEqual(kept);
   });
 });
@@ -651,9 +652,9 @@ describe("deleting a printer", () => {
   it("returns the impact it read and leaves exactly what the spec says, every other row as it was", async () => {
     const v = await seedVenue();
     const before = await snapshot();
-    const read = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, v.P));
+    const read = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.P));
 
-    const done = await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW));
+    const done = await withTransaction(suite.db, (tx) => deletePrinter(tx, v.P, NOW));
 
     expect(done).toEqual(read);
     expect(await snapshot()).toEqual(afterDelete(before, v.P, LIVE(v), NOW));
@@ -662,7 +663,7 @@ describe("deleting a printer", () => {
   it("clears every matching choice and link, including an inactive device's, and promotes no other default", async () => {
     const v = await seedVenue();
 
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW));
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.P, NOW));
 
     const choices = await suite.db
       .select({
@@ -710,7 +711,7 @@ describe("deleting a printer", () => {
 
   it("recomputes inside the delete: work and settings added after the read are ended and removed, and a job finished meanwhile stays finished", async () => {
     const v = await seedVenue();
-    const read = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.cfg, v.P));
+    const read = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.P));
     expect(read).toEqual(expectedImpactOfP(v));
 
     // Between the read and the delete: an agent finishes one job, two more are queued, the holder
@@ -749,7 +750,7 @@ describe("deleting a printer", () => {
     await suite.db.insert(stationPrinters).values({ stationId: drinks!.id, printerId: v.P });
     const before = await snapshot();
 
-    const done = await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW));
+    const done = await withTransaction(suite.db, (tx) => deletePrinter(tx, v.P, NOW));
 
     const expected = expectedImpactOfP(v);
     const item = (list: DeleteImpact["ends"], key: string) => list.find((i) => i.key === key)!;
@@ -797,7 +798,7 @@ describe("deleting a printer", () => {
       withTransaction(suite.db, (tx) => resolveDevicePrinterId(tx, deviceId, "cash_drawer"));
     expect(await drawerOf(v.barTill)).toBe(v.P);
 
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW));
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.P, NOW));
 
     expect(await drawerOf(v.barTill)).toBeNull();
     const waitersDrawers = await suite.db
@@ -816,23 +817,23 @@ describe("deleting a printer", () => {
     const v = await seedVenue();
     const before = await snapshot();
 
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.Z, NOW));
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.Z, NOW));
     const afterZ = afterDelete(before, v.Z, [], NOW);
     expect(await snapshot()).toEqual(afterZ);
 
     const later = new Date("2026-10-10T11:00:00.000Z");
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.D, later));
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.D, later));
     expect(await snapshot()).toEqual(afterDelete(afterZ, v.D, [v.jobs.dJob], later));
   });
 
   it("answers printer.not_found to a second delete and writes nothing", async () => {
     const v = await seedVenue();
-    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW));
+    await withTransaction(suite.db, (tx) => deletePrinter(tx, v.P, NOW));
     const before = await snapshot();
 
     for (const id of [v.P, randomUUID()]) {
       await expect(
-        withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, id, new Date())),
+        withTransaction(suite.db, (tx) => deletePrinter(tx, id, new Date())),
       ).rejects.toMatchObject({ code: "printer.not_found", params: { id } });
     }
     expect(await snapshot()).toEqual(before);
@@ -855,7 +856,7 @@ describe("deleting a printer", () => {
       );
       try {
         await expect(
-          withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW)),
+          withTransaction(suite.db, (tx) => deletePrinter(tx, v.P, NOW)),
         ).rejects.toThrow(/test_delete_failure/);
         expect(await snapshot()).toEqual(before);
         expect(heard).toEqual([]);
@@ -864,7 +865,7 @@ describe("deleting a printer", () => {
       }
 
       // Control: the same subscription hears the delete once the trigger is gone.
-      await withTransaction(suite.db, (tx) => deletePrinter(tx, v.cfg, v.P, NOW));
+      await withTransaction(suite.db, (tx) => deletePrinter(tx, v.P, NOW));
       expect(heard).toContainEqual(expect.objectContaining({ type: "printers", id: v.P }));
     } finally {
       unsubscribe();
@@ -879,7 +880,7 @@ describe("deleting a printer", () => {
 
     // What the deactivate route runs.
     await withTransaction(suite.db, async (tx) => {
-      await deactivatePrinter(tx, v.cfg, v.P);
+      await deactivatePrinter(tx, v.P);
       await endDeactivatedInvoicePrintDeliveries(tx, v.P, NOW);
     });
     const after = await snapshot();
@@ -897,7 +898,7 @@ describe("deleting a printer", () => {
       );
     }
 
-    await withTransaction(suite.db, (tx) => updatePrinter(tx, v.cfg, v.P, { active: true }));
+    await withTransaction(suite.db, (tx) => updatePrinter(tx, v.P, { active: true }));
     const [row] = await suite.db
       .select({ active: printers.active, deletedAt: printers.deletedAt })
       .from(printers)

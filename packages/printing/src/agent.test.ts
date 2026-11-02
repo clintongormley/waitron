@@ -6,7 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import { hashSecret } from "@waitron/identity";
 import { authenticateAgent } from "./agent.js";
-import type { PrintAgentConfig } from "./agent.js";
+type PrintAgentConfig = { locationId: string };
 import "./errors.js";
 
 const LOCALE = "es-ES";

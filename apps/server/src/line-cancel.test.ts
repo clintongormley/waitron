@@ -1095,11 +1095,11 @@ describe("Cancel item service command", () => {
     const { barId, screenId, barPrinterId, cells } = await inTx(venue, async (tx) => {
       const barId = (await createStation(tx, venue.cfg, { name: `Bar ${randomUUID()}` })).id;
       const screenId = (await createStation(tx, venue.cfg, { name: `Screen ${randomUUID()}` })).id;
-      const printer = await createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        { name: `Bar ${randomUUID()}`, transport: "cloud_poll", pollId: randomUUID() },
-      );
+      const printer = await createPrinter(tx, {
+        name: `Bar ${randomUUID()}`,
+        transport: "cloud_poll",
+        pollId: randomUUID(),
+      });
       await attachPrinterToStation(tx, {
         locationId: venue.cfg.locationId,
         stationId: barId,

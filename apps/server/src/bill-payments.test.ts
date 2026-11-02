@@ -235,11 +235,11 @@ async function provision(db: typeof suite.db): Promise<Venue> {
       productIds.set(item.name, product.id);
     }
     await assignCatalogueToVenue(tx, cat.id);
-    const printer = await createPrinter(
-      tx,
-      { locationId: cfg.locationId },
-      { name: "Recibos", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-    );
+    const printer = await createPrinter(tx, {
+      name: "Recibos",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
     await tx.run(
       sql`update devices set receipt_printer_id = ${printer.id}, payment_slip_printer_id = ${printer.id}`,
     );

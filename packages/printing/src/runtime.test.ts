@@ -15,7 +15,7 @@ import { createPrinter } from "./printers.js";
 import { enqueuePrintJob } from "./outbox.js";
 import { FakeSink } from "@waitron/print-agent";
 import type { PrinterTarget, Transport } from "@waitron/print-agent";
-import type { PrintConfig } from "./printers.js";
+type PrintConfig = { locationId: string };
 
 const SETTING = { paperWidth: "58mm", resolution: "180dpi" } as const;
 
@@ -44,8 +44,8 @@ async function seedAgent(cfg: PrintConfig, name = "Kitchen agent"): Promise<stri
   return row!.id;
 }
 
-async function seedPrinter(tx: Transaction, cfg: PrintConfig): Promise<string> {
-  const { id } = await createPrinter(tx, cfg, {
+async function seedPrinter(tx: Transaction): Promise<string> {
+  const { id } = await createPrinter(tx, {
     name: "Kitchen",
     transport: "network_tcp",
     host: "10.0.0.9",
@@ -91,10 +91,9 @@ describe("runAgentOnce (pull → push → report)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     await withTransaction(suite.db, async (tx) => {
-      const printerId = await seedPrinter(tx, cfg);
+      const printerId = await seedPrinter(tx);
       const { jobId } = await enqueuePrintJob(
         tx,
-        cfg,
         printerId,
         esc(SETTING).line("Table 4").cut().bytes(),
       );
@@ -103,7 +102,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       const result = await runAgentOnce({
         tx,
         agentId,
-        locationId: cfg.locationId,
         visibleKeys: [],
         transport: sink,
       });
@@ -122,18 +120,18 @@ describe("runAgentOnce (pull → push → report)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     await withTransaction(suite.db, async (tx) => {
-      const down = await createPrinter(tx, cfg, {
+      const down = await createPrinter(tx, {
         name: "Down",
         transport: "network_tcp",
         host: "10.0.0.1",
       });
-      const up = await createPrinter(tx, cfg, {
+      const up = await createPrinter(tx, {
         name: "Up",
         transport: "network_tcp",
         host: "10.0.0.2",
       });
-      const { jobId: downJob } = await enqueuePrintJob(tx, cfg, down.id, new Uint8Array([1]));
-      const { jobId: upJob } = await enqueuePrintJob(tx, cfg, up.id, new Uint8Array([2]));
+      const { jobId: downJob } = await enqueuePrintJob(tx, down.id, new Uint8Array([1]));
+      const { jobId: upJob } = await enqueuePrintJob(tx, up.id, new Uint8Array([2]));
 
       const sink = new FlakySink(down.id);
       const runs = [];
@@ -142,7 +140,6 @@ describe("runAgentOnce (pull → push → report)", () => {
           await runAgentOnce({
             tx,
             agentId,
-            locationId: cfg.locationId,
             visibleKeys: [],
             transport: sink,
           }),
@@ -176,13 +173,12 @@ describe("runAgentOnce (pull → push → report)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     await withTransaction(suite.db, async (tx) => {
-      const printerId = await seedPrinter(tx, cfg);
-      const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([1]));
+      const printerId = await seedPrinter(tx);
+      const { jobId } = await enqueuePrintJob(tx, printerId, new Uint8Array([1]));
       const rejecting: Transport = { send: () => Promise.reject("drawer jammed") };
       const result = await runAgentOnce({
         tx,
         agentId,
-        locationId: cfg.locationId,
         visibleKeys: [],
         transport: rejecting,
       });
@@ -200,15 +196,14 @@ describe("runAgentOnce (pull → push → report)", () => {
       when new.status = 'done' begin select raise(abort, 'done report refused'); end`);
     try {
       await withTransaction(suite.db, async (tx) => {
-        const printerId = await seedPrinter(tx, cfg);
-        const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([7]));
+        const printerId = await seedPrinter(tx);
+        const { jobId } = await enqueuePrintJob(tx, printerId, new Uint8Array([7]));
 
         const sink = new FakeSink();
         await expect(
           runAgentOnce({
             tx,
             agentId,
-            locationId: cfg.locationId,
             visibleKeys: [],
             transport: sink,
           }),
@@ -232,13 +227,12 @@ describe("runAgentOnce (pull → push → report)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     await withTransaction(suite.db, async (tx) => {
-      const printerId = await seedPrinter(tx, cfg);
-      const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([7]));
+      const printerId = await seedPrinter(tx);
+      const { jobId } = await enqueuePrintJob(tx, printerId, new Uint8Array([7]));
 
       await runAgentOnce({
         tx,
         agentId,
-        locationId: cfg.locationId,
         visibleKeys: [],
         transport: new FlakySink(printerId),
       });
@@ -249,7 +243,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       const result = await runAgentOnce({
         tx,
         agentId,
-        locationId: cfg.locationId,
         visibleKeys: [],
         transport: sink,
       });
@@ -264,9 +257,9 @@ describe("runAgentOnce (pull → push → report)", () => {
     const agentId = await seedAgent(cfg);
     const deadAgentId = await seedAgent(cfg, "Crashed agent");
     await withTransaction(suite.db, async (tx) => {
-      const printerId = await seedPrinter(tx, cfg);
-      const { jobId: live } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([1]));
-      const { jobId: stale } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([2]));
+      const printerId = await seedPrinter(tx);
+      const { jobId: live } = await enqueuePrintJob(tx, printerId, new Uint8Array([1]));
+      const { jobId: stale } = await enqueuePrintJob(tx, printerId, new Uint8Array([2]));
       // Both rows sit in `printing`, claimed by ANOTHER agent. One second either side of the lease,
       // so the two cases differ only in which side of the cutoff they fall.
       const claimedAgo = (ms: number) => new Date(Date.now() - ms).toISOString();
@@ -284,7 +277,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       const result = await runAgentOnce({
         tx,
         agentId,
-        locationId: cfg.locationId,
         visibleKeys: [],
         transport: sink,
       });
@@ -305,12 +297,11 @@ describe("runAgentOnce (pull → push → report)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     await withTransaction(suite.db, async (tx) => {
-      const printerId = await seedPrinter(tx, cfg);
-      const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([3]));
+      const printerId = await seedPrinter(tx);
+      const { jobId } = await enqueuePrintJob(tx, printerId, new Uint8Array([3]));
 
       // Claim WITHOUT reporting — the job is left `printing`, holding the stamp the claim wrote.
       const claimed = await claimPrintJobs(tx, agentId, {
-        locationId: cfg.locationId,
         visibleKeys: [],
       });
       expect(claimed.map((j) => j.id)).toEqual([jobId]);
@@ -319,7 +310,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       const result = await runAgentOnce({
         tx,
         agentId,
-        locationId: cfg.locationId,
         visibleKeys: [],
         transport: sink,
       });
@@ -333,8 +323,8 @@ describe("runAgentOnce (pull → push → report)", () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     await withTransaction(suite.db, async (tx) => {
-      const printerId = await seedPrinter(tx, cfg);
-      const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([9]));
+      const printerId = await seedPrinter(tx);
+      const { jobId } = await enqueuePrintJob(tx, printerId, new Uint8Array([9]));
       await tx
         .update(printJobs)
         .set({ status: "failed", attempts: MAX_DELIVERY_ATTEMPTS })
@@ -344,7 +334,6 @@ describe("runAgentOnce (pull → push → report)", () => {
       const result = await runAgentOnce({
         tx,
         agentId,
-        locationId: cfg.locationId,
         visibleKeys: [],
         transport: sink,
       });
@@ -354,39 +343,16 @@ describe("runAgentOnce (pull → push → report)", () => {
     });
   });
 
-  it("does NOT pull a network printer's job for an agent serving a DIFFERENT venue (venue scope)", async () => {
-    const cfg = await setup();
-    const agentId = await seedAgent(cfg);
-    const otherLocationId = await seedLocation("Terrace");
-    await withTransaction(suite.db, async (tx) => {
-      const printerId = await seedPrinter(tx, cfg);
-      const { jobId } = await enqueuePrintJob(tx, cfg, printerId, new Uint8Array([1]));
-
-      const sink = new FakeSink();
-      const result = await runAgentOnce({
-        tx,
-        agentId,
-        locationId: otherLocationId,
-        visibleKeys: [],
-        transport: sink,
-      });
-      expect(result).toEqual({ claimed: 0, delivered: 0, failed: 0 });
-      expect(sink.written).toEqual([]);
-      expect((await jobRow(tx, jobId)).status).toBe("queued");
-    });
-  });
-
   it("reports an empty batch when the agent has no queued work", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg);
     await withTransaction(suite.db, async (tx) => {
-      await seedPrinter(tx, cfg);
+      await seedPrinter(tx);
       const sink = new FakeSink();
       expect(
         await runAgentOnce({
           tx,
           agentId,
-          locationId: cfg.locationId,
           visibleKeys: [],
           transport: sink,
         }),

@@ -1037,13 +1037,9 @@ describe("dashboard print on a receipt printer", () => {
 
   it("refuses a receipt printer switched off or deleted, writing nothing", async () => {
     const { billId, saleId } = await fullInvoice();
-    const make = (name: string, locationId: string = venue.cfg.locationId) =>
+    const make = (name: string) =>
       inTx(venue, (tx) =>
-        createPrinter(
-          tx,
-          { locationId },
-          { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
-        ),
+        createPrinter(tx, { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}` }),
       );
     const off = (await make("Apagada")).id;
     const deleted = (await make("Borrada")).id;

@@ -15,8 +15,6 @@ export interface AgentRuntimeDeps {
   tx: Transaction;
   /** Not an eligibility filter: it is stamped into `claimed_by`, and only the claimer may report. */
   agentId: string;
-  /** A `network_tcp` printer is claimable by any agent reporting its venue. */
-  locationId: string;
   /** The device keys (USB serials, Bluetooth MACs) the agent reports it can deliver a job to now
    * (its `visible` list). A usb/bluetooth printer is eligible only when its `local_key` is one of
    * these. */
@@ -72,7 +70,6 @@ export async function claimPrintJobs(
   tx: Transaction,
   agentId: string,
   ctx: {
-    locationId: string;
     visibleKeys: string[];
     printerId?: string;
     /** Includes due invoice receipts; the caller must attach their token in this transaction. */
@@ -106,7 +103,7 @@ export async function claimPrintJobs(
     key: "id",
     claimableJoin: sql`join printers p on p.id = j.printer_id`,
     claimable: sql`p.active = true and p.deleted_at is null
-      and ( (p.transport = 'network_tcp' and p.location_id = ${ctx.locationId}) or ${usbBt} )
+      and ( p.transport = 'network_tcp' or ${usbBt} )
       ${ctx.printerId === undefined ? sql`` : sql`and p.id = ${ctx.printerId}`}
       and ${invoiceDue(sql`j.id`)}
       and (j.kind = 'document' or j.status = 'queued')
@@ -186,9 +183,9 @@ export async function reportPrintJob(
 }
 
 export async function runAgentOnce(deps: AgentRuntimeDeps): Promise<AgentRunResult> {
-  const { tx, agentId, locationId, visibleKeys, transport } = deps;
+  const { tx, agentId, visibleKeys, transport } = deps;
 
-  const claimed = await claimPrintJobs(tx, agentId, { locationId, visibleKeys });
+  const claimed = await claimPrintJobs(tx, agentId, { visibleKeys });
 
   let delivered = 0;
   let failed = 0;

@@ -44,11 +44,11 @@ async function stationPrinter(
   locationId: string,
   stationId: string,
 ): Promise<string> {
-  const { id } = await createPrinter(
-    tx,
-    { locationId },
-    { name: `Printer ${randomUUID()}`, transport: "cloud_poll", pollId: randomUUID() },
-  );
+  const { id } = await createPrinter(tx, {
+    name: `Printer ${randomUUID()}`,
+    transport: "cloud_poll",
+    pollId: randomUUID(),
+  });
   await attachPrinterToStation(tx, { locationId, stationId, printerId: id });
   return id;
 }

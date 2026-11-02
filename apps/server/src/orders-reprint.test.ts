@@ -204,16 +204,12 @@ describe("dashboard receipt reprint", () => {
   it("prints on a second printer chosen for this copy", async () => {
     const billId = await placedIssuedBill(venue, "Caña");
     const printer = await inTx(venue, (tx) =>
-      createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        {
-          name: "Oficina",
-          transport: "cloud_poll",
-          pollId: `poll-${randomUUID()}`,
-          hasCashDrawer: true,
-        },
-      ),
+      createPrinter(tx, {
+        name: "Oficina",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+        hasCashDrawer: true,
+      }),
     );
     const answer = await post(venue.adminDashboard, billId, printer.id);
     expect(answer.status).toBe(202);
@@ -316,15 +312,11 @@ describe("dashboard receipt reprint", () => {
     const open = await parked(venue, "Caña");
     const noBill = await billlessSale(venue);
     const other = await inTx(venue, (tx) =>
-      createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        {
-          name: "Inactive",
-          transport: "cloud_poll",
-          pollId: `poll-${randomUUID()}`,
-        },
-      ),
+      createPrinter(tx, {
+        name: "Inactive",
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      }),
     );
     await inTx(venue, (tx) =>
       tx.update(printers).set({ active: false }).where(eq(printers.id, other.id)),
@@ -363,11 +355,12 @@ describe("dashboard receipt reprint", () => {
 describe("a receipt copy printed on a printer later deleted", () => {
   const newPrinter = (name: string) =>
     inTx(venue, (tx) =>
-      createPrinter(
-        tx,
-        { locationId: venue.cfg.locationId },
-        { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}`, paperWidth: "58mm" },
-      ),
+      createPrinter(tx, {
+        name,
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+        paperWidth: "58mm",
+      }),
     );
 
   it("keeps the old printer's name on the order, refuses it for a new copy, and prints the new copy on the replacement", async () => {
@@ -393,7 +386,7 @@ describe("a receipt copy printed on a printer later deleted", () => {
       }));
     const before = await history();
 
-    await inTx(venue, (tx) => deletePrinter(tx, { locationId: venue.cfg.locationId }, old.id));
+    await inTx(venue, (tx) => deletePrinter(tx, old.id));
     const replacement = await newPrinter("New kitchen");
 
     const choices = await send(

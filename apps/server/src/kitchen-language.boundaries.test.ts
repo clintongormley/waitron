@@ -64,7 +64,7 @@ describe("A964 language boundaries", () => {
           defaultLanguage: language === "en" ? "es" : "en",
           languages: ["en", "es"],
         });
-        const printer = await createPrinter(tx, v.cfg, {
+        const printer = await createPrinter(tx, {
           name: "Recorded kitchen",
           transport: "cloud_poll",
           pollId: randomUUID(),

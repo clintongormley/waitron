@@ -83,15 +83,11 @@ export async function setupSplitExtrasVenue() {
     };
     const printers = {} as Record<"grill" | "fryer" | "kitchen" | "bar" | "pass", string>;
     for (const station of ["grill", "fryer", "kitchen", "bar"] as const) {
-      const printer = await createPrinter(
-        tx,
-        { locationId: cfg.locationId },
-        {
-          name: `${station} printer`,
-          transport: "cloud_poll",
-          pollId: `poll-${randomUUID()}`,
-        },
-      );
+      const printer = await createPrinter(tx, {
+        name: `${station} printer`,
+        transport: "cloud_poll",
+        pollId: `poll-${randomUUID()}`,
+      });
       printers[station] = printer.id;
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
@@ -99,15 +95,11 @@ export async function setupSplitExtrasVenue() {
         printerId: printer.id,
       });
     }
-    const pass = await createPrinter(
-      tx,
-      { locationId: cfg.locationId },
-      {
-        name: "Pass",
-        transport: "cloud_poll",
-        pollId: `poll-${randomUUID()}`,
-      },
-    );
+    const pass = await createPrinter(tx, {
+      name: "Pass",
+      transport: "cloud_poll",
+      pollId: `poll-${randomUUID()}`,
+    });
     printers.pass = pass.id;
     for (const stationId of [stations.grill, stations.fryer])
       await attachPrinterToStation(tx, {
