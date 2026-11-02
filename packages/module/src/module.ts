@@ -1116,8 +1116,8 @@ export interface VenueServiceContribution {
     targetId: string,
   ): Promise<void>;
   /** Narrows the device from its current profile to `profileId`, before a switch writes it,
-   *  recording what it lost and giving back what `profileId` allows again, as a profile save does,
-   *  against the profiles' lists at the device's own location; never refuses. Null: it lost nothing, or the device is unknown. */
+   *  recording what it lost and giving back what `profileId` allows again, as a profile save does;
+   *  never refuses. Null: it lost nothing, or the device is unknown. */
   narrowDeviceKitchenScreens(
     tx: Transaction,
     cfg: { locationId: LocationId },

@@ -468,7 +468,7 @@ describe("whole service settings saves", () => {
     },
   );
 
-  it.each(["disabled"])("refuses a %s department without writes", async (kind) => {
+  it("refuses a disabled department without writes", async () => {
     const fx = await settingsFixture();
     const path = fx.departmentPath;
     await db.update(departments).set({ active: false }).where(eq(departments.id, fx.departmentId));
@@ -483,9 +483,8 @@ describe("whole service settings saves", () => {
       `/management-api/venue-service/departments/${fx.departmentId}/transfers`,
       fx.managerCookie,
     );
-    expect(transfers.status).toBe(kind === "disabled" ? 404 : 200);
-    if (kind === "disabled")
-      expect(await transfers.json()).toMatchObject({ error: { code: "department.not_found" } });
+    expect(transfers.status).toBe(404);
+    expect(await transfers.json()).toMatchObject({ error: { code: "department.not_found" } });
   });
 
   it("saves all four zone overrides and clears all four to inherit", async () => {

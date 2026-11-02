@@ -1253,8 +1253,8 @@ describe("listStationNotices", () => {
   });
 });
 
+// A1301: deleted with cfg in S18
 describe("listStationsNotices and the scope", () => {
-  // A1301: deleted with cfg in S18
   it("returns a notice at the venue's station whatever location the scope names", async () => {
     const v = await venue();
     const order = await seedOrder(v.locationId, 1, null);

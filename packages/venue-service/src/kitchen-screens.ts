@@ -595,7 +595,7 @@ export async function removeDeviceKitchenScreens(tx: Transaction, deviceId: stri
 
 /**
  * The slots a list shows: the device's explicit list, or else the profile's (no row or "every"
- * meaning every switched-on one here) less what narrowings took; what they took shows too, as
+ * meaning every switched-on one) less what narrowings took; what they took shows too, as
  * no longer available. Deleted places are absent.
  */
 function slots(
@@ -628,7 +628,7 @@ export async function readDeviceKitchenScreens(
   return (await readDevicesKitchenScreens(tx, cfg, [deviceId])).get(deviceId)!;
 }
 
-/** Each named device's {@link readDeviceKitchenScreens}; one unknown here reads none. */
+/** Each named device's {@link readDeviceKitchenScreens}; one unknown reads none. */
 export async function readDevicesKitchenScreens(
   tx: Transaction,
   _cfg: VenueScope,
