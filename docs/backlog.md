@@ -6607,8 +6607,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   needing no taxpayer row (`reset-request`), and second-location cases whose code slice deletes them.
   S16 sends setup venue fields directly and names the venue in restore previews. Old
   `first-setup.json` files are refused, including after a completed setup, so boxes set up through
-  first setup are reset; the node and storage ids remain for S18 and the schema slices. S17 makes
-  the configuration export format 10: its `venue` holds the venue's own setup fields, the default
+  first setup are reset; the node and storage ids remain for S18 and the schema slices. S17 landed
+  (#2415): the configuration export is format 10: its `venue` holds the venue's own setup fields, the default
   menu travels as the top-level `defaultCatalogueId`, a format-9 export is refused as outdated, and
   the module contract's `locationColumns` is gone. Until the schema slices drop the columns, the
   import sets every column whose foreign key points at `locations` to the importing venue's row
