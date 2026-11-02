@@ -322,7 +322,7 @@ export async function applyVenue(
           await tx.insert(kitchenStations).values({
             locationId,
             name: action.stationName,
-            colour: await nextStationColour(tx, locationId),
+            colour: await nextStationColour(tx),
             isDefault: true,
             active: true,
           });
