@@ -187,6 +187,16 @@ describe("zone CRUD", () => {
     expect((await asApp(cfg, (tx) => listZones(tx, cfg))).map((z) => z.name)).toEqual(["Terrace"]);
   });
 
+  // A1301: deleted with cfg in S18
+  it("listZones lists the venue's active zones whatever location the scope names", async () => {
+    const cfg = await setupVenue();
+    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace", displayOrder: 0 }));
+    const elsewhere = { ...cfg, locationId: brandLocationId(randomUUID()) };
+    expect((await asApp(cfg, (tx) => listZones(tx, elsewhere))).map((z) => z.name)).toEqual([
+      "Terrace",
+    ]);
+  });
+
   it("listZones returns exactly the FloorZone shape (id/name/displayOrder/active — no createdAt)", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) =>

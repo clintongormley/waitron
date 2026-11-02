@@ -52,7 +52,7 @@ function entry(key: string, label: string, extra: Partial<SaveEntry> = {}): Save
   return { key, label, seats: 4, fixed: false, placement: PLACE, partKeys: [], ...extra };
 }
 
-const sets = () => floorPlanSetsFor(v.cfg);
+const sets = () => floorPlanSetsFor();
 
 /** A department with zone Inside and sets Standard (its default) and Dinner. */
 async function department() {
@@ -128,7 +128,7 @@ describe("layoutCounts", () => {
 });
 
 describe("the floor plan sets port", () => {
-  it("creates an empty set of the location", async () => {
+  it("creates an empty set", async () => {
     const setId = await inTx(v, (tx) => sets().create(tx));
     const rows = await inTx(v, (tx) =>
       tx.select().from(floorPlanSets).where(eq(floorPlanSets.id, setId)),
@@ -247,7 +247,7 @@ describe("the floor plan sets port", () => {
     expect(await statementsToCopy(3)).toBe(await statementsToCopy(1));
   });
 
-  it("refuses a copy from or to a set the location does not hold", async () => {
+  it("refuses a copy from or to a set that does not exist", async () => {
     const d = await department();
     const unknown = randomUUID();
     for (const [from, to] of [
@@ -456,13 +456,8 @@ describe("the floor plan sets port", () => {
     expect(after.standard).toHaveLength(1);
   });
 
-  it("removes nothing for no sets and ignores another location's set", async () => {
+  it("removes nothing for no sets", async () => {
     const d = await department();
-    await inTx(v, (tx) =>
-      floorDeletionFor({ ...v.cfg, locationId: randomUUID() as never }, NONE).removeSets(tx, [
-        d.standard,
-      ]),
-    );
     await inTx(v, (tx) => floorDeletionFor(v.cfg, NONE).removeSets(tx, []));
     const rows = await inTx(v, (tx) =>
       tx.select().from(floorPlanSets).where(eq(floorPlanSets.id, d.standard)),

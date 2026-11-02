@@ -43,7 +43,7 @@ export async function zoneLayouts(
   prepared?: PreparedServiceDay,
 ): Promise<Map<string, ZoneLayoutState>> {
   if (zoneIds.length === 0) return new Map();
-  const day = prepared === undefined ? await todayBusinessDay(tx, cfg, now) : prepared.businessDay;
+  const day = prepared === undefined ? await todayBusinessDay(tx, now) : prepared.businessDay;
   return (await zoneLayoutsOn(tx, cfg, zoneIds, now, day, prepared)).states;
 }
 

@@ -611,7 +611,7 @@ describe("building today's plan from a zone's layout", () => {
         .where(eq(locations.id, v.cfg.locationId)),
     );
     try {
-      expect(await inTx(v, (tx) => todayBusinessDay(tx, v.cfg, NOW))).toBeNull();
+      expect(await inTx(v, (tx) => todayBusinessDay(tx, NOW))).toBeNull();
       await inTx(v, (tx) => ensureToday(tx, v.cfg, NONE, NOW));
       await reset(z);
       expect(await todayZone(z)).toBeUndefined();
@@ -1182,7 +1182,7 @@ describe("catch-up containing-zone validation", () => {
     expect(await todayZone(z)).toBeUndefined();
   });
 
-  it.each(["missing", "deleted", "other-location"] as const)(
+  it.each(["missing", "deleted"] as const)(
     "refuses an empty %s zone without creating floor rows",
     async (kind) => {
       const z = kind === "missing" ? randomUUID() : await zone();
@@ -1190,11 +1190,7 @@ describe("catch-up containing-zone validation", () => {
         await inTx(v, (tx) =>
           tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, z)),
         );
-      const cfg =
-        kind === "other-location"
-          ? { ...v.cfg, locationId: randomUUID() as typeof v.cfg.locationId }
-          : v.cfg;
-      await expect(inTx(v, (tx) => catchUpZone(tx, cfg, NONE, z, NOW))).rejects.toMatchObject({
+      await expect(inTx(v, (tx) => catchUpZone(tx, v.cfg, NONE, z, NOW))).rejects.toMatchObject({
         code: "zone.not_found",
         params: { zoneId: z },
       });

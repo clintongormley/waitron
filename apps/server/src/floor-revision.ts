@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import {
   diningTables,
   floorResetTables,
@@ -62,7 +62,7 @@ export async function roomRevisions(
  */
 export async function roomPrints(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   zoneIds: readonly string[],
 ): Promise<Map<string, string>> {
   const rows = await tx
@@ -96,9 +96,7 @@ export async function roomPrints(
     .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
     .leftJoin(floorTodaySplitParts, eq(floorTodaySplitParts.partTableId, diningTables.id))
     .leftJoin(floorResetTables, eq(floorResetTables.tableId, diningTables.id))
-    .where(
-      and(eq(diningTables.locationId, cfg.locationId), inArray(diningTables.zoneId, [...zoneIds])),
-    )
+    .where(inArray(diningTables.zoneId, [...zoneIds]))
     .orderBy(asc(diningTables.id));
   const byZone = new Map<string, Omit<(typeof rows)[number], "zoneId">[]>(
     zoneIds.map((zoneId) => [zoneId, []]),
@@ -137,18 +135,15 @@ export async function moveChangedRooms(
   return moved;
 }
 
-/** The zones of `tableIds`, read within the venue's location. */
 export async function zonesOf(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   tableIds: readonly string[],
 ): Promise<string[]> {
   const rows = await tx
     .selectDistinct({ zoneId: diningTables.zoneId })
     .from(diningTables)
-    .where(
-      and(eq(diningTables.locationId, cfg.locationId), inArray(diningTables.id, [...tableIds])),
-    )
+    .where(inArray(diningTables.id, [...tableIds]))
     .orderBy(asc(diningTables.zoneId));
   return rows.map((row) => row.zoneId);
 }

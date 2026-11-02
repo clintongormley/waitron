@@ -5,14 +5,12 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   diningTables,
-  floorZones,
   floorPlanPlacements,
   floorPlanTables,
   floorResetTables,
   floorTodayJoinTables,
   floorTodayJoins,
   floorTodayTables,
-  locations,
   workingOrders,
 } from "@waitron/db";
 import { foodOnItsWay } from "./delivery-release.js";
@@ -450,42 +448,5 @@ describe("today's changes", () => {
     await back(table.a!);
 
     expect(await labelOf(table.a!)).toBe(label);
-  });
-
-  it("refuses a table of another venue as not found", async () => {
-    const elsewhere = randomUUID();
-    const id = randomUUID();
-    await inTx(v, async (tx) => {
-      await tx.insert(locations).values({
-        id: elsewhere,
-        name: "Other",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurant",
-      });
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ locationId: elsewhere, name: "Other tables" })
-        .returning({ id: floorZones.id });
-      await tx.insert(diningTables).values({
-        id,
-        locationId: elsewhere,
-        zoneId: zone!.id,
-        label: `Elsewhere ${id.slice(0, 6)}`,
-      });
-      await tx.insert(floorTodayTables).values({ tableId: id, seats: 4, ...place(0, 0) });
-    });
-    const before = await todayRow(v, id);
-    for (const write of [
-      () => takeOff(id),
-      () => putBack(id),
-      () => seats(id, 6),
-      () => back(id),
-    ]) {
-      await expect(write()).rejects.toMatchObject({
-        code: "table.not_found",
-        params: { tableId: id },
-      });
-    }
-    expect(await todayRow(v, id)).toEqual(before);
   });
 });

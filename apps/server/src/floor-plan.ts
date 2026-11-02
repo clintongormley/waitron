@@ -71,19 +71,13 @@ export interface ZonePlanSave {
 
 export async function requireZone(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   zoneId: string,
 ): Promise<void> {
   const [zone] = await tx
     .select({ id: floorZones.id })
     .from(floorZones)
-    .where(
-      and(
-        eq(floorZones.id, zoneId),
-        eq(floorZones.locationId, cfg.locationId),
-        eq(floorZones.active, true),
-      ),
-    );
+    .where(and(eq(floorZones.id, zoneId), eq(floorZones.active, true)));
   if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
 }
 
@@ -326,18 +320,16 @@ function checkParts(tables: ZonePlanSave["tables"]): void {
  */
 async function otherZonesTaken(
   tx: Transaction,
-  cfg: TradingContext,
   zoneId: string,
 ): Promise<{ labels: Set<string>; shortNames: Map<string, string> }> {
   const masters = await tx
     .select({ label: floorPlanTables.label, shortName: floorPlanTables.shortName })
     .from(floorPlanTables)
-    .innerJoin(floorZones, eq(floorZones.id, floorPlanTables.zoneId))
-    .where(and(eq(floorZones.locationId, cfg.locationId), ne(floorPlanTables.zoneId, zoneId)));
+    .where(ne(floorPlanTables.zoneId, zoneId));
   const live = await tx
     .select({ label: diningTables.label, shortName: diningTables.shortName })
     .from(diningTables)
-    .where(and(eq(diningTables.locationId, cfg.locationId), ne(diningTables.zoneId, zoneId)));
+    .where(ne(diningTables.zoneId, zoneId));
   const labels = new Set<string>();
   const shortNames = new Map<string, string>();
   for (const { label, shortName } of [...masters, ...live]) {
@@ -405,7 +397,7 @@ async function checkSave(
     }
   }
 
-  const taken = await otherZonesTaken(tx, cfg, zoneId);
+  const taken = await otherZonesTaken(tx, zoneId);
   const seen = new Set<string>();
   for (const table of tables) {
     const label = table.label.trim();

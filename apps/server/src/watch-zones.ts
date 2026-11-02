@@ -31,9 +31,7 @@ export async function orderWatchZones(
       : await tx
           .select({ id: diningTables.id, zoneId: diningTables.zoneId })
           .from(diningTables)
-          .where(
-            and(eq(diningTables.locationId, cfg.locationId), inArray(diningTables.id, deliveryIds)),
-          );
+          .where(inArray(diningTables.id, deliveryIds));
   const deliveryZones = new Map(deliveryRows.map((row) => [row.id, row.zoneId]));
   const zones = new Map<string, string | null>();
   const unresolved: string[] = [];
@@ -56,16 +54,16 @@ export async function orderWatchZones(
  *  party absent from the map sits at no table. */
 export async function partyWatchZones(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   ids: readonly string[],
 ): Promise<Map<string, string | null>> {
   const partyIds = [...new Set(ids)];
-  const partyTablesById = await activePartyZones(tx, cfg, partyIds);
+  const partyTablesById = await activePartyZones(tx, partyIds);
   const seatless = partyIds.filter((id) => !partyTablesById.has(id));
   if (seatless.length > 0) {
     const survivors = await partySurvivors(tx, seatless);
     const unread = [...new Set(survivors.values())].filter((id) => !partyTablesById.has(id));
-    const survivorTables = await activePartyZones(tx, cfg, unread);
+    const survivorTables = await activePartyZones(tx, unread);
     for (const id of seatless) {
       const survivor = survivors.get(id);
       if (survivor !== undefined) {
@@ -79,7 +77,6 @@ export async function partyWatchZones(
 
 async function activePartyZones(
   tx: Transaction,
-  cfg: TradingContext,
   partyIds: readonly string[],
 ): Promise<Map<string, string | null>> {
   if (partyIds.length === 0) return new Map();
@@ -87,13 +84,7 @@ async function activePartyZones(
     .select({ partyId: partyTables.partyId, zoneId: diningTables.zoneId })
     .from(partyTables)
     .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
-    .where(
-      and(
-        inArray(partyTables.partyId, [...partyIds]),
-        eq(diningTables.locationId, cfg.locationId),
-        isNull(partyTables.leftAt),
-      ),
-    )
+    .where(and(inArray(partyTables.partyId, [...partyIds]), isNull(partyTables.leftAt)))
     .orderBy(partyTables.joinedAt, sql`${partyTables}.rowid`);
   const zones = new Map<string, string | null>();
   for (const row of rows) if (!zones.has(row.partyId)) zones.set(row.partyId, row.zoneId);

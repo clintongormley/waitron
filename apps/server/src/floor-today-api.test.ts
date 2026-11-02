@@ -18,8 +18,6 @@ import {
   floorTodaySplitParts,
   floorTodayTables,
   floorTodayZones,
-  floorZones,
-  locations,
   partyTables,
   ticketItems,
   workingOrders,
@@ -709,48 +707,6 @@ describe("today's routes", () => {
     expect(
       await refusal(send("POST", `/api/zones/${randomUUID()}/today/reset`, { zoneRevision: 0 })),
     ).toMatchObject({ status: 404, body: { error: { code: "zone.not_found" } } });
-  });
-
-  it("refuses another venue's zone as not found, and leaves its today's plan alone", async () => {
-    const elsewhere = randomUUID();
-    const zoneId = randomUUID();
-    await inTx(v, async (tx) => {
-      await tx.insert(locations).values({
-        id: elsewhere,
-        name: "Other",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurant",
-      });
-      await tx.insert(floorZones).values({ id: zoneId, locationId: elsewhere, name: "Elsewhere" });
-      const [set] = await tx
-        .insert(floorPlanSets)
-        .values({ locationId: elsewhere })
-        .returning({ id: floorPlanSets.id });
-      await tx
-        .insert(floorPlans)
-        .values({ zoneId, setId: set!.id, savedAt: "2026-01-01T00:00:00.000Z" });
-      await tx.insert(floorTodayZones).values({ zoneId, businessDay: "2026-01-01", revision: 1 });
-    });
-
-    try {
-      const answer = await send("POST", `/api/zones/${zoneId}/today/reset`, { zoneRevision: 1 });
-      const [row] = await inTx(v, (tx) =>
-        tx.select().from(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId)),
-      );
-      expect(row).toMatchObject({ businessDay: "2026-01-01", revision: 1 });
-      expect(answer.status).toBe(404);
-      expect(await answer.json()).toEqual({
-        error: { code: "zone.not_found", params: { zoneId } },
-      });
-    } finally {
-      await inTx(v, async (tx) => {
-        await tx.delete(floorTodayZones).where(eq(floorTodayZones.zoneId, zoneId));
-        await tx.delete(floorPlans).where(eq(floorPlans.zoneId, zoneId));
-        await tx.delete(floorPlanSets).where(eq(floorPlanSets.locationId, elsewhere));
-        await tx.delete(floorZones).where(eq(floorZones.id, zoneId));
-        await tx.delete(locations).where(eq(locations.id, elsewhere));
-      });
-    }
   });
 
   it("leaves a zone with no layout alone on a reset", async () => {

@@ -115,23 +115,22 @@ function zoneRevision(body: Record<string, unknown>): number | null {
  */
 async function refuseStaleZone(
   tx: Transaction,
-  locationId: string,
   zoneId: string,
   sent: number | null,
   from: number,
 ): Promise<void> {
   if (sent !== null) refuseStale(zoneId, sent, from);
-  else if (await hasTodayRow(tx, locationId, zoneId)) {
+  else if (await hasTodayRow(tx, zoneId)) {
     throw new AppError("floor_today.out_of_date", { zoneId, revision: from });
   }
 }
 
-async function hasTodayRow(tx: Transaction, locationId: string, zoneId: string): Promise<boolean> {
+async function hasTodayRow(tx: Transaction, zoneId: string): Promise<boolean> {
   const [row] = await tx
     .select({ id: floorTodayTables.id })
     .from(floorTodayTables)
     .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
-    .where(and(eq(diningTables.locationId, locationId), eq(diningTables.zoneId, zoneId)))
+    .where(eq(diningTables.zoneId, zoneId))
     .limit(1);
   return row !== undefined;
 }
@@ -262,11 +261,11 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       const sent = zoneRevision(await bodyOf(c));
       const revision = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ zoneId }]);
-        const active = await zoneActive(tx, deps.cfg, zoneId);
+        const active = await zoneActive(tx, zoneId);
         const now = deps.clock.now().instant;
         const day = await ensureToday(tx, deps.cfg, removals, now);
         const from = await roomRevision(tx, zoneId);
-        await refuseStaleZone(tx, deps.cfg.locationId, zoneId, sent, from);
+        await refuseStaleZone(tx, zoneId, sent, from);
         if (!active || day === null) return from;
         const onto = await recordedOnto(tx, deps.cfg, zoneId, day);
         if (onto === null) return from;
@@ -291,11 +290,11 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
       };
       const revision = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ zoneId }]);
-        const active = await zoneActive(tx, deps.cfg, zoneId);
+        const active = await zoneActive(tx, zoneId);
         const now = deps.clock.now().instant;
         const day = await ensureToday(tx, deps.cfg, removals, now);
         const from = await roomRevision(tx, zoneId);
-        await refuseStaleZone(tx, deps.cfg.locationId, zoneId, sent, from);
+        await refuseStaleZone(tx, zoneId, sent, from);
         if (!active) return from;
         return updateLayout(tx, deps.cfg, removals, zoneId, day, now, layout);
       });
@@ -305,11 +304,11 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
 }
 
 /** Whether the venue's zone is enabled; refuses `zone.not_found` for none. */
-async function zoneActive(tx: Transaction, cfg: TradingContext, zoneId: string): Promise<boolean> {
+async function zoneActive(tx: Transaction, zoneId: string): Promise<boolean> {
   const [zone] = await tx
     .select({ active: floorZones.active })
     .from(floorZones)
-    .where(and(eq(floorZones.id, zoneId), eq(floorZones.locationId, cfg.locationId)));
+    .where(eq(floorZones.id, zoneId));
   if (zone === undefined) throw new AppError("zone.not_found", { zoneId });
   return zone.active;
 }

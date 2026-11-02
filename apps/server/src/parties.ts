@@ -144,7 +144,7 @@ export function moduleCoreServices(
   return {
     seatTable: (tx, req) => seatTable(tx, dashboard, req),
     floorDeletion: floorDeletionFor(cfg, removals),
-    floorPlanSets: floorPlanSetsFor(cfg),
+    floorPlanSets: floorPlanSetsFor(),
   };
 }
 
@@ -356,7 +356,7 @@ export async function leaveTables(
     .where(and(inArray(partyTables.tableId, [...tableIds]), isNull(partyTables.leftAt)));
 }
 
-/** The party holding each of the tables now, by table id; a free table is absent. Reads by id alone. */
+/** The party holding each of the tables now, by table id; a free table is absent. */
 export async function holdersOf(
   tx: Transaction,
   tableIds: readonly string[],
@@ -368,7 +368,7 @@ export async function holdersOf(
   return new Map(rows.map((row) => [row.tableId, row.partyId]));
 }
 
-/** The party holding the table now, or null. Reads by id alone. */
+/** The party holding the table now, or null. */
 export async function holderOf(tx: Transaction, tableId: string): Promise<string | null> {
   return (await holdersOf(tx, [tableId])).get(tableId) ?? null;
 }

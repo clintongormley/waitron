@@ -21,10 +21,10 @@ export interface Today {
   merge: { joinId: string; members: (typeof floorTodayTables.$inferSelect)[] } | null;
 }
 
-/** The table, read only within the venue's location, with its today's row and its merge. */
+/** The table, with its today's row and its merge. */
 export async function todayOf(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   tableId: string,
 ): Promise<Today> {
   const [table] = await tx
@@ -37,13 +37,7 @@ export async function todayOf(
     .innerJoin(floorZones, eq(floorZones.id, diningTables.zoneId))
     .leftJoin(floorTodayTables, eq(floorTodayTables.tableId, diningTables.id))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, diningTables.id))
-    .where(
-      and(
-        eq(diningTables.id, tableId),
-        eq(diningTables.locationId, cfg.locationId),
-        eq(floorZones.active, true),
-      ),
-    );
+    .where(and(eq(diningTables.id, tableId), eq(floorZones.active, true)));
   if (table === undefined) throw new AppError("table.not_found", { tableId });
   const { zoneId, row, joinId } = table;
   if (row === null) throw new AppError("table.not_on_today_plan", { tableId });
@@ -57,23 +51,17 @@ export async function todayOf(
   return { tableId, zoneId, row, merge: { joinId, members: members.map((m) => m.row) } };
 }
 
-/** The zone of a table in an active zone of the venue's location, as `todayOf` finds it. */
+/** The zone of a table in an active zone, as `todayOf` finds it. */
 export async function zoneOfTable(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   tableId: string,
 ): Promise<string> {
   const [table] = await tx
     .select({ zoneId: diningTables.zoneId })
     .from(diningTables)
     .innerJoin(floorZones, eq(floorZones.id, diningTables.zoneId))
-    .where(
-      and(
-        eq(diningTables.id, tableId),
-        eq(diningTables.locationId, cfg.locationId),
-        eq(floorZones.active, true),
-      ),
-    );
+    .where(and(eq(diningTables.id, tableId), eq(floorZones.active, true)));
   if (table === undefined) throw new AppError("table.not_found", { tableId });
   return table.zoneId;
 }
@@ -142,7 +130,7 @@ export async function refuseInJoinedTable(
   if (first !== undefined) throw new AppError("table.in_joined_table", { tableId: first });
 }
 
-/** Any of the tables taken off today, the first in the caller's order named; a table with no today's row never is. Reads by id alone. */
+/** Any of the tables taken off today, the first in the caller's order named; a table with no today's row never is. */
 export async function refuseTakenOff(tx: Transaction, tableIds: readonly string[]): Promise<void> {
   const rows = await tx
     .select({ tableId: floorTodayTables.tableId })

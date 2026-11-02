@@ -18,7 +18,7 @@ import type { TradingContext } from "./trading-context.js";
  */
 export async function readReceiptOrder(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   workingOrderId: string,
   opts: { atIssuance?: boolean } = {},
 ): Promise<{ orderLabel: string | null; orderNumber: number }> {
@@ -50,7 +50,7 @@ export async function readReceiptOrder(
       orderNumber: order.orderNumber,
     };
   }
-  const labels = await orderTableLabels(tx, cfg.locationId, [
+  const labels = await orderTableLabels(tx, [
     {
       id: workingOrderId,
       partyId: null,

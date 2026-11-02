@@ -12,7 +12,6 @@ import {
   floorPlans,
   floorPlanTables,
   floorZones,
-  locations,
   withTransaction,
   workingOrders,
   type Transaction,
@@ -268,20 +267,8 @@ describe("permanent service delete HTTP contracts", () => {
       expect(await run(rows)).toEqual(before);
     },
   );
-  it("keeps zone malformed/unknown/wrong-location not-found contracts", async () => {
-    const [other] = await run((tx) =>
-      tx
-        .insert(locations)
-        .values({ name: "Other", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
-        .returning(),
-    );
-    const outside = await run((tx) =>
-      tx
-        .insert(floorZones)
-        .values({ locationId: other!.id, name: "Outside" })
-        .returning({ id: floorZones.id }),
-    );
-    for (const id of ["bad-id", randomUUID(), outside[0]!.id])
+  it("keeps zone malformed/unknown not-found contracts", async () => {
+    for (const id of ["bad-id", randomUUID()])
       for (const method of ["GET", "DELETE"]) {
         await error(
           await send(method, `${path("zone", id)}${method === "GET" ? "/delete-impact" : ""}`),

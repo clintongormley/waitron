@@ -1,11 +1,5 @@
 import { and, eq, isNotNull, not } from "drizzle-orm";
-import {
-  diningTables,
-  floorTodayJoins,
-  floorTodayTables,
-  floorZones,
-  joinedOutOfService,
-} from "@waitron/db";
+import { diningTables, floorTodayJoins, floorTodayTables, joinedOutOfService } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, normalisePartyName } from "@waitron/shared";
 import { refuseInJoinedTable, todayOf } from "./floor-today-table.js";
@@ -40,7 +34,7 @@ export async function nameToday(
       .from(floorTodayJoins)
       .where(eq(floorTodayJoins.id, joinId));
     if (wanted === group!.name) return;
-    if (wanted !== null) await refuseInUse(tx, cfg, wanted, { joinId });
+    if (wanted !== null) await refuseInUse(tx, wanted, { joinId });
     await withMovedSlips(
       tx,
       cfg,
@@ -61,7 +55,7 @@ export async function nameToday(
     .where(eq(diningTables.id, tableId));
   if (wanted !== null && sameName(wanted, own!.label)) wanted = null;
   if (wanted === today.row.name) return;
-  if (wanted !== null) await refuseInUse(tx, cfg, wanted, { tableId });
+  if (wanted !== null) await refuseInUse(tx, wanted, { tableId });
   await withMovedSlips(tx, cfg, { tables: [tableId] }, async () => {
     await tx
       .update(floorTodayTables)
@@ -77,7 +71,6 @@ export async function nameToday(
  */
 async function refuseInUse(
   tx: Transaction,
-  cfg: TradingContext,
   name: string,
   self: { tableId: string } | { joinId: string },
 ): Promise<void> {
@@ -87,8 +80,7 @@ async function refuseInUse(
 
   const saved = await tx
     .select({ id: diningTables.id, label: diningTables.label })
-    .from(diningTables)
-    .where(eq(diningTables.locationId, cfg.locationId));
+    .from(diningTables);
   if (saved.some((t) => t.id !== selfTable && sameName(t.label, name))) throw taken;
 
   const todays = await tx
@@ -96,18 +88,13 @@ async function refuseInUse(
     .from(floorTodayTables)
     .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
     .where(
-      and(
-        eq(diningTables.locationId, cfg.locationId),
-        isNotNull(floorTodayTables.name),
-        not(joinedOutOfService(floorTodayTables.tableId)),
-      ),
+      and(isNotNull(floorTodayTables.name), not(joinedOutOfService(floorTodayTables.tableId))),
     );
   if (todays.some((t) => t.tableId !== selfTable && sameName(t.name!, name))) throw taken;
 
   const groups = await tx
     .select({ id: floorTodayJoins.id, name: floorTodayJoins.name })
     .from(floorTodayJoins)
-    .innerJoin(floorZones, eq(floorZones.id, floorTodayJoins.zoneId))
-    .where(and(eq(floorZones.locationId, cfg.locationId), isNotNull(floorTodayJoins.name)));
+    .where(isNotNull(floorTodayJoins.name));
   if (groups.some((g) => g.id !== selfJoin && sameName(g.name!, name))) throw taken;
 }

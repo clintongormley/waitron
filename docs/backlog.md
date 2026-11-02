@@ -3093,9 +3093,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
     as merged into each other, which the database accepts) is named by the bill's own label;
     whether any till action can make such a loop was not checked.
   - Left by #906's review: no case pins what a correction slip prints for a counter order delivered
-    to a table; and a database built on purpose with a delivery table in another location now
-    names the order by its own label — no product path creates that state, and whether every
-    existing venue database is free of it was not checked.
+    to a table.
   - Open (found by #905's review, by reading, not reproduced): on a handheld, a waiter who taps a
     free table to seat it, goes back to the order tab (on a handheld, the table's bar button since
     A797 slice 3) while the seating is still under way and starts Move guests can have the move

@@ -5,7 +5,6 @@ import {
   orderTableLabels,
   ticketItems,
   workingOrderLines,
-  venueLocationId,
   workingOrders,
 } from "@waitron/db";
 import { BAND_RANK, classifyBand, worstBand } from "@waitron/shared";
@@ -128,7 +127,6 @@ export async function computeOverdueOrders(
   if (late.length === 0) return [];
   const tableLabels = await orderTableLabels(
     tx,
-    await venueLocationId(tx),
     late.map(({ orderId, order }) => ({ id: orderId, ...order })),
   );
   const results: OverdueOrder[] = late.map(({ orderId, order, band, worstLine }) => ({

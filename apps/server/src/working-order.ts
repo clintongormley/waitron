@@ -5189,7 +5189,8 @@ export interface HeldOrder {
 /** List the venue's open bills, a party's bill and lineless ones included. */
 export async function listHeldOrders(
   deps: WorkingOrderDeps,
-  cfg: TradingContext,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: TradingContext,
 ): Promise<HeldOrderSummary[]> {
   return withTransaction(deps.db, async (tx) => {
     const rows = await tx
@@ -5218,7 +5219,6 @@ export async function listHeldOrders(
       .orderBy(workingOrders.orderNumber);
     const tableLabels = await orderTableLabels(
       tx,
-      cfg.locationId,
       rows.map((row) => ({ ...row, label: null })),
     );
     const ids = rows.map((row) => row.id);
@@ -7558,7 +7558,6 @@ export async function listCounterWaiting(
       .orderBy(workingOrders.openedAt, workingOrders.orderNumber);
     const tableLabels = await orderTableLabels(
       tx,
-      cfg.locationId,
       rows.map((row) => ({ ...row, label: null })),
     );
     const placedIds = rows.filter((row) => row.status === "placed").map((row) => row.id);
@@ -8479,7 +8478,7 @@ export function liveKitchenDish(): SQL | undefined {
 /** Build every section of the selected pass orders before a pass screen or pass monitor narrows their items. */
 export async function readPassBoard(
   tx: Transaction,
-  locationId: string,
+  _locationId: string,
   scope: SQL,
 ): Promise<ExpoOrder[]> {
   const rows = await tx
@@ -8561,7 +8560,6 @@ export async function readPassBoard(
   );
   const tableLabels = await orderTableLabels(
     tx,
-    locationId,
     [...new Map(rows.map((row) => [row.orderId, row])).values()].map((row) => ({
       id: row.orderId,
       partyId: row.partyId,

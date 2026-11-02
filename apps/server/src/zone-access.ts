@@ -27,12 +27,7 @@ async function subjectZones(
   const [table] = await tx
     .select({ zoneId: diningTables.zoneId })
     .from(diningTables)
-    .where(
-      and(
-        eq(diningTables.id, subject.tableId.toLowerCase()),
-        eq(diningTables.locationId, cfg.locationId),
-      ),
-    );
+    .where(eq(diningTables.id, subject.tableId.toLowerCase()));
   return [table?.zoneId ?? null];
 }
 
