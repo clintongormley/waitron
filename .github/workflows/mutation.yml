@@ -205,9 +205,9 @@ jobs:
       - name: Score the package
         run: node scripts/mutation-aggregate.mjs mutation-reports --package ui-core --shards 4 --break 90
 
-  # packages/ui, sharded the same way as packages/db below, and gated the same way: no
-  # thresholds.break in packages/ui/stryker.config.json, one bar on the merged score in
-  # `mutation-ui-aggregate`. scripts/mutation-shard.mjs picks ui's files from that config's `mutate`
+  # packages/ui, sharded by the same script as packages/db below (by bytes: ui has no cost table),
+  # and gated the same way: no thresholds.break in packages/ui/stryker.config.json, one bar on the
+  # merged score in `mutation-ui-aggregate`. scripts/mutation-shard.mjs picks ui's files from that config's `mutate`
   # list, cuts wt-combobox.ts, wt-data-table.ts and wt-dialog.ts into line ranges, and runs each
   # range in a shard of its own. Why, on run 38233718266 at 20 shards: wt-combobox.ts and
   # wt-dialog.ts, each alone in a shard, hit the 30-minute limit (716 of 780 and 325 of 382 mutants
@@ -384,11 +384,12 @@ jobs:
   # database-backed mutants (every suite here opens a venue database and applies a schema), which on
   # ONE 2-vCPU runner was ~10h — past GitHub's 6h job limit, so the job never once completed.
   #
-  # EVERY TIMING IN THIS NOTE below this paragraph, and the shard count they argue for, was measured
-  # while that database was PGlite — a WASM PostgreSQL booted per suite. The storage switch replaced
-  # it with SQLite files on disk. On SQLite, run 38206876422 (2026-10-12) took 5m00s to 11m41s per
-  # shard, shard 10 the longest (job wall times from `gh run view`), so ten shards may now be more
-  # than the work needs. Treat ~10h as a FLOOR for the PGlite engine, not a current figure: it was
+  # EVERY TIMING IN THIS NOTE below this paragraph, except the dry-run figure dated 2026-11-02, and
+  # the shard count they argue for, was measured while that database was PGlite — a WASM PostgreSQL
+  # booted per suite. The storage switch replaced it with SQLite files on disk. On SQLite, run 38206876422 (2026-10-12) took 5m00s to 11m41s per
+  # shard, shard 10 the longest (job wall times from `gh run view`); on 2026-11-02 shard 10 reached
+  # the 25-minute limit (docs/developers/ci-and-gates.md, "db's mutation shards are packed by
+  # estimated cost"). Treat ~10h as a FLOOR for the PGlite engine, not a current figure: it was
   # Stryker's own ETA at 749 mutants, and the set has grown a great deal since (a whole-package
   # `--dryRunOnly` read 2649 on 2026-09-19). That is why the count lives in dated receipts rather
   # than in this sentence.

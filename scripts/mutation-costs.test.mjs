@@ -1,4 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, it } from "vitest";
 
 import {
   costTable,
@@ -77,6 +82,13 @@ describe("fileSecondsFromReport", () => {
     const seconds = fileSecondsFromReport({
       files: { "src/x.ts": { mutants: [{ status: "Killed", coveredBy: ["0"] }] } },
     });
+    expect(seconds.get("src/x.ts")).toBeCloseTo(MUTANT_SECONDS);
+  });
+
+  it("counts only the test files a covering id maps to", () => {
+    const seconds = fileSecondsFromReport(
+      report({ "src/x.ts": [["Killed", ["0", "unmapped", "also-unmapped"]]] }, suites),
+    );
     expect(seconds.get("src/x.ts")).toBeCloseTo(MUTANT_SECONDS + TEST_FILE_SECONDS);
   });
 
@@ -94,18 +106,21 @@ describe("costTable", () => {
     const table = costTable(
       [new Map([["src/x.ts", 10.04]]), new Map([["src/x.ts", 30]]), new Map([["src/x.ts", 20.06]])],
       [],
+      ["src/x.ts"],
     );
     expect(table).toEqual({ "src/x.ts": 20.1 });
   });
 
   it("averages the middle two of an even count", () => {
-    expect(costTable([new Map([["src/x.ts", 10]]), new Map([["src/x.ts", 20]])], [])).toEqual({
-      "src/x.ts": 15,
-    });
+    expect(
+      costTable([new Map([["src/x.ts", 10]]), new Map([["src/x.ts", 20]])], [], ["src/x.ts"]),
+    ).toEqual({ "src/x.ts": 15 });
   });
 
   it("keeps every file above zero, so a file no test reaches still has a weight", () => {
-    expect(costTable([new Map([["src/x.ts", 0]])], [])).toEqual({ "src/x.ts": 0.1 });
+    expect(costTable([new Map([["src/x.ts", 0]])], [], ["src/x.ts"])).toEqual({
+      "src/x.ts": 0.1,
+    });
   });
 
   it("leaves out the package's split files, whose reports hold one range each", () => {
@@ -118,6 +133,22 @@ describe("costTable", () => {
           ]),
         ],
         ["src/heavy.ts"],
+        ["src/heavy.ts", "src/x.ts"],
+      ),
+    ).toEqual({ "src/x.ts": 1 });
+  });
+
+  it("leaves out a file the package's mutate selection no longer holds", () => {
+    expect(
+      costTable(
+        [
+          new Map([
+            ["src/renamed-away.ts", 5],
+            ["src/x.ts", 1],
+          ]),
+        ],
+        [],
+        ["src/x.ts"],
       ),
     ).toEqual({ "src/x.ts": 1 });
   });
@@ -131,16 +162,18 @@ describe("costTable", () => {
         ]),
       ],
       [],
+      ["src/a.ts", "src/b.ts"],
     );
     expect(Object.keys(table)).toEqual(["src/a.ts", "src/b.ts"]);
   });
 });
 
 describe("main", () => {
-  const run = (argv, files) => {
+  const run = (argv, files, selected = ["src/x.ts", "src/y.ts"]) => {
     const written = {};
     const errors = [];
     const status = main(argv, {
+      selection: (pkg) => (pkg === "db" ? selected : []),
       readFile: (path) => files[path],
       writeFile: (path, text) => (written[path] = text),
       stderr: (line) => errors.push(line),
@@ -167,6 +200,15 @@ describe("main", () => {
     expect(written["out.json"].endsWith("}\n")).toBe(true);
   });
 
+  it("writes only the files the package's mutate selection holds", () => {
+    const one = JSON.stringify(
+      report({ "src/x.ts": [["Killed", ["0"]]], "src/gone.ts": [["Killed", ["0"]]] }, suites),
+    );
+    const { status, written } = run(["db", "out.json", "one.json"], { "one.json": one });
+    expect(status).toBe(0);
+    expect(Object.keys(JSON.parse(written["out.json"]))).toEqual(["src/x.ts"]);
+  });
+
   it("refuses too few arguments with its usage", () => {
     const { status, errors, written } = run(["db", "out.json"], {});
     expect(status).toBe(2);
@@ -187,5 +229,52 @@ describe("main", () => {
     expect(status).toBe(1);
     expect(errors.join("\n")).toMatch(/no mutated files in the reports; out\.json left unchanged/);
     expect(written).toEqual({});
+  });
+});
+
+describe("the command line", () => {
+  const script = join(import.meta.dirname, "mutation-costs.mjs");
+  let dir;
+
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  function run(...argv) {
+    dir = mkdtempSync(join(tmpdir(), "mutation-costs-"));
+    const out = join(dir, "out.json");
+    const reports = argv.map((files, i) => {
+      const path = join(dir, `${i}.json`);
+      writeFileSync(path, JSON.stringify(report(files, suites)));
+      return path;
+    });
+    const result = spawnSync(process.execPath, [script, "db", out, ...reports], {
+      encoding: "utf8",
+    });
+    return { result, out };
+  }
+
+  it("writes db's table to the named file, keeping only files db mutates, and exits 0", () => {
+    const { result, out } = run({
+      "src/errors.ts": [["Killed", ["0", "2"]]],
+      "src/no-longer-mutated.ts": [["Killed", ["0"]]],
+    });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(readFileSync(out, "utf8")).toBe('{\n  "src/errors.ts": 0.9\n}\n');
+  });
+
+  it("exits 1 and writes no file when the reports name no file db mutates", () => {
+    const { result, out } = run({ "src/no-longer-mutated.ts": [["Killed", ["0"]]] });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/^no mutated files in the reports/);
+    expect(existsSync(out)).toBe(false);
+  });
+
+  it("exits 2 with its usage when given too few arguments", () => {
+    const result = spawnSync(process.execPath, [script, "db"], { encoding: "utf8" });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toMatch(/^usage: node scripts\/mutation-costs\.mjs/);
   });
 });

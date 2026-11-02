@@ -668,8 +668,8 @@ by its 25-minute job limit at 390 of 391 mutants. Two things lay behind it.
 - **Mutants that change nothing, covered by the whole suite.** `useVenueDb`'s per-test reset in
   `src/testing/venue-db.ts` was guarded by `resetPerTest && db !== undefined && resetPlan !==
   undefined`, and the plan is only ever set when the other two hold, so most mutants of that
-  condition change nothing. Each one runs every test that touches a database (1,265 in the reports)
-  and on CI's runners ends at Stryker's per-mutant timeout: the three timeouts in that file on
+  condition change nothing. Each one runs every test that reaches it (1,265 or 652 in the reports)
+  and on CI's runners some ran to Stryker's per-mutant timeout: the three timeouts in that file on
   2026-10-31 and 2026-11-01 were all on that line. A947 slice 3a (#2371) added the same condition
   for `node.db`. Locally (`pnpm exec stryker run --mutate "src/testing/venue-db.ts:213-216"
   --concurrency 6 --force` on `main` at cbbec7ff2b), the two lines made 18 mutants: 8 killed,
@@ -709,8 +709,8 @@ The job logs, the reports, the fit and the replay are in `/Users/clintongormley/
 outside the repository.
 
 **Limits.** The model is a fit over three nights, not a measurement of any one file. The guard in
-`scripts/mutation-shard.test.mjs` checks only that db's table exists and holds positive seconds for
-unsplit `src/` files, never that it is fresh. Nothing guards against another condition, in code
+`scripts/mutation-shard.test.mjs` checks only that db's table exists, holds positive seconds for
+unsplit `src/` files and names only files db's Stryker config still mutates, never that it is fresh. Nothing guards against another condition, in code
 that every test runs, that its own guard already implies.
 
 ## Fiscal coverage uses four file shards
@@ -2095,7 +2095,10 @@ the previous run, `38233718266`, with 20 ui shards, `wt-combobox.ts` and `wt-dia
 the 30-minute limit alone. Until A539 split it, ui ran inside the `mutation` matrix at a 185-minute
 limit, which run `38206876422` reached and was cancelled at. `mutation-db`'s 8.8 is from runs `36380351019` and `37267389722`, the two scheduled runs from the
 SQLite switch to 2026-10-05; on run `38241392066` its shards took 2.9 to 12.2 minutes (shard 10 longest, 732 s),
-so its limit is 25 by the doubling rule.
+so its limit is 25 by the doubling rule. On run `41392057587` (2026-11-02) shard 10 was cancelled at that
+limit, and shard 7 ran to its end in 24.2 minutes, which the doubling rule would make 50; A1309
+repacked the shards by estimated cost instead of raising the limit ("db's mutation shards are packed
+by estimated cost").
 
 codeql.yml's figure is from GitHub's default setup, before A488 replaced it: the 55 successful
 `main` runs from 2026-10-10 09:16 to 2026-10-11 10:33 UTC, where the `javascript-typescript` job

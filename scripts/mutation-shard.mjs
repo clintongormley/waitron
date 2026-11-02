@@ -68,6 +68,13 @@ export function mutateFiles(packageDir, mutatePatterns) {
   return out.sort();
 }
 
+/** `packages/<pkg>` under `root`, and the files its `stryker.config.json` mutates there. */
+export function packageSelection(pkg, root = REPO_ROOT) {
+  const packageDir = join(root, "packages", pkg);
+  const config = JSON.parse(readFileSync(join(packageDir, "stryker.config.json"), "utf8"));
+  return { packageDir, paths: mutateFiles(packageDir, config.mutate) };
+}
+
 /** The HEAVY_FILES entries `files` does not hold, so a rename cannot silently un-split a file. */
 export function missingHeavyFiles(heavy, files) {
   return Object.keys(heavy).filter((path) => !files.includes(path));
@@ -89,9 +96,7 @@ export function shardFiles(pkg, shard, total, root = REPO_ROOT) {
   if (!Number.isInteger(shard) || shard < 1 || shard > total)
     throw new Error(`shard must be an integer in 1..${total}, got "${shard}"`);
 
-  const packageDir = join(root, "packages", pkg);
-  const config = JSON.parse(readFileSync(join(packageDir, "stryker.config.json"), "utf8"));
-  const paths = mutateFiles(packageDir, config.mutate);
+  const { packageDir, paths } = packageSelection(pkg, root);
 
   const missing = missingHeavyFiles(heavy, paths);
   if (missing.length > 0)
@@ -114,6 +119,7 @@ export function shardFiles(pkg, shard, total, root = REPO_ROOT) {
       .filter((path) => !Object.hasOwn(heavy, path))
       .map((path) => ({ path, size: statSync(join(packageDir, path)).size })),
     costs,
+    costsPath,
   );
   if (total < ranges.length || (total === ranges.length && others.length > 0))
     throw new Error(
@@ -151,9 +157,17 @@ export function splitRanges(path, lineCount, parts) {
  * otherwise its bytes at the named files' seconds per byte, and its bytes alone when `costs` is
  * absent or names none of `files`. Bytes are only the fallback because they do not predict a file's
  * cost (docs/developers/ci-and-gates.md, "db's mutation shards are packed by estimated cost").
+ * Throws, naming `costsPath`, on a cost it would use that is not a number of seconds above zero.
  */
-export function fileWeights(files, costs) {
+export function fileWeights(files, costs, costsPath) {
   const named = costs === undefined ? [] : files.filter((file) => Object.hasOwn(costs, file.path));
+  for (const { path } of named) {
+    const seconds = costs[path];
+    if (!(Number.isFinite(seconds) && seconds > 0))
+      throw new Error(
+        `${costsPath} gives "${path}" ${typeof seconds === "string" ? JSON.stringify(seconds) : String(seconds)} seconds; every cost must be a number of seconds above zero`,
+      );
+  }
   if (named.length === 0) return files.map(({ path, size }) => ({ path, weight: size }));
   const secondsPerByte =
     named.reduce((sum, file) => sum + costs[file.path], 0) /

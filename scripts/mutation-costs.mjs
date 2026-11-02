@@ -4,12 +4,11 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 
-import { HEAVY_FILES } from "./mutation-shard.mjs";
+import { HEAVY_FILES, packageSelection } from "./mutation-shard.mjs";
 
-// A Stryker report records no time per mutant, so a file's seconds are estimated. These three
-// charges are a least-squares fit of the mutation phase of 29 db shard runs against their
-// reports (2026-10-31 to 2026-11-02), error 113 s root-mean-square; the receipt is in
-// docs/developers/ci-and-gates.md, "db's mutation shards are packed by estimated cost".
+// A Stryker report records no time per mutant, so a file's seconds are estimated from these three
+// fitted charges: docs/developers/ci-and-gates.md,
+// "db's mutation shards are packed by estimated cost".
 export const MUTANT_SECONDS = 0.694;
 export const TEST_FILE_SECONDS = 0.084;
 export const TIMEOUT_SECONDS = 82.2;
@@ -26,7 +25,11 @@ export function fileSecondsFromReport(report) {
     let total = 0;
     for (const mutant of mutants) {
       if (UNTESTED.has(mutant.status)) continue;
-      const testFiles = new Set((mutant.coveredBy ?? []).map((id) => fileOfTest.get(id)));
+      const testFiles = new Set(
+        (mutant.coveredBy ?? [])
+          .map((id) => fileOfTest.get(id))
+          .filter((file) => file !== undefined),
+      );
       total += MUTANT_SECONDS + TEST_FILE_SECONDS * testFiles.size;
       if (mutant.status === "Timeout") total += TIMEOUT_SECONDS;
     }
@@ -46,12 +49,17 @@ function median(values) {
   return sorted.length % 2 === 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
-/** Each file's median seconds over `reports`, leaving out `splitPaths`, whose reports hold one range each. */
-export function costTable(reports, splitPaths) {
+/**
+ * Each file's median seconds over `reports`, for the files in `selected` (the package's current
+ * mutate selection), leaving out `splitPaths`, whose reports hold one range each.
+ */
+export function costTable(reports, splitPaths, selected) {
+  const kept = new Set(selected);
+  for (const path of splitPaths) kept.delete(path);
   const byPath = new Map();
   for (const report of reports) {
     for (const [path, seconds] of report) {
-      if (splitPaths.includes(path)) continue;
+      if (!kept.has(path)) continue;
       if (!byPath.has(path)) byPath.set(path, []);
       byPath.get(path).push(seconds);
     }
@@ -64,7 +72,7 @@ export function costTable(reports, splitPaths) {
   return table;
 }
 
-export function main(argv, { readFile, writeFile, stderr }) {
+export function main(argv, { selection, readFile, writeFile, stderr }) {
   if (argv.length < 3) {
     stderr(
       "usage: node scripts/mutation-costs.mjs <package> <out.json> <mutation.json> [<mutation.json> …]",
@@ -79,6 +87,7 @@ export function main(argv, { readFile, writeFile, stderr }) {
   const table = costTable(
     reports.map((path) => fileSecondsFromReport(JSON.parse(readFile(path)))),
     Object.keys(HEAVY_FILES[pkg]),
+    selection(pkg),
   );
   if (Object.keys(table).length === 0) {
     stderr(`no mutated files in the reports; ${out} left unchanged`);
@@ -88,10 +97,12 @@ export function main(argv, { readFile, writeFile, stderr }) {
   return 0;
 }
 
-// Ignored for coverage because nothing runs it in-process; its suite calls `main` directly.
+// Ignored for coverage because its tests run it in a CHILD process, which the v8 provider does not
+// measure.
 /* v8 ignore start */
 if (process.argv[1] && process.argv[1].endsWith("mutation-costs.mjs")) {
   process.exitCode = main(process.argv.slice(2), {
+    selection: (pkg) => packageSelection(pkg).paths,
     readFile: (file) => readFileSync(file, "utf8"),
     writeFile: (file, text) => writeFileSync(file, text),
     stderr: (line) => console.error(line),

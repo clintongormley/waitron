@@ -20,6 +20,7 @@ import {
   HEAVY_FILES,
   missingHeavyFiles,
   mutateFiles,
+  packageSelection,
   shardFiles as shardFilesOf,
   splitRanges,
 } from "./mutation-shard.mjs";
@@ -137,6 +138,20 @@ describe("fileWeights", () => {
 
   it("falls back to bytes when the table names none of the files", () => {
     expect(fileWeights([sized("a", 600)], { gone: 9 })).toEqual([f("a", 600)]);
+  });
+
+  for (const bad of ["3", 0, -1, Number.NaN, Number.POSITIVE_INFINITY, null]) {
+    it(`refuses a table that gives a file it weighs ${String(bad)} seconds, naming the file and the table`, () => {
+      expect(() =>
+        fileWeights([sized("a", 600), sized("b", 20)], { a: 3, b: bad }, "pkg/mutation-costs.json"),
+      ).toThrow(
+        /pkg\/mutation-costs\.json gives "b" .*; every cost must be a number of seconds above zero/,
+      );
+    });
+  }
+
+  it("ignores a bad value for a file it does not weigh", () => {
+    expect(fileWeights([sized("a", 600)], { a: 3, gone: 0 }, "t.json")).toEqual([f("a", 3)]);
   });
 });
 
@@ -404,6 +419,15 @@ describe("shardFiles", () => {
     expect(shards).toEqual([["src/e.ts"], ["src/a.ts", "src/c.ts"], ["src/b.ts", "src/d.ts"]]);
   });
 
+  it("refuses a cost table that gives a file zero seconds, naming the table", () => {
+    const dir = dbFixture(["src/a.ts", "src/b.ts"]);
+    const tablePath = join(dir, "packages", "db", "mutation-costs.json");
+    writeFileSync(tablePath, JSON.stringify({ "src/a.ts": 1, "src/b.ts": 0 }));
+    expect(() => shardFilesOf("db", 4, 5, dir)).toThrow(
+      `${tablePath} gives "src/b.ts" 0 seconds; every cost must be a number of seconds above zero`,
+    );
+  });
+
   it("refuses a shard count that cannot hold the heavy ranges plus the other files", () => {
     const dir = dbFixture(["src/a.ts"]);
     expect(() => shardFilesOf("db", 1, 3, dir)).toThrow(
@@ -493,6 +517,12 @@ describe("db's committed cost table", () => {
       expect(Object.hasOwn(HEAVY_FILES.db, path)).toBe(false);
       expect(typeof seconds === "number" && seconds > 0).toBe(true);
     }
+  });
+
+  it("names only files db's stryker config still mutates, so a rename or deletion fails here", () => {
+    const table = JSON.parse(readFileSync(tablePath, "utf8"));
+    const selected = packageSelection("db").paths;
+    expect(Object.keys(table).filter((path) => !selected.includes(path))).toEqual([]);
   });
 });
 
