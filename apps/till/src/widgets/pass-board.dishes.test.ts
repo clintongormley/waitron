@@ -218,6 +218,99 @@ describe("A773 pass board widget: dishes", () => {
     expect(itemOf(el, "p2").querySelector("[data-forgotten]")).not.toBeNull();
   });
 
+  it.each<[string, Partial<PassCardItem>, Partial<PassCardItem>]>([
+    [
+      "another phase",
+      { phase: "requested", state: "queued", firedAt: null },
+      { phase: "held", state: "queued", firedAt: null, requestedAt: null },
+    ],
+    ["one dimmed", {}, { informational: true }],
+    ["its station closed", {}, { stationClosed: true }],
+  ])("draws a portion with %s apart from an otherwise identical one", async (_, first, second) => {
+    const el = await inProgress([portion("p1", first), portion("p2", { ...first, ...second })]);
+    expect(names(el)).toEqual(["1× Burger", "1× Burger"]);
+  });
+
+  it("draws the same dish in another course apart", async () => {
+    const el = await inProgress([
+      portion("starter", {
+        name: "Chips",
+        course: { id: "course-starters", name: "Starters", displayOrder: 1 },
+      }),
+      portion("main", { name: "Chips" }),
+    ]);
+    expect(names(el)).toEqual(["1× Chips", "1× Chips"]);
+  });
+
+  it("draws the same dish from two bills on one group card apart", async () => {
+    const el = await mountBoard(
+      passBoard({
+        inProgress: [
+          passCard({
+            key: "group:p3:g3",
+            target: { kind: "group", partyId: "p3", groupId: "g3" },
+            party: { id: "p3", revision: 2 },
+            group: { displayNumber: 4, position: 1 },
+            orders: [
+              { orderId: "order-21", orderNumber: 21, tableLabel: "T11", kitchenNote: null },
+              { orderId: "order-22", orderNumber: 22, tableLabel: "T11", kitchenNote: null },
+            ],
+            items: [
+              portion("ana", { name: "Chips", orderId: "order-21" }),
+              portion("clint", { name: "Chips", orderId: "order-22" }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(names(el)).toEqual(["1× Chips", "1× Chips"]);
+  });
+
+  it("draws each dish's left edge in its kitchen state's colour, held and dimmed dishes included", async () => {
+    const el = await mountBoard(
+      passBoard({
+        held: [
+          passCard({
+            key: "bill:held",
+            kind: "held",
+            requestedAt: null,
+            items: [passItem({ id: "held", phase: "held", firedAt: null, requestedAt: null })],
+          }),
+        ],
+        inProgress: [
+          passCard({
+            items: [
+              passItem({ id: "queued", name: "Soup" }),
+              passItem({ id: "preparing", name: "Fish", state: "preparing", phase: "preparing" }),
+              passItem({ id: "ready", name: "Salad", state: "ready", phase: "ready" }),
+              passItem({
+                id: "dimmed",
+                name: "Wine",
+                stationName: "Bar",
+                state: "preparing",
+                phase: "preparing",
+                informational: true,
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    el.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+    el.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
+    el.style.setProperty("--wt-color-success", "rgb(7, 8, 9)");
+    el.style.setProperty("--wt-space-1", "5px");
+    const stripe = (id: string) => {
+      const style = getComputedStyle(itemOf(el, id));
+      return [style.borderLeftColor, style.borderLeftStyle, style.borderLeftWidth];
+    };
+    expect(stripe("queued")).toEqual(["rgb(1, 2, 3)", "solid", "5px"]);
+    expect(stripe("preparing")).toEqual(["rgb(4, 5, 6)", "solid", "5px"]);
+    expect(stripe("ready")).toEqual(["rgb(7, 8, 9)", "solid", "5px"]);
+    expect(stripe("held")).toEqual(["rgb(1, 2, 3)", "solid", "5px"]);
+    expect(stripe("dimmed")).toEqual(["rgb(4, 5, 6)", "solid", "5px"]);
+  });
+
   it("marks a forgotten dish in view by its age on the board's clock, dimmed or not, never by the server's band", async () => {
     const el = await inProgress([
       passItem({ id: "own", queuedAt: minutesAgo(20), band: "fresh" }),
@@ -291,6 +384,48 @@ describe("A773 pass board widget: dishes", () => {
       "Captured milk",
     );
     expect(itemOf(el, "plain").querySelector("[data-kitchen-allergy]")).toBeNull();
+  });
+
+  it("marks the card head only for an allergy on a dish in the pass's view", async () => {
+    const el = await inProgress([
+      passItem({ id: "burger", name: "Burger" }),
+      passItem({
+        id: "chips",
+        name: "Chips",
+        stationName: "Fryer",
+        visible: false,
+        informational: true,
+        allergy: allergyBlock,
+      }),
+    ]);
+    expect(itemOf(el, "chips")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-allergy-marker]")).toBeNull();
+  });
+
+  it("draws each extra's own allergens and diet beside it, apart from the dish's own", async () => {
+    const el = await inProgress([
+      passItem({
+        id: "burger",
+        asServed: { allergens: { gluten: { kinds: ["wheat"] } }, pending: false },
+        modifiers: [
+          {
+            descriptions: { "es-ES": "Bacon" },
+            addAllergens: { milk: {} },
+            suitableFor: ["halal"],
+          },
+        ],
+      }),
+    ]);
+    const milk = allergenName("milk", currentLocale());
+    const extraAllergens = el.shadowRoot!.querySelector(
+      '[data-test="item-modifier-allergens-burger-0"]',
+    )!;
+    expect(extraAllergens.textContent).toContain(milk);
+    const extraDiet = el.shadowRoot!.querySelector('[data-test="item-modifier-diet-burger-0"]')!;
+    expect(extraDiet.querySelector("[data-diet='halal']")).not.toBeNull();
+    const dish = el.shadowRoot!.querySelector('[data-item-allergens="burger"]')!;
+    expect(dish.textContent).toContain(allergenName("gluten", currentLocale()));
+    expect(dish.textContent).not.toContain(milk);
   });
 
   it("draws no allergy marker and no kitchen note on a card without them", async () => {

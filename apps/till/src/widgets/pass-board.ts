@@ -2,9 +2,8 @@ import { ContentLanguageController, baseStyles } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { TimingBand } from "@waitron/shared";
-import type { PassBoard, PassCardItem } from "../api/client.js";
-import { allergenName } from "../i18n/allergen-names.js";
-import { currentLocale, t } from "../i18n/t.js";
+import type { PassBoard } from "../api/client.js";
+import { t } from "../i18n/t.js";
 import { type BoardMeasure, columnsFit } from "../state/kitchen-board-fit.js";
 import { type ColumnKey, type ColumnState, PASS_COLUMNS } from "../state/kitchen-columns.js";
 import { overviewRows, rowsToMake } from "../state/kitchen-overview.js";
@@ -18,11 +17,14 @@ import {
   passOverviewDishes,
 } from "../state/pass-view.js";
 import { kitchenPortionKey, portionGroups } from "../state/portion-groups.js";
-import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
-import { dishLine, snapshotDescriptionFor } from "./dish-format.js";
+import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
+import { dishLine } from "./dish-format.js";
 import { groupName } from "./group-name.js";
 import {
   columnHeading,
+  dishAllergens,
+  dishModifiers,
+  dishNote,
   kitchenBoardStyles,
   measureBoard,
   overviewList,
@@ -32,9 +34,8 @@ import {
   kitchenAllergyMarker,
   kitchenAllergyStyles,
 } from "./kitchen-allergy-block.js";
-import { optionAnswers } from "./option-snapshot.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
-import { extraCount, queueCrossRefs } from "./queue-crossrefs.js";
+import { queueCrossRefs } from "./queue-crossrefs.js";
 
 const COLUMN_WORDS = {
   overview: "station.overview",
@@ -199,20 +200,35 @@ export class TillPassBoard extends LitElement {
         gap: var(--wt-space-1);
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
+        border-left: var(--wt-space-1) solid var(--wt-color-border);
         border-radius: var(--wt-radius-sm);
         background: var(--wt-color-surface);
         color: var(--wt-color-text);
+      }
+
+      .item.state-queued {
+        border-left-color: var(--wt-color-text-muted);
+      }
+
+      .item.state-preparing {
+        border-left-color: var(--wt-color-primary);
+      }
+
+      .item.state-ready {
+        border-left-color: var(--wt-color-success);
       }
 
       /* Muted text and a dotted box, never opacity, which would fail the contrast sweep; the
          caption says why in words. */
       .item.dimmed {
         border-style: dotted;
+        border-left-style: solid;
         color: var(--wt-color-text-muted);
       }
 
       .item.held {
         border-style: dashed;
+        border-left-style: solid;
         color: var(--wt-color-text-muted);
       }
 
@@ -428,7 +444,7 @@ export class TillPassBoard extends LitElement {
               ${order.tableLabel ? html`<span class="label">${order.tableLabel}</span>` : nothing}`,
         )}
         ${card.group === undefined ? nothing : html`<span class="group-name">${groupName(card.group)}</span>`}
-        ${kitchenAllergyMarker(view.items.some(({ item }) => item.allergy !== null))}
+        ${kitchenAllergyMarker(view.items.some(({ item }) => item.visible && item.allergy !== null))}
         ${this.#age(view)}
       </div>
       ${card.orders.map((order) =>
@@ -473,7 +489,7 @@ export class TillPassBoard extends LitElement {
       item.name,
     );
     return html`<li
-      class="item ${view.dimmed ? "dimmed" : ""} ${held ? "held" : ""}"
+      class="item state-${item.state} ${view.dimmed ? "dimmed" : ""} ${held ? "held" : ""}"
       data-item=${item.id}
       ?data-dimmed=${view.dimmed}
     >
@@ -497,7 +513,7 @@ export class TillPassBoard extends LitElement {
               ).replaceAll("{station}", () => item.stationName)}</span
             >`
       }
-      ${customisation(item)}${modifiers(item)}${queueCrossRefs(item, "item")}${allergens(item)}${dietBadges(
+      ${dishNote(item, "item")}${dishModifiers(item, "item")}${queueCrossRefs(item, "item")}${dishAllergens(item, "item")}${dietBadges(
         item.asServedDiet,
         `item-diet-${item.id}`,
       )}${kitchenAllergyBlock(item.allergy)}
@@ -586,6 +602,8 @@ function rows(items: readonly ItemView[]): ItemView[][] {
     (view) =>
       kitchenPortionKey(view.item, view.item.qty, [
         view.item.stationName,
+        view.item.course?.id ?? null,
+        view.item.orderId,
         view.item.phase,
         view.dimmed,
         view.closed,
@@ -593,44 +611,6 @@ function rows(items: readonly ItemView[]): ItemView[][] {
       ]),
     () => 0,
   );
-}
-
-function customisation(item: PassCardItem): TemplateResult | typeof nothing {
-  const note = item.note ?? null;
-  if (note === null || note === "") return nothing;
-  return html`<span class="item-customisation" data-item-customisation=${item.id}>
-    <span class="item-note" data-note>${note}</span>
-  </span>`;
-}
-
-/** The dish's own allergen profile; each extra's own allergens are drawn beside the extra. */
-function allergens(item: PassCardItem): TemplateResult | typeof nothing {
-  const codes = item.asServed ? Object.keys(item.asServed.allergens).sort() : [];
-  if (codes.length === 0) return nothing;
-  const locale = currentLocale();
-  return html`<span class="item-allergens" data-item-allergens=${item.id}>
-    <span class="allergen-label">${t("allergens.contains")}</span>
-    ${codes.map((code) => html`<span class="allergen-chip">${allergenName(code, locale)}</span>`)}
-  </span>`;
-}
-
-function modifiers(item: PassCardItem): TemplateResult | typeof nothing {
-  const picked = item.modifiers ?? [];
-  const answers = optionAnswers(item.optionSnapshots, { reads: "kitchen" });
-  if (picked.length === 0 && answers.length === 0) return nothing;
-  return html`<span class="item-modifiers">
-    ${answers.map((answer) => html`<span class="modifier-answer">${answer}</span>`)}
-    ${picked.map(
-      (modifier, i) =>
-        html`<span class="modifier"
-          >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}${extraCount(modifier)}`}${extraNutrition(
-            modifier,
-            `item-modifier-allergens-${item.id}-${i}`,
-            `item-modifier-diet-${item.id}-${i}`,
-          )}</span
-        >`,
-    )}
-  </span>`;
 }
 
 function captionWords(caption: ItemCaption): string | null {

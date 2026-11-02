@@ -1,11 +1,16 @@
 import { registerIcons, visuallyHiddenStyles } from "@waitron/ui";
 import { type TemplateResult, css, html, nothing } from "lit";
 import { thousandthsToDecimal } from "@waitron/shared";
-import { t } from "../i18n/t.js";
+import type { ExpoItem } from "../api/client.js";
+import { allergenName } from "../i18n/allergen-names.js";
+import { currentLocale, t } from "../i18n/t.js";
 import type { BoardMeasure } from "../state/kitchen-board-fit.js";
 import type { ColumnKey } from "../state/kitchen-columns.js";
 import type { OverviewRow } from "../state/kitchen-overview.js";
-import { trimQuantity } from "./dish-format.js";
+import { extraNutrition } from "./diet-badges.js";
+import { snapshotDescriptionFor, trimQuantity } from "./dish-format.js";
+import { optionAnswers } from "./option-snapshot.js";
+import { extraCount } from "./queue-crossrefs.js";
 
 registerIcons({
   "column-open": "M2 5.4 3.4 4 8 8.6 12.6 4 14 5.4 8 11.4Z",
@@ -174,4 +179,49 @@ export function columnHeading(
       >${lateWords(count, late)}${collapsed ? nothing : html`<wt-icon name="column-open" aria-hidden="true"></wt-icon>`}
     </button>
   </h2>`;
+}
+
+/** What a dish's sub-lines read, on the station's items and the pass's alike. */
+type DishLines = Pick<ExpoItem, "id" | "note" | "asServed" | "modifiers" | "optionSnapshots">;
+
+/** `prefix` names the sub-lines' classes: `line` on the station, `item` on the pass. */
+export function dishNote(item: DishLines, prefix: string): TemplateResult | typeof nothing {
+  const note = item.note ?? null;
+  if (note === null || note === "") return nothing;
+  return html`<span class="${prefix}-customisation" data-item-customisation=${item.id}>
+    <span class="${prefix}-note" data-note>${note}</span>
+  </span>`;
+}
+
+/** The dish's own allergen profile; each extra's own allergens are drawn beside the extra. */
+export function dishAllergens(item: DishLines, prefix: string): TemplateResult | typeof nothing {
+  const codes = item.asServed ? Object.keys(item.asServed.allergens).sort() : [];
+  if (codes.length === 0) return nothing;
+  const locale = currentLocale();
+  return html`<span class="${prefix}-allergens" data-item-allergens=${item.id}>
+    <span class="allergen-label">${t("allergens.contains")}</span> ${codes.map(
+      (code) => html`<span class="allergen-chip">${allergenName(code, locale)}</span>`,
+    )}
+  </span>`;
+}
+
+/** A cook reads the kitchen wording of an answer, which carries no per-language text and so needs
+ * no locale; an extra's own name is still a locale map. */
+export function dishModifiers(item: DishLines, prefix: string): TemplateResult | typeof nothing {
+  const modifiers = item.modifiers ?? [];
+  const answers = optionAnswers(item.optionSnapshots, { reads: "kitchen" });
+  if (modifiers.length === 0 && answers.length === 0) return nothing;
+  return html`<span class="${prefix}-modifiers">
+    ${answers.map((answer) => html`<span class="modifier-answer">${answer}</span>`)}
+    ${modifiers.map(
+      (modifier, i) =>
+        html`<span class="modifier"
+          >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}${extraCount(modifier)}`}${extraNutrition(
+            modifier,
+            `item-modifier-allergens-${item.id}-${i}`,
+            `item-modifier-diet-${item.id}-${i}`,
+          )}</span
+        >`,
+    )}
+  </span>`;
 }

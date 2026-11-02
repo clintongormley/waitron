@@ -4,18 +4,16 @@ import {
   kitchenAllergyStyles,
 } from "./kitchen-allergy-block.js";
 import { groupName } from "./group-name.js";
-import { extraCount, queueCrossRefs } from "./queue-crossrefs.js";
-import { optionAnswers } from "./option-snapshot.js";
+import { queueCrossRefs } from "./queue-crossrefs.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles, registerIcons } from "@waitron/ui";
 import { type TimingBand, classifyBand, thousandthsToDecimal } from "@waitron/shared";
-import { clockTime, currentLocale, t } from "../i18n/t.js";
-import { allergenName } from "../i18n/allergen-names.js";
-import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
+import { clockTime, t } from "../i18n/t.js";
+import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
-import { dishLine, snapshotDescriptionFor, trimQuantity } from "./dish-format.js";
+import { dishLine, trimQuantity } from "./dish-format.js";
 import {
   type CourseSection,
   type KitchenCard,
@@ -39,6 +37,9 @@ import {
 import { PHONE_WIDTH } from "./language-chooser-styles.js";
 import {
   columnHeading,
+  dishAllergens,
+  dishModifiers,
+  dishNote,
   kitchenBoardStyles,
   lateWords,
   measureBoard,
@@ -1362,10 +1363,10 @@ export class TillStationQueue extends LitElement {
               .filter((part) => part !== null)
               .join(" · ")}</span
           >`;
-    const customisation = this.#customisation(item);
-    const modifiers = this.#modifiers(item);
+    const customisation = dishNote(item, "line");
+    const modifiers = dishModifiers(item, "line");
     const crossRefs = queueCrossRefs(item, "line");
-    const allergens = this.#allergens(item);
+    const allergens = dishAllergens(item, "line");
     const allergy = kitchenAllergyBlock(item.allergy);
     const diet = dietBadges(item.asServedDiet, `line-diet-${item.id}`);
     const held = item.firedAt === null;
@@ -1407,53 +1408,6 @@ export class TillStationQueue extends LitElement {
       item.state === "queued" &&
       !(item.crossRefs ?? []).some((ref) => ref.kind === "for")
     );
-  }
-
-  #customisation(item: StationQueueItem): TemplateResult | typeof nothing {
-    const note = item.note ?? null;
-    if (note === null || note === "") return nothing;
-    return html`<span class="line-customisation" data-item-customisation=${item.id}>
-      <span class="line-note" data-note>${note}</span>
-    </span>`;
-  }
-
-  /** A `pending` profile shows a "not reviewed" warning: a cook must never read an unverified plate as
-   *  allergen-free. Each extra's own allergens are shown separately. */
-  #allergens(item: StationQueueItem): TemplateResult | typeof nothing {
-    const asServed = item.asServed;
-    const codes = asServed ? Object.keys(asServed.allergens).sort() : [];
-    if (codes.length === 0) return nothing;
-    const locale = currentLocale();
-    return html`<span class="line-allergens" data-item-allergens=${item.id}>
-      ${
-        codes.length > 0
-          ? html`<span class="allergen-label">${t("allergens.contains")}</span> ${codes.map(
-                (code) => html`<span class="allergen-chip">${allergenName(code, locale)}</span>`,
-              )}`
-          : nothing
-      }
-    </span>`;
-  }
-
-  /** A cook reads the KITCHEN wording of an answer, which carries no per-language text and so needs
-   *  no locale; an extra's own name is still a locale map. */
-  #modifiers(item: StationQueueItem): TemplateResult | typeof nothing {
-    const modifiers = item.modifiers ?? [];
-    const answers = optionAnswers(item.optionSnapshots, { reads: "kitchen" });
-    if (modifiers.length === 0 && answers.length === 0) return nothing;
-    return html`<span class="line-modifiers">
-      ${answers.map((answer) => html`<span class="modifier-answer">${answer}</span>`)}
-      ${modifiers.map(
-        (modifier, i) =>
-          html`<span class="modifier"
-            >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}${extraCount(modifier)}`}${extraNutrition(
-              modifier,
-              `item-modifier-allergens-${item.id}-${i}`,
-              `item-modifier-diet-${item.id}-${i}`,
-            )}</span
-          >`,
-      )}
-    </span>`;
   }
 
   /** The name is the server-resolved kitchen label and is rendered as sent. */
