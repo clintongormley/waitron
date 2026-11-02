@@ -29,7 +29,7 @@ departments, about 6 floor zones.
 
 Seventeen tables replace the area's 32. Columns marked "(new)" do not exist today.
 
-### 1.1 `tenants` — the taxpayer (core set, `venue.db`, `state`, not append-only)
+### 1.1 `taxpayer` (today `tenants`, renamed by README §5 U9) — the taxpayer (core set, `venue.db`, `state`, not append-only)
 
 The legal person invoices are issued in the name of. Narrowed to the fiscal identity: the privacy
 contact moves to `settings.venue` (§2).
@@ -223,7 +223,7 @@ health reads (`apps/server/src/pass.ts`), so it is a typed table, not `activity_
 reconciliation uses it today (`rg -c 'runDue\('` in `boot.ts` = 1, per the tables file). Rows: 0
 without Stripe; about 360–700 a year with it.
 
-### 1.16 `tenant_credentials` — the venue's sealed secrets (credentials set, `local`)
+### 1.16 `venue_credentials` (today `tenant_credentials`, renamed by README §5 U9) — the venue's sealed secrets (credentials set, `local`)
 
 Kept: `purpose` PK, `ciphertext`, `iv`, `auth_tag`, `key_version`, `updated_at`, with its four CHECKs.
 The two purposes marked DEPRECATED and never written (`sync.mirror_token`, `membership.node_key`,

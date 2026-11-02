@@ -111,7 +111,7 @@ the artifact "Waitron Database Tables" shows it per table.
 ```mermaid
 flowchart LR
   subgraph Venue
-    tenants --- settings
+    taxpayer --- settings
     departments --- floor_zones --- dining_tables
   end
   subgraph Service
@@ -143,8 +143,8 @@ The target, grouped by the real thing each group is about:
 
 | Real thing | Tables | Count |
 | --- | --- | --- |
-| **The venue** | `tenants`, `settings`, `departments`, `day_cutover_changes`, `seasons`, `special_days`, `special_day_dates`, `opening_hours` | 8 |
-| **The box** | `nodes`, `deployment`, `node_membership`, `node_sealed_state`, `recovery_packs`, `incidents`, `change_log`, `tenant_credentials`, `box` (node.db) | 9 |
+| **The venue** | `taxpayer`, `settings`, `departments`, `day_cutover_changes`, `seasons`, `special_days`, `special_day_dates`, `opening_hours` | 8 |
+| **The box** | `nodes`, `deployment`, `node_membership`, `node_sealed_state`, `recovery_packs`, `incidents`, `change_log`, `venue_credentials`, `box` (node.db) | 9 |
 | **The floor** | `floor_zones`, `dining_tables`, `floor_plan_sets`, `floor_plans`, `floor_plan_placements`, `table_merges` | 6 |
 | **Guests** | `parties`, `party_tables`, `party_allergy_guests`, `allergy_line_ticks`, `bookings` | 5 |
 | **An open bill** | `working_orders`, `working_order_lines`, `order_drafts`, `order_draft_lines`, `order_groups`, `order_group_hold_stations`, `order_events`, `order_amendments`, `order_kitchen_notes`, `service_commands`, `department_transfer_destinations`, `department_transfer_requests` | 12 |
@@ -252,7 +252,7 @@ them (owner, 2026-10-21: truly fiscal PRs wait for the owner).
 
 **U7. Secrets: one owner, three files, one store.** `secrets.env` holds the root keys (vault key
 ring and account key), `backup.env` the backup recovery key, `trading.env` identity only; every
-other secret lives sealed in `tenant_credentials` (`environment.md` §6 D4). One file was proposed
+other secret lives sealed in `venue_credentials` (`environment.md` §6 D4). One file was proposed
 and does not hold: restore treats the three differently (it writes `trading.env` last as its commit
 point and drops the archive's `backup.env`, `restore.ts:557-561, 795-812`). Settings that are sealed
 today but are not secret (the SMTP sender, Stripe's return addresses, the bucket's name and region,
@@ -270,6 +270,22 @@ ahead as planned. S23's new `venue_settings` and `venue_catalogues` tables are r
 `fiscal_certificates`, `sessions` → `till_sessions`, `management_sessions` → `dashboard_sessions`,
 `floor_today_joins` → `table_merges`, and the people area's attendance renames
 (`tables-people.md` §9 D8).
+
+**No name says "tenant" any more** (owner, 2026-11-02). The word is left over from the retired
+design in which one database held several businesses. A name that means the taxpayer says
+`taxpayer`: the `tenants` table becomes `taxpayer`, its checks `tenants_singleton_ck` and
+`tenants_country_tax_id_key` become `taxpayer_singleton_ck` and `taxpayer_country_tax_id_key`, and
+the helpers, types, files and error codes that name it follow (for example `seedTenant`,
+`readTenant`, `setupTenant`, `TENANT_A`, `packages/provisioning/src/tenant-guard.ts`,
+`provisioning.foreign_tenant`, `provisioning.tenant_identity_mismatch`). A name that means the
+venue or the box says that instead: `tenant_credentials` becomes `venue_credentials`, and index
+names such as `persons_tenant_email_uq` drop the word. `tenant_receipts` is deleted anyway (U6),
+and `WAITRON_TENANT_DOMAIN` goes with the second-box path (U5). The fiscal module's leftovers
+(`registros_tenant_node_secuencia_uq`, `TenantTransport`, the filing pass's `tenantsWithWork` and
+its `drain.tenant_skipped` log line) are renamed in the fiscal slice, which the owner lands. The
+shared test helpers are renamed in the venue-and-box slice; each other area renames its own.
+`scripts/no-tenant-column.test.ts` stays, since it stops the old `tenant_id` column coming back,
+and CLAUDE.md §3's "There is no tenant column" rule is reworded in the venue-and-box slice.
 
 **U10. Retention stays with A980.** The approved data-protection design (A980, built on A664's
 gates) says nothing that holds personal data or evidence is deleted on a timer until the tax

@@ -6453,6 +6453,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   eight migration sets instead of sixteen, one job runner, 111 product environment variables → 51,
   and one state-folder layout. The owner chose that A760's squash runs first, merged into the eight
   sets. If approved, it absorbs A1301's schema slices (S20–S28, S23's `venue_settings` included).
+  It also renames every leftover "tenant" name: the `tenants` table becomes `taxpayer`, and
+  names that mean the venue or box get that name (owner, 2026-11-02; design §5 U9).
 
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
   2026-11-01, high priority; nothing new is built on locations meanwhile). The design is written and
