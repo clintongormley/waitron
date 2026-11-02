@@ -68,8 +68,7 @@ it("round-trips the clock-in capability and still refuses a shared display", asy
   await applyVenue(planVenue(request, ALL_MODULES), {
     db: target.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, installed) =>
-      importConfigurationTables(tx, bundle, installed, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
   });
   await withTransaction(target.db, async (tx) => {
     const [clock] = await tx
@@ -141,13 +140,12 @@ it.each(["request", "artifact"] as const)(
       },
     };
     if (invalidSide === "request") request.timeZone = "Europe/London";
-    else bundle.venue.location.timeZone = "Europe/London";
+    else bundle.venue.timeZone = "Europe/London";
     const run = async () =>
       applyVenue(planVenue(request, ALL_MODULES), {
         db: target.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, installed) =>
-          importConfigurationTables(tx, bundle, installed, ALL_MODULES, versions),
+        beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
       });
     const refusal = await run().catch((error: unknown) => error);
     expect(await target.db.select().from(locations)).toEqual([]);

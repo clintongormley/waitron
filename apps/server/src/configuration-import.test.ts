@@ -46,7 +46,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 9,
+  version: 10,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -54,31 +54,54 @@ const bundle: ConfigurationBundle = {
     taxId: "B12345678",
     legalName: "Prepared SL",
     taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
-    location: {
-      id: "location",
-      name: "Prepared",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
-      fiscalTerritory: "ES-common",
-      addressLine1: "Calle 1",
-      addressLine2: null,
-      postalCode: "28001",
-      city: "Madrid",
-      province: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00:00",
-      fireControl: "waiter",
-      catalogueId: null,
-    },
+    name: "Prepared",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant",
+    fiscalTerritory: "ES-common",
+    addressLine1: "Calle 1",
+    addressLine2: null,
+    postalCode: "28001",
+    city: "Madrid",
+    province: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00:00",
     seriesCode: "F",
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
   },
+  defaultCatalogueId: null,
   privacyContact: { privacyNoticeUrl: null, privacyEmail: null },
   modules: { core: 1 },
   tables: { products: [{ id: "p1" }] },
   reconnect: ["printers"],
 };
+// A format-9 export nested the venue's own fields under `location`, beside its id and fire control.
+const formatNineVenue = (extra: Record<string, unknown>) => ({
+  country: "ES",
+  taxId: "B12345678",
+  legalName: "Prepared SL",
+  taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
+  location: {
+    id: "location",
+    name: "Prepared",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant",
+    fiscalTerritory: "ES-common",
+    addressLine1: "Calle 1",
+    addressLine2: null,
+    postalCode: "28001",
+    city: "Madrid",
+    province: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00:00",
+    fireControl: "waiter",
+    catalogueId: null,
+    ...extra,
+  },
+  seriesCode: "F",
+  fullSeriesCode: "FF",
+  rectificativeSeriesCode: "R",
+});
 const modules = [
   {
     name: "core",
@@ -179,35 +202,34 @@ describe("staged configuration import", () => {
     ["A980 pre-privacy-contact export with the key", { version: 8 }],
     ["A980 pre-privacy-contact export without it", { version: 8, privacyContact: undefined }],
     ["old version", { version: 1 }],
-    ["future version", { version: 10 }],
+    ["future version", { version: 11 }],
+    ["pre-venue-fields export", { version: 9, venue: formatNineVenue({}) }],
     [
       "retired drawer value",
       {
-        venue: {
-          ...bundle.venue,
-          location: { ...bundle.venue.location, drawerOpenPolicy: "open" },
-        },
+        version: 9,
+        venue: formatNineVenue({ drawerOpenPolicy: "open" }),
       },
     ],
     [
       "retired drawer null",
       {
-        venue: { ...bundle.venue, location: { ...bundle.venue.location, drawerOpenPolicy: null } },
+        version: 9,
+        venue: formatNineVenue({ drawerOpenPolicy: null }),
       },
     ],
     [
       "retired receipt value",
       {
-        venue: {
-          ...bundle.venue,
-          location: { ...bundle.venue.location, receiptPrintMode: "never" },
-        },
+        version: 9,
+        venue: formatNineVenue({ receiptPrintMode: "never" }),
       },
     ],
     [
       "retired receipt null",
       {
-        venue: { ...bundle.venue, location: { ...bundle.venue.location, receiptPrintMode: null } },
+        version: 9,
+        venue: formatNineVenue({ receiptPrintMode: null }),
       },
     ],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {
@@ -779,8 +801,7 @@ describe("routing cells in a staged import", () => {
         applyVenue(planVenue(venue("B24681365"), ALL_MODULES), {
           db: target.db,
           modules: ALL_MODULES,
-          beforeCommit: (tx, result) =>
-            importConfigurationTables(tx, candidate, result, ALL_MODULES, versions),
+          beforeCommit: (tx) => importConfigurationTables(tx, candidate, ALL_MODULES, versions),
         }),
       ).rejects.toMatchObject(refusal);
       expect((await target.db.execute(sql`select count(*) count from tenants`)).rows).toEqual([
@@ -817,14 +838,7 @@ describe("routing cells in a staged import", () => {
       applyVenue(planVenue(request, ALL_MODULES), {
         db: target.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, created) =>
-          importConfigurationTables(
-            tx,
-            refused,
-            { locationId: created.locationId },
-            ALL_MODULES,
-            versions,
-          ),
+        beforeCommit: (tx) => importConfigurationTables(tx, refused, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
     const tenants = await target.db.execute<{ count: number }>(
@@ -860,14 +874,7 @@ describe("routing cells in a staged import", () => {
       applyVenue(planVenue(request, ALL_MODULES), {
         db: target.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, created) =>
-          importConfigurationTables(
-            tx,
-            switchedOff,
-            { locationId: created.locationId },
-            ALL_MODULES,
-            versions,
-          ),
+        beforeCommit: (tx) => importConfigurationTables(tx, switchedOff, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
     const tenants = await target.db.execute<{ count: number }>(
@@ -910,14 +917,7 @@ describe("routing cells in a staged import", () => {
       applyVenue(planVenue(request, ALL_MODULES), {
         db: target.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, created) =>
-          importConfigurationTables(
-            tx,
-            withoutCell,
-            { locationId: created.locationId },
-            ALL_MODULES,
-            versions,
-          ),
+        beforeCommit: (tx) => importConfigurationTables(tx, withoutCell, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
     const tenants = await target.db.execute<{ count: number }>(
