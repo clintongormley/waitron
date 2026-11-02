@@ -1,8 +1,8 @@
 // A Vitest reporter that prints which test FILE is running, so a CI job that hangs shows the file
 // it hung in. Vitest's default reporter, off a terminal, names a file only once it finishes. In a
 // browser project it also attaches Chrome's debugger to each test page, and pauses a page whose
-// file has reported no case or hook for longer than its timeouts allow plus 60 seconds, to print
-// its JavaScript stack.
+// file has reported no case or hook for 60 seconds longer than its running cases' time limits and
+// the project's hook time limit, to print its JavaScript stack.
 
 const PREFIX = "[file-progress]";
 const STACK = `${PREFIX} stack:`;
@@ -26,6 +26,11 @@ function oneLine(text) {
 
 function limit(ms) {
   return typeof ms === "number" ? ms : undefined;
+}
+
+// Vitest's timer sets no limit for these (withTimeout in @vitest/runner).
+function unbounded(ms) {
+  return ms !== undefined && (ms <= 0 || ms === Infinity);
 }
 
 // Vitest reruns a case's body for each retry and repeat inside one case-start/case-end pair.
@@ -246,11 +251,12 @@ export default class FileProgressReporter {
     }
   }
 
-  // The longest running case's timeout once per try, plus one hookTimeout. Not counted: a timeout
-  // argument given to a hook or an onTestFinished/onTestFailed callback (the reporter is never
-  // handed one), a second such callback (they run one after another with no event between), and
-  // a retry's delay; only the 60-second margin covers those. Undefined when a timeout of 0 leaves
-  // a step unbounded.
+  // The longest running case's timeout plus one hookTimeout, once per try (onTestFinished
+  // callbacks are registered again on each try). Not counted: a timeout argument given to a hook
+  // or an onTestFinished/onTestFailed callback (the reporter is never handed one), a second such
+  // callback, several hooks of one kind in one suite, an aroundEach or aroundAll hook (none of
+  // these reports its own event), and a retry's delay; only the 60-second margin covers those.
+  // Undefined when a limit Vitest treats as none may cover what is running.
   silenceAllowed(key) {
     const config = this.modules.get(key).project.config ?? {};
     const testTimeout = limit(config.testTimeout);
@@ -258,15 +264,19 @@ export default class FileProgressReporter {
     const cases = running.length > 0 ? running : [{ timeout: undefined, tries: 1 }];
     const caseTimeouts = cases.map((testCase) => testCase.timeout ?? testTimeout);
     const hookTimeout = limit(config.hookTimeout);
-    if (caseTimeouts.includes(0) || hookTimeout === 0) return undefined;
-    const longest = Math.max(...cases.map(({ tries }, i) => (caseTimeouts[i] ?? 0) * tries));
-    return this.stackAfterMs + longest + (hookTimeout ?? 0);
+    if (caseTimeouts.some(unbounded) || unbounded(hookTimeout)) return undefined;
+    const tryLimits = cases.map(
+      ({ tries }, i) => ((caseTimeouts[i] ?? 0) + (hookTimeout ?? 0)) * tries,
+    );
+    return this.stackAfterMs + Math.max(...tryLimits);
   }
 
   noteUnbounded(key, head) {
     if (this.unbounded.has(key) || !this.modules.get(key).project.browser?.provider?.pages) return;
     this.unbounded.add(key);
-    this.stack(`${head} a time limit of 0 bounds nothing, so its page is not paused`);
+    this.stack(
+      `${head} what is running may have no time limit (0 or less, or Infinity), so its page is not paused now`,
+    );
   }
 
   async sampleFile(key, head) {

@@ -1166,9 +1166,8 @@ no loop.
 On the next stall, read the `[file-progress] stack:` lines first
 ([how they are taken](../developers/ci-and-gates.md#a-browser-file-silent-past-its-time-limits-gets-a-stack-sample)).
 They show where the page's JavaScript was when paused, or that nothing paused and
-whether the page answered, or that no page showed the file, or that a time limit of 0 kept it from pausing. A file
-that went silent less than 60 seconds plus its test and hook timeouts before the deadline gets
-no `stack:` line. The earlier dashboard
+whether the page answered, or that no page showed the file, or that a time limit Vitest treats as none kept it from pausing then. A file whose silence
+began too close to the deadline for its limit to pass gets no `stack:` line. The earlier dashboard
 stall (A1230, above) left too little evidence to say whether it was the same.
 
 ## A1252: remaining server job time after the held-setup split
