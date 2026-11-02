@@ -968,7 +968,7 @@ describe("adjustment report routes", () => {
 
   // A1301: deleted with cfg in S18
   it("reads the venue's clock whatever location the module names", async () => {
-    await db.insert(locations).values({
+    await seedVenue(db, {
       name: "Sala",
       invoiceLocales: ["es"],
       operationDescription: "Restaurante",
