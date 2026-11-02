@@ -26,26 +26,36 @@ jobs:
           dpkg -l | grep -i -E 'coreutils|uutils' || true
           ls /usr/bin/gnutimeout /usr/lib/cargo/bin/coreutils 2>&1 || true
           ls /usr/lib/cargo/bin 2>/dev/null | head -50 || true
-      - name: Does timeout's kill reach a grandchild that ignores TERM
+      - name: Shapes - which processes survive each timeout
+        shell: bash {0}
         run: |
-          start=$SECONDS
-          timeout -k 1 1 bash -c "trap '' TERM; sleep 301" & tpid=$!
-          sleep 0.5
-          ps -o pid,ppid,pgid,sid,stat,comm -e | awk 'NR==1 || /timeout|bash|sleep/'
-          echo "my pgid: $(ps -o pgid= -p $$)"
-          wait $tpid; echo "timeout exit $? after $((SECONDS-start))s"
-          sleep 1
-          if pgrep -a -f 'sleep 301'; then echo "RESULT: grandchild SURVIVED"; else echo "RESULT: no survivor"; fi
-          pkill -f 'sleep 301' || true
-      - name: Does timeout's TERM reach a grandchild that keeps TERM
-        run: |
-          start=$SECONDS
-          timeout -k 1 1 bash -c "sleep 302; echo after" ; echo "timeout exit $? after $((SECONDS-start))s"
-          sleep 1
-          if pgrep -a -f 'sleep 302'; then echo "RESULT: grandchild SURVIVED"; else echo "RESULT: no survivor"; fi
-          pkill -f 'sleep 302' || true
+          probe() {  # probe <label> <timeout-cmd> <bash -c body>
+            local label="$1" t="$2" body="$3" start=$SECONDS
+            "$t" -k 1 1 bash -c "$body" & local tpid=$!
+            sleep 0.5
+            echo "--- $label ($t): tree"
+            ps -o pid,ppid,pgid,stat,comm -e | awk -v p=$tpid 'NR==1 || $1==p || $2==p || $3==p'
+            wait $tpid; echo "$label: timeout exit $? after $((SECONDS-start))s"
+            sleep 1
+            if pgrep -a -f 'sleep 30[0-9]'; then echo "RESULT $label: SURVIVOR"; else echo "RESULT $label: no survivor"; fi
+            pkill -f 'sleep 30[0-9]'; sleep 0.2
+          }
+          for t in timeout gnutimeout; do
+            command -v $t >/dev/null || continue
+            probe exec-ignore-term $t "trap '' TERM; sleep 301"
+            probe bash-ignore-term $t "trap '' TERM; sleep 302; exit 0"
+            probe bash-keeps-term $t "sleep 303; exit 0"
+          done
+          echo "--- strace of uutils timeout, bash-ignore-term shape"
+          if command -v strace >/dev/null; then
+            strace -f -e trace=kill,setpgid,setsid -o /tmp/st.txt timeout -k 1 1 bash -c "trap '' TERM; sleep 304; exit 0"; echo "exit $?"
+            grep -v 'sleep' /tmp/st.txt | head -40
+            pkill -f 'sleep 304'
+          fi
+          true
       - name: The real script, ignore-term stub, read through a pipe like spawnSync
         timeout-minutes: 3
+        shell: bash {0}
         env:
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
