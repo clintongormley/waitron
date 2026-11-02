@@ -1,13 +1,23 @@
 import { asc, eq } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
-import { printJobs, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  orderGroups,
+  printJobs,
+  ticketItems,
+  withTransaction,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { addTabRound, setLineCourse } from "./testing/order-writer-fixture.js";
+import { addTabRound, setLineCourse, updateOrderLine } from "./testing/order-writer-fixture.js";
+import { moveBill } from "./testing/move-bill-fixture.js";
+import { createTable } from "./testing/live-table.js";
+import { seatTable } from "./parties.js";
 import { createCourse } from "./kitchen.js";
 import { mergeBills, moveDishes, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { OPERATOR } from "./testing/party-venue.js";
@@ -87,6 +97,10 @@ const stamps = (item: Awaited<ReturnType<typeof itemOf>>) => ({
 });
 
 describe("A773 requested lifecycle: bill move", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("lets Split bill take a Requested dish to a new bill, keeping its request and printing nothing", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
@@ -236,6 +250,76 @@ describe("A773 requested lifecycle: bill move", () => {
 
       expect((await linesOf(tx, venue.party.tabId))[0]!.courseId).toBe(postres.id);
       expect((await itemOf(tx, held!.id)).courseId).toBe(postres.id);
+    });
+  });
+
+  it("dates the arrival of a raised waiting copy, moved alone, by the copy's request", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-03-14T10:00:00.000Z") });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      const [burger] = await requestedBurgers(tx, venue, ["burger"]);
+      vi.setSystemTime(new Date("2026-03-14T10:05:00.000Z"));
+      const [bill] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, venue.party.tabId));
+      await updateOrderLine(
+        tx,
+        venue.cfg,
+        venue.party.tabId,
+        burger!.lineNo,
+        { quantity: "2" },
+        bill!.revision,
+        OPERATOR,
+      );
+      const copy = (await linesOf(tx, venue.party.tabId)).find((row) => row.id !== burger!.id)!;
+      expect(copy.sentAt).toBe("2026-03-14T10:00:00.000Z");
+      expect(stamps(await itemOf(tx, copy.id))).toMatchObject({
+        requestedAt: "2026-03-14T10:05:00.000Z",
+        firedAt: null,
+      });
+      vi.setSystemTime(new Date("2026-03-14T10:10:00.000Z"));
+      const { billId } = await splitBill(
+        tx,
+        venue.cfg,
+        venue.party.tabId,
+        [{ lineNo: copy.lineNo }],
+        await command(tx, venue),
+      );
+      const tableId = (
+        await createTable(tx, venue.cfg, { label: "Elsewhere", zoneId: venue.party.zoneId })
+      ).id;
+      const other = await seatTable(tx, venue.cfg, {
+        tableId,
+        guestCount: null,
+        operatorId: OPERATOR,
+      });
+      const jobs = await jobCount(tx);
+
+      await moveBill(
+        tx,
+        venue.cfg,
+        billId,
+        { tableId },
+        {
+          operatorId: OPERATOR,
+          expectedPartyRevision: await partyRevision(tx, venue.party.partyId),
+          otherPartyId: other.partyId,
+          expectedOtherPartyRevision: await partyRevision(tx, other.partyId),
+        },
+      );
+
+      expect(
+        await tx
+          .select({ state: orderGroups.state, firedAt: orderGroups.firedAt })
+          .from(orderGroups)
+          .where(eq(orderGroups.partyId, other.partyId)),
+      ).toEqual([{ state: "fired", firedAt: "2026-03-14T10:05:00.000Z" }]);
+      expect(stamps(await itemOf(tx, copy.id))).toMatchObject({
+        requestedAt: "2026-03-14T10:05:00.000Z",
+        firedAt: null,
+      });
+      expect(await jobCount(tx)).toBe(jobs);
     });
   });
 

@@ -1146,6 +1146,55 @@ describe("A773 requested lifecycle: arrival", () => {
     });
   });
 
+  it("lets Split a table take a Requested dish alone in a course held until fired into one fired group, printing nothing", async () => {
+    const [m4, m5] = [await v.table("Pedido separar 1"), await v.table("Pedido separar 2")];
+    const ana = await seat(v, m4);
+    await nextMillisecond();
+    const joining = await commandFor(v, ana.partyId);
+    await inTx(v, (tx) => joinTables(tx, v.cfg, ana.partyId, m5, joining));
+    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
+    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    await everyStationWaiting(async () => {
+      await inTx(v, (tx) =>
+        addTabRound(tx, v.cfg, b2, [
+          { menuItemId: v.item("Flan"), quantity: "1", courseId: postres },
+        ]),
+      );
+      const flan = (await lineRows(b2)).find(
+        (line) => line.productId !== null && line.courseId === postres,
+      )!;
+      const item = await itemOf(flan.id);
+      expect(item).toMatchObject({
+        requestedAt: expect.any(String),
+        firedAt: null,
+        passControlled: true,
+      });
+      const printed = async () =>
+        (
+          await inTx(v, (tx) =>
+            tx
+              .select({ payload: printJobs.payload })
+              .from(printJobs)
+              .orderBy(sql`rowid`),
+          )
+        ).map((job) => printedLines(job.payload));
+      const jobsBefore = (await printed()).length;
+
+      const splitting = await commandFor(v, ana.partyId);
+      const result = await inTx(v, (tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
+
+      const groups = await groupsOf(result.partyId);
+      expect(groups.map((g) => g.state)).toEqual(["fired"]);
+      expect((await lineRows(b2)).find((line) => line.id === flan.id)!.groupId).toBe(groups[0]!.id);
+      expect(await itemOf(flan.id)).toEqual(item);
+      const after = (await printed()).slice(jobsBefore);
+      expect(after.flat().filter((text) => text.includes("FLAN"))).toEqual([]);
+      expect(after.map((lines) => lines[0])).not.toContain(
+        `*** ${kitchenTicketWords("es").hold} ***`,
+      );
+    });
+  });
+
   it("moves a Requested dish beside an earlier released one into one fired group dated by the released dish", async () => {
     const ana = await coursedBill("Pedido junto 1");
     const [burger, flan] = await lineRows(ana.tabId);
