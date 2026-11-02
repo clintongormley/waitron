@@ -33,7 +33,15 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { createStation } from "./kitchen.js";
 import { createOpenOrder, fireableLineColumns, fireLines, markServed } from "./working-order.js";
-import { commandFor, inTx, orderForParty, seat, setupPartyVenue } from "./testing/party-venue.js";
+import {
+  OPERATOR,
+  commandFor,
+  inTx,
+  orderForParty,
+  seat,
+  setupPartyVenue,
+} from "./testing/party-venue.js";
+import { combineParties } from "./testing/table-action-fixture.js";
 import { createPrinter } from "@waitron/printing";
 import { attendanceOperationFacts } from "@waitron/workforce";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -974,6 +982,38 @@ describe("A773 pass release: route", () => {
     await refused(f, () => release(f.app, display.cookie, ask), 409, {
       code: "ticket.pass_context_changed",
     });
+  });
+
+  it("refuses a new release of a party merged into another, and replays one completed before the merge", async () => {
+    const f = await releaseFixture();
+    const display = await kdsOn(f, await f.savedProfile(FULL));
+    const seated = await requested(f);
+    await orderForParty(f.v, seated.partyId, ["Burger"], seated.tabId);
+    const [first, second] = await card(f.app, display.cookie);
+    const done = askOf(first!);
+    const released = { status: 200, body: { releasedTicketItemIds: done.ticketItemIds } };
+    const answer = await release(f.app, display.cookie, done);
+    expect({ status: answer.status, body: await answer.json() }).toEqual(released);
+    expect(await f.jobs()).toBe(1);
+
+    const other = await seat(f.v, await f.v.table(`Other ${randomUUID()}`));
+    await inTx(f.v, (tx) =>
+      combineParties(tx, f.v.cfg, {
+        from: seated.partyId,
+        into: other.partyId,
+        tables: "join",
+        operatorId: OPERATOR,
+      }),
+    );
+
+    await refused(f, () => release(f.app, display.cookie, askOf(second!)), 409, {
+      code: "party.not_open",
+    });
+    const before = await inTx(f.v, (tx) => tx.select().from(ticketItems));
+    const again = await release(f.app, display.cookie, done);
+    expect({ status: again.status, body: await again.json() }).toEqual(released);
+    expect(await inTx(f.v, (tx) => tx.select().from(ticketItems))).toEqual(before);
+    expect(await f.jobs()).toBe(1);
   });
 
   it("refuses an empty id list as a malformed request", async () => {

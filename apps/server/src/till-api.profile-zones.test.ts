@@ -11,6 +11,8 @@ import {
   kitchenStations,
   pagePrinters,
   parties,
+  printJobs,
+  ticketItems,
   workingOrderLines,
   tenants,
   workingOrders,
@@ -208,6 +210,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | GET  /api/invoices/lookup                               | list, by order zone    | "shows a Deli invoice to the Deli ...", "fills ... twenty Deli invoices ..." |
  * | POST /api/device/orders/:id/courses/:courseId/ready | order, against the device's pass zones | refuses the display's POST /api/device/orders/:id/courses/:courseId/<verb> |
  * | POST /api/device/parties/:id/groups/:gid/ready | party, against the device's pass zones | refuses the display's POST /api/device/parties/:id/groups/:gid/<verb> |
+ * | POST /api/device/pass-screen/release | body party or order, against the profile's zones | "A773 pass release" below |
  *
  * The bill lookup searches party names, delivery labels and table labels as well as numbers, and
  * the invoice lookup the customer's legal name, so both are filtered like the other lists, reading
@@ -1527,6 +1530,38 @@ describe("A773 pass board", () => {
       expect(groups).not.toContain(deliGroup);
       expect(board.toFire.map((card) => card.target.groupId)).toContain(restGroup);
     }
+  });
+});
+
+describe("A773 pass release", () => {
+  it("refuses a till pass's release of a party outside its profile's zones, writing nothing", async () => {
+    const device = await enrolDeviceForTest(suite.db, v.cfg, {
+      name: `Till pass ${randomUUID()}`,
+      profileId: restaurantProfile,
+      kitchenScreen: { kind: "pass", stationIds: null, zoneIds: null },
+    });
+    const deviceCookie = `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+    const login = await app.request("/api/session", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: deviceCookie },
+      body: JSON.stringify({ personId, pin: "5555" }),
+    });
+    expect(login.status).toBe(200);
+    const cookie = `${deviceCookie}; ${login.headers.get("set-cookie")!.split(";")[0]!}`;
+    const written = () =>
+      inTx(v, async (tx) => ({
+        items: await tx.select().from(ticketItems),
+        jobs: await tx.select().from(printJobs),
+      }));
+    const before = await written();
+    const answer = await send(cookie, "POST", "/api/device/pass-screen/release", {
+      submissionId: randomUUID(),
+      target: { kind: "group", partyId: f.deliParty, groupId: randomUUID() },
+      ticketItemIds: [randomUUID()],
+      expectedContext: "0".repeat(64),
+    });
+    expect(answer).toEqual(notAllowed(f.deliTables));
+    expect(await written()).toEqual(before);
   });
 });
 
