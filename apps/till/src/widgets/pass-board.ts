@@ -5,7 +5,9 @@ import type { TimingBand } from "@waitron/shared";
 import type { PassBoard, PassCardItem } from "../api/client.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { currentLocale, t } from "../i18n/t.js";
+import { type BoardMeasure, columnsFit } from "../state/kitchen-board-fit.js";
 import { type ColumnKey, type ColumnState, PASS_COLUMNS } from "../state/kitchen-columns.js";
+import { overviewRows, rowsToMake } from "../state/kitchen-overview.js";
 import {
   type CardView,
   type ItemCaption,
@@ -13,11 +15,18 @@ import {
   type PassMode,
   passCardViews,
   passOverdueCount,
+  passOverviewDishes,
 } from "../state/pass-view.js";
 import { kitchenPortionKey, portionGroups } from "../state/portion-groups.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
 import { dishLine, snapshotDescriptionFor } from "./dish-format.js";
 import { groupName } from "./group-name.js";
+import {
+  columnHeading,
+  kitchenBoardStyles,
+  measureBoard,
+  overviewList,
+} from "./kitchen-board-parts.js";
 import {
   kitchenAllergyBlock,
   kitchenAllergyMarker,
@@ -28,6 +37,7 @@ import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { extraCount, queueCrossRefs } from "./queue-crossrefs.js";
 
 const COLUMN_WORDS = {
+  overview: "station.overview",
   held: "pass.column.held",
   toFire: "pass.column.to_fire",
   inProgress: "pass.column.in_progress",
@@ -47,14 +57,31 @@ export class TillPassBoard extends LitElement {
     dietBadgeStyles,
     kitchenAllergyStyles,
     orderNumberStyles,
+    kitchenBoardStyles,
     css`
       :host {
         display: block;
       }
 
+      .width-probe {
+        height: 0;
+      }
+
+      .board-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
+        margin: 0 0 var(--wt-space-2);
+      }
+
+      .board-head wt-button {
+        margin-inline-start: auto;
+      }
+
       .overdue-count {
         display: inline-block;
-        margin: 0 0 var(--wt-space-2);
+        margin: 0;
         padding: var(--wt-space-1) var(--wt-space-3);
         border-radius: var(--wt-radius-sm);
         background: var(--wt-color-danger);
@@ -68,6 +95,12 @@ export class TillPassBoard extends LitElement {
         gap: var(--wt-space-3);
       }
 
+      .list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-3);
+      }
+
       .column {
         display: flex;
         flex: 1 1 0;
@@ -76,18 +109,18 @@ export class TillPassBoard extends LitElement {
         min-width: 0;
       }
 
-      .column-heading {
-        display: flex;
-        gap: var(--wt-space-1);
-        margin: 0 0 var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-        color: var(--wt-color-text-muted);
-        text-transform: uppercase;
+      .kanban .column-overview {
+        flex: 0 0 auto;
       }
 
-      .column-count {
-        margin-inline-start: auto;
+      .kanban .column.collapsed {
+        flex: 0 0 var(--wt-tap-min);
+      }
+
+      /* A collapsed section in the list is a full-width heading, not a strip. */
+      .list .collapsed .column-toggle {
+        padding: 0 var(--wt-space-2);
+        writing-mode: horizontal-tb;
       }
 
       .ticket {
@@ -303,29 +336,82 @@ export class TillPassBoard extends LitElement {
   /** Reprint is a till's; the screen decides, and a monitor never draws it. */
   @property({ type: Boolean }) showReprint = false;
 
+  #measured?: BoardMeasure;
+  #resizing?: ResizeObserver;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.#observeWidth();
+  }
+
+  override firstUpdated(): void {
+    this.#observeWidth();
+  }
+
+  /** Watches a line of no height across the board, not the host, whose height the layout changes. */
+  #observeWidth(): void {
+    this.#resizing = new ResizeObserver((entries) => {
+      if (entries.at(-1)!.contentRect.width !== this.#measured?.width) this.requestUpdate();
+    });
+    this.#resizing.observe(this.renderRoot.querySelector(".width-probe")!);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#resizing?.disconnect();
+    this.#resizing = undefined;
+  }
+
+  override willUpdate(): void {
+    this.#measured = measureBoard(this);
+  }
+
   override render() {
     const views = passCardViews(this.board, this.mode, this.runsPass, this.now);
     const overdue = passOverdueCount(views);
     const shown = this.columns.order.filter(
-      (key) => !this.columns.hidden.includes(key) && views.has(key),
+      (key) => !this.columns.hidden.includes(key) && (key === "overview" || views.has(key)),
     );
-    return html`${
-        overdue === 0
-          ? nothing
-          : html`<p class="overdue-count" data-overdue-count>
-              ${overdue} ${t("station.overdue_count")}
-            </p>`
-      }
-      <div class="kanban">${shown.map((key) => this.#column(key, views.get(key)!))}</div>`;
+    const fits =
+      this.#measured === undefined || columnsFit(this.#measured, shown, this.columns.collapsed);
+    return html`<div class="width-probe"></div>
+      <div class="board-head" data-board-head>
+        ${
+          overdue === 0
+            ? nothing
+            : html`<p class="overdue-count" data-overdue-count>
+                ${overdue} ${t("station.overdue_count")}
+              </p>`
+        }<wt-button
+          data-columns-open
+          variant="secondary"
+          @click=${(event: Event) =>
+            this.#emit("open-columns", { opener: event.currentTarget as HTMLElement })}
+          >${t("station.columns")}</wt-button
+        >
+      </div>
+      <div class=${fits ? "kanban" : "list"}>
+        ${shown.map((key) => this.#column(key, views.get(key) ?? []))}
+      </div>`;
   }
 
   #column(key: ColumnKey, cards: readonly CardView[]): TemplateResult {
-    return html`<section class="column" data-column=${key}>
-      <h2 class="column-heading">
-        <span class="column-title">${t(COLUMN_WORDS[key as keyof typeof COLUMN_WORDS])}</span
-        ><span class="column-count" data-column-count>${cards.length}</span>
-      </h2>
-      ${cards.map((view) => this.#card(view))}
+    const collapsed = this.columns.collapsed.includes(key);
+    const toggle = () => this.#emit("toggle-column", { key });
+    const title = t(COLUMN_WORDS[key as keyof typeof COLUMN_WORDS]);
+    if (key === "overview") {
+      const rows = overviewRows(passOverviewDishes(this.board));
+      return html`<section
+        class="column column-overview ${collapsed ? "collapsed" : ""}"
+        data-column="overview"
+      >
+        ${columnHeading(key, title, rowsToMake(rows), collapsed, toggle)}
+        ${collapsed ? nothing : overviewList(rows)}
+      </section>`;
+    }
+    return html`<section class="column ${collapsed ? "collapsed" : ""}" data-column=${key}>
+      ${columnHeading(key, title, cards.length, collapsed, toggle)}
+      ${collapsed ? nothing : cards.map((view) => this.#card(view))}
     </section>`;
   }
 

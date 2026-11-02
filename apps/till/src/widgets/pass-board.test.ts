@@ -2,8 +2,10 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
-import { PASS_COLUMNS } from "../state/kitchen-columns.js";
-import type { PassBoard } from "../api/client.js";
+import { type ColumnKey, PASS_COLUMNS } from "../state/kitchen-columns.js";
+import { overviewRows, rowsToMake } from "../state/kitchen-overview.js";
+import { passOverviewDishes } from "../state/pass-view.js";
+import type { OverviewFact, PassBoard } from "../api/client.js";
 import {
   PASS_NOW,
   minutesAgo,
@@ -457,5 +459,168 @@ describe("A773 pass board widget", () => {
     const still = await mountBoard({ board, reducedMotion: true });
     expect(cardOf(still, "forgotten").classList.contains("age-forgotten")).toBe(true);
     expect(cardOf(still, "forgotten").classList.contains("flash")).toBe(false);
+  });
+
+  const overviewFacts: OverviewFact[] = [
+    {
+      lineId: "o-1",
+      stationId: "st-grill",
+      name: "Paella",
+      qty: "2",
+      phase: "waiting",
+      informational: false,
+    },
+    {
+      lineId: "o-2",
+      stationId: "st-grill",
+      name: "Paella",
+      qty: "1",
+      phase: "held",
+      informational: false,
+    },
+    {
+      lineId: "o-3",
+      stationId: "st-grill",
+      name: "Croquetas",
+      qty: "3",
+      phase: "requested",
+      informational: false,
+    },
+    {
+      lineId: "o-4",
+      stationId: "st-grill",
+      name: "Tortilla",
+      qty: "1",
+      phase: "preparing",
+      informational: false,
+    },
+    {
+      lineId: "o-5",
+      stationId: "st-grill",
+      name: "Agua",
+      qty: "1",
+      phase: "ready",
+      informational: false,
+    },
+    {
+      lineId: "o-6",
+      stationId: "st-bar",
+      name: "Vino",
+      qty: "1",
+      phase: "waiting",
+      informational: true,
+    },
+  ];
+  const allShown = { order: PASS_COLUMNS.order, hidden: [], collapsed: [] };
+
+  it("draws Overview's rows from the pass's own dishes, the held after a +, when it is shown", async () => {
+    const board = passBoard({ toFire: [toFireCard], overview: overviewFacts });
+    const el = await mountBoard({ board, columns: allShown });
+    const column = root(el).querySelector<HTMLElement>('[data-column="overview"]')!;
+    expect(column).not.toBeNull();
+    expect(column.querySelector(".column-heading")!.textContent).toContain(t("station.overview"));
+    const rows = overviewRows(passOverviewDishes(board));
+    expect(column.querySelector("[data-column-count]")!.textContent!.trim()).toBe(
+      String(rowsToMake(rows)),
+    );
+    const drawn = [...column.querySelectorAll<HTMLElement>("[data-overview-row]")].map((row) => [
+      row.querySelector(".overview-name")!.textContent,
+      row.querySelector("[data-overview-making]")!.textContent,
+      row.querySelector("[data-overview-held]")?.textContent ?? null,
+    ]);
+    expect(drawn).toEqual([
+      ["Paella", "2", "+1"],
+      ["Tortilla", "1", null],
+      ["Croquetas", "0", "+3"],
+    ]);
+    expect(rows.map((row) => row.name)).toEqual(drawn.map(([name]) => name));
+  });
+
+  it("keeps a collapsed column's heading and count, draws none of its cards, and only asks to open it", async () => {
+    const el = await mountBoard({
+      board: passBoard({
+        toFire: [toFireCard],
+        inProgress: [billInProgress],
+        overview: overviewFacts,
+      }),
+      columns: { order: PASS_COLUMNS.order, hidden: [], collapsed: ["toFire", "overview"] },
+    });
+    const column = (key: string) => root(el).querySelector<HTMLElement>(`[data-column="${key}"]`)!;
+    expect(column("toFire").querySelector(".column-heading")!.textContent).toContain(
+      t("pass.column.to_fire"),
+    );
+    expect(column("toFire").querySelector("[data-column-count]")!.textContent!.trim()).toBe("1");
+    expect(column("toFire").querySelectorAll("[data-card]")).toHaveLength(0);
+    expect(column("overview").querySelector("[data-overview]")).toBeNull();
+    expect(column("inProgress").querySelectorAll("[data-card]")).toHaveLength(1);
+
+    const toggle = column("toFire").querySelector<HTMLButtonElement>("[data-column-toggle]")!;
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      column("inProgress").querySelector("[data-column-toggle]")!.getAttribute("aria-expanded"),
+    ).toBe("true");
+    const toggled = eventsOf(el, "toggle-column");
+    await userEvent.click(toggle);
+    await el.updateComplete;
+    expect(toggled).toEqual([{ key: "toFire" }]);
+    expect(column("toFire").querySelectorAll("[data-card]")).toHaveLength(0);
+  });
+
+  it("draws one list of sections on a narrow screen, in the owner's order, with the same cards", async () => {
+    const board = passBoard({
+      held: [heldCard],
+      toFire: [toFireCard],
+      inProgress: [billInProgress],
+      ready: [readyCard],
+      overview: overviewFacts,
+    });
+    const columns = {
+      order: ["ready", "toFire", "overview", "inProgress", "held"] as ColumnKey[],
+      hidden: ["held"] as ColumnKey[],
+      collapsed: [],
+    };
+    const wide = await mountBoard({ board, columns });
+    const wideCards = [...root(wide).querySelectorAll<HTMLElement>("[data-card]")].map(
+      (card) => card.dataset.card,
+    );
+    cleanupWidgets();
+
+    await page.viewport(390, 844);
+    expect(window.innerWidth).toBe(390);
+    const el = await mountBoard({ board, columns });
+    const sections = [...root(el).querySelectorAll<HTMLElement>("[data-column]")];
+    expect(sections.map((section) => section.dataset.column)).toEqual([
+      "ready",
+      "toFire",
+      "overview",
+      "inProgress",
+    ]);
+    const rects = sections.map((section) => section.getBoundingClientRect());
+    for (let i = 1; i < rects.length; i++) {
+      expect(rects[i]!.left).toBe(rects[0]!.left);
+      expect(rects[i]!.top).toBeGreaterThanOrEqual(rects[i - 1]!.bottom);
+    }
+    expect(
+      [...root(el).querySelectorAll<HTMLElement>("[data-card]")].map((card) => card.dataset.card),
+    ).toEqual(wideCards);
+
+    const toggled = eventsOf(el, "toggle-column");
+    await userEvent.click(sections[0]!.querySelector<HTMLElement>("[data-column-toggle]")!);
+    expect(toggled).toEqual([{ key: "ready" }]);
+  });
+
+  it("keeps the header row and its Columns button when every column is hidden", async () => {
+    const el = await mountBoard({
+      board: passBoard({ toFire: [toFireCard] }),
+      columns: { order: PASS_COLUMNS.order, hidden: [...PASS_COLUMNS.order], collapsed: [] },
+    });
+    expect(root(el).querySelectorAll("[data-column]")).toHaveLength(0);
+    const head = root(el).querySelector("[data-board-head]")!;
+    expect(head).not.toBeNull();
+    const columnsButton = head.querySelector<HTMLElement>("[data-columns-open]")!;
+    expect(columnsButton.textContent!.trim()).toBe(t("station.columns"));
+    const opened = eventsOf(el, "open-columns");
+    await userEvent.click(columnsButton);
+    expect(opened).toEqual([{ opener: columnsButton }]);
   });
 });
