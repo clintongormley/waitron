@@ -193,7 +193,6 @@ export async function adoptFromPrimary(
   // Unconditional, even `{}`, so a re-adopt overwrites.
   await deps.persistModuleConfig(moduleConfig);
   await writePendingAdoption(deps.stateDir, {
-    locationId: designated.locationId,
     standby: { nodeId: standby.nodeId, publicKey: standby.publicKey },
     nodeName: `${bundle.primaryNode.name} (standby)`,
     filingModule: bundle.primaryNode.filingModule,

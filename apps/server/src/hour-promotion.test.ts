@@ -1039,7 +1039,6 @@ it("establishes the real reserved node and identity while keeping its fiscal sta
       establishReservedStandbyIdentity(
         { ownerDb: spare.db },
         {
-          locationId: target.locationId,
           standby: identity,
           nodeName: "New spare",
           filingModule: "verifactu",

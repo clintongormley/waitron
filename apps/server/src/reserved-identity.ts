@@ -4,11 +4,13 @@ import {
   insertReservedNodeTx,
   insertReservedSeriesTx,
   nodes,
+  venueLocationId,
   withTransaction,
   type Database,
   type Transaction,
 } from "@waitron/db";
 import { eq } from "drizzle-orm";
+import { readOperationalVenueIds } from "@waitron/provisioning";
 import {
   moduleOperationFor,
   snapshotModuleOperations,
@@ -44,7 +46,6 @@ export function generateStandbyIdentity(): StandbyIdentity {
 export async function establishReservedStandbyIdentity(
   deps: { ownerDb: Database },
   args: {
-    locationId: string;
     standby: StandbyPublicIdentity;
     nodeName: string;
     filingModule: string | null;
@@ -64,15 +65,18 @@ export async function establishReservedStandbyIdentity(
   await withPreparedModuleOperations(modules, operations, standby.nodeId, "establish", (prepared) =>
     withTransaction(deps.ownerDb, async (tx) => {
       if (await standbyNodeExists(tx, standby.nodeId)) return;
+      if ((await readOperationalVenueIds(tx)).length === 0)
+        throw new AppError("mirror.venue_not_copied", {});
 
       const owner = modules.find(
         (module) => module.provisioning?.standby?.series === "on-activation",
       );
       if (owner !== undefined && (reserved.series?.length ?? 0) !== 0)
         throw new AppError("module.operation_invalid", { module: owner.name });
+      const venueId = await venueLocationId(tx);
       await insertReservedNodeTx(tx, {
         id: standby.nodeId,
-        locationId: supplied.locationId,
+        locationId: venueId,
         name: supplied.nodeName,
         filingModule: supplied.filingModule,
         taxModule: supplied.taxModule,
@@ -80,7 +84,7 @@ export async function establishReservedStandbyIdentity(
         endorsement: reserved.endorsement,
       });
       const standbyNode = {
-        locationId: brandLocationId(supplied.locationId),
+        locationId: brandLocationId(venueId),
         nodeId: brandNodeId(standby.nodeId),
       };
       for (const m of modules) {

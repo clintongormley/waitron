@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, stat, readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -28,7 +28,6 @@ async function tempDir(): Promise<string> {
 
 const STANDBY_NODE_ID = "33333333-3333-4333-8333-333333333333";
 const PENDING: PendingAdoption = {
-  locationId: "55555555-5555-4555-8555-555555555555",
   standby: { nodeId: STANDBY_NODE_ID, publicKey: "pub" },
   nodeName: "standby",
   filingModule: "fiscal-verifactu",
@@ -56,6 +55,44 @@ describe("writePendingAdoption / readPendingAdoption", () => {
 });
 
 describe("runFinishAdoption", () => {
+  it("finishes a pending record written before this change without forwarding its obsolete location", async () => {
+    const dir = await tempDir();
+    await writeFile(
+      join(dir, PENDING_ADOPTION_FILE),
+      JSON.stringify({ ...PENDING, locationId: "55555555-5555-4555-8555-555555555555" }),
+      { mode: 0o600 },
+    );
+    let established: unknown;
+    let establishCalls = 0;
+    const logged: unknown[] = [];
+    await runFinishAdoption({
+      ownerDb: dummyDb,
+      stateDir: dir,
+      modules: [],
+      establish: (args) => {
+        establishCalls += 1;
+        established = args;
+        return Promise.resolve();
+      },
+      ensureViewer: () => Promise.resolve(),
+      log: ((level: string, event: string, fields: unknown) =>
+        logged.push({ level, event, fields })) as never,
+    });
+    expect(establishCalls).toBe(1);
+    expect(established).toEqual({
+      standby: PENDING.standby,
+      nodeName: "standby",
+      filingModule: "fiscal-verifactu",
+      taxModule: null,
+      modules: [],
+      reserved: PENDING.reserved,
+    });
+    expect(logged).toEqual([
+      { level: "info", event: "adoption.established", fields: { nodeId: STANDBY_NODE_ID } },
+    ]);
+    expect(await readPendingAdoption(dir)).toBeNull();
+  });
+
   it("establishes the reserved identity, ensures the viewer, and unlinks the file", async () => {
     const dir = await tempDir();
     await writePendingAdoption(dir, PENDING);
@@ -152,9 +189,33 @@ describe("runFinishAdoption — default steps on a migrated venue", () => {
     timeoutMs: 60_000,
   });
 
+  it("logs the named no-venue refusal and keeps the pending record", async () => {
+    await seedTenant(suite.db);
+    const dir = await tempDir();
+    await writePendingAdoption(dir, PENDING);
+    const logged: unknown[] = [];
+    await runFinishAdoption({
+      ownerDb: suite.db,
+      stateDir: dir,
+      modules: [],
+      log: ((level: string, event: string, fields: unknown) =>
+        logged.push({ level, event, fields })) as never,
+    });
+    expect(logged).toEqual([
+      {
+        level: "error",
+        event: "adoption.establish_failed",
+        fields: { code: "mirror.venue_not_copied" },
+      },
+    ]);
+    expect(await readPendingAdoption(dir)).toEqual(PENDING);
+    expect((await suite.db.execute(sql`select 1 from nodes`)).rows).toEqual([]);
+    expect((await suite.db.execute(sql`select 1 from persons`)).rows).toEqual([]);
+  });
+
   it("establishes the standby's node and the mirror viewer, then clears the record", async () => {
     await seedTenant(suite.db);
-    const [location] = await suite.db
+    await suite.db
       .insert(locations)
       .values({
         name: "Barra",
@@ -165,7 +226,6 @@ describe("runFinishAdoption — default steps on a migrated venue", () => {
     const dir = await tempDir();
     await writePendingAdoption(dir, {
       ...PENDING,
-      locationId: location!.id,
       filingModule: null,
       reserved: {
         modules: {},

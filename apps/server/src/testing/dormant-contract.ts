@@ -67,7 +67,6 @@ export async function establishDormantContract(args: {
     establishReservedStandbyIdentity(
       { ownerDb: args.db },
       {
-        locationId: args.locationId,
         standby: args.standby,
         nodeName: "cloud",
         filingModule: "verifactu",

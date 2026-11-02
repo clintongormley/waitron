@@ -109,7 +109,6 @@ async function environment(ownNode: boolean, pending = false) {
     await writeFile(
       join(state, "pending-adoption.json"),
       JSON.stringify({
-        locationId: LOCATION,
         standby: { nodeId: NODE, publicKey: "pub" },
         nodeName: "standby",
         filingModule: "fiscal-none",

@@ -6461,7 +6461,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   own plan, written against A1268's merged diff (#2375): S13, S14, S15 (three pull requests) and
   S12d, lane B's, landed in that order. S18 waits for S2–S17, and the schema
   slices S20–S28 get a plan of their own, which first settles what the venue id sent to Cloud and
-  naming the backup folder becomes.
+  naming the backup folder becomes. S4 is implemented for owner review: standby establishment
+  refuses with `mirror.venue_not_copied` before a node write when no venue row exists, including
+  with the node's venue foreign key removed. Pending-adoption files no longer write or forward a
+  location id; an old-shaped file is read without a reset. S4 must land before S25 drops the key.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](superpowers/plans/2026-11-01-a1301-remove-location.md),
   [working-time plan](superpowers/plans/2026-11-02-a1301-working-time-slices.md)

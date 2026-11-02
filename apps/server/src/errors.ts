@@ -1126,6 +1126,11 @@ declare module "@waitron/shared" {
      */
     "mirror.not_provisioned": Record<string, never>;
     /**
+     * An adopted mirror's standby identity was not established because this database holds no venue
+     * row; nothing copies the main box's rows to a mirror yet.
+     */
+    "mirror.venue_not_copied": Record<string, never>;
+    /**
      * A mirror was pointed at a primary of a different deployment environment. One database serves
      * one environment (CLAUDE.md §5); refused before adopt writes anything. `expected` is this box's
      * environment and `actual` the primary's.

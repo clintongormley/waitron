@@ -319,7 +319,7 @@ describe("runStagedReset", () => {
       const pending = JSON.parse(
         await readFile(join(stateDir, PENDING_ADOPTION_FILE), "utf8"),
       ) as PendingAdoption;
-      expect(pending.locationId).toBe(BUNDLE.designated.locationId);
+      expect(pending).not.toHaveProperty("locationId");
       expect(pending.standby.nodeId).toBe(standbyNodeId);
       expect(pending.originNodeId).toBe(PRIMARY_NODE_ID);
       expect(await readMirrorLink(store.node, standbyNodeId!)).toMatchObject({

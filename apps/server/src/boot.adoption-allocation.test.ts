@@ -81,7 +81,6 @@ it("boot retains allocation-dependent adoption as pending without an ambient ses
   await stampDeployment(suite.db, "preproduction");
   await setNodeMode({ venue: suite.db, node: suite.node }, STANDBY, "mirror");
   const pending: PendingAdoption = {
-    locationId: LOCATION,
     originNodeId: PRIMARY,
     standby: { nodeId: STANDBY, publicKey: "synthetic-public" },
     nodeName: "Spare",

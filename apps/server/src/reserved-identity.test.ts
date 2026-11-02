@@ -72,7 +72,6 @@ describe("establishReservedStandbyIdentity", () => {
       establishReservedStandbyIdentity(
         { ownerDb: suite.db },
         {
-          locationId,
           standby,
           nodeName: "cloud",
           filingModule: "verifactu",
@@ -122,7 +121,6 @@ describe("establishReservedStandbyIdentity", () => {
   it("is idempotent: a second call with a fresh identity is a no-op (keeps the first)", async () => {
     const first = generateStandbyIdentity();
     const base = {
-      locationId,
       nodeName: "cloud",
       filingModule: null,
       taxModule: null,
@@ -178,7 +176,6 @@ describe("establishReservedStandbyIdentity", () => {
         establishReservedStandbyIdentity(
           { ownerDb: suite.db },
           {
-            locationId,
             standby,
             nodeName: "cloud",
             filingModule: "verifactu",
@@ -215,7 +212,6 @@ describe("establishReservedStandbyIdentity", () => {
         establishReservedStandbyIdentity(
           { ownerDb: suite.db },
           {
-            locationId,
             standby,
             nodeName: "cloud",
             filingModule: "verifactu",
@@ -245,7 +241,6 @@ describe("establishReservedStandbyIdentity", () => {
     await establishReservedStandbyIdentity(
       { ownerDb: suite.db },
       {
-        locationId,
         standby,
         nodeName: "cloud",
         filingModule: null,
@@ -263,6 +258,75 @@ describe("establishReservedStandbyIdentity", () => {
     );
     expect(series.rows[0]!.n).toBe(0);
   });
+  it("refuses with mirror.venue_not_copied before writing the standby's node when no venue row exists", async () => {
+    const standby = generateStandbyIdentity();
+    await suite.db.execute(sql`delete from locations`);
+    await expect(
+      establishReservedStandbyIdentity(
+        { ownerDb: suite.db },
+        {
+          standby,
+          nodeName: "cloud",
+          filingModule: null,
+          taxModule: null,
+          modules: [],
+          reserved: {
+            modules: {},
+            series: [],
+            endorsement: { ...ENDORSEMENT, nodeId: standby.nodeId, publicKey: standby.publicKey },
+          },
+        },
+      ),
+    ).rejects.toMatchObject({ code: "mirror.venue_not_copied" });
+    expect(
+      (await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`)).rows,
+    ).toEqual([]);
+    expect(
+      (await suite.db.execute(sql`select 1 from invoice_series where node_id = ${standby.nodeId}`))
+        .rows,
+    ).toEqual([]);
+  });
+
+  it("refuses a fiscal standby without a venue before recording its reservation", async () => {
+    const standby = generateStandbyIdentity();
+    const fixture = await preparedReservation(standby);
+    const reservationsBefore = await suite.db.select().from(fiscalReservations);
+    await suite.db.execute(sql`pragma foreign_keys = off`);
+    try {
+      await suite.db.execute(sql`delete from locations`);
+    } finally {
+      await suite.db.execute(sql`pragma foreign_keys = on`);
+    }
+    await expect(
+      fixture.authorised("establish", (operation) =>
+        establishReservedStandbyIdentity(
+          { ownerDb: suite.db },
+          {
+            standby,
+            nodeName: "cloud",
+            filingModule: "verifactu",
+            taxModule: "vat",
+            modules: allocatedStandbyModules(ALL_MODULES, fixture),
+            moduleOperations: new Map([["fiscal-verifactu", operation]]),
+            reserved: {
+              modules: { "fiscal-verifactu": fixture.state },
+              series: [],
+              endorsement: { ...ENDORSEMENT, nodeId: standby.nodeId, publicKey: standby.publicKey },
+            },
+          },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "mirror.venue_not_copied" });
+    expect(
+      (await suite.db.execute(sql`select 1 from nodes where id = ${standby.nodeId}`)).rows,
+    ).toEqual([]);
+    expect(
+      (await suite.db.execute(sql`select 1 from invoice_series where node_id = ${standby.nodeId}`))
+        .rows,
+    ).toEqual([]);
+    expect(await suite.db.select().from(fiscalReservations)).toEqual(reservationsBefore);
+  });
+
   async function preparedReservation(standby: StandbyIdentity) {
     const primary = {
       nodeId: brandNodeId(crypto.randomUUID()),
