@@ -698,4 +698,56 @@ describe("A773 pass screen", () => {
       expect(stale.parentElement).toBe(boardOf(el));
     });
   });
+
+  describe("an empty board", () => {
+    const empty = deviceBoard(passBoard());
+    const words = (el: TillPassScreen) =>
+      [...el.shadowRoot!.querySelectorAll("till-pass-board > [data-empty]")].map((node) =>
+        node.textContent!.trim(),
+      );
+
+    it.each([
+      ["a kitchen display's pass", "expo.watcher_empty", { deviceMode: true, initialBoard: empty }],
+      ["a pass monitor", "expo.empty", { monitor: true, initialBoard: empty }],
+      ["an embedded card on All stations", "expo.empty", { embedded: true }],
+    ] as const)("%s says %s in the board's status slot", async (_, key, props) => {
+      const api = fakeApi({ getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard() }) });
+      const el = await mount({ api, ...props });
+      expect(words(el)).toEqual([t(key)]);
+      expect(el.shadowRoot!.querySelector("[data-empty]")!.getAttribute("slot")).toBe("status");
+    });
+
+    it.each([
+      [[chosen("pass")], "expo.watcher_empty"],
+      [[chosen("pass_monitor")], "expo.empty"],
+      [[], "expo.empty"],
+    ] as const)("a till whose device chose %j says %s", async (screens, key) => {
+      const api = fakeApi({
+        getDeviceIdentity: vi.fn().mockResolvedValue(identity([...screens])),
+        getDevicePassBoard: vi.fn().mockResolvedValue(empty),
+        getDevicePassMonitorBoard: vi.fn().mockResolvedValue(empty),
+        getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard() }),
+      });
+      const el = await mount({ api });
+      expect(words(el)).toEqual([t(key)]);
+    });
+
+    it.each(["held", "toFire", "inProgress", "ready"] as const)(
+      "says nothing while one card waits in %s",
+      async (column) => {
+        const board = passBoard({ [column]: [passCard()] });
+        const el = await mount({ deviceMode: true, initialBoard: deviceBoard(board) });
+        expect(words(el)).toEqual([]);
+      },
+    );
+
+    it("says nothing while the pass is gone", async () => {
+      const api = fakeApi({
+        getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass", false)])),
+        getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard() }),
+      });
+      const el = await mount({ api });
+      expect(el.shadowRoot!.querySelector("[data-empty]")).toBeNull();
+    });
+  });
 });

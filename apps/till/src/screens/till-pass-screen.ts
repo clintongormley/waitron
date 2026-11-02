@@ -140,6 +140,13 @@ export class TillPassScreen extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      .empty {
+        margin: 0;
+        padding: var(--wt-space-4);
+        color: var(--wt-color-text-muted);
+        text-align: center;
+      }
+
       .title {
         margin: 0;
         font-size: var(--wt-font-size-xl);
@@ -560,6 +567,14 @@ export class TillPassScreen extends LitElement {
     );
   }
 
+  #empty(boardId: BoardId): TemplateResult | typeof nothing {
+    const { held, toFire, inProgress, ready } = this.board;
+    if (held.length + toFire.length + inProgress.length + ready.length > 0) return nothing;
+    return html`<p class="empty" role="status" slot="status" data-empty>
+      ${t(boardId === "pass" ? "expo.watcher_empty" : "expo.empty")}
+    </p>`;
+  }
+
   override render() {
     const boardId = this.#boardId();
     return html`<section class="screen" aria-label=${t("expo.title")}>
@@ -615,7 +630,7 @@ export class TillPassScreen extends LitElement {
         const { opener } = (event as CustomEvent<{ opener: HTMLElement }>).detail;
         this.columnsWindow = { boardId, opener };
       }}
-      >${this.#lead("lead")}${this.#unavailable("status")}
+      >${this.#lead("lead")}${this.#unavailable("status")}${this.#empty(boardId)}
       <p class="stale" role="status" slot="status" ?data-stale=${this.stale}>
         ${this.stale ? html`<till-stale-since .since=${this.#lastGoodAt}></till-stale-since>` : nothing}
       </p>
