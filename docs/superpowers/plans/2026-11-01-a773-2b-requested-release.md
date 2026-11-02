@@ -303,6 +303,10 @@ groups and the pass") to say B1 landed and B2–B4 remain, with this plan linked
   | `fireHeldLine`'s new group (`:596`) | fire | `next_course` |
   | `fireGroup` (held → fired) | unchanged | keeps `next_course` |
 
+  Superseded in part on 2026-11-02 by B3's D57: `nextFireKind` answers `new_order` while the party
+  has no fired group, and `releaseGroup` gives a held group fired as the party's first food
+  `new_order`.
+
   `nextFireKind(tx, partyId)` answers `new_order` when the party has no group whose state is not
   `removed`, else `added`. Reading it once before the loop matters: a submission listing its held
   group before its fire group must still give the fire group `new_order`. A counter order has no
@@ -1221,7 +1225,8 @@ fired, `releaseHeld`'s count, and the made-here extras' first step) were answere
   - **Owner, open:** firing one held dish alone (`fireHeldLine`) as a table's first food keeps
     `next_course`; B3 asked the owner whether it should be `new_order` (lane C's `questions.md`,
     2026-11-02). B4 makes the change if the answer is yes.
-  - **Backlog follow-ups** (entries in `docs/backlog/till.md`): a pass warning before releasing to
+  - **Backlog follow-ups** (entries in `docs/backlog.md`, detail for the waiting extra in
+    `docs/backlog/till.md`): a pass warning before releasing to
     a station whose output is down (D54); an edit adding an extra at a waiting station prints no
     `+N` on its HOLD paper when the dish's own station fires at once; no suite pins `fired: false`
     on today's pass board's course section, nor that a listed but switched-off pass-screen zone is
