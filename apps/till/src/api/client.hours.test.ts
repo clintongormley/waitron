@@ -26,13 +26,13 @@ it.each([selection, { kind: "week" as const }])(
     const api = new TillApi("https://box.test", fetcher);
     expect(api).toHaveProperty("getHours", expect.any(Function));
     const signal = new AbortController().signal;
-    expect(await api.getHours("old/location", selected, { signal })).toEqual({
+    expect(await api.getHours(selected, { signal })).toEqual({
       ...body,
       selection: selected,
     });
     expect(fetcher.mock.calls).toEqual([
       [
-        `https://box.test/api/attendance/hours?locationId=old%2Flocation&kind=${selected.kind}${selected.date === undefined ? "" : "&date=2026-10-25"}`,
+        `https://box.test/api/attendance/hours?kind=${selected.kind}${selected.date === undefined ? "" : "&date=2026-10-25"}`,
         { method: "GET", credentials: "include", signal },
       ],
     ]);
@@ -49,7 +49,7 @@ it("keeps a read refusal structured and never invents a write or a retry", async
   );
   const api = new TillApi("", fetcher);
   expect(api).toHaveProperty("getHours", expect.any(Function));
-  await expect(api.getHours("venue", { kind: "week" })).rejects.toEqual({
+  await expect(api.getHours({ kind: "week" })).rejects.toEqual({
     code: "attendance.not_permitted",
     status: 403,
     personId: "ana",

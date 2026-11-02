@@ -84,12 +84,12 @@ describe("attendance state ownership", () => {
     f.api.listAttendanceApprovers.mockReturnValueOnce(new Promise(() => {}));
     const reads = [
       f.controller.refresh(),
-      f.controller.readDay("2026-10-14", "venue"),
+      f.controller.readDay("2026-10-14"),
       f.controller.readApprovers("item", "approve"),
     ];
     const signals = [
       f.api.getAttendanceInbox.mock.calls.at(-1)![0].signal,
-      f.api.getAttendanceDay.mock.calls[0]![2].signal,
+      f.api.getAttendanceDay.mock.calls[0]![1].signal,
       f.api.listAttendanceApprovers.mock.calls[0]![2].signal,
     ] as AbortSignal[];
     f.controller.stop();
@@ -118,7 +118,7 @@ describe("attendance state ownership", () => {
         await f.controller.refresh();
       } else if (phase === "day") {
         f.api.getAttendanceDay.mockImplementationOnce(() => completeAtLogout(day()));
-        expect(await f.controller.readDay("2026-10-14", "venue")).toBeNull();
+        expect(await f.controller.readDay("2026-10-14")).toBeNull();
       } else {
         if (phase === "receipt") {
           f.api.sendAttendanceCommand.mockRejectedValueOnce(new TypeError("lost"));
@@ -186,8 +186,7 @@ describe("attendance state ownership", () => {
       }
     });
     if (phase === "inbox-start") await f.controller.refresh();
-    else if (phase.startsWith("day"))
-      expect(await f.controller.readDay("2026-10-14", "venue")).toBeNull();
+    else if (phase.startsWith("day")) expect(await f.controller.readDay("2026-10-14")).toBeNull();
     else expect(await f.controller.act(command)).toBeNull();
     expect(stopped).toBe(true);
     expect(f.snapshot()).toMatchObject({
@@ -233,7 +232,7 @@ describe("attendance state ownership", () => {
     await f.controller.refresh();
     await f.controller.retryRead();
     expect(await f.controller.act(command)).toBeNull();
-    expect(await f.controller.readDay("2026-10-14", "venue")).toBeNull();
+    expect(await f.controller.readDay("2026-10-14")).toBeNull();
     expect(await f.controller.readApprovers("item", "approve")).toBeNull();
     for (const method of Object.values(f.api)) expect(method).not.toHaveBeenCalled();
   });
@@ -465,9 +464,9 @@ describe("attendance state ownership", () => {
     const old = deferred<AttendanceDayView>();
     const current = deferred<AttendanceDayView>();
     f.api.getAttendanceDay.mockReturnValueOnce(old.promise).mockReturnValueOnce(current.promise);
-    const first = f.controller.readDay("2026-10-13", "venue");
-    const oldSignal = f.api.getAttendanceDay.mock.calls[0]![2].signal as AbortSignal;
-    const second = f.controller.readDay("2026-10-14", "venue");
+    const first = f.controller.readDay("2026-10-13");
+    const oldSignal = f.api.getAttendanceDay.mock.calls[0]![1].signal as AbortSignal;
+    const second = f.controller.readDay("2026-10-14");
     old.resolve(day("2026-10-13"));
     expect(await first).toBeNull();
     expect(oldSignal.aborted).toBe(true);
@@ -477,26 +476,22 @@ describe("attendance state ownership", () => {
     expect(f.snapshot()).toMatchObject({ day: day(), dayReading: false, dayError: null });
   });
 
-  it.each(["person", "date", "location"] as const)(
+  it.each(["person", "date"] as const)(
     "rejects a day response with a different %s",
     async (scope) => {
       const f = await fixture();
       await f.controller.start("ana");
       const foreign = {
         ...day(),
-        ...(scope === "person"
-          ? { personId: "other" }
-          : scope === "date"
-            ? { date: "2026-10-13" }
-            : { locationId: "other" }),
+        ...(scope === "person" ? { personId: "other" } : { date: "2026-10-13" }),
       };
       f.api.getAttendanceDay.mockResolvedValueOnce(foreign);
-      expect(await f.controller.readDay("2026-10-14", "venue")).toBeNull();
+      expect(await f.controller.readDay("2026-10-14")).toBeNull();
       expect(f.snapshot()).toMatchObject({
         day: null,
         dayError: { code: "attendance.read_failed" },
       });
-      expect(await f.controller.readDay("2026-10-14", "venue")).toEqual(day());
+      expect(await f.controller.readDay("2026-10-14")).toEqual(day());
       expect(f.snapshot().dayError).toBeNull();
     },
   );
@@ -508,7 +503,7 @@ describe("attendance state ownership", () => {
     const oldPicker = deferred<{ personId: string; displayName: string }[]>();
     f.api.getAttendanceDay.mockReturnValueOnce(oldDay.promise);
     f.api.listAttendanceApprovers.mockReturnValueOnce(oldPicker.promise);
-    const read = f.controller.readDay("2026-10-14", "venue");
+    const read = f.controller.readDay("2026-10-14");
     const picker = f.controller.readApprovers("item", "approve");
     expect(await f.controller.act(command)).toEqual(saved);
     oldDay.resolve(day());
@@ -522,7 +517,7 @@ describe("attendance state ownership", () => {
       approversReading: false,
     });
     f.api.getAttendanceDay.mockReturnValueOnce(new Promise(() => {}));
-    const stopped = f.controller.readDay("2026-10-14", "venue");
+    const stopped = f.controller.readDay("2026-10-14");
     f.controller.stop();
     expect(await stopped).toBeNull();
     expect(f.snapshot().day).toBeNull();
@@ -568,7 +563,7 @@ describe("attendance state ownership", () => {
       await f.controller.start("ana");
       await vi.advanceTimersByTimeAsync(20_000);
       await f.controller.refresh();
-      await f.controller.readDay("2026-10-14", "venue");
+      await f.controller.readDay("2026-10-14");
       expect(wakeLock.request).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(10_000);
       expect(idle).toHaveBeenCalledTimes(1);

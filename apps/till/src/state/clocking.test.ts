@@ -10,7 +10,6 @@ function clock(
 ): TillClockState {
   return {
     personId,
-    locationId: "venue",
     businessDay: "2026-10-14",
     state,
     lastEntryId,

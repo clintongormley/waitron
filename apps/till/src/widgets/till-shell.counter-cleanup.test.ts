@@ -241,7 +241,6 @@ it.each([390, 1280])(
         clockAvailable: true,
         clockState: {
           personId: "ana",
-          locationId: "v",
           businessDay: "2026-10-19",
           state: "working",
           lastEntryId: "entry",

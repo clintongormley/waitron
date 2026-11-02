@@ -32,7 +32,6 @@ function failure(error: unknown): NonNullable<HoursSnapshot["readError"]> {
 export class HoursController {
   #snapshot = empty();
   #personId: string | null = null;
-  #locationId = "";
   #selection: HoursSelection = { kind: "week" };
   #version = 0;
   #request?: AbortController;
@@ -51,15 +50,13 @@ export class HoursController {
     this.#snapshot = empty();
     this.#publish();
   }
-  async start(personId: string, locationId: string, selection: HoursSelection): Promise<void> {
+  async start(personId: string, selection: HoursSelection): Promise<void> {
     this.stop();
     this.#personId = personId;
-    await this.select(locationId, selection);
+    await this.select(selection);
   }
-  async select(locationId: string, selection: HoursSelection): Promise<void> {
-    if (locationId !== this.#locationId || !sameSelection(selection, this.#selection))
-      this.#snapshot = empty();
-    this.#locationId = locationId;
+  async select(selection: HoursSelection): Promise<void> {
+    if (!sameSelection(selection, this.#selection)) this.#snapshot = empty();
     this.#selection = { ...selection };
     await this.refresh();
   }
@@ -68,7 +65,6 @@ export class HoursController {
     const version = ++this.#version;
     this.#request?.abort();
     const personId = this.#personId,
-      locationId = this.#locationId,
       selection = { ...this.#selection };
     const request = new AbortController();
     this.#request = request;
@@ -84,15 +80,11 @@ export class HoursController {
     const timer = setTimeout(() => request.abort(), 25_000);
     try {
       const view = await Promise.race([
-        this.api.getHours(locationId, selection, { signal: request.signal }),
+        this.api.getHours(selection, { signal: request.signal }),
         aborted,
       ]);
       if (!current()) return;
-      if (
-        view.personId !== personId ||
-        view.locationId !== locationId ||
-        !sameSelection(view.selection, selection)
-      )
+      if (view.personId !== personId || !sameSelection(view.selection, selection))
         throw new TypeError("Hours belongs to another selection");
       this.#snapshot = { view, reading: false, readError: null };
     } catch (error) {

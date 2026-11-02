@@ -142,7 +142,6 @@ function findBillParams(query: BillsQuery | TransactionsQuery): string {
 export type TillClockStatus = "out" | "working" | "on_break";
 export interface TillClockState {
   personId: string;
-  locationId: string;
   businessDay: string;
   state: TillClockStatus;
   lastEntryId: string | null;
@@ -2804,25 +2803,16 @@ export class TillApi {
     return this.#request("/api/attendance/inbox", "GET", undefined, options.signal);
   }
 
-  getHours(
-    locationId: string,
-    selection: HoursSelection,
-    options: ReadOptions = {},
-  ): Promise<PersonHours> {
+  getHours(selection: HoursSelection, options: ReadOptions = {}): Promise<PersonHours> {
     const query = new URLSearchParams({
-      locationId,
       kind: selection.kind,
       ...(selection.date === undefined ? {} : { date: selection.date }),
     });
     return this.#request(`/api/attendance/hours?${query}`, "GET", undefined, options.signal);
   }
 
-  getAttendanceDay(
-    date: string,
-    locationId: string,
-    options: ReadOptions = {},
-  ): Promise<AttendanceDayView> {
-    const query = new URLSearchParams({ date, locationId });
+  getAttendanceDay(date: string, options: ReadOptions = {}): Promise<AttendanceDayView> {
+    const query = new URLSearchParams({ date });
     return this.#request(`/api/attendance/day?${query}`, "GET", undefined, options.signal);
   }
 

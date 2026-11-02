@@ -40,7 +40,6 @@ describe("till-shell", () => {
         clockAvailable: true,
         clockState: {
           personId: "ana",
-          locationId: "venue",
           businessDay: "2026-10-14",
           state,
           lastEntryId: "entry",
@@ -96,7 +95,6 @@ describe("till-shell", () => {
         clockAvailable: true,
         clockState: {
           personId: "ana",
-          locationId: "venue",
           businessDay: "2026-10-14",
           state: "on_break",
           lastEntryId: "entry",
@@ -504,7 +502,6 @@ describe("till-shell", () => {
             clockAvailable: true,
             clockState: {
               personId: "ana",
-              locationId: "venue",
               businessDay: "2026-10-14",
               state: "working",
               lastEntryId: "entry",
@@ -845,7 +842,6 @@ describe("a handheld's More", () => {
     clockAvailable: true,
     clockState: {
       personId: "ana",
-      locationId: "venue",
       businessDay: "2026-10-14",
       state: "working",
       lastEntryId: "entry",
@@ -1391,7 +1387,6 @@ describe("till-shell at phone width", () => {
     clockAvailable: true,
     clockState: {
       personId: "ana",
-      locationId: "venue",
       businessDay: "2026-10-14",
       state: "working",
       lastEntryId: "entry",
@@ -1972,7 +1967,6 @@ describe("till-shell above phone width", () => {
           clockAvailable: true,
           clockState: {
             personId: "ana",
-            locationId: "venue",
             businessDay: "2026-10-14",
             state: "working",
             lastEntryId: "entry",

@@ -437,7 +437,7 @@ describe("till correction editors and manager PIN", () => {
       "2026-10-14",
     );
     await vi.waitFor(() => expect(day.view?.date).toBe("2026-10-14"));
-    expect(f.api.getAttendanceDay).toHaveBeenCalledWith("2026-10-14", "venue", {
+    expect(f.api.getAttendanceDay).toHaveBeenCalledWith("2026-10-14", {
       signal: expect.any(AbortSignal),
     });
     await userEvent.click(day.shadowRoot!.querySelector<HTMLElement>('[data-add-pair="shift"]')!);
@@ -457,9 +457,9 @@ describe("till correction editors and manager PIN", () => {
         status: "waiting-manager",
       });
       f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
-      f.api.getAttendanceDay.mockImplementation(async (date, locationId) => ({
+      f.api.getAttendanceDay.mockImplementation(async (date) => ({
         personId: "p1",
-        locationId,
+        locationId: "venue",
         date,
         revision: "day-revision",
         timeZone: "Europe/Madrid",
@@ -511,9 +511,9 @@ describe("till correction editors and manager PIN", () => {
       status: "waiting-manager",
     });
     f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
-    f.api.getAttendanceDay.mockImplementation(async (date, locationId) => ({
+    f.api.getAttendanceDay.mockImplementation(async (date) => ({
       personId: "p1",
-      locationId,
+      locationId: "venue",
       date,
       revision: "revision",
       timeZone: "Europe/Madrid",
@@ -571,9 +571,9 @@ it("a lost PIN approval is recovered from the day and retried with the same comm
     personId: "p1",
   });
   f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
-  f.api.getAttendanceDay.mockImplementation(async (date, locationId) => ({
+  f.api.getAttendanceDay.mockImplementation(async (date) => ({
     personId: "p1",
-    locationId,
+    locationId: "venue",
     date,
     revision: "revision",
     timeZone: "Europe/Madrid",
@@ -619,9 +619,9 @@ it("a recorded day's retime keeps its target and recovers a lost reply through t
   const { page } = await import("vitest/browser");
   const f = await clockApp({ state: clockState("working", "in") });
   f.api.getAttendanceInbox.mockResolvedValue(empty());
-  f.api.getAttendanceDay.mockImplementation(async (date, locationId) => ({
+  f.api.getAttendanceDay.mockImplementation(async (date) => ({
     personId: "p1",
-    locationId,
+    locationId: "venue",
     date,
     revision: "day-revision",
     timeZone: "Europe/Madrid",
@@ -776,9 +776,9 @@ it("closing during an approver read retires that opening and does not block a re
     status: "waiting-manager",
   });
   f.api.getAttendanceInbox.mockResolvedValue({ ...empty(), items: [item] });
-  f.api.getAttendanceDay.mockImplementation(async (date, locationId) => ({
+  f.api.getAttendanceDay.mockImplementation(async (date) => ({
     personId: "p1",
-    locationId,
+    locationId: "venue",
     date,
     revision: "revision",
     timeZone: "Europe/Madrid",

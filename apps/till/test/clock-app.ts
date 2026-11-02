@@ -15,7 +15,6 @@ export function clockState(
 ): TillClockState {
   return {
     personId,
-    locationId: "venue",
     businessDay: "2026-10-14",
     state,
     lastEntryId: id,
@@ -166,9 +165,7 @@ export async function clockApp(
     listSentDepartmentTransfers: vi.fn().mockResolvedValue({ requests: [] }),
     getHours: vi
       .fn()
-      .mockImplementation(async (locationId: string, selection) =>
-        hoursView({ personId: state.personId, locationId, selection }),
-      ),
+      .mockImplementation(async (selection) => hoursView({ personId: state.personId, selection })),
     getAttendanceInbox: vi.fn().mockImplementation(async () => ({
       personId: state.personId,
       revision: "revision",
@@ -176,9 +173,9 @@ export async function clockApp(
       items: [],
       locations: [{ id: "venue", name: "Clock venue", timeZone: "Europe/Madrid" }],
     })),
-    getAttendanceDay: vi.fn().mockImplementation(async (date: string, locationId: string) => ({
+    getAttendanceDay: vi.fn().mockImplementation(async (date: string) => ({
       personId: state.personId,
-      locationId,
+      locationId: "venue",
       date,
       revision: "revision",
       timeZone: "Europe/Madrid",

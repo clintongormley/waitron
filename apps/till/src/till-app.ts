@@ -2811,7 +2811,6 @@ export class TillApp extends LitElement {
   #attendancePanelVersion = 0;
   @state() private attendanceDayOpen = false;
   @state() private attendanceDayDate = "";
-  @state() private attendanceDayLocation = "";
   @state() private attendancePinReading = false;
   @state() private attendancePin: {
     itemId: string;
@@ -4630,8 +4629,7 @@ export class TillApp extends LitElement {
         queueMicrotask(async () => {
           if (!current()) return;
           await controller.refresh();
-          if (current() && this.attendanceDayOpen)
-            await controller.readDay(this.attendanceDayDate, this.attendanceDayLocation);
+          if (current() && this.attendanceDayOpen) await controller.readDay(this.attendanceDayDate);
           if (
             current() &&
             panelVersion === this.#attendancePanelVersion &&
@@ -4672,11 +4670,6 @@ export class TillApp extends LitElement {
 
   #startHours(): void {
     if (this.#hours || this.drill?.kind !== "hours" || !this.#allowsDestination("hours")) return;
-    const locationId = this.clockSnapshot.state?.locationId;
-    if (!locationId) {
-      if (!this.clockSnapshot.reading) void this.#clocking?.refresh();
-      return;
-    }
     const api = this.api,
       session = this.#operatorSession,
       signIn = this.#signIns;
@@ -4711,7 +4704,7 @@ export class TillApp extends LitElement {
       }
     });
     this.#hours = controller;
-    void controller.start(this.operatorPersonId, locationId, { kind: "week" });
+    void controller.start(this.operatorPersonId, { kind: "week" });
     void this.#attendance?.refresh();
   }
 
@@ -4768,7 +4761,7 @@ export class TillApp extends LitElement {
       this.attendanceSnapshot?.inbox &&
       !this.attendanceSnapshot.uncertainCommandId
     )
-      await this.#attendance?.readDay(this.attendanceDayDate, this.attendanceDayLocation);
+      await this.#attendance?.readDay(this.attendanceDayDate);
   }
 
   async #sendAttendance(
@@ -4812,7 +4805,7 @@ export class TillApp extends LitElement {
     else await this.#runAttendance(command);
   }
 
-  async #openAttendanceDay(scope?: { date: string; locationId: string }): Promise<void> {
+  async #openAttendanceDay(scope?: { date: string }): Promise<void> {
     const controller = this.#attendance;
     if (!controller || this.attendanceSnapshot?.busy) return;
     const version = ++this.#attendancePanelVersion;
@@ -4826,22 +4819,15 @@ export class TillApp extends LitElement {
       return;
     const inbox = this.attendanceSnapshot?.inbox;
     if (!inbox) return;
-    const location = scope
-      ? inbox.locations.find((candidate) => candidate.id === scope.locationId)
-      : (inbox.locations.find(
-          (candidate) => candidate.id === this.clockSnapshot.state?.locationId,
-        ) ?? inbox.locations[0]);
-    if (!location) return;
-    this.attendanceDayLocation = location.id;
     this.attendanceDayDate =
       scope?.date ??
       new Intl.DateTimeFormat("en-CA", {
-        timeZone: location.timeZone,
+        timeZone: inbox.locations[0]?.timeZone,
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
       }).format(new Date());
-    await controller.readDay(this.attendanceDayDate, this.attendanceDayLocation);
+    await controller.readDay(this.attendanceDayDate);
   }
 
   #closeAttendanceDay(): void {
@@ -4852,14 +4838,13 @@ export class TillApp extends LitElement {
     this.attendancePin = null;
   }
 
-  #selectAttendanceDay(event: CustomEvent<{ date: string; locationId: string }>): void {
+  #selectAttendanceDay(event: CustomEvent<{ date: string }>): void {
     event.stopPropagation();
     if (!this.attendanceDayOpen || !this.#attendance) return;
     ++this.#attendancePanelVersion;
     this.attendancePinReading = false;
     this.attendanceDayDate = event.detail.date;
-    this.attendanceDayLocation = event.detail.locationId;
-    void this.#attendance.readDay(event.detail.date, event.detail.locationId);
+    void this.#attendance.readDay(event.detail.date);
   }
 
   #editAttendancePrompt(promptId: string, disagree = false): void {
@@ -4908,8 +4893,7 @@ export class TillApp extends LitElement {
       !this.attendanceDayOpen ||
       this.attendanceSnapshot?.busy ||
       this.attendanceSnapshot?.uncertainCommandId ||
-      day.date !== this.attendanceDayDate ||
-      day.locationId !== this.attendanceDayLocation
+      day.date !== this.attendanceDayDate
     )
       return;
     const targets = "target" in event.detail ? [event.detail.target] : event.detail.targets;
@@ -5025,7 +5009,7 @@ export class TillApp extends LitElement {
               .view=${snapshot?.day ?? null}
               .locations=${snapshot?.inbox?.locations ?? []}
               .date=${this.attendanceDayDate}
-              .locationId=${this.attendanceDayLocation}
+              .locationId=${snapshot?.inbox?.locations[0]?.id ?? ""}
               .reading=${snapshot?.dayReading || snapshot?.reading || this.attendancePinReading}
               .busy=${snapshot?.busy ?? false}
               .blocked=${blocked}
@@ -19380,7 +19364,7 @@ export class TillApp extends LitElement {
                 (l) => l.id === event.detail.locationId,
               )
             )
-              void this.#hours?.select(event.detail.locationId, event.detail.selection);
+              void this.#hours?.select(event.detail.selection);
           }}
           @hours-refresh=${(event: Event) => {
             event.stopPropagation();

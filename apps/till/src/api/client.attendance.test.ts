@@ -118,8 +118,8 @@ describe("attendance client", () => {
     ],
     [
       "getAttendanceDay",
-      ["2026-10-25", "old/location"],
-      "/api/attendance/day?date=2026-10-25&locationId=old%2Flocation",
+      ["2026-10-25"],
+      "/api/attendance/day?date=2026-10-25",
       {
         personId: "ana",
         locationId: "old/location",

@@ -65,7 +65,6 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
                     ? null
                     : {
                         personId: "ana",
-                        locationId: "venue",
                         businessDay: "2026-10-14",
                         state,
                         lastEntryId: "entry",
