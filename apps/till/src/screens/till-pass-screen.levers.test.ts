@@ -216,9 +216,11 @@ describe("A773 pass screen: levers", () => {
       const el = await mountOne(api);
       await press(el, '[data-group-ready="g-1"]');
       expect(text(leverError(el))).toBe(`#7 T7: ${codeMessage("device.forbidden_action")}`);
+      expect(leverError(el)!.getAttribute("role")).toBe("alert");
       expect(tableChanged(el)).toBeNull();
       await press(el, '[data-ready="course-mains"]');
       expect(text(leverError(el))).toBe(`#1 T1: ${codeMessage("order.payment_in_flight")}`);
+      expect(leverError(el)!.getAttribute("role")).toBe("alert");
     },
   );
 

@@ -80,9 +80,12 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       .fn()
       .mockResolvedValue({ defaultLanguage: "es", languages: ["es", "en"] }),
     getDevDevices: vi.fn().mockRejectedValue({ code: "server.internal" }),
-    getDeviceIdentity: vi
-      .fn()
-      .mockResolvedValue({ deviceId: "till-dev", name: "Till 1", formFactor: "till" }),
+    getDeviceIdentity: vi.fn().mockResolvedValue({
+      deviceId: "till-dev",
+      name: "Till 1",
+      formFactor: "till",
+      kitchenScreens: [],
+    }),
     reportBattery: vi.fn().mockResolvedValue(undefined),
     listStaff: vi.fn().mockResolvedValue([]),
     getLocales: vi.fn().mockResolvedValue({

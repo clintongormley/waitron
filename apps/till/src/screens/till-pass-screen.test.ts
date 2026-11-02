@@ -507,6 +507,22 @@ describe("A773 pass screen", () => {
     }
   });
 
+  it("at a till, a pass read refused device.unauthorized re-boots nothing and the refresh goes on", () =>
+    listening((reboot) =>
+      withFakeTimers(async () => {
+        const refused = Object.assign(new Error("401"), { code: "device.unauthorized" });
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          getDevicePassBoard: vi.fn().mockRejectedValue(refused),
+        });
+        await mount({ api });
+        expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+        await vi.advanceTimersByTimeAsync(15_000);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        expect(reboot).not.toHaveBeenCalled();
+      }),
+    ));
+
   describe("reads and refreshes", () => {
     const stale = (el: TillPassScreen) => el.shadowRoot!.querySelector(".stale[data-stale]");
 
@@ -719,6 +735,32 @@ describe("A773 pass screen", () => {
       expect(el.shadowRoot!.querySelector(".stale")).toBeNull();
     });
 
+    it.each([
+      [
+        "a till following its pass",
+        "getDevicePassBoard",
+        { getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])) },
+        {},
+      ],
+      ["a pass monitor", "getDevicePassMonitorBoard", {}, { monitor: true }],
+    ] as const)(
+      "%s shows only its lines when a narrowing took every station",
+      async (_, read, overrides, props) => {
+        const api = fakeApi({
+          ...overrides,
+          [read]: vi.fn().mockResolvedValue(
+            deviceBoard(boardA, {
+              stations: [{ id: "st-2", name: "Freidora", available: false }],
+            }),
+          ),
+        });
+        const el = await mount({ api, ...props });
+        expect(api[read]).toHaveBeenCalledOnce();
+        expect(lines(el)).toEqual([t("station.unavailable").replace("{name}", "Freidora")]);
+        expect(boardOf(el)).toBeNull();
+      },
+    );
+
     it("shows only its lines when a narrowing took every zone", async () => {
       const el = await mount({
         deviceMode: true,
@@ -740,6 +782,19 @@ describe("A773 pass screen", () => {
       expect(api.getDevicePassBoard).not.toHaveBeenCalled();
       expect(api.getExpoBoard).not.toHaveBeenCalled();
     });
+
+    it("at a till whose pass screen a narrowing took, reads no board on a refresh either", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass", false)])),
+        });
+        await mount({ api });
+        await vi.advanceTimersByTimeAsync(15_000);
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        expect(api.getDevicePassBoard).not.toHaveBeenCalled();
+        expect(api.getDevicePassMonitorBoard).not.toHaveBeenCalled();
+        expect(api.getExpoBoard).not.toHaveBeenCalled();
+      }));
 
     it.each([
       [
@@ -1005,6 +1060,34 @@ describe("A773 pass screen", () => {
       expect(el.shadowRoot!.querySelector(".stale[data-stale]")).not.toBeNull();
       expect(status.at(-1)!.hasAttribute("data-empty")).toBe(true);
       expect(status.at(-1)!.hasAttribute("role")).toBe(false);
+    });
+
+    it("draws the words after the table-changed line when a refused Fire's reload finds the board empty", async () => {
+      const toFire = passCard({
+        key: "group:g-1",
+        target: { kind: "group", partyId: "p-1", groupId: "g-1" },
+        kind: "next_course",
+        items: [passItem({ id: "a", phase: "requested", firedAt: null })],
+        releaseTicketItemIds: ["r-1"],
+        releaseContext: "ctx-1",
+      });
+      const api = fakeApi({
+        getDevicePassBoard: vi.fn().mockResolvedValue(empty),
+        releaseDevicePass: vi.fn().mockRejectedValue({ code: "party.not_open", status: 409 }),
+      });
+      const el = await mount({
+        api,
+        deviceMode: true,
+        initialBoard: deviceBoard(passBoard({ toFire: [toFire] })),
+      });
+      await userEvent.click(
+        boardOf(el)!.shadowRoot!.querySelector<HTMLButtonElement>('[data-pass-fire="group:g-1"]')!,
+      );
+      await vi.waitFor(() => expect(api.getDevicePassBoard).toHaveBeenCalledOnce());
+      await flush(el);
+      const status = [...boardOf(el)!.querySelectorAll(':scope > [slot="status"]')];
+      expect(el.shadowRoot!.querySelector("[data-table-changed]")).not.toBeNull();
+      expect(status.at(-1)!.hasAttribute("data-empty")).toBe(true);
     });
 
     it.each([
