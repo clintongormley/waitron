@@ -38,27 +38,25 @@ is grouped and sent.
 ## Mock-ups
 
 Every screen, drawn with one story (Table 4; Starters not held, Mains and Desserts held; Bar does
-not wait for the pass, Cold and Grill do), in
-[`docs/backlog/mockups/a773-courses-and-groups/`](../../backlog/mockups/a773-courses-and-groups/):
+not wait for the pass, Cold and Grill do), in mock-ups removed from the repository on 2026-11-02:
 
-1. [Table screen, first order](../../backlog/mockups/a773-courses-and-groups/01-first-order.png)
-2. [Making a new group](../../backlog/mockups/a773-courses-and-groups/02-new-group.png)
-3. [Table screen, adding later](../../backlog/mockups/a773-courses-and-groups/03-adding-later.png)
-4. [Handheld at phone width](../../backlog/mockups/a773-courses-and-groups/04-handheld.png)
-5. [A station that waits for the pass](../../backlog/mockups/a773-courses-and-groups/05-grill-station.png)
-6. [Pass screen](../../backlog/mockups/a773-courses-and-groups/06-pass-screen.png)
-7. [A station that does not wait for the pass](../../backlog/mockups/a773-courses-and-groups/07-bar-station.png)
-8. [Printed tickets](../../backlog/mockups/a773-courses-and-groups/08-tickets.png)
-9. [Courses page](../../backlog/mockups/a773-courses-and-groups/09-courses-page.png)
-10. [A station's settings](../../backlog/mockups/a773-courses-and-groups/10-station-settings.png)
-11. [Counter order](../../backlog/mockups/a773-courses-and-groups/11-counter-order.png)
+1. Table screen, first order
+2. Making a new group
+3. Table screen, adding later
+4. Handheld at phone width
+5. A station that waits for the pass
+6. Pass screen
+7. A station that does not wait for the pass
+8. Printed tickets
+9. Courses page
+10. A station's settings
+11. Counter order
 
-Added by the 2026-10-17 revision, in
-[`docs/backlog/mockups/a773-order-panel/`](../../backlog/mockups/a773-order-panel/):
+Added by the 2026-10-17 revision, in mock-ups removed from the repository on 2026-11-02:
 
-12. [The order panel, collapsed and opened](../../backlog/mockups/a773-order-panel/01-order-panel.png)
-13. [Sending empties the New order](../../backlog/mockups/a773-order-panel/02-sending-empties-the-new-order.png)
-14. [The line window after sending, and Comp…](../../backlog/mockups/a773-order-panel/03-line-window-after-sending.png)
+12. The order panel, collapsed and opened
+13. Sending empties the New order
+14. The line window after sending, and Comp…
 
 Pictures 1, 3 and 4 show the first version's merged list: their arrangement of Fire now and held
 groups still holds inside the New order box, but where they show already-sent lines, pictures 12–14
@@ -655,7 +653,7 @@ Browser tests open the real screens in both themes and at phone width (CLAUDE.md
 
 ## 14. A773-1's six open points — answered 2026-10-17
 
-The questions are in [`docs/backlog/mockups/a773-1-open-points/`](../../backlog/mockups/a773-1-open-points/README.md).
+The questions were in a file removed from the repository on 2026-11-02.
 
 1. **Held groups in two places — neither.** The drawer's Current orders goes entirely; serving moves
    to Fired, reminders to the Held line.

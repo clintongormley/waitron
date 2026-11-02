@@ -6,7 +6,7 @@
 
 **Architecture:** Add one information card to the existing completion screen, linking to the local Cloud services page. Keep sign-up, trial selection, payment and billing authority in Cloud. Reuse restart readiness and add one tab-only flag identifying a successful fresh setup; add no persistence, table, API, billing field or tutorial progress.
 
-**Tech stack:** Existing Lit screen, `wt-card`, setup EN/ES catalogue and `--wt-*` tokens. Proposed static [mockup](../../backlog/mockups/a1186-cloud-trial-offer/README.md).
+**Tech stack:** Existing Lit screen, `wt-card`, setup EN/ES catalogue and `--wt-*` tokens. Proposed static mockup.
 
 **Spec:** This plan contains the UI specification. Commercial decisions come from [Cloud billing design at PR705's merge commit](https://github.com/waitron-io/waitron-cloud/blob/4064f3044f4826235e399070e564a94e4dd7bdd0/docs/superpowers/specs/2026-10-29-cloud-billing-design.md), §§2, 4, 5 and 10. Its front matter still says “draft for owner approval”; the driver's handoff identifies PR705 as merged. Neither statement proves a billing runtime exists.
 

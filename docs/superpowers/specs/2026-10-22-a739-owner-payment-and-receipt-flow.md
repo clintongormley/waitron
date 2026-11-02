@@ -92,7 +92,7 @@ These are owner instructions and source-reading evidence, **not runtime verifica
 - Scope contracts: [A790](2026-10-19-a790-document-and-printer-choice-design.md),
   [A796](2026-10-19-a796-handheld-payments-design.md),
   [A582](2026-10-18-a582-help-mode-design.md), and
-  [historical artwork README](../../backlog/mockups/a739-owner-receipt-flow/README.md).
+  historical artwork README.
 
 **Everything below is preserved verbatim as historical material. Its open questions, native-control
 proposals, pending-choice proposals and F1-off statements are superseded by this approved addendum.**
@@ -175,7 +175,7 @@ exposed capability gap, not whether the owner's YES or unticked default still st
 - **C:** name a different change to the boundary.
 
 **No fallback is approved.** The
-[eight SVG boards](../../backlog/mockups/a739-owner-receipt-flow/README.md) show A as a target
+eight SVG boards show A as a target
 proposal, with native control disabled, not an effective new feature.
 
 ## Separate owner question: an unanswered document choice
@@ -242,7 +242,7 @@ This revision changes the document sequence, not those decisions.
 
 ## Read the four cases
 
-[Eight native SVG boards and PNG render targets](../../backlog/mockups/a739-owner-receipt-flow/README.md)
+Eight native SVG boards and PNG render targets
 show the same four journeys in English and Spanish, light and dark, at 390 and 1280 px.
 They depict the target interaction. Full-invoice fields are explicitly marked as dependent
 on separate fiscal work; they are not screenshots of an available feature.

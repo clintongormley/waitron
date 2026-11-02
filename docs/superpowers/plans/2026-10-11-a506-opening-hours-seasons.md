@@ -8,8 +8,7 @@
 **Status:** plan, 2026-10-11. Not started. Nothing here is built.
 
 **Spec:** [Opening hours rebuilt around seasons and special days](../specs/2026-10-11-opening-hours-seasons-design.md)
-(A506). The spec is the source of truth; each task names the spec section it builds. Mockups:
-[`docs/backlog/mockups/a506-opening-hours-seasons/`](../../backlog/mockups/a506-opening-hours-seasons/).
+(A506). The spec is the source of truth; each task names the spec section it builds. Mockups: removed from the repository on 2026-11-02.
 Backlog: `docs/backlog.md` (the A506 entry) and `docs/backlog/service-periods.md` (its A506
 section). 2026-10-14: A506-12 deleted both; the owner's rules are now one entry under
 [Decisions and deliberate limits](../../backlog/service-periods.md#decisions-and-deliberate-limits).

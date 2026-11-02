@@ -57,9 +57,7 @@ settlement currency is not the euro would make every payment differ.
 
 ## A846's points for the owner at land: held card payments
 
-Each stays open until the owner answers it. "The picture" is
-[01-record-what-was-done.png](mockups/a846-held-card-payments/01-record-what-was-done.png)
-([dark](mockups/a846-held-card-payments/01-record-what-was-done-dark.png)).
+Each stays open until the owner answers it. "The picture" was a mock-up, removed from the repository on 2026-11-02.
 
 1. **"Kept: the money was owed" leaves money with no invoice.** The payment stays captured on an
    abandoned order with no sale, and Waitron files nothing for it. Whether the money needs an
@@ -340,8 +338,7 @@ type from `readReceiptIssuer`, which returns none when the backend has no filed 
 
 NOT APPROVED: the owner (2026-10-18, on Q38): "Leave this for now. Back to the backlog. It needs a
 bigger brainstorm." Next: that brainstorm with the owner, before any build or further question.
-A first design is kept as input ([design](../superpowers/specs/2026-10-18-a793-tips-design.md), pictures in
-[mockups/a793-tips/](mockups/a793-tips/), research in
+A first design is kept as input ([design](../superpowers/specs/2026-10-18-a793-tips-design.md), research in
 [compliance/research/2026-10-18-a793-tips.md](../compliance/research/2026-10-18-a793-tips.md)); not
 built. A shared pot per business day split by hours clocked (kitchen included) or each person
 keeping their own, chosen on a new Tips tab in Venue settings that also replaces

@@ -3,8 +3,7 @@
 Status: built (lane B, 2026-10-15); the backlog entry is retired with the build. The owner answered all four questions (a) on 2026-10-15, adding
 that every sidebar icon is drawn without colour (below).
 Backlog: A654 (retired when this landed; its detail sat in `docs/backlog/dashboard.md`).
-Drawings: [`docs/backlog/mockups/a654-sidebar-icons/`](../../backlog/mockups/a654-sidebar-icons/)
-(the HTML beside the pictures is their source; it is a drawing, not the product's CSS).
+Drawings and their HTML source: removed from the repository on 2026-11-02.
 
 ## What it is
 

@@ -251,7 +251,7 @@ source only; none establishes a passing test, physical delivery or a public F1 r
 
 ## Static scenes and focused acceptance for the later build
 
-The [static mockup README](../../backlog/mockups/a555-counter-invoice-delivery/README.md)
+The static mockup README
 links recipient/delivery selection for email and A4, payment confirmation, failed email, held A4
 and unknown A4 result. The EUR84 example appears in EN/ES, light/dark, at 390 and 1280 px.
 The original selector replaces ordinary None; the captions identify this as proposed behavior.

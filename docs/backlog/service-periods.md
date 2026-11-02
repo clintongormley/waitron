@@ -361,8 +361,6 @@ bar is which department (hover shows it; the All departments Month has none eith
   when it turns read-only. The Defaults card drops its draft when it turns
   read-only (`willUpdate` in `venue-defaults-panel.ts`). Left open by A824.
 
-[Mockups](mockups/a755-venue-settings/)
-
 ## A per-field department policy repair changes the trading-name default.
 
 With no policy row,
@@ -688,8 +686,7 @@ its id. Left open by A789 slice 3, #2051 (plan D33).
   seasons that cover the whole year and repeat every year, each with its own week per department;
   a special day is painted over its dates, and its unpainted time follows the season; periods have
   a page of their own; the venue holds no hours of its own. The rules are in the
-  [spec](../superpowers/specs/2026-10-11-opening-hours-seasons-design.md), with
-  [mockups](mockups/a506-opening-hours-seasons/).
+  [spec](../superpowers/specs/2026-10-11-opening-hours-seasons-design.md).
 
 - A season delete's confirmation names only the departments with hours in it, though the delete
   also removes the zones' closed times for that season (`seasonDeleteImpact`,

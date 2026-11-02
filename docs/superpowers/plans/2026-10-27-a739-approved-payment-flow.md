@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Lit, shared `wt-*` primitives, exact Decimal money, Drizzle/SQLite, Vitest with real Chromium and axe.
 
-**Spec:** [Authoritative 27 October addendum](../specs/2026-10-22-a739-owner-payment-and-receipt-flow.md). Read its complete historical body and [companion](../specs/2026-10-22-a739-receipt-timing-revision.md) under that precedence. [Approved-answer artwork](../../backlog/mockups/a739-owner-receipt-flow/README.md) accompanies this plan; running UI verification belongs to execution.
+**Spec:** [Authoritative 27 October addendum](../specs/2026-10-22-a739-owner-payment-and-receipt-flow.md). Read its complete historical body and [companion](../specs/2026-10-22-a739-receipt-timing-revision.md) under that precedence. Approved-answer artwork accompanied this plan (removed from the repository on 2026-11-02); running UI verification belongs to execution.
 
 ## Global Constraints
 

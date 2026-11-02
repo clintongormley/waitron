@@ -127,7 +127,7 @@ venue-service can ask contributing modules for that count, or deliberately keep 
 **Owner, 2026-10-16.** Waits for the second part of [A724](#named-staffing-guide-bands-a724-owner-2026-10-15), which has not landed. The owner's point, as written:
 
 > **Staffing month: the Monday "Rota for this week" link goes**
-> ([board 6](mockups/a763-rota/06-staffing-month.png); today the `rota-week` button in
+> (board 6; today the `rota-week` button in
 > `staffing-month.ts`), so Monday's box is the same height as the others. The day box already
 > offers "Rota for this week" on every day (A720 Part 5); it is still to state where that week's
 > rota stands. The Rota tab opens the week of the day last picked in the month, else the current
@@ -318,8 +318,7 @@ it changes a shared primitive, so it needs its token-painting and a11y tests.
 
 The box lists each area's number; the
 mockup's role names and times ("Head chef ×1 16:00–01:30") need the month read to carry each
-block. Decision 13 of the [A720 plan](../superpowers/plans/2026-10-15-a720-calendar-year-month.md),
-[mockup](mockups/a718-a727-calendar-and-stations/10-staffing-month.png).
+block. Decision 13 of the [A720 plan](../superpowers/plans/2026-10-15-a720-calendar-year-month.md).
 
 ## The Rota shift routes read a null or malformed JSON body as an empty object.
 

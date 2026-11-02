@@ -756,7 +756,7 @@ each costs.
 
 ## Mock-ups
 
-In [`docs/backlog/mockups/a1188-cloud-emergency-start/`](../../backlog/mockups/a1188-cloud-emergency-start/),
+In mock-ups removed from the repository on 2026-11-02,
 light and dark, 1280 and 390 wide. The venue, people, address, times and price in them are invented:
 
 1. `01-till-strip` — the till's strip, shown to everyone, with **Start the venue in the cloud**

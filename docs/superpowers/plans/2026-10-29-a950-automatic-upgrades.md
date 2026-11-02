@@ -12,7 +12,7 @@
 
 **Tech Stack:** Repository-pinned Node, ESM JavaScript with strict runtime parsers and JSDoc types for host tools; TypeScript/Hono, SQLite and existing module seats for the server; Lit/shared fields for screens; Vitest and real Chromium for focused tests. Encrypted Linux btrfs, the selected Docker store and pinned Litestream/S3 require separate real qualification. No new workspace package.
 
-**Spec:** [Complete approved A950 design](../specs/2026-10-27-a950-automatic-upgrades-design.md), §§1–9, including the 29 October approval. Read its [screen brief](../../backlog/mockups/a950-automatic-upgrades/README.md), [B3 plan](2026-10-26-b3-usb-installer.md), [A799 plan](2026-10-22-a799-real-upgrade-testing.md) and [A947 design](../specs/2026-10-21-a947-two-box-failover-design.md) before execution. B3, A799 and A947 approval does not supply missing A950 contracts or qualification.
+**Spec:** [Complete approved A950 design](../specs/2026-10-27-a950-automatic-upgrades-design.md), §§1–9, including the 29 October approval. Read its screen brief, [B3 plan](2026-10-26-b3-usb-installer.md), [A799 plan](2026-10-22-a799-real-upgrade-testing.md) and [A947 design](../specs/2026-10-21-a947-two-box-failover-design.md) before execution. B3, A799 and A947 approval does not supply missing A950 contracts or qualification.
 
 ## Global Constraints
 

@@ -313,7 +313,7 @@ R1–R4 correction path and foreign-recipient `IDOtro`/`IDType` remain separate 
 ## A555. Counter full-invoice delivery through payment — DESIGN APPROVED (2026-10-21)
 
 The [proposed design](../superpowers/specs/2026-10-21-a555-counter-invoice-delivery-design.md)
-and [static pictures](mockups/a555-counter-invoice-delivery/README.md) cover retaining Email PDF,
+and static pictures (removed from the repository on 2026-11-02) cover retaining Email PDF,
 A4 or receipt-printer delivery through Counter payment. The source audit records the current
 request/staging gap against `77ab2ced8`; it is not an executed public-F1 result.
 
@@ -340,7 +340,7 @@ Found by A231d's research. [Orden HAC/1028/2026](https://www.boe.es/buscar/doc.p
 fresh-context review and docs-only publication. The build retains its separate gates.
 
 The [approved design](../superpowers/specs/2026-10-22-a275-final-transfer-close-design.md),
-[16 synthetic pictures](mockups/a275-final-transfer-close/README.md) and
+16 synthetic pictures (removed from the repository on 2026-11-02) and
 [implementation plan](../superpowers/plans/2026-10-22-a275-final-transfer-close.md) retain the
 owner's 2026-10-21 02:40 policy: invoice at the meal, then close the whole eligible bill finally
 as “to be paid by transfer”. Preserve split bills and release the party/table only through the
@@ -1040,7 +1040,6 @@ and the pinned digest of the shipped XML in `apps/server/src/full-comp.fiscal-id
 changed (the owner accepted it on 2026-10-23). Still open: the producer's name and NIF (Task 8 of the plan), then
 slices 1b to 6, and A993's plan. Still needed from outside: his name, NIF and publishable
 address, and the asesor's answer to Q53.
-[Mock-ups](mockups/a940-declaracion-responsable/README.md)
 
 ## A993. A change of the system's identity opens a new installation by itself — designed in A940 §5.6, approved 2026-10-22; fiscal, the owner lands it.
 

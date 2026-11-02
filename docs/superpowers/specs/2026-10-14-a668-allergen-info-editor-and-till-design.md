@@ -115,7 +115,7 @@ answers, which this spec now follows:
    add the dish). Owner: on a small device the buttons are sized to be easy to press; the
    information must be there but is used seldom, so a long press is enough.
 3. **The mark is Material Symbols `allergies`** (option B of
-   [board 4](../../backlog/mockups/a668-allergen-icons/4-product-button-mark.png)). The owner
+   board 4). The owner
    rejected the dish's own icons on the button (option A) for lack of space, and the "i" because it
    invites a tap.
 4. **The info window has Add to order beside Close**, and **a long press on an order line, or a
@@ -131,7 +131,7 @@ The proposed Spanish labels are approved: Añadir al pedido, Dieta and Alérgeno
 
 ## Mockups
 
-In [docs/backlog/mockups/a668-allergen-icons/](../../backlog/mockups/a668-allergen-icons/):
+In the mockups (removed from the repository on 2026-11-02):
 1 and 2 compare the candidate icon sets at full size and at 16 px; 3 shows the editor, the closed
 line's states, the product buttons, the info window, the order list, the publish warning, the
 Products list, and the cereal/nut choice (option B chosen). Where a board and this text differ, this

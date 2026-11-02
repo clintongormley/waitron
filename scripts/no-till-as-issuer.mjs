@@ -10,7 +10,6 @@ const historicalFiles = new Set([
   "docs/compliance/asesor-questions.md",
   "docs/research/2026-07-20-pglite-throughput.md",
   "docs/research/2026-07-20-pglite-throughput-readme.md",
-  "docs/backlog/mockups/a947-two-box-failover/question.txt",
 ]);
 const negativeSettingFiles = new Set([
   "apps/server/scripts/dev-setup.test.ts",

@@ -461,9 +461,7 @@ growth then the same shrink need not put the table back
 (`packages/ui/src/floor-plan-geometry.test.ts`, "is not reversible square for square at the edge").
 Owner question asked 2026-10-16: (a) keep it so, which is what A672 built; or (b) let a saved
 position go below 0 so the turned outline can touch the edge, a separate job in which the database
-and the server accept a wider range. Pictures:
-[keep the gap](mockups/a672-floor-plan-canvas/q4-a-keep-gap.png),
-[below 0](mockups/a672-floor-plan-canvas/q4-b-below-zero.png). Next: the owner's answer.
+and the server accept a wider range. Pictures were removed from the repository on 2026-11-02. Next: the owner's answer.
 
 ## A570. A table split off a joined table whose removal was refused cannot be moved
 
@@ -1056,8 +1054,8 @@ may predate that branch:
   kitchen screen's group cards, Overview and Columns; (3) the phone's order screen, waiting for
   A803's slice 3; (4) the pass and its Held column, built by A773-2 into these layouts (§7 splits
   the work):
-  [design](../superpowers/specs/2026-10-18-a797-device-screens-design.md),
-  [mockups](mockups/a797-device-screens/). Menu Device Home Page, receipt configuration and the floor-plan editor stay
+  [design](../superpowers/specs/2026-10-18-a797-device-screens-design.md).
+  Menu Device Home Page, receipt configuration and the floor-plan editor stay
   separate. The owner's screen-designer decision is retained under Decisions and deliberate limits.
 
 ## What W105b left open (#1248, a disabled device coming back as itself)
@@ -1330,7 +1328,7 @@ A508. Show the owner, on the running till:
   `docs/superpowers/plans/2026-10-20-a757-4-precedence-pulses.md`; Open point 4's ring no longer
   dims "to 30%" — since A757 slice 4b it dims to a colour, `--wt-color-danger-pulse-dim` or
   `--wt-color-warning-pulse-dim`), and one point from its look
-  (2026-10-20, pictures in `docs/backlog/mockups/a757-table-states/built-4/`): at 1280 px every list
+  (2026-10-20): at 1280 px every list
   card in a row stretches to its tallest neighbour, so one busy card makes the calm ones beside it
   tall and mostly empty. The grid rule behind it dates from 2026-08-21 (`git blame`) and slice 4 did
   not change it; I believe the stretching predates slice 4.
@@ -1341,7 +1339,7 @@ A508. Show the owner, on the running till:
   named there.
 - the choices slice 8 made where the pictures are silent: its plan's Owner points
   (`docs/superpowers/plans/2026-10-22-a757-8-service-steps-floor.md`), each built with the default
-  named there, and the step pictures as built (`docs/backlog/mockups/a757-table-states/built-8/`).
+  named there.
 - the choices slice 5 made where the pictures are silent: its plan's Owner points
   (`docs/superpowers/plans/2026-10-20-a757-5-map-zone-tabs.md`), each built with the default named
   here, plus two found while building it (the last two):
@@ -1395,8 +1393,7 @@ A508. Show the owner, on the running till:
     earlier in the tab order gives the edge mark its icon and is scrolled to**: beyond the right
     end, that is the one nearest the strip; beyond the left end, the one farthest from it. The
     alternative is the one nearest the strip at both ends. Default: as built.
-- two spacing points from A757 slice 2's look (2026-10-20, pictures in
-  `docs/backlog/mockups/a757-table-states/built-2/`): in the table drawer, "Still to pay at this
+- two spacing points from A757 slice 2's look (2026-10-20): in the table drawer, "Still to pay at this
   table" sits right against the "Mark bill requested" button; and at 390 px the floor's list cards
   started flush against the left edge — seen inside a test frame only, so check the running till
   first.
@@ -1453,7 +1450,7 @@ decides "whole units" with `soldByTheUnit`, which does not read `measure`
 Delete dialog's "Used by Dinner." reads oddly when a set and a period share a name; the till's
 banner is a plain line where the mock-up draws a tinted box (`wt-banner` would be close); the 390 px
 floor menu's heading is in sentence case, not small capitals. Mock-ups:
-[a504-floor-plans](mockups/a504-floor-plans/). Left open by A504.
+removed from the repository on 2026-11-02. Left open by A504.
 
 ## A860. A floor-check rule copied four times
 
@@ -1927,8 +1924,8 @@ and colour key go. The removed explanation of first-save and later-change timing
 mode (A582). Placement markers are squares: primary filled on the plan, outlined off it,
 grey filled for a joined table's parts. Only the square changes placement; a placed table's name
 selects it, and an unplaced name does nothing. A new joined table goes straight onto the plan.
-Mockups: [nothing selected](mockups/a671-floor-plan-editor-panel/1-nothing-selected.png) and
-[a table selected](mockups/a671-floor-plan-editor-panel/2-table-selected.png). The latter's corner
+Mockups: nothing selected and
+a table selected. The latter's corner
 handles belong to A672. (2026-10-16: A672 built those corner handles.) The current contract is in
 [design-system.md](../developers/design-system.md#departments-and-zones).
 
@@ -1998,7 +1995,7 @@ handles belong to A672. (2026-10-16: A672 built those corner handles.) The curre
   selected table resizes, so only it carries the keys' description
   ([design-system.md](../developers/design-system.md)).
 - **The floor plan editor's header runs Undo, Redo, Cancel, Save (A502, owner, 2026-10-11).**
-  Cancel sits beside Save, after Undo and Redo, as the owner's [mockup 1](mockups/a502-a503-floor-plan-editor/1-editor-table-selected.png) puts it: an
+  Cancel sits beside Save, after Undo and Redo, as the owner's mockup 1 puts it: an
   exception to Cancel on the left ([design-system.md](../developers/design-system.md)).
 - **A turned table's size dots stay on its own sides (A548, owner, 2026-10-12).** At every angle the
   dots sit on the table's own sides, diagonal on a 30° table; only each dot's cursor follows the way
@@ -2235,7 +2232,7 @@ with [fixed device screens](../developers/design-system.md#fixed-device-screens)
 from those mounts; the earlier canvas paths below remain part of the original design record.
 
 Owner, 2026-10-15, decided over screenshots of the Santet till and four rounds of mock-ups. The
-boards are in [mockups/a737-a740-till-counter-redesign/](mockups/a737-a740-till-counter-redesign/):
+boards were:
 1 the counter screen, 2 the windows opened from the order, 3 paying, 4 Find a bill, 5 zones on a
 device. Where a board and this text differ, this text wins. This is A182 part 1 for the counter
 till (the handheld, kitchen screen and pass are not covered). **A182 part 2, retiring canvases,
@@ -2367,7 +2364,7 @@ addition. This publishes the plan and updated static boards; product/runtime acc
 no-rebuild/native-control/pending-choice/F1-off proposals are superseded.**
 
 **2026-10-27 precedence.** The [current amendment](../superpowers/specs/2026-10-22-a739-owner-payment-and-receipt-flow.md)
-and [eight four-case boards](mockups/a739-owner-receipt-flow/README.md) supersede conflicting history
+and eight four-case boards (removed from the repository on 2026-11-02) supersede conflicting history
 below. The owner's 2026-10-26 ~07:00 YES requires an initially unticked native-reader checkbox;
 ticking requests the reader's own slip. Effective native control needs proved adapter and hardware
 behaviour. The SumUp/Stripe boundary probes did not forward print intent; physical paper is
@@ -2768,7 +2765,6 @@ cancel moves too.
 ## A1020. The owner looks at A758-6's words and choices
 
 Left open by A758-6. Each works as built, with the default named; the owner may want it different.
-[Pictures as built](mockups/a758-adjustment-reasons/built/).
 
 1. **No "Table finished" on the pass.** Since A773-2 (#1944) a finished table's food leaves the
    pass, so design §3.8 item 5 has nowhere to show (the plan's Decision 1).

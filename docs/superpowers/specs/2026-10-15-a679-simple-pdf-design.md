@@ -16,7 +16,7 @@ The named node recovery key gives more access than the old allocation-signing ke
 
 The PDF says plainly: **“This sheet helps recover a backup. It does not contain your sales.”** You continue after saving or printing it; routine setup requires no transcription or recovery exercise.
 
-Proposed mockups, **not built**: [desktop](2026-10-15-a679-simple-pdf/setup-desktop-en.png), [phone](2026-10-15-a679-simple-pdf/setup-phone-en.png), [PDF](2026-10-15-a679-simple-pdf/recovery-sheet-en.png).
+Proposed mockups, **not built**: desktop, phone, PDF (removed from the repository on 2026-11-02).
 
 ## Olivo, from setup to replacement
 

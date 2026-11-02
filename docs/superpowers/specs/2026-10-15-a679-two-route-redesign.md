@@ -371,12 +371,14 @@ Authority: **Q** `questions.md:4374–4381,4386–4416,4475–4491`; **P** repai
 
 These are rendered proposal PNGs, **not a built product PDF or working recovery screens**:
 
-- [paper-setup-desktop-en.png](2026-10-15-a679-two-route-redesign/paper-setup-desktop-en.png)
-- [paper-setup-phone-en.png](2026-10-15-a679-two-route-redesign/paper-setup-phone-en.png)
-- [paper-register-en.png](2026-10-15-a679-two-route-redesign/paper-register-en.png)
-- [cloud-setup-desktop-en.png](2026-10-15-a679-two-route-redesign/cloud-setup-desktop-en.png)
+- paper-setup-desktop-en.png
+- paper-setup-phone-en.png
+- paper-register-en.png
+- cloud-setup-desktop-en.png
 
-The paper delivery screen shows the assigned series and Download/Print; its note describes selecting the current register first. The register board illustrates occupied names and the warning about stale copies. The Cloud delivery screen illustrates one consumed receipt and describes uncertain/unavailable handling. These boards do not depict every state or the final encoding. [Drawing sources and capture matrix](2026-10-15-a679-two-route-redesign/README.md).
+(These pictures were removed from the repository on 2026-11-02.)
+
+The paper delivery screen shows the assigned series and Download/Print; its note describes selecting the current register first. The register board illustrates occupied names and the warning about stale copies. The Cloud delivery screen illustrates one consumed receipt and describes uncertain/unavailable handling. These boards do not depict every state or the final encoding. Drawing sources and capture matrix (removed from the repository on 2026-11-02).
 
 Later acceptance must exercise the real wizard and generated PDF, including printed scanning, stale-history controls, interruptions and zero-activation reissue. Shared form behavior follows **M** `docs/developers/design-system.md:1920–1980`. The driver rendered 20 English/Spanish PNGs in real headless Chromium: light/dark, 390/1280 screen widths, and 794×1123 register illustrations. Captures had no horizontal overflow or page errors; both language contact sheets were visually inspected. No axe, physical print/scan, generated-PDF or new recovery behavior is qualified by those observations.
 
@@ -592,9 +594,9 @@ No 40-character generated-key claim survives: 39 payload symbols plus eight chec
 ### Updated screen and printout
 
 The screen and printout must group every typed field independently in fours.
-The [21:30 drawings](2026-10-15-a679-two-route-redesign/README.md#current-2130-typing-proposal)
+The 21:30 drawings (removed from the repository on 2026-11-02)
 retain their historical grouping and counts; they do not qualify this amendment.
-Their [synthetic values](2026-10-15-a679-two-route-redesign/position-reference.json)
+Their synthetic values (removed from the repository on 2026-11-02)
 calculate the proposed check domains; they are not product-codec, PDF or recovery qualification.
 
 ## Typed continuation and its limits

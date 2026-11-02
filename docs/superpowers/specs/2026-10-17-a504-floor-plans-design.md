@@ -11,8 +11,8 @@ and says so. Statements about the new behaviour are proposals. The owner's ten a
 in section 10. The details the answers left open are the numbered defaults in "Decisions this
 revision makes" below; each can be overridden by quoting its number.
 
-Mock-ups: [docs/backlog/mockups/a504-floor-plans/](../../backlog/mockups/a504-floor-plans/). They
-are static drawings in the house colours, not screenshots of running code.
+Mock-ups: removed from the repository on 2026-11-02. They
+were static drawings in the house colours, not screenshots of running code.
 
 ## Decisions this revision makes
 
@@ -324,7 +324,7 @@ of furniture through every change of layout.
 
 ## 5. The Floor plans page (answer 3(a))
 
-Mock-up: [1-floor-plans-page.png](../../backlog/mockups/a504-floor-plans/1-floor-plans-page.png).
+Mock-up: removed from the repository on 2026-11-02.
 
 - **Where:** a page called **Floor plans** in the sidebar's Operations group, beside Departments
   and zones and the Calendar, at `/manage/floor-plans`. It needs `venue.configure`, as the editor
@@ -362,7 +362,7 @@ Mock-up: [1-floor-plans-page.png](../../backlog/mockups/a504-floor-plans/1-floor
 
 ## 6. A period picks its set (answer 4(b), changed)
 
-Mock-up: [2-period-floor-plan-field.png](../../backlog/mockups/a504-floor-plans/2-period-floor-plan-field.png).
+Mock-up: removed from the repository on 2026-11-02.
 
 - **The period dialog gains an optional Floor plan field**, a dropdown of the department's sets,
   after Period end offset and before Painted in. It shows only when the period's department has a
@@ -481,8 +481,7 @@ How the owner's earlier examples come out:
 
 ### 7.2 The banner and Update layout (decisions 5 and 6)
 
-Mock-ups: [3-till-update-layout.png](../../backlog/mockups/a504-floor-plans/3-till-update-layout.png)
-and [4-till-update-layout-phone.png](../../backlog/mockups/a504-floor-plans/4-till-update-layout-phone.png).
+Mock-ups: removed from the repository on 2026-11-02.
 
 - **Where:** one line under the zone tabs' row, above the map or the list, for the zone on screen.
 - **Words:** "**{period} layout is ready.**" when the due set differs from the recorded set and the
@@ -639,7 +638,7 @@ A878 added that check, refusing `table.place_taken`. See
 
 ### 7.7 List and Map on a phone (decision 16)
 
-Mock-up: [4-till-update-layout-phone.png](../../backlog/mockups/a504-floor-plans/4-till-update-layout-phone.png).
+Mock-up: removed from the repository on 2026-11-02.
 
 Below `PHONE_WIDTH` the List/Map button leaves the toolbar; the ⋮ stays alone at the right of the
 tabs' row. The menu reads, top to bottom: **List** (on the map) or **Map** (on the list); the

@@ -59,12 +59,14 @@ boards stack the screens at 390 px; desktop boards place A beside B at 1440 px. 
 design drawings, not running product screens. “Issued” in the examples assumes successful local
 issuance; it is not a status measured in this task.
 
-| Language | Theme  | Desktop                                                           | Phone                                                                    |
-| -------- | ------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| English  | Light  | [Six cases](2026-10-22-a739-receipt-timing/en-light-desktop.svg)  | [Six stacked cases](2026-10-22-a739-receipt-timing/en-light-phone.svg)   |
-| English  | Dark   | [Six cases](2026-10-22-a739-receipt-timing/en-dark-desktop.svg)   | [Six stacked cases](2026-10-22-a739-receipt-timing/en-dark-phone.svg)    |
-| Español  | Claro  | [Seis casos](2026-10-22-a739-receipt-timing/es-light-desktop.svg) | [Seis casos apilados](2026-10-22-a739-receipt-timing/es-light-phone.svg) |
-| Español  | Oscuro | [Seis casos](2026-10-22-a739-receipt-timing/es-dark-desktop.svg)  | [Seis casos apilados](2026-10-22-a739-receipt-timing/es-dark-phone.svg)  |
+| Language | Theme  | Desktop    | Phone               |
+| -------- | ------ | ---------- | ------------------- |
+| English  | Light  | Six cases  | Six stacked cases   |
+| English  | Dark   | Six cases  | Six stacked cases   |
+| Español  | Claro  | Seis casos | Seis casos apilados |
+| Español  | Oscuro | Seis casos | Seis casos apilados |
+
+These boards were removed from the repository on 2026-11-02.
 
 The drawings use the repository's light/dark colour and type tokens. Receipt language and paper
 printer are delivery choices; invoice identity remains in Bill details before issuance. Email

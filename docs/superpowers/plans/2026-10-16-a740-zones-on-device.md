@@ -7,7 +7,7 @@
 derive menu defaults and service-period identity on the server, retaining browsing choices per device and zone in the browser.
 **Tech Stack:** TypeScript, Lit, shared `wt-*` controls and draft coordinator, Hono, Drizzle/SQLite, Vitest with real Chromium.
 **Spec:** [A737–A740 introduction and A740](../../backlog/till.md#a737a740-the-counter-till-redesigned-owner-2026-10-15),
-[backlog A740](../../backlog.md), [board 5](../../backlog/mockups/a737-a740-till-counter-redesign/5-zones-on-a-device.png). Read the 2026-10-16
+[backlog A740](../../backlog.md), board 5. Read the 2026-10-16
 addition: table-only Floor pills; List and ⋮ on the pills' row. Text wins over the board.
 **Related contracts:** [W97](../specs/2026-10-04-devices-menus-and-service-zones-design.md),
 [Fixed device screens](../../developers/design-system.md#fixed-device-screens). A740 supersedes W97's reset-on-zone-change menu rule and its

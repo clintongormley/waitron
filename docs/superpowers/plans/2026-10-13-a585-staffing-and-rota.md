@@ -36,7 +36,7 @@ drizzle-kit 0.31.11 migrations, Lit web components with the `wt-*` primitives, V
 and Playwright Chromium browser projects).
 
 **Spec:** [docs/superpowers/specs/2026-10-13-a585-staffing-and-rota-design.md](../specs/2026-10-13-a585-staffing-and-rota-design.md).
-Mockups: [docs/backlog/mockups/a585-staffing/](../../backlog/mockups/a585-staffing/). Read both
+Mockups: removed from the repository on 2026-11-02. Read the spec
 before any task.
 
 ## Global Constraints

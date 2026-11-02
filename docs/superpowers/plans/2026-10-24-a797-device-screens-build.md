@@ -12,7 +12,7 @@ warning**, **slice 8 — Kitchen group cards**, **slice 8b — Short names on ki
 tasks when it starts.
 
 **Spec:** `docs/superpowers/specs/2026-10-18-a797-device-screens-design.md` (read it whole; this plan
-argues from it). Pictures: `docs/backlog/mockups/a797-device-screens/`.
+argues from it). Pictures: removed from the repository on 2026-11-02.
 
 **The owner's answer to Q51 (2026-10-24 04:29, verbatim from lane C's questions file):** "Q51
 approved": every recommendation in (a)–(g) stands as written, with (c)'s Ready warning time

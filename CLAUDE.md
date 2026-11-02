@@ -892,6 +892,11 @@ before treating an implementation as a rule violation.
   worktrees that take the first port slot. Moving between worktrees on the same target does not wipe
   that slot's venue — so a branch's migrations can fail on the rows already in it.**
   `wa-wt reset demo <name>` rebuilds it.
+- **Mock-ups and screenshots are never committed, and not copied to Drive** (owner, 2026-11-02):
+  they stay in the working folder of whoever made them and are shown to the owner directly. Cost:
+  184 MiB of them in the tree when removed; A1306 rewrites the history. Guard:
+  `scripts/no-mockups-in-docs.test.ts`, weaker than its name: reads tracked file names, not
+  content. [Limits](docs/developers/workflow-guide.md#mock-ups-and-screenshots-are-never-committed).
 
 **Docs.** `docs/backlog.md` answers "what should I work on?" — read it before starting anything
 unprompted, and **update it in the same change that makes it stale** (the moment it goes stale most

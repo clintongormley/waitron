@@ -9,7 +9,7 @@
 > below is retained unchanged, including its then-pending approval and source observations.
 
 **PROPOSED, 2026-10-22. Awaiting full owner approval; no plan or implementation authorised.**
-All new behaviour below is proposed. [Synthetic pictures](../../backlog/mockups/a275-final-transfer-close/README.md)
+All new behaviour below is proposed. Synthetic pictures
 illustrate the policy, not a running application.
 
 ## 1. Close the meal without tracking the bank

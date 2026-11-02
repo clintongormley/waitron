@@ -654,7 +654,7 @@ Settled by [A668](../superpowers/specs/2026-10-14-a668-allergen-info-editor-and-
 **A547 — Preview tab: "Publish later" sits to the left of "Publish now", and "Scheduled versions"
 shows only when something is scheduled** (owner, 2026-10-12). Today "Publish now" is on its own
 line, then a "Scheduled versions" heading, the "Publish later" button and a table that says "No
-versions are scheduled." ([before](mockups/a547-preview-tab-before.png)). Wanted: the two
+versions are scheduled." Wanted: the two
 buttons on one line, Publish later first; the heading and table drawn only while at least one
 version is queued. The two buttons live in different widgets: Publish now in
 `apps/dashboard/src/widgets/menu-preview.ts` (`#renderPublish`), Publish later with the heading,
@@ -1032,7 +1032,6 @@ failing test first.
   Dietary info start hidden. The ordering column is headed Standalone (Spanish «Por separado»), and
   the editor field and the filter are "Standalone ordering by" (Spanish «Pedir por separado»). A
   Course column and a Course filter join the list, and "Default course" is "Course".
-  Pictures and the owner's question: [mockups/a655-products-columns/](mockups/a655-products-columns/).
 
 - **Optional customer text and unit staff identity (A682, owner, 2026-10-17).** Every customer
   translation is optional, including the default. Units have a required staff name and abbreviation;
@@ -1110,8 +1109,7 @@ The visible-page resolver remembers up to 256 recent presentations across remoun
 
 ### A647 — tidy the product editor
 
-Owner, 2026-10-14, decided over a run of screenshots and mock-ups. Boards, in
-[mockups/a647-product-editor/](mockups/a647-product-editor/): 1 the thumbnail, 2 the sections,
+Owner, 2026-10-14, decided over a run of screenshots and mock-ups. Boards: 1 the thumbnail, 2 the sections,
 3 the Variants section and the unit link, 4 the whole editor as it opens (the target), 5 the
 Selling options (A chosen; B, two loose lines under the name, rejected). Where a board and this
 text differ, this text wins. The editor is `apps/dashboard/src/widgets/product-editor.ts`.

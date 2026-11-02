@@ -1,8 +1,7 @@
 # Opening hours rebuilt around seasons and special days
 
 **Status:** design, 2026-10-11, backlog **A506**. The product rules come from the owner's backlog text
-(`docs/backlog/service-periods.md`, section A506) and the nine mockups in
-[`docs/backlog/mockups/a506-opening-hours-seasons/`](../../backlog/mockups/a506-opening-hours-seasons/),
+(`docs/backlog/service-periods.md`, section A506) and the nine mockups (removed from the repository on 2026-11-02),
 which the owner agreed on 2026-10-11. Everything else here is the designer's choice: each one is
 marked **(default)** where it applies, and section 16 lists them. Three of them are put to the owner
 as questions; the default is built unless the owner answers otherwise. Behaviour below is the target

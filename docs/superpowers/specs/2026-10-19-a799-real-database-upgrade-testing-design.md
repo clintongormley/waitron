@@ -180,7 +180,7 @@ All source observations below at `87f19d4bc98d2fb7925e886228430cabfc490a9b` rema
 historical source reads, **UNVERIFIED at runtime**. This answer adds no current-source
 re-verification and no capture, boot, migration, upgrade, preservation, new-sale, size, timing,
 containment or private-access result. No A799 completion or published support change is claimed.
-The [F and complete-design review boards](../../backlog/mockups/a799-real-database-upgrade-testing/revision-f-and-complete-design/README.md)
+The F and complete-design review boards
 are static native SVG artwork. All eight PNGs were rendered and individually inspected in
 English and Spanish, both themes and both widths. Native SVG text-bounds and overlap checks
 passed; these checks supply no product-runtime or accessibility evidence. Earlier boards
@@ -272,7 +272,7 @@ node/SIF/series identity. Preservation and a separate new sale remain distinct r
 Original source observations remain historical reads at
 `87f19d4bc98d2fb7925e886228430cabfc490a9b`, **UNVERIFIED at runtime**. This revision
 supplies no capture, boot, migration, upgrade, preservation, new-sale, size or access
-result. The [eight E/F review boards](../../backlog/mockups/a799-real-database-upgrade-testing/revision-e-and-support-boundary/README.md)
+result. The eight E/F review boards
 are static design drawings. All eight PNGs were rendered and individually inspected;
 native SVG checks found no text outside the canvas or overlapping text. These checks
 supply no runtime evidence. This design authorises no product implementation, capture,
@@ -352,7 +352,7 @@ node/SIF/series identity. Preservation and a separate new sale remain distinct r
 Original source observations remain historical reads at
 `87f19d4bc98d2fb7925e886228430cabfc490a9b`, **UNVERIFIED at runtime**. This revision
 supplies no capture, runtime, upgrade, preservation, new-sale or size evidence and no
-implementation plan. Read the [D/E static review boards](../../backlog/mockups/a799-real-database-upgrade-testing/revision-d-and-capture-facts/README.md);
+implementation plan. The D/E static review boards (removed from the repository on 2026-11-02):
 all eight were rendered and individually inspected, with native SVG text bounds checked. These drawings are not runtime evidence. Ask only E next.
 
 ---
@@ -442,8 +442,8 @@ Ask only D next; A/B/C are not reopened. Capture IDs/time, support/retirement an
 verification remain unresolved boundaries. Original source observations remain historical reads
 at `87f19d4bc98d2fb7925e886228430cabfc490a9b`, **UNVERIFIED at runtime**. This revision supplies
 no capture, boot, upgrade, preservation or new-sale result. The watcher's size context has not
-been independently remeasured here. Read the [eight static EN/ES light/dark boards
-at 390/1280 px, PNG with SVG sources](../../backlog/mockups/a799-real-database-upgrade-testing/revision-c-github-releases-and-f1/README.md);
+been independently remeasured here. Eight static EN/ES light/dark boards
+at 390/1280 px accompanied it (removed from the repository on 2026-11-02);
 the parent rendered and inspected these drawings; they are not runtime evidence.
 
 ---
@@ -509,8 +509,8 @@ plan and build decisions remain open.
 R1 through R5 are imagined labels, not existing fixtures or observed upgrade results. Original
 source observations remain historical reads at `87f19d4bc98d2fb7925e886228430cabfc490a9b`,
 **UNVERIFIED at runtime**. No capture, boot, migration, preservation or new-sale run was performed
-for this revision. Read the [eight static EN/ES light/dark review boards at
-390/1280 px, as PNGs with SVG sources](../../backlog/mockups/a799-real-database-upgrade-testing/revision-b-and-artifact-store/README.md).
+for this revision. Eight static EN/ES light/dark review boards at
+390/1280 px accompanied it (removed from the repository on 2026-11-02).
 These drawings accompany question C; they are not runtime evidence.
 
 ---
@@ -577,8 +577,9 @@ issued full invoice, and the source answer does not approve narrower coverage or
 Artifact store/access, issued-F1 coverage, capture determinism/time, exact support/retirement policy
 and the complete design/plan/build remain open. Ask only B next; no later recommendation is approved.
 
-[Eight revised static review boards](../../backlog/mockups/a799-real-database-upgrade-testing/revision-a-and-release-checks/README.md)
-are available in English/Spanish, light/dark, at 390/1280 px, as PNGs with SVG sources. These are
+Eight revised static review boards
+were drawn in English/Spanish, light/dark, at 390/1280 px, as PNGs with SVG sources (removed from
+the repository on 2026-11-02). These are
 illustrative drawings, not evidence of an upgrade run. The original boards remain historical.
 
 ---
@@ -591,7 +592,7 @@ It authorizes no implementation, migration, squash, reset, compatibility repair 
 No tests were requested or run for this proposal. All current-source observations below are
 **UNVERIFIED at runtime**, read at `87f19d4bc98d2fb7925e886228430cabfc490a9b`.
 Examples and acceptance conditions are proposed requirements, not observed outputs.
-[Review boards](../../backlog/mockups/a799-real-database-upgrade-testing/README.md) give you
+Review boards give you
 the first owner choice and worked examples in English and Spanish at phone and desktop widths.
 
 An upgrade can keep every table and every row count while changing yesterday's invoice or losing

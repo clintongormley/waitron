@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Lit, shared `wt-*` controls, Hono, Drizzle/SQLite, Vitest and real Playwright Chromium, ESC/POS.
 
-**Spec:** [A743 in the backlog](../../backlog.md), [kitchen detail](../../backlog/kitchen.md), [board 1](../../backlog/mockups/a737-a740-till-counter-redesign/1-counter-screen.png), and [approved A669 spec](../specs/2026-10-14-a669-allergy-at-the-table-design.md) for heading placement only. A743 is owner-decided; choices below are implementation choices, not additional owner decisions.
+**Spec:** [A743 in the backlog](../../backlog.md), [kitchen detail](../../backlog/kitchen.md), board 1, and [approved A669 spec](../specs/2026-10-14-a669-allergy-at-the-table-design.md) for heading placement only. A743 is owner-decided; choices below are implementation choices, not additional owner decisions.
 
 ## Global constraints and requirements
 

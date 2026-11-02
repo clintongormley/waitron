@@ -413,8 +413,7 @@ the change (plan PR 8 Decision 1).
   department. A department with nothing on a date that another department fills draws an empty
   track; a date with nothing at all reads "No orders" once. A station one department feeds keeps
   one track and no key. The owner turned down one bar holding every range (two ranges at the same
-  time hid each other) and one bar with a label naming both where times overlap. Mockups:
-  [mockups/a506-12-times-overlap/](mockups/a506-12-times-overlap/).
+  time hid each other) and one bar with a label naming both where times overlap.
   **2026-10-17:** A725 retires that standalone tab. Calendar's Show picker carries the station
   view, using department names even for a single sending department (A722 Part 3, Decision 10).
 

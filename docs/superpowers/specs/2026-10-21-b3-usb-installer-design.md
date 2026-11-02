@@ -19,8 +19,7 @@ and the retained shared-backoff proposal remain PROPOSED requirements. Actual An
 trust qualification is UNVERIFIED / NOT RUN today, with historical negative evidence and a release
 hold (§7.5). Planning slices 1, 2, 3, 5, 6 and 8 is authorised; building is not.
 Plan: [`2026-10-26-b3-usb-installer.md`](../plans/2026-10-26-b3-usb-installer.md).
-Backlog entry: `docs/backlog.md`, "B3. The bootable USB installer". Pictures:
-[`docs/backlog/mockups/b3-usb-installer/`](../../backlog/mockups/b3-usb-installer/).
+Backlog entry: `docs/backlog.md`, "B3. The bootable USB installer". Pictures: removed from the repository on 2026-11-02.
 
 **What the revision changed.** The first version carried every release on a large stick, needed no
 internet, and erased nothing without a press on the box's screen. The owner chose instead: a small
@@ -1579,7 +1578,7 @@ Cable/local display remain; no separate recovery SSID or unlock hotspot. Receipt
 `~/waitron-campaign-f/questions.md`, the two OWNER ANSWER sections beginning at line 886.
 These answers supersede the earlier A/B/C picker and its pending-policy language. The retained
 2/4/8/16/32/60-second shared backoff is a plan proposal, not an explicit numeric owner choice.
-[`question.txt`](../../backlog/mockups/b3-usb-installer/question.txt) is now an FYI. Ask no new
+`question.txt` is now an FYI. Ask no new
 approval question unless review or Android results require changing the approved behavior.
 
 Planning slices 1, 2, 3, 5, 6 and 8 is authorised. No unlock-policy answer is outstanding.

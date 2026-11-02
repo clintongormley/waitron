@@ -859,6 +859,8 @@ assertions.
 
 ## Owner questions
 
+(2026-11-02: pictures are no longer committed or copied to Drive; keep them in the working folder and show the owner directly — CLAUDE.md §6.)
+
 Each has a default the build uses; a different answer changes only the tasks named. **Question 5
 is written to `questions.md` at Task 0, before any file it names is edited.** The others go to
 `questions.md` and the PR at Task 16, each with its pictures from Task 15 (saved as PNGs in

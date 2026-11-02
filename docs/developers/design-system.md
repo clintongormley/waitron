@@ -4151,7 +4151,7 @@ waiting change ("offers only Change start while a change waits, and opens the di
 says when the change takes effect ("previews when the change takes effect and how long today's
 business day runs"). Inside each card a row puts its label
 beside its value, the label muted and the value in normal weight, and stacks them on a phone
-(`settingsRows`), as the owner's approved mock-ups draw (`docs/backlog/mockups/a755-venue-settings/`).
+(`settingsRows`), as the owner's approved mock-ups drew.
 
 Printer details are a navigable destination with a different edit pattern. The printer name edits
 beside the heading, network host and port edit inside Connection, and Active saves in Status. Status
