@@ -225,13 +225,11 @@ called weaker than its name, the topic file lists what it does not see.
 
 ### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26)
 
-- **A refusal explains what happened and what each choice does; offer any needed administrator or owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody else.** The only exceptions are a state only a bug can produce, identified at the site as a fault in Waitron (owner, 2026-10-25), the till's full-disk strip, «Tell a manager» (owner, 2026-10-28, A1127 Q4), and the two backup-room alerts, which name no next step (owner, 2026-10-28, A1167). Nothing guards it. Receipt: [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
+- **A refusal explains what happened and what each choice does; offer any needed administrator or owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody else.** The only exceptions are a state only a bug can produce, identified at the site as a fault in Waitron (owner, 2026-10-25), the till's full-disk strip (owner, 2026-10-28, A1127 Q4), and the two backup-room alerts (owner, 2026-10-28, A1167). Nothing guards it. Receipt: [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
 - **New or changed forms use [design-system.md](docs/developers/design-system.md) → Forms.**
-  Required fields are marked; invalid fields get inline errors and one localized bottom message on its
-  own line above buttons, never a top summary, with the action disabled until fixed. Request refusals alone never disable it; field refusals
+  Request refusals alone never disable the action; field refusals
   appear under that field (owner, 2026-09-29).
-  Saves stay quiet and disabled until the draft changes, using `draftScopeFor`, `saveActionState` and
-  a save-handler early return (owner, 2026-10-07, A331). Other actions stay quiet while awaiting a choice,
+  Saves stay quiet and disabled until the draft changes (owner, 2026-10-07, A331; [receipt](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02)). Other actions stay quiet while awaiting a choice,
   selection or load, or barred by row state; use their own colour when actionable or sending (owner,
   2026-10-08, A416/A427). Exceptions are in the Forms contract; nothing guards these across screens.
   A hint is the placeholder; short explanations are hints, not “?” buttons (owner, 2026-10-03; unguarded,
@@ -249,10 +247,9 @@ called weaker than its name, the topic file lists what it does not see.
   help is on (owner, 2026-10-18, A582 design §7). Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads
   literals as text; what it misses is in [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A screen change updates its guide in English and, where a twin exists, Spanish.**
-  Every section heading carries a shared `{#id}`; dashboard/till links use each app's `help-guide.ts`. Guides live in
-  `apps/server/src/guide/<language>/`, served at `/help/<language>/<page>`.
+  Every section heading carries a shared `{#id}`; dashboard/till links use each app's `help-guide.ts`.
   Guards: `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts`, weaker than their
-  names: render/link/id checks and scoped text scans, not accuracy or proof the guide was updated.
+  names: not proof the guide was updated. [Limits](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
 - **Before treating a numeric field as whole numbers, follow its checks and wire conversion and try
   a fraction.** Receipt: [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Normalising a field while typing preserves the native selection.** Guards: the EN/ES caret cases
@@ -288,8 +285,7 @@ called weaker than its name, the topic file lists what it does not see.
 - **A value the till takes from its start read either refreshes through `setupRevision` or is listed
   as fixed until reload**, with why, in [conventions-ui.md](docs/developers/conventions-ui.md).
   Nothing guards it.
-- **Every staff-notice code a source sends is worded by the till's `staffNoticeText`**
-  (`apps/till/src/i18n/staff-notices.ts`, from `staff_notice.<code>` in English and Spanish); a
+- **Every staff-notice code a source sends is worded by the till's `staffNoticeText`**; a
   code it does not name is drawn as "The box needs attention". Guard:
   `scripts/staff-notice-codes.test.ts`, weaker than its name — it reads `code: "…"` literals as
   text, in source files it lists by hand. See [conventions-ui.md](docs/developers/conventions-ui.md).
@@ -297,23 +293,22 @@ called weaker than its name, the topic file lists what it does not see.
   automatic pairing renewal uses its own authenticated route.
 - **Dashboard subscription names travel with their server sources.** Guard: `scripts/live-subscriptions.test.ts` — it catches unknown names, NOT missing SQL dependencies or disabled-module combinations. [Detail](docs/developers/conventions-ui.md).
 - **A module adds a Calendar view through `calendarViews` on its `DashboardContribution`, never by
-  venue-service importing it, and never names its address words in `apps/dashboard/src/navigation.ts`**,
-  whose `keepUnlisted` already keeps them. Nothing guards the second half. See
+  venue-service importing it, and never names its address words in `apps/dashboard/src/navigation.ts`**.
+  Nothing guards the second half. See
   [conventions-ui.md](docs/developers/conventions-ui.md).
 - **The dashboard banner is persistent identity chrome** — top of the page, full width, the tenant's
-  legal name (not a location). The account menu (a person-icon `wt-row-actions` popover holding
-  Account settings, Theme, Language and Log out) sits at the trailing edge only when a session exists.
+  legal name (not a location). The account menu sits at the trailing edge only when a session exists.
+  [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
 - **The dashboard matches the browser's `Accept-Language` when no language is saved.** Guard against
   a late locale response overwriting an authenticated person's language or an explicit choice.
 - **Dashboard login offers methods without revealing account enrolment.** Never query account status
   or passkey enrolment to choose the public screen. A modal passkey prompt requires an explicit
-  action: navigation, refresh, logout and session expiry never open one. Save the authenticated email
-  and the successful method only with Remember selected, never in tab storage.
-- **A login refusal never reveals account existence** (owner, 2026-09-30): unknown, suspended,
-  pending, wrong-secret and till-profile-inadmissible accounts answer `password.invalid` or `pin.invalid`
-  after the same hashing work, as one sentence with no field marked. Only missing/malformed input marks
+  action. Save the authenticated email
+  and the successful method only with Remember selected, never in tab storage. [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
+- **A login refusal never reveals account existence** (owner, 2026-09-30). Only missing/malformed input marks
   a field; the real cause is a log-only `reason`. Owner-approved exception: `passkey.not_registered`.
   Guards: identity login and route suites, weaker than the set looks: no new sign-in route is covered.
+  [Detail](docs/developers/conventions-ui.md#a-logins-refusal-never-says-whether-the-account-exists).
 - **A device's profile and the signed-in person must both allow a till action; profile zones bound
   service and its admission list bounds sign-in.** Preserve the stated action-map exceptions. New routes
   add refusing cases and rows to `apps/server/src/till-api.profile-actions.test.ts` and
@@ -337,15 +332,13 @@ called weaker than its name, the topic file lists what it does not see.
   `event.stopPropagation()` before re-emitting**, or, for a composed trigger such as `input`, the
   consumer observes the change twice. App screens and app-owned components may name their own
   events plainly.
-- **A retained hardware registration must remain re-addable after deactivation.** Discovery finds
-  disabled printers and card readers, and a disabled device's browser asks to rejoin; Enable brings
-  each back under its existing id. A deleted printer, card reader or device is matched by neither
-  and returns with a new id.
+- **A retained hardware registration must remain re-addable after deactivation.**
+  [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
 - **A narrower roll in a wider receipt printer needs an explicit print area before native
   centring.** Guard: `apps/server/src/receipt-ticket.test.ts`.
 - **The hardware transport seam is `@waitron/print-agent`, and it is database-free.** It imports no
   other package in this repo, and `@waitron/printing` depends on IT, never the reverse. The guard is
-  the `import-x/no-restricted-paths` zone in `eslint.config.js`, not the empty `dependencies` block.
+  the `import-x/no-restricted-paths` zone in `eslint.config.js`.
 - **A container that must reach a hot-plugged USB printer mounts `/dev:/dev:ro`**, plus
   `device_cgroup_rules: ["c 180:* rwm"]` and `group_add: ["7"]` — not a `/dev/usb` subdirectory bind
   and not a hard `devices:` line.
@@ -355,17 +348,17 @@ called weaker than its name, the topic file lists what it does not see.
   Guards, weaker than their names: image-smoke (no Bluetooth on the runner) and
   `scripts/deploy-image-env.test.ts` (reads the profile as TEXT).
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
-  code (after a Start again Move, an answer naming the set-aside folder takes their place); its log tail is the file's last lines, whichever start or running server wrote them,
-  written through `redactSecrets` and the personal-data mask (except the frozen-process watchdog's
-  own line, which goes through neither), and HTML-escaped** (owner decision 2026-09-26; the tail's span and the personal-data mask are A980
+  code; its log tail is the file's last lines,
+  written through `redactSecrets` and the personal-data mask, and HTML-escaped**, with stated
+  exceptions (owner decision 2026-09-26; the tail's span and the personal-data mask are A980
   S10's defaults, open to the owner).
-  `redactSecrets` masks only a password in a URL, which is why no code's params and no logged
+  No code's params and no logged
   message may carry a secret. Its one password form, for `setup.start_again_files_found`, takes
   the administrator password over HTTPS only (cost if not: a password sent in plain text on the
   venue's network); its Move choice is the owner's one exception to never suggesting a removal
   (A1098). Guard: the never-delete cases in
   `apps/server/src/recovery-surface.test.ts`, weaker than their name: they read the text tables,
-  not the page.
+  not the page. [Exceptions](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
 
 ### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md#root-detail-moved-on-2026-10-26)
 
