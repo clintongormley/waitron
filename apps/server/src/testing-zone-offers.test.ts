@@ -5,12 +5,13 @@ import { describe, expect, it } from "vitest";
 import {
   locations,
   ticketItems,
+  venueLocationId,
   withTransaction,
   workingOrderLines,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   getOrderServiceContext,
@@ -56,18 +57,18 @@ interface Venue {
   stations: { kitchen: string; counter: string; pass: string };
 }
 
-async function seedVenue(db: Database): Promise<Venue> {
-  await seedTenant(db);
+async function seedVenueWithMenu(db: Database): Promise<Venue> {
+  await seedVenue(db, {
+    name: "Main bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Retail",
+  });
   await seedLegacySellingUnits(db);
-  const [loc] = await db
-    .insert(locations)
-    .values({ name: "Main bar", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
-    .returning({ id: locations.id });
-  const locationId = brandLocationId(loc!.id);
+  const locationId = brandLocationId(await venueLocationId(db));
   const kitchen = await seedKitchenStation(db, { locationId });
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
-    nodeId: brandNodeId(await seedNode(db, locationId)),
+    nodeId: brandNodeId(await seedNode(db)),
     locationId,
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
@@ -153,7 +154,7 @@ async function counts(db: Database) {
 
 describe("offerProducts", () => {
   it("keeps both menus orderable overnight and preserves a customer menu on repeat", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithMenu(suite.db);
     const first = await withTransaction(suite.db, async (tx) => {
       await tx
         .update(locations)
@@ -221,7 +222,7 @@ describe("offerProducts", () => {
   ] as const)(
     "starts $zone offers as $orderStart with $paidWhen payment timing",
     async ({ zone, orderStart, paidWhen, expected }) => {
-      const venue = await seedVenue(suite.db);
+      const venue = await seedVenueWithMenu(suite.db);
       const offers = await withTransaction(suite.db, (tx) =>
         offerProducts(tx, venue.cfg, { zone, orderStart, paidWhen }),
       );
@@ -243,7 +244,7 @@ describe("offerProducts", () => {
   );
 
   it("defaults quick-sale offers to prepay without reading the retired till setting", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithMenu(suite.db);
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
     const context = await withTransaction(suite.db, (tx) =>
       resolveZoneContext(tx, venue.cfg, offers.zoneId),
@@ -254,7 +255,7 @@ describe("offerProducts", () => {
   it.each(["prepay", "ticket_then_pay"] as const)(
     "snapshots explicit %s zone payment timing onto a quick sale",
     async (paidWhen) => {
-      const venue = await seedVenue(suite.db);
+      const venue = await seedVenueWithMenu(suite.db);
       const offers = await withTransaction(suite.db, (tx) =>
         offerProducts(tx, venue.cfg, { paidWhen }),
       );
@@ -276,7 +277,7 @@ describe("offerProducts", () => {
   );
 
   it("offers each product at the product's own price, even beside a menu that reprices it", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithMenu(suite.db);
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
     await withTransaction(suite.db, async (tx) => {
       await addProductToMenu(tx, {
@@ -304,7 +305,7 @@ describe("offerProducts", () => {
   });
 
   it("publishes a product's extras lists on its offer, so a pick sells", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithMenu(suite.db);
     const offers = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
     const id = randomUUID();
     await parkOrder({ db: suite.db }, venue.cfg, {
@@ -327,7 +328,7 @@ describe("offerProducts", () => {
   });
 
   it("keeps an explicit counter style separate from a table-tab zone", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithMenu(suite.db);
     const context = await withTransaction(suite.db, async (tx) => {
       const counter = await offerProducts(tx, venue.cfg, { orderStart: "counter" });
       const tables = await offerProducts(tx, venue.cfg, { zone: "tables" });
@@ -342,7 +343,7 @@ describe("offerProducts", () => {
   });
 
   it("an explicit counter paid-at-collection policy answers ticket_then_pay", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithMenu(suite.db);
     const context = await withTransaction(suite.db, async (tx) => {
       const counter = await offerProducts(tx, venue.cfg, {
         orderStart: "counter",
@@ -354,7 +355,7 @@ describe("offerProducts", () => {
   });
 
   it("fires each line to the station the product, its category or the venue default would pick", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithMenu(suite.db);
     const tabId = await withTransaction(suite.db, async (tx) => {
       const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
       const table = await createTable(tx, venue.cfg, { label: "T1", zoneId: offers.zoneId });
@@ -386,7 +387,7 @@ describe("offerProducts", () => {
   });
 
   it("refuses a zoned dish when no rule matches and the default is switched off", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithMenu(suite.db);
     await expect(
       withTransaction(suite.db, async (tx) => {
         await tx.execute(
@@ -406,7 +407,7 @@ describe("offerProducts", () => {
   });
 
   it("is harmless to call twice, and offers a product added between the calls", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithMenu(suite.db);
     const first = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
     const before = await counts(suite.db);
     const again = await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
@@ -436,7 +437,7 @@ describe("offerProducts", () => {
   });
 
   it("takes an extras list off the offer once the product stops carrying it", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithMenu(suite.db);
     await withTransaction(suite.db, (tx) => offerProducts(tx, venue.cfg));
     expect((await counts(suite.db)).extras).toBe(1);
     await withTransaction(suite.db, (tx) => writeProductModifiers(tx, venue.coffee, []));
@@ -445,7 +446,7 @@ describe("offerProducts", () => {
   });
 
   it("names the product when asked for one it does not offer", async () => {
-    const venue = await seedVenue(suite.db);
+    const venue = await seedVenueWithMenu(suite.db);
     const offers = await withTransaction(suite.db, (tx) =>
       offerProducts(tx, venue.cfg, { productIds: [venue.coffee] }),
     );

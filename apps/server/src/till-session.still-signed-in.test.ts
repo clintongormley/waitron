@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { devices, locations, nowIso, withTransaction } from "@waitron/db";
+import { devices, nowIso, venueLocationId, withTransaction } from "@waitron/db";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -19,11 +20,12 @@ let personId: string;
 let sessionId: string;
 
 beforeEach(async () => {
-  const [loc] = await suite.db
-    .insert(locations)
-    .values({ name: "Barra", invoiceLocales: ["es"], operationDescription: "Venta" })
-    .returning({ id: locations.id });
-  locationId = loc!.id;
+  await seedVenue(suite.db, {
+    name: "Barra",
+    invoiceLocales: ["es"],
+    operationDescription: "Venta",
+  });
+  locationId = await venueLocationId(suite.db);
   deviceId = await seedSessionDevice(suite.db, { locationId });
   personId = randomUUID();
   sessionId = await openTillSession(suite.db, { deviceId, personId });

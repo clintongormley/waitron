@@ -13,8 +13,8 @@ import {
   floorZones,
   parties,
   partyTables,
-  locations,
   nowIso,
+  venueLocationId,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -22,7 +22,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -67,21 +67,15 @@ beforeAll(() => {
 });
 
 async function setupVenue(opts: { timeZone?: string } = {}): Promise<OriginConfig> {
-  await seedTenant(db);
   const timeZone = opts.timeZone ?? DEFAULT_TIME_ZONE;
-  // Through the table definitions: `locations.id` is a `$defaultFn` generator,
-  // which a raw insert does not reach.
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Main bar",
-      invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
-      timeZone,
-    })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  await seedVenue(db, {
+    name: "Main bar",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Venta en establecimiento",
+    timeZone,
+  });
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
   return {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),
@@ -410,21 +404,15 @@ async function setupTabVenue(): Promise<{
   tableId: string;
   offers: ZoneOffers;
 }> {
-  await seedTenant(db);
+  await seedVenue(db, {
+    name: "Main bar",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Venta en establecimiento",
+  });
   await seedLegacySellingUnits(db);
-  // Through the table definitions: `locations.id` is a `$defaultFn` generator,
-  // which a raw insert does not reach.
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Main bar",
-      invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
+  const locationId = await venueLocationId(db);
   await seedKitchenStation(db, { locationId: brandLocationId(locationId), name: "Kitchen" });
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  const nodeId = await seedNode(db);
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),

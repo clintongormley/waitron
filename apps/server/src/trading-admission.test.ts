@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { IssueScope } from "@waitron/fiscal";
 import { TradingAdmission, requireEconomicWrite } from "./trading-admission.js";
 
@@ -46,17 +45,13 @@ describe("trading admission", () => {
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 let scope: IssueScope;
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [row] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Test venue",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Restaurant service",
-      timeZone: "Europe/Madrid",
-    })
-    .returning();
-  scope = { nodeId: await seedNode(suite.db, locationId(row!.id)) };
+  await seedVenue(suite.db, {
+    name: "Test venue",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Restaurant service",
+    timeZone: "Europe/Madrid",
+  });
+  scope = { nodeId: await seedNode(suite.db) };
 });
 describe("economic transaction admission", () => {
   it.each(["unchecked", "missing", "invalid", "restart_required"] as const)(

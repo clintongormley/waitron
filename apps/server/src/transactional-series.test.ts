@@ -2,8 +2,9 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { billPayments, invoiceSeries, nodes, printJobs, sales, withTransaction } from "@waitron/db";
+import { billPayments, invoiceSeries, printJobs, sales, withTransaction } from "@waitron/db";
 import { payments } from "@waitron/payments";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { FiscalBackend } from "@waitron/fiscal";
@@ -21,15 +22,9 @@ const short = "A-P000042";
 async function venueWithOtherNode() {
   const v = await provisionBillVenue(suite.db);
   await withTransaction(v.db, async (tx) => {
-    const [other] = await tx
-      .insert(nodes)
-      .values({
-        locationId: v.cfg.locationId,
-        name: "Other box",
-      })
-      .returning();
+    const other = await seedNode(tx);
     await tx.insert(invoiceSeries).values({
-      nodeId: other!.id,
+      nodeId: other,
       code: "OTHER-P999999",
       purpose: "standard",
       nextNumber: 99,

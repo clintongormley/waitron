@@ -12,10 +12,10 @@ import {
   saleSubstitutions,
   tenderRefunds,
   tenders,
+  venueLocationId,
   withTransaction,
-  workingOrders,
 } from "@waitron/db";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   createPinThrottle,
@@ -68,14 +68,14 @@ let counter: number;
 
 beforeEach(async () => {
   const db = store.db;
-  await seedTenant(db);
-  const [place] = await db
-    .insert(locations)
-    .values({ name: "Returns", invoiceLocales: ["en-GB"], operationDescription: "Meals" })
-    .returning();
-  const placeId = locationId(place!.id);
-  const nodeId = await seedNode(db, placeId);
-  const device = await seedDevice(db, { locationId: placeId, capabilities: CAPS });
+  await seedVenue(db, {
+    name: "Returns",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Meals",
+  });
+  const placeId = locationId(await venueLocationId(db));
+  const nodeId = await seedNode(db);
+  const device = await seedDevice(db, { capabilities: CAPS });
   profileId = device.profileId;
   cfg = {
     nodeId,
@@ -141,12 +141,11 @@ async function target(
 ) {
   const db = store.db;
   const orderId = randomUUID();
-  await db.insert(workingOrders).values({
+  await seedWorkingOrder(db, {
     id: orderId,
     source: "device",
     deviceId: cfg.origin.deviceId,
     nodeId: cfg.nodeId,
-    locationId: cfg.locationId,
     orderNumber: ++counter,
   });
   if (zoneId !== null)

@@ -8,15 +8,15 @@ import {
   devices,
   drawerOpens,
   invoiceSeries,
-  locations,
   printers,
   printJobs,
   sales,
   tenderRefunds,
   tenders,
+  venueLocationId,
   withTransaction,
 } from "@waitron/db";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { deviceOrigin, jobOrigin, locationId } from "@waitron/shared";
 import { enqueueTenderRefundDrawer } from "./receipt-print.js";
@@ -34,17 +34,10 @@ let drawerId: string;
 let receiptId: string;
 beforeEach(async () => {
   const db = store.db;
-  await seedTenant(db);
-  const [place] = await db
-    .insert(locations)
-    .values({ name: "Returns", invoiceLocales: ["en"], operationDescription: "Meals" })
-    .returning();
-  const placeId = locationId(place!.id);
-  const nodeId = await seedNode(db, placeId);
-  const device = await seedDevice(db, {
-    locationId: placeId,
-    capabilities: ["take-cash", "open-cash-drawer"],
-  });
+  await seedVenue(db, { name: "Returns", invoiceLocales: ["en"], operationDescription: "Meals" });
+  const placeId = locationId(await venueLocationId(db));
+  const nodeId = await seedNode(db);
+  const device = await seedDevice(db, { capabilities: ["take-cash", "open-cash-drawer"] });
   profileId = device.profileId;
   cfg = {
     nodeId,
@@ -264,7 +257,7 @@ describe("settled-tender refund audited drawer", () => {
   });
   it("does not open a second device's drawer on a replay", async () => {
     const row = await refund();
-    const other = await seedDevice(store.db, { locationId: cfg.locationId, profileId });
+    const other = await seedDevice(store.db, { profileId });
     await enqueue(row.id, { ...cfg, origin: deviceOrigin(other.deviceId) });
     await empty();
   });
@@ -275,7 +268,7 @@ describe("settled-tender refund audited drawer", () => {
   });
   it("does not enqueue under a different node provenance", async () => {
     const row = await refund();
-    const node = await seedNode(store.db, cfg.locationId);
+    const node = await seedNode(store.db);
     await enqueue(row.id, { ...cfg, nodeId: node });
     await empty();
   });
