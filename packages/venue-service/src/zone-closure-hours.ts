@@ -1,5 +1,4 @@
-import type { Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { readVenueClock, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { resolveDepartmentsDays } from "./day-resolver.js";
 import type { LocalDate } from "./hours-types.js";
@@ -34,7 +33,7 @@ export async function assertSeasonClosuresInHours(
 ): Promise<void> {
   if (zones.length === 0) return;
   const { clock, departmentOf } = read ?? {
-    clock: await readLocationClock(tx, cfg.locationId),
+    clock: await readVenueClock(tx),
     departmentOf: new Map(
       (await readServiceZones(tx, cfg)).map((zone) => [zone.id, zone.departmentId]),
     ),

@@ -233,12 +233,8 @@ describe("calendar follows department service periods", () => {
     });
   });
 
-  it("ignores inactive departments and other venues, and closes when no active department is open", async () => {
+  it("ignores inactive departments, and closes when no active department is open", async () => {
     const f = await fixture();
-    const other = await fixture();
-    await withTransaction(suite.db, (tx) =>
-      replaceMenuWeek(tx, other.cfg, other.department, other.week(2), at, 0),
-    );
     expect(await tones(f.cfg, "2026-10-20")).toEqual({
       calendar: ["closed"],
       model: ["closed"],

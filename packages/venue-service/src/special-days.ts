@@ -1,6 +1,12 @@
 import { and, asc, eq, inArray, isNotNull, lte, ne, or, sql } from "drizzle-orm";
-import { floorZones, newId, type Transaction } from "@waitron/db";
-import { readLocationClock, type LocationPlace } from "@waitron/reporting";
+import {
+  floorZones,
+  newId,
+  readVenueClock,
+  venueLocationId,
+  type Transaction,
+  type VenuePlace,
+} from "@waitron/db";
 import { AppError, isUuid, type BusinessDayClock, type ErrorParams } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
@@ -53,7 +59,7 @@ async function holidayDatesFor(
   cfg: VenueScope,
   rules: readonly SpecialDayDateRule[],
   [fromYear, toYear]: readonly [number, number],
-  place?: LocationPlace,
+  place?: VenuePlace,
 ): Promise<HolidayDates> {
   const named = rules.filter(followsHoliday);
   if (named.length === 0) return NO_HOLIDAY_DATES;
@@ -187,7 +193,7 @@ export async function specialDaysOn(
   tx: Transaction,
   cfg: VenueScope,
   days: readonly LocalDate[],
-  place?: LocationPlace,
+  place?: VenuePlace,
 ): Promise<Map<LocalDate, SpecialDayOccurrence | null>> {
   const found = new Map<LocalDate, SpecialDayOccurrence | null>(days.map((day) => [day, null]));
   if (days.length === 0) return found;
@@ -205,20 +211,15 @@ export async function specialDaysOn(
     .from(specialDayDates)
     .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
     .where(
-      and(
-        eq(specialDayDates.locationId, cfg.locationId),
-        or(
-          inArray(specialDayDates.date, ordered),
-          and(
-            eq(specialDays.repeatsYearly, true),
-            or(
-              inArray(sql`substr(${specialDayDates.date}, 6)`, [
-                ...new Set(ordered.map(repeatKey)),
-              ]),
-              isNotNull(specialDayDates.holidayName),
-            ),
-            lte(specialDayDates.date, ordered[ordered.length - 1]!),
+      or(
+        inArray(specialDayDates.date, ordered),
+        and(
+          eq(specialDays.repeatsYearly, true),
+          or(
+            inArray(sql`substr(${specialDayDates.date}, 6)`, [...new Set(ordered.map(repeatKey))]),
+            isNotNull(specialDayDates.holidayName),
           ),
+          lte(specialDayDates.date, ordered[ordered.length - 1]!),
         ),
       ),
     )
@@ -318,12 +319,12 @@ async function occurrencesOf(
   });
 }
 
-/** The location's special day `specialDayId` and each of its dates' own occurrence, at its stored
+/** The venue's special day `specialDayId` and each of its dates' own occurrence, at its stored
  *  date, in date order: one read of the day with its dates, and one of the paint when it has dates.
- *  Null when the location has no such special day. */
+ *  Null when the venue has no such special day. */
 export async function specialDayOccurrences(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   specialDayId: string,
 ): Promise<{ name: string; occurrences: SpecialDayOccurrence[] } | null> {
   const rows = await tx
@@ -335,7 +336,7 @@ export async function specialDayOccurrences(
     })
     .from(specialDays)
     .leftJoin(specialDayDates, eq(specialDayDates.specialDayId, specialDays.id))
-    .where(and(eq(specialDays.id, specialDayId), eq(specialDays.locationId, cfg.locationId)))
+    .where(eq(specialDays.id, specialDayId))
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
   const [first] = rows;
   if (first === undefined) return null;
@@ -376,7 +377,7 @@ export async function specialDayReadiness(
   cfg: VenueScope,
   at: Date,
 ): Promise<{ missing: MissingHoliday[]; clashes: SpecialDayClash[] }> {
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const today = venueLocalMoment(at, clock)?.civilDate ?? at.toISOString().slice(0, 10);
   const years = [yearOf(today), yearOf(today) + 1] as const;
   // Ordered as `specialDaysOn` reads them, so the day named as applying is the one that does.
@@ -390,7 +391,6 @@ export async function specialDayReadiness(
     })
     .from(specialDayDates)
     .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
-    .where(eq(specialDayDates.locationId, cfg.locationId))
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
   const holidays = await holidayDatesFor(tx, cfg, rows, years);
   const missing = await missingHolidaysIn(tx, cfg, years, holidays);
@@ -440,13 +440,7 @@ export async function missingHolidaysIn(
     })
     .from(specialDayDates)
     .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
-    .where(
-      and(
-        eq(specialDayDates.locationId, cfg.locationId),
-        eq(specialDays.repeatsYearly, true),
-        isNotNull(specialDayDates.holidayName),
-      ),
-    )
+    .where(and(eq(specialDays.repeatsYearly, true), isNotNull(specialDayDates.holidayName)))
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
   if (rows.length === 0 || years.length === 0) return [];
   const rules = rows.map((row) => ({ ...row, repeats: true }));
@@ -668,7 +662,6 @@ function parseInput(
  *  department. */
 async function assertPaintOwners(
   tx: Transaction,
-  cfg: VenueScope,
   departmentIds: readonly string[],
   zoneIds: readonly string[],
 ): Promise<Map<string, string>> {
@@ -679,11 +672,7 @@ async function assertPaintOwners(
           .select({ id: departments.id })
           .from(departments)
           .where(
-            and(
-              inArray(departments.id, [...new Set(departmentIds)]),
-              eq(departments.locationId, cfg.locationId),
-              eq(departments.active, true),
-            ),
+            and(inArray(departments.id, [...new Set(departmentIds)]), eq(departments.active, true)),
           )
       ).map((row) => row.id),
     );
@@ -701,11 +690,9 @@ async function assertPaintOwners(
         .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
         .where(
           and(
-            eq(zoneServicePolicies.locationId, cfg.locationId),
             inArray(zoneServicePolicies.zoneId, [...new Set(zoneIds)]),
             eq(departments.active, true),
             eq(floorZones.active, true),
-            eq(floorZones.locationId, cfg.locationId),
           ),
         )
     ).map((row) => [row.id, row.departmentId] as const),
@@ -769,7 +756,6 @@ function assertNoSkippedTimes(
  *  `holidays` covers the rules' years through `holidayHorizon`. */
 async function assertDatesFree(
   tx: Transaction,
-  cfg: VenueScope,
   ownId: string | null,
   rules: readonly SpecialDayDateRule[],
   holidays: HolidayDates,
@@ -788,7 +774,6 @@ async function assertDatesFree(
     .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
     .where(
       and(
-        eq(specialDayDates.locationId, cfg.locationId),
         ownId === null ? undefined : ne(specialDays.id, ownId),
         // A date following a holiday's name can meet any month and day in a later year.
         rules.some(followsHoliday)
@@ -812,11 +797,8 @@ async function assertDatesFree(
     }
 }
 
-async function requireSpecialDay(tx: Transaction, cfg: VenueScope, id: string) {
-  const [row] = await tx
-    .select()
-    .from(specialDays)
-    .where(and(eq(specialDays.id, id), eq(specialDays.locationId, cfg.locationId)));
+async function requireSpecialDay(tx: Transaction, id: string) {
+  const [row] = await tx.select().from(specialDays).where(eq(specialDays.id, id));
   if (row === undefined) throw new AppError("special_day.not_found", { specialDayId: id });
   return row;
 }
@@ -834,7 +816,7 @@ const storedDate = (row: {
 /** Every special day of the venue with its dates, by name then id; no paint. */
 export async function listSpecialDays(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
 ): Promise<SpecialDaySummary[]> {
   const days = await tx
     .select({
@@ -843,7 +825,6 @@ export async function listSpecialDays(
       repeatsYearly: specialDays.repeatsYearly,
     })
     .from(specialDays)
-    .where(eq(specialDays.locationId, cfg.locationId))
     .orderBy(asc(specialDays.name), asc(specialDays.id));
   if (days.length === 0) return [];
   const dates = await tx
@@ -868,10 +849,10 @@ export async function listSpecialDays(
 
 export async function readSpecialDay(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   id: string,
 ): Promise<SpecialDayDetail> {
-  const day = await requireSpecialDay(tx, cfg, id);
+  const day = await requireSpecialDay(tx, id);
   const dates = await tx
     .select({
       id: specialDayDates.id,
@@ -966,12 +947,11 @@ export async function saveSpecialDay(
 ): Promise<SpecialDayDetail> {
   await assertBusinessDayScheduleWrite(tx, cfg, "time", expectedClockRevision);
   const stored = id === null ? null : await readSpecialDay(tx, cfg, id);
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const inForce = inForceClock(clock, at);
   const parsed = parseInput(input, { settled: settledClock(clock, at), inForce });
   const zoneDepartments = await assertPaintOwners(
     tx,
-    cfg,
     parsed.paint.map((entry) => entry.ownerId),
     parsed.zonePaint.map((entry) => entry.ownerId),
   );
@@ -1025,14 +1005,13 @@ export async function saveSpecialDay(
     ...retainedPaint,
     ...retainedZonePaint,
   ]);
-  await assertDatesFree(tx, cfg, id, rules, holidays);
+  await assertDatesFree(tx, id, rules, holidays);
 
   const values = { name: parsed.name, repeatsYearly: parsed.repeatsYearly };
   const specialDayId = id ?? newId();
+  const venueRowId = await venueLocationId(tx);
   if (id === null)
-    await tx
-      .insert(specialDays)
-      .values({ id: specialDayId, locationId: cfg.locationId, ...values });
+    await tx.insert(specialDays).values({ id: specialDayId, locationId: venueRowId, ...values });
   else await tx.update(specialDays).set(values).where(eq(specialDays.id, id));
 
   const existing = await tx
@@ -1061,7 +1040,7 @@ export async function saveSpecialDay(
       ...entry,
       id: newId(),
       specialDayId,
-      locationId: cfg.locationId,
+      locationId: venueRowId,
       holidayName: ruleOf.get(entry.date)!.holidayName,
     }));
   if (added.length > 0) await tx.insert(specialDayDates).values(added);
@@ -1125,8 +1104,8 @@ export async function deleteSpecialDay(
   expectedClockRevision: number,
 ): Promise<void> {
   await assertBusinessDayScheduleWrite(tx, cfg, "time", expectedClockRevision);
-  await requireSpecialDay(tx, cfg, id);
+  await requireSpecialDay(tx, id);
   await tx.delete(specialDays).where(eq(specialDays.id, id));
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   await assertWaitingChangeFits(tx, cfg, at, clock);
 }

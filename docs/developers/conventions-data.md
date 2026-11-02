@@ -726,7 +726,7 @@ changes that season alone (`replaceMenuWeek` in `packages/venue-service/src/menu
 `replaceZoneClosedWeek` in `packages/venue-service/src/zone-closed-times.ts`). The two week routes
 (`PUT …/departments/:departmentId/menu-week`, `PUT …/zones/:zoneId/closed-week`,
 `packages/venue-service/src/routes.ts`) require `seasonId`: a missing or malformed one is refused
-`management.request_invalid`, an unknown or another venue's one `season.not_found` (404).
+`management.request_invalid`, an unknown one `season.not_found` (404).
 In-process callers that name no season, such as `placeOpenPeriod` (`menu-timetable.ts`), which gives a new
 department its first starter period (named "Open" in the staff language) at provisioning and
 whenever a department is created, and the demo

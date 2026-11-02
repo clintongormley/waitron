@@ -186,13 +186,22 @@ describe("ensureDefaultSeasons", () => {
     );
   });
 
-  it("reads only the asked location's seasons, ordered by start", async () => {
+  // A1301: deleted with cfg in S18
+  it("reads the venue's seasons whatever location the scope names", async () => {
+    const locationId = await newLocation("Scope-blind seasons");
+    const own = await withTransaction(db, (tx) => ensureDefaultSeasons(tx, { locationId }));
+    const read = await withTransaction(db, (tx) =>
+      readSeasons(tx, { locationId: brandLocationId(randomUUID()) }),
+    );
+    expect(own).toHaveLength(4);
+    expect(read).toEqual(own);
+  });
+
+  it("reads the venue's seasons, ordered by start", async () => {
     const mine = await newLocation("Mine");
-    const other = await newLocation("Other");
     await db.insert(seasons).values([
       { locationId: mine, name: "Late", startsOn: "10-01" },
       { locationId: mine, name: "Early", startsOn: "02-01" },
-      { locationId: other, name: "Theirs", startsOn: "05-01" },
     ]);
     const read = await withTransaction(db, (tx) => readSeasons(tx, { locationId: mine }));
     expect(shape(read)).toEqual([

@@ -1,6 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, type BusinessDayClock } from "@waitron/shared";
 import {
   assertBusinessDayScheduleWrite,
@@ -207,13 +206,13 @@ const emptyFilter = (only: SeasonDays | undefined) =>
 /** With `only`, each read week holds just those weekdays' ranges, the rest left empty. */
 export async function readDepartmentSeasonWeeks(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   departmentIds?: readonly string[],
   cutover?: string,
   only?: SeasonDays,
 ): Promise<Map<string, Map<string, ServiceRange[][]>>> {
   if (departmentIds?.length === 0 || emptyFilter(only)) return new Map();
-  const dayCutover = cutover ?? (await readLocationClock(tx, cfg.locationId)).dayCutover;
+  const dayCutover = cutover ?? (await readVenueClock(tx)).dayCutover;
   const rows = await tx
     .select({
       departmentId: departmentDays.departmentId,
@@ -228,7 +227,6 @@ export async function readDepartmentSeasonWeeks(
     .leftJoin(departmentDayRanges, eq(departmentDayRanges.dayId, departmentDays.id))
     .where(
       and(
-        eq(seasons.locationId, cfg.locationId),
         departmentIds === undefined
           ? undefined
           : inArray(departmentDays.departmentId, [...departmentIds]),
@@ -257,13 +255,13 @@ export async function readDepartmentSeasonWeeks(
 /** With `only`, each read week holds just those weekdays' ranges, the rest left empty. */
 export async function readZoneSeasonWeeks(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   zoneIds?: readonly string[],
   cutover?: string,
   only?: SeasonDays,
 ): Promise<Map<string, Map<string, ClosedRange[][]>>> {
   if (zoneIds?.length === 0 || emptyFilter(only)) return new Map();
-  const dayCutover = cutover ?? (await readLocationClock(tx, cfg.locationId)).dayCutover;
+  const dayCutover = cutover ?? (await readVenueClock(tx)).dayCutover;
   const rows = await tx
     .select({
       zoneId: zoneDays.zoneId,
@@ -277,7 +275,6 @@ export async function readZoneSeasonWeeks(
     .leftJoin(zoneDayRanges, eq(zoneDayRanges.dayId, zoneDays.id))
     .where(
       and(
-        eq(seasons.locationId, cfg.locationId),
         zoneIds === undefined ? undefined : inArray(zoneDays.zoneId, [...zoneIds]),
         only === undefined ? undefined : inArray(zoneDays.seasonId, [...only.seasonIds]),
         only === undefined ? undefined : inArray(zoneDays.weekday, [...only.weekdays]),
@@ -331,7 +328,7 @@ export async function saveSeasonWeeks(
   afterWrite?: (read: ServingRead) => Promise<void>,
 ): Promise<void> {
   const season = (await seasonsNaming(tx, cfg, seasonId)).own;
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const inForce = inForceClock(clock, at);
   const departmentEntries = input.departments ?? [];
   const departmentReads = await readDepartmentWeekReads(

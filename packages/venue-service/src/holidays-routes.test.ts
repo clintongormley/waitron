@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { getCountryPack } from "@waitron/country-packs";
@@ -76,7 +76,6 @@ interface Address {
 interface Fixture {
   app: Hono;
   cfg: VenueScope;
-  other: VenueScope;
   manager: string;
   supervisor: string;
   staff: string;
@@ -85,21 +84,17 @@ interface Fixture {
 
 async function fixture(address: Address = {}): Promise<Fixture> {
   const made = await withTransaction(db, async (tx) => {
-    const venue = (name: string) => ({
-      name: `${name} ${randomUUID()}`,
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
-      province: address.province === undefined ? "Sevilla" : address.province,
-      city: address.city === undefined ? "Sevilla" : address.city,
-    });
-    const [location] = await tx.insert(locations).values(venue("Venue")).returning();
-    const [otherLocation] = await tx.insert(locations).values(venue("Other")).returning();
-    const other = { locationId: locationId(otherLocation!.id) };
-    await tx
-      .update(locations)
-      .set({ province: "Sevilla", city: "Sevilla" })
-      .where(eq(locations.id, other.locationId));
+    const [location] = await tx
+      .insert(locations)
+      .values({
+        name: `Venue ${randomUUID()}`,
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+        timeZone: "Europe/Madrid",
+        province: address.province === undefined ? "Sevilla" : address.province,
+        city: address.city === undefined ? "Sevilla" : address.city,
+      })
+      .returning();
     const person = async (role: "manager" | "supervisor" | "staff") => {
       const [row] = await tx
         .insert(persons)
@@ -109,7 +104,6 @@ async function fixture(address: Address = {}): Promise<Fixture> {
     };
     return {
       cfg: { locationId: locationId(location!.id) },
-      other,
       manager: await person("manager"),
       supervisor: await person("supervisor"),
       staff: await person("staff"),
@@ -172,19 +166,13 @@ async function refused(response: Response, status: number, error: Record<string,
 
 const direct = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(db, fn);
 
-/** Every geography and entry of both fixture venues, so a refusal can be shown to change none. */
-async function rows(fx: Fixture) {
-  const ids = [fx.cfg.locationId, fx.other.locationId];
+/** Every geography and entry, so a refusal can be shown to change none. */
+async function rows() {
   const geographies = await db
     .select()
     .from(holidayGeographies)
-    .where(inArray(holidayGeographies.locationId, ids))
     .orderBy(asc(holidayGeographies.id));
-  const entries = await db
-    .select()
-    .from(specialDays)
-    .where(inArray(specialDays.locationId, ids))
-    .orderBy(asc(specialDays.id));
+  const entries = await db.select().from(specialDays).orderBy(asc(specialDays.id));
   return { geographies, entries };
 }
 
@@ -341,21 +329,24 @@ describe("holiday area", () => {
 
   it("answers 204 when clearing a choice the address never stored, writing nothing", async () => {
     const fx = await fixture({ province: "Lleida", city: "Vielha" });
-    const before = await rows(fx);
+    const before = await rows();
     const response = await send(fx, "PUT", "/holiday-area", fx.manager, { areaKey: null });
     expect(response.status).toBe(204);
-    expect(await rows(fx)).toEqual(before);
+    expect(await rows()).toEqual(before);
   });
 
-  it("refuses a missing or unknown area, and any area where none is sourced", async () => {
+  it("refuses a missing or unknown area", async () => {
     const lleida = await fixture({ province: "Lleida", city: "Vielha" });
-    const before = await rows(lleida);
+    const before = await rows();
     for (const body of [{}, { areaKey: "tenerife" }, { areaKey: 7 }])
       await refused(await send(lleida, "PUT", "/holiday-area", lleida.manager, body), 400, {
         code: "holiday.invalid",
         params: { field: "areaKey" },
       });
-    expect(await rows(lleida)).toEqual(before);
+    expect(await rows()).toEqual(before);
+  });
+
+  it("refuses any area where none is sourced", async () => {
     const sevilla = await fixture();
     await refused(
       await send(sevilla, "PUT", "/holiday-area", sevilla.manager, { areaKey: "aran" }),
@@ -367,7 +358,7 @@ describe("holiday area", () => {
 
 it("retired local-holiday routes are absent for a signed-in manager", async () => {
   const fx = await fixture();
-  const before = await rows(fx);
+  const before = await rows();
   for (const [method, path] of [
     ["GET", "/local-holidays"],
     ["POST", "/local-holidays"],
@@ -389,12 +380,12 @@ it("retired local-holiday routes are absent for a signed-in manager", async () =
       ).status,
     ).toBe(404);
   }
-  expect(await rows(fx)).toEqual(before);
+  expect(await rows()).toEqual(before);
 });
 
 it("refuses the retained area write to a read-only supervisor, staff, an absent and an expired session", async () => {
   const fx = await fixture({ province: "Lleida", city: "Vielha" });
-  const before = await rows(fx);
+  const before = await rows();
   for (const cookie of [fx.supervisor, fx.staff])
     await refused(await send(fx, "PUT", "/holiday-area", cookie, { areaKey: "aran" }), 403, {
       code: "authorization.not_permitted",
@@ -405,18 +396,18 @@ it("refuses the retained area write to a read-only supervisor, staff, an absent 
   await refused(await send(fx, "PUT", "/holiday-area", fx.expired, { areaKey: "aran" }), 401, {
     code: "management_session.expired",
   });
-  expect(await rows(fx)).toEqual(before);
+  expect(await rows()).toEqual(before);
 });
 
 it("refuses a submitted city on the retained area route and writes nothing", async () => {
   const fx = await fixture({ province: "Lleida", city: "Vielha" });
-  const before = await rows(fx);
+  const before = await rows();
   await refused(
     await send(fx, "PUT", "/holiday-area", fx.manager, { areaKey: null, city: "Vielha" }),
     400,
     { code: "management.request_invalid", params: { field: "city" } },
   );
-  expect(await rows(fx)).toEqual(before);
+  expect(await rows()).toEqual(before);
 });
 it.each([
   { city: null, province: "Lleida" },
@@ -424,10 +415,10 @@ it.each([
   { city: null, province: null },
 ])("refuses the unresolved address %j at the area route without writes", async (address) => {
   const fx = await fixture(address);
-  const before = await rows(fx);
+  const before = await rows();
   await refused(await send(fx, "PUT", "/holiday-area", fx.manager, { areaKey: "aran" }), 400, {
     code: "holiday.invalid",
     params: { field: "geography" },
   });
-  expect(await rows(fx)).toEqual(before);
+  expect(await rows()).toEqual(before);
 });

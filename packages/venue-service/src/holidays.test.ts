@@ -152,7 +152,7 @@ async function setCountry(tx: Transaction, country: string) {
     .onConflictDoUpdate({ target: tenants.id, set: { country } });
 }
 
-/** A venue at `address`, with a second venue beside it so a foreign id has somewhere to live. */
+/** A venue at `address`. */
 async function venue(address: Address = {}): Promise<VenueScope> {
   return withTransaction(db, async (tx) => {
     await setCountry(tx, address.country ?? "ZZ");
@@ -473,37 +473,25 @@ describe("an address that does not resolve", () => {
     });
   });
 
-  it("guesses nothing when the database has no taxpayer row or no such venue", async () => {
+  it("guesses nothing when the database has no taxpayer row", async () => {
     const cfg = await venue();
     await run((tx) => tx.delete(tenants));
-    const unknown = { locationId: locationId(randomUUID()) };
-    for (const scope of [cfg, unknown]) {
-      const read = await run((tx) => store.readHolidays(tx, scope, ...year));
-      expect(read).toEqual({
-        facts: [],
-        coverage: [
-          {
-            year: 2026,
-            country: "",
-            provinceCode: null,
-            regionCode: null,
-            nationalRegional: "unsupported_country",
-            local: "address_unresolved",
-            dataVersion: null,
-            sourceIds: [],
-          },
-        ],
-        sources: [],
-      });
-    }
-    await run((tx) => setCountry(tx, "ZZ"));
-    expect(await run((tx) => store.readHolidayAreaModel(tx, unknown))).toEqual({
-      venue: { country: "ZZ", provinceCode: null, city: null },
-      readiness: "unresolved_address",
-      localHolidaysPerYear: 1,
-      areaOptions: [],
-      areaRequired: false,
-      chosen: null,
+    const read = await run((tx) => store.readHolidays(tx, cfg, ...year));
+    expect(read).toEqual({
+      facts: [],
+      coverage: [
+        {
+          year: 2026,
+          country: "",
+          provinceCode: null,
+          regionCode: null,
+          nationalRegional: "unsupported_country",
+          local: "address_unresolved",
+          dataVersion: null,
+          sourceIds: [],
+        },
+      ],
+      sources: [],
     });
   });
 
@@ -633,9 +621,10 @@ describe("territorial areas", () => {
   });
 
   it("refuses an area nobody sourced, an omitted key and a wrong type", async () => {
-    const isles = await venue({ province: "Isleshire" });
-    const north = await venue();
-    const cases: [VenueScope, unknown][] = [
+    const cfg = await venue();
+    const isles: Address = { province: "Isleshire" };
+    const north: Address = { province: "Northshire" };
+    const cases: [Address, unknown][] = [
       [isles, { areaKey: "isle-c" }],
       [isles, { areaKey: 3 }],
       [isles, { areaKey: ["isle-a"] }],
@@ -644,12 +633,14 @@ describe("territorial areas", () => {
       [north, { areaKey: "isle-a" }],
       [north, { areaKey: null }],
     ];
-    for (const [cfg, input] of cases)
+    for (const [address, input] of cases) {
+      await moveTo(cfg, address);
       expect(
         await refusal(() =>
           run((tx) => store.saveHolidayArea(tx, cfg, input as { areaKey: string | null })),
         ),
       ).toMatchObject({ code: "holiday.invalid", params: { field: "areaKey" } });
+    }
     expect(await stored()).toEqual({ geographies: [], entries: [], dates: [] });
   });
 
@@ -877,8 +868,9 @@ it("reuses a holiday area's geography for an equivalent city spelling", async ()
 });
 
 it("the retained area writer stores a city trimmed at the address's full length", async () => {
+  const cfg = await venue({ province: "Isleshire" });
   for (const city of ["  Villa Real  ", "x".repeat(5000)]) {
-    const cfg = await venue({ province: "Isleshire", city });
+    await moveTo(cfg, { city });
     const saved = (await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" })))!;
     expect(saved.city).toBe(city.trim());
   }
@@ -921,6 +913,14 @@ it("refuses an area choice in a country whose pack has no holiday calendar, writ
     await refusal(() => run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" }))),
   ).toMatchObject({ code: "holiday.invalid", params: { field: "areaKey" } });
   expect(await stored()).toEqual({ geographies: [], entries: [], dates: [] });
+});
+
+it("takes the holiday area from the venue's city and province", async () => {
+  const cfg = await venue({ province: "Isleshire", city: "Puerto Isla" });
+  await run((tx) => store.saveHolidayArea(tx, cfg, { areaKey: "isle-a" }));
+  const scope: VenueScope = { locationId: locationId(randomUUID()) };
+  const read = await run((tx) => store.readHolidays(tx, scope, "2026-07-01", "2026-07-01"));
+  expect(read.facts.map(({ name }) => name)).toEqual(["Isle A day"]);
 });
 
 it("gives the holiday dates by year and name, adding an area's holiday once the venue chooses that area", async () => {
