@@ -38,13 +38,14 @@ import { recallToDraft } from "./draft-recall.js";
 import { fireGroup } from "./order-groups.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem } from "./line-cancel.js";
-import { cancelLine, GIVE_AWAY_REASON } from "./testing/cancel-line.js";
+import { cancelLine, cancelReasonId, GIVE_AWAY_REASON } from "./testing/cancel-line.js";
 import {
   moveDishesToStation,
   updateHeldOrder,
   updateOrderLine,
 } from "./testing/order-writer-fixture.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { setMadeHereStations } from "./made-here.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
@@ -898,6 +899,255 @@ describe("A773 hold paper: added work", () => {
       for (const name of ["fryer", "kitchen", "bar"]) expect(added(name)).toEqual([]);
     });
   });
+});
+
+describe("A773 hold paper: cancels of a whole dish, and released work", () => {
+  const suite = useVenueDb({
+    migrations: migrationOptionsFor(manifestSets(), null),
+    timeoutMs: 60_000,
+  });
+  let db: Database;
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function fresh(): Promise<Venue> {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    db = suite.db;
+    useSplitExtrasDb(db);
+    return setupSplitExtrasVenue();
+  }
+
+  async function cancelBurger(
+    tx: Transaction,
+    venue: Venue,
+    lineId: string,
+    outcome: "remove_charge" | "keep_charge",
+  ) {
+    await tx
+      .insert(persons)
+      .values({ id: OPERATOR, displayName: "Operator", role: "supervisor" })
+      .onConflictDoNothing({ target: persons.id });
+    const [bill] = await tx
+      .select({ revision: workingOrders.revision })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, venue.party.tabId));
+    await cancelItem(
+      tx,
+      venue.cfg,
+      venue.party.partyId,
+      lineId,
+      {
+        quantity: "1",
+        outcome,
+        reasonId: await cancelReasonId(tx),
+        expectedEdit: await readBillEditState(tx, venue.party.tabId),
+        expectedPartyRevision: (await partyArgs(tx, venue)).expectedPartyRevision,
+        expectedBillRevision: bill!.revision,
+        expectedContext: await readCancellationContext(tx, venue.party.partyId, lineId),
+        submissionId: randomUUID(),
+        admission: testTradingAdmission(),
+      },
+      OPERATOR,
+    );
+  }
+
+  const burgerLine = async (tx: Transaction, venue: Venue) => {
+    const [line] = await tx
+      .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+      .from(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, venue.party.tabId),
+          eq(workingOrderLines.productId, venue.products.burger),
+        ),
+      );
+    return line!;
+  };
+
+  it("cancelling a Requested burger cancels its Requested chips on Fryer's HOLD paper", async () => {
+    const venue = await fresh();
+    await withTransaction(db, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: true }, [
+        venue.stations.grill,
+        venue.stations.fryer,
+      ]);
+      const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [burger(venue, true)], release: "hold" }],
+      });
+      await setStationsWaitForPass(tx, true, [venue.stations.grill, venue.stations.fryer]);
+      await fireGroup(
+        tx,
+        venue.cfg,
+        venue.party.partyId,
+        placed.groups[0]!.id,
+        await partyArgs(tx, venue),
+      );
+      const line = await burgerLine(tx, venue);
+      const before = await slips(tx, venue);
+      vi.setSystemTime(new Date(LATER));
+
+      await cancelLine(tx, venue.cfg, venue.party.tabId, line.lineNo);
+
+      const after = await slips(tx, venue);
+      const added = (name: string) => after[name]!.slice(before[name]!.length);
+      const grill = [...cancelledBurger.slice(0, -1), "  > with CHIPS from Fryer", ""];
+      const fryer = [
+        "*** HOLD CANCELLED ***",
+        "Fryer",
+        "Split extras",
+        "1",
+        "13:05",
+        "GROUP 1",
+        "1.000 x CHIPS",
+        "  > for BURG at Grill",
+        "",
+      ];
+      expect(added("grill")).toEqual([grill]);
+      expect(added("fryer")).toEqual([fryer]);
+      expect(added("pass")).toEqual([grill, fryer]);
+      for (const name of ["kitchen", "bar"]) expect(added(name)).toEqual([]);
+    });
+  });
+
+  it("keeping the charge on a burger made here tells a waiting Fryer of its Requested chips in a held group whose HOLD printed elsewhere", async () => {
+    const venue = await fresh();
+    const [profile] = await withTransaction(db, (tx) =>
+      tx
+        .insert(deviceProfiles)
+        .values({ name: "Grill till", formFactor: "till", capabilities: [] })
+        .returning({ id: deviceProfiles.id }),
+    );
+    const here = await enrolDeviceForTest(db, venue.cfg, {
+      name: "Grill till",
+      profileId: profile!.id,
+    });
+    await withTransaction(db, async (tx) => {
+      await setMadeHereStations(tx, venue.cfg, here.deviceId, [venue.stations.grill]);
+      await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
+      await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.kitchen]);
+      const placed = await placeGroups(
+        tx,
+        { ...venue.cfg, sendingDeviceId: here.deviceId },
+        venue.party.partyId,
+        {
+          operatorId: OPERATOR,
+          groups: [
+            {
+              lines: [
+                burger(venue, true),
+                { menuItemId: venue.tables.offerFor(venue.products.cheese), quantity: "1" },
+              ],
+              release: "hold",
+            },
+          ],
+        },
+      );
+      const groupId = placed.groups[0]!.id;
+      const [group] = await tx.select().from(orderGroups).where(eq(orderGroups.id, groupId));
+      expect(group).toMatchObject({ state: "held", holdPrintedAt: AT });
+      expect(
+        await tx
+          .select({ stationId: orderGroupHoldStations.stationId })
+          .from(orderGroupHoldStations)
+          .where(eq(orderGroupHoldStations.groupId, groupId)),
+      ).toEqual([{ stationId: venue.stations.kitchen }]);
+      const items = await tx
+        .select({
+          stationId: ticketItems.stationId,
+          state: ticketItems.state,
+          requestedAt: ticketItems.requestedAt,
+          firedAt: ticketItems.firedAt,
+        })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, venue.party.tabId));
+      expect(items).toEqual(
+        expect.arrayContaining([
+          { stationId: venue.stations.grill, state: "ready", requestedAt: AT, firedAt: AT },
+          {
+            stationId: venue.stations.fryer,
+            state: expect.any(String),
+            requestedAt: AT,
+            firedAt: null,
+          },
+        ]),
+      );
+      const line = await burgerLine(tx, venue);
+      const before = await slips(tx, venue);
+
+      await cancelBurger(tx, venue, line.id, "keep_charge");
+
+      const after = await slips(tx, venue);
+      for (const name of Object.keys(after))
+        expect(after[name]!.slice(before[name]!.length)).toEqual([]);
+      expect(await noticesAt(tx, venue.stations.fryer)).toEqual([{ kind: "void", quantity: 1000 }]);
+    });
+  });
+
+  /** A held burger with chips whose HOLD ticket printed at Grill and Fryer, fired with nothing
+   *  waiting, so released. */
+  async function releasedFromHold(tx: Transaction, venue: Venue) {
+    await setStationPrinting(tx, { printHeldWork: true }, [
+      venue.stations.grill,
+      venue.stations.fryer,
+    ]);
+    const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
+      operatorId: OPERATOR,
+      groups: [{ lines: [burger(venue, true)], release: "hold" }],
+    });
+    await fireGroup(
+      tx,
+      venue.cfg,
+      venue.party.partyId,
+      placed.groups[0]!.id,
+      await partyArgs(tx, venue),
+    );
+    const line = await burgerLine(tx, venue);
+    expect(
+      await tx
+        .select({ requestedAt: ticketItems.requestedAt, firedAt: ticketItems.firedAt })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, venue.party.tabId)),
+    ).toEqual([
+      { requestedAt: AT, firedAt: AT },
+      { requestedAt: AT, firedAt: AT },
+    ]);
+    const [group] = await tx
+      .select()
+      .from(orderGroups)
+      .where(eq(orderGroups.id, placed.groups[0]!.id));
+    expect(group).toMatchObject({ state: "fired", holdPrintedAt: AT });
+    return line;
+  }
+
+  for (const writer of ["draft recall", "the cancel that removes the charge"] as const)
+    it(`${writer} of a released burger with chips in a fired group whose HOLD printed prints its slip and no HOLD CANCELLED`, async () => {
+      const venue = await fresh();
+      await withTransaction(db, async (tx) => {
+        const line = await releasedFromHold(tx, venue);
+        const before = await slips(tx, venue);
+        vi.setSystemTime(new Date(LATER));
+
+        if (writer === "draft recall")
+          await recallToDraft(tx, venue.cfg, venue.party.partyId, line.id, {
+            ...(await partyArgs(tx, venue)),
+            expectedEdit: await readBillEditState(tx, venue.party.tabId),
+          });
+        else await cancelBurger(tx, venue, line.id, "remove_charge");
+
+        const after = await slips(tx, venue);
+        const added = (name: string) => after[name]!.slice(before[name]!.length);
+        const word = writer === "draft recall" ? "*** RECALLED ***" : "*** VOID ***";
+        const head = ["Split extras", "1", "13:05"];
+        const grill = [word, "Grill", ...head, "1.000 x BURG", "  > with CHIPS from Fryer", ""];
+        const fryer = [word, "Fryer", ...head, "1.000 x CHIPS", "  > for BURG at Grill", ""];
+        expect(added("grill")).toEqual([grill]);
+        expect(added("fryer")).toEqual([fryer]);
+        expect(added("pass")).toEqual([grill, fryer]);
+        for (const name of ["kitchen", "bar"]) expect(added(name)).toEqual([]);
+      });
+    });
 });
 
 /** A device whose own kitchen profile may run the pass, showing every station. */

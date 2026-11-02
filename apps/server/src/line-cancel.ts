@@ -507,7 +507,6 @@ export async function cancelItem(
             cfg,
             bill!.id,
             corrections.flatMap(({ group, requested, requestedAt, item }) =>
-              // Requested work printed nothing unless its station has its group's HOLD paper.
               item.fired ||
               group === undefined ||
               (requested &&

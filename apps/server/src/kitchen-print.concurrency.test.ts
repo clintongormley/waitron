@@ -1,12 +1,3 @@
-/**
- * A `deactivatePrinter` started while a kitchen fire is open never aborts the fire: the fire enqueues
- * its job, the deactivation lands only afterwards, and the printer ends up inactive.
- *
- * Narrower than its name: there is no hook inside `enqueueKitchenTickets`, so the fire parks AFTER
- * it returns, uncommitted. What is observed is the venue file's write queue — a second write
- * transaction does not start while the first is open — not an interleave inside this call path. The
- * mechanism is stated on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
- */
 import { randomUUID } from "node:crypto";
 import { count as countRows, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -91,6 +82,15 @@ async function parkedThenRelease<A, B>(
   return settled;
 }
 
+/**
+ * A `deactivatePrinter` started while a kitchen fire is open never aborts the fire: the fire enqueues
+ * its job, the deactivation lands only afterwards, and the printer ends up inactive.
+ *
+ * Narrower than its name: there is no hook inside `enqueueKitchenTickets`, so the fire parks AFTER
+ * it returns, uncommitted. What is observed is the venue file's write queue — a second write
+ * transaction does not start while the first is open — not an interleave inside this call path. The
+ * mechanism is stated on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ */
 describe("print-on-fire concurrency — the write queue around the mapping read", () => {
   it("a concurrent deactivatePrinter runs only after the fire commits, and never aborts it", async () => {
     // ---- Setup, committed before the two contending transactions are staged ----
@@ -273,11 +273,19 @@ describe("A773 pass release: a printer two pass screens share", () => {
       return released;
     });
     await Promise.race([parked.passed, first.then(undefined, () => undefined)]);
-    const second = withTransaction(suite.db, (tx) =>
-      releasePassItems(tx, venue.cfg, back, askOf(backCard)),
-    );
-    go.open();
-    expect(await Promise.allSettled([first, second])).toMatchObject([
+    let secondStarted = false;
+    const second = withTransaction(suite.db, (tx) => {
+      secondStarted = true;
+      return releasePassItems(tx, venue.cfg, back, askOf(backCard));
+    });
+    const settled = Promise.allSettled([first, second]);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(secondStarted, "the second Fire started while the first was still open").toBe(false);
+    } finally {
+      go.open();
+    }
+    expect(await settled).toMatchObject([
       { status: "fulfilled", value: { releasedTicketItemIds: [item] } },
       {
         status: "rejected",

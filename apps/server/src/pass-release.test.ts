@@ -1856,4 +1856,31 @@ describe("A773 pass release: races", () => {
         touched ? nothing : { ...nothing, grill: [GRILL_FIRE], pass: [GRILL_FIRE] },
       );
     });
+
+  it("fires a dish whose note changed after its card was read, printing the note as it now reads", async () => {
+    const f = await burgerAndWater();
+    const read = await cardOf(f.venue, f.pass.by, f.placed.groupId);
+    expect(read.items.map((item) => item.note)).toEqual([null]);
+    const edit = await pendingEdit(f.venue, f.placed.line, { note: "No salt" });
+    expect(await race(edit, f.fire)).toMatchObject([fulfilled, fulfilled]);
+    expect(await rows([f.placed.item])).toEqual(
+      f.before.map((row) => releasedRow({ ...row, note: "No salt" })),
+    );
+    const noted = `${GRILL_FIRE}  * No salt\n`;
+    expect(gained(f.start, await printed(f.venue))).toEqual({
+      ...nothing,
+      grill: [noted],
+      pass: [noted],
+    });
+    const board = await withTransaction(db, async (tx) => {
+      const screen = (
+        await VENUE_SERVICE.readDeviceKitchenScreens(tx, f.venue.cfg, f.pass.by.deviceId)
+      ).find((candidate) => candidate.kind === "pass")!;
+      return readScopedPassBoard(tx, f.venue.cfg, passScopeOf(screen));
+    });
+    expect(board.toFire).toEqual([]);
+    expect(board.inProgress.map((card) => [card.key, card.items.map((item) => item.note)])).toEqual(
+      [[read.key, ["No salt"]]],
+    );
+  });
 });
