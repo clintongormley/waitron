@@ -59,7 +59,6 @@ import {
   openVenueDatabase,
   withTransaction,
   applicationVersion,
-  locations,
   type Database,
   type SingletonRole,
 } from "@waitron/db";
@@ -2067,20 +2066,14 @@ async function bootServer(
       attendanceController.abort();
       await attendanceLoop;
     });
-    const [location] = await db
-      .select({ name: locations.name })
-      .from(locations)
-      .where(eq(locations.id, tradingContext.locationId));
     attendanceEmailLoop = runAttendanceEmailLoop({
       db,
       nodeId: tradingContext.nodeId,
-      locationId: tradingContext.locationId,
       holder: tradingContext.nodeId,
       now,
       isPrimary: () => holders.singletonRole.current === "primary",
       signal: attendanceController.signal,
       venueLocale: venueLocale === "es-ES" ? "es" : "en",
-      locationName: location!.name,
       resolveDelivery: () =>
         resolveEmailDelivery(db, ring, config.devMode || tradingContext.practiceMode === true),
       send: createAttendanceEmailSender(),

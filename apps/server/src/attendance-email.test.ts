@@ -79,7 +79,7 @@ const message = {
   recipient: "worker@example.test",
   locale: "en" as const,
   businessDay: "2026-01-05",
-  locationName: "Madrid",
+  venueName: "Madrid",
   missingKinds: ["in", "out"] as const,
 };
 function decode(message: string) {
@@ -222,7 +222,7 @@ it.each(["venue@example.test", { name: "Harbour Kitchen", address: "venue@exampl
           : "From: Harbour Kitchen <venue@example.test>",
       );
       expect(decode(rig.messages[0]!)).toContain(message.businessDay);
-      expect(decode(rig.messages[0]!)).toContain(message.locationName);
+      expect(decode(rig.messages[0]!)).toContain(message.venueName);
     } finally {
       await rig.close();
     }

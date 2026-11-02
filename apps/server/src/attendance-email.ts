@@ -8,14 +8,14 @@ export type AttendanceEmailSender = (message: {
   recipient: string;
   locale: "en" | "es";
   businessDay: string;
-  locationName: string;
+  venueName: string;
   missingKinds: readonly ("in" | "out")[];
 }) => Promise<AttendanceMailOutcome>;
 
 export function createAttendanceEmailSender(
   options: { onFailure?: (reason: SmtpTestCode) => void } = {},
 ): AttendanceEmailSender {
-  return async ({ smtp, recipient, locale, businessDay, locationName, missingKinds }) => {
+  return async ({ smtp, recipient, locale, businessDay, venueName, missingKinds }) => {
     const copy = locale === "es" ? ATTENDANCE_EMAIL_WORDS.es : ATTENDANCE_EMAIL_WORDS.en;
     const missing =
       missingKinds.length === 2
@@ -26,7 +26,7 @@ export function createAttendanceEmailSender(
     const outcome = await sendSmtpMessage(smtp, {
       to: recipient,
       subject: copy.subject(businessDay),
-      text: copy.text(businessDay, locationName, missing),
+      text: copy.text(businessDay, venueName, missing),
     });
     if (outcome.status !== "sent") {
       try {

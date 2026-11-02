@@ -370,11 +370,7 @@ describe("durable attendance discovery", () => {
     await run((tx) => backend.clockIn(tx, { ...event("2026-01-05T08:00:00Z"), nodeId: otherNode }));
     expect(
       await run((tx) =>
-        reconcileAttendanceBeforeClock(
-          tx,
-          { nodeId, locationId, personId },
-          new Date("2026-01-06T12:00:00Z"),
-        ),
+        reconcileAttendanceBeforeClock(tx, { nodeId, personId }, new Date("2026-01-06T12:00:00Z")),
       ),
     ).toBeNull();
     expect((await rows()).map((r) => r.businessDay)).toEqual(["2026-01-05"]);

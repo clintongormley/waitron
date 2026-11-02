@@ -4,12 +4,12 @@ import { eq } from "drizzle-orm";
 import {
   deviceProfiles,
   devices,
+  readVenueClock,
   withTransaction,
   type Database,
   type Transaction,
 } from "@waitron/db";
 import { canUseDeviceProfile } from "@waitron/identity";
-import { readLocationClock } from "@waitron/reporting";
 import { AppError, deviceOrigin, isUuid } from "@waitron/shared";
 import { createErrorBoundary } from "@waitron/server-kit";
 import { offsetMinutes } from "@waitron/venue-service";
@@ -93,17 +93,10 @@ export function mountTillClockApi(app: Hono, deps: TillClockApiDeps, log: Logger
         const at = deps.now();
         const read = await reconcileAttendanceBeforeClock(
           tx,
-          { ...deps.cfg, personId: session.personId },
+          { nodeId: deps.cfg.nodeId, personId: session.personId },
           at,
         );
-        return (
-          read ??
-          readTillClockState(
-            tx,
-            { personId: session.personId, locationId: deps.cfg.locationId },
-            at,
-          )
-        );
+        return read ?? readTillClockState(tx, { personId: session.personId }, at);
       });
       return c.json(state);
     }),
@@ -121,14 +114,9 @@ export function mountTillClockApi(app: Hono, deps: TillClockApiDeps, log: Logger
           const before =
             (await reconcileAttendanceBeforeClock(
               tx,
-              { ...deps.cfg, personId: session.personId },
+              { nodeId: deps.cfg.nodeId, personId: session.personId },
               at,
-            )) ??
-            (await readTillClockState(
-              tx,
-              { personId: session.personId, locationId: deps.cfg.locationId },
-              at,
-            ));
+            )) ?? (await readTillClockState(tx, { personId: session.personId }, at));
           if (before.lastEntryId !== expectedEntryId)
             // Commit reconciliation even when its new end makes the submitted action stale.
             return { error: new AppError("attendance.state_changed", {}) };
@@ -149,7 +137,7 @@ async function writeClock(
   before: TillClockState,
   at: Date,
 ): Promise<TillClockState> {
-  const clock = await readLocationClock(tx, deps.cfg.locationId);
+  const clock = await readVenueClock(tx);
   const input = {
     nodeId: deps.cfg.nodeId,
     personId: session.personId,
@@ -165,9 +153,5 @@ async function writeClock(
     if (before.state === "on_break") await backend.breakEnd(tx, input);
     await backend.clockOut(tx, input);
   }
-  return readTillClockState(
-    tx,
-    { personId: session.personId, locationId: deps.cfg.locationId },
-    at,
-  );
+  return readTillClockState(tx, { personId: session.personId }, at);
 }

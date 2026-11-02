@@ -23,7 +23,7 @@ import { readTillClockState, type TillClockState } from "./till-clock-state.js";
 /** The state it read, or `null` when it reconciled a day and the caller must read it again. */
 export async function reconcileAttendanceBeforeClock(
   tx: Transaction,
-  scope: { nodeId: string; locationId: string; personId: string },
+  scope: { nodeId: string; personId: string },
   at: Date,
 ): Promise<TillClockState | null> {
   const state = await readTillClockState(tx, scope, at);
