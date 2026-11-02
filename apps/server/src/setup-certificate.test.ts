@@ -55,7 +55,7 @@ it.each([false, true])(
     });
     const venue = {
       ...request,
-      location: { ...request.location, operationDescription: "Restaurant" },
+      operationDescription: "Restaurant",
     };
     const claim = owned
       ? await host.owner.claimFirstSetup(

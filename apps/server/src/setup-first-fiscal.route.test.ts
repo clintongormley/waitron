@@ -211,7 +211,7 @@ async function recoveryDocument(
     version: 1,
     scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "production" },
     taxpayerName: request.legalName,
-    venueName: request.location.name,
+    venueName: request.name,
     createdAt: new Date().toISOString(),
     nodeKey: { nodeId: staged.stage.nodeId, name: staged.stage.name },
   };

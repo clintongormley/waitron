@@ -514,7 +514,7 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
       displayName: asString(admin.displayName, "admin.displayName"),
       firstNames: asOptionalName(admin.firstNames, "admin.firstNames"),
       lastNames: asOptionalName(admin.lastNames, "admin.lastNames"),
-      // The DISPLAY language, not the fiscal `location.invoiceLocales`. Never null: the till after a
+      // The DISPLAY language, not the fiscal `invoiceLocales`. Never null: the till after a
       // PIN sign-in and account emails have no browser header to fall back to.
       locale: resolveLoginLocale(
         acceptLanguage,
