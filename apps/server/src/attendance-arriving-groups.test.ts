@@ -169,7 +169,7 @@ describe("attendance for dishes arriving in a party", () => {
       .where(eq(workingOrderLines.id, lines[1]!.id));
     await suite.db
       .update(ticketItems)
-      .set({ firedAt: null, madeHere: false })
+      .set({ firedAt: null, requestedAt: null, madeHere: false })
       .where(eq(ticketItems.workingOrderLineId, lines[1]!.id));
     await run(async (tx) => {
       const course = await createCourse(tx, v.cfg, { name: "Held arrival", displayOrder: 1 });

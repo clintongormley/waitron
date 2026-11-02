@@ -1494,6 +1494,8 @@ describe("till-app: service cancellation consent", () => {
           lineId: "line-1",
           state: stage === "started" ? "preparing" : "queued",
           firedAt: "2026-10-17T10:00:00Z",
+          requestedAt: null,
+          stationId: "station-1",
           quantity: "1.000",
           kitchenQuantity: "1.000",
           servedQuantity: "0.000",

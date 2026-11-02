@@ -1930,6 +1930,27 @@ interface DishKitchenPlace {
   initiated: boolean;
 }
 
+/** What an edit's re-send keeps of each deleted record's phase (D22): a released record stays
+ *  released, and a Requested one keeps its first request time while it comes back Requested. */
+interface KeptPhase {
+  keepReleased?: ReadonlySet<string>;
+  keepRequestedAt?: ReadonlyMap<string, string>;
+}
+
+function keptStamps(
+  keep: KeptPhase,
+  lineId: string,
+  input: Parameters<typeof requestStamps>[0],
+): ReturnType<typeof requestStamps> {
+  const stamps = requestStamps(
+    keep.keepReleased?.has(lineId) === true ? { ...input, waits: false } : input,
+  );
+  const first = keep.keepRequestedAt?.get(lineId);
+  return first !== undefined && stamps.firedAt === null && stamps.requestedAt !== null
+    ? { ...stamps, requestedAt: first }
+    : stamps;
+}
+
 /** Insert records only for extra lines whose own station differs from their dish's destination. */
 export async function insertSplitExtras(
   tx: Transaction,
@@ -1939,6 +1960,7 @@ export async function insertSplitExtras(
   dishes: readonly DishKitchenPlace[],
   routing: RoutingOnce,
   keepAllergies?: ReadonlyMap<string, TicketAllergyCopy>,
+  keepPhase: KeptPhase = {},
 ): Promise<
   {
     workingOrderLineId: string;
@@ -1998,7 +2020,7 @@ export async function insertSplitExtras(
     if (decision?.kind !== "made") return [];
     const dish = byDish.get(extra.parentLineId!)!;
     const here = madeHere.has(decision.stationId);
-    const stamps = requestStamps({
+    const stamps = keptStamps(keepPhase, extra.id, {
       at: routing.at.toISOString(),
       initiated: dish.initiated,
       madeHere: here,
@@ -2109,7 +2131,7 @@ export async function fireLines(
     keepMadeHere?: ReadonlyMap<string, { madeHere: boolean; stationId: string }>;
     keepAllergies?: ReadonlyMap<string, TicketAllergyCopy>;
     routing?: RoutingOnce;
-  } = {},
+  } & KeptPhase = {},
 ): Promise<FireableLine[]> {
   const routing = options.routing ?? routingOnce(tx, cfg, new Date());
   const now = routing.at;
@@ -2319,7 +2341,7 @@ export async function fireLines(
   );
   const values = placed.map(({ initiated, value }) => ({
     ...value,
-    ...requestStamps({
+    ...keptStamps(options, value.workingOrderLineId, {
       at: firedAt,
       initiated,
       madeHere: value.madeHere,
@@ -2395,6 +2417,7 @@ export async function fireLines(
     dishPlaces,
     routing,
     options.keepAllergies,
+    options,
   );
 
   // Only newly fired items not made here print. Outbox inserts on this transaction: no hardware I/O
@@ -2581,7 +2604,7 @@ async function releaseHeld(
   noRouteScope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
   fire?: { heldPaper: ReadonlySet<string> },
   routing = routingOnce(tx, cfg, new Date()),
-): Promise<number> {
+): Promise<void> {
   const firedNow = routing.at.toISOString();
   const pending = await tx
     .select({ id: ticketItems.id })
@@ -2618,7 +2641,6 @@ async function releaseHeld(
     routing,
     rerouted,
   );
-  return firedItems.length + requested.length + noRoute.lines.length;
 }
 
 // Only the items released by this write may print, so a retry cannot print them again.
@@ -3573,10 +3595,10 @@ export function quantityOfLine(
 }
 
 /**
- * Move ONE not-yet-fired line of an OPEN tab into another kitchen course, or clear its course to null.
- * A deleted course is not a valid new target. A line that has already FIRED is refused
- * `ticket.already_fired`: once the kitchen has been told to cook it, it is corrected by a recall,
- * never re-coursed underneath the pass.
+ * Move ONE held line of an OPEN tab into another kitchen course, or clear its course to null.
+ * A deleted course is not a valid new target. A line the waiter has fired, released or still
+ * waiting for the pass, is refused `ticket.already_fired`: once the kitchen or the pass has been
+ * told about it, it is corrected by a recall, never re-coursed underneath the pass.
  */
 export async function setLineCourse(
   tx: Transaction,
@@ -3608,10 +3630,10 @@ export async function setLineCourse(
   }
   await refuseRecalledWrite(tx, eq(workingOrderLines.id, line.id));
   const [item] = await tx
-    .select({ firedAt: ticketItems.firedAt })
+    .select({ id: ticketItems.id })
     .from(ticketItems)
-    .where(and(onDishesOrTheirExtras(tx, [line.id]), isNotNull(ticketItems.firedAt)));
-  if (item !== undefined && item.firedAt != null) {
+    .where(and(onDishesOrTheirExtras(tx, [line.id]), initiatedItem()));
+  if (item !== undefined) {
     throw new AppError("ticket.already_fired", { workingOrderId: tabId });
   }
   await tx.update(workingOrderLines).set({ courseId }).where(eq(workingOrderLines.id, line.id));
@@ -3637,6 +3659,7 @@ interface ServableLine {
   groupState: "held" | "fired" | "removed" | null;
   ticketItemId: string | null;
   ticketFiredAt: string | null;
+  ticketRequestedAt: string | null;
   ticketMadeHere: boolean | null;
   extraHeld: boolean;
 }
@@ -3665,13 +3688,20 @@ async function servableLines(
       groupState: orderGroups.state,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      ticketRequestedAt: ticketItems.requestedAt,
       ticketMadeHere: ticketItems.madeHere,
       extraHeld: exists(
         tx
           .select({ one: sql`1` })
           .from(extra)
           .innerJoin(extraItem, eq(extraItem.workingOrderLineId, extra.id))
-          .where(and(eq(extra.parentLineId, workingOrderLines.id), isNull(extraItem.firedAt))),
+          .where(
+            and(
+              eq(extra.parentLineId, workingOrderLines.id),
+              isNull(extraItem.firedAt),
+              isNull(extraItem.requestedAt),
+            ),
+          ),
       ).mapWith(Boolean),
     })
     .from(workingOrderLines)
@@ -3708,9 +3738,9 @@ async function servableLines(
 }
 
 /**
- * Whether a dish line is released work, which is what serving needs. A made-here line is released
- * at its send, even in a held group. Other held-group and unfired lines wait; an ungrouped line
- * with no kitchen item needs a sent time.
+ * Whether a dish line is released work: the kitchen has it. A made-here line is released at its
+ * send, even in a held group. Other held-group and unfired lines wait; an ungrouped line with no
+ * kitchen item needs a sent time.
  */
 export function isReleased(
   line: Pick<
@@ -3726,10 +3756,32 @@ export function isReleased(
       : line.groupState !== null || line.sentAt !== null;
 }
 
+/** Whether the waiter has initiated a dish line, which is what serving needs (D21). The money
+ *  gates read {@link isReleased} instead. */
+export function serviceRequested(
+  line: Pick<
+    ServableLine,
+    | "groupState"
+    | "ticketItemId"
+    | "ticketFiredAt"
+    | "ticketRequestedAt"
+    | "ticketMadeHere"
+    | "sentAt"
+  >,
+): boolean {
+  if (line.ticketMadeHere === true) return true;
+  return line.groupState === "held"
+    ? false
+    : line.ticketItemId !== null
+      ? initiatedAt({ requestedAt: line.ticketRequestedAt, firedAt: line.ticketFiredAt }) !== null
+      : line.groupState !== null || line.sentAt !== null;
+}
+
 /**
  * The named orders holding a dish the kitchen is not making: one never sent and holding no kitchen
  * item ({@link unsentDishLines}), or one that is not released work ({@link isReleased}) — held in
  * a group, or held or recalled by its kitchen item.
+ * A Requested dish served whole is not counted (D41).
  */
 export async function ordersWithUnfiredDish(
   tx: Transaction,
@@ -3745,7 +3797,9 @@ export async function ordersWithUnfiredDish(
       groupState: orderGroups.state,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      ticketRequestedAt: ticketItems.requestedAt,
       ticketMadeHere: ticketItems.madeHere,
+      servedQuantity: workingOrderLines.servedQuantity,
     })
     .from(workingOrderLines)
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
@@ -3762,15 +3816,25 @@ export async function ordersWithUnfiredDish(
   );
   return new Set(
     lines
-      .filter((line) => line.quantity > (cancellations.get(line.id) ?? 0))
-      .filter((line) => (line.sentAt === null && line.ticketItemId === null) || !isReleased(line))
+      .filter((line) => {
+        const { active, remaining } = serviceQuantities(
+          line.quantity,
+          line.servedQuantity,
+          cancellations.get(line.id) ?? 0,
+        );
+        if (active === 0) return false;
+        if (line.sentAt === null && line.ticketItemId === null) return true;
+        if (isReleased(line)) return false;
+        return !(remaining === 0 && line.ticketRequestedAt !== null);
+      })
       .map((line) => line.workingOrderId),
   );
 }
 
-/** Serving needs released work ({@link isReleased}), else `group.line_held`. */
+/** Serving needs a dish the waiter has initiated ({@link serviceRequested}) and no held extra,
+ *  else `group.line_held`. */
 function refuseUnreleased(line: ServableLine): void {
-  if (!isReleased(line) || line.extraHeld) {
+  if (!serviceRequested(line) || line.extraHeld) {
     throw new AppError("group.line_held", { tabId: line.workingOrderId, lineNo: line.lineNo });
   }
 }
@@ -4565,7 +4629,8 @@ export function assertDistinctTransferLines(tabId: string, transfers: { lineNo: 
  * split of a dish with extras is refused `tab.transfer_modifier_line` unless `splitExtras` is set:
  * then each extra is split with it, the part going with the split dish being its count a dish times
  * the part split, and refused the same when an extra is not a whole count a dish. With
- * `refuseHeld`, a line whose own or split-off extra's ticket item is unfired is refused
+ * `refuseHeld`, a line whose own or split-off extra's ticket item is held (neither fired nor
+ * requested) is refused
  * `tab.split_held_line` unless its group is held: firing a group fires its lines on whichever bills
  * they are on. Returns each
  * ticket item a split made, mapped to the one it was copied from, and each row a split made, keyed
@@ -4624,6 +4689,7 @@ async function carveLines(
       listUnitPriceGross: workingOrderLines.listUnitPriceGross,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      ticketRequestedAt: ticketItems.requestedAt,
       groupState: orderGroups.state,
       orderNumber: workingOrders.orderNumber,
     })
@@ -4676,7 +4742,9 @@ async function carveLines(
       opts.refuseHeld &&
       line.groupState !== "held" &&
       [line, ...childLineNos.map((lineNo) => byLineNo.get(lineNo)!)].some(
-        (row) => row.ticketItemId !== null && row.ticketFiredAt === null,
+        (row) =>
+          row.ticketItemId !== null &&
+          initiatedAt({ requestedAt: row.ticketRequestedAt, firedAt: row.ticketFiredAt }) === null,
       )
     ) {
       throw new AppError("tab.split_held_line", { tabId: fromTabId, lineNo: t.lineNo });
@@ -5486,11 +5554,12 @@ interface EditableOrder {
 
 /**
  * What a line the kitchen has not fired is waiting for, in {@link EditableOrder.newWork}'s terms: a
- * held or recalled item waits to be sent; a line with no item was released when it was stamped sent,
- * waits in its held group when it has one, and is otherwise a line nothing has sent.
+ * Requested item was sent by the waiter; a held or recalled item waits to be sent; a line with no
+ * item was released when it was stamped sent, waits in its held group when it has one, and is
+ * otherwise a line nothing has sent.
  */
 function kitchenStateOf(line: EditableLine): EditableOrder["newWork"] {
-  if (line.ticket !== null) return "hold";
+  if (line.ticket !== null) return initiatedAt(line.ticket) === null ? "hold" : "fire";
   if (line.sentAt !== null) return "fire";
   return line.groupId === null ? "none" : "hold";
 }
@@ -6229,7 +6298,7 @@ async function applyLineEdits(
       ...voided,
       ...removedExtras,
       ...dropped.flatMap(({ parent, kept, removed }) => [
-        ...(parent.ticket === null ? [] : [correctionFor(parent, removed)]),
+        ...(parent.ticket?.firedAt == null ? [] : [correctionFor(parent, removed)]),
         ...kept
           .filter(({ child }) => child.ticket?.firedAt != null)
           .map(({ child, perDish }) =>
@@ -6267,6 +6336,8 @@ async function applyLineEdits(
   const fireNow: Parameters<typeof fireLines>[3] = [];
   const keepMadeHere = new Map<string, { madeHere: boolean; stationId: string }>();
   const keepStations = new Map<string, string>();
+  const keepReleased = new Set<string>();
+  const keepRequestedAt = new Map<string, string>();
   const keepSentNumber = new Map<number, string[]>();
   const newPortions: PortionRef[] = [];
   const copiedContexts: { from: string; to: string }[] = [];
@@ -6334,6 +6405,9 @@ async function applyLineEdits(
       for (const line of [parent, ...kept.map(({ child }) => child)]) {
         const sent = line.ticket?.sentOrderNumber ?? null;
         if (sent !== null) keepSentNumber.set(sent, [...(keepSentNumber.get(sent) ?? []), line.id]);
+        if (line.ticket?.firedAt != null) keepReleased.add(line.id);
+        else if (line.ticket?.requestedAt != null)
+          keepRequestedAt.set(line.id, line.ticket.requestedAt);
       }
       if (parent.ticket !== null) {
         keepMadeHere.set(parent.id, {
@@ -6593,6 +6667,8 @@ async function applyLineEdits(
     keepStations,
     keepMadeHere,
     keepAllergies,
+    keepReleased,
+    keepRequestedAt,
     routing,
   });
   for (const [sent, lineIds] of keepSentNumber)

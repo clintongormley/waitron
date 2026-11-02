@@ -1101,6 +1101,8 @@ function sameFinishContext(
         row.lineId,
         row.state,
         row.firedAt,
+        row.requestedAt,
+        row.stationId,
         row.quantity,
         row.kitchenQuantity,
         row.servedQuantity,

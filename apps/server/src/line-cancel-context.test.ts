@@ -14,6 +14,9 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell, ticketItemAllergies } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
 import { advanceTicketItem } from "./working-order.js";
+import { fireGroup } from "./order-groups.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
+import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { readCancellationContext, requireCancellationContext } from "./line-cancel-context.js";
 import {
   billWith,
@@ -24,6 +27,7 @@ import {
 
 const AT = "2026-10-17T11:30:00.000Z";
 let venue: AdjustmentVenue;
+let extraStationId: string;
 useVenueDb({
   resetPerTest: false,
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -32,6 +36,7 @@ useVenueDb({
     venue = await provisionAdjustmentVenue(db);
     await inTx(venue, async (tx) => {
       const station = await createStation(tx, venue.cfg, { name: "Extra station" });
+      extraStationId = station.id;
       await setRoutingCell(
         tx,
         venue.cfg,
@@ -143,6 +148,8 @@ describe("cancellation confirmation context", () => {
           lineId: order.extra!.id,
           state: "queued",
           firedAt: null,
+          requestedAt: null,
+          stationId: extraStationId,
           quantity: "6.000",
           kitchenQuantity: "4.000",
           servedQuantity: "0.000",
@@ -153,6 +160,8 @@ describe("cancellation confirmation context", () => {
           lineId: order.parent.id,
           state: "queued",
           firedAt: null,
+          requestedAt: null,
+          stationId: venue.stationId,
           quantity: "3.000",
           kitchenQuantity: "2.000",
           servedQuantity: "0.000",
@@ -191,6 +200,8 @@ describe("cancellation confirmation context", () => {
           lineId: order.parent.id,
           state: null,
           firedAt: null,
+          requestedAt: null,
+          stationId: null,
           quantity: "3.000",
           kitchenQuantity: null,
           servedQuantity: "0.000",
@@ -415,4 +426,75 @@ describe("cancellation confirmation context", () => {
       ).rejects.toMatchObject({ code });
     },
   );
+});
+
+describe("A773 requested lifecycle", () => {
+  async function fireWhileWaiting(order: Fixture) {
+    await inTx(venue, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stationId, extraStationId]);
+      const [party] = await tx.select().from(parties).where(eq(parties.id, order.partyId));
+      await fireGroup(tx, venue.cfg, order.partyId, order.parent.groupId!, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: party!.revision,
+        operatorId: venue.staffId,
+      });
+      await setStationsWaitForPass(tx, false, [venue.stationId, extraStationId]);
+    });
+  }
+  async function refuses(order: Fixture, expected: Awaited<ReturnType<typeof read>>) {
+    const current = await read(order);
+    await expect(
+      inTx(venue, (tx) => requireCancellationContext(tx, order.partyId, order.parent.id, expected)),
+    ).rejects.toMatchObject({ code: "tab.cancel_context_changed", params: { context: current } });
+    return current;
+  }
+
+  it("refuses a context read while the dish was held once its group is fired to a waiting station", async () => {
+    const order = await fixture("hold");
+    const expected = await read(order);
+    await fireWhileWaiting(order);
+    const current = await refuses(order, expected);
+    const [ticket] = await inTx(venue, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.id, order.parentTicket)),
+    );
+    expect(ticket!.requestedAt).toEqual(expect.any(String));
+    expect(current.components.find((c) => c.id === order.parentTicket)).toMatchObject({
+      requestedAt: ticket!.requestedAt,
+      firedAt: null,
+      stationId: venue.stationId,
+    });
+  });
+
+  it("refuses a context read before the dish moved to another station under the same kitchen id", async () => {
+    const order = await fixture();
+    const expected = await read(order);
+    await inTx(venue, (tx) =>
+      moveDishesToStation(
+        tx,
+        venue.cfg,
+        order.billId,
+        { submissionId: randomUUID(), lineIds: [order.parent.id], stationId: extraStationId },
+        { deviceId: venue.deviceId, personId: venue.staffId },
+      ),
+    );
+    const current = await refuses(order, expected);
+    expect(current.components.find((c) => c.lineId === order.parent.id)).toMatchObject({
+      id: order.parentTicket,
+      stationId: extraStationId,
+    });
+  });
+
+  it("refuses a context read while the dish waited for the pass once the pass releases it", async () => {
+    const order = await fixture("hold");
+    await fireWhileWaiting(order);
+    const expected = await read(order);
+    const later = new Date(Date.now() + 60_000).toISOString();
+    await inTx(venue, (tx) =>
+      tx
+        .update(ticketItems)
+        .set({ firedAt: later, queuedAt: later })
+        .where(eq(ticketItems.id, order.parentTicket)),
+    );
+    await refuses(order, expected);
+  });
 });

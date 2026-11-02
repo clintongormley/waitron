@@ -220,7 +220,7 @@ describe("releasing split-off extras", () => {
       )!;
       await tx
         .update(ticketItems)
-        .set({ firedAt: null })
+        .set({ firedAt: null, requestedAt: null })
         .where(
           eq(ticketItems.workingOrderLineId, (await rows(tx, venue.party.tabId)).items[0]!.lineId),
         );

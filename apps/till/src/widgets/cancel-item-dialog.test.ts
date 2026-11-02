@@ -46,6 +46,8 @@ const read = (
         lineId: "dish-1",
         state: stage === "started" ? "preparing" : "queued",
         firedAt: stage === "started" ? "2026-10-17T10:00:00Z" : null,
+        requestedAt: null,
+        stationId: "station-1",
         quantity: "3.000",
         kitchenQuantity: "3.000",
         servedQuantity: "0.000",
@@ -424,6 +426,8 @@ it.each([
   "billRevision",
   "firedAt",
   "ticketId",
+  "requestedAt",
+  "stationId",
 ])("a changed %s refresh requires fresh money consent", async (change) => {
   const consent = read("open", "started");
   const el = await mount({ consent });
@@ -441,6 +445,9 @@ it.each([
   else if (change === "billRevision") next.billRevision++;
   else if (change === "firedAt") next.context.components[0]!.firedAt = null;
   else if (change === "ticketId") next.context.components[0]!.id = "replacement";
+  else if (change === "requestedAt")
+    next.context.components[0]!.requestedAt = "2026-10-17T09:59:00Z";
+  else if (change === "stationId") next.context.components[0]!.stationId = "station-2";
   else Object.assign(next.context.components[0]!, { [change]: "1.000" });
   el.consent = next;
   await el.updateComplete;

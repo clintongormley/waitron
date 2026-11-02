@@ -1,10 +1,11 @@
 import "./errors.js";
-import { and, eq, gte, inArray, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, or, type SQL } from "drizzle-orm";
 import { worstBand } from "@waitron/shared";
 import { ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { ResolvedKitchenScreen } from "@waitron/module";
 import type { TradingContext } from "./trading-context.js";
+import { requestedItem } from "./kitchen-phase.js";
 import { orderWatchZones } from "./watch-zones.js";
 import {
   liveKitchenDish,
@@ -152,8 +153,8 @@ async function scopedItems(
   );
 }
 
-/** Every live kitchen dish at this location fired at or after `firedSince`, with its order's
- *  watched zone when `withZones`, else a null zone. */
+/** Every live kitchen dish at this location fired, or requested and not yet released, at or after
+ *  `firedSince`, with its order's watched zone when `withZones`, else a null zone. */
 export async function firedPassDishes(
   tx: Transaction,
   cfg: TradingContext,
@@ -177,7 +178,15 @@ export async function firedPassDishes(
     .from(ticketItems)
     .innerJoin(workingOrders, eq(ticketItems.workingOrderId, workingOrders.id))
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
-    .where(and(liveKitchenDishAt(cfg), gte(ticketItems.firedAt, firedSince)));
+    .where(
+      and(
+        liveKitchenDishAt(cfg),
+        or(
+          gte(ticketItems.firedAt, firedSince),
+          and(requestedItem(), gte(ticketItems.requestedAt, firedSince)),
+        ),
+      ),
+    );
   const zones = withZones ? await rowsWatchZones(tx, cfg, rows) : new Map<string, string>();
   return rows.map(({ id, orderId, stationId }) => ({
     id,

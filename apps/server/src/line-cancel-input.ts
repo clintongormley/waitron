@@ -21,16 +21,19 @@ export function parseCancellationContext(raw: unknown): CancellationContext {
   const components = value.components.map((raw: unknown) => {
     if (raw === null || typeof raw !== "object" || Array.isArray(raw)) throw invalid(field);
     const item = raw as Record<string, unknown>;
-    if (
-      item.firedAt !== null &&
-      (typeof item.firedAt !== "string" || !Number.isFinite(Date.parse(item.firedAt)))
-    )
-      throw invalid(field);
+    const time = (value: unknown) => {
+      if (value !== null && (typeof value !== "string" || !Number.isFinite(Date.parse(value))))
+        throw invalid(field);
+      return value as string | null;
+    };
     return {
       id: item.id === null ? null : requireBodyUuid(item.id, field).toLowerCase(),
       lineId: requireBodyUuid(item.lineId, field).toLowerCase(),
       state: item.state === null ? null : oneOf(item.state, ticketState.enumValues, field),
-      firedAt: item.firedAt as string | null,
+      firedAt: time(item.firedAt),
+      requestedAt: time(item.requestedAt),
+      stationId:
+        item.stationId === null ? null : requireBodyUuid(item.stationId, field).toLowerCase(),
       quantity: quantity(item.quantity)!,
       kitchenQuantity: quantity(item.kitchenQuantity, true),
       servedQuantity: quantity(item.servedQuantity)!,

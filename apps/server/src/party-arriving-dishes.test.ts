@@ -29,9 +29,10 @@ import {
   groupArrivingDishes,
   readCurrentOrders,
 } from "./order-groups.js";
-import { attachPrinterToStation } from "./station-printers.js";
+import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
-import { listExpoQueue, parkOrder } from "./working-order.js";
+import { fireOrderLines, listExpoQueue, parkOrder } from "./working-order.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -757,7 +758,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
         .where(eq(workingOrderLines.id, burger!.id));
       await tx
         .update(ticketItems)
-        .set({ firedAt: null })
+        .set({ firedAt: null, requestedAt: null })
         .where(eq(ticketItems.workingOrderLineId, burger!.id));
       await tx.insert(workingOrderLines).values([
         { ...burger!, id: randomUUID(), lineNo: 2 },
@@ -1058,5 +1059,166 @@ describe("an arriving held group's advance HOLD ticket", () => {
       },
     ]);
     expect(held.holdPrintedAt).not.toBeNull();
+  });
+});
+
+describe("A773 requested lifecycle: arrival", () => {
+  /** Every station waits for the pass and prints held work, with one printer on every active
+   *  station; each is restored afterwards, the venue being shared across cases. */
+  async function everyStationWaiting(run: (jobCount: () => Promise<number>) => Promise<void>) {
+    const stations = v.db.all<{ id: string; active: number }>(
+      sql`select id, active from kitchen_stations`,
+    );
+    const stationIds = stations.map((station) => station.id);
+    const active = stations.filter((station) => station.active).map((station) => station.id);
+    const printerId = await inTx(v, async (tx) => {
+      await setStationsWaitForPass(tx, true, stationIds);
+      await setStationPrinting(tx, { printHeldWork: true });
+      const { id } = await createPrinter(
+        tx,
+        { locationId: v.cfg.locationId },
+        {
+          name: `P-${randomUUID().slice(0, 8)}`,
+          transport: "cloud_poll",
+          pollId: `poll-${randomUUID()}`,
+        },
+      );
+      for (const stationId of active)
+        await attachPrinterToStation(tx, {
+          locationId: v.cfg.locationId,
+          stationId,
+          printerId: id,
+        });
+      return id;
+    });
+    const jobCount = async () =>
+      (
+        await inTx(v, (tx) =>
+          tx.select({ id: printJobs.id }).from(printJobs).where(eq(printJobs.printerId, printerId)),
+        )
+      ).length;
+    try {
+      await run(jobCount);
+    } finally {
+      await inTx(v, async (tx) => {
+        await setStationsWaitForPass(tx, false, stationIds);
+        await setStationPrinting(tx, { printHeldWork: false });
+        for (const stationId of active)
+          await detachPrinterFromStation(tx, v.cfg, { stationId, printerId });
+      });
+    }
+  }
+
+  async function itemOf(lineId: string) {
+    const [item] = await inTx(v, (tx) =>
+      tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, lineId)),
+    );
+    return item!;
+  }
+
+  it("moves a Requested dish alone in a course held until fired into one fired group dated by its request, printing nothing", async () => {
+    await everyStationWaiting(async (jobCount) => {
+      const ana = await seat(v, await v.table("Pedido solo 1"));
+      await inTx(v, (tx) =>
+        addTabRound(tx, v.cfg, ana.tabId, [
+          { menuItemId: v.item("Flan"), quantity: "1", courseId: postres },
+        ]),
+      );
+      const [flan] = await lineRows(ana.tabId);
+      const item = await itemOf(flan!.id);
+      expect(item).toMatchObject({
+        requestedAt: expect.any(String),
+        firedAt: null,
+        passControlled: true,
+      });
+      const mesa = await v.table("Pedido solo 2");
+      const luis = await seat(v, mesa);
+      await nextMillisecond();
+      const jobsBefore = await jobCount();
+
+      await move(ana.tabId, { tableId: mesa });
+
+      expect(
+        (await groupsOf(luis.partyId)).map((g) => ({ state: g.state, firedAt: g.firedAt })),
+      ).toEqual([{ state: "fired", firedAt: item.requestedAt }]);
+      expect(await itemOf(flan!.id)).toEqual(item);
+      expect(await jobCount()).toBe(jobsBefore);
+    });
+  });
+
+  it("lets Split a table take a Requested dish alone in a course held until fired into one fired group, printing nothing", async () => {
+    const [m4, m5] = [await v.table("Pedido separar 1"), await v.table("Pedido separar 2")];
+    const ana = await seat(v, m4);
+    await nextMillisecond();
+    const joining = await commandFor(v, ana.partyId);
+    await inTx(v, (tx) => joinTables(tx, v.cfg, ana.partyId, m5, joining));
+    await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
+    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    await everyStationWaiting(async () => {
+      await inTx(v, (tx) =>
+        addTabRound(tx, v.cfg, b2, [
+          { menuItemId: v.item("Flan"), quantity: "1", courseId: postres },
+        ]),
+      );
+      const flan = (await lineRows(b2)).find(
+        (line) => line.productId !== null && line.courseId === postres,
+      )!;
+      const item = await itemOf(flan.id);
+      expect(item).toMatchObject({
+        requestedAt: expect.any(String),
+        firedAt: null,
+        passControlled: true,
+      });
+      const printed = async () =>
+        (
+          await inTx(v, (tx) =>
+            tx
+              .select({ payload: printJobs.payload })
+              .from(printJobs)
+              .orderBy(sql`rowid`),
+          )
+        ).map((job) => printedLines(job.payload));
+      const jobsBefore = (await printed()).length;
+
+      const splitting = await commandFor(v, ana.partyId);
+      const result = await inTx(v, (tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
+
+      const groups = await groupsOf(result.partyId);
+      expect(groups.map((g) => g.state)).toEqual(["fired"]);
+      expect((await lineRows(b2)).find((line) => line.id === flan.id)!.groupId).toBe(groups[0]!.id);
+      expect(await itemOf(flan.id)).toEqual(item);
+      const after = (await printed()).slice(jobsBefore);
+      expect(after.flat().filter((text) => text.includes("FLAN"))).toEqual([]);
+      expect(after.map((lines) => lines[0])).not.toContain(
+        `*** ${kitchenTicketWords("es").hold} ***`,
+      );
+    });
+  });
+
+  it("moves a Requested dish beside an earlier released one into one fired group dated by the released dish", async () => {
+    const ana = await coursedBill("Pedido junto 1");
+    const [burger, flan] = await lineRows(ana.tabId);
+    const burgerItem = await itemOf(burger!.id);
+    expect(burgerItem.firedAt).not.toBeNull();
+    await nextMillisecond();
+    await everyStationWaiting(async () => {
+      await inTx(v, (tx) => fireOrderLines(tx, v.cfg, ana.tabId, [flan!.id]));
+      const flanItem = await itemOf(flan!.id);
+      expect(flanItem).toMatchObject({ firedAt: null, passControlled: true });
+      expect(flanItem.requestedAt! > burgerItem.firedAt!).toBe(true);
+      const mesa = await v.table("Pedido junto 2");
+      const luis = await seat(v, mesa);
+
+      await move(ana.tabId, { tableId: mesa });
+
+      const groups = await groupsOf(luis.partyId);
+      expect(groups.map((g) => ({ state: g.state, firedAt: g.firedAt }))).toEqual([
+        { state: "fired", firedAt: burgerItem.firedAt },
+      ]);
+      expect((await lineRows(ana.tabId)).map((l) => l.groupId)).toEqual([
+        groups[0]!.id,
+        groups[0]!.id,
+      ]);
+    });
   });
 });

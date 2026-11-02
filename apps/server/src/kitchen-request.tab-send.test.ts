@@ -1,4 +1,4 @@
-import { asc, eq, getTableColumns } from "drizzle-orm";
+import { asc, eq, getTableColumns, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { printJobs, ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
@@ -10,6 +10,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { addTabRound, recallLines, sendLines } from "./testing/order-writer-fixture.js";
 import { createCourse } from "./kitchen.js";
+import { readAllergySendView } from "./party-allergy.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -112,6 +113,51 @@ describe("A773 waiter request: tab send", () => {
       await sendLines(tx, venue.cfg, venue.party.tabId, []);
       expect(await items(tx, venue.party.tabId)).toEqual(afterFirst);
       expect(await jobCounts(tx, venue)).toEqual(before);
+    });
+  });
+
+  it("leaves a Requested dish out of the allergy question for its course and its own line", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      const later = await createCourse(tx, venue.cfg, { name: "Later", displayOrder: 2 });
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...burger(venue), courseId: later.id },
+      ]);
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [
+        { ...burger(venue), courseId: later.id, hold: true },
+      ]);
+      const [requestedLine, heldLine] = await lines(tx, venue.party.tabId);
+      const [requested, held] = await items(tx, venue.party.tabId);
+      expect(requested).toMatchObject({ requestedAt: AT, firedAt: null, passControlled: true });
+      expect(held).toMatchObject({ requestedAt: null, firedAt: null });
+      const requestedCopies = await allergyCopies(tx, requested!.id);
+      await tx.run(sql`delete from party_allergy where party_id = ${venue.party.partyId}`);
+      const before = await jobCounts(tx, venue);
+      const asked = async (target: Parameters<typeof readAllergySendView>[3]) =>
+        (await readAllergySendView(tx, venue.cfg, venue.party.partyId, target)).dishes.map(
+          (dish) => dish.line,
+        );
+
+      expect(
+        await asked({ kind: "course", orderId: venue.party.tabId, courseId: later.id }),
+      ).toEqual([{ kind: "working", id: heldLine!.id }]);
+      expect(
+        await asked({
+          kind: "lines",
+          orderId: venue.party.tabId,
+          lineNos: [requestedLine!.lineNo],
+        }),
+      ).toEqual([]);
+      vi.setSystemTime(new Date(LATER));
+      await sendLines(tx, venue.cfg, venue.party.tabId, [requestedLine!.lineNo]);
+      expect(await items(tx, venue.party.tabId)).toEqual([requested, held]);
+      expect(await allergyCopies(tx, requested!.id)).toEqual(requestedCopies);
+      expect(await jobCounts(tx, venue)).toEqual(before);
+      await expect(
+        sendLines(tx, venue.cfg, venue.party.tabId, [heldLine!.lineNo]),
+      ).rejects.toMatchObject({ code: "allergy.unanswered" });
     });
   });
 

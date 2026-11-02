@@ -573,7 +573,8 @@ export interface OrderGroup {
   state: "held" | "fired";
   firedAt: string | null;
   remindAt: string | null;
-  /** Present only when a person recorded every fired kitchen item of the group ready. */
+  /** Present only when every kitchen item of the group that the waiter has asked for and is not yet
+   *  served whole is ready (recorded ready, or made here), and at least one such item exists. */
   ready?: true;
   lineIds: string[];
   courseIds: string[];
@@ -4103,8 +4104,8 @@ export class TillApi {
   /**
    * Mark part or all of each of a party's lines served → `POST /api/parties/:partyId/served`, on any
    * of its bills but an abandoned one, a paid one included. `quantity` is how much THIS command serves. Rejects
-   * `tab.serve_quantity_invalid` for more than is left to serve, `group.line_held` for a line not yet
-   * released, `group.not_found`, and the command refusals.
+   * `tab.serve_quantity_invalid` for more than is left to serve, `group.line_held` for a line the waiter
+   * has not yet asked for or one with a held extra, `group.not_found`, and the command refusals.
    */
   markServed(
     partyId: string,
@@ -4252,8 +4253,8 @@ export class TillApi {
   }
 
   /**
-   * Move ONE not-yet-fired line into another course → `PATCH
-   * /api/working-orders/:orderId/lines/:lineNo/course`. `null` CLEARS the line's course and is sent as an
+   * Move ONE held line (neither it nor its extras fired or waiting for the pass) into another
+   * course → `PATCH /api/working-orders/:orderId/lines/:lineNo/course`. `null` CLEARS the line's course and is sent as an
    * explicit null, not an absent field. NON-FISCAL. Rejects `tab.not_open`, `course.not_found`,
    * `tab.line_not_found`, or `ticket.already_fired`.
    */

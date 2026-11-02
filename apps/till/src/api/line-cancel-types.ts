@@ -8,6 +8,8 @@ export interface CancellationContext {
     lineId: string;
     state: "queued" | "preparing" | "ready" | null;
     firedAt: string | null;
+    requestedAt: string | null;
+    stationId: string | null;
     quantity: string;
     kitchenQuantity: string | null;
     servedQuantity: string;

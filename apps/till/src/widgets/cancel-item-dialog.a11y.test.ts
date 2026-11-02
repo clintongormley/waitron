@@ -39,6 +39,8 @@ const consent = (
         lineId: "dish",
         state: stage === "started" ? "preparing" : "queued",
         firedAt: null,
+        requestedAt: null,
+        stationId: "station-1",
         quantity: "3.000",
         kitchenQuantity: "3.000",
         servedQuantity: "0.000",

@@ -237,16 +237,19 @@ function dish(overrides: Partial<CountedLine> = {}): CountedLine {
     recalled: false,
     sentAt: nowIso(),
     groupState: null,
-    ticket: { madeHere: false, firedAt: nowIso(), state: "queued" },
+    ticket: { madeHere: false, requestedAt: nowIso(), firedAt: nowIso(), state: "queued" },
     ...overrides,
   };
 }
 
-const unfired = { madeHere: false, firedAt: null, state: "queued" } as const;
-const readyHere = { madeHere: true, firedAt: nowIso(), state: "ready" } as const;
+const unfired = { madeHere: false, requestedAt: null, firedAt: null, state: "queued" } as const;
+const readyHere = {
+  madeHere: true,
+  requestedAt: nowIso(),
+  firedAt: nowIso(),
+  state: "ready",
+} as const;
 
-// The rules this mirrors: `unsentDishLines`, `isReleased` and `takesExtras` in working-order.ts,
-// and `heldExtras` in order-groups.ts.
 describe("dishCounts", () => {
   it("counts a dish with no kitchen item, group or send as unsent", () => {
     expect(dishCounts(dish({ sentAt: null, ticket: null }), [], false)).toEqual({
@@ -304,7 +307,12 @@ describe("dishCounts", () => {
 
   it("counts a fired, queued or preparing dish as waiting", () => {
     expect(dishCounts(dish(), [], false)).toEqual({ ...zero, ordered: 1, waiting: 1 });
-    const preparing = { madeHere: false, firedAt: nowIso(), state: "preparing" } as const;
+    const preparing = {
+      madeHere: false,
+      requestedAt: nowIso(),
+      firedAt: nowIso(),
+      state: "preparing",
+    } as const;
     expect(dishCounts(dish({ ticket: preparing }), [], false)).toEqual({
       ...zero,
       ordered: 1,
@@ -313,8 +321,18 @@ describe("dishCounts", () => {
   });
 
   it("counts a ready dish with a fired extra still queued as waiting", () => {
-    const ready = { madeHere: false, firedAt: nowIso(), state: "ready" } as const;
-    const queued = { madeHere: false, firedAt: nowIso(), state: "queued" } as const;
+    const ready = {
+      madeHere: false,
+      requestedAt: nowIso(),
+      firedAt: nowIso(),
+      state: "ready",
+    } as const;
+    const queued = {
+      madeHere: false,
+      requestedAt: nowIso(),
+      firedAt: nowIso(),
+      state: "queued",
+    } as const;
     expect(dishCounts(dish({ ticket: ready }), [{ ticket: queued }], false)).toEqual({
       ...zero,
       ordered: 1,
@@ -323,7 +341,12 @@ describe("dishCounts", () => {
   });
 
   it("counts a dish whose every kitchen part is ready as ready", () => {
-    const ready = { madeHere: false, firedAt: nowIso(), state: "ready" } as const;
+    const ready = {
+      madeHere: false,
+      requestedAt: nowIso(),
+      firedAt: nowIso(),
+      state: "ready",
+    } as const;
     expect(
       dishCounts(dish({ ticket: ready }), [{ ticket: ready }, { ticket: null }], false),
     ).toEqual({ ...zero, ordered: 1, ready: 1 });
@@ -656,8 +679,6 @@ function saveBillDraft(
   );
 }
 
-// The rules the kitchen states mirror: `isReleased` in working-order.ts and `heldExtras` and
-// `readyAt` in order-groups.ts.
 describe("readOrderStateCounts on a party's bill", () => {
   it("counts a held group's dishes as held, extras adding nothing, as readHeldCounts does", async () => {
     const { partyId, billId } = await seatParty();
@@ -735,7 +756,10 @@ describe("readOrderStateCounts on a party's bill", () => {
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 1, ready: 1 });
 
     await inTx(venue, (tx) =>
-      tx.update(ticketItems).set({ firedAt: null }).where(eq(ticketItems.id, extra!.id)),
+      tx
+        .update(ticketItems)
+        .set({ requestedAt: null, firedAt: null })
+        .where(eq(ticketItems.id, extra!.id)),
     );
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 1, held: 1 });
   });

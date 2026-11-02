@@ -252,7 +252,7 @@ async function openServeAndPay(
     });
   });
 
-  // Only released work can be served. Both tabs of a comparison are fired, so
+  // Only work the waiter has asked for can be served. Both tabs of a comparison are fired, so
   // `served_at` stays the one difference between them.
   if (options.fire) {
     await withTransaction(db, (tx) => fireAll(tx, cfg, tabId));

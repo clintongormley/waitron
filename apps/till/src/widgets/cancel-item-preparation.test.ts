@@ -36,6 +36,8 @@ function consent(): CancellationRead {
           lineId: "dish",
           state: "queued",
           firedAt: "2026-10-19T10:00:00Z",
+          requestedAt: null,
+          stationId: "station-1",
           quantity: "3.000",
           kitchenQuantity: "3.000",
           servedQuantity: "0.000",

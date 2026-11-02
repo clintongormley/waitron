@@ -480,7 +480,8 @@ declare module "@waitron/shared" {
     /**
      * Record unpaid departure found a bill it would invoice — open, or presented with no invoice
      * yet — holding a dish the kitchen is not making: never sent, held in its group or by its
-     * kitchen item, or recalled from the kitchen. Staff cancel it first.
+     * kitchen item, recalled from the kitchen, or waiting for the pass and not served whole. Staff
+     * cancel it first.
      */
     "unpaid_departure.unfired_dishes": { workingOrderId: string };
     /**
@@ -546,8 +547,8 @@ declare module "@waitron/shared" {
      */
     "group.held_leaves_party": { tabId: string; lineNo: number };
     /**
-     * A line was sent on its own, or marked served, while its group is held or its kitchen item
-     * unreleased; it is released by firing the group.
+     * A line was named while its group is held, or marked served before the waiter has asked for
+     * it or while one of its extras is held.
      */
     "group.line_held": { tabId: string; lineNo: number };
     /** A payment was asked of a bill with nothing left to pay and no card pending on it. */
@@ -762,8 +763,10 @@ declare module "@waitron/shared" {
      */
     "tab.transfer_modifier_line": { tabId: string; lineNo: number };
     /**
-     * A split onto a new bill named a line whose kitchen ticket is unfired and whose group is not
-     * held (a recalled dish, or a held round with no group). `lineNo` is the offending source line.
+     * A split onto a new bill named a line whose kitchen ticket, or an extra's, is held (neither
+     * fired nor requested) and whose group is not held (a recalled dish, or a held round with no
+     * group).
+     * `lineNo` is the offending source line.
      */
     "tab.split_held_line": { tabId: string; lineNo: number };
     /**
@@ -858,9 +861,10 @@ declare module "@waitron/shared" {
     /**
      * The line has already gone to the kitchen, so this write is refused: a re-fire (`fireLines`
      * refuses a line that already holds a ticket item before any of its writes), a re-course of a
-     * fired line (`setLineCourse`), and, when a station's choice of changes after sending refuses
-     * it, a recall (`recallToDraft`, `recallLines`), or a change or quantity rise in an edit
-     * (`applyLineEdits`), of a dish with work there. It names the order, not a ticket item.
+     * line that is fired or waiting for the pass (`setLineCourse`), and, when a station's choice of
+     * changes after sending refuses it, a recall (`recallToDraft`, `recallLines`), or a change or
+     * quantity rise in an edit (`applyLineEdits`), of a dish with work there. It names the order,
+     * not a ticket item.
      */
     "ticket.already_fired": { workingOrderId: string };
     /**

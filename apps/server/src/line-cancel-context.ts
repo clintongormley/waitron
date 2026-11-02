@@ -17,6 +17,8 @@ export interface CancellationContext {
     lineId: string;
     state: TicketState | null;
     firedAt: string | null;
+    requestedAt: string | null;
+    stationId: string | null;
     quantity: string;
     kitchenQuantity: string | null;
     servedQuantity: string;
@@ -77,6 +79,8 @@ async function readRowContext(
       id: ticketItems.id,
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
+      requestedAt: ticketItems.requestedAt,
+      stationId: ticketItems.stationId,
       kitchenQuantity: ticketItems.quantity,
     })
     .from(workingOrderLines)
@@ -104,6 +108,8 @@ async function readRowContext(
       lineId: line.lineId,
       state: line.state,
       firedAt: line.firedAt,
+      requestedAt: line.requestedAt,
+      stationId: line.stationId,
       quantity: thousandthsToDecimal(line.quantity),
       kitchenQuantity:
         line.id === null ? null : thousandthsToDecimal(line.kitchenQuantity ?? line.quantity),

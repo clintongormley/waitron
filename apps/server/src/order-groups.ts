@@ -58,6 +58,7 @@ import {
   printerMappings,
 } from "./kitchen-print.js";
 import type { FiredItem, HoldCorrection, TicketState } from "./kitchen-print.js";
+import { initiatedAt, initiatedItem } from "./kitchen-phase.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { trimQuantityForDisplay } from "./receipt-lines.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
@@ -80,6 +81,7 @@ import {
   priceTabRound,
   routingOnce,
   refusePaymentInFlight,
+  serviceRequested,
   splitLinesWithinOrder,
   splitUnitsWithinOrder,
   type TabRoundLine,
@@ -1521,7 +1523,7 @@ async function readGroups(
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(and(eq(orderGroups.partyId, partyId), isNotNull(ticketItems.firedAt), ...scope))
+    .where(and(eq(orderGroups.partyId, partyId), initiatedItem(), ...scope))
     .groupBy(workingOrderLines.groupId);
   const readyGroups = new Set(
     kitchen
@@ -1794,7 +1796,8 @@ export interface CurrentOrderRow {
   unitPrecision: number | null;
   servedQuantity: string;
   servedAt: string | null;
-  /** Released work, which alone can be marked served. */
+  /** Whether Serve is offered: the waiter has asked for the dish ({@link serviceRequested}) and
+   *  none of its extras is held. */
   released: boolean;
   /** Null for a dish with no kitchen item, such as one needing no preparation. */
   kitchen: CurrentOrderKitchen | null;
@@ -1913,6 +1916,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       ticketItemId: ticketItems.id,
       ticketState: ticketItems.state,
       ticketFiredAt: ticketItems.firedAt,
+      ticketRequestedAt: ticketItems.requestedAt,
       ticketReadyAt: ticketItems.readyAt,
       ticketMadeHere: ticketItems.madeHere,
       stationId: ticketItems.stationId,
@@ -1943,7 +1947,10 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     lines
       .filter(
         (line) =>
-          line.parentLineId !== null && line.ticketItemId !== null && line.ticketFiredAt === null,
+          line.parentLineId !== null &&
+          line.ticketItemId !== null &&
+          initiatedAt({ requestedAt: line.ticketRequestedAt, firedAt: line.ticketFiredAt }) ===
+            null,
       )
       .map((line) => line.parentLineId),
   );
@@ -2033,7 +2040,9 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
       servedQuantity: thousandthsToDecimal(line.servedQuantity),
       servedAt: line.servedAt,
       released:
-        line.quantity > line.cancelledQuantity && isReleased(line) && !heldExtras.has(line.id),
+        line.quantity > line.cancelledQuantity &&
+        serviceRequested(line) &&
+        !heldExtras.has(line.id),
       kitchen:
         line.ticketState === null
           ? null
@@ -2459,7 +2468,8 @@ export async function recordGroupEvent(
   });
 }
 
-// Relocation preserves fired history; only a live held course keeps arriving unfired food held.
+// Relocation preserves fired and requested history; only a live held course keeps arriving food
+// the waiter has not asked for held.
 export async function groupArrivingDishes(
   tx: Transaction,
   cfg: OriginConfig,
@@ -2478,6 +2488,7 @@ export async function groupArrivingDishes(
       sentAt: workingOrderLines.sentAt,
       ticketItemId: ticketItems.id,
       ticketFiredAt: ticketItems.firedAt,
+      ticketRequestedAt: ticketItems.requestedAt,
       ticketMadeHere: ticketItems.madeHere,
     })
     .from(workingOrderLines)
@@ -2505,7 +2516,7 @@ export async function groupArrivingDishes(
   const immediate: typeof dishes = [];
   const heldByCourse = new Map<string | null, typeof dishes>();
   for (const line of dishes) {
-    if (isReleased({ ...line, groupState: null })) released.push(line);
+    if (serviceRequested({ ...line, groupState: null })) released.push(line);
     else if (line.courseActive !== true || line.heldUntilFired !== true) immediate.push(line);
     else {
       const course = heldByCourse.get(line.courseId);
@@ -2515,7 +2526,12 @@ export async function groupArrivingDishes(
   }
   const routing = immediate.length === 0 ? undefined : routingOnce(tx, cfg, new Date());
   const firing = [
-    ...released.map((line) => ({ id: line.id, firedAt: line.ticketFiredAt ?? line.sentAt })),
+    // A copy added when a waiting dish was raised carries its parent's sent time, so its request
+    // time dates it.
+    ...released.map((line) => ({
+      id: line.id,
+      firedAt: line.ticketFiredAt ?? line.ticketRequestedAt ?? line.sentAt,
+    })),
     ...immediate.map((line) => ({ id: line.id, firedAt: routing!.at.toISOString() })),
   ];
   const fired =

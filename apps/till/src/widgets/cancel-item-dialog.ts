@@ -69,6 +69,8 @@ function consentKey(read: CancellationRead | null): string {
         row.id,
         row.state,
         row.firedAt,
+        row.requestedAt,
+        row.stationId,
         row.quantity,
         row.kitchenQuantity,
         row.servedQuantity,

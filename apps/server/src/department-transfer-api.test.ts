@@ -1971,7 +1971,7 @@ describe("human transfer identities", () => {
     for (const item of items)
       await suite.db
         .update(ticketItems)
-        .set(item.name === "Burger" ? { firedAt: null } : { state: "ready" })
+        .set(item.name === "Burger" ? { requestedAt: null, firedAt: null } : { state: "ready" })
         .where(eq(ticketItems.id, item.id));
   }
   const rowOf = (body: { requests: { id: string }[] }, id: string) =>
