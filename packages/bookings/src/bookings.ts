@@ -92,11 +92,11 @@ export async function createBooking(
 
 /** Names the venue's row only so `bookings_location_date_idx`, which leads with `location_id`, plans
  *  the read; without it the day list scans every booking. */
-export function bookingsOnDay(tx: Transaction, venueLocation: string, date: string) {
+export function bookingsOnDay(tx: Transaction, venueId: string, date: string) {
   return tx
     .select()
     .from(bookings)
-    .where(and(eq(bookings.locationId, venueLocation), eq(bookings.bookingDate, date)))
+    .where(and(eq(bookings.locationId, venueId), eq(bookings.bookingDate, date)))
     .orderBy(asc(bookings.bookingTime), asc(bookings.id));
 }
 

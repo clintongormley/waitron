@@ -470,6 +470,10 @@ function no longer reads the scope. It fails before the change. It is marked
   index, not a scan" in `bookings.test.ts`. The slice that drops `bookings.location_id` rebuilds the
   index on `(booking_date)` and deletes the condition; every other slice checks its own reads'
   plans against the indexes on the tables it reads.
+  S9b found the same for the staff-role name check: `staffRolesNamed`
+  (`packages/staffing/src/staff-roles.ts`) keeps the condition for `staff_roles_location_name_key`.
+  The staff-role, department, station and roster-version lists it also changed now scan, but their
+  old plans searched on `location_id` alone, which matches every row on a box with one venue.
 - **The live-query table names** (`location_day_cutover_changes`, `{ type: "locations" }`) and the
   unique-index column lists (`columns: ["location_id", "name"]`) named as leftovers below go with
   S23 and S24.
@@ -2791,6 +2795,12 @@ at)`, `readSeasonStaffing(tx, seasonId)` and the rest without `cfg`, except `rea
   lines `rota.ts:85,363` and `staffing-types.ts:113`. The two dashboard files print their S13
   lines.
 - [ ] **Step 7: commit** "Staffing reads the venue, not a location (A1301 S9b)".
+
+**Delivered 2026-11-02.** `bookingsOnDay` keeps `location_id = venueLocationId(tx)` (see "Indexes
+that lead with `location_id`"). `readStaffingMonth`, `readSeasonStaffing`, `readSpecialDayStaffing`
+and `resolveStaffing` keep `cfg` for the scope they hand venue-service, which S6 and S8 leave ignored
+and S18 removes. `addRotaShift`, `updateRotaShift` and `removeRotaShift` keep `cfg` for the workforce
+roster calls S13b changes.
 
 ### Open PRs touching S9's files
 

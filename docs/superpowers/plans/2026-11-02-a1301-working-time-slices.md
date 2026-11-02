@@ -209,7 +209,7 @@ Pattern and command: the shared done-check's `P`, `git grep -c -E "$P" -- <file>
 | `packages/workforce/src/schedule-reads.ts` | 4 | S13b | `PersonShiftRow.locationId` (`:20`) and its select (`:60`, `:67`, `:77`) |
 | `packages/workforce/src/personal-data.ts` | 4 | — | **left as is** ("Carried to other slices", S22): the rota file's `location` is a join through `shifts.location_id` (`:67`, `:76`, `:187`) |
 | `packages/workforce/src/absences.ts`, `shift-swaps.ts` | 1 + 1 | S13b | the comments "Not location-scoped…" (`:88`, `:124`) deleted |
-| `packages/staffing/src/rota.ts` | 11 | S13b, S13c | S13b: `getRoster`/`createRosterVersion`/`addShift` calls stop spreading `cfg` (`:251`, `:255`, `:256-261`, `:288`, `:304`, `:360`), `roster.draft_exists` with `{}` (`:363`). `unattachedWeek`'s `cfg` (`:281`), unused once its `getRoster` call (`:288`) stops spreading it, goes with the arguments at `:302` and `:354`. S13c: `RotaWeek`'s `locationId` (`:85`). The rest is S9's |
+| `packages/staffing/src/rota.ts` | 11 | S13b, S13c | S13b: `getRoster`/`createRosterVersion`/`addShift` calls stop spreading `cfg` (`:251`, `:255`, `:256-261`, `:288`, `:304`, `:360`), `roster.draft_exists` with `{}` (`:363`). `unattachedWeek`'s `cfg` (`:281`), unused once its `getRoster` call (`:288`) stops spreading it, goes with the arguments at `:302` and `:354`. `addRotaShift`, `updateRotaShift` and `removeRotaShift` then drop their `cfg`. S13c: `RotaWeek`'s `locationId` (`:85`). The rest is S9's |
 | `packages/staffing/src/staffing-types.ts` | 4 | S13c | `RotaWeek.locationId` (`:113`); the three comments are S9's |
 | `packages/staffing/src/dashboard/client.ts` | 3 | S13c | `watchRotaWarnings(queries, week, apply)` (`:145-159`): no `locationId` parameter, key or query parameter |
 | `packages/staffing/src/dashboard/rota-view.ts` | 1 | S13c | the call at `:416` |
@@ -361,8 +361,9 @@ case of the warnings describe: Step 4).
 
 **Files:** `packages/workforce/src/clocking.ts`, `body-ids.ts`, `errors.ts`, `schedule-reads.ts`,
 `absences.ts:88`, `shift-swaps.ts:124`; crossings `packages/staffing/src/rota.ts` (the calls listed
-in the table; `:363`), `packages/staffing/src/routes.ts` (only if `changeRotaWeek`'s `cfg` becomes
-unused), `apps/server/src/workforce-api.ts` (the S13b lines in the table). Tests:
+in the table; `:363`), `packages/staffing/src/routes.ts` (the `addRotaShift`, `updateRotaShift`
+and `removeRotaShift` calls, and `changeRotaWeek`'s if its `cfg` becomes unused),
+`apps/server/src/workforce-api.ts` (the S13b lines in the table). Tests:
 `packages/workforce/src/scheduling.test.ts`, `scheduling.concurrency.test.ts`,
 `schedule-reads.test.ts`, `shift-swaps.test.ts`, `personal-data.test.ts`, `pay-period-closure.test.ts:156`,
 `record-reads.test.ts:164`; `packages/staffing/src/rota.test.ts`; `apps/server/src/schedule-api.test.ts`,
@@ -396,7 +397,9 @@ compiler refuses their literal `locationId` once the inputs lose it.
   backend calls stop spreading `cfg`. `unattachedWeek`'s `cfg` parameter (`rota.ts:281`) is then
   unused, which `noUnusedParameters` refuses: drop it and the arguments at `:302` and `:354`. If
   `changeRotaWeek`'s `cfg` is then unused (TS6133), drop it and the argument at its caller in
-  `packages/staffing/src/routes.ts`.
+  `packages/staffing/src/routes.ts`. `addRotaShift`, `updateRotaShift` and `removeRotaShift` kept
+  their `cfg` in S9 for these calls alone (S9b commit): drop it, and the arguments in
+  `packages/staffing/src/routes.ts` and `rota.test.ts`.
 - [ ] **Step 4: tests.** Codemod the call arguments (`scheduling.test.ts` names `locationId` on
   114 lines: `git grep -c -E 'locationId' -- packages/workforce/src/scheduling.test.ts`). The suite
   shares one database (`:28-29`) and seeds extra locations per case (`:151`, `:852`, `:874`,

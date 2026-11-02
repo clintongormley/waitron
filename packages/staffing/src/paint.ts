@@ -225,8 +225,8 @@ async function assertEditTargets(
     .select({ id: staffRoles.id })
     .from(staffRoles)
     .where(inArray(staffRoles.id, wanted));
-  const here = new Set(found.map((row) => row.id));
-  const missingRole = wanted.find((id) => !here.has(id));
+  const known = new Set(found.map((row) => row.id));
+  const missingRole = wanted.find((id) => !known.has(id));
   if (missingRole !== undefined)
     throw new AppError("staff_role.not_found", { staffRoleId: missingRole });
 }

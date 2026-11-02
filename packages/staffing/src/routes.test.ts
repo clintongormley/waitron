@@ -661,7 +661,7 @@ describe("the staffing paint routes", () => {
     );
   });
 
-  it("answers an unknown season with 404, and an area or staff role the body names that is not the venue's with 400", async () => {
+  it("answers an unknown season with 404, and a malformed season id, an unknown or inactive area or an unknown staff role the body names with 400", async () => {
     const p = await painted();
     const ghostSeason = randomUUID();
     const unknownSeason = `${STAFFING}/seasons/${ghostSeason}`;

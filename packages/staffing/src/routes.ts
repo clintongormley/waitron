@@ -70,7 +70,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "special_day.not_found": 404,
 };
 const run = createErrorBoundary(STATUS, "staffing.failed");
-// An id in a request body that is not one of the venue's is a bad request, not a missing page.
+// An id in a request body that names no row is a bad request, not a missing page.
 const runReorder = createErrorBoundary(
   { ...STATUS, "staff_role.not_found": 400 },
   "staffing.failed",

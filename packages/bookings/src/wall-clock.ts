@@ -22,7 +22,7 @@ function wallClockFormatter(timeZone: string): Intl.DateTimeFormat {
   return fmt;
 }
 
-/** The stored time zone is free text, so a zone `Intl` rejects falls back to the column's default
+/** The stored time zone is free text, so a zone `Intl` rejects falls back to `DEFAULT_TIME_ZONE`
  *  rather than throwing. */
 function safeTimeZone(timeZone: string): string {
   try {
