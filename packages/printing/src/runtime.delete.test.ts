@@ -2,15 +2,15 @@ import { eq, inArray } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
-  locations,
   printAgents,
   printJobs,
   printers,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   MAX_DELIVERY_ATTEMPTS,
   PRINT_JOB_LEASE_MS,
@@ -38,12 +38,13 @@ const EXPIRED = new Date(NOW.getTime() - PRINT_JOB_LEASE_MS - 1_000).toISOString
 const DELETED_AT = "2026-10-10T09:00:00.000Z";
 
 async function setup(): Promise<PrintConfig> {
-  await seedTenant(suite.db);
-  const [row] = await suite.db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
-    .returning({ id: locations.id });
-  return { locationId: row!.id };
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Sale on premises",
+  });
+  const venueId = await venueLocationId(suite.db);
+  return { locationId: venueId };
 }
 
 async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {

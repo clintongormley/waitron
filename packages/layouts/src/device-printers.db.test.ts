@@ -4,15 +4,15 @@ import {
   deviceProfilePrinters,
   deviceProfiles,
   devices,
-  locations,
   pagePrinters,
   printers,
   restrictRefused,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
@@ -46,11 +46,9 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 }
 
 async function seedLocation(name: string): Promise<LocationId> {
-  const [row] = await suite.db
-    .insert(locations)
-    .values({ name, invoiceLocales: ["es"], operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
-  return brandLocationId(row!.id);
+  await seedVenue(suite.db, { name, invoiceLocales: ["es"], operationDescription: "Hospitality" });
+  const venueId = await venueLocationId(suite.db);
+  return brandLocationId(venueId);
 }
 
 async function seedPrinter(location: string, name: string): Promise<string> {

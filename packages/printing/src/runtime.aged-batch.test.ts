@@ -1,8 +1,14 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, printAgents, printJobs, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  printAgents,
+  printJobs,
+  withTransaction,
+  venueLocationId,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { FakeSink } from "@waitron/print-agent";
 import { claimPrintJobs, reportPrintJob } from "./runtime.js";
 import { createPrinter } from "./printers.js";
@@ -11,16 +17,13 @@ import { enqueuePrintJob } from "./outbox.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function fixture(kind: "document" | "drawer", separatePrinter = false) {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Bar",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Sale on premises",
-    })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Sale on premises",
+  });
+  const venueId = await venueLocationId(suite.db);
+  const locationId = venueId;
   const agents = await suite.db
     .insert(printAgents)
     .values([

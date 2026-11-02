@@ -3,15 +3,15 @@ import {
   captureError,
   deviceProfilePrinters,
   devices,
-  locations,
   pagePrinters,
   printerHolders,
   printers,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { and, asc, eq } from "drizzle-orm";
@@ -56,11 +56,9 @@ function lists(partial: Partial<ProfilePrinterLists>): ProfilePrinterLists {
 }
 
 async function seedLocation(name: string): Promise<string> {
-  const [row] = await suite.db
-    .insert(locations)
-    .values({ name, invoiceLocales: ["es"], operationDescription: "Hospitality" })
-    .returning({ id: locations.id });
-  return row!.id;
+  await seedVenue(suite.db, { name, invoiceLocales: ["es"], operationDescription: "Hospitality" });
+  const venueId = await venueLocationId(suite.db);
+  return venueId;
 }
 
 async function seedPrinter(
