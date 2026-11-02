@@ -1315,6 +1315,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The request to hand the work over to another server was not valid, so nothing was changed. Start the handover again.",
     es: "La solicitud para pasar el trabajo a otro servidor no era válida, así que no se ha cambiado nada. Vuelve a empezar el cambio de servidor.",
   },
+  "handover.step_out_of_order": {
+    en: "The handover is at a different stage, so this step cannot be taken now. Refresh the page to see where it stands.",
+    es: "El cambio de servidor está en otra fase, así que este paso no se puede dar ahora. Actualiza la página para ver en qué punto está.",
+  },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",
     es: "Este aviso ya no existe. Actualiza la lista.",

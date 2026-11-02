@@ -836,7 +836,7 @@ it.each([
 it("has a sentence in both languages for each handover refusal", () => {
   const GENERIC_EN = codeMessage("test.unmapped_code", "en");
   const GENERIC_ES = codeMessage("test.unmapped_code", "es");
-  for (const code of ["handover.request_invalid"]) {
+  for (const code of ["handover.request_invalid", "handover.step_out_of_order"]) {
     expect(codeMessage(code, "en")).not.toBe(GENERIC_EN);
     expect(codeMessage(code, "es")).not.toBe(GENERIC_ES);
     expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
