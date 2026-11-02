@@ -1,9 +1,15 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
-import { asc, eq } from "drizzle-orm";
-import { locations, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { asc } from "drizzle-orm";
+import {
+  readVenue,
+  readVenueClock,
+  venueLocationId,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import { authorizeManager, persons, resolveManagementSession } from "@waitron/identity";
-import { readLocationClock } from "@waitron/reporting";
 import { AppError, jobOrigin } from "@waitron/shared";
 import {
   createErrorBoundary,
@@ -30,10 +36,9 @@ import type { Logger } from "./logger.js";
 import type { ModuleTimeRecordExport } from "@waitron/module";
 import { mountAttendanceExportApi } from "./attendance-export-api.js";
 import { parseHoursQuery, parseOwnAttendanceCommand } from "./hours-request.js";
-import { assertOwnAttendanceLocation } from "./attendance-own-scope.js";
 export interface ManagementAttendanceApiDeps {
   db: Database;
-  cfg: { nodeId: string; locationId: string };
+  cfg: { nodeId: string };
   now: () => Date;
   exporter?: ModuleTimeRecordExport;
 }
@@ -77,15 +82,7 @@ export function mountManagementAttendanceApi(
         await withTransaction(deps.db, async (tx) => {
           const viewer = await resolveManagementSession(tx, token);
           noQuery(c);
-          const inbox = await readAttendanceInbox(tx, viewer.personId);
-          if (!inbox.locations.some((location) => location.id === deps.cfg.locationId)) {
-            const current = await tx
-              .select({ id: locations.id, name: locations.name, timeZone: locations.timeZone })
-              .from(locations)
-              .where(eq(locations.id, deps.cfg.locationId));
-            inbox.locations.push(...current);
-          }
-          return inbox;
+          return readAttendanceInbox(tx, viewer.personId);
         }),
       );
     }),
@@ -97,13 +94,8 @@ export function mountManagementAttendanceApi(
         await withTransaction(deps.db, async (tx) => {
           const viewer = await resolveManagementSession(tx, token);
           const scope = parseHoursQuery(new URL(c.req.url).searchParams, "own");
-          await assertOwnAttendanceLocation(tx, {
-            personId: viewer.personId,
-            locationId: scope.locationId,
-            currentLocationId: deps.cfg.locationId,
-          });
           const now = deps.now();
-          const clock = await readLocationClock(tx, scope.locationId);
+          const clock = await readVenueClock(tx);
           return readPersonHours(tx, { ...scope, personId: viewer.personId, clock, now });
         }),
       );
@@ -116,11 +108,6 @@ export function mountManagementAttendanceApi(
         await withTransaction(deps.db, async (tx) => {
           const viewer = await resolveManagementSession(tx, token);
           const scope = parseAttendanceDayQuery(new URL(c.req.url).searchParams, "worker");
-          await assertOwnAttendanceLocation(tx, {
-            personId: viewer.personId,
-            locationId: scope.locationId,
-            currentLocationId: deps.cfg.locationId,
-          });
           return readAttendanceDay(tx, { ...scope, personId: viewer.personId });
         }),
       );
@@ -148,12 +135,6 @@ export function mountManagementAttendanceApi(
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           const viewer = await resolveManagementSession(tx, token);
-          if (command.action === "request")
-            await assertOwnAttendanceLocation(tx, {
-              personId: viewer.personId,
-              locationId: command.locationId,
-              currentLocationId: deps.cfg.locationId,
-            });
           return executeAttendanceCommand(tx, {
             nodeId: deps.cfg.nodeId,
             requestedByPersonId: viewer.personId,
@@ -173,15 +154,8 @@ export function mountManagementAttendanceApi(
         await withTransaction(deps.db, async (tx) => {
           await authorize(tx, token);
           const scope = parseHoursQuery(new URL(c.req.url).searchParams, "manager");
-          const [location] = await tx
-            .select({ id: locations.id })
-            .from(locations)
-            .where(eq(locations.id, scope.locationId))
-            .limit(1);
-          if (!location)
-            throw new AppError("attendance.invalid", { reason: "record_scope_or_period" });
           const now = deps.now();
-          const clock = await readLocationClock(tx, scope.locationId);
+          const clock = await readVenueClock(tx);
           return readManagerHours(tx, { ...scope, clock, now });
         }),
       );
@@ -194,17 +168,14 @@ export function mountManagementAttendanceApi(
         await withTransaction(deps.db, async (tx): Promise<AttendanceLookups> => {
           const viewer = await authorize(tx, token);
           noQuery(c);
-          const locationRows = await tx
-            .select({ id: locations.id, name: locations.name, timeZone: locations.timeZone })
-            .from(locations)
-            .orderBy(asc(locations.name), asc(locations.id));
+          const { name, timeZone } = await readVenue(tx);
           const people = await tx
             .select({ personId: persons.id, displayName: persons.displayName })
             .from(persons)
             .orderBy(asc(persons.displayName), asc(persons.id));
           return {
             viewer: { personId: viewer.authorizedBy, canSelfApprove: viewer.role === "admin" },
-            locations: locationRows,
+            locations: [{ id: await venueLocationId(tx), name, timeZone }],
             people,
           };
         }),

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { beforeEach, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { locations, withTransaction } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -15,7 +15,6 @@ import {
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
   WorkforceBackend,
-  attendanceQuestions,
   readAttendanceInbox,
   timeEntries,
   upsertAttendanceQuestion,
@@ -389,73 +388,6 @@ it("forbids another subject's target, manager actions, overrides and stale own r
   });
   expect(snapshot()).toEqual(before);
 });
-async function otherWorkplace() {
-  const [other] = await suite.db
-    .insert(locations)
-    .values({ name: "Old", invoiceLocales: ["es"], operationDescription: "Restaurant" })
-    .returning();
-  return other!;
-}
-async function askQuestionAt(other: { id: string }, personId = venue.personId) {
-  await suite.db.insert(attendanceQuestions).values({
-    locationId: other.id,
-    personId,
-    businessDay: "2026-01-04",
-    kind: "missing-times",
-    active: false,
-    shiftKey: "old-place",
-    evidenceKeys: ["retained"],
-    createdAt: "2026-01-04T12:00:00.000Z",
-    inactiveReason: "retired",
-    startAt: "2026-01-04T04:00:00.000Z",
-    endAt: "2026-01-05T04:00:00.000Z",
-    missingKinds: ["in", "out"],
-  });
-}
-it("admits another own workplace only where a person with no clock entries has a question", async () => {
-  const other = await otherWorkplace();
-  const [worker] = await suite.db
-    .insert(persons)
-    .values({ displayName: "New worker", role: "staff" })
-    .returning({ id: persons.id });
-  const cookie = `${MANAGEMENT_COOKIE}=${
-    (await withTransaction(suite.db, (tx) => startManagementSession(tx, { personId: worker!.id })))
-      .token
-  }`;
-  const route = own + `hours?locationId=${other.id}&kind=month&date=2026-01-05`;
-  let response = await ask(route, undefined, cookie);
-  expect(response.status).toBe(403);
-  expect(await response.json()).toMatchObject({ error: { code: "attendance.not_permitted" } });
-  await askQuestionAt(other, worker!.id);
-  response = await ask(route, undefined, cookie);
-  expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({
-    personId: worker!.id,
-    locationId: other.id,
-    workedMinutes: 0,
-  });
-});
-it("refuses a person with clock entries everywhere once a second location row exists", async () => {
-  const other = await otherWorkplace();
-  const route = own + `hours?locationId=${other.id}&kind=month&date=2026-01-05`;
-  await withTransaction(suite.db, async (tx) => {
-    const common = {
-      ...venue.cfg,
-      personId: venue.personId,
-      origin: jobOrigin("dashboard"),
-      offsetMinutes: 60,
-    };
-    await backend.clockIn(tx, { ...common, at: "2026-01-06T09:00:00Z" });
-    await backend.clockOut(tx, { ...common, at: "2026-01-06T17:00:00Z" });
-  });
-  expect((await ask(route)).status).toBe(403);
-  await askQuestionAt(other);
-  for (const place of [other.id, venue.cfg.locationId]) {
-    const response = await ask(own + `hours?locationId=${place}&kind=month&date=2026-01-05`);
-    expect(response.status, place).toBe(400);
-    expect(await response.json()).toMatchObject({ error: { code: "provisioning.second_venue" } });
-  }
-});
 it("rechecks a revoked own session after authentication and before the human write", async () => {
   expect((await ask(own + path())).status).toBe(200);
   let reached!: () => void, release!: () => void;
@@ -582,7 +514,8 @@ it("another worker's actual target, question and proposal confer no own authorit
   expect(value.record.entries.every((e) => e.entry.personId === venue.personId)).toBe(true);
 });
 
-it("refuses an unknown manager workplace with the same domain refusal as queue and day", async () => {
+// A1301: deleted with the parameter in S15
+it("answers the venue's hours, queue and day whatever workplace id the query names", async () => {
   const locationId = crypto.randomUUID();
   for (const route of [
     `hours?locationId=${locationId}&kind=pay-period`,
@@ -590,12 +523,7 @@ it("refuses an unknown manager workplace with the same domain refusal as queue a
     `day?locationId=${locationId}&personId=${venue.personId}&date=2026-01-05`,
   ]) {
     const response = await ask("/management-api/attendance/" + route, undefined, ownerCookie);
-    expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({
-      error: { code: "attendance.invalid", params: { reason: "record_scope_or_period" } },
-    });
+    expect(response.status, route).toBe(200);
+    expect(await response.json()).toMatchObject({ locationId: venue.cfg.locationId });
   }
-  expect(
-    (await ask("/management-api/attendance/" + path("pay-period"), undefined, ownerCookie)).status,
-  ).toBe(200);
 });

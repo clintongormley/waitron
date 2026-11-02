@@ -2421,7 +2421,7 @@ async function bootServer(
       app,
       {
         db,
-        cfg: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
+        cfg: { nodeId: tradingContext.nodeId },
         now,
         exporter: selectTimeRecordExport(setsToMigrate),
       },

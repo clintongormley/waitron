@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   IDENTITY_MIGRATIONS,
@@ -12,13 +12,7 @@ import {
   withPassiveManagementRead,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import {
-  WORKFORCE_MIGRATIONS,
-  WorkforceBackend,
-  attendanceQuestions,
-  attendanceMail,
-  upsertAttendanceQuestion,
-} from "@waitron/workforce";
+import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
 import { WORKFORCE_ES_RECORD_EXPORT } from "@waitron/workforce-es";
 import { jobOrigin } from "@waitron/shared";
 import type { ModuleTimeRecordExport } from "@waitron/module";
@@ -221,12 +215,7 @@ describe("authenticated working-time downloads", () => {
       expect((await ask("manager", {}, managerCookie)).status).toBe(200);
     },
   );
-  it("restricts own workplace, allows one where the worker has a question and refuses missing location or person after authority", async () => {
-    const [unrelated] = await suite.db
-      .insert(locations)
-      .values({ name: "Unrelated", invoiceLocales: ["en"], operationDescription: "Sale" })
-      .returning();
-    await fail(await ask("own", { locationId: unrelated!.id }), 403, "attendance.not_permitted");
+  it("refuses missing location or person after authority", async () => {
     await fail(await ask("own", { locationId: crypto.randomUUID() }), 400, "attendance.invalid");
     await fail(
       await ask("manager", { personId: crypto.randomUUID() }, managerCookie),
@@ -239,33 +228,6 @@ describe("authenticated working-time downloads", () => {
       "authorization.not_permitted",
     );
     expect(provider.prepare).not.toHaveBeenCalled();
-    const alternate = mount();
-    // The current appliance location differs; the worker has a question at the selected one.
-    const historical = new Hono();
-    const deps = {
-      db: suite.db,
-      cfg: { nodeId: fixture.nodeId, locationId: unrelated!.id },
-      now: () => new Date(),
-      exporter: provider,
-    };
-    mountManagementAttendanceApi(historical, deps, logger);
-    expect((await ask("own", {}, staffCookie, historical)).status).toBe(403);
-    await suite.db.insert(attendanceQuestions).values({
-      locationId: fixture.locationId,
-      personId: fixture.personId,
-      businessDay: "2026-01-04",
-      kind: "missing-times",
-      active: false,
-      shiftKey: "old-place",
-      evidenceKeys: ["retained"],
-      createdAt: "2026-01-04T12:00:00.000Z",
-      inactiveReason: "retired",
-      startAt: "2026-01-04T04:00:00.000Z",
-      endAt: "2026-01-05T04:00:00.000Z",
-      missingKinds: ["in", "out"],
-    });
-    expect((await ask("own", {}, staffCookie, historical)).status).toBe(200);
-    expect((await ask("own", {}, staffCookie, alternate)).status).toBe(200);
   });
   it("never exports a caller-supplied person on the own route", async () => {
     await fail(
@@ -430,7 +392,7 @@ describe("authenticated working-time downloads", () => {
       missing,
       {
         db: suite.db,
-        cfg: { nodeId: fixture.nodeId, locationId: fixture.locationId },
+        cfg: { nodeId: fixture.nodeId },
         now: () => new Date(),
       },
       logger,
@@ -566,54 +528,5 @@ it.each(["staff", "manager"] as const)(
           .where(eq(managementSessions.personId, personId))
       )[0]!.lastSeenAt,
     ).not.toBe(old);
-  },
-);
-it.each(["retained", "removed"] as const)(
-  "rechecks a %s question-only historical workplace after formatting",
-  async (state) => {
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Former workplace", invoiceLocales: ["en"], operationDescription: "Sale" })
-      .returning();
-    const questionId = await withTransaction(suite.db, (tx) =>
-      upsertAttendanceQuestion(
-        tx,
-        {
-          personId: fixture.personId,
-          day: {
-            businessDay: "2026-01-05",
-            startAt: "2026-01-05T00:00:00Z",
-            endAt: "2026-01-06T00:00:00Z",
-          },
-          shiftKey: "old-question-only",
-          kind: "missing-times",
-          missingKinds: ["in", "out"],
-          openEntryId: null,
-          automaticEntryId: null,
-          evidenceKeys: ["test:shift"],
-        },
-        new Date("2026-01-06T00:00:00Z"),
-      ),
-    );
-    const held = heldProvider();
-    const delayed = ask("own", { locationId: location!.id }, staffCookie, mount(held.exporter));
-    expect(
-      await Promise.race([held.started.then(() => "formatter"), delayed.then(() => "response")]),
-    ).toBe("formatter");
-    try {
-      if (state === "removed")
-        await withTransaction(suite.db, async (tx) => {
-          await tx.delete(attendanceMail).where(eq(attendanceMail.questionId, questionId));
-          await tx.delete(attendanceQuestions).where(eq(attendanceQuestions.id, questionId));
-        });
-    } finally {
-      held.release();
-    }
-    const response = await delayed;
-    if (state === "removed") await fail(response, 403, "attendance.not_permitted");
-    else {
-      expect(response.status).toBe(200);
-      expect(await response.text()).toContain("Former workplace");
-    }
   },
 );
