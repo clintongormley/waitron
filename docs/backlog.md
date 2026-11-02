@@ -415,8 +415,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   invoice version is accepted. It records the case decision and clears the held acknowledgement
   without another fiscal record. The separately gated manual brake action now makes only the
   first eligible held record due immediately and records a note on its holding case. Later
-  held records still wait for that answer to break the refusal run. Actual staff cancellation/refund
-  qualification remains unfinished; cancellation release currently requires the same issuing chain.
+  held records still wait for that answer to break the refusal run. The staff integration now
+  refunds cash through the till route, records the void, corrects the rejected original and files
+  the same held cancellation. Concurrent release and replay preserve the completed refund and
+  drawer jobs. Unknown or conflicting originals and an unsuitable existing cancellation refuse
+  record-producing remedies; release using another issuing chain also refuses. Whole-item review,
+  rebasing and CI remain before publication.
   The 2 November AEAT TEST run accepted an original and two successive S/N description corrections as `Correcto`; consultation matched
   the second correction's fingerprint. This one-identity probe does not enable production remedies.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).

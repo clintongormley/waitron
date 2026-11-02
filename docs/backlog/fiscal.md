@@ -1320,3 +1320,24 @@ installation code a UTC minute but kept the `packages/fiscal-verifactu/src/hour-
 their identifiers, the `source: "hour"` label the allocations carry, and test titles that still
 say "hour" for what is now a minute (for example "same-hour code", "burns the entire hour"). Before go-live it needs
 no compatibility code: until then any installation may be reset (CLAUDE.md §3).
+
+
+### Task 8 staff refund and held-cancellation qualification, 2 November 2026
+
+`apps/server/src/fiscal-remedy.staff-refund.test.ts` uses a real provisioned venue and the
+core sale and void writers. It returns 12.10 in cash through the till's refund route before
+voiding the invoice; the refund route deliberately refuses an already voided invoice. The
+filing queue sets the ordinary cancellation aside after the original's definitive rejection.
+An explicitly enabled synthetic correction is accepted by the real client and fake tax service;
+the administrator then releases the same cancellation. Concurrent release and reordered retries
+return the saved decision. A refund retry returns the original completed refund. The checks compare
+all sale, line, tender, settlement, void, refund, drawer, print-job and series rows, plus the
+immutable fiscal rows and chain head after release and filing.
+
+The other cases retain those accounting effects while refusing record-producing remedies for
+unknown outcomes, conflicting invoice identities and an already generated ordinary cancellation.
+An accepted correction from another issuing chain does not release the old chain's cancellation.
+That boundary remains a refusal, not a qualified cross-chain remedy. The original rejection in
+these cases is synthetic stored evidence; they do not send a real refund or establish a legal
+remedy. The public permitted-remedy set stays empty. Whole-item rebasing, the two required Claude
+reviews, the normal push hook and current-head CI remain before publication for owner review.
