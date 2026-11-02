@@ -1080,6 +1080,7 @@ export interface CancelledExtra {
   /** Null when the dish has no kitchen item. */
   item: {
     firedAt: string | null;
+    requestedAt: string | null;
     stationId: string | null;
     state: TicketState;
     firedQuantity: number;
@@ -1103,6 +1104,7 @@ export async function readCancelledExtra(
       dishGroupId: workingOrderLines.groupId,
       ticketItemId: ticketItems.id,
       firedAt: ticketItems.firedAt,
+      requestedAt: ticketItems.requestedAt,
       stationId: ticketItems.stationId,
       state: ticketItems.state,
       firedQuantity,
@@ -1127,6 +1129,7 @@ export async function readCancelledExtra(
         ? null
         : {
             firedAt: found.firedAt,
+            requestedAt: found.requestedAt,
             stationId: found.stationId,
             state: found.state!,
             firedQuantity: found.firedQuantity,

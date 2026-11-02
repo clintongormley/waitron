@@ -207,12 +207,13 @@ describe("A773 requested lifecycle: cancel", () => {
       params: { field: "preparationStarted" },
     });
   });
-  it("keeps the charge on a Requested dish moved away from its group's HOLD paper without telling either station", async () => {
+  it("keeps the charge on a Requested dish moved away from its group's HOLD paper: the move tells the station holding its HOLD paper, the cancel tells neither station", async () => {
     await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }, [venue.stationId]));
     try {
       const before = (await jobs()).length;
       const order = await requestedPizzas("hold");
       expect((await jobs()).slice(before)).toHaveLength(1);
+      const beforeMove = (await jobs()).length;
       const elsewhere = await inTx(venue, async (tx) => {
         const station = await createStation(tx, venue.cfg, { name: "No HOLD paper here" });
         await moveDishesToStation(
@@ -224,12 +225,44 @@ describe("A773 requested lifecycle: cancel", () => {
         );
         return station.id;
       });
+      const moved = (await jobs()).slice(beforeMove);
+      expect(moved.map((job) => job.printerId)).toEqual([venue.printerId]);
+      const slip = printedLines(moved[0]!.payload);
+      const header = slip.slice(1, slip.indexOf("GRUPO 1"));
+      expect(header.length).toBeGreaterThan(0);
+      expect(slip).toEqual([
+        "*** EN ESPERA CANCELADO ***",
+        ...header,
+        "GRUPO 1",
+        "3.000 x PIZZA",
+        "  + Olives x2",
+        "",
+      ]);
       await pay(order);
       const beforeCancel = (await jobs()).length;
       await cancel(order, await askFor(order, "keep_charge"));
       expect((await jobs()).slice(beforeCancel)).toEqual([]);
       expect(await notices(order, elsewhere)).toEqual([]);
-      expect(await notices(order)).toEqual([]);
+      expect(await notices(order)).toEqual([
+        {
+          cancelledExtra: null,
+          createdAt: expect.any(String),
+          direction: null,
+          id: expect.any(String),
+          kind: "rerouted",
+          lineName: "PIZZA",
+          movedTo: null,
+          note: null,
+          orderLabel: "#6",
+          quantity: "3.000",
+          reroutedTo: "No HOLD paper here",
+          soldInEach: true,
+          stationId: venue.stationId,
+          unitName: { es: "ud" },
+          wasStarted: false,
+          workingOrderId: order.billId,
+        },
+      ]);
     } finally {
       await inTx(venue, (tx) =>
         setStationPrinting(tx, { printHeldWork: false }, [venue.stationId]),

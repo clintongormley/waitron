@@ -3417,8 +3417,8 @@ export async function removePortions(
 
 /**
  * Once an extra is off its dish, tell a kitchen that has the dish which extra to take off: a fired
- * dish, or a held one at a station that has its group's HOLD paper. A dish never sent, held with no HOLD
- * ticket queued, or going to no station tells it nothing.
+ * dish, or an unfired one on HOLD paper ({@link holdPaperFor}, asked with the dish's item). Any
+ * other dish, or one going to no station, tells it nothing.
  */
 async function tellKitchenOfCancelledExtra(
   tx: Transaction,
@@ -3439,7 +3439,7 @@ async function tellKitchenOfCancelledExtra(
     return;
   }
   if (extra.dishGroupId === null) return;
-  const group = (await printedHeldGroups(tx, [extra.dishGroupId])).get(extra.dishGroupId);
+  const group = (await holdPaperFor(tx, [extra.dishGroupId]))(extra.dishGroupId, item);
   if (group === undefined) return;
   await enqueueExtraCancelled(
     tx,

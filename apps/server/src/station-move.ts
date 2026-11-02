@@ -21,7 +21,12 @@ import type { TicketState, CorrectionItem, FiredItem } from "./kitchen-print.js"
 import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { heldItem } from "./kitchen-phase.js";
-import { heldPaperStations, printedHeldGroups, recordHeldPaper } from "./order-groups.js";
+import {
+  heldPaperStations,
+  holdPaperFor,
+  printedHeldGroups,
+  recordHeldPaper,
+} from "./order-groups.js";
 import { readLineCancellations } from "./line-service-state.js";
 import { runServiceCommand } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
@@ -365,6 +370,7 @@ export async function moveDishesToStation(
                 stationId: ticketItems.stationId,
                 state: ticketItems.state,
                 firedAt: ticketItems.firedAt,
+                requestedAt: ticketItems.requestedAt,
                 madeHere: ticketItems.madeHere,
                 quantity: firedQuantity,
               })
@@ -401,16 +407,18 @@ export async function moveDishesToStation(
           stationId: request.stationId,
           moved: [],
         };
-      const printed = await printedHeldGroups(
+      const holdPaper = await holdPaperFor(
         tx,
         moving.flatMap((row) => (row.groupId === null ? [] : [row.groupId])),
       );
+      const paperOf = (row: (typeof moving)[number]) =>
+        row.groupId === null ? undefined : holdPaper(row.groupId, row);
       const byStation = new Map<string, typeof moving>();
       for (const row of moving)
         byStation.set(row.stationId!, [...(byStation.get(row.stationId!) ?? []), row]);
       for (const [oldStationId, lines] of byStation) {
         const corrections: CorrectionItem[] = lines.flatMap((row) => {
-          const group = row.groupId === null ? undefined : printed.get(row.groupId);
+          const group = paperOf(row);
           if (row.firedAt === null && group === undefined) return [];
           return [
             {
@@ -467,11 +475,7 @@ export async function moveDishesToStation(
       const paperAtDestination = await destinationHoldPaper(
         tx,
         request.stationId,
-        moving.flatMap((row) =>
-          row.firedAt === null && row.groupId !== null && printed.has(row.groupId)
-            ? [row.groupId]
-            : [],
-        ),
+        moving.flatMap((row) => (paperOf(row) === undefined ? [] : [row.groupId!])),
         moving.map((row) => row.id),
       );
       for (const [oldStationId, lines] of byStation) {
@@ -487,7 +491,7 @@ export async function moveDishesToStation(
         if (fired.length > 0) await enqueueKitchenTickets(tx, cfg, orderId, fired, { from });
         for (const [groupId, recorded] of paperAtDestination) {
           const held: FiredItem[] = lines
-            .filter((row) => row.firedAt === null && row.groupId === groupId)
+            .filter((row) => row.groupId === groupId && paperOf(row) !== undefined)
             .map((row) => ({
               workingOrderLineId: row.id,
               stationId: request.stationId,
