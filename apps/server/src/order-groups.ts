@@ -2211,6 +2211,50 @@ export async function printedHeldGroups(
   return new Map(rows.map((row) => [row.id, row.displayNumber]));
 }
 
+/** An unfired kitchen item as {@link holdPaperFor} judges it. */
+export interface HoldPaperItem {
+  stationId: string | null;
+  requestedAt: string | null;
+  firedAt: string | null;
+}
+
+/**
+ * The HOLD paper number an unfired item is corrected under, or undefined for none (plan D56). A
+ * held group whose HOLD ticket printed corrects every unfired item; a fired group corrects only a
+ * Requested item at a station recorded as having the group's HOLD paper. A legacy-recalled item
+ * (neither stamp) in a fired group is corrected nowhere.
+ */
+export async function holdPaperFor(
+  tx: Transaction,
+  groupIds: readonly string[],
+): Promise<(groupId: string, item: HoldPaperItem) => number | undefined> {
+  if (groupIds.length === 0) return () => undefined;
+  const ids = [...new Set(groupIds)];
+  const rows = await tx
+    .select({
+      id: orderGroups.id,
+      state: orderGroups.state,
+      displayNumber: orderGroups.displayNumber,
+      holdPrintedAt: orderGroups.holdPrintedAt,
+    })
+    .from(orderGroups)
+    .where(inArray(orderGroups.id, ids));
+  const groups = new Map(rows.map((row) => [row.id, row]));
+  const paper = await heldPaperStations(
+    tx,
+    rows.filter((row) => row.state === "fired").map((row) => row.id),
+  );
+  return (groupId, item) => {
+    const group = groups.get(groupId);
+    if (group === undefined || item.firedAt !== null) return undefined;
+    if (group.state === "held")
+      return group.holdPrintedAt === null ? undefined : group.displayNumber;
+    if (group.state !== "fired" || item.requestedAt === null || item.stationId === null)
+      return undefined;
+    return paper.get(groupId)?.has(item.stationId) === true ? group.displayNumber : undefined;
+  };
+}
+
 /** Changed held work on a queued HOLD ticket, identified by its permanent group number. */
 export interface HeldChange {
   workingOrderId: string;

@@ -35,7 +35,7 @@ import { captureKitchenActivity } from "./attendance-capture.js";
 import { requireBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { refuseRecalledWrite } from "./draft-source.js";
-import { heldPaperStations } from "./order-groups.js";
+import { holdPaperFor } from "./order-groups.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueCorrectionSlips, enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
 import { bumpPartyRevision, partyRevision, runServiceCommand } from "./parties.js";
@@ -476,6 +476,7 @@ export async function cancelItem(
                   {
                     group: groupOf(dish),
                     requested: item!.requestedAt !== null && item!.firedAt === null,
+                    requestedAt: item!.requestedAt,
                     item: {
                       workingOrderLineId: row.id,
                       stationId: item!.stationId,
@@ -495,7 +496,7 @@ export async function cancelItem(
           "VOID",
         );
         if (groups.length > 0) {
-          const heldPaper = await heldPaperStations(
+          const holdPaper = await holdPaperFor(
             tx,
             corrections.flatMap(({ group, requested }) =>
               requested && group !== undefined ? [group.id] : [],
@@ -505,11 +506,16 @@ export async function cancelItem(
             tx,
             cfg,
             bill!.id,
-            corrections.flatMap(({ group, requested, item }) =>
+            corrections.flatMap(({ group, requested, requestedAt, item }) =>
               // Requested work printed nothing unless its station has its group's HOLD paper.
               item.fired ||
               group === undefined ||
-              (requested && heldPaper.get(group.id)?.has(item.stationId) !== true)
+              (requested &&
+                holdPaper(group.id, {
+                  stationId: item.stationId,
+                  requestedAt,
+                  firedAt: null,
+                }) === undefined)
                 ? []
                 : [
                     {

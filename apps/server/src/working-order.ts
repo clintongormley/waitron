@@ -270,6 +270,7 @@ import {
   correctJoin,
   recordJoiningStations,
   onShownBill,
+  holdPaperFor,
   printedHeldGroups,
   printHoldTickets,
   readReleaseReminders,
@@ -3157,6 +3158,19 @@ export interface VoidTarget {
   firedQuantity: number;
 }
 
+/** Each ticket item's `requested_at`, read in one select. */
+async function requestedAtOf(
+  tx: Transaction,
+  ticketItemIds: readonly string[],
+): Promise<Map<string, string | null>> {
+  if (ticketItemIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ id: ticketItems.id, requestedAt: ticketItems.requestedAt })
+    .from(ticketItems)
+    .where(inArray(ticketItems.id, [...ticketItemIds]));
+  return new Map(rows.map((row) => [row.id, row.requestedAt]));
+}
+
 /**
  * The caller checks that the bill and paid quantities allow removal. Corrections must precede
  * deletion because notices and slips read the removed rows.
@@ -3218,30 +3232,46 @@ export async function removeFromLine(
   // Before the delete or the reduction: the notice and the slip re-read the line.
   await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
   if (target.groupId !== null) {
-    const group = (await printedHeldGroups(tx, [target.groupId])).get(target.groupId);
-    if (group !== undefined) {
-      const held = childItems
-        .filter((item) => item.firedAt === null)
-        .map((item) => ({
-          workingOrderId: tabId,
-          workingOrderLineId: item.workingOrderLineId,
-          stationId: item.stationId,
-          quantity: removedQuantity(item),
-          groupId: target.groupId!,
-          group,
-        }));
-      if (target.ticketItemId !== null && target.firedAt === null) {
-        held.unshift({
-          workingOrderId: tabId,
-          workingOrderLineId: target.id,
-          stationId: target.stationId!,
-          quantity: removed ?? target.firedQuantity,
-          groupId: target.groupId,
-          group,
-        });
-      }
-      await correctHoldTickets(tx, cfg, held, { kind: "HOLD CANCELLED" });
-    }
+    const groupId = target.groupId;
+    const holdPaper = await holdPaperFor(tx, [groupId]);
+    const requestedAt =
+      target.ticketItemId === null || target.firedAt !== null
+        ? null
+        : (await requestedAtOf(tx, [target.ticketItemId])).get(target.ticketItemId)!;
+    const own =
+      target.ticketItemId === null
+        ? undefined
+        : holdPaper(groupId, { stationId: target.stationId, requestedAt, firedAt: target.firedAt });
+    const held = [
+      ...(own === undefined
+        ? []
+        : [
+            {
+              workingOrderId: tabId,
+              workingOrderLineId: target.id,
+              stationId: target.stationId!,
+              quantity: removed ?? target.firedQuantity,
+              groupId,
+              group: own,
+            },
+          ]),
+      ...childItems.flatMap((item) => {
+        const group = holdPaper(groupId, item);
+        return group === undefined
+          ? []
+          : [
+              {
+                workingOrderId: tabId,
+                workingOrderLineId: item.workingOrderLineId,
+                stationId: item.stationId,
+                quantity: removedQuantity(item),
+                groupId,
+                group,
+              },
+            ];
+      }),
+    ];
+    if (held.length > 0) await correctHoldTickets(tx, cfg, held, { kind: "HOLD CANCELLED" });
   }
   await bumpRevision(tx, [tabId]);
   if (removed === null) {
@@ -3322,30 +3352,52 @@ export async function removePortions(
   // Before the delete: the notice and the slip re-read the lines.
   await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
   const groupIds = [...new Set(targets.flatMap(({ groupId }) => groupId ?? []))];
-  const printed = await printedHeldGroups(tx, groupIds);
+  const holdPaper = await holdPaperFor(tx, groupIds);
+  const requested = await requestedAtOf(
+    tx,
+    targets.flatMap(({ ticketItemId, firedAt }) =>
+      ticketItemId === null || firedAt !== null ? [] : [ticketItemId],
+    ),
+  );
   const held = targets.flatMap((target) => {
-    const group = target.groupId === null ? undefined : printed.get(target.groupId);
-    if (group === undefined) return [];
-    const at = { workingOrderId: tabId, groupId: target.groupId!, group };
+    const groupId = target.groupId;
+    if (groupId === null) return [];
+    const own =
+      target.ticketItemId === null
+        ? undefined
+        : holdPaper(groupId, {
+            stationId: target.stationId,
+            requestedAt: requested.get(target.ticketItemId) ?? null,
+            firedAt: target.firedAt,
+          });
     return [
-      ...(target.ticketItemId !== null && target.firedAt === null
-        ? [
+      ...(own === undefined
+        ? []
+        : [
             {
-              ...at,
+              workingOrderId: tabId,
+              groupId,
+              group: own,
               workingOrderLineId: target.id,
               stationId: target.stationId!,
               quantity: target.firedQuantity,
             },
-          ]
-        : []),
-      ...childrenOf(target)
-        .filter((item) => item.firedAt === null)
-        .map((item) => ({
-          ...at,
-          workingOrderLineId: item.workingOrderLineId,
-          stationId: item.stationId,
-          quantity: item.firedQuantity,
-        })),
+          ]),
+      ...childrenOf(target).flatMap((item) => {
+        const group = holdPaper(groupId, item);
+        return group === undefined
+          ? []
+          : [
+              {
+                workingOrderId: tabId,
+                groupId,
+                group,
+                workingOrderLineId: item.workingOrderLineId,
+                stationId: item.stationId,
+                quantity: item.firedQuantity,
+              },
+            ];
+      }),
     ];
   });
   if (held.length > 0) await correctHoldTickets(tx, cfg, held, { kind: "HOLD CANCELLED" });
