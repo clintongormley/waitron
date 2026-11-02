@@ -28,8 +28,10 @@ import {
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
@@ -97,11 +99,13 @@ const setCategoryCell = (
 /** `suffix` tells apart the names of a second fixture in one database, where root categories and
  * Active products may not share a name with the first's. */
 async function fixture(tx: Transaction, suffix = "") {
-  const [loc] = await tx
-    .insert(locations)
-    .values({ name: "Venue", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
-    .returning();
-  const cfg = { locationId: locationId(loc!.id) };
+  await seedVenue(tx, {
+    name: "Venue",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+  });
+  const venueId = await venueLocationId(tx);
+  const cfg = { locationId: locationId(venueId) };
   const [terrace] = await tx
     .insert(floorZones)
     .values({ ...cfg, name: "Terrace" })
@@ -2102,11 +2106,13 @@ describe("routing previews", () => {
 
   it("reports exactly what working out every product in every zone reports, for every kind of change", async () =>
     scoped(async (tx) => {
-      const [loc] = await tx
-        .insert(locations)
-        .values({ name: "Venue", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
-        .returning();
-      const cfg = { locationId: locationId(loc!.id) };
+      await seedVenue(tx, {
+        name: "Venue",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+      });
+      const venueId = await venueLocationId(tx);
+      const cfg = { locationId: locationId(venueId) };
       const zone = async (name: string) => {
         const [row] = await tx
           .insert(floorZones)

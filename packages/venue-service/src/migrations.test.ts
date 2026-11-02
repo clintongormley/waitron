@@ -6,20 +6,20 @@ import {
   CHECK_VIOLATION,
   CORE_MIGRATIONS,
   deviceProfiles,
-  devices,
   engineErrorMessage,
   floorZones,
   FOREIGN_KEY_VIOLATION,
   isRefusal,
   kitchenStations,
-  locations,
   UNIQUE_VIOLATION,
   withTransaction,
+  locations,
+  venueLocationId,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { departments } from "./schema/service.js";
@@ -1099,19 +1099,20 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
   });
 
   it("refuses a notice kind outside the vocabulary, a zero quantity, a missing station and a table on a notice that is not a move", async () => {
-    await seedTenant(db);
-    const [location] = await db
-      .insert(locations)
-      .values({ name: "Venue", invoiceLocales: ["en"], operationDescription: "Hospitality" })
-      .returning({ id: locations.id });
+    await seedVenue(db, {
+      name: "Venue",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    });
+    const venueId = await venueLocationId(db);
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: location!.id, name: "Grill" })
+      .values({ locationId: venueId, name: "Grill" })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
       insert into working_orders (id, source, location_id, order_number, opened_at)
-      values (${orderId}, 'dashboard', ${location!.id}, 1, ${new Date().toISOString()})`);
+      values (${orderId}, 'dashboard', ${venueId}, 1, ${new Date().toISOString()})`);
     const notice = (kind: string, quantity: number, stationId: string) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity, created_at)
@@ -1149,19 +1150,20 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
   });
 
   it("refuses a direction outside added and removed, and a direction on a notice that is not a change", async () => {
-    await seedTenant(db);
-    const [location] = await db
-      .insert(locations)
-      .values({ name: "Venue", invoiceLocales: ["en"], operationDescription: "Hospitality" })
-      .returning({ id: locations.id });
+    await seedVenue(db, {
+      name: "Venue",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    });
+    const venueId = await venueLocationId(db);
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: location!.id, name: "Grill" })
+      .values({ locationId: venueId, name: "Grill" })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
       insert into working_orders (id, source, location_id, order_number, opened_at)
-      values (${orderId}, 'dashboard', ${location!.id}, 1, ${new Date().toISOString()})`);
+      values (${orderId}, 'dashboard', ${venueId}, 1, ${new Date().toISOString()})`);
     const notice = (kind: string, direction: string | null) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity, direction,
@@ -1195,19 +1197,20 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
   });
 
   it("refuses a cancelled extra on a notice that is not a change", async () => {
-    await seedTenant(db);
-    const [location] = await db
-      .insert(locations)
-      .values({ name: "Venue", invoiceLocales: ["en"], operationDescription: "Hospitality" })
-      .returning({ id: locations.id });
+    await seedVenue(db, {
+      name: "Venue",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    });
+    const venueId = await venueLocationId(db);
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: location!.id, name: "Grill" })
+      .values({ locationId: venueId, name: "Grill" })
       .returning({ id: kitchenStations.id });
     const orderId = randomUUID();
     await db.execute(sql`
       insert into working_orders (id, source, location_id, order_number, opened_at)
-      values (${orderId}, 'dashboard', ${location!.id}, 1, ${new Date().toISOString()})`);
+      values (${orderId}, 'dashboard', ${venueId}, 1, ${new Date().toISOString()})`);
     const notice = (kind: string, cancelledExtra: string | null) =>
       sql`insert into kitchen_notices
             (id, station_id, working_order_id, order_label, kind, line_name, quantity,
@@ -1240,37 +1243,30 @@ describe("the kitchen notices table refuses what its rules forbid", () => {
 
 describe("the kitchen screen tables refuse what their rules forbid", () => {
   async function venue() {
-    await seedTenant(db);
-    const [location] = await db
-      .insert(locations)
-      .values({ name: "Venue", invoiceLocales: ["en"], operationDescription: "Hospitality" })
-      .returning({ id: locations.id });
+    await seedVenue(db, {
+      name: "Venue",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    });
+    const venueId = await venueLocationId(db);
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: location!.id, name: "Grill" })
+      .values({ locationId: venueId, name: "Grill" })
       .returning({ id: kitchenStations.id });
     const [zone] = await db
       .insert(floorZones)
-      .values({ locationId: brandLocationId(location!.id), name: "Terrace" })
+      .values({ locationId: brandLocationId(venueId), name: "Terrace" })
       .returning({ id: floorZones.id });
     const [profile] = await db
       .insert(deviceProfiles)
       .values({ name: "Front till", formFactor: "till" })
       .returning({ id: deviceProfiles.id });
-    const [device] = await db
-      .insert(devices)
-      .values({
-        locationId: location!.id,
-        deviceProfileId: profile!.id,
-        label: "Till 1",
-        tokenHash: "hash",
-      })
-      .returning({ id: devices.id });
+    const device = await seedDevice(db, { profileId: profile!.id, label: "Till 1" });
     return {
       stationId: station!.id,
       zoneId: zone!.id,
       profileId: profile!.id,
-      deviceId: device!.id,
+      deviceId: device.deviceId,
     };
   }
 

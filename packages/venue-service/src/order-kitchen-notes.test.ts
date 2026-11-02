@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, locations, parties, workingOrders, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, parties, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import * as notes from "./index.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
@@ -12,29 +12,20 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
   timeoutMs: 60_000,
 });
-let locationId: string;
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [row] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Dining room",
-      invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
-      timeZone: "UTC",
-    })
-    .returning();
-  locationId = row!.id;
+  await seedVenue(suite.db, {
+    name: "Dining room",
+    invoiceLocales: ["en"],
+    operationDescription: "Restaurant",
+    timeZone: "UTC",
+  });
 });
 async function owner(kind: "order" | "party") {
   if (kind === "party") {
     const [row] = await suite.db.insert(parties).values({ openedBy: randomUUID() }).returning();
     return { partyId: row!.id };
   }
-  const [row] = await suite.db
-    .insert(workingOrders)
-    .values({ locationId, source: "dashboard", orderNumber: 1 })
-    .returning();
+  const row = await seedWorkingOrder(suite.db, { source: "dashboard", orderNumber: 1 });
   return { workingOrderId: row!.id };
 }
 const tx = <T>(fn: Parameters<typeof withTransaction<T>>[1]) => withTransaction(suite.db, fn);

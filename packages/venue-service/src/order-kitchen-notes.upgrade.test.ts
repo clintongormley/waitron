@@ -12,9 +12,10 @@ import {
   workingOrderLines,
   workingOrders,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { applyMigrationSet, useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { kitchenNotices } from "./schema/kitchen-notices.js";
@@ -78,23 +79,18 @@ const suite = useVenueDb({
 });
 
 it("adds order instructions to a populated predecessor without changing its dish notes, notices or triggers", async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Existing restaurant",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant service",
-    })
-    .returning();
+  await seedVenue(suite.db, {
+    name: "Existing restaurant",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant service",
+  });
+  const venueId = await venueLocationId(suite.db);
+  const [location] = await suite.db.select().from(locations);
   const [station] = await suite.db
     .insert(kitchenStations)
-    .values({ locationId: location!.id, name: "Kitchen" })
+    .values({ locationId: venueId, name: "Kitchen" })
     .returning();
-  const [order] = await suite.db
-    .insert(workingOrders)
-    .values({ locationId: location!.id, source: "dashboard", orderNumber: 42 })
-    .returning();
+  const order = await seedWorkingOrder(suite.db, { source: "dashboard", orderNumber: 42 });
   const [line] = await suite.db
     .insert(workingOrderLines)
     .values({

@@ -4,17 +4,15 @@ import { eq, sql } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  locations,
   parties,
   orderDrafts,
   orderDraftLines,
-  workingOrders,
   workingOrderLines,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import * as allergy from "./index.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
@@ -24,19 +22,13 @@ const suite = useVenueDb({
 const actor = randomUUID();
 const tx = <T>(fn: (t: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 let partyId: string;
-let locationId: string;
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Dining room",
-      invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
-      timeZone: "UTC",
-    })
-    .returning();
-  locationId = location!.id;
+  await seedVenue(suite.db, {
+    name: "Dining room",
+    invoiceLocales: ["en"],
+    operationDescription: "Restaurant",
+    timeZone: "UTC",
+  });
   const [party] = await suite.db.insert(parties).values({ openedBy: actor }).returning();
   partyId = party!.id;
 });
@@ -101,10 +93,11 @@ async function draftLine(id = partyId) {
   return line!.id;
 }
 async function workingLine(id = partyId, parentLineId?: string) {
-  const [order] = await suite.db
-    .insert(workingOrders)
-    .values({ locationId, partyId: id, orderNumber: 1, source: "dashboard" })
-    .returning();
+  const order = await seedWorkingOrder(suite.db, {
+    partyId: id,
+    orderNumber: 1,
+    source: "dashboard",
+  });
   const [line] = await suite.db
     .insert(workingOrderLines)
     .values({

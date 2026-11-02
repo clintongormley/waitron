@@ -6,14 +6,13 @@ import {
   CORE_MIGRATIONS,
   engineErrorMessage,
   kitchenStations,
-  locations,
   parties,
   ticketItems,
   workingOrderLines,
-  workingOrders,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -42,35 +41,28 @@ let orderId: string;
 let stationId: string;
 let ticketId: string;
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Dining room",
-      invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
-    })
-    .returning();
-  const nodeId = await seedNode(suite.db, locationId(location!.id));
+  await seedVenue(suite.db, {
+    name: "Dining room",
+    invoiceLocales: ["en"],
+    operationDescription: "Restaurant",
+  });
+  const venueId = await venueLocationId(suite.db);
+  const nodeId = await seedNode(suite.db, locationId(venueId));
   const [station] = await suite.db
     .insert(kitchenStations)
     .values({
-      locationId: location!.id,
+      locationId: venueId,
       name: "Grill",
     })
     .returning();
   stationId = station!.id;
   const [party] = await suite.db.insert(parties).values({ openedBy: actor }).returning();
   partyId = party!.id;
-  const [order] = await suite.db
-    .insert(workingOrders)
-    .values({
-      locationId: location!.id,
-      partyId,
-      orderNumber: 1,
-      source: "dashboard",
-    })
-    .returning();
+  const order = await seedWorkingOrder(suite.db, {
+    partyId,
+    orderNumber: 1,
+    source: "dashboard",
+  });
   orderId = order!.id;
   const [line] = await suite.db
     .insert(workingOrderLines)

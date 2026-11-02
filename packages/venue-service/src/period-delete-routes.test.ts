@@ -13,12 +13,13 @@ import {
   CORE_MIGRATIONS,
   kitchenStations,
   locationBusinessDaySettings,
-  locations,
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   IDENTITY_MIGRATIONS,
@@ -78,17 +79,15 @@ const slot = (periodId: string, startsAt: string, endsAt: string): MenuSlot => (
 const hhmm = (time: string) => time.slice(0, 5);
 
 async function routed() {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: `House ${randomUUID()}`,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00:00",
-    })
-    .returning({ id: locations.id });
-  const locationId = brandLocationId(location!.id);
+  await seedVenue(db, {
+    name: `House ${randomUUID()}`,
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Hospitality",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00:00",
+  });
+  const venueId = await venueLocationId(db);
+  const locationId = brandLocationId(venueId);
   const cfg = { locationId };
   const [station] = await db
     .insert(kitchenStations)

@@ -7,12 +7,13 @@ import {
   devices,
   floorZones,
   kitchenStations,
-  locations,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice as seedSharedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError, locationId as brandLocationId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import type { DeviceKitchenScreen, ProfileKitchenScreens } from "@waitron/module";
@@ -72,15 +73,13 @@ const refused = (field: string, reason: string) => ({
 });
 
 async function seedLocation(): Promise<LocationId> {
-  const [row] = await db
-    .insert(locations)
-    .values({
-      name: `Venue ${randomUUID()}`,
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
-    })
-    .returning({ id: locations.id });
-  return brandLocationId(row!.id);
+  await seedVenue(db, {
+    name: `Venue ${randomUUID()}`,
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+  });
+  const venueId = await venueLocationId(db);
+  return brandLocationId(venueId);
 }
 
 async function seedProfile(formFactor: "till" | "phone-portrait" | "kds"): Promise<string> {
@@ -103,7 +102,7 @@ async function seedStation(locationId: LocationId, name: string) {
  * Stations Grill, Cold and Pastry, shown Cold, Grill, Pastry; zones Terrace, Dining room and
  * Counter, shown Terrace, Dining room, Counter; a kitchen display profile and a till profile.
  */
-async function seedVenue() {
+async function seedVenueWithStations() {
   const locationId = await seedLocation();
   const cfg = { locationId };
   const grill = await seedStation(locationId, "Grill");
@@ -142,7 +141,7 @@ async function seedVenue() {
   };
 }
 
-type Venue = Awaited<ReturnType<typeof seedVenue>>;
+type Venue = Awaited<ReturnType<typeof seedVenueWithStations>>;
 
 const set = (venue: Venue, profileId: string, screens: ProfileKitchenScreens) =>
   scoped((tx) => setProfileKitchenScreens(tx, venue.cfg, profileId, screens));
@@ -154,7 +153,7 @@ async function screensOf(venue: Venue, profileId: string) {
 
 describe("a profile's kitchen screens", () => {
   it("stores each kind a kitchen display offers, stations by name and zones in display order", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await expect(
       set(venue, venue.kds, {
         station: { stationIds: [venue.grill, venue.cold, venue.grill], zoneIds: null },
@@ -176,7 +175,7 @@ describe("a profile's kitchen screens", () => {
   });
 
   it("lets a till bound a station screen and a pass screen", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.till, {
       station: { stationIds: null, zoneIds: null },
       pass: { stationIds: [venue.grill], zoneIds: [venue.dining] },
@@ -188,7 +187,7 @@ describe("a profile's kitchen screens", () => {
   });
 
   it("reads every live profile, one with nothing stored as no screens, and no retired one", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: { stationIds: [venue.grill], zoneIds: null } });
     await db
       .update(deviceProfiles)
@@ -203,7 +202,7 @@ describe("a profile's kitchen screens", () => {
   });
 
   it("omits deleted stations and zones", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, {
       pass: { stationIds: [venue.grill, venue.cold], zoneIds: [venue.dining, venue.terrace] },
     });
@@ -218,7 +217,7 @@ describe("a profile's kitchen screens", () => {
   });
 
   it("replaces every kind on each save, dropping a kind it does not name", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, {
       station: { stationIds: [venue.grill], zoneIds: null },
       pass: { stationIds: null, zoneIds: null },
@@ -232,7 +231,7 @@ describe("a profile's kitchen screens", () => {
   });
 
   it("lets a till profile and a handheld profile each store a pass monitor", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     const handheld = await seedProfile("phone-portrait");
     for (const profileId of [venue.till, handheld]) {
       await expect(
@@ -247,14 +246,14 @@ describe("a profile's kitchen screens", () => {
   });
 
   it("refuses zones on a station screen", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await expect(
       outcome(set(venue, venue.kds, { station: { stationIds: null, zoneIds: [venue.dining] } })),
     ).resolves.toEqual(refused("kitchenScreens", "not_for_screen"));
   });
 
   it("refuses an explicit empty list, naming its field", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     const every = { stationIds: null, zoneIds: null };
     for (const [screens, field] of [
       [{ station: { stationIds: [], zoneIds: null } }, "stationScreenStations"],
@@ -271,7 +270,7 @@ describe("a profile's kitchen screens", () => {
   });
 
   it("refuses an unknown station or zone, or one switched off", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     const offStation = await seedStation(venue.cfg.locationId, "Old grill");
     await db
       .update(kitchenStations)
@@ -295,7 +294,7 @@ describe("a profile's kitchen screens", () => {
   });
 
   it("refuses deleted stations and previously stored deleted zones", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, {
       pass: { stationIds: [venue.grill, venue.cold], zoneIds: [venue.dining] },
     });
@@ -348,7 +347,7 @@ describe("a profile's kitchen screens", () => {
   });
 
   it("refuses the screens of a profile that is unknown or retired", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await db
       .update(deviceProfiles)
       .set({ retiredAt: new Date().toISOString() })
@@ -364,7 +363,7 @@ describe("a profile's kitchen screens", () => {
 
 describe("a profile whose form factor changes", () => {
   it("keeps a kitchen display's pass monitor once the profile is a till, and saves it again", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     const screens = {
       station: { stationIds: null, zoneIds: null },
       pass_monitor: { stationIds: [venue.grill], zoneIds: [venue.dining] },
@@ -388,7 +387,7 @@ describe("a kitchen screen added to a profile", () => {
   ) => scoped((tx) => addProfileKitchenScreen(tx, venue.cfg, profileId, screen));
 
   it("creates the profile's row with the lists it is given", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await add(venue, venue.kds, { kind: "station", stationIds: [venue.grill], zoneIds: null });
     await add(venue, venue.kds, {
       kind: "pass",
@@ -402,7 +401,7 @@ describe("a kitchen screen added to a profile", () => {
   });
 
   it("adds the stations and zones an explicit list lacks, removing none", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, {
       pass: { stationIds: [venue.grill], zoneIds: [venue.dining] },
     });
@@ -417,7 +416,7 @@ describe("a kitchen screen added to a profile", () => {
   });
 
   it("turns an explicit list into every one when given every one", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, {
       pass: { stationIds: [venue.grill], zoneIds: [venue.dining] },
     });
@@ -428,7 +427,7 @@ describe("a kitchen screen added to a profile", () => {
   });
 
   it("changes nothing on an every list, and leaves the other kinds alone", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, {
       station: { stationIds: null, zoneIds: null },
       pass_monitor: { stationIds: [venue.grill], zoneIds: null },
@@ -447,17 +446,8 @@ describe("a kitchen screen added to a profile", () => {
   });
 });
 
-async function seedDevice(venue: Venue, profileId: string, label: string): Promise<string> {
-  const [row] = await db
-    .insert(devices)
-    .values({
-      locationId: venue.cfg.locationId,
-      deviceProfileId: profileId,
-      label,
-      tokenHash: "hash",
-    })
-    .returning({ id: devices.id });
-  return row!.id;
+async function seedDevice(profileId: string, label: string): Promise<string> {
+  return (await seedSharedDevice(db, { profileId, label })).deviceId;
 }
 
 const choose = (
@@ -501,14 +491,14 @@ const every = { stationIds: null, zoneIds: null };
 
 describe("the kitchen screens a device chooses", () => {
   async function kitchen() {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, {
       station: { stationIds: [venue.grill, venue.cold], zoneIds: null },
       pass: { stationIds: null, zoneIds: [venue.dining, venue.terrace] },
       pass_monitor: every,
     });
-    const screen = await seedDevice(venue, venue.kds, "Pass screen");
-    const till = await seedDevice(venue, venue.till, "Till");
+    const screen = await seedDevice(venue.kds, "Pass screen");
+    const till = await seedDevice(venue.till, "Till");
     return { venue, screen, till };
   }
 
@@ -550,12 +540,12 @@ describe("the kitchen screens a device chooses", () => {
   });
 
   it("lets a till and a handheld choose a pass monitor within their profile's row, and read it back", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     const handheldProfile = await seedProfile("phone-portrait");
     const row = { stationIds: [venue.grill, venue.cold], zoneIds: [venue.dining, venue.terrace] };
     for (const profileId of [venue.till, handheldProfile]) {
       await set(venue, profileId, { pass_monitor: row });
-      const device = await seedDevice(venue, profileId, `Device ${profileId}`);
+      const device = await seedDevice(profileId, `Device ${profileId}`);
       await expect(
         outcome(
           choose(venue, device, profileId, [
@@ -788,7 +778,7 @@ describe("the kitchen screens a device chooses", () => {
 
   it("refuses deleted stations even for the device that stored them", async () => {
     const { venue, screen } = await kitchen();
-    const other = await seedDevice(venue, venue.kds, "Other");
+    const other = await seedDevice(venue.kds, "Other");
     const cold = { kind: "station", stationIds: [venue.cold], zoneIds: null } as const;
     await choose(venue, screen, venue.kds, [cold]);
     await db
@@ -853,11 +843,11 @@ describe("what a device's kitchen screens show", () => {
   });
 
   it("shows an every device the profile's stations by name, its removals in their places", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, {
       station: { stationIds: [venue.pastry, venue.grill, venue.cold], zoneIds: null },
     });
-    const screen = await seedDevice(venue, venue.kds, "Line");
+    const screen = await seedDevice(venue.kds, "Line");
     await choose(venue, screen, venue.kds, [{ kind: "station", ...every }]);
     await recordRemoval(screen, "station", { stationId: venue.grill });
     await expect(shown(venue, screen)).resolves.toEqual([
@@ -878,8 +868,8 @@ describe("what a device's kitchen screens show", () => {
   });
 
   it("shows an explicit device its stored stations and its removals by name", async () => {
-    const venue = await seedVenue();
-    const till = await seedDevice(venue, venue.till, "Till");
+    const venue = await seedVenueWithStations();
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [
       { kind: "pass", stationIds: [venue.pastry, venue.cold], zoneIds: [venue.counter] },
     ]);
@@ -903,8 +893,8 @@ describe("what a device's kitchen screens show", () => {
   });
 
   it("omits deleted stations and zones and reads restored fixtures", async () => {
-    const venue = await seedVenue();
-    const till = await seedDevice(venue, venue.till, "Till");
+    const venue = await seedVenueWithStations();
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [
       { kind: "pass", stationIds: [venue.grill, venue.cold], zoneIds: [venue.dining] },
     ]);
@@ -939,8 +929,8 @@ describe("what a device's kitchen screens show", () => {
   });
 
   it("omits deleted stations and zones while retaining live narrowed slots", async () => {
-    const venue = await seedVenue();
-    const till = await seedDevice(venue, venue.till, "Till");
+    const venue = await seedVenueWithStations();
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [
       {
         kind: "pass",
@@ -974,12 +964,12 @@ describe("what a device's kitchen screens show", () => {
   });
 
   it("shows every switched-on station and no zone filter when neither profile nor device lists any", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await db
       .update(kitchenStations)
       .set({ active: false })
       .where(eq(kitchenStations.id, venue.pastry));
-    const till = await seedDevice(venue, venue.till, "Till");
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [
       { kind: "station", ...every },
       { kind: "pass", ...every },
@@ -1008,11 +998,11 @@ describe("what a device's kitchen screens show", () => {
   });
 
   it("narrows every zone to the profile's list, less the device's recorded zone removals", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, {
       pass: { stationIds: [venue.grill], zoneIds: [venue.counter, venue.dining] },
     });
-    const screen = await seedDevice(venue, venue.kds, "Pass");
+    const screen = await seedDevice(venue.kds, "Pass");
     await choose(venue, screen, venue.kds, [{ kind: "pass", ...every }]);
     await recordRemoval(screen, "pass", { zoneId: venue.counter });
     await expect(shown(venue, screen)).resolves.toEqual([
@@ -1029,14 +1019,14 @@ describe("what a device's kitchen screens show", () => {
   });
 
   it("shows a kind recorded as removed after the stored ones, and one that lost its whole list", async () => {
-    const venue = await seedVenue();
-    const till = await seedDevice(venue, venue.till, "Till");
+    const venue = await seedVenueWithStations();
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [
       { kind: "pass", stationIds: [venue.grill], zoneIds: null },
     ]);
     await recordRemoval(till, "station");
     await recordRemoval(till, "station", { stationId: venue.cold });
-    const screen = await seedDevice(venue, venue.kds, "Line");
+    const screen = await seedDevice(venue.kds, "Line");
     await recordRemoval(screen, "station", { stationId: venue.grill });
     await expect(shown(venue, till)).resolves.toEqual([
       {
@@ -1072,8 +1062,8 @@ describe("what a device's kitchen screens show", () => {
   });
 
   it("shows a pass screen that lost its whole zone list with that zone as no longer available", async () => {
-    const venue = await seedVenue();
-    const screen = await seedDevice(venue, venue.kds, "Pass");
+    const venue = await seedVenueWithStations();
+    const screen = await seedDevice(venue.kds, "Pass");
     await recordRemoval(screen, "pass", { zoneId: venue.counter });
     await expect(shown(venue, screen)).resolves.toEqual([
       {
@@ -1089,26 +1079,26 @@ describe("what a device's kitchen screens show", () => {
   });
 
   it("shows nothing for a device that chose nothing, or one unknown here", async () => {
-    const venue = await seedVenue();
-    const till = await seedDevice(venue, venue.till, "Till");
+    const venue = await seedVenueWithStations();
+    const till = await seedDevice(venue.till, "Till");
     await expect(shown(venue, till)).resolves.toEqual([]);
     await expect(shown(venue, randomUUID())).resolves.toEqual([]);
   });
 
   it("reads several devices at once, each as it reads alone, and none for an unknown one or an empty list", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every, pass: every });
-    const line = await seedDevice(venue, venue.kds, "Line");
+    const line = await seedDevice(venue.kds, "Line");
     await choose(venue, line, venue.kds, [{ kind: "station", ...every }]);
     await recordRemoval(line, "station", { stationId: venue.grill });
-    const pass = await seedDevice(venue, venue.kds, "Pass");
+    const pass = await seedDevice(venue.kds, "Pass");
     await choose(venue, pass, venue.kds, [
       { kind: "pass", stationIds: [venue.cold], zoneIds: [venue.dining] },
     ]);
     await recordRemoval(pass, "pass", { zoneId: venue.terrace });
-    const till = await seedDevice(venue, venue.till, "Till");
+    const till = await seedDevice(venue.till, "Till");
     await recordRemoval(till, "station");
-    const bare = await seedDevice(venue, venue.till, "Bare");
+    const bare = await seedDevice(venue.till, "Bare");
     const unknown = randomUUID();
     const ids = [line, pass, till, bare, unknown];
 
@@ -1131,10 +1121,10 @@ describe("a kitchen display keeping a kitchen screen", () => {
     outcome(scoped((tx) => assertKitchenDisplayHasScreen(tx, venue.cfg, deviceId, profileId)));
 
   it("refuses a kitchen display's profile for a device storing no screen, even one a narrowing took", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { pass_monitor: every });
-    const till = await seedDevice(venue, venue.till, "Till");
-    const taken = await seedDevice(venue, venue.kds, "Taken");
+    const till = await seedDevice(venue.till, "Till");
+    const taken = await seedDevice(venue.kds, "Taken");
     await recordRemoval(taken, "pass_monitor");
     const required = { code: "kitchen_screen.required", params: {} };
     await expect(check(venue, till, venue.kds)).resolves.toEqual(required);
@@ -1142,11 +1132,11 @@ describe("a kitchen display keeping a kitchen screen", () => {
   });
 
   it("passes a device storing a screen, and any device on a profile that is not a kitchen display", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { pass_monitor: every });
-    const monitor = await seedDevice(venue, venue.kds, "Monitor");
+    const monitor = await seedDevice(venue.kds, "Monitor");
     await choose(venue, monitor, venue.kds, [{ kind: "pass_monitor", ...every }]);
-    const till = await seedDevice(venue, venue.till, "Till");
+    const till = await seedDevice(venue.till, "Till");
     await expect(check(venue, monitor, venue.kds)).resolves.toEqual({ resolved: undefined });
     await expect(check(venue, till, venue.till)).resolves.toEqual({ resolved: undefined });
   });
@@ -1157,8 +1147,8 @@ describe("an order's zone checked against a device's pass screen", () => {
     outcome(scoped((tx) => assertPassScreenZone(tx, venue.cfg, deviceId, zoneId)));
 
   it("refuses a device without a pass screen", async () => {
-    const venue = await seedVenue();
-    const till = await seedDevice(venue, venue.till, "Till");
+    const venue = await seedVenueWithStations();
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [{ kind: "station", ...every }]);
     await expect(check(venue, till, venue.dining)).resolves.toEqual({
       code: "kitchen_screen.not_allowed",
@@ -1167,8 +1157,8 @@ describe("an order's zone checked against a device's pass screen", () => {
   });
 
   it("refuses a zone outside an explicit list, and an order in no zone", async () => {
-    const venue = await seedVenue();
-    const till = await seedDevice(venue, venue.till, "Till");
+    const venue = await seedVenueWithStations();
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [
       { kind: "pass", stationIds: null, zoneIds: [venue.dining, venue.terrace] },
     ]);
@@ -1184,17 +1174,17 @@ describe("an order's zone checked against a device's pass screen", () => {
   });
 
   it("passes any zone, or none, on an every-zone pass", async () => {
-    const venue = await seedVenue();
-    const till = await seedDevice(venue, venue.till, "Till");
+    const venue = await seedVenueWithStations();
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [{ kind: "pass", ...every }]);
     await expect(check(venue, till, venue.counter)).resolves.toEqual({ resolved: undefined });
     await expect(check(venue, till, null)).resolves.toEqual({ resolved: undefined });
   });
 
   it("refuses a kitchen display whose pass screen a narrowing emptied, for any zone or none", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { pass: { stationIds: [venue.grill, venue.cold], zoneIds: null } });
-    const screen = await seedDevice(venue, venue.kds, "Pass");
+    const screen = await seedDevice(venue.kds, "Pass");
     await choose(venue, screen, venue.kds, [
       { kind: "pass", stationIds: [venue.cold], zoneIds: null },
     ]);
@@ -1209,8 +1199,8 @@ describe("an order's zone checked against a device's pass screen", () => {
   });
 
   it("refuses an order in no zone on an every-zone pass that lost a zone, as on an explicit list", async () => {
-    const venue = await seedVenue();
-    const till = await seedDevice(venue, venue.till, "Till");
+    const venue = await seedVenueWithStations();
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [{ kind: "pass", ...every }]);
     await recordRemoval(till, "pass", { zoneId: venue.counter });
     await expect(check(venue, till, venue.dining)).resolves.toEqual({ resolved: undefined });
@@ -1225,16 +1215,16 @@ describe("an order's zone checked against a device's pass screen", () => {
 
 describe("what the read says is every", () => {
   it("says whether the device's own lists are every, and whether its profile's station list is", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every, pass: every });
     await set(venue, venue.till, {
       station: { stationIds: [venue.grill, venue.cold], zoneIds: null },
       pass: { stationIds: null, zoneIds: [venue.dining, venue.terrace] },
     });
-    const open = await seedDevice(venue, venue.kds, "Open");
-    const listed = await seedDevice(venue, venue.kds, "Listed");
-    const bounded = await seedDevice(venue, venue.till, "Till");
-    const matching = await seedDevice(venue, venue.till, "Till listing all it may");
+    const open = await seedDevice(venue.kds, "Open");
+    const listed = await seedDevice(venue.kds, "Listed");
+    const bounded = await seedDevice(venue.till, "Till");
+    const matching = await seedDevice(venue.till, "Till listing all it may");
     await choose(venue, open, venue.kds, [{ kind: "station", ...every }]);
     await choose(venue, listed, venue.kds, [
       { kind: "pass", stationIds: [venue.grill], zoneIds: [venue.terrace] },
@@ -1273,9 +1263,9 @@ describe("what the read says is every", () => {
   });
 
   it("says no list is every on a kind a narrowing took", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every, pass: every });
-    const open = await seedDevice(venue, venue.kds, "Open");
+    const open = await seedDevice(venue.kds, "Open");
     await choose(venue, open, venue.kds, [{ kind: "station", ...every }]);
     await set(venue, venue.kds, { pass: every });
     expect(await shown(venue, open)).toEqual([
@@ -1294,12 +1284,12 @@ describe("what the read says is every", () => {
 
 describe("the station screens kitchen displays run", () => {
   it("lists each active kitchen display's shown stations, never a till's", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every, pass: every });
-    const line = await seedDevice(venue, venue.kds, "Line");
-    const pass = await seedDevice(venue, venue.kds, "Pass");
-    const off = await seedDevice(venue, venue.kds, "Old line");
-    const till = await seedDevice(venue, venue.till, "Till");
+    const line = await seedDevice(venue.kds, "Line");
+    const pass = await seedDevice(venue.kds, "Pass");
+    const off = await seedDevice(venue.kds, "Old line");
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, line, venue.kds, [
       { kind: "station", stationIds: [venue.pastry, venue.grill], zoneIds: null },
     ]);
@@ -1320,20 +1310,20 @@ describe("the station screens kitchen displays run", () => {
 
 describe("the station screens of several kitchen displays", () => {
   it("lists nothing when no kitchen display runs a station screen", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await expect(scoped((tx) => readStationScreens(tx, venue.cfg))).resolves.toEqual([]);
   });
 
   it("lists each display under its own profile's bound, choice and removals", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, {
       station: { stationIds: [venue.grill, venue.cold], zoneIds: null },
     });
     const wide = await seedProfile("kds");
     await set(venue, wide, { station: every });
-    const bounded = await seedDevice(venue, venue.kds, "Bounded");
-    const explicit = await seedDevice(venue, wide, "Explicit");
-    const open = await seedDevice(venue, wide, "Open");
+    const bounded = await seedDevice(venue.kds, "Bounded");
+    const explicit = await seedDevice(wide, "Explicit");
+    const open = await seedDevice(wide, "Open");
     await choose(venue, bounded, venue.kds, [{ kind: "station", ...every }]);
     await choose(venue, explicit, wide, [
       { kind: "station", stationIds: [venue.pastry, venue.cold], zoneIds: null },
@@ -1350,10 +1340,10 @@ describe("the station screens of several kitchen displays", () => {
     );
   });
   it("omits a deleted station even from an explicit display list", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every });
-    const listed = await seedDevice(venue, venue.kds, "Listed");
-    const open = await seedDevice(venue, venue.kds, "Open");
+    const listed = await seedDevice(venue.kds, "Listed");
+    const open = await seedDevice(venue.kds, "Open");
     await choose(venue, listed, venue.kds, [
       { kind: "station", stationIds: [venue.grill, venue.cold, venue.pastry], zoneIds: null },
     ]);
@@ -1409,12 +1399,12 @@ describe("a profile save narrowing its devices", () => {
 
   /** A kitchen display profile offering Grill, Cold and Pastry, with an explicit and an every device. */
   async function narrowing() {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, {
       station: { stationIds: [venue.grill, venue.cold, venue.pastry], zoneIds: null },
     });
-    const line = await seedDevice(venue, venue.kds, "Line");
-    const all = await seedDevice(venue, venue.kds, "All");
+    const line = await seedDevice(venue.kds, "Line");
+    const all = await seedDevice(venue.kds, "All");
     await choose(venue, line, venue.kds, [station([venue.grill, venue.pastry])]);
     await choose(venue, all, venue.kds, [station(null)]);
     return { venue, line, all };
@@ -1422,12 +1412,12 @@ describe("a profile save narrowing its devices", () => {
 
   it("takes a station off each device on the profile, switched off or not, and no other", async () => {
     const { venue, line, all } = await narrowing();
-    const old = await seedDevice(venue, venue.kds, "Old line");
+    const old = await seedDevice(venue.kds, "Old line");
     await choose(venue, old, venue.kds, [station([venue.pastry, venue.cold])]);
     await db.update(devices).set({ active: false }).where(eq(devices.id, old));
     const other = await seedProfile("kds");
     await set(venue, other, { station: every });
-    const elsewhere = await seedDevice(venue, other, "Elsewhere");
+    const elsewhere = await seedDevice(other, "Elsewhere");
     await choose(venue, elsewhere, other, [station([venue.pastry])]);
 
     await expect(
@@ -1529,9 +1519,9 @@ describe("a profile save narrowing its devices", () => {
   });
 
   it("empties a display's only station without refusing it, keeping the station as no longer available", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every });
-    const deli = await seedDevice(venue, venue.kds, "Deli");
+    const deli = await seedDevice(venue.kds, "Deli");
     await choose(venue, deli, venue.kds, [station([venue.pastry])]);
     await expect(
       set(venue, venue.kds, { station: { stationIds: [venue.grill], zoneIds: null } }),
@@ -1551,9 +1541,9 @@ describe("a profile save narrowing its devices", () => {
   });
 
   it("records every other switched-on station an every device showed, and nothing twice", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every });
-    const all = await seedDevice(venue, venue.kds, "All");
+    const all = await seedDevice(venue.kds, "All");
     await choose(venue, all, venue.kds, [station(null)]);
     await recordRemoval(all, "station", { stationId: venue.cold });
     const off = await seedStation(venue.cfg.locationId, "Bar");
@@ -1567,9 +1557,9 @@ describe("a profile save narrowing its devices", () => {
   });
 
   it("narrows a till's zones once its profile first bounds them, and the device's explicit list", async () => {
-    const venue = await seedVenue();
-    const open = await seedDevice(venue, venue.till, "Open till");
-    const listed = await seedDevice(venue, venue.till, "Listed till");
+    const venue = await seedVenueWithStations();
+    const open = await seedDevice(venue.till, "Open till");
+    const listed = await seedDevice(venue.till, "Listed till");
     await choose(venue, open, venue.till, [{ kind: "pass", ...every }]);
     await choose(venue, listed, venue.till, [
       { kind: "pass", stationIds: [venue.grill], zoneIds: [venue.dining, venue.terrace] },
@@ -1611,8 +1601,8 @@ describe("a profile save narrowing its devices", () => {
   });
 
   it("empties a pass screen's explicit zone list, keeping the zone as no longer available", async () => {
-    const venue = await seedVenue();
-    const till = await seedDevice(venue, venue.till, "Till");
+    const venue = await seedVenueWithStations();
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [
       { kind: "pass", stationIds: null, zoneIds: [venue.counter] },
     ]);
@@ -1634,10 +1624,10 @@ describe("a profile save narrowing its devices", () => {
   });
 
   it("takes a kind the profile stops offering off its devices, recording the kind", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every, pass_monitor: every });
-    const wall = await seedDevice(venue, venue.kds, "Wall");
-    const line = await seedDevice(venue, venue.kds, "Line");
+    const wall = await seedDevice(venue.kds, "Wall");
+    const line = await seedDevice(venue.kds, "Line");
     await choose(venue, wall, venue.kds, [{ kind: "pass_monitor", ...every }]);
     await choose(venue, line, venue.kds, [station(null)]);
     await expect(set(venue, venue.kds, { station: every })).resolves.toEqual([
@@ -1660,7 +1650,7 @@ describe("a profile save narrowing its devices", () => {
 
   it("gives a station added back to each device still showing it as lost, and not to one picked on since", async () => {
     const { venue, line, all } = await narrowing();
-    const picked = await seedDevice(venue, venue.kds, "Picked");
+    const picked = await seedDevice(venue.kds, "Picked");
     await choose(venue, picked, venue.kds, [station([venue.grill, venue.pastry])]);
     await set(venue, venue.kds, {
       station: { stationIds: [venue.grill, venue.cold], zoneIds: null },
@@ -1695,11 +1685,11 @@ describe("a profile save narrowing its devices", () => {
   });
 
   it("gives a kind offered again back as the device chose it, with no line", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, {
       pass: { stationIds: [venue.grill, venue.cold], zoneIds: [venue.terrace, venue.dining] },
     });
-    const pass = await seedDevice(venue, venue.kds, "Pass");
+    const pass = await seedDevice(venue.kds, "Pass");
     await choose(venue, pass, venue.kds, [
       { kind: "pass", stationIds: [venue.grill], zoneIds: [venue.terrace] },
     ]);
@@ -1722,10 +1712,10 @@ describe("a profile save narrowing its devices", () => {
   });
 
   it("gives an every device back the kind offered again as it was, losing no station it never showed", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     const grillOnly = { station: { stationIds: [venue.grill], zoneIds: null } };
     await set(venue, venue.kds, grillOnly);
-    const all = await seedDevice(venue, venue.kds, "All");
+    const all = await seedDevice(venue.kds, "All");
     await choose(venue, all, venue.kds, [station(null)]);
     await expect(set(venue, venue.kds, { pass: every })).resolves.toEqual([
       lost(all, "All", { screens: ["station"] }),
@@ -1736,9 +1726,9 @@ describe("a profile save narrowing its devices", () => {
   });
 
   it("restores a kind and narrows its stations in one save", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { pass: every });
-    const pass = await seedDevice(venue, venue.kds, "Pass");
+    const pass = await seedDevice(venue.kds, "Pass");
     await choose(venue, pass, venue.kds, [
       { kind: "pass", stationIds: [venue.grill, venue.cold], zoneIds: [venue.terrace] },
     ]);
@@ -1767,8 +1757,8 @@ describe("a profile save narrowing its devices", () => {
   });
 
   it("gives a zone added back to a till still showing it as lost", async () => {
-    const venue = await seedVenue();
-    const till = await seedDevice(venue, venue.till, "Till");
+    const venue = await seedVenueWithStations();
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [
       { kind: "pass", stationIds: null, zoneIds: [venue.dining, venue.terrace] },
     ]);
@@ -1782,11 +1772,11 @@ describe("a profile save narrowing its devices", () => {
   });
 
   it("keeps a display a narrowing emptied out of the station screens, refused as having no screen and not following every station", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every, pass_monitor: every });
-    const deli = await seedDevice(venue, venue.kds, "Deli");
-    const wall = await seedDevice(venue, venue.kds, "Wall");
-    const open = await seedDevice(venue, venue.kds, "Open");
+    const deli = await seedDevice(venue.kds, "Deli");
+    const wall = await seedDevice(venue.kds, "Wall");
+    const open = await seedDevice(venue.kds, "Open");
     await choose(venue, deli, venue.kds, [station([venue.pastry])]);
     await choose(venue, wall, venue.kds, [{ kind: "pass_monitor", ...every }]);
     await choose(venue, open, venue.kds, [station(null)]);
@@ -1813,7 +1803,7 @@ describe("a profile save narrowing its devices", () => {
 
   it("answers nothing and records nothing for a save that narrows nothing a device shows", async () => {
     const { venue, line, all } = await narrowing();
-    const till = await seedDevice(venue, venue.till, "Till");
+    const till = await seedDevice(venue.till, "Till");
     await set(venue, venue.till, { pass: { stationIds: [venue.grill], zoneIds: null } });
     await choose(venue, till, venue.till, [
       { kind: "pass", stationIds: [venue.grill], zoneIds: null },
@@ -1829,12 +1819,12 @@ describe("a profile save narrowing its devices", () => {
   });
 
   it("records nothing a device already holds as removed", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { pass_monitor: every });
-    const wall = await seedDevice(venue, venue.kds, "Wall");
+    const wall = await seedDevice(venue.kds, "Wall");
     await choose(venue, wall, venue.kds, [{ kind: "pass_monitor", ...every }]);
     await recordRemoval(wall, "pass_monitor");
-    const till = await seedDevice(venue, venue.till, "Till");
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [
       { kind: "pass", stationIds: null, zoneIds: [venue.dining, venue.terrace] },
     ]);
@@ -1866,12 +1856,12 @@ describe("a device narrowed against another profile", () => {
     scoped((tx) => narrowDeviceKitchenScreens(tx, venue.cfg, deviceId, profileId));
 
   it("drops what the other profile does not offer, and answers null when it loses nothing", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every, pass: every });
     const strict = await seedProfile("kds");
     await set(venue, strict, { station: { stationIds: [venue.grill], zoneIds: null } });
-    const line = await seedDevice(venue, venue.kds, "Line");
-    const pass = await seedDevice(venue, venue.kds, "Pass");
+    const line = await seedDevice(venue.kds, "Line");
+    const pass = await seedDevice(venue.kds, "Pass");
     await choose(venue, line, venue.kds, [
       { kind: "station", stationIds: [venue.grill, venue.cold], zoneIds: null },
     ]);
@@ -1900,18 +1890,18 @@ describe("a device narrowed against another profile", () => {
       },
     ]);
     await expect(narrow(venue, randomUUID(), strict)).resolves.toBeNull();
-    const till = await seedDevice(venue, venue.till, "Till");
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [{ kind: "pass", ...every }]);
     await expect(narrow(venue, till, await seedProfile("till"))).resolves.toBeNull();
   });
 
   it("gives back on a switch back what a switch took, unless the device was picked on since", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every });
     const strict = await seedProfile("kds");
     await set(venue, strict, { station: { stationIds: [venue.grill], zoneIds: null } });
-    const line = await seedDevice(venue, venue.kds, "Line");
-    const picked = await seedDevice(venue, venue.kds, "Picked");
+    const line = await seedDevice(venue.kds, "Line");
+    const picked = await seedDevice(venue.kds, "Picked");
     for (const device of [line, picked]) {
       await choose(venue, device, venue.kds, [
         { kind: "station", stationIds: [venue.grill, venue.cold], zoneIds: null },
@@ -1936,17 +1926,17 @@ describe("a device narrowed against another profile", () => {
   });
 
   it("gives a kind back on a switch losing no station the device never showed, and a till what its profile never bounded", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every });
     const strict = await seedProfile("kds");
     await set(venue, strict, { station: { stationIds: [venue.grill], zoneIds: null } });
-    const all = await seedDevice(venue, venue.kds, "All");
+    const all = await seedDevice(venue.kds, "All");
     await choose(venue, all, venue.kds, [{ kind: "station", ...every }]);
     await set(venue, venue.kds, { pass: every });
     await expect(narrow(venue, all, strict)).resolves.toBeNull();
     expect(await removalsOf(all)).toEqual([]);
 
-    const till = await seedDevice(venue, venue.till, "Till");
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [{ kind: "station", ...every }]);
     const strictTill = await seedProfile("till");
     await set(venue, strictTill, { station: { stationIds: [venue.grill], zoneIds: null } });
@@ -1981,12 +1971,12 @@ describe("the statements a device's kitchen screens are read in", () => {
   const from = (table: string) => (query: { sql: string }) => query.sql.includes(`from "${table}"`);
 
   it("reads each device's removals once, and only the profile rows of the devices it resolves", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every, pass: every });
     await set(venue, venue.till, { pass: { stationIds: [venue.grill], zoneIds: null } });
-    const line = await seedDevice(venue, venue.kds, "Line");
+    const line = await seedDevice(venue.kds, "Line");
     await choose(venue, line, venue.kds, [{ kind: "station", ...every }]);
-    const till = await seedDevice(venue, venue.till, "Till");
+    const till = await seedDevice(venue.till, "Till");
     await choose(venue, till, venue.till, [{ kind: "pass", ...every }]);
 
     for (const read of [
@@ -2006,7 +1996,7 @@ describe("the statements a device's kitchen screens are read in", () => {
   });
 
   it("saves a profile with no devices without reading any device's screens", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     const statements = await statementsOf((tx) =>
       setProfileKitchenScreens(tx, venue.cfg, venue.kds, { station: every }),
     );
@@ -2038,13 +2028,13 @@ describe("a device's kitchen screens counted and removed", () => {
   }
 
   it("counts a device's kitchen screens, then removes them with their stations, zones and removals, leaving other devices alone", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.till, {
       station: { stationIds: [venue.grill, venue.cold], zoneIds: null },
       pass: { stationIds: null, zoneIds: [venue.dining, venue.terrace] },
     });
-    const deviceA = await seedDevice(venue, venue.till, "Till A");
-    const deviceB = await seedDevice(venue, venue.till, "Till B");
+    const deviceA = await seedDevice(venue.till, "Till A");
+    const deviceB = await seedDevice(venue.till, "Till B");
     await choose(venue, deviceA, venue.till, [
       { kind: "station", stationIds: [venue.grill], zoneIds: null },
       { kind: "pass", stationIds: null, zoneIds: [venue.dining] },
@@ -2077,7 +2067,7 @@ describe("a device's kitchen screens counted and removed", () => {
 
 describe("deleted zone bounds", () => {
   it("retained empty zone bound survives unrelated profile save without widening", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [venue.dining] } });
     await db
       .delete(deviceProfileKitchenScreenZones)
@@ -2100,9 +2090,9 @@ describe("deleted zone bounds", () => {
   });
 
   it("retained empty zone bound survives unchanged device save without widening", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [venue.dining] } });
-    const deviceId = await seedDevice(venue, venue.kds, "Empty pass");
+    const deviceId = await seedDevice(venue.kds, "Empty pass");
     await choose(venue, deviceId, venue.kds, [
       { kind: "pass", stationIds: [venue.grill], zoneIds: [venue.dining] },
     ]);
@@ -2129,12 +2119,12 @@ describe("deleted zone bounds", () => {
   });
 
   it("new empty device zone choice refuses while an empty profile bound restricts Every", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [venue.dining] } });
     await db
       .delete(deviceProfileKitchenScreenZones)
       .where(eq(deviceProfileKitchenScreenZones.deviceProfileId, venue.kds));
-    const deviceId = await seedDevice(venue, venue.kds, "New restricted pass");
+    const deviceId = await seedDevice(venue.kds, "New restricted pass");
     await expect(
       outcome(
         choose(venue, deviceId, venue.kds, [{ kind: "pass", stationIds: null, zoneIds: [] }]),
@@ -2162,11 +2152,11 @@ describe("deleted zone bounds", () => {
 });
 
 it("A725 profile and device station choices use names and preserve removed slots", async () => {
-  const v = await seedVenue();
+  const v = await seedVenueWithStations();
   await db.update(kitchenStations).set({ name: "Ásador" }).where(eq(kitchenStations.id, v.cold));
   await set(v, v.kds, { station: { stationIds: [v.pastry, v.grill, v.cold], zoneIds: null } });
   expect((await screensOf(v, v.kds))!.station!.stationIds).toEqual([v.cold, v.grill, v.pastry]);
-  const device = await seedDevice(v, v.kds, "Names");
+  const device = await seedDevice(v.kds, "Names");
   await choose(v, device, v.kds, [{ kind: "station", ...every }]);
   await recordRemoval(device, "station", { stationId: v.pastry });
   const rows = (await shown(v, device))[0]!.stations;

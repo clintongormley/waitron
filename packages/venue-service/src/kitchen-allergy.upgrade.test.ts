@@ -9,9 +9,7 @@ import {
   CORE_MIGRATIONS,
   installChangeFeed,
   kitchenStations,
-  locations,
   parties,
-  workingOrders,
   workingOrderLines,
   ticketItems,
   printers,
@@ -19,10 +17,11 @@ import {
   kitchenPrintJobs,
   kitchenPrintJobLines,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { applyMigrations } from "@waitron/migrations";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
@@ -71,32 +70,26 @@ const suite = useVenueDb({
 it("A669 storage upgrades populated kitchen work and restores boot change feeds without inventing originals", async () => {
   await seedTenant(suite.db);
   const actor = randomUUID();
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Predecessor room",
-      invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
-    })
-    .returning();
-  const nodeId = await seedNode(suite.db, locationId(location!.id));
+  await seedVenue(suite.db, {
+    name: "Predecessor room",
+    invoiceLocales: ["en"],
+    operationDescription: "Restaurant",
+  });
+  const venueId = await venueLocationId(suite.db);
+  const nodeId = await seedNode(suite.db, locationId(venueId));
   const [station] = await suite.db
     .insert(kitchenStations)
-    .values({ locationId: location!.id, name: "Old grill" })
+    .values({ locationId: venueId, name: "Old grill" })
     .returning();
   const [party] = await suite.db
     .insert(parties)
     .values({ openedBy: actor, name: "Old guests" })
     .returning();
-  const [order] = await suite.db
-    .insert(workingOrders)
-    .values({
-      locationId: location!.id,
-      partyId: party!.id,
-      source: "dashboard",
-      orderNumber: 23,
-    })
-    .returning();
+  const order = await seedWorkingOrder(suite.db, {
+    partyId: party!.id,
+    source: "dashboard",
+    orderNumber: 23,
+  });
   const [dish] = await suite.db
     .insert(workingOrderLines)
     .values({
@@ -149,7 +142,7 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
   const [printer] = await suite.db
     .insert(printers)
     .values({
-      locationId: location!.id,
+      locationId: venueId,
       name: "Old printer",
       transport: "network_tcp",
       host: "192.0.2.10",
@@ -158,7 +151,7 @@ it("A669 storage upgrades populated kitchen work and restores boot change feeds 
   const [job] = await suite.db
     .insert(printJobs)
     .values({
-      locationId: location!.id,
+      locationId: venueId,
       printerId: printer!.id,
       payload: Uint8Array.of(27, 64, 79, 76, 68),
       status: "done",

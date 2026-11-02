@@ -9,8 +9,10 @@ import {
   locations,
   withTransaction,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment, listZoneOffers, menuState } from "./operations.js";
@@ -33,21 +35,18 @@ const at = (time: string, date = "2026-10-09") =>
 async function fixture() {
   return run(async (tx) => {
     const [existing] = await tx.select({ id: locations.id }).from(locations);
-    const [venue] =
-      existing === undefined
-        ? await tx
-            .insert(locations)
-            .values({
-              name: "Venue",
-              invoiceLocales: ["en-GB"],
-              operationDescription: "Hospitality",
-              timeZone: "Europe/Madrid",
-              dayCutover: "06:00:00",
-            })
-            .returning()
-        : [existing];
+    if (existing === undefined) {
+      await seedVenue(tx, {
+        name: "Venue",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00:00",
+      });
+    }
+    const venueId = await venueLocationId(tx);
     const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
-    const cfg = { locationId: locationId(venue!.id) };
+    const cfg = { locationId: locationId(venueId) };
     const departmentId = (
       await createDepartment(tx, cfg, { name: `Restaurant${suffix}`, orderStart: "table" })
     ).id;
@@ -56,7 +55,7 @@ async function fixture() {
       .values({ ...cfg, name: `Dining${suffix}` })
       .returning();
     await configureZone(tx, cfg, { zoneId: zone!.id, departmentId });
-    const menu = await createCatalogue(tx, { name: `Menu ${venue!.id}${suffix}` });
+    const menu = await createCatalogue(tx, { name: `Menu ${venueId}${suffix}` });
     const lunch = (
       await saveMenuPeriod(tx, cfg, departmentId, {
         name: "Lunch",

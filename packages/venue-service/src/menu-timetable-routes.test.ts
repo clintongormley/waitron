@@ -15,12 +15,13 @@ import {
   floorPlanSets,
   floorZones,
   kitchenStations,
-  locations,
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   IDENTITY_MIGRATIONS,
@@ -68,16 +69,14 @@ const isPeriodSave = (method: string, path: string) =>
   (method === "PATCH" && path.startsWith("/menu-periods/"));
 
 async function routed() {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: `House ${randomUUID()}`,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
-    })
-    .returning({ id: locations.id });
-  const locationId = brandLocationId(location!.id);
+  await seedVenue(db, {
+    name: `House ${randomUUID()}`,
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Hospitality",
+    timeZone: "Europe/Madrid",
+  });
+  const venueId = await venueLocationId(db);
+  const locationId = brandLocationId(venueId);
   const cfg = { locationId };
   await db.insert(kitchenStations).values({ locationId, name: "Kitchen", isDefault: true });
   const zone = async (name: string) =>

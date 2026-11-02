@@ -15,14 +15,15 @@ import {
   floorZones,
   isRefusal,
   kitchenStations,
-  locations,
   products,
   UNIQUE_VIOLATION,
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
@@ -44,15 +45,13 @@ const noPrep: RouteTarget = { kind: "no_preparation" };
 const station = (stationId: string): RouteTarget => ({ kind: "station", stationId });
 
 async function venue(tx: Transaction, suffix = "") {
-  const [loc] = await tx
-    .insert(locations)
-    .values({
-      name: `Venue${suffix}`,
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
-    })
-    .returning();
-  const cfg = { locationId: locationId(loc!.id) };
+  await seedVenue(tx, {
+    name: `Venue${suffix}`,
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+  });
+  const venueId = await venueLocationId(tx);
+  const cfg = { locationId: locationId(venueId) };
   const zones = await tx
     .insert(floorZones)
     .values([

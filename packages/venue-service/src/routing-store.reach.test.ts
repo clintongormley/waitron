@@ -11,13 +11,14 @@ import {
   CORE_MIGRATIONS,
   floorZones,
   kitchenStations,
-  locations,
   products,
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { configureZone, createDepartment } from "./operations.js";
@@ -43,11 +44,13 @@ beforeAll(() => {
 });
 
 async function fixture(tx: Transaction) {
-  const [loc] = await tx
-    .insert(locations)
-    .values({ name: "Venue", invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
-    .returning();
-  const cfg = { locationId: locationId(loc!.id) };
+  await seedVenue(tx, {
+    name: "Venue",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+  });
+  const venueId = await venueLocationId(tx);
+  const cfg = { locationId: locationId(venueId) };
   const department = await createDepartment(tx, cfg, {
     name: "Dining",
     orderStart: "table",
