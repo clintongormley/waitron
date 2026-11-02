@@ -367,7 +367,8 @@ called weaker than its name, the topic file lists what it does not see.
   [Receipt](docs/developers/conventions-data.md#saved-zone-validity-uses-the-stored-spelling).
 - **Default optional request fields only when absent, and check enum types before comparing values.**
   Explicit null and coerced arrays passed modifier validation. A field whose null is itself a value
-  is deliberately outside the rule; examples: [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02).
+  is deliberately outside the rule; examples:
+  [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02).
 - **Error codes name the domain concept, never the throwing package; `server.*` names process facts.**
   Every throwing file imports its registry. Before a venue is live, rename/delete freely; afterwards
   either is a migration (owner, 2026-09-26). Move every tree copy together; once live, rewrite stored
@@ -376,15 +377,18 @@ called weaker than its name, the topic file lists what it does not see.
 - **A detail or log field holding a person's name, email or tax number uses a name on
   `PERSONAL_LOG_KEYS` or a path on `PERSONAL_LOG_PATHS` (`apps/server/src/log-personal-data.ts`),
   which the server's logger masks in every line it writes; the answer keeps it. Name it for whose
-  it is (`guestName`, `customerTaxId`), never a bare `name` or `taxId`.** Cost: staff names and emails reached the
-  sign-in-free recovery page. Guard: `scripts/personal-log-params.test.ts`, weaker than its name:
+  it is (`guestName`, `customerTaxId`), never a bare `name` or `taxId`.** Cost: staff names and
+  emails reached the sign-in-free recovery page. Guard: `scripts/personal-log-params.test.ts`, weaker than its name:
   reads text. [Limits](docs/developers/conventions-data.md#root-receipts-moved-on-2026-10-31).
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
   `scripts/alert-codes.test.ts`, weaker than its name — it reads literals in hand-listed files.
 - **General code is English only** (owner, 2026-09-07 and 2026-10-19), including literals, comments,
-  identifiers, file names, seeds, starter content and tests. Exceptions (owner, 2026-10-20, A913;
-  owner, 2026-10-20, A918): [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02). Country packs also provide English and own demo
-  data; Spain receipts use the venue's receipt language, never English. Starter content is English
+  identifiers, file names, seeds, starter content and tests. Exceptions: `packages/fiscal-verifactu`,
+  AEAT wire names, translation files/guides and Spain-specific packages (`country-es`, `workforce-es`,
+  reporting's modelo 303) for official Spain-only text/terms (owner, 2026-10-20, A913), and starter
+  content's other languages (owner, 2026-10-20, A918):
+  [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02). Country packs
+  also provide English and own demo data; Spain receipts use the venue's receipt language, never English. Starter content is English
   in code and translated at setup; non-English screen tests read expected strings. Domain terms
   have one declaring module vocabulary; fiscal terms never enter the base.
   Guard: `scripts/english-only.test.ts`, weaker than its name: listed words and packages only, no apps;
@@ -460,14 +464,16 @@ called weaker than its name, the topic file lists what it does not see.
 - **Identify result-code 1811 refusals by their words, never `isRefusal` alone.**
   Use `restrictRefused`/`triggerRaised` in `packages/db/src/constraint-target.ts`. Nothing guards it.
 - **A full disk is not one error code; code 14 also names a missing folder.**
-  `fullDiskFailure` in `apps/server/src/boot-failure.ts` classifies them. Guard: its test suite,
+  `fullDiskFailure` in `apps/server/src/boot-failure.ts` classifies 13 always, 14/4874/`ENOSPC` only
+  under 16 MiB free. Guard: its test suite,
   weaker than the rule: stubbed errors, no real `ENOSPC` case.
   [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02).
 - **Within the server, only the start (on a nearly full disk, before first-setup resolution), its
   emptying of a discarded recovery and the repair page's Start-again flow delete
   `<state>/spare-space` (`waitron.sh reset` deletes it too); a release writes
   `spare-space.released` (exceptions in the topic file), which holds the till stop, across restarts,
-  until the spare is written back whole. It is never venue data, and a recovery's originals walk leaves both out.**
+  until the spare is written back whole. It is never venue data, and a recovery's originals walk
+  leaves both out.**
   Guard: `scripts/spare-space.test.ts`, weaker than its name: reads text.
   [Cost and detail](docs/developers/conventions-data.md#the-boxs-spare-file).
 - **Every server path that replaces or removes the live `venue.db` deletes
@@ -485,9 +491,8 @@ called weaker than its name, the topic file lists what it does not see.
   than their names: prove the locks, not that every caller takes them.
 - **Anything that writes or deletes in `<state>/backup-staging` does it inside the staging turn**
   (`apps/server/src/backup-staging-turn.ts`), **except the start's clean-up (`freeSpaceAtStart`)**.
-  Guard:
-  `scripts/backup-staging-touchers.test.ts`, weaker than its name — it reads text and never checks
-  that a file takes the turn. Receipt:
+  Guard: `scripts/backup-staging-touchers.test.ts`, weaker than its name — it reads text and never
+  checks that a file takes the turn. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#backup-staging-is-touched-only-inside-the-staging-turn).
 - **A duty `bootServer` starts registers its stop on `undoOnFailure` before the next throwing step.**
   The landing listener, started last, is the exception. Guard: `apps/server/src/boot.failed-start.test.ts`,
@@ -514,7 +519,8 @@ called weaker than its name, the topic file lists what it does not see.
   guards the one-spelling rule across the columns.
 - **Classify new tables `ledger`, `state` or `local` in their module; use `appendOnly()` for
   uncorrectable tables and `migrationOptionsFor(...)` when migrating.** Marking an existing table
-  append-only must be disclosed in the PR. [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02).
+  append-only must be disclosed in the PR.
+  [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02).
   Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts`,
   `scripts/apply-migrations-callers.test.ts`; the last is weaker than its name: call shape, not sets.
 - **A new append-only table travels in both its module's exported migration descriptor and
