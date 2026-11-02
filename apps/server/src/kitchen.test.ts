@@ -479,6 +479,7 @@ describe("kitchen-station config", () => {
     }
     expect(createErr).toBeInstanceOf(Error);
     expect(createErr).not.toBeInstanceOf(AppError);
+    expect(String(createErr)).toMatch(/station insert refused/);
 
     const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Ord" }));
     const updateErr = await asApp(cfg, (tx) =>
@@ -811,6 +812,7 @@ describe("kitchen-course config", () => {
     }
     expect(createErr).toBeInstanceOf(Error);
     expect(createErr).not.toBeInstanceOf(AppError);
+    expect(String(createErr)).toMatch(/course insert refused/);
   });
 });
 

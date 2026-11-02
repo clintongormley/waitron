@@ -1,10 +1,9 @@
-import { eq } from "drizzle-orm";
 import {
   resolveInstalledStarterLanguages,
   starterName,
   starterNames,
 } from "@waitron/country-packs";
-import { readVenue, tenants } from "@waitron/db";
+import { readTenant, readVenue } from "@waitron/db";
 import type { PersonRoleValue } from "@waitron/identity";
 import type { ModuleProvisioning } from "@waitron/module";
 import { createAdjustmentReason, listAdjustmentReasons } from "./operations.js";
@@ -80,10 +79,7 @@ export const ADJUSTMENTS_PROVISIONING: ModuleProvisioning = {
       if ((await listAdjustmentReasons(tx)).length > 0) {
         return "reasons already present";
       }
-      const [tenant] = await tx
-        .select({ country: tenants.country })
-        .from(tenants)
-        .where(eq(tenants.id, 1));
+      const tenant = await readTenant(tx);
       const venue = await readVenue(tx);
       const { languages, staffLanguage } = resolveInstalledStarterLanguages({
         country: tenant?.country,
