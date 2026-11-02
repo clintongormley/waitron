@@ -11,7 +11,7 @@ import {
   migrationOptionsFor,
 } from "../packages/migrations/src/index.js";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
-import { appendToChain } from "../packages/fiscal-verifactu/src/chain.js";
+import { appendPreReplacementRecord } from "../packages/fiscal-verifactu/test/pre-replacement-fixture.js";
 import { altaFor, seedSale, seedNode } from "../packages/fiscal-verifactu/src/testing/seed.js";
 
 const { sql } = createRequire(new URL("../packages/db/package.json", import.meta.url))(
@@ -66,7 +66,9 @@ for (const kind of ["empty", "populated", "orphan", "unchecked-orphan"] as const
     const till = await seedNode(suite.db);
     if (kind !== "empty") {
       const sale = await seedSale(suite.db, till, 1);
-      await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, sale, 1, 1)));
+      await suite.db.transaction((tx) =>
+        appendPreReplacementRecord(tx, till.nodeId, altaFor(till, sale, 1, 1)),
+      );
     }
     const records = suite.db.execute(sql`select * from registros_facturacion`).rows;
     expect(records).toHaveLength(kind === "empty" ? 0 : 1);

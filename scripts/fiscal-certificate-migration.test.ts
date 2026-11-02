@@ -11,7 +11,7 @@ import {
   migrationOptionsFor,
 } from "../packages/migrations/src/index.js";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
-import { appendToChain } from "../packages/fiscal-verifactu/src/chain.js";
+import { appendPreReplacementRecord } from "../packages/fiscal-verifactu/test/pre-replacement-fixture.js";
 import { openFilingCase, recordCaseEvent } from "../packages/fiscal-verifactu/src/filing-cases.js";
 import {
   altaFor,
@@ -92,9 +92,11 @@ function snapshot(tables: string[]) {
 it("applies the certificate migration without changing any filed fiscal row", async () => {
   const till = await seedNode(suite.db);
   const sale = await seedSale(suite.db, till, 1);
-  await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, sale, 1, 1)));
   await suite.db.transaction((tx) =>
-    appendToChain(tx, till.nodeId, anulacionFor(till, sale, 1, 2)),
+    appendPreReplacementRecord(tx, till.nodeId, altaFor(till, sale, 1, 1)),
+  );
+  await suite.db.transaction((tx) =>
+    appendPreReplacementRecord(tx, till.nodeId, anulacionFor(till, sale, 1, 2)),
   );
   const [alta] = suite.db.execute<{ id: string }>(
     sql`select id from registros_facturacion where tipo_registro = 'alta'`,
