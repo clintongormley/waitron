@@ -811,9 +811,7 @@ with none, the project's `testTimeout`) plus the project's `hookTimeout`, becaus
 case's `onTestFinished` callbacks run under `hookTimeout` before the case reports its
 result. A timeout missing from the configuration counts as 0. A timeout of exactly 0
 means Vitest bounds nothing, so such a file is never paused; it gets one `stack:` line
-saying `a time limit of 0 bounds nothing, so its page is not paused`. A page still
-running normally reports a case or hook within those limits, since Vitest's own timer
-fails a stuck case, so only a file that is already failing is paused. How long a file
+saying `a time limit of 0 bounds nothing, so its page is not paused`. How long a file
 has run overall is not the trigger: a healthy file can run for minutes.
 For each such file, it pauses every page with a frame whose address contains the file's path
 and prints `[file-progress] stack:` lines. A file no page shows yet gets one line
@@ -900,6 +898,14 @@ Vitest's handshake is lost was not isolated. A probe on an idle page found that 
 `Debugger.pause` stays waiting and pauses the page's next script (one pause event
 when the page next ran a script), and that `Debugger.disable` sent before that script
 cancels it (no pause event after disable then enable).
+
+Two real-Chromium runs in `apps/dashboard` on 2 November 2026, with the reporter
+told to sample after 1 second instead of 60 (its limit then came to 46 seconds: 1
+plus the project's 15-second `testTimeout` and 30-second `hookTimeout`): over
+`menus-screen.test.ts` (607 cases, all passed), the longest gap between two reports
+from the file was 3.8 seconds and no `stack:` line was printed, while `main`'s
+reporter with the same setting paused the page 1.4 seconds in. A scratch case that
+looped forever was sampled at 46.1 seconds, its stack naming the looping function.
 
 
 ### A browser shard reports before its job limit
