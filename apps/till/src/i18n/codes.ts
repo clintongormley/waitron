@@ -21,6 +21,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The dish changed. Check its current kitchen state and choose again.",
     es: "El plato ha cambiado. Revisa su estado actual en cocina y vuelve a elegir.",
   },
+  "ticket.pass_context_changed": {
+    en: en["station.table_changed"],
+    es: es["station.table_changed"],
+  },
   "device_zones.invalid": {
     en: "Choose the zones this device shows and a starting zone from that list.",
     es: "Elige las zonas que muestra este dispositivo y una zona inicial de esa lista.",

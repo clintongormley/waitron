@@ -846,3 +846,14 @@ it.each([
     codeMessage("unknown", "en-GB"),
   );
 });
+
+it("A773 pass asks the pass to check a refreshed screen when its card went stale", () => {
+  expect(codeMessage("ticket.pass_context_changed", "en-GB")).toBe(en["station.table_changed"]);
+  expect(codeMessage("ticket.pass_context_changed", "es-ES")).toBe(es["station.table_changed"]);
+  expect(codeMessage("ticket.pass_context_changed", "en-GB")).toBe(
+    "The screen has been refreshed: check it and press again.",
+  );
+  expect(codeMessage("ticket.pass_context_changed", "es-ES")).toBe(
+    "La pantalla se ha actualizado: revísala y vuelve a pulsar.",
+  );
+});

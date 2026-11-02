@@ -2012,6 +2012,84 @@ export interface DevicePassScreen {
   /** null: no zone filter. */
   zones: ScreenSlot[] | null;
 }
+export type KitchenPhase = "held" | "requested" | "waiting" | "preparing" | "ready";
+
+export type PassTarget =
+  { kind: "group"; partyId: string; groupId: string } | { kind: "bill"; workingOrderId: string };
+
+/** null for a dish in no course. */
+export type PassCourse = { id: string; name: string | null; displayOrder: number | null } | null;
+
+export interface PassCardItem extends ExpoItem {
+  lineId: string;
+  orderId: string;
+  stationId: string;
+  phase: KitchenPhase;
+  requestedAt: string | null;
+  readyAt: string | null;
+  visible: boolean;
+  informational: boolean;
+  passControlled: boolean;
+  course: PassCourse;
+  stationClosed: boolean;
+  extra: boolean;
+}
+
+export interface PassCard {
+  key: string;
+  target: PassTarget;
+  kind: "held" | "new_order" | "next_course" | "added";
+  /** null on a held card. */
+  requestedAt: string | null;
+  readyAt: string | null;
+  allReady: boolean;
+  party?: { id: string; revision: number };
+  orders: {
+    orderId: string;
+    orderNumber: number;
+    tableLabel?: string;
+    kitchenNote: string | null;
+    formerNumbers?: number[];
+  }[];
+  group?: { displayNumber: number; numberPartyLabel?: string; position: number };
+  items: PassCardItem[];
+  /** Empty, with a null context, on the pass monitor's board. */
+  releaseTicketItemIds: string[];
+  releaseContext: string | null;
+}
+
+export type OverviewFact = Pick<
+  PassCardItem,
+  "lineId" | "stationId" | "name" | "qty" | "phase" | "informational" | "unitName" | "soldInEach"
+>;
+
+export interface PassBoard {
+  held: PassCard[];
+  toFire: PassCard[];
+  inProgress: PassCard[];
+  ready: PassCard[];
+  overview: OverviewFact[];
+}
+
+export interface DevicePassBoard {
+  board: PassBoard;
+  stations: ScreenSlot[];
+  /** null: no zone filter. */
+  zones: ScreenSlot[] | null;
+}
+
+/** A card's `releaseTicketItemIds` and `releaseContext`, sent back unchanged. */
+export interface PassReleaseAsk {
+  submissionId: string;
+  target: PassTarget;
+  ticketItemIds: string[];
+  expectedContext: string;
+}
+
+export interface PassReleaseResult {
+  releasedTicketItemIds: string[];
+}
+
 export interface DevicePassMonitor {
   orders: ExpoOrder[];
   stations: ScreenSlot[];
@@ -3486,6 +3564,32 @@ export class TillApi {
       undefined,
       options.signal,
     );
+  }
+
+  /** The pass's board → `GET /api/device/pass-board`; at a till it needs a signed-in person. */
+  getDevicePassBoard(options: ReadOptions = {}): Promise<DevicePassBoard> {
+    return this.#request<DevicePassBoard>(
+      "/api/device/pass-board",
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  /** A pass monitor's board → `GET /api/device/pass-monitor-board`; its cards carry no release. */
+  getDevicePassMonitorBoard(options: ReadOptions = {}): Promise<DevicePassBoard> {
+    return this.#request<DevicePassBoard>(
+      "/api/device/pass-monitor-board",
+      "GET",
+      undefined,
+      options.signal,
+    );
+  }
+
+  /** The pass's Fire → `POST /api/device/pass-screen/release`. A stale card rejects
+   *  `ticket.pass_context_changed`; the same `submissionId` replays its first answer. */
+  releaseDevicePass(ask: PassReleaseAsk): Promise<PassReleaseResult> {
+    return this.#request<PassReleaseResult>("/api/device/pass-screen/release", "POST", ask);
   }
 
   async bumpDeviceCourseReady(orderId: string, courseId: string): Promise<void> {
