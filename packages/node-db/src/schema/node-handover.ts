@@ -57,7 +57,10 @@ export const nodeHandoverOperations = table(
     uniqueIndex("node_handover_one_open_uq")
       .on(t.nodeId)
       .where(
-        sql`${t.state} not in ('return_complete', 'return_abandoned', 'replaced', 'abandoned')`,
+        sql`${t.state} not in (${sql.join(
+          HANDOVER_CLOSED_STATES.map((state) => sql`${state}`),
+          sql`, `,
+        )})`.inlineParams(),
       ),
   ],
   /* v8 ignore stop */
@@ -67,7 +70,9 @@ export const nodeHandoverOperations = table(
 export const nodeHandoverEvents = table("node_handover_events", {
   eventId: id("event_id").primaryKey().$defaultFn(newId),
   nodeId: id("node_id").notNull(),
-  // Null for a decision that belongs to no operation, such as carrying on as the main box.
+  // A `node_handover_operations` id, or null for a decision that belongs to no operation, such as
+  // carrying on as the main box. Nothing establishes that the operation's row exists: the A1018
+  // plan keeps node.db's handover tables free of foreign keys, so the writer's caller is trusted.
   operationId: id("operation_id"),
   kind: label("kind").notNull(),
   detail: json<Readonly<Record<string, unknown>>>("detail").notNull(),
@@ -80,7 +85,9 @@ export const nodeHandoverRestriction = table(
   "node_handover_restriction",
   {
     nodeId: id("node_id").primaryKey(),
-    // Null for a supersession learnt from a newer membership chart alone.
+    // A `node_handover_operations` id, or null for a supersession learnt from a newer membership
+    // chart alone. Nothing establishes that the operation's row exists, and no foreign key could:
+    // a returning box writes `superseded` at start, before it begins its side of the operation.
     operationId: id("operation_id"),
     kind: enumText("kind", ["handed-over", "superseded"]).notNull(),
     // A venue `nodes` row. Nothing in node.db establishes that it exists: node.db holds no venue

@@ -1324,8 +1324,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este cambio de servidor ya se empezó con otros datos, así que no se ha cambiado nada. Empieza un cambio de servidor nuevo.",
   },
   "handover.operation_in_progress": {
-    en: "This server is already in the middle of another handover, so a new one cannot start until that one has finished or been closed.",
-    es: "Este servidor ya está en medio de otro cambio de servidor, así que no se puede empezar otro hasta que ese termine o se cierre.",
+    en: "Nothing was started, because this server is already in the middle of another handover. Finish that handover, or abandon it, and then start this one again.",
+    es: "No se ha empezado nada, porque este servidor ya está en medio de otro cambio de servidor. Termina ese cambio de servidor, o abandónalo, y luego vuelve a empezar este.",
   },
   "handover.restriction_conflict": {
     en: "This server has already recorded that it handed over its work, with different details, so the record was not changed.",
