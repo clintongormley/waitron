@@ -29,7 +29,6 @@ beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
 const shift: MyShift = {
   id: "shift-1",
-  locationId: "location-1",
   startsAt: "2026-10-10T09:00:00Z",
   startsOffsetMinutes: 0,
   endsAt: "2026-10-10T17:00:00Z",

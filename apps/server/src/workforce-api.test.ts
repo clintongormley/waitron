@@ -110,18 +110,14 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
   });
 
   it("GET /management-api/roster returns { version: null, shifts: [] } for an empty week", async () => {
-    const res = await send(
-      mountApp(),
-      "GET",
-      `/management-api/roster?locationId=${locationId}&period=2026-03-02`,
-    );
+    const res = await send(mountApp(), "GET", `/management-api/roster?period=2026-03-02`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ version: null, shifts: [] });
   });
 
   it("POST /management-api/roster creates a draft and returns { versionId } (201)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/roster", {
-      body: { locationId, period: "2026-03-09" },
+      body: { period: "2026-03-09" },
     });
     expect(res.status).toBe(201);
     expect((await res.json()) as { versionId: string }).toMatchObject({
@@ -129,29 +125,9 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
     });
   });
 
-  it("400s a non-UUID locationId on GET (shared.invalid_id, never a 500)", async () => {
-    const res = await send(
-      mountApp(),
-      "GET",
-      "/management-api/roster?locationId=not-a-uuid&period=2026-03-02",
-    );
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "shared.invalid_id" },
-    });
-  });
-
-  it("400s a GET /roster with no locationId (shared.invalid_id)", async () => {
-    const res = await send(mountApp(), "GET", "/management-api/roster?period=2026-03-02");
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "shared.invalid_id" },
-    });
-  });
-
   it("400s a malformed period on POST (management.request_invalid)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/roster", {
-      body: { locationId, period: "not-a-date" },
+      body: { period: "not-a-date" },
     });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -160,8 +136,8 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
   });
 
   it("400s a POST /roster with a MALFORMED body (never a 500)", async () => {
-    // `readJsonBody` coerces the malformed body to `{}`, so `requireBodyUuid` rejects the missing
-    // locationId. Sent raw, since `send` would JSON.stringify a valid body.
+    // `readJsonBody` coerces the malformed body to `{}`, so `requirePeriod` rejects the missing
+    // period. Sent raw, since `send` would JSON.stringify a valid body.
     const res = await mountApp().request("/management-api/roster", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: managerCookie },
@@ -173,7 +149,7 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
   it("400s a shaped-but-invalid calendar date on POST (2026-02-30 → request_invalid, never a 500)", async () => {
     // Shape passes the YYYY-MM-DD regex but Feb 30 is not a real day.
     const res = await send(mountApp(), "POST", "/management-api/roster", {
-      body: { locationId, period: "2026-02-30" },
+      body: { period: "2026-02-30" },
     });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -182,11 +158,7 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
   });
 
   it("400s a shaped-but-invalid calendar date on GET (2026-13-01 → request_invalid, never a 500)", async () => {
-    const res = await send(
-      mountApp(),
-      "GET",
-      `/management-api/roster?locationId=${locationId}&period=2026-13-01`,
-    );
+    const res = await send(mountApp(), "GET", `/management-api/roster?period=2026-13-01`);
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "management.request_invalid" },
@@ -200,7 +172,7 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
 
   it("403s a staff-role session (no schedule.manage)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/roster", {
-      body: { locationId, period: "2026-03-09" },
+      body: { period: "2026-03-09" },
       cookie: staffCookie,
     });
     expect(res.status).toBe(403);
@@ -213,13 +185,12 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
 describe("mountWorkforceApi — shift routes", () => {
   async function draftVersion(period: string): Promise<string> {
     const res = await send(mountApp(), "POST", "/management-api/roster", {
-      body: { locationId, period },
+      body: { period },
     });
     return ((await res.json()) as { versionId: string }).versionId;
   }
   const shiftBody = (day: string) => ({
     personId,
-    locationId,
     startsAt: `${day}T09:00:00Z`,
     startsOffsetMinutes: 0,
     endsAt: `${day}T17:00:00Z`,
@@ -234,11 +205,7 @@ describe("mountWorkforceApi — shift routes", () => {
     });
     expect(res.status).toBe(201);
     const { shiftId } = (await res.json()) as { shiftId: string };
-    const roster = await send(
-      app,
-      "GET",
-      `/management-api/roster?locationId=${locationId}&period=2026-04-06`,
-    );
+    const roster = await send(app, "GET", `/management-api/roster?period=2026-04-06`);
     expect(
       ((await roster.json()) as { shifts: { id: string }[] }).shifts.map((s) => s.id),
     ).toContain(shiftId);
@@ -255,15 +222,11 @@ describe("mountWorkforceApi — shift routes", () => {
       endsOffsetMinutes: 120,
     };
     const added = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
-      body: { ...shift, locationId },
+      body: shift,
     });
     expect(added.status).toBe(201);
     const { shiftId } = (await added.json()) as { shiftId: string };
-    const roster = await send(
-      app,
-      "GET",
-      `/management-api/roster?locationId=${locationId}&period=2026-03-23`,
-    );
+    const roster = await send(app, "GET", `/management-api/roster?period=2026-03-23`);
     expect(roster.status).toBe(200);
     expect(((await roster.json()) as { shifts: unknown[] }).shifts).toContainEqual({
       id: shiftId,
@@ -306,11 +269,7 @@ describe("mountWorkforceApi — shift routes", () => {
       },
     });
     expect(res.status).toBe(204);
-    const roster = await send(
-      app,
-      "GET",
-      `/management-api/roster?locationId=${locationId}&period=2026-06-01`,
-    );
+    const roster = await send(app, "GET", `/management-api/roster?period=2026-06-01`);
     const shift = ((await roster.json()) as { shifts: Record<string, unknown>[] }).shifts.find(
       (s) => s.id === shiftId,
     );
@@ -439,13 +398,12 @@ describe("mountWorkforceApi — publish", () => {
     await seedConvenio();
     const app = mountApp();
     const create = await send(app, "POST", "/management-api/roster", {
-      body: { locationId, period: "2026-05-04" },
+      body: { period: "2026-05-04" },
     });
     const { versionId } = (await create.json()) as { versionId: string };
     await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
       body: {
         personId,
-        locationId,
         startsAt: "2026-05-04T09:00:00Z",
         startsOffsetMinutes: 0,
         endsAt: "2026-05-04T14:00:00Z",
@@ -461,14 +419,13 @@ describe("mountWorkforceApi — publish", () => {
     await seedConvenio();
     const app = mountApp();
     const create = await send(app, "POST", "/management-api/roster", {
-      body: { locationId, period: "2026-05-11" },
+      body: { period: "2026-05-11" },
     });
     const { versionId } = (await create.json()) as { versionId: string };
     // A 12h shift breaches the 9h ordinary-daily max AND owes a break — a non-empty breaches array.
     await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
       body: {
         personId,
-        locationId,
         startsAt: "2026-05-11T08:00:00Z",
         startsOffsetMinutes: 0,
         endsAt: "2026-05-11T20:00:00Z",
@@ -480,11 +437,7 @@ describe("mountWorkforceApi — publish", () => {
     const { breaches } = (await res.json()) as { breaches: { kind: string }[] };
     expect(breaches.map((b) => b.kind)).toContain("exceeds_daily_max");
     // Still published:
-    const roster = await send(
-      app,
-      "GET",
-      `/management-api/roster?locationId=${locationId}&period=2026-05-11`,
-    );
+    const roster = await send(app, "GET", `/management-api/roster?period=2026-05-11`);
     expect(((await roster.json()) as { version: { status: string } }).version.status).toBe(
       "published",
     );
@@ -496,17 +449,13 @@ describe("mountWorkforceApi — publish", () => {
     const removed = await suite.db.delete(convenioConfig).returning();
     try {
       const create = await send(app, "POST", "/management-api/roster", {
-        body: { locationId, period: "2026-05-18" },
+        body: { period: "2026-05-18" },
       });
       const { versionId } = (await create.json()) as { versionId: string };
       const res = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ breaches: [] });
-      const roster = await send(
-        app,
-        "GET",
-        `/management-api/roster?locationId=${locationId}&period=2026-05-18`,
-      );
+      const roster = await send(app, "GET", `/management-api/roster?period=2026-05-18`);
       expect(await roster.json()).toMatchObject({
         version: { id: versionId, status: "published" },
       });
@@ -518,7 +467,7 @@ describe("mountWorkforceApi — publish", () => {
   it("leaves the roster draft when resolving its labour rules fails unexpectedly", async () => {
     const app = mountApp();
     const create = await send(app, "POST", "/management-api/roster", {
-      body: { locationId, period: "2026-08-17" },
+      body: { period: "2026-08-17" },
     });
     const { versionId } = (await create.json()) as { versionId: string };
     const spy = vi
@@ -528,11 +477,7 @@ describe("mountWorkforceApi — publish", () => {
       const response = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
       expect(response.status).toBe(500);
       expect(await response.json()).toEqual({ error: { code: "server.internal" } });
-      const read = await send(
-        app,
-        "GET",
-        `/management-api/roster?locationId=${locationId}&period=2026-08-17`,
-      );
+      const read = await send(app, "GET", `/management-api/roster?period=2026-08-17`);
       expect(await read.json()).toMatchObject({ version: { id: versionId, status: "draft" } });
     } finally {
       spy.mockRestore();

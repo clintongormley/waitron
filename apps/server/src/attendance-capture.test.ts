@@ -136,7 +136,8 @@ describe("transactional attendance operation capture", () => {
     ]);
   });
   it("records an operation for the venue when given no location", async () => {
-    const { locationId: _omitted, ...withoutLocation } = fact();
+    const withoutLocation: Parameters<AttendanceRecorder>[1] = fact();
+    delete withoutLocation.locationId;
     await capture(withoutLocation);
     expect(await suite.db.select().from(attendanceOperationFacts)).toMatchObject([
       { key: "attempt:one", locationId, businessDay: "2026-01-05", outcome: "qualifying" },

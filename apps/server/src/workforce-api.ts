@@ -121,7 +121,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
   app.get("/management-api/roster", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      requireUuidParam(c.req.query("locationId") ?? "", "LocationId");
       const period = requirePeriod(c.req.query("period"), "period");
       const snapshot = await gated(sessionId, SCHEDULE_PERMISSION, (tx) =>
         backend.getRoster(tx, { period }),
@@ -202,8 +201,7 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
   app.post("/management-api/roster", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const body = await readJsonBody<{ locationId?: unknown; period?: unknown }>(c);
-      requireBodyUuid(body.locationId, "locationId");
+      const body = await readJsonBody<{ period?: unknown }>(c);
       const period = requirePeriod(body.period, "period");
       const versionId = await gated(sessionId, SCHEDULE_PERMISSION, async (tx) => {
         const id = await backend.createRosterVersion(tx, { period });
@@ -220,7 +218,6 @@ export function mountWorkforceApi(app: Hono, deps: WorkforceApiDeps, log: Logger
       const versionId = requireUuidParam(c.req.param("versionId"), "RosterVersionId");
       const body = await readJsonBody<Record<string, unknown>>(c);
       const personId = requireBodyUuid(body.personId, "personId");
-      requireBodyUuid(body.locationId, "locationId");
       const startsAt = requireTimestamp(body.startsAt, "startsAt");
       const endsAt = requireTimestamp(body.endsAt, "endsAt");
       const startsOffsetMinutes = requireOffsetMinutes(

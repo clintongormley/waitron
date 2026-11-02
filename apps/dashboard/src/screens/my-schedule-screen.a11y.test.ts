@@ -13,7 +13,6 @@ const roster: RosterEntry[] = [
 const shifts: MyShift[] = [
   {
     id: "s1",
-    locationId: "loc1",
     startsAt: "2026-05-04T09:00:00Z",
     startsOffsetMinutes: 0,
     endsAt: "2026-05-04T17:00:00Z",

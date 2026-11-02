@@ -31,7 +31,6 @@ afterEach(() => {
 
 const shift: MyShift = {
   id: "shift-1",
-  locationId: "loc-1",
   startsAt: "2026-10-07T09:00:00Z",
   endsAt: "2026-10-07T17:00:00Z",
   startsOffsetMinutes: 0,
