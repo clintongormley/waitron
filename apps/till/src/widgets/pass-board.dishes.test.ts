@@ -1,0 +1,301 @@
+import { page } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { allergenName } from "../i18n/allergen-names.js";
+import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
+import { PASS_COLUMNS } from "../state/kitchen-columns.js";
+import type { PassBoard, PassCard, PassCardItem } from "../api/client.js";
+import {
+  PASS_NOW,
+  minutesAgo,
+  passBoard,
+  passCard,
+  passItem,
+} from "../../test/pass-board-fixtures.js";
+import { allergyBlock } from "../../test/kitchen-allergy-fixtures.js";
+import type { TillPassBoard } from "./pass-board.js";
+import "./pass-board.js";
+
+beforeEach(async () => {
+  await page.viewport(1280, 900);
+});
+afterEach(resetPage);
+afterEach(cleanupWidgets);
+
+async function mountBoard(board: PassBoard) {
+  const { el } = await mountWidget<TillPassBoard>("till-pass-board", {
+    board,
+    mode: "pass",
+    runsPass: true,
+    columns: PASS_COLUMNS,
+    now: PASS_NOW,
+    sending: new Set<string>(),
+    reducedMotion: false,
+  });
+  return el;
+}
+
+const inProgress = (items: PassCardItem[], card: Partial<PassCard> = {}) =>
+  mountBoard(passBoard({ inProgress: [passCard({ items, ...card })] }));
+const itemOf = (el: TillPassBoard, id: string) =>
+  el.shadowRoot!.querySelector<HTMLElement>(`[data-item="${id}"]`)!;
+const names = (el: TillPassBoard) =>
+  [...el.shadowRoot!.querySelectorAll(".item-name")].map((name) => name.textContent);
+const portion = (id: string, overrides: Partial<PassCardItem> = {}) =>
+  passItem({
+    id,
+    name: "Burger",
+    qty: "1.000",
+    unitName: null,
+    unitPrecision: 0,
+    soldInEach: true,
+    state: "preparing",
+    phase: "preparing",
+    ...overrides,
+  });
+
+describe("A773 pass board widget: dishes", () => {
+  it("draws a dish's option answers and extras as indented sub-text after its name", async () => {
+    const el = await inProgress([
+      passItem({
+        id: "ti-9",
+        name: "Cortado",
+        optionSnapshots: [
+          {
+            listName: { en: "Size" },
+            listCustomerName: { en: "Customer size" },
+            listKitchenName: "Kitchen size",
+            labelName: { en: "Large" },
+            labelCustomerName: { en: "Customer large" },
+            labelKitchenName: "Kitchen large",
+          },
+        ],
+        modifiers: [
+          { descriptions: { "es-ES": "Leche avena" } },
+          { descriptions: { "es-ES": "Sirope" }, perDish: 2 },
+        ],
+      }),
+    ]);
+    const item = itemOf(el, "ti-9");
+    const subText = item.querySelector<HTMLElement>(".item-modifiers")!;
+    expect(subText.querySelector(".modifier-answer")!.textContent).toContain("Kitchen large");
+    expect(subText.textContent).not.toContain("Customer large");
+    expect(
+      [...subText.querySelectorAll(".modifier")].map((modifier) => modifier.textContent!.trim()),
+    ).toEqual(["+ Leche avena", "+ Sirope x2"]);
+    expect(item.innerHTML.indexOf("Cortado")).toBeLessThan(item.innerHTML.indexOf("Kitchen large"));
+  });
+
+  it("draws no option sub-text on a dish with none", async () => {
+    const el = await inProgress([passItem()]);
+    expect(el.shadowRoot!.querySelectorAll(".item-modifiers")).toHaveLength(0);
+  });
+
+  it("draws the line's frozen note beneath the dish, and no row for an empty or missing one", async () => {
+    const el = await inProgress([
+      passItem({ id: "noted", note: "sin sal" }),
+      passItem({ id: "empty", note: "" }),
+      passItem({ id: "none", note: null }),
+    ]);
+    expect(
+      itemOf(el, "noted").querySelector('[data-item-customisation="noted"] [data-note]')!
+        .textContent,
+    ).toContain("sin sal");
+    expect(itemOf(el, "empty").querySelector(".item-customisation")).toBeNull();
+    expect(itemOf(el, "none").querySelector(".item-customisation")).toBeNull();
+  });
+
+  it("draws the dish's own allergen chips and no not-reviewed warning", async () => {
+    const el = await inProgress([
+      passItem({ id: "milk", asServed: { allergens: { milk: {} }, pending: false } }),
+      passItem({ id: "pending", asServed: { allergens: {}, pending: true } }),
+      passItem({ id: "plain" }),
+    ]);
+    const chips = itemOf(el, "milk").querySelector('[data-item-allergens="milk"]')!;
+    expect(chips.querySelector(".allergen-chip")!.textContent).toBe(
+      allergenName("milk", currentLocale()),
+    );
+    expect(chips.textContent).toContain(t("allergens.contains"));
+    expect(itemOf(el, "pending").querySelector(".item-allergens")).toBeNull();
+    expect(itemOf(el, "pending").textContent).not.toMatch(/review|revisi/i);
+    expect(itemOf(el, "plain").querySelector(".item-allergens")).toBeNull();
+  });
+
+  it("draws diet badges, a contains chip, and the neutral not-reviewed note", async () => {
+    const el = await inProgress([
+      passItem({ id: "vegan", asServedDiet: { vegan: "yes", vegetarian: "yes", contains: [] } }),
+      passItem({ id: "meat", asServedDiet: { vegan: "no", vegetarian: "no", contains: ["meat"] } }),
+      passItem({
+        id: "unknown",
+        asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
+      }),
+      passItem({ id: "plain" }),
+    ]);
+    expect(itemOf(el, "vegan").querySelector("[data-diet='vegan']")).not.toBeNull();
+    expect(itemOf(el, "vegan").querySelector("[data-diet='vegetarian']")).not.toBeNull();
+    expect(itemOf(el, "meat").querySelector("[data-diet-contains='meat']")).not.toBeNull();
+    expect(itemOf(el, "meat").querySelector("[data-diet='vegan']")).toBeNull();
+    expect(itemOf(el, "unknown").querySelector("[data-diet-pending]")).not.toBeNull();
+    expect(itemOf(el, "unknown").querySelector("[data-diet='vegan']")).toBeNull();
+    expect(itemOf(el, "plain").querySelector(".line-diet")).toBeNull();
+  });
+
+  it("names extras made at another station, with the extra's nutrition, and never as a '+' extra", async () => {
+    const el = await inProgress([
+      passItem({
+        id: "with",
+        crossRefs: [
+          {
+            kind: "with",
+            name: "CHIPS",
+            perDish: 2,
+            stationName: "Fryer",
+            addAllergens: { gluten: { kinds: ["wheat"] } },
+            suitableFor: [],
+          },
+        ],
+      }),
+      passItem({ id: "for", crossRefs: [{ kind: "for", name: "BURG", stationName: "Grill" }] }),
+      passItem({ id: "plain" }),
+    ]);
+    const withRef = itemOf(el, "with").querySelector("[data-crossref]")!.textContent!;
+    expect(withRef).toContain("with CHIPS x2 from Fryer");
+    expect(withRef).toContain(allergenName("gluten", currentLocale()));
+    expect(itemOf(el, "for").querySelector("[data-crossref]")!.textContent).toContain(
+      "for BURG at Grill",
+    );
+    expect(itemOf(el, "plain").querySelector("[data-crossref]")).toBeNull();
+    expect(el.shadowRoot!.textContent).not.toContain("+ CHIPS");
+  });
+
+  describe("in Spanish", () => {
+    let previous: string;
+    beforeEach(() => {
+      previous = currentLocale();
+      setLocale("es-ES");
+    });
+    afterEach(() => setLocale(previous));
+
+    it("words extras made at another station in Spanish", async () => {
+      const el = await inProgress([
+        passItem({
+          id: "with",
+          crossRefs: [{ kind: "with", name: "CHIPS", perDish: 2, stationName: "Fryer" }],
+        }),
+        passItem({ id: "none", crossRefs: [{ kind: "for", name: "AGUA", stationName: null }] }),
+      ]);
+      expect(itemOf(el, "with").querySelector("[data-crossref]")!.textContent).toContain(
+        "con CHIPS x2 de Fryer",
+      );
+      expect(itemOf(el, "none").querySelector("[data-crossref]")!.textContent).toContain(
+        "para AGUA, sin preparación",
+      );
+    });
+  });
+
+  it("draws identical portions as one row with their count", async () => {
+    const el = await inProgress([portion("p1"), portion("f1", { name: "Fish" }), portion("p2")]);
+    expect(names(el)).toEqual(["2× Burger", "1× Fish"]);
+    expect(el.shadowRoot!.querySelectorAll("[data-item]")).toHaveLength(2);
+  });
+
+  it.each<[string, Partial<PassCardItem>]>([
+    ["another station", { stationName: "Parrilla" }],
+    ["another state", { state: "ready", phase: "ready" }],
+    ["another note", { note: "no salt" }],
+  ])("draws a portion with %s apart", async (_, overrides) => {
+    const el = await inProgress([portion("p1"), portion("p2", overrides)]);
+    expect(el.shadowRoot!.querySelectorAll("[data-item]")).toHaveLength(2);
+  });
+
+  it("draws a forgotten portion apart from a fresh one, and marks only the forgotten", async () => {
+    const el = await inProgress([
+      portion("p1"),
+      portion("p2", { queuedAt: minutesAgo(20), band: "fresh" }),
+    ]);
+    expect(names(el)).toEqual(["1× Burger", "1× Burger"]);
+    expect(el.shadowRoot!.querySelectorAll("[data-forgotten]")).toHaveLength(1);
+    expect(itemOf(el, "p2").querySelector("[data-forgotten]")).not.toBeNull();
+  });
+
+  it("marks a forgotten dish in view by its age on the board's clock, dimmed or not, never by the server's band", async () => {
+    const el = await inProgress([
+      passItem({ id: "own", queuedAt: minutesAgo(20), band: "fresh" }),
+      passItem({
+        id: "dimmed",
+        informational: true,
+        stationName: "Bar",
+        queuedAt: minutesAgo(20),
+        band: "fresh",
+      }),
+      passItem({ id: "young", queuedAt: minutesAgo(1), band: "forgotten" }),
+    ]);
+    for (const id of ["own", "dimmed"]) {
+      expect(itemOf(el, id).querySelector("[data-forgotten]")!.textContent).toContain(
+        t("expo.item_forgotten"),
+      );
+    }
+    expect(itemOf(el, "young").querySelector("[data-forgotten]")).toBeNull();
+  });
+
+  it("marks no held dish forgotten, however old", async () => {
+    const el = await mountBoard(
+      passBoard({
+        held: [
+          passCard({
+            key: "bill:held",
+            kind: "held",
+            requestedAt: null,
+            items: [
+              passItem({
+                id: "held",
+                phase: "held",
+                firedAt: null,
+                requestedAt: null,
+                queuedAt: minutesAgo(60),
+                band: "forgotten",
+              }),
+            ],
+          }),
+        ],
+      }),
+    );
+    expect(itemOf(el, "held")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-forgotten]")).toBeNull();
+  });
+
+  it("heads a card with its former numbers, kitchen note and the allergy line's marker", async () => {
+    const el = await inProgress(
+      [passItem({ id: "allergic", allergy: allergyBlock }), passItem({ id: "plain" })],
+      {
+        orders: [
+          {
+            orderId: "order-1",
+            orderNumber: 27,
+            formerNumbers: [28, 30],
+            tableLabel: "T1",
+            kitchenNote: "Birthday, bring candles",
+          },
+        ],
+      },
+    );
+    const head = el.shadowRoot!.querySelector(".ticket-head")!;
+    expect(head.querySelector(".number")!.textContent!.replace(/\s+/g, " ")).toBe(
+      "#27 (was 28, 30)",
+    );
+    expect(head.querySelectorAll("[data-allergy-marker]")).toHaveLength(1);
+    expect(el.shadowRoot!.querySelector("[data-kitchen-note]")!.textContent).toContain(
+      `${t("kitchen_note.heading")}: Birthday, bring candles`,
+    );
+    expect(itemOf(el, "allergic").querySelector("[data-kitchen-allergy]")!.textContent).toContain(
+      "Captured milk",
+    );
+    expect(itemOf(el, "plain").querySelector("[data-kitchen-allergy]")).toBeNull();
+  });
+
+  it("draws no allergy marker and no kitchen note on a card without them", async () => {
+    const el = await inProgress([passItem()]);
+    expect(el.shadowRoot!.querySelector("[data-allergy-marker]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-kitchen-note]")).toBeNull();
+  });
+});

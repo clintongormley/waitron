@@ -2,8 +2,9 @@ import { ContentLanguageController, baseStyles } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { TimingBand } from "@waitron/shared";
-import type { PassBoard } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import type { PassBoard, PassCardItem } from "../api/client.js";
+import { allergenName } from "../i18n/allergen-names.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { type ColumnKey, type ColumnState, PASS_COLUMNS } from "../state/kitchen-columns.js";
 import {
   type CardView,
@@ -13,9 +14,18 @@ import {
   passCardViews,
   passOverdueCount,
 } from "../state/pass-view.js";
-import { dishLine } from "./dish-format.js";
+import { kitchenPortionKey, portionGroups } from "../state/portion-groups.js";
+import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
+import { dishLine, snapshotDescriptionFor } from "./dish-format.js";
 import { groupName } from "./group-name.js";
+import {
+  kitchenAllergyBlock,
+  kitchenAllergyMarker,
+  kitchenAllergyStyles,
+} from "./kitchen-allergy-block.js";
+import { optionAnswers } from "./option-snapshot.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
+import { extraCount, queueCrossRefs } from "./queue-crossrefs.js";
 
 const COLUMN_WORDS = {
   held: "pass.column.held",
@@ -34,6 +44,8 @@ export class TillPassBoard extends LitElement {
 
   static override styles = [
     baseStyles,
+    dietBadgeStyles,
+    kitchenAllergyStyles,
     orderNumberStyles,
     css`
       :host {
@@ -181,6 +193,71 @@ export class TillPassBoard extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
+      .kitchen-note {
+        margin: 0;
+        overflow-wrap: anywhere;
+        color: var(--wt-color-text);
+      }
+
+      .item-forgotten-flag {
+        color: var(--wt-color-danger);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .item-modifiers,
+      .item-crossrefs,
+      .item-customisation {
+        display: flex;
+        flex-direction: column;
+        padding-left: var(--wt-space-3);
+        font-size: var(--wt-font-size-sm);
+      }
+
+      .item-modifiers,
+      .item-crossrefs,
+      .item-note {
+        color: var(--wt-color-text-muted);
+      }
+
+      .line-diet {
+        padding-left: var(--wt-space-3);
+      }
+
+      .extra-nutrition,
+      .extra-allergens,
+      .extra-diet {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1);
+      }
+
+      .extra-nutrition {
+        margin-left: var(--wt-space-1);
+      }
+
+      .item-allergens {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-1) var(--wt-space-2);
+        padding-left: var(--wt-space-3);
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+
+      .allergen-label {
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .allergen-chip {
+        display: inline-block;
+        padding: 0 var(--wt-space-2);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-full);
+      }
+
       .fire,
       .lever {
         min-height: var(--wt-tap-min);
@@ -265,10 +342,18 @@ export class TillPassBoard extends LitElement {
               ${order.tableLabel ? html`<span class="label">${order.tableLabel}</span>` : nothing}`,
         )}
         ${card.group === undefined ? nothing : html`<span class="group-name">${groupName(card.group)}</span>`}
+        ${kitchenAllergyMarker(view.items.some(({ item }) => item.allergy !== null))}
         ${this.#age(view)}
       </div>
+      ${card.orders.map((order) =>
+        order.kitchenNote
+          ? html`<p class="kitchen-note" data-kitchen-note>
+              ${t("kitchen_note.heading")}: ${order.kitchenNote}
+            </p>`
+          : nothing,
+      )}
       <ul class="items">
-        ${view.items.map((item) => this.#item(item))}
+        ${rows(view.items).map((members) => this.#item(members))}
       </ul>
       ${this.#fire(view)}${this.#groupReady(view)}${view.courseReady.map((course) =>
         this.#courseReady(view, course),
@@ -288,11 +373,17 @@ export class TillPassBoard extends LitElement {
     >`;
   }
 
-  #item(view: ItemView): TemplateResult {
+  /** `members`: identical portions drawn as one row from its first. */
+  #item(members: readonly ItemView[]): TemplateResult {
+    const view = members[0]!;
     const { item } = view;
     const held = item.phase === "held";
     const label = dishLine(
-      { quantity: item.qty, unitName: item.unitName, soldInEach: item.soldInEach },
+      {
+        quantity: members.length === 1 ? item.qty : String(members.length),
+        unitName: item.unitName,
+        soldInEach: item.soldInEach,
+      },
       item.name,
     );
     return html`<li
@@ -302,6 +393,13 @@ export class TillPassBoard extends LitElement {
     >
       <span class="item-name">${label}</span>
       ${this.#caption(view.caption)}
+      ${
+        view.forgotten
+          ? html`<span class="item-forgotten-flag" data-forgotten
+              >${t("expo.item_forgotten")}</span
+            >`
+          : nothing
+      }
       ${
         view.closed === null
           ? nothing
@@ -313,6 +411,10 @@ export class TillPassBoard extends LitElement {
               ).replaceAll("{station}", () => item.stationName)}</span
             >`
       }
+      ${customisation(item)}${modifiers(item)}${queueCrossRefs(item, "item")}${allergens(item)}${dietBadges(
+        item.asServedDiet,
+        `item-diet-${item.id}`,
+      )}${kitchenAllergyBlock(item.allergy)}
     </li>`;
   }
 
@@ -388,6 +490,61 @@ export class TillPassBoard extends LitElement {
       this.reducedMotion ?? window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     return `age-${band}${band === "forgotten" && !reduced ? " flash" : ""}`;
   }
+}
+
+/** A portion's time is keyed only as the Forgotten mark it draws: the server stamps each ticket
+ * item's `queuedAt` on its own, so portions fired together can differ by a millisecond. */
+function rows(items: readonly ItemView[]): ItemView[][] {
+  return portionGroups(
+    items,
+    (view) =>
+      kitchenPortionKey(view.item, view.item.qty, [
+        view.item.stationName,
+        view.item.phase,
+        view.dimmed,
+        view.closed,
+        view.forgotten,
+      ]),
+    () => 0,
+  );
+}
+
+function customisation(item: PassCardItem): TemplateResult | typeof nothing {
+  const note = item.note ?? null;
+  if (note === null || note === "") return nothing;
+  return html`<span class="item-customisation" data-item-customisation=${item.id}>
+    <span class="item-note" data-note>${note}</span>
+  </span>`;
+}
+
+/** The dish's own allergen profile; each extra's own allergens are drawn beside the extra. */
+function allergens(item: PassCardItem): TemplateResult | typeof nothing {
+  const codes = item.asServed ? Object.keys(item.asServed.allergens).sort() : [];
+  if (codes.length === 0) return nothing;
+  const locale = currentLocale();
+  return html`<span class="item-allergens" data-item-allergens=${item.id}>
+    <span class="allergen-label">${t("allergens.contains")}</span>
+    ${codes.map((code) => html`<span class="allergen-chip">${allergenName(code, locale)}</span>`)}
+  </span>`;
+}
+
+function modifiers(item: PassCardItem): TemplateResult | typeof nothing {
+  const picked = item.modifiers ?? [];
+  const answers = optionAnswers(item.optionSnapshots, { reads: "kitchen" });
+  if (picked.length === 0 && answers.length === 0) return nothing;
+  return html`<span class="item-modifiers">
+    ${answers.map((answer) => html`<span class="modifier-answer">${answer}</span>`)}
+    ${picked.map(
+      (modifier, i) =>
+        html`<span class="modifier"
+          >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}${extraCount(modifier)}`}${extraNutrition(
+            modifier,
+            `item-modifier-allergens-${item.id}-${i}`,
+            `item-modifier-diet-${item.id}-${i}`,
+          )}</span
+        >`,
+    )}
+  </span>`;
 }
 
 function captionWords(caption: ItemCaption): string | null {
