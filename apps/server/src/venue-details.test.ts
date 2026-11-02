@@ -1537,9 +1537,11 @@ describe("workforce facts after venue corrections", () => {
     );
     expect(await readCurrent()).toEqual(before);
     expect(retained()).toEqual(history);
-    expect(await get("locations")).toEqual([
-      { id: venue.cfg.locationId, name: "Current location label", timeZone: "UTC" },
-    ]);
+    expect((await read()).details).toEqual({
+      ...initial.details,
+      name: "Current location label",
+      timeZone: "UTC",
+    });
   });
 });
 
