@@ -15,11 +15,18 @@ import { writePartyAllergy } from "@waitron/venue-service";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { OPERATOR } from "./testing/party-venue.js";
+import {
+  inTx,
+  OPERATOR,
+  pay,
+  seatWithNoAllergies,
+  setupPartyVenue,
+} from "./testing/party-venue.js";
+import { combineParties } from "./testing/table-action-fixture.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { readScopedPassBoard, type PassScope } from "./pass-board.js";
 import type { PassBoard, PassCard } from "./pass-card.js";
-import { fireGroup, moveGroupsToParty } from "./order-groups.js";
+import { fireGroup } from "./order-groups.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import { createTable } from "./testing/live-table.js";
 import { seatTable } from "./parties.js";
@@ -186,26 +193,39 @@ describe("A773 pass board: ages and party", () => {
   });
 
   it("gives a group card after a merge its own party, not its first bill's", async () => {
-    vi.useFakeTimers({ toFake: ["Date"], now: at("12:00") });
-    current = await setupSplitExtrasVenue();
-    const { groupId } = await heldThenFired(current);
-    const target = await withTransaction(db, async (tx) => {
-      const other = await seatAnotherParty(tx, current, "Merged into");
-      // The bill stays on its own party while the groups move, as a merge leaves a paid bill.
-      await moveGroupsToParty(tx, current.party.partyId, other);
-      const closed = await partyRow(tx, current.party.partyId);
-      let surviving = await partyRow(tx, other);
+    const v = await setupPartyVenue(db);
+    const paid = await seatWithNoAllergies(v, await v.table("Paid first"));
+    const placed = await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, paid.partyId, {
+        billId: paid.tabId,
+        operatorId: OPERATOR,
+        groups: [{ lines: [{ menuItemId: v.item("Burger"), quantity: "1" }], release: "fire" }],
+      }),
+    );
+    await pay(v, paid.tabId, "12.00");
+    const into = await seatWithNoAllergies(v, await v.table("Merged into"));
+    const target = await inTx(v, async (tx) => {
+      await combineParties(tx, v.cfg, {
+        from: paid.partyId,
+        into: into.partyId,
+        tables: "join",
+        operatorId: OPERATOR,
+      });
+      const closed = await partyRow(tx, paid.partyId);
+      let surviving = await partyRow(tx, into.partyId);
+      // Equal revisions could not tell which party's revision the card carries.
       if (closed.revision === surviving.revision) {
         await tx
           .update(parties)
           .set({ revision: sql`${parties.revision} + 3` })
-          .where(eq(parties.id, other));
-        surviving = await partyRow(tx, other);
+          .where(eq(parties.id, into.partyId));
+        surviving = await partyRow(tx, into.partyId);
       }
       expect(surviving.revision).not.toBe(closed.revision);
       return surviving;
     });
-    const card = groupCard(await board(), groupId);
+    const merged = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY));
+    const card = groupCard(merged, placed.groups[0]!.id);
     expect(card.target).toMatchObject({ kind: "group", partyId: target.id });
     expect(card.party).toEqual({ id: target.id, revision: target.revision });
   });
@@ -280,6 +300,28 @@ describe("A773 pass board: dimming", () => {
     });
     const pass = await read({ stationIds: [grill, bar], zoneIds: null });
     expect(atStation(pass, grill).informational).toBe(false);
+  });
+
+  it("2b. dims nothing in view when the only pass work is out of the pass's view", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: at("12:00") });
+    current = await setupSplitExtrasVenue();
+    const { grill, fryer, bar } = current.stations;
+    await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [fryer]);
+      await fireBurgerWithChips(tx, current, current.party.partyId);
+    });
+    const pass = await read({ stationIds: [grill, bar], zoneIds: null });
+    expect(atStation(pass, fryer)).toMatchObject({
+      phase: "requested",
+      passControlled: true,
+      visible: false,
+      informational: true,
+    });
+    expect(atStation(pass, grill)).toMatchObject({
+      passControlled: false,
+      visible: true,
+      informational: false,
+    });
   });
 
   it("3. keeps a dish out of the pass's view informational while dimming nothing in view", async () => {

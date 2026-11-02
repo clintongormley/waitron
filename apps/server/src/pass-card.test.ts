@@ -662,7 +662,7 @@ describe("A773 pass board: release set", () => {
 });
 
 describe("A773 pass board: dimming", () => {
-  it("5. dims non-pass-work dishes in view only when a station in view waits, and Fire never reads it", () => {
+  it("5. dims non-pass-work dishes in view only when a station in view waits, and Hide drops only those", () => {
     const scope: PassScope = { stationIds: [grill, fryer, bar], zoneIds: null };
     const rows = [
       released({ id: "grill-1", state: "preparing", passControlled: false, lineNo: 1 }),
@@ -718,5 +718,21 @@ describe("A773 pass board: dimming", () => {
       cards(board).map((card) => [card.releaseTicketItemIds, card.releaseContext]);
     for (const board of [waiting, calmHidden, waitingHidden])
       expect(release(board)).toEqual(release(calm));
+  });
+
+  it("5b. lets no recalled pass work dim the board", () => {
+    const rows = [
+      row({ id: "grill-recalled", recalled: true, lineNo: 1 }),
+      released({
+        id: "bar-1",
+        stationId: bar,
+        state: "preparing",
+        passControlled: false,
+        lineNo: 2,
+      }),
+    ];
+    const board = buildPassBoard(rows, EVERY, { showNonPassStations: true }, false);
+    expect(cards(board).flatMap((card) => card.items.map((item) => item.id))).toEqual(["bar-1"]);
+    expect(itemOf(cards(board)[0]!, "bar-1").informational).toBe(false);
   });
 });

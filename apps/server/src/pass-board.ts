@@ -144,7 +144,7 @@ export async function readScopedPassBoard(
   return buildPassBoard(rows, scope, display, await aStationInViewWaits(tx, scope));
 }
 
-/** Active stations only: a deactivated station left waiting must not dim the pass unexplained. */
+/** Active stations only, so a deactivated station left waiting does not set the flag. */
 async function aStationInViewWaits(tx: Transaction, scope: PassScope): Promise<boolean> {
   if (scope.stationIds !== null && scope.stationIds.length === 0) return false;
   const conditions = [eq(kitchenStations.waitsForPass, true), eq(kitchenStations.active, true)];
