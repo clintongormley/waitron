@@ -100,6 +100,16 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     expect(m.get(t)).toEqual({ reservedTime: "14:00" });
   });
 
+  // A1301: deleted with cfg in S18
+  it("annotates the venue's booking whatever location the scope names", async () => {
+    const v = await setupVenue();
+    const t = await makeTable(v, "7b");
+    await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
+    const stray = { locationId: brandLocationId(randomUUID()) };
+    const m = await annotate(stray, MADRID_NOON, [t]);
+    expect(m.get(t)).toEqual({ reservedTime: "14:00" });
+  });
+
   it("returns reservedTime null when the table has no upcoming booked reservation", async () => {
     const v = await setupVenue();
     const t = await makeTable(v, "8");

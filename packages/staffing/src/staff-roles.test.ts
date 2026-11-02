@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
+import { CORE_MIGRATIONS, venueLocationId, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
@@ -26,6 +26,7 @@ import {
   readStaffRoleDeleteImpact,
   reorderStaffRoles,
   setStaffRoleHolders,
+  staffRolesNamed,
   updateStaffRole,
 } from "./staff-roles.js";
 
@@ -129,6 +130,27 @@ describe("staff roles", () => {
     await expect(
       inTx((tx) => createStaffRole(tx, { name: " Waiter ", colour: "red" })),
     ).rejects.toMatchObject({ code: "staff_role.name_taken", params: { name: "Waiter" } });
+  });
+
+  it("plans the name check on the location and name index, not a scan", async () => {
+    await seedVenue(suite.db);
+    for (const except of [null, randomUUID()]) {
+      const plan = await inTx(async (tx) => {
+        const emitted = staffRolesNamed(tx, await venueLocationId(tx), "Waiter", except).toSQL();
+        const parts = emitted.sql.split("?");
+        const statement = sql.raw(`explain query plan ${parts[0]}`);
+        emitted.params.forEach((param, i) => {
+          statement.append(sql`${param}`);
+          statement.append(sql.raw(parts[i + 1]!));
+        });
+        return tx.execute<{ detail: string }>(statement);
+      });
+      const details = plan.rows.map((row) => row.detail);
+      expect(details.some((d) => d.includes("USING INDEX staff_roles_location_name_key"))).toBe(
+        true,
+      );
+      expect(details.some((d) => d.includes("SCAN staff_roles"))).toBe(false);
+    }
   });
 
   it("refuses a blank name and an unknown colour as staffing.invalid", async () => {

@@ -234,3 +234,39 @@ describe("BOOKINGS_TABLE_REMOVAL.deleteRefusals", () => {
     });
   });
 });
+
+// A1301: deleted with cfg in S18
+describe("BOOKINGS_TABLE_REMOVAL whatever location the scope names", () => {
+  it("refuses, names and releases the venue's bookings for a scope naming no location", async () => {
+    const v = await setupVenue();
+    const t = await makeTable(v, "Stray");
+    const booking = await insertBooking(v, { tableId: t, date: "2026-09-16", time: "21:00:00" });
+    const stray = { locationId: brandLocationId(randomUUID()) };
+
+    const refusals = await inTx((tx) =>
+      BOOKINGS_TABLE_REMOVAL.refuse(tx, stray, [t], AFTER_MADRID_MIDNIGHT),
+    );
+    expect(refusals.get(t)).toMatchObject({
+      code: "table.booked",
+      params: { tableId: t, date: "2026-09-16", time: "21:00" },
+    });
+
+    expect(
+      await inTx((tx) =>
+        BOOKINGS_TABLE_REMOVAL.deleteRefusals!(tx, stray, [t], AFTER_MADRID_MIDNIGHT),
+      ),
+    ).toEqual([
+      {
+        code: "table.booked",
+        params: { tableId: t, date: "2026-09-16", time: "21:00" },
+        targets: [{ id: booking, name: "Ana · 2026-09-16 21:00" }],
+      },
+    ]);
+
+    await inTx((tx) => BOOKINGS_TABLE_REMOVAL.release(tx, stray, t, "Stray"));
+    expect(await inTx((tx) => getBooking(tx, booking))).toMatchObject({
+      tableId: null,
+      tableLabel: "Stray",
+    });
+  });
+});
