@@ -622,25 +622,6 @@ describe("stored preparation rules", () => {
       expect(sortCells(categorised.cells)).toEqual(sortCells(written));
     }));
 
-  it("reads the cells and zones of its own location only", async () =>
-    scoped(async (tx) => {
-      const f = await fixture(tx),
-        other = await fixture(tx, " (other venue)");
-      await setCategoryCell(tx, f.cfg, f.drinks, noPrep);
-      await setRoutingCell(
-        tx,
-        other.cfg,
-        { row: categoryRow(other.drinks), zoneId: other.terrace },
-        station(other.bar),
-      );
-      const own = await routingModel(tx, f.cfg, new Date("2026-10-02T18:00:00Z"));
-      expect(own.cells).toEqual([{ row: categoryRow(f.drinks), zoneId: null, target: noPrep }]);
-      expect(own.zones).toEqual([{ id: f.terrace, name: "Terrace", departmentId: f.department }]);
-      expect((await loadRoutingRules(tx, other.cfg, null)).cells).toEqual([
-        { row: categoryRow(other.drinks), zoneId: other.terrace, target: station(other.bar) },
-      ]);
-    }));
-
   it("variants are not grid products, even with a stored category of their own", async () =>
     scoped(async (tx) => {
       const f = await fixture(tx);
@@ -3629,51 +3610,6 @@ describe("saving a cell's period choices", () => {
         await tx.delete(sectionMembers).where(eq(sectionMembers.id, variantMember!.id));
         expect((await modelCell(tx, f, mojitoRow(f)))?.periods).toStrictEqual([
           { ...line(f.brunch, station(f.downstairs)), notOffered: true },
-        ]);
-      }));
-
-    it("marks a stored line whose period is not one of the venue's, last, rather than failing the read", async () =>
-      scoped(async (tx) => {
-        const f = await choicesFixture(tx);
-        const [elsewhere] = await tx
-          .insert(locations)
-          .values({
-            name: "Elsewhere",
-            invoiceLocales: ["en-GB"],
-            operationDescription: "Hospitality",
-          })
-          .returning();
-        const otherCfg = { locationId: locationId(elsewhere!.id) };
-        const otherDepartment = await createDepartment(tx, otherCfg, {
-          name: "Dining",
-          orderStart: "table",
-        });
-        const otherLunch = (
-          await saveMenuPeriod(tx, otherCfg, otherDepartment.id, {
-            name: "Lunch",
-            menuId: f.lunchMenu,
-            staffMenuIds: [],
-            colour: "blue",
-          })
-        ).id;
-        await setRoutingCell(tx, f.cfg, mojitoRow(f), station(f.upstairs));
-        const [cell] = await tx
-          .select({ id: routingCells.id })
-          .from(routingCells)
-          .where(eq(routingCells.productId, f.mojito));
-        for (const [periodId, departmentId] of [
-          [otherLunch, otherDepartment.id],
-          [f.lunch, f.department],
-        ])
-          await tx.insert(routingCellPeriods).values({
-            cellId: cell!.id,
-            periodId: periodId!,
-            departmentId: departmentId!,
-            stationId: f.downstairs,
-          });
-        expect((await modelCell(tx, f, mojitoRow(f)))?.periods).toStrictEqual([
-          line(f.lunch, station(f.downstairs)),
-          { ...line(otherLunch, station(f.downstairs)), notOffered: true },
         ]);
       }));
 

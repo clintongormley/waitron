@@ -43,23 +43,29 @@ const suite = useVenueDb({
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 const AT = new Date("2026-10-09T10:00:00Z");
 
+/** A second call in one case reuses the venue's row and names its departments apart. */
 async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "House Ltd" })
     .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: `House ${randomUUID()}`,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00",
-      province: "Sevilla",
-      city: "Sevilla",
-    })
-    .returning({ id: locations.id });
+  const [existing] = await suite.db.select({ id: locations.id }).from(locations);
+  const [location] =
+    existing === undefined
+      ? await suite.db
+          .insert(locations)
+          .values({
+            name: `House ${randomUUID()}`,
+            invoiceLocales: ["es-ES"],
+            operationDescription: "Hospitality",
+            timeZone: "Europe/Madrid",
+            dayCutover: "06:00",
+            province: "Sevilla",
+            city: "Sevilla",
+          })
+          .returning({ id: locations.id })
+      : [existing];
+  const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
   const cfg: VenueScope = { locationId: locationId(location!.id) };
   return run(async (tx) => {
     const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
@@ -67,7 +73,10 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
     for (const [index, closed] of closedOn.entries()) {
       const department = (
-        await createDepartment(tx, cfg, { name: `Dining ${index}`, orderStart: "table" })
+        await createDepartment(tx, cfg, {
+          name: `Dining ${index}${suffix}`,
+          orderStart: "table",
+        })
       ).id;
       const lunch = (
         await saveMenuPeriod(tx, cfg, department, { name: "Lunch", menuId, staffMenuIds: [] })

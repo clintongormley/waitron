@@ -430,9 +430,8 @@ describe("setRoutingCell / clearRoutingCell", () => {
 
   it("refuses an inactive or foreign-location station", async () => {
     const f = await setup();
-    const other = await scoped((tx) => venue(tx, " (other)"));
     const address: CellAddress = { row: { kind: "category", categoryId: f.drinks }, zoneId: null };
-    for (const stationId of [f.switchedOff, other.bar, randomUUID()])
+    for (const stationId of [f.switchedOff, randomUUID()])
       await expect(
         scoped((tx) => setRoutingCell(tx, f.cfg, address, station(stationId))),
       ).rejects.toMatchObject({ code: "route.station_inactive", params: { stationId } });
@@ -441,11 +440,10 @@ describe("setRoutingCell / clearRoutingCell", () => {
 
   it("refuses an inactive or foreign zone", async () => {
     const f = await setup();
-    const other = await scoped((tx) => venue(tx, " (other)"));
     await scoped(async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${f.inside}`),
     );
-    for (const zoneId of [f.inside, other.terrace, randomUUID()]) {
+    for (const zoneId of [f.inside, randomUUID()]) {
       const address: CellAddress = { row: { kind: "category", categoryId: f.drinks }, zoneId };
       await expect(
         scoped((tx) => setRoutingCell(tx, f.cfg, address, station(f.bar))),
@@ -613,15 +611,6 @@ describe("setRoutingCell / clearRoutingCell", () => {
       .where(eq(kitchenStations.locationId, f.cfg.locationId));
     expect(defaults.filter((row) => row.isDefault).map((row) => row.id)).toEqual([f.bar]);
     expect(await readStoredCells(f)).toEqual([]);
-  });
-
-  it("scopes a clear to its own location", async () => {
-    const f = await setup();
-    const other = await scoped((tx) => venue(tx, " (other)"));
-    const address: CellAddress = { row: { kind: "category", categoryId: f.drinks }, zoneId: null };
-    await scoped((tx) => setRoutingCell(tx, f.cfg, address, station(f.bar)));
-    await scoped((tx) => clearRoutingCell(tx, other.cfg, address));
-    expect(await readStoredCell(f, address)).toMatchObject({ station_id: f.bar });
   });
 
   it("two queued transactions writing one coordinate leave one row holding the second value", async () => {

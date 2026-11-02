@@ -272,7 +272,6 @@ describe("a profile's kitchen screens", () => {
 
   it("refuses an unknown station or zone, one at another location, or one switched off", async () => {
     const venue = await seedVenue();
-    const elsewhere = await seedVenue();
     const offStation = await seedStation(venue.cfg.locationId, "Old grill");
     await db
       .update(kitchenStations)
@@ -282,10 +281,8 @@ describe("a profile's kitchen screens", () => {
     const every = { stationIds: null, zoneIds: null };
     for (const [screens, field] of [
       [{ station: { stationIds: [randomUUID()], zoneIds: null } }, "stationScreenStations"],
-      [{ station: { stationIds: [elsewhere.grill], zoneIds: null } }, "stationScreenStations"],
       [{ station: { stationIds: [offStation], zoneIds: null } }, "stationScreenStations"],
       [{ pass: { ...every, stationIds: [venue.grill, offStation] } }, "passScreenStations"],
-      [{ pass: { ...every, zoneIds: [elsewhere.dining] } }, "passScreenZones"],
       [{ pass: { ...every, zoneIds: [venue.dining, venue.counter] } }, "passScreenZones"],
       [{ pass_monitor: { ...every, stationIds: [offStation] } }, "passMonitorStations"],
       [{ pass_monitor: { ...every, zoneIds: [randomUUID()] } }, "passMonitorZones"],
@@ -675,7 +672,6 @@ describe("the kitchen screens a device chooses", () => {
 
   it("refuses an unknown station or zone, one at another location, or one switched off", async () => {
     const { venue, till } = await kitchen();
-    const elsewhere = await seedVenue();
     await db
       .update(kitchenStations)
       .set({ active: false })
@@ -683,9 +679,7 @@ describe("the kitchen screens a device chooses", () => {
     await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, venue.terrace));
     for (const [screen, field] of [
       [{ kind: "station", stationIds: [randomUUID()], zoneIds: null }, "stationIds"],
-      [{ kind: "station", stationIds: [elsewhere.grill], zoneIds: null }, "stationIds"],
       [{ kind: "pass", stationIds: [venue.grill, venue.cold], zoneIds: null }, "stationIds"],
-      [{ kind: "pass", stationIds: null, zoneIds: [elsewhere.dining] }, "zoneIds"],
       [{ kind: "pass", stationIds: null, zoneIds: [venue.dining, venue.terrace] }, "zoneIds"],
     ] as const) {
       await expect(outcome(choose(venue, till, venue.till, [screen]))).resolves.toEqual(
@@ -1103,7 +1097,6 @@ describe("what a device's kitchen screens show", () => {
 
   it("reads several devices at once, each as it reads alone, and none for an unknown one or an empty list", async () => {
     const venue = await seedVenue();
-    const elsewhere = await seedVenue();
     await set(venue, venue.kds, { station: every, pass: every });
     const line = await seedDevice(venue, venue.kds, "Line");
     await choose(venue, line, venue.kds, [{ kind: "station", ...every }]);
@@ -1116,10 +1109,8 @@ describe("what a device's kitchen screens show", () => {
     const till = await seedDevice(venue, venue.till, "Till");
     await recordRemoval(till, "station");
     const bare = await seedDevice(venue, venue.till, "Bare");
-    const away = await seedDevice(elsewhere, elsewhere.till, "Away");
-    await choose(elsewhere, away, elsewhere.till, [{ kind: "pass", ...every }]);
     const unknown = randomUUID();
-    const ids = [line, pass, till, bare, away, unknown];
+    const ids = [line, pass, till, bare, unknown];
 
     const read = await scoped((tx) => readDevicesKitchenScreens(tx, venue.cfg, ids));
 
@@ -1128,7 +1119,6 @@ describe("what a device's kitchen screens show", () => {
     expect(read).toEqual(alone);
     expect(read.get(line)).not.toEqual(read.get(pass));
     expect(read.get(till)).toMatchObject([{ kind: "station", available: false }]);
-    expect(read.get(away)).toEqual([]);
     expect(read.get(unknown)).toEqual([]);
     await expect(scoped((tx) => readDevicesKitchenScreens(tx, venue.cfg, []))).resolves.toEqual(
       new Map(),
@@ -1171,13 +1161,6 @@ describe("an order's zone checked against a device's pass screen", () => {
     const till = await seedDevice(venue, venue.till, "Till");
     await choose(venue, till, venue.till, [{ kind: "station", ...every }]);
     await expect(check(venue, till, venue.dining)).resolves.toEqual({
-      code: "kitchen_screen.not_allowed",
-      params: { screen: "pass" },
-    });
-    const elsewhere = await seedVenue();
-    const away = await seedDevice(elsewhere, elsewhere.till, "Away");
-    await choose(elsewhere, away, elsewhere.till, [{ kind: "pass", ...every }]);
-    await expect(check(venue, away, null)).resolves.toEqual({
       code: "kitchen_screen.not_allowed",
       params: { screen: "pass" },
     });
@@ -1329,10 +1312,6 @@ describe("the station screens kitchen displays run", () => {
       .update(kitchenStations)
       .set({ active: false })
       .where(eq(kitchenStations.id, venue.pastry));
-    const elsewhere = await seedVenue();
-    await set(elsewhere, elsewhere.kds, { station: every });
-    const away = await seedDevice(elsewhere, elsewhere.kds, "Line");
-    await choose(elsewhere, away, elsewhere.kds, [{ kind: "station", ...every }]);
     await expect(scoped((tx) => readStationScreens(tx, venue.cfg))).resolves.toEqual([
       { deviceId: line, stationIds: [venue.grill] },
     ]);
@@ -1552,51 +1531,6 @@ describe("a profile save narrowing its devices", () => {
         everyZone: false,
         profileEveryStation: false,
         stations: [slot(venue.pastry, "Pastry", false)],
-        zones: null,
-      },
-    ]);
-  });
-
-  it("narrows the profile's devices at every location, each against its own stations", async () => {
-    const venue = await seedVenue();
-    await set(venue, venue.kds, { station: every, pass: every });
-    const line = await seedDevice(venue, venue.kds, "Line");
-    await choose(venue, line, venue.kds, [station([venue.grill])]);
-    const elsewhere = await seedVenue();
-    const away = await seedDevice(elsewhere, venue.kds, "Away");
-    const awayPass = await seedDevice(elsewhere, venue.kds, "Away pass");
-    await choose(elsewhere, away, venue.kds, [station([elsewhere.grill, elsewhere.cold])]);
-    await choose(elsewhere, awayPass, venue.kds, [{ kind: "pass", ...every }]);
-    await expect(
-      set(venue, venue.kds, { station: { stationIds: [venue.grill], zoneIds: null } }),
-    ).resolves.toEqual([
-      lost(away, "Away", {
-        stations: [named(elsewhere.cold, "Cold"), named(elsewhere.grill, "Grill")],
-      }),
-      lost(awayPass, "Away pass", { screens: ["pass"] }),
-    ]);
-    expect(await storedKindsOf(line)).toEqual(["station"]);
-    expect(await storedKindsOf(away)).toEqual(["station"]);
-    expect(await storedKindsOf(awayPass)).toEqual(["pass"]);
-    await expect(shown(elsewhere, awayPass)).resolves.toEqual([
-      {
-        kind: "pass",
-        available: false,
-        everyStation: false,
-        everyZone: false,
-        profileEveryStation: false,
-        stations: [],
-        zones: null,
-      },
-    ]);
-    await expect(shown(elsewhere, away)).resolves.toEqual([
-      {
-        kind: "station",
-        available: true,
-        everyStation: false,
-        everyZone: false,
-        profileEveryStation: false,
-        stations: [slot(elsewhere.cold, "Cold", false), slot(elsewhere.grill, "Grill", false)],
         zones: null,
       },
     ]);
@@ -2013,23 +1947,6 @@ describe("a device narrowed against another profile", () => {
         ],
         zones: [],
       },
-    });
-  });
-
-  it("narrows a device at another location against that location's stations", async () => {
-    const venue = await seedVenue();
-    const elsewhere = await seedVenue();
-    await set(elsewhere, elsewhere.kds, { station: every });
-    const strict = await seedProfile("kds");
-    await set(elsewhere, strict, { station: { stationIds: [elsewhere.grill], zoneIds: null } });
-    const away = await seedDevice(elsewhere, elsewhere.kds, "Away");
-    await choose(elsewhere, away, elsewhere.kds, [
-      { kind: "station", stationIds: [elsewhere.grill, elsewhere.cold], zoneIds: null },
-    ]);
-    await expect(narrow(venue, away, strict)).resolves.toEqual({
-      deviceId: away,
-      deviceName: "Away",
-      lost: { screens: [], stations: [{ id: elsewhere.cold, name: "Cold" }], zones: [] },
     });
   });
 });

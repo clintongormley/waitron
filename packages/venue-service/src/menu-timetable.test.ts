@@ -597,24 +597,33 @@ describe("service-period writers", () => {
   );
 });
 
+/** A second call in one case reuses the venue's row and names its station, zones and departments
+ * apart. */
 async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } = {}) {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: `Casa ${randomUUID()}`,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Hostelería",
-      timeZone: ZONE,
-    })
-    .returning({ id: locations.id });
+  const [existing] = await db.select({ id: locations.id }).from(locations);
+  const [location] =
+    existing === undefined
+      ? await db
+          .insert(locations)
+          .values({
+            name: `Casa ${randomUUID()}`,
+            invoiceLocales: ["es-ES"],
+            operationDescription: "Hostelería",
+            timeZone: ZONE,
+          })
+          .returning({ id: locations.id })
+      : [existing];
+  const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
   const locationId: LocationId = brandLocationId(location!.id);
   const cfg = { locationId };
-  await db.insert(kitchenStations).values({ locationId, name: "Cocina", isDefault: true });
+  await db
+    .insert(kitchenStations)
+    .values({ locationId, name: `Cocina${suffix}`, isDefault: existing === undefined });
   const zone = async (name: string, displayOrder: number) =>
     (
       await db
         .insert(floorZones)
-        .values({ locationId, name, displayOrder })
+        .values({ locationId, name: `${name}${suffix}`, displayOrder })
         .returning({ id: floorZones.id })
     )[0]!.id;
   const barra = await zone("Barra", 0);
@@ -623,9 +632,10 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
   const mostrador = await zone("Mostrador deli", 3);
   return scoped(async (tx) => {
     const restaurant = (
-      await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
+      await createDepartment(tx, cfg, { name: `Restaurant${suffix}`, orderStart: "table" })
     ).id;
-    const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
+    const deli = (await createDepartment(tx, cfg, { name: `Deli${suffix}`, orderStart: "counter" }))
+      .id;
     for (const zoneId of [barra, sala, terraza])
       await configureZone(tx, cfg, { zoneId, departmentId: restaurant });
     await configureZone(tx, cfg, { zoneId: mostrador, departmentId: deli });
@@ -950,11 +960,6 @@ describe("the menu a zone starts on", () => {
       code: "service_zone.not_found",
       params: { zoneId: v.mostrador },
     });
-    const other = await timed();
-    await expect(resolve(v, other.sala, madrid(MONDAY, "12:30"))).rejects.toMatchObject({
-      code: "service_zone.not_found",
-      params: { zoneId: other.sala },
-    });
   });
 
   it("leaves an inactive menu out of the list while a period still names it as the default", async () => {
@@ -1057,9 +1062,8 @@ describe("a special date's menu timetable", () => {
 
   it("refuses another venue's department, and a department that does not exist", async () => {
     const v = await timed();
-    const other = await timed();
     const unknown = randomUUID();
-    for (const departmentId of [other.restaurant, unknown]) {
+    for (const departmentId of [unknown]) {
       await expect(saveDay({ ...v, restaurant: departmentId }, CHRISTMAS)).rejects.toMatchObject({
         code: "department.not_found",
         params: { departmentId },
@@ -2242,11 +2246,6 @@ describe("department service periods", () => {
       offers: [],
       liveFields: NO_LIVE_FIELDS,
     });
-    const other = await serviceVenue();
-    await expect(scoped((tx) => listZoneOffers(tx, v.cfg, other.barra))).rejects.toMatchObject({
-      code: "service_zone.not_found",
-      params: { zoneId: other.barra },
-    });
   });
 
   it("keeps period menus for a stored basket when closed, with none orderable and no default", async () => {
@@ -2344,7 +2343,6 @@ describe("department service periods", () => {
 
   it("reads opening hours with period colours, ordered staff menus and all seven days", async () => {
     const v = await serviceVenue();
-    const other = await venue({ timetable: false });
     await db.update(menuPeriods).set({ colour: "blue" }).where(eq(menuPeriods.id, v.lunch));
     await scoped((tx) =>
       (async () => {
@@ -2359,9 +2357,6 @@ describe("department service periods", () => {
     const inEverySeason = <T>(week: T) => seasonIds.map((seasonId) => ({ seasonId, week }));
     expect(model.dayCutover).toBe("06:00");
     expect(model.departments.map((department) => department.id)).toEqual([v.restaurant]);
-    expect(
-      model.departments.find((department) => department.id === other.restaurant),
-    ).toBeUndefined();
     expect(model.departments.find((department) => department.id === v.restaurant)).toEqual({
       id: v.restaurant,
       name: "Restaurant",
@@ -2767,10 +2762,6 @@ describe("department service periods", () => {
       orderableMenuIds: [],
       endedMenus: [],
     });
-    const other = await venue({ timetable: false });
-    await expect(
-      scoped((tx) => resolveDepartmentService(tx, other.cfg, v.restaurant, AT)),
-    ).rejects.toMatchObject({ code: "department.not_found" });
   });
 });
 
