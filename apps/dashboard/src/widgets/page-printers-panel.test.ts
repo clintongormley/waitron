@@ -196,7 +196,7 @@ it("keeps the row menu in a pinned actions column", async () => {
   expect(table.columns.at(-1)).toMatchObject({ key: "actions", pinned: "end" });
 });
 
-it("draws nothing while the location has no office printer", async () => {
+it("draws nothing while the venue has no office printer", async () => {
   const { el } = await mount({ rows: [] });
   expect(q(el, "[data-test=page-printers-panel]")).toBeNull();
 });

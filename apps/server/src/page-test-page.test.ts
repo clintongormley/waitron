@@ -734,7 +734,7 @@ describe("one job per office printer, test pages included", () => {
 });
 
 describe("an agent asking for work", () => {
-  /** The claim's answer, and how many times it read the location's office printers. */
+  /** The claim's answer, and how many times it read the office printers. */
   async function claimReadingPrinters(v: Venue) {
     const session = (
       suite.db as unknown as { session: { prepareQuery: (...args: unknown[]) => unknown } }

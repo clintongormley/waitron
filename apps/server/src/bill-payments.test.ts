@@ -26,7 +26,6 @@ import {
   invoiceSeries,
   invoiceDeliveries,
   pagePrinters,
-  locations,
   tenders,
   tenantReceipts,
   tenants,
@@ -254,13 +253,8 @@ async function provision(db: typeof suite.db): Promise<Venue> {
 
 const inTx = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTransaction(suite.db, fn);
 
-/** Makes `pagePrinterId` the only invoice printer on the till's profile: its default only at the
- * till's location. */
-async function tillInvoicePrinter(
-  tx: Transaction,
-  pagePrinterId: string,
-  locationId: string,
-): Promise<void> {
+/** Makes `pagePrinterId` the only invoice printer on the till's profile, as its default. */
+async function tillInvoicePrinter(tx: Transaction, pagePrinterId: string): Promise<void> {
   const [device] = await tx
     .select({ profileId: devices.deviceProfileId })
     .from(devices)
@@ -276,7 +270,7 @@ async function tillInvoicePrinter(
   await listInvoicePrinter(tx, {
     profileId: device!.profileId,
     pagePrinterId,
-    isDefault: locationId === venue.cfg.locationId,
+    isDefault: true,
   });
 }
 const fiscal = () => ({ db: suite.db, backend, clock });
@@ -2668,85 +2662,60 @@ describe("the invoice at full payment", () => {
     expect(saved!.invoiceDelivery).toEqual({ medium: "receipt" });
   });
 
-  it.each(["active", "disabled", "other-location", "missing"] as const)(
-    "stages only an active local A4 destination: %s",
+  it.each(["active", "disabled", "missing"] as const)(
+    "stages only an active A4 destination: %s",
     async (kind) => {
       const billId = await tabWith("Caña");
-      const otherLocationId = randomUUID();
-      if (kind === "other-location")
-        await inTx((tx) =>
-          tx.insert(locations).values({
-            id: otherLocationId,
-            name: "Other",
-            invoiceLocales: ["es-ES"],
-            operationDescription: "Restaurant",
-          }),
-        );
       const pagePrinterId = randomUUID();
-      try {
-        if (kind !== "missing")
-          await inTx(async (tx) => {
-            await tx.insert(pagePrinters).values({
-              id: pagePrinterId,
-              locationId: kind === "other-location" ? otherLocationId : venue.cfg.locationId,
-              name: "Office",
-              host: pagePrinterId,
-              port: 631,
-              resourcePath: "/ipp/print",
-              documentFormat: "application/pdf",
-              supportedFormats: ["application/pdf"],
-              media: "iso_a4_210x297mm",
-              resolutionDpi: 300,
-              active: kind !== "disabled",
-            });
-            await tillInvoicePrinter(
-              tx,
-              pagePrinterId,
-              kind === "other-location" ? otherLocationId : venue.cfg.locationId,
-            );
+      if (kind !== "missing")
+        await inTx(async (tx) => {
+          await tx.insert(pagePrinters).values({
+            id: pagePrinterId,
+            locationId: venue.cfg.locationId,
+            name: "Office",
+            host: pagePrinterId,
+            port: 631,
+            resourcePath: "/ipp/print",
+            documentFormat: "application/pdf",
+            supportedFormats: ["application/pdf"],
+            media: "iso_a4_210x297mm",
+            resolutionDpi: 300,
+            active: kind !== "disabled",
           });
-        const request = {
-          revision: 0,
-          invoiceType: "F1" as const,
-          recipient: {
-            taxId: "B12345674",
-            legalName: "Cliente SL",
-            address: "2 Main Street, 28013 Madrid, Madrid",
-            countryCode: "ES",
-          },
-          delivery: { medium: "a4", pagePrinterId },
-        };
-        const context = { personId: OPERATOR, emailAvailable: false };
-        if (kind === "active") {
-          expect(
-            await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request, context),
-          ).toBe(1);
-          const [saved] = await inTx((tx) =>
-            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
-          );
-          expect(saved!.invoiceDelivery).toEqual({
-            medium: "a4",
-            pagePrinterId,
-            personId: OPERATOR,
-          });
-        } else {
-          await expect(
-            setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request, context),
-          ).rejects.toMatchObject({ code: "invoice_delivery.printer_invalid", params: {} });
-          const [saved] = await inTx((tx) =>
-            tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
-          );
-          expect(saved).toMatchObject({ revision: 0, invoiceType: "F2", invoiceDelivery: null });
-        }
-      } finally {
-        if (kind === "other-location")
-          await inTx(async (tx) => {
-            await tx
-              .delete(deviceProfilePrinters)
-              .where(eq(deviceProfilePrinters.pagePrinterId, pagePrinterId));
-            await tx.delete(pagePrinters).where(eq(pagePrinters.id, pagePrinterId));
-            await tx.delete(locations).where(eq(locations.id, otherLocationId));
-          });
+          await tillInvoicePrinter(tx, pagePrinterId);
+        });
+      const request = {
+        revision: 0,
+        invoiceType: "F1" as const,
+        recipient: {
+          taxId: "B12345674",
+          legalName: "Cliente SL",
+          address: "2 Main Street, 28013 Madrid, Madrid",
+          countryCode: "ES",
+        },
+        delivery: { medium: "a4", pagePrinterId },
+      };
+      const context = { personId: OPERATOR, emailAvailable: false };
+      if (kind === "active") {
+        expect(
+          await setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request, context),
+        ).toBe(1);
+        const [saved] = await inTx((tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+        );
+        expect(saved!.invoiceDelivery).toEqual({
+          medium: "a4",
+          pagePrinterId,
+          personId: OPERATOR,
+        });
+      } else {
+        await expect(
+          setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, request, context),
+        ).rejects.toMatchObject({ code: "invoice_delivery.printer_invalid", params: {} });
+        const [saved] = await inTx((tx) =>
+          tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+        );
+        expect(saved).toMatchObject({ revision: 0, invoiceType: "F2", invoiceDelivery: null });
       }
     },
   );
@@ -2767,7 +2736,7 @@ describe("the invoice at full payment", () => {
         media: "iso_a4_210x297mm",
         resolutionDpi: 300,
       });
-      await tillInvoicePrinter(tx, pagePrinterId, venue.cfg.locationId);
+      await tillInvoicePrinter(tx, pagePrinterId);
     });
     await expect(
       setOrderInvoiceChoice(suite.db, backend, venue.cfg, billId, {
@@ -2827,7 +2796,7 @@ describe("the invoice at full payment", () => {
             media: "iso_a4_210x297mm",
             resolutionDpi: 300,
           });
-          await tillInvoicePrinter(tx, pagePrinterId, venue.cfg.locationId);
+          await tillInvoicePrinter(tx, pagePrinterId);
         });
         await setOrderInvoiceChoice(
           suite.db,

@@ -439,7 +439,7 @@ those letters (not checked).
   5. **The printer details say where the printer is used, each with a link** (owner, 2026-10-08):
      the device profiles that list it and for what (receipts, payment slips, cash drawer, full
      invoices), the preparation stations that print to it, and the departments those profiles
-     belong to. A printer belongs to a location, not a department (`printers.location_id`);
+     belong to. A printer belongs to the venue, not a department;
      departments share one through `device_profile_printers` and `station_printers`. A link leaves the modal for another screen.
   6. **One table for every printer** (owner, 2026-10-14). The Printers tab draws A4 printers in a
      second table under "A4 printers", with other columns and its own indentation. They
@@ -657,10 +657,6 @@ only the app keeps from deletion; no trigger protects it either.
 
 ## Loose ends left by A661 (#1745)
 
-- The till's payment-time options and a staged A4 choice resolve the device's invoice printer
-  without the sale's location. Both call `resolveInvoicePrinter` with no `at`
-  (`apps/server/src/till-api.ts`, `apps/server/src/working-order.ts`). From reading, a printer at
-  another location is believed refused when the delivery is reserved; untested.
 - The print queue's Resend does not follow the till's rule for a full invoice's printer. A till
   refuses to resend an original a print request sent, when that printer is not the till's invoice
   printer (`receiptPrinterWithdrawn`, `apps/server/src/invoice-delivery-status.ts`). The

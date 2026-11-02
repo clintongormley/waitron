@@ -8,10 +8,10 @@ import { MAX_DELIVERY_ATTEMPTS } from "./runtime.js";
 import { PRINTER_DELETED } from "./printer-delete-jobs.js";
 
 /**
- * The whole of what a caller does to print: one read and one insert, with no socket and no wait on
- * hardware, so a slow, broken or absent printer can never delay the caller (CLAUDE.md §5).
- * `saleId` names the sale a receipt prints. A caller queuing several jobs reads the venue's id
- * once and passes it to each as `venueId`; without it the job reads it.
+ * The whole of what a caller does to print: a printer check, a venue read unless the caller passes
+ * `venueId`, and one insert, with no socket and no wait on hardware, so a slow, broken or absent
+ * printer can never delay the caller (CLAUDE.md §5). `saleId` names the sale a receipt prints. A
+ * caller queuing several jobs reads the venue's id once and passes it to each as `venueId`.
  */
 export async function enqueuePrintJob(
   tx: Transaction,

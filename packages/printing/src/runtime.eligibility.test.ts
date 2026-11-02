@@ -31,7 +31,7 @@ async function seedAgent(cfg: PrintConfig, name: string): Promise<string> {
   return row!.id;
 }
 
-describe("claim eligibility — derived from venue + visible keys", () => {
+describe("claim eligibility — derived from transport and visible keys", () => {
   it("a printer-specific pull leaves another visible printer's job queued", async () => {
     const cfg = await setup();
     const agentId = await seedAgent(cfg, "Demo printer");

@@ -82,13 +82,17 @@ async function seedPrinter(
   return row!.id;
 }
 
-async function seedPagePrinter(locationId: string, name: string): Promise<string> {
+async function seedPagePrinter(
+  locationId: string,
+  name: string,
+  host = "10.0.0.9",
+): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
       locationId,
       name,
-      host: "10.0.0.9",
+      host,
       port: 631,
       resourcePath: "/ipp/print",
       documentFormat: "application/pdf",
@@ -148,7 +152,6 @@ function choose(
 
 describe("which printer each of a device's roles resolves to", () => {
   let loc: string;
-  let elsewhere: string;
   let profile: string;
   let a: string;
   let b: string;
@@ -162,7 +165,6 @@ describe("which printer each of a device's roles resolves to", () => {
   beforeEach(async () => {
     await seedTenant(suite.db);
     loc = await seedLocation("Here");
-    elsewhere = await seedLocation("Elsewhere");
     const first = await seedDevice(suite.db, { locationId: loc, label: "Till A" });
     profile = first.profileId;
     a = first.deviceId;
@@ -173,7 +175,7 @@ describe("which printer each of a device's roles resolves to", () => {
     p1 = await seedPrinter(loc, "Handheld", { portable: true });
     await seedPrinter(loc, "Handheld 2", { portable: true });
     drawer = await seedPrinter(loc, "Drawer", { hasCashDrawer: true });
-    away = await seedPrinter(elsewhere, "Other venue");
+    away = await seedPrinter(loc, "Other venue");
   });
 
   it.each<[ProfilePrinterRole, "receipt" | "slip" | "drawer"]>([
@@ -305,7 +307,7 @@ describe("which printer each of a device's roles resolves to", () => {
     },
   );
 
-  it("accepts a listed, switched-on printer at the device's location", async () => {
+  it("accepts a listed, switched-on printer", async () => {
     await inTx((tx) =>
       setProfilePrinterLists(tx, profile, lists({ receiptPrinterIds: [away, f1] })),
     );
@@ -1001,7 +1003,6 @@ describe("a deleted printer as a device's choice or a portable setting", () => {
 
 describe("the invoice role, which names a receipt printer or a page printer", () => {
   let loc: string;
-  let elsewhere: string;
   let profile: string;
   let a: string;
   let b: string;
@@ -1014,7 +1015,6 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
   beforeEach(async () => {
     await seedTenant(suite.db);
     loc = await seedLocation("Here");
-    elsewhere = await seedLocation("Elsewhere");
     const first = await seedDevice(suite.db, { locationId: loc, label: "Till A" });
     profile = first.profileId;
     a = first.deviceId;
@@ -1023,8 +1023,8 @@ describe("the invoice role, which names a receipt printer or a page printer", ()
     receiptPrinter = await seedPrinter(loc, "Bar");
     page = await seedPagePrinter(loc, "Office");
     carried = await seedPrinter(loc, "Handheld", { portable: true });
-    awayPage = await seedPagePrinter(elsewhere, "Other office");
-    awayPrinter = await seedPrinter(elsewhere, "Other bar");
+    awayPage = await seedPagePrinter(loc, "Other office", "10.0.0.10");
+    awayPrinter = await seedPrinter(loc, "Other bar");
   });
 
   function listInvoices(ids: string[], defaultId: string | null = null) {

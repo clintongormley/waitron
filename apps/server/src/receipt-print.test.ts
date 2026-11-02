@@ -2123,7 +2123,7 @@ describe("the device's invoice printer", () => {
   const resolve = (origin: Parameters<typeof resolveInvoicePrinter>[1]) =>
     withTransaction(suite.db, (tx) => resolveInvoicePrinter(tx, origin));
 
-  it("resolves the profile's default A4 printer at the device's location", async () => {
+  it("resolves the profile's default A4 printer", async () => {
     const { cfg } = await setupVenue();
     const office = await officePrinter(cfg);
     await withTransaction(suite.db, async (tx) =>

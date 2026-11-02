@@ -206,25 +206,6 @@ it.each(["printer", "reader"] as const)("refuses a deleted %s source", async (ki
   expect((await response.json()).error.code).toBe(`${kind}.not_found`);
   expect(await suite.db.select().from(printJobs)).toEqual([]);
 });
-it.each(["target", "label"])(
-  "prints a venue printer from another location as %s",
-  async (which) => {
-    const [other] = await suite.db
-      .insert(locations)
-      .values({ name: "Other", invoiceLocales: ["en-GB"], operationDescription: "Sale" })
-      .returning();
-    await suite.db
-      .update(printers)
-      .set({ locationId: other!.id })
-      .where(eq(printers.id, which === "target" ? target : source));
-    const response = await send({ kind: "printer", id: source });
-    expect(response.status).toBe(202);
-    const { jobId } = await response.json();
-    const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, jobId));
-    expect(job).toMatchObject({ printerId: target, kind: "document" });
-    expect(opensDrawer(job!.payload)).toBe(false);
-  },
-);
 it("refuses a demo reader label that the till cannot select", async () => {
   await suite.db
     .insert(cardReaders)

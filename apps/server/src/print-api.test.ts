@@ -779,8 +779,8 @@ describe("mountPrintApi — agent claim + report", () => {
   });
 
   it("does NOT claim a usb job whose key the pulling box cannot see (derived eligibility)", async () => {
-    // The visible key is the isolation between boxes: a network_tcp printer is claimable by any box at
-    // its location, so a cross-agent claim of one is expected.
+    // The visible key is the isolation between boxes: a network_tcp printer is claimable by any box,
+    // so a cross-agent claim of one is expected.
     const app = mountApp();
     const mine = await joinAndAccept(app, "Mine");
     const serial = `SN-${randomUUID()}`;
