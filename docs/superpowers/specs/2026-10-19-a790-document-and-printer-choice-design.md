@@ -199,7 +199,7 @@ interview is needed. A799 and the closed public-F1 prerequisite are not advanced
 | `apps/server/src/orders-api.ts:155,281,297` → `orders-reprint.ts:11` → `receipt-print.ts:326,349` / `invoice-delivery-actions.ts:56` → `invoice-delivery.ts:42`             | Read the management visibility/action boundary, copy queueing and shared F1 reservation path. The old copy helper uses configured till location; this addendum requires sale location instead. No claim that the complete new list/guard/portable contract already works.                                                                                          |
 | `apps/server/src/till-setup.ts:118`, `till-sale.ts:521`, `working-order.ts:4043`                                                                                            | Start advertises `fullInvoices: false`; the two request/order helpers refuse F1. Read only; public closure and caller coverage must be retained and tested in the later build.                                                                                                                                                                                     |
 
-[Eight static M/review boards](../../backlog/mockups/a790-document-and-printer-choice/revision-m-agreed/README.md)
+Eight static M/review boards
 use the previous SVG style and system palette, in EN/ES, light/dark, 390/1280 px.
 They distinguish proposed UI from design explanation. All eight PNGs were rendered in
 headless Chromium, checked for native text bounds and individually inspected. Static drawings
@@ -320,7 +320,7 @@ Still open: M; technical storage/errors/private or unusual lifecycles; concurren
 accepted intents and account transitions; portable Receipt holding; wider document steps;
 integration; and full design/plan/build. No extra automatic expiry or manual reset is chosen.
 
-[Eight native static L/M boards](../../backlog/mockups/a790-document-and-printer-choice/revision-l-and-invoice-equipment/README.md)
+Eight native static L/M boards
 cover EN/ES, light/dark and 390/1280 px. All eight final PNGs were rendered from native
 SVGs in an HTML wrapper in headless Chromium and individually inspected. Native SVG text
 bounds were checked inside each drawing. Cards marked UI are screen details; surrounding
@@ -404,7 +404,7 @@ Device Invoice memory, portable receipt holding, wider steps, integration and th
 build remain open, alongside L and the technical uncertainties above. **The full design,
 plan and build remain unapproved.** These drawings claim no existing product behavior.
 
-[Eight static K/L boards](../../backlog/mockups/a790-document-and-printer-choice/revision-k-and-forget-printer/README.md)
+Eight static K/L boards
 cover EN/ES, light/dark, 390/1280 px. All eight final PNGs were rendered from the native
 SVGs inside a plain HTML wrapper in headless Chromium and individually inspected. Native
 SVG text bounds were checked within each drawing. These static checks supply no runtime,
@@ -497,7 +497,7 @@ rerouting or added payment, fiscal or drawer effects.
 Still open: K; technical storage, expiry, manual reset, errors and private/unusual lifecycles;
 concurrent/late accepted intents and account transitions; device Invoice memory; portable
 receipt holding; wider document steps; integration; and full design/plan/build agreement.
-[Eight static J/K boards](../../backlog/mockups/a790-document-and-printer-choice/revision-j-and-no-printers/README.md)
+Eight static J/K boards
 cover EN/ES, light/dark, 390/1280 px. Each final PNG was rendered in headless Chromium
 and individually inspected; native SVG text bounds were checked within each drawing. No runtime, test, accessibility, legal or physical-output evidence is claimed;
 the old source map remains historical and runtime-unverified.
@@ -588,7 +588,7 @@ same-identity reconciliation before fresh work, successful-write versus failed-r
 server-derived original/copy, shared full-invoice (F1) delivery guard and closed public F1.
 No implicit print, rerouting or new fiscal, payment or drawer effects are authorized.
 
-[Eight static I/J boards](../../backlog/mockups/a790-document-and-printer-choice/revision-i-and-several-printers/README.md)
+Eight static I/J boards
 cover EN/ES, light/dark, at 390/1280 px. Each final PNG was rendered in headless Chromium
 and individually inspected; native SVG text boxes were checked within each drawing. Earlier conflicting boards remain history; the source map
 remains historical and runtime-unverified. This docs-only update supplies no runtime,
@@ -678,7 +678,7 @@ failed refresh. Keep server-derived original/copy, the shared full-invoice (F1) 
 guard and closed public F1 gate. No implicit print, rerouting, payment, fiscal or drawer
 effects are authorized.
 
-[Eight static H/I boards](../../backlog/mockups/a790-document-and-printer-choice/revision-h-and-browser-reopen/README.md)
+Eight static H/I boards
 cover EN/ES, light/dark, at 390/1280 px. Each final PNG was rendered in headless Chromium
 and visually inspected; native SVG text boxes were checked within each drawing. Earlier conflicting boards remain history; the source map
 stays historical and runtime-unverified. This docs-only proposal supplies no runtime,
@@ -773,7 +773,7 @@ failed refresh. Keep server-derived original/copy, the shared full-invoice (F1) 
 guard and closed public F1 gate. No implicit print, rerouting, payment, fiscal or drawer
 effects are authorized.
 
-[Eight static G/H boards](../../backlog/mockups/a790-document-and-printer-choice/revision-g-and-login-memory/README.md)
+Eight static G/H boards
 cover EN/ES, light/dark, at 390/1280 px. The final PNGs were rendered in headless
 Chromium and visually inspected; native SVG text boxes were checked within each drawing. Earlier conflicting boards remain history; the source map stays historical
 and runtime-unverified. This is a docs-only proposal, with no legal, runtime, proof,
@@ -861,7 +861,7 @@ unknown and late outcomes before a fresh request. Separate an accepted write fro
 refresh. Keep server-derived original/copy, the shared full-invoice (F1) delivery guard and
 closed public F1 gate. No implicit print, rerouting, payment, fiscal or drawer effects.
 
-[Eight static F/G boards](../../backlog/mockups/a790-document-and-printer-choice/revision-f-and-fallback/README.md)
+Eight static F/G boards
 cover EN/ES, light/dark, at 390/1280 px. The final PNGs were rendered in headless
 Chromium and visually inspected; native SVG text boxes were checked within each drawing.
 Earlier boards remain history where they conflict. The historical source map remains
@@ -934,7 +934,7 @@ rerouting or implicit print. Preserve late outcomes and reconcile uncertain requ
 a fresh request; distinguish a successful write from a failed refresh. Print/reprint adds
 no payment, fiscal or drawer side effects. These remain design requirements, not runtime claims.
 
-[Eight static drawings](../../backlog/mockups/a790-document-and-printer-choice/revision-e-and-memory-update/README.md)
+Eight static drawings
 in English/Spanish, light/dark, at 390/1280 px, showing approved E and proposed F.
 All eight PNGs were rendered in headless Chromium and visually inspected; native SVG
 text boxes were measured within the drawings. Earlier boards remain historical where
@@ -1000,7 +1000,7 @@ successes, and reconcile before a fresh request. No silent rerouting or implicit
 Keep server-derived original/copy, the shared full-invoice delivery guard and closed public
 F1 gate. No payment, fiscal or drawer change is authorized.
 
-[D-and-browser-memory static illustrations](../../backlog/mockups/a790-document-and-printer-choice/revision-d-and-browser-memory/README.md)
+D-and-browser-memory static illustrations
 show approved D and E's separate/shared proposals. Eight PNGs were rendered in headless
 Chromium and visually inspected in EN/ES, light/dark, at 390/1280 px. Native SVG text boxes
 were measured within each drawing.
@@ -1064,7 +1064,7 @@ F1 gate. No payment, fiscal or drawer behavior change is proposed. First-use/fur
 fallback, exact browser storage, Equipment save/rollback/concurrency, portable-receipt
 holder enforcement and remaining persistence choices still need agreement before build.
 
-The [C-and-D static illustrations](../../backlog/mockups/a790-document-and-printer-choice/revision-c-and-d/README.md)
+The C-and-D static illustrations
 show approved C and D's two alternatives. Eight PNGs were rendered in headless Chromium
 and visually inspected in English/Spanish, both themes, at 390/1280 px; native SVG text
 boxes were measured within the drawings. Earlier boards remain historical wherever they
@@ -1183,7 +1183,7 @@ F1 delivery guard, public-F1 gate, fiscal invariants and separate queue Resend p
 Selection, loading, collapse, Equipment updates and saving recipient details never print.
 Print/reprint adds no payment, fiscal or drawer side effect.
 
-The [dashboard/Equipment/C boards](../../backlog/mockups/a790-document-and-printer-choice/revision-dashboard-equipment/README.md)
+The dashboard/Equipment/C boards
 show the approved decisions and proposed C. Eight PNGs were rendered in headless Chromium
 and visually inspected in English/Spanish, both themes, at 390/1280 px. Their native SVG
 text boxes were measured within the drawings. These checks concern static drawings only. Original and earlier
@@ -1355,12 +1355,12 @@ visibility, a device impersonation or reuse of till last-use memory. B remains u
 Ask B only. C, D and persistence are later unapproved topics, not additional owner questions
 in this revision. Complete design/board agreement is still required before planning/build.
 
-The [eight revised static boards](../../backlog/mockups/a790-document-and-printer-choice/revision-2026-10-19/README.md)
+The eight revised static boards
 show collapsed and expanded equipment in the payment form, and after-payment Receipt in
 the same print form. They cover English/Spanish, light/dark and 390/1280 px. All eight
 PNGs were inspected; they exercise no product behavior, accessibility or physical paper.
-For B, use the existing [English phone board](../../backlog/mockups/a790-document-and-printer-choice/b-dashboard-printer-context-en-light-390.png)
-and [Spanish dark phone board](../../backlog/mockups/a790-document-and-printer-choice/b-dashboard-printer-context-es-dark-390.png).
+For B, the English phone board and Spanish dark phone board applied (removed from the
+repository on 2026-11-02).
 The original boards remain historical alternatives wherever superseded. Neither old nor
 revised boards approve C/D or the complete build.
 
@@ -1390,7 +1390,7 @@ invoice in the compact receipt layout, with its customer details and existing in
 number, through the receipt-printer list, while “Invoice” uses the invoice-printer list
 (including receipt-paper printers), as recommended below?**
 
-Accompany this question with board A described in the [mockup brief](../../backlog/mockups/a790-document-and-printer-choice/README.md).
+Accompany this question with board A described in the mockup brief.
 Do not send questions B–D alongside it. After A is answered, revise the affected examples
 and boards, then take B, C and D in that order. No recommendation here is an owner answer.
 

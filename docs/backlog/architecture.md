@@ -7,7 +7,7 @@ their full text.
 
 - **A646 — OPEN; DESIGN APPROVED (owner, 2026-10-17).**
   [Design](../superpowers/specs/2026-10-16-a646-modules-page-design.md) and
-  [static mockups](mockups/a646-modules-page/README.md). Build waits for A739. The
+  static mockups (removed from the repository on 2026-11-02). Build waits for A739. The
   first independent build PR must repair retained disabled-module append-only protection before
   any UI state controls; [that defect remains OPEN](#a-switched-off-modules-append-only-tables-are-neither-re-protected-nor-checked).
   The revision proposes one complete optional catalogue, initially Enabled; Add a module filters

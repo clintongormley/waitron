@@ -280,13 +280,13 @@ refusal. Sending the steak held empties Bill 1 and releases it. Luis can pay Bil
 pies remain unsent on Bill 2. The floor now shows only **Bill 2 · Luis**. Either permitted waiter
 can later fire the already-sent steak or serve the bravas without takeover.
 
-[Light SVG](../../backlog/mockups/a773-one-editor/light.svg) ·
-[Dark SVG](../../backlog/mockups/a773-one-editor/dark.svg)
+Light SVG ·
+Dark SVG
 
 These are design mockups, not product screenshots. They show concurrent Bill 1/Ana and Bill 2/Luis,
 Bill 1's independent takeover, and Ana's read-only saved view beside her retained local salad.
-[Light PNG](../../backlog/mockups/a773-one-editor/light.png) ·
-[Dark PNG](../../backlog/mockups/a773-one-editor/dark.png)
+Light PNG ·
+Dark PNG
 
 ## 9. Implementation handoff
 

@@ -130,15 +130,15 @@ changes where the rules come from and nothing else.
 
 ## Mockups
 
-Saved in [docs/backlog/mockups/a585-staffing/](../../backlog/mockups/a585-staffing/). The names, dates
+Saved in a folder removed from the repository on 2026-11-02. The names, dates
 and hours in them are examples.
 
-1. [How a day's staffing is painted](../../backlog/mockups/a585-staffing/1-painter-approaches.png):
+1. How a day's staffing is painted:
    the three options; A was chosen.
-2. [The Calendar's Staffing view](../../backlog/mockups/a585-staffing/2-calendar-staffing-views.png):
+2. The Calendar's Staffing view:
    the month, and the season painter in Staffing view.
-3. [The Rota view, by area](../../backlog/mockups/a585-staffing/3-rota-by-area.png).
-4. [The Rota view, by person](../../backlog/mockups/a585-staffing/4-rota-by-person.png), with the
+3. The Rota view, by area.
+4. The Rota view, by person, with the
    picker, the publish warnings and the till's My schedule.
 
 ## Words

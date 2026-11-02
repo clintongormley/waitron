@@ -48,8 +48,7 @@ measured never to reach the recovery page, so the start itself frees space first
 notices need a module seat after all (§5). The choices that were hidden in revision 1 are now
 defaults (§6). Every other finding is fixed in place.
 
-Backlog entry: `docs/backlog.md`, "A798" under _The box: backups, upgrades and recovery_. Pictures:
-[`docs/backlog/mockups/a798-degraded-trading/`](../../backlog/mockups/a798-degraded-trading/README.md),
+Backlog entry: `docs/backlog.md`, "A798" under _The box: backups, upgrades and recovery_. Pictures (removed from the repository on 2026-11-02),
 drawn in HTML with the apps' colour and spacing tokens, not screenshots; each is labelled "today" or
 "proposed". The generator is kept outside the repository.
 
@@ -1580,7 +1579,7 @@ Smallest first; each names the risk triggers it touches (CLAUDE.md's review-weig
 
 ## 9. Questions for the owner
 
-Four, one at a time. Each has a recommendation; the pictures are in the mock-ups folder. All four are
+Four, one at a time. Each has a recommendation; the pictures were in the mock-ups folder (removed from the repository on 2026-11-02). All four are
 answered; question 4 was raised by the review round of revision 5.
 
 ### Question 1 of 3 — When the disk fills, should the box free its reserve by itself?

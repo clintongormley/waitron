@@ -573,6 +573,8 @@ case red (its receipts); `splitBill`, `transferItems` and their routes are other
 
 ## Owner questions
 
+(2026-11-02: pictures are no longer committed or copied to Drive; keep them in the working folder and show the owner directly — CLAUDE.md §6.)
+
 Each has a default the build uses; a different answer changes only the tasks named. **Question 2
 is written to `questions.md` at Task 0, before any file it names is edited.** Questions 1, 3 and 4 go
 to `questions.md` and the PR at Task 13 with pictures from Task 12 (saved as

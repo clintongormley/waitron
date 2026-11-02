@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Lit, shared `wt-*` controls, Drizzle/node:sqlite, Vitest real Chromium and `useVenueDb`.
 
-**Spec:** [A725, all seven points](../../backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [backlog summary](../../backlog.md), [mockup README](../../backlog/mockups/a718-a727-calendar-and-stations/README.md), `boards.html#b14` and `14-prep-stations.png` in that directory. Text overrides the drawing, including the later popup decision. A756/A773's later settings redesign is separate.
+**Spec:** [A725, all seven points](../../backlog/kitchen.md#a725-prep-stations-up-the-sidebar-no-times-tab-or-drag-handles-colours-that-differ-a-clearer-station-editor), [backlog summary](../../backlog.md), mockup README, `boards.html#b14` and `14-prep-stations.png` in that directory. Text overrides the drawing, including the later popup decision. A756/A773's later settings redesign is separate.
 
 ## Global Constraints
 

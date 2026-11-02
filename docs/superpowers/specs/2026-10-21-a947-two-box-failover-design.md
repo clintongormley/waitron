@@ -22,7 +22,7 @@ mirror), §5 (promotion, return, tail shipper, split brain), §6 (trust and fenc
 order, slices 3–5). Where this document and that one differ, this one is newer; that one is not
 rewritten, and carries a dated pointer here.
 
-**Mock-ups:** [`docs/backlog/mockups/a947-two-box-failover/`](../../backlog/mockups/a947-two-box-failover/README.md).
+**Mock-ups:** removed from the repository on 2026-11-02.
 
 > **Decisions made while building slice 4a (2026-10-22).** Where slice 4a's code does more, or
 > other, than the text below says, it is recorded here and the text below is narrowed to match:

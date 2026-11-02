@@ -13,9 +13,8 @@ way back into administration.
 The requested destination is **Settings > Modules**. Google becomes an optional module, with a
 sealed client ID and secret managed there. SumUp and Stripe setup moves there. Card payments links
 to Modules filtered to card providers. Profile > Security shows its Google row only while Google
-is enabled. Static documentation mockups are available in
-[the mockup index](../../backlog/mockups/a646-modules-page/README.md). They illustrate the proposal,
-not the running application.
+is enabled. Static documentation mockups (removed from the repository on 2026-11-02) illustrated the
+proposal, not the running application.
 
 ## Owner revision source, 16 October 2026
 

@@ -522,8 +522,6 @@ switch (§6.6); the returning box hands over and becomes the spare by itself aft
 (§7.2); a spare is a choice per venue. Found while revising: both boxes put the same address in
 the membership chart, so a till's router sees one server (§2).
 
-[Mock-ups](mockups/a947-two-box-failover/README.md).
-
 ## A1273: the shared key ring has no rotation path to the spare
 
 Left open by A947 slice 3a, for slices 3b and 3c. A spare receives the main box's key ring once,

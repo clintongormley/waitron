@@ -494,7 +494,7 @@ Answers settle policy; none alone is full-design approval.
    This remains required after policy answers, the fresh builder check and any revisions. Public
    F1 enablement still follows A231's own gates; this approval is no fiscal-invariant exception.
 
-The [picture guide](../../backlog/mockups/a275-invoice-now-transfer-later/README.md) describes the
+The picture guide describes the
 five drawn boards in English/Spanish, light/dark, phone/desktop. They must show proposed behavior, the F1
 gate, phone review, unpaid list, receipt/reversal and daily-close distinctions, not masquerade as
 screenshots or runtime evidence.

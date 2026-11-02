@@ -4938,7 +4938,7 @@ printed. (FYI, no answer needed: by default, joined tables whose bills were kept
 guests line, since neither bill knows its share; this choice is how a waiter adds one.) The till has no print window today: Print receipt and Reprint print at once (Reprint asks
 only the language, and only when the venue offers several), and in a department set to print
 receipts automatically the receipt prints during the payment, before anyone can touch anything.
-[Mockup](../../backlog/mockups/a663-receipt-layout/3-guests-when-printing.png).
+Mockup.
 Example: Mesa 12 is seated with 4 and pays 407,00 € in cash. By default the receipt prints «4
 comensales · por persona 101,75 €». The waiter changes the number to 5 for this print: «5
 comensales · por persona 81,40 €»; empties it: no line. Either way the table's own count stays 4 and

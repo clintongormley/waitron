@@ -85,7 +85,7 @@ What exists today (read on `main` at c75800ed7, not run):
 
 ## Mockups
 
-In [docs/backlog/mockups/a669-allergy-at-the-table/](../../backlog/mockups/a669-allergy-at-the-table/):
+In the mockups (removed from the repository on 2026-11-02):
 1 is the first Send (question, who and what, ticking dishes, the order afterwards) and both
 ticket options (B chosen) with the kitchen screen; 2 is changing the allergy (the banner, Actions,
 the window with sent dishes, the notice, the floor plan). Where a board and this text differ, this

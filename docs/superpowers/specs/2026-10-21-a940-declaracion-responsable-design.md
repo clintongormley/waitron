@@ -24,7 +24,7 @@ the asesor (tax adviser), the answer to Q53, which item d)'s wording waits for. 
 plan: [`2026-10-22-a940-1-software-identity.md`](../plans/2026-10-22-a940-1-software-identity.md).
 **Items:** A940, and A993 for the automatic identity change (§5.6).
 
-**Mock-ups:** [`docs/backlog/mockups/a940-declaracion-responsable/`](../../backlog/mockups/a940-declaracion-responsable/README.md).
+**Mock-ups:** removed from the repository on 2026-11-02.
 
 > **Third revision 2026-10-22 — the owner's answers of 02:45 to 03:12.** Both of the second
 > revision's questions are answered, and two further directions apply to every clock wait. What

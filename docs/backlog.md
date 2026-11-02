@@ -148,8 +148,7 @@ come after the list above:
   collapsed column, carry a red bar) landed in #2144, from the build plan's slice 9c. What is left of
   A797: slices 10–11, now that A803's slice 3 has landed (#2360), and 12b after A773-2, which builds the pass's
   part: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
-  [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
-  [mockups](backlog/mockups/a797-device-screens/).
+  [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md).
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
   upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
   installer (B3); what the box does when a part fails but it can still sell (A798-B, the build:
@@ -359,7 +358,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A275. Invoice a bill paid later by transfer (full or simplified invoice)** — DESIGN APPROVED; [reviewed plan](superpowers/plans/2026-10-22-a275-final-transfer-close.md) published, build pending.
   Invoice at the meal, close finally by transfer, preserve sibling/service checks, and export for the accountant; no later receipts or debt.
   The precise H2 writer approval, released clock/Pay contracts and separate F1/delivery/physical gates remain.
-  [Design](superpowers/specs/2026-10-22-a275-final-transfer-close-design.md), [pictures](backlog/mockups/a275-final-transfer-close/README.md), [detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17).
+  [Design](superpowers/specs/2026-10-22-a275-final-transfer-close-design.md), [detail](backlog/fiscal.md#a275-invoice-a-bill-paid-later-by-transfer-full-or-simplified-invoice--design-now-2026-10-17).
 
 - **A679 follow-up: pin the clock's future-finished sample refusal.** A serial review fault
   bypassing that internal stale-reading check survived the hour suites. Add both the refusal
@@ -2022,8 +2021,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   during implementation. Each new seating starts at Bill 1
   (owner, 2026-10-19); bills staying at their table retain their numbers.
   [Spec](superpowers/specs/2026-10-18-a803-bills-and-tables-design.md);
-  [plan](superpowers/plans/2026-10-19-a803-bills-and-tables.md);
-  [mockups](backlog/mockups/a803-bills-and-tables/).
+  [plan](superpowers/plans/2026-10-19-a803-bills-and-tables.md).
 
 - **A1191. Pay items lists one row per portion (left open by A803 slice 1, D15).** "12 ×
   Croquetas" is twelve rows to tick, because A739's payment window holds those files
@@ -2339,14 +2337,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   orders; Comp… still offered on a line already at €0.00 (the server refuses it, 409
   `adjustment.no_reduction`); and two English refusals the Comp windows can show still saying
   "discount" (`adjustment.exceeds_amount`, `adjustment.no_reduction`).
-  [Pictures as built](backlog/mockups/a758-adjustment-reasons/built/)
 
 - **A1020. The owner looks at A758-6's words and choices (left open by A758-6).** Each works as
   built; the owner may want it different: among them no Table finished on the pass, Not served
   found by its English name, the PIN carried from the cancel to its refund, and a finished table
   checked against all its bills' zones.
-  [Detail](backlog/till.md#a1020-the-owner-looks-at-a758-6s-words-and-choices),
-  [pictures as built](backlog/mockups/a758-adjustment-reasons/built/)
+  [Detail](backlog/till.md#a1020-the-owner-looks-at-a758-6s-words-and-choices).
 
 - **A1021. Cap Void and Comp reason names at the reasons route (left open by A758-6).** The reasons
   page and its route (`packages/adjustments/src/routes.ts`) take a name of any length, while a
@@ -2589,7 +2585,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   At a table, A803 slice 3 (#2360) left the wide screen's pay controls (Cash, Card, the pay ways,
   the bill's Full invoice and receipt language) in the foot under the totals; this window puts
   them behind one Pay button, as a handheld already has (its D16, Owner question 7).
-  [Four-case boards](backlog/mockups/a739-owner-receipt-flow/README.md),
   [historical detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window).
 
 - **A678 — Two readers answer "where is this order" (2026-10-14; open).** `readOrderPlaces`
@@ -2646,9 +2641,9 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   `apps/till/src/screens/till-table-order-screen.ts`), both drawn since A231 (#1256). While full
   invoices are switched off neither is drawn (A741), so the question is for when they are on.
   A803 slice 3 (#2360) draws only the bill's own at a table, its Owner question 3's default; the
-  counter keeps the panel's. **Next action:** owner to pick between the two pictures:
-  [the bill's own, as built](backlog/mockups/a803-bills-and-tables/slice3-q3-full-invoice-bill-button.png)
-  and [the payment panel's](backlog/mockups/a803-bills-and-tables/slice3-q3-full-invoice-pay-panel-button.png).
+  counter keeps the panel's. **Next action:** owner to pick between
+  drawing only the bill's own Full invoice button (as built) and the payment panel's; the pictures
+  were removed from the repository on 2026-11-02.
 
 - **The device delete dialog's sign-in count is not live**: `sessions` is not a declared live
   table (`apps/dashboard/src/api/live-queries.ts:75-92`), so a sign-in or sign-out while the
@@ -3167,8 +3162,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   warning time, 3 minutes by default, and the till's read carrying it) landed in #2108, built from
   the build plan's slice 6; slice 7 (the Ready bar's warning) landed in #2113, slice 8 (the kitchen screen's group cards) in #2123, slice 8b (short names on kitchen cards) in #2126, slice 9 (a kitchen column collapses by a tap on its heading, which shows its count, and the device remembers it) in #2129, and slice 9b (the Columns window) in #2135. Slice 9c (Overview, the first kitchen column, counting each dish to make with the held after a +; below the width its columns need, a kitchen board shows them as tabs; a late card's tab, and its collapsed column, carry a red bar) landed in #2144, from the build plan's slice 9c. What is left of A797: slices 10–11 once A803's slice 3 lands, and 12b after A773-2:
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
-  [design](superpowers/specs/2026-10-18-a797-device-screens-design.md),
-  [mockups](backlog/mockups/a797-device-screens/). A737 Part 2 adds the separate
+  [design](superpowers/specs/2026-10-18-a797-device-screens-design.md).
+  A737 Part 2 adds the separate
   durable post-invoice payment-refund path. The screen designer was
   retired in [#1800](https://github.com/clintongormley/waitron/pull/1800) without redesigning those workflows.
   [Detail](backlog/till.md#build-good-screens-for-each-kind-of-device-and-retire-canvases-a182-owner-2026-10-01)
@@ -3447,7 +3442,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   app sets right to left yet.
 
 - **A841 slice 5 differences from the pictures and tidy-ups (2026-10-21).** Optional, for the owner
-  to judge from its [screenshots](backlog/mockups/a841-5-theme-editor/): at a 1280 px window with
+  to judge (its screenshots were removed from the repository on 2026-11-02): at a 1280 px window with
   the side menu open the form is about 825 px wide, under the 900 px at which the preview sits beside the choices, so it sits
   below them (pictures 02, 04, 05 show it beside); the warning and fix lines are plain text and a
   plain button, without the pictures' boxes and colour chips; Waitron's choice sits above the swatches
@@ -3504,9 +3499,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 - **A841 slice 11: Waitron's own headings are one step lighter (2026-10-27).** For the owner: the
   design's rule that every bold, heading and table header reads the Bold weight, so a theme's Bold
   reaches them, also moves Waitron's own from the browser's 700 to Bold's 600, on the dashboard, the
-  tills and the setup screens; the design did not discuss it. Pictures:
-  `11a-{overview,till,setup}-{main,branch}.png` in
-  [mockups/a841-11-text-by-hand/](backlog/mockups/a841-11-text-by-hand/). The way not taken: a
+  tills and the setup screens; the design did not discuss it. The way not taken: a
   heading weight held at 700, which no hand-set Bold would reach. The rule stands unless the owner
   says otherwise.
 
@@ -3911,8 +3904,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **A405 — printer details and the print queue (owner, 2026-10-08; open; low priority; not queued —
   owner 2026-10-08: take it from here when a lane has room; after A404).**
-  [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue),
-  [mockups](backlog/mockups/a405-printer-details/)
+  [Detail](backlog/printers.md#a405--printer-details-and-the-print-queue)
 
 - **Loose ends left by A662 (#1803).**
   [Detail](backlog/printers.md#loose-ends-left-by-a662-1803)
@@ -5967,6 +5959,15 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **A1306. Rewrite git history to drop the development artifacts** (owner, 2026-11-02: "there is
+  no point in keeping these development artifacts as history"). Mock-ups and screenshots left the
+  tree on 2026-11-02, but history still holds 2,327 image versions, about 300 MB compressed of a
+  584 MB pack (measured that day with `git rev-list --objects --all` and `git cat-file
+  --batch-check`). Rewrite `main` with them removed, at a moment when the lanes are paused, such as
+  beside A760's squash. Every clone, worktree, lane and open pull request then restarts from the
+  rewritten `main`, and old commit links stop resolving. Decide then whether other development
+  artifacts (finished specs and plans, look reports) go too.
+
 - **Real-source bundle tests repeat metadata work.**
   Measure selective shared setup and audit the remaining smaller build limits in the recovery
   PDF and provisioning CLI tests.
@@ -6618,7 +6619,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   package's `src/starter-content.ts` (A918). [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A646 — a Modules page where the administrator switches optional modules on and sets them up (OPEN; design approved).**
-  [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md) and [mockups](backlog/mockups/a646-modules-page/README.md).
+  [Design](superpowers/specs/2026-10-16-a646-modules-page-design.md).
   Build waits for A739; retained protection comes first. Google disable protects every active administrator.
   [Detail](backlog/architecture.md#a646--a-modules-page-where-the-administrator-switches-optional-modules-on-and-sets-them-up)
 

@@ -3,8 +3,7 @@
 Status: DESIGNED 2026-10-20 by an unattended campaign run; revised the same day after two fresh
 reviews and a narrow check (round 1: 8 high, 8 medium, 10 low; round 2: 4 high, 9 medium, 12 low;
 round 3: 1 high, 5 medium, 9 low — each finding's resolution is listed in §16). Waiting for the owner's answers
-to three questions (§12). Not built. Pictures:
-[mockups/a917-box-local-name/](../../backlog/mockups/a917-box-local-name/).
+to three questions (§12). Not built. Pictures: removed from the repository on 2026-11-02.
 
 The owner's words (2026-10-20, through the watcher): "we should allow … specifying a new .local
 domain name".

@@ -133,8 +133,8 @@ The source inventory is explicitly historical READ evidence at
 `9d5853c310e691ed558d80a8a12d0dbddccab2e7`, not today's runtime. Later source changes prove no
 A950 behaviour. No A950 Linux, VM, TPM, btrfs, bucket or two-box runtime qualification has run;
 A799 historical qualification and B3 hardware/trust holds remain gates; owner option A supplies build authority for eligible cuts.
-The [mockup brief and EN/ES copy](mockups/a950-automatic-upgrades/README.md) retain the existing
-validation/restoration/completion views and add eight rendered and visually inspected window-settings
+The mockup brief and EN/ES copy (removed from the repository on 2026-11-02) retained the existing
+validation/restoration/completion views and added eight rendered and visually inspected window-settings
 views. The [sliced implementation plan](../superpowers/plans/2026-10-29-a950-automatic-upgrades.md)
 has owner approval (option A). Cuts 1–2 add isolated settings, dated-window, bounded-discovery, attempt-journal and startup-decision libraries. After cancellation, discovery waits for one immediate callback and one timer callback before deciding whether to retry; unfinished work keeps the discovery slot. Its fake-clock cancellation and cooperative-deadline tests wait for each attempt and deadline to be armed before advancing time; native cancellation cleanup runs between advances. The cancellation test polls with a zero interval and checks that synchronisation leaves its fake clock unchanged. The cooperative cases also cover an adapter admitted on the next event-loop turn. Both fixture groups abort and await their discovery in `finally`; forced-assertion controls leave the following discovery able to run. The separate uncooperative-timeout fixture still needs `finally` cleanup that settles its deliberately non-cancelling adapter after a failed assertion. The journal retains one attempt’s immutable hash-linked records and terminal facts behind an injected fixed-root, exclusive-turn, no-follow IO contract. A publication marker keeps failed flushes/read-back under inspection. Startup decisions cover design §6 and require further checks or recorded transitions; they issue no trading permit. The verifier, hold and journal IO boundaries have no production adapters, and no installed updater or timer calls them. B3 must qualify actual root/disk/mount identity, caller authentication, exclusion, IO and power-loss durability. Later controller work must preserve terminal evidence when allocating another attempt namespace, resolve interrupted publication through authoritative evidence, and rebind fresh terminal startup checks before issuing any new-boot release. Floor/publication/input digest references still need their real immutable documents from cuts 3/5. An intact incomplete freeze must be durably abandoned before the old service reopens; elapsed restore budgets now lead to inspection. JournalIo reserves `.turn` inside its namespace: a future production adapter must use that name or keep its lock outside the namespace. Remaining work includes the production close/report receipt
 producer, archive completion integration, account-free Cloud hold contract, B3 host/image/trust
@@ -734,8 +734,7 @@ must distinguish verifier non-activation from the ordinary restore's authorised 
 DESIGNED
 2026-10-20 and its three questions answered (where the name is
 set, the certificate authority, the old name during a rename;
-[design](../superpowers/specs/2026-10-20-a917-box-local-name-design.md), pictures in
-[mockups/a917-box-local-name/](../backlog/mockups/a917-box-local-name/)); not built. **Not
+[design](../superpowers/specs/2026-10-20-a917-box-local-name-design.md)); not built. **Not
 scheduled:** on 2026-10-25 the owner said "Put it on the backlog. I'm not sure I want to allow that
 change", so whether the name should be changeable at all is open again. Recommended in the design:
 named once on the server's first page, before its certificate authority is made; a later rename is
@@ -747,8 +746,8 @@ old name only points at the new one for 14 days. Five slices; no migration.
 APPROVED WITH CHANGES, owner 2026-10-26 ~12:15:
 “We don't need the configuration code. It's not a concern. The rest approved.”
 [Design](../superpowers/specs/2026-10-21-b3-usb-installer-design.md),
-[plan](../superpowers/plans/2026-10-26-b3-usb-installer.md),
-[pictures/status](../backlog/mockups/b3-usb-installer/). Planning slices 1, 2, 3, 5, 6 and 8 is
+[plan](../superpowers/plans/2026-10-26-b3-usb-installer.md).
+Planning slices 1, 2, 3, 5, 6 and 8 is
 authorised, and on 2026-11-01 the owner authorised the build, cut one pull request at a time
 (see "Built so far" below). Q2 stays answered: Prepare on the SAME box, then an admin freshly
 reauthenticates before destructive cutover, saves allowed configuration and starts fresh Live
@@ -804,7 +803,7 @@ leaf, and accept the correct recovery hostname. Retain device/build/trust-store 
 metadata; Node TLS probes do not qualify Android. Failed negatives block release and any changed
 approved behavior needs an owner decision, never silently weaker checks. No new approval question
 is pending unless review/Android changes approved behavior. An unsigned startup image still cannot
-prove itself honest. [FYI](mockups/b3-usb-installer/question.txt) replaces the policy question.
+prove itself honest.
 
 §12 retains the full copy/reconnect inventory, suspended staff, stripped credentials, inactive
 printers and missing device enrolments. A989's required-language/import readiness must pass before
@@ -1217,7 +1216,7 @@ release-bundle publication, fiscal change or F1 enablement. Landing the plan gra
 of those authorities. The future plan must evaluate actual interfaces/identity seams,
 availability, budgets, containment and private CI access through existing permissions.
 
-[Static F/design boards](mockups/a799-real-database-upgrade-testing/revision-f-and-complete-design/README.md)
+Static F/design boards (removed from the repository on 2026-11-02)
 were rendered and individually inspected in both languages, themes and widths. Native SVG
 text-bounds and overlap checks passed. Source observations at
 `87f19d4bc98d2fb7925e886228430cabfc490a9b` remain historical and **UNVERIFIED at runtime**.
@@ -1245,7 +1244,7 @@ B still selects oldest supported plus previous retained: R1/R4 for R5 without
 retirement, or R2/R4 under the proposed R2/R3/R4 window. Deduplicate equal endpoints.
 Retirement removes a supported test starting point, never its original bundle or
 expectations. It changes no exact comparison or published guarantee; an unrun release
-has no passing evidence. [Static E/F boards](mockups/a799-real-database-upgrade-testing/revision-e-and-support-boundary/README.md)
+has no passing evidence. Static E/F boards (removed from the repository on 2026-11-02)
 were rendered and individually inspected in both languages, themes and widths. Native SVG
 checks found no text outside the canvas or overlapping text. Ask only F next.
 
@@ -1268,7 +1267,7 @@ runtime**. This revision supplies no runtime evidence or authority to capture or
 ## Upgrade testing — blocking before go-live (owner, 2026-09-26)
 
 **A799 design proposal, 19 October 2026:** the [design](../superpowers/specs/2026-10-19-a799-real-database-upgrade-testing-design.md)
-and [worked-example boards](mockups/a799-real-database-upgrade-testing/README.md) await owner
+and worked-example boards (removed from the repository on 2026-11-02) await owner
 agreement. Recommend an invented venue captured after an immutable older image writes it through
 product paths, with independently frozen facts and a separate candidate copy. Supported captures
 begin after A760’s approved squash/reset; this proposal does not execute that operator job or
@@ -1677,8 +1676,7 @@ The bell's
 Design revision 7 (2026-10-24); every owner question answered except one the slice 9b outline
   keeps for when 9b is planned. The remaining build follows the design's §8 slices:
   [plan](../superpowers/plans/2026-10-21-a798-b-degraded-trading-build.md),
-  [design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md),
-  [mock-ups](../backlog/mockups/a798-degraded-trading/README.md).
+  [design](../superpowers/specs/2026-10-19-a798-degraded-trading-design.md).
 
 Two slices from those answers are open, each its own pull request: 9b, the box sets its own clock from a confirmed source and watches its time service ([plan](../superpowers/plans/2026-10-24-a798-9b-box-sets-its-clock.md)), built and parked for the owner as #2331; and 9c, a clock check at every start and after every change of the clock, with selling stopped while it waits ([outline](../superpowers/plans/2026-10-24-a798-9c-clock-check-at-start-and-change.md)). Open asesor questions:
   [Q51](../compliance/asesor-questions.md#q51-a-chain-whose-record-times-step-back-once-when-the-boxs-clock-is-confirmed-added-2026-10-21-revised-2026-10-24),

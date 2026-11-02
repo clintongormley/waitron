@@ -554,8 +554,7 @@ The browser's `prefers-color-scheme` was not measured, so the cause is **UNVERIF
 against `data-wt-theme` in the live dashboard before deciding a fix.
 A366-4B's 2026-10-09 sidebar captures also show a dark wordmark with the root and fixture host
 set to the dark theme. The media preference and selected source were not measured there either.
-Seen again 2026-10-20 in A757 slice 2's look pictures
-(`docs/backlog/mockups/a757-table-states/built-2/venue-settings-*-dark.png`).
+Seen again 2026-10-20 in A757 slice 2's look pictures.
 
 ## A form's Save stays quiet and disabled until something changes (A331, owner 2026-10-07)
 
@@ -902,8 +901,7 @@ The per-form classifications remain in the [A331 plan](../superpowers/plans/2026
 
 ## A653 — every long dashboard table scrolls the same way, with less above it
 
-Owner, 2026-10-14, from two screenshots of the Santet venue at desktop width
-([mockups/a653-table-scrolling/](mockups/a653-table-scrolling/)): "the products table scrolls
+Owner, 2026-10-14, from two screenshots of the Santet venue at desktop width: "the products table scrolls
 independently of the page, but the menu table doesn't. these (and other similar tables) should be
 consistent. the problem is the amount of space that is used above the table which needs to be
 minimised, especially for use on mobiles".
@@ -929,7 +927,7 @@ minimised, especially for use on mobiles".
   the item that built it called short of "enough rows to remain usable"; Select and move mode
   overflowed there, and A303 changed that layout without the measurement being retaken.
 - **Phone side margins and the demo link strip** (owner, 2026-10-14, from a phone screenshot of the
-  Routes tab, [3-phone-side-margins-and-demo-bar.jpg](mockups/a653-table-scrolling/3-phone-side-margins-and-demo-bar.jpg)):
+  Routes tab):
   "the mobile view still has a lot of margin on the sides which narrows the page width
   considerably". The page body keeps `padding: var(--wt-space-5)` at every width
   (`apps/dashboard/index.html`), drawing a frame round the whole shell, and each screen pads its

@@ -38,8 +38,7 @@ each with the last one used selected, folded away until the waiter wants to chan
 decisions.
 
 Backlog entry: `docs/backlog.md`, "Slice 2 — the handheld NFC/QR link" (under _Payments and card readers_),
-detail in [payments.md](../../backlog/payments.md#slice-2--the-handheld-nfcqr-link). Pictures:
-[`docs/backlog/mockups/a796-handheld-payments/`](../../backlog/mockups/a796-handheld-payments/),
+detail in [payments.md](../../backlog/payments.md#slice-2--the-handheld-nfcqr-link). Pictures (removed from the repository on 2026-11-02),
 drawn in HTML with the apps' colour and spacing tokens, not screenshots; each is labelled "today" or
 "proposed — drawn". The generator is kept outside the repository.
 

@@ -9,7 +9,7 @@
 **Status: owner-approved design, 2026-10-18 (including section 6's calls). Nothing here is
 built. Sequenced straight after A773-1 (owner, 2026-10-18); the plan is written when A773-1 lands.**
 
-Mockups: [`docs/backlog/mockups/a803-bills-and-tables/`](../../backlog/mockups/a803-bills-and-tables/)
+Mockups (removed from the repository on 2026-11-02)
 (boards 01–07 map today's behaviour and the gaps; 08–13 are the proposals).
 
 ## 1. Why

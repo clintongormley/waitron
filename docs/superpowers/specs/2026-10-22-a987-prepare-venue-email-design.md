@@ -125,7 +125,7 @@ Status: draft for owner review
 Written 2026-10-22 by an unattended campaign run, and revised the same day after a fresh review and a
 claim check (§13 lists what each finding changed). Docs only; nothing is built. Claims about the code
 cite `file:line` at commit `96a1129e3`; the measurements in §3 say what was run and what it printed.
-Five questions wait for the owner (§5). Pictures: [mockups/a987/](../../backlog/mockups/a987/).
+Five questions wait for the owner (§5). Pictures: removed from the repository on 2026-11-02.
 
 **What the owner asked** (2026-10-03, recorded in `docs/backlog/box.md`): "Later prepare should use a
 real SMTP server". A venue in the Prepare stage would send invitations and password resets through a
@@ -590,11 +590,6 @@ development server keeps today's rules (§2.2), with decision 2's narrower inbox
 
 ### 6.2 The setup wizard, Prepare path
 
-Picture 04 ([light](../../backlog/mockups/a987/04-setup-prepare-email-light-1280.png),
-[dark](../../backlog/mockups/a987/04-setup-prepare-email-dark-1280.png),
-[phone](../../backlog/mockups/a987/04-setup-prepare-email-light-390.png),
-[phone dark](../../backlog/mockups/a987/04-setup-prepare-email-dark-390.png)).
-
 The Prepare path shows the same Email step as Live, after the venue details and before the review,
 with its own first sentence: "While you prepare, Waitron sends real email, as a live restaurant does".
 Continue needs an accepted test. All four of §2.3's Live-only gates open for Prepare: the wizard keeps
@@ -606,19 +601,6 @@ as Live (`:884-889`). Demo still refuses them. The owner-held first setup and th
 first-setup command stay Live-only (§2.3).
 
 ### 6.3 The dashboard's Email page
-
-Pictures: no mail server, [01](../../backlog/mockups/a987/01-prepare-no-server-light-1280.png)
-([dark](../../backlog/mockups/a987/01-prepare-no-server-dark-1280.png),
-[phone](../../backlog/mockups/a987/01-prepare-no-server-light-390.png),
-[phone dark](../../backlog/mockups/a987/01-prepare-no-server-dark-390.png)); the form after a refused
-login, [02](../../backlog/mockups/a987/02-form-login-refused-light-1280.png)
-([dark](../../backlog/mockups/a987/02-form-login-refused-dark-1280.png),
-[phone](../../backlog/mockups/a987/02-form-login-refused-light-390.png),
-[phone dark](../../backlog/mockups/a987/02-form-login-refused-dark-390.png)); with a server set,
-[03](../../backlog/mockups/a987/03-prepare-server-set-light-1280.png)
-([dark](../../backlog/mockups/a987/03-prepare-server-set-dark-1280.png),
-[phone](../../backlog/mockups/a987/03-prepare-server-set-light-390.png),
-[phone dark](../../backlog/mockups/a987/03-prepare-server-set-dark-390.png)).
 
 - **No mail server (Prepare after a Remove, or Live).** The Mail server card says Waitron sends no
   email: invitations and resets are not sent and the till does not offer to email invoices. Its

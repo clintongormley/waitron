@@ -43,7 +43,7 @@ special dates (§7 here), and the trading name's switch gets a home and a positi
 (§5 here). A254's other decisions stand, including its split of the four-value service style into
 separate settings (A254 §3) and its open questions about tabs at the counter (A254 §3.1).
 
-The approved mockups are in [2026-10-03-venue-operations-mockups/](2026-10-03-venue-operations-mockups/).
+The approved mockups were in `2026-10-03-venue-operations-mockups/`, removed from the repository on 2026-11-02.
 They are HTML fragments drawn for the brainstorming tool, so a browser shows them without its
 styling. Where a later mockup replaced part of an earlier one, this spec says which one wins.
 

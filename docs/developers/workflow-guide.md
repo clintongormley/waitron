@@ -204,6 +204,22 @@ done; never open a PR for one. Anything durable in a handoff belongs in the root
 
 Historical docs record what was true when written. Add a dated pointer rather than rewriting them.
 
+### Mock-ups and screenshots are never committed
+
+Owner decision 2026-11-02: a mock-up, design board or screenshot stays in the working folder of
+whoever made it (a lane's campaign folder, a session's scratch space) and is shown to the owner
+directly; it is not committed and not copied to Google Drive. The removal took 184 MiB out of the
+tree; backlog item A1306 holds the history measurement and the rewrite.
+
+The guard, `scripts/no-mockups-in-docs.test.ts`, reads `git ls-files` names only. It refuses
+anything under `docs/backlog/mockups/` and a raster image (PNG, JPEG, GIF, WebP, BMP, TIFF, AVIF,
+HEIC, HEIF) anywhere under `docs/`. It does not see:
+
+- a PDF, SVG or HTML board under `docs/` outside `docs/backlog/mockups/` (a source PDF and a
+  research tool's icon and page are tracked there legitimately);
+- any image tracked outside `docs/`;
+- an image with an extension the list does not name.
+
 ## The development stack from a worktree
 
 Use localhost for laptop development. Development servers (`WAITRON_ENV=dev`) and loopback-only

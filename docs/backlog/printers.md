@@ -131,8 +131,6 @@ and Invoice-setting request identities, local storage, retention, migration boun
 independently checked tasks. Preserve sale-location/permission checks and the
 shared original/copy guard.
 
-[Historical M boards](mockups/a790-document-and-printer-choice/revision-m-agreed/README.md).
-
 ## Show a failed automatic invoice copy to staff
 
 `reserveStagedInvoiceDelivery` returns `undefined` after its failed reservation is rolled back;
@@ -398,8 +396,6 @@ those letters (not checked).
      together at the bottom. Edit turns the same modal into a form holding only what can change
      (Name and Address), with Cancel and Save; the Active switch stays on the viewing side, where it
      acts at once.
-     [Mockup: viewing](mockups/a405-printer-details/1-details-modal.png),
-     [mockup: editing](mockups/a405-printer-details/2-edit-in-the-modal.png)
   2. **The connection line says the opposite of the truth for USB and Bluetooth printers.**
      `printers.connection_roaming` ("Can roam between agents", `printers-screen.ts`) is shown for
      them, but a USB or Bluetooth printer is tied to the one agent it is plugged into or paired
@@ -451,7 +447,6 @@ those letters (not checked).
      own panel (`apps/dashboard/src/widgets/page-printers-panel.ts`), but the screen need not follow
      that: one table, told apart by a Paper column ("80 mm roll", "A4"), every row opening the same
      details modal. An A4 printer's details differ (no calibration; a test page; A4 or Letter).
-     [Mockup](mockups/a405-printer-details/3-one-printer-table.png)
 
 ## Find a bill's pay offers no guests field
 

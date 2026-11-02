@@ -594,7 +594,7 @@ an update cannot silently weaken it. Rejoining a repaired spare remains A947's j
 
 ## 8. What you see
 
-[Static screen brief and EN/ES copy](../../backlog/mockups/a950-automatic-upgrades/README.md)
+Static screen brief and EN/ES copy
 show `01-upgrade-check.png`, `02-rollback-complete.png` and `03-upgrade-complete.png`, with
 English/Spanish, both themes, phone and desktop variants. The existing state views are unchanged.
 The eight `04-window-settings-<en|es>-<light|dark>-<390|1280>.png` settings views show the timeline
