@@ -125,7 +125,7 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
             database: "synthetic",
             moduleConfig: venueModuleConfig(
               parseModuleConfig({}, ALL_MODULES),
-              request.venue.location.fiscalTerritory,
+              request.venue.fiscalTerritory,
             ),
             beforeTransaction,
           },
