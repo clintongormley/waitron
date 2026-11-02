@@ -2494,7 +2494,9 @@ check. No legacy move assertion was changed to hide this result.
 
 **A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
 with PRs B–D remaining. PR B is cut into B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
-B2–B4 remain, and no station can be set to wait for the pass until PR C. Old nonempty stamps remain in regression fixtures, outside the till's
+B3–B4 remain, and no station can be set to wait for the pass until PR C. What B1 and
+[B2's task plan](../superpowers/plans/2026-11-01-a773-2b2-requested-lifecycle.md) leave to B3 and
+B4 is in the slice plan's "Left for B3 and B4". Old nonempty stamps remain in regression fixtures, outside the till's
 public contracts. Physical schema and configuration-transfer fields remain for Task 12.
 
 PRs B–D add Requested and scoped pass release, integrate the agreed columns and display policy,
@@ -2503,6 +2505,17 @@ configuration fields. Preserve separately routed extras and the allergy snapshot
 rebuilding ticket items. Recheck current main and other lanes' actual reservations before
 each slice. A797's completed Q42 design revision, pictures and FYI landed on 2026-10-21; no new
 Q42 answer is required. New copy still follows the plan's wording-review gate.
+
+**Four owner questions, asked with B3's copy sheet** (B2's plan, "Owner questions"; each default
+is what the build does until answered, and none is reachable before PR C):
+1. A dish the pass already released is edited at a station that waits: the station gets the
+   corrected ticket at once (default), or the pass must press Fire again?
+2. Does a table whose dishes have waited long for the pass show the floor's "waiting long" mark?
+   Default: no.
+3. The adjustments report's stage for a cancelled dish that was waiting for the pass: "Unsent"
+   (default) or "Held"?
+4. Another station's dish waiting for the pass, in a cook's "rest of the order": keep the
+   "(on hold)" mark (default) or print no mark?
 
 The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
 [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md) govern the landed

@@ -1147,24 +1147,14 @@ reads `heldItem()` (D6). No exported signature changes.
   recall now clears the request time too (D20).
 - [ ] Ledger `Status: done` for B1 and the exact next step: B2's task plan.
 
-## Left for B2 and B3 by B1's per-task reviews (2026-11-01)
+## Left for B3 and B4 (B1's per-task reviews, 2026-11-01; B2's plan, 2026-11-02)
 
-Each point was found by a B1 reviewer and is outside B1's scope; the reports are kept with lane
-C's campaign notes, not in the repository.
+Each point was found by a B1 reviewer or B2's plan and is outside both PRs' scope; the review
+reports are kept with lane C's campaign notes, not in the repository. B1's points for B2 (D3's
+second path, the edited order's `firedCourseIds`, a Requested dish moved into a course held until
+fired, `releaseHeld`'s count, and the made-here extras' first step) were answered by B2's plan
+(`2026-11-01-a773-2b2-requested-lifecycle.md`); what B2 left of them is below.
 
-- **B2.1:** D3's shift has a second path. When every dish in a course is Requested, `fireLines`'
-  later round stamps the course's no-preparation line (a water) sent at once, as the first
-  round does. B2.1's check covers both paths.
-- **B2.2:** the edited-order read keeps its own `firedCourseIds`, built from
-  `ticket.firedAt != null`, in `working-order.ts` (search the name). Check it under D19 when
-  editing a released or Requested dish. `applyLineEdits`' late read of the next fire's kind has
-  no case that reaches it; none was found, and none was shown impossible.
-- **B2.5:** after Task 5a, a Requested dish moved into a course held until fired would print a
-  HOLD ticket. The move task decides and pins it.
-- **B2 or B3:** the extras of a dish made here, in a held group, become Requested at a waiting
-  station while the group is still held (Task 4's dated paragraph). Decide the mapping where the
-  pass first reads those extras.
-- **B2.6:** `releaseHeld`'s count now includes Requested lines; nothing reads it yet.
 - **B3, beside master Contract 8:** a held item rerouted from a closed station and then made
   Requested raises `route.released_at_closed_station` at the request, whose words say the dishes
   "went to" the closed station; the reroute also sets its `queued_at`, which D2 says a Requested
@@ -1181,6 +1171,26 @@ C's campaign notes, not in the repository.
 - **B3:** a party whose fired dishes were all cancelled or moved, or whose first submission was
   all held, gets `added` on its next fire. Before the pass shows "New order" or "Added", ask the
   owner what counts as a table's first send (with Owner question 1's copy sheet).
+- **From B2's plan** — the detail of each is under its "Left for B3 by this plan":
+  - **B3:** HOLD paper printed before the fire for work that became Requested is corrected only by
+    the keep-charge cancel (D26); an edit that cuts or removes such a dish now prints nothing.
+  - **B3:** the made-here extras mapping (D36): which pass card and column shows them, and whether
+    HOLD paper lists them.
+  - **B3:** `applyLineEdits`' late read of the next fire's kind (D38), with B3.1's reader.
+  - **B3:** "waiting for the pass" in department transfers (D37) and current orders' `firedAt` for
+    a Requested row.
+  - **B3:** the pass's release stamps the order number (`stampSentOrderNumber` skips Requested
+    items) and decides what station closing's "leave" (`stationRetainedAtRelease`) does.
+  - **B3:** whether the pass is warned before releasing to a station whose output is down, and
+    whether the dark-pass alert's one-hour window suits Requested work (D34).
+  - **B3.3 or B4:** the rest of the order's "(on hold)" mark for a Requested dish (D33, Owner
+    question 4).
+  - **B3.5:** races between the pass's release and Serve, cancel, Recall and moves (D40).
+  - **B4:** the till's Current orders row for a Requested dish shows no state at all (it showed
+    "Held" before B2): `#rowState` in `apps/till/src/screens/till-table-order-screen.ts` returns
+    nothing for a released row whose kitchen `firedAt` is null, and B2 reads a Requested row as
+    released.
+  - **B3's copy sheet:** B2's Owner questions 1–4.
 
 ## B2 (outline): a requested dish through every service action
 
