@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { streamSSE } from "hono/streaming";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHandoverGate, type HandoverGate } from "./handover-gate.js";
 
@@ -16,7 +17,7 @@ function rig(): {
   holds: Map<string, ReturnType<typeof hold>>;
   contexts: Map<string, Context>;
 } {
-  const gate = createHandoverGate({ notCounted: (c) => c.req.path === "/events" });
+  const gate = createHandoverGate();
   const holds = new Map<string, ReturnType<typeof hold>>();
   const contexts = new Map<string, Context>();
   const app = new Hono();
@@ -31,7 +32,15 @@ function rig(): {
   };
   app.get("/slow", (c) => held(c, `slow:${c.req.query("n") ?? ""}`));
   app.post("/slow", (c) => held(c, `post:${c.req.query("n") ?? ""}`));
-  app.get("/events", (c) => held(c, "events"));
+  app.get("/events", (c) =>
+    streamSSE(c, async (stream) => {
+      const h = hold();
+      holds.set("events", h);
+      await stream.writeSSE({ data: "open" });
+      h.arrive();
+      await h.wait;
+    }),
+  );
   app.get("/fast", (c) => c.json({ ok: true }));
   app.get("/health", (c) => c.json({ healthy: true }));
   return { app, gate, holds, contexts };
@@ -64,13 +73,17 @@ describe("createHandoverGate", () => {
     expect(await r.gate.settled(0)).toEqual({ remaining: [] });
   });
 
-  it("an event stream is not counted", async () => {
+  it("an open event stream is not counted: its handler has returned its response", async () => {
     const r = rig();
-    const res = r.app.request("/events");
+    const res = await r.app.request("/events");
+    const reader = res.body!.getReader();
+    const first = await reader.read();
+    expect(new TextDecoder().decode(first.value)).toContain("data: open");
     await entered(r, "events");
-    expect(await r.gate.settled(1_000)).toEqual({ remaining: [] });
+    expect(await r.gate.settled(0)).toEqual({ remaining: [] });
     r.holds.get("events")!.release();
-    await res;
+    await reader.read();
+    expect((await reader.read()).done).toBe(true);
   });
 
   it("after close, a new request is refused 503 handover.stepping_down and an allowed one passes", async () => {
@@ -99,15 +112,19 @@ describe("createHandoverGate", () => {
 
   it("an allowed request after close is not counted", async () => {
     const r = rig();
+    const closer = r.app.request("/slow?n=closer", { method: "POST" });
+    await entered(r, "post:closer");
     r.gate.close({
-      allowed: (c) => c.req.path === "/slow",
-      self: undefined as unknown as Context,
+      allowed: (c) => c.req.method === "GET" && c.req.path === "/slow",
+      self: r.contexts.get("post:closer")!,
     });
     const res = r.app.request("/slow?n=allowed");
     await entered(r, "slow:allowed");
     expect(await r.gate.settled(1_000)).toEqual({ remaining: [] });
     r.holds.get("slow:allowed")!.release();
+    r.holds.get("post:closer")!.release();
     expect((await res).status).toBe(200);
+    expect((await closer).status).toBe(200);
   });
 
   it("is open until closed", async () => {
@@ -119,14 +136,18 @@ describe("createHandoverGate", () => {
   it("a request inside before close still completes after it", async () => {
     const r = rig();
     const inside = r.app.request("/slow?n=inside");
+    const closer = r.app.request("/slow?n=closer", { method: "POST" });
     await entered(r, "slow:inside");
-    r.gate.close({ allowed: () => false, self: undefined as unknown as Context });
+    await entered(r, "post:closer");
+    r.gate.close({ allowed: () => false, self: r.contexts.get("post:closer")! });
     const settled = r.gate.settled(60_000);
     r.holds.get("slow:inside")!.release();
     const res = await inside;
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ done: "slow:inside" });
     expect(await settled).toEqual({ remaining: [] });
+    r.holds.get("post:closer")!.release();
+    expect((await closer).status).toBe(200);
   });
 
   it("the closing request is not waited for", async () => {
@@ -135,9 +156,22 @@ describe("createHandoverGate", () => {
     await entered(r, "post:closer");
     r.gate.close({ allowed: () => false, self: r.contexts.get("post:closer")! });
     expect(await r.gate.settled(1_000)).toEqual({ remaining: [] });
-    // Its own finally must not drive the count below zero and hide a later request.
     r.holds.get("post:closer")!.release();
     expect((await closer).status).toBe(200);
+  });
+
+  it("the closing request finishing does not hide a request still inside", async () => {
+    const r = rig();
+    const other = r.app.request("/slow?n=other");
+    const closer = r.app.request("/slow?n=closer", { method: "POST" });
+    await entered(r, "slow:other");
+    await entered(r, "post:closer");
+    r.gate.close({ allowed: () => false, self: r.contexts.get("post:closer")! });
+    r.holds.get("post:closer")!.release();
+    expect((await closer).status).toBe(200);
+    expect(await r.gate.settled(50)).toEqual({ remaining: [{ method: "GET", path: "/slow" }] });
+    r.holds.get("slow:other")!.release();
+    expect((await other).status).toBe(200);
   });
 
   it("settled resolves at zero", async () => {

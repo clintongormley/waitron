@@ -14,7 +14,7 @@ export interface HandoverGate {
  * A Hono middleware is not inside a route's error boundary, so the refusal is written in the
  * boundary's response shape directly rather than thrown.
  */
-export function createHandoverGate(deps: { notCounted: (c: Context) => boolean }): HandoverGate {
+export function createHandoverGate(): HandoverGate {
   const inside = new Map<Context, { method: string; path: string }>();
   const atZero = new Set<() => void>();
   let allowed: ((c: Context) => boolean) | null = null;
@@ -33,7 +33,6 @@ export function createHandoverGate(deps: { notCounted: (c: Context) => boolean }
           "Cache-Control": "no-store",
         });
       }
-      if (deps.notCounted(c)) return next();
       inside.set(c, { method: c.req.method, path: c.req.path });
       try {
         await next();

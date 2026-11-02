@@ -804,6 +804,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The box's time was not confirmed. Use “Check the time” to see why.",
     es: "No se ha confirmado la hora del equipo. Usa «Comprobar la hora» para ver por qué.",
   },
+  "handover.stepping_down": {
+    en: "This server is handing its work over to another server, so it is not taking requests now. Nothing was changed.",
+    es: "Este servidor está pasando su trabajo a otro servidor, así que ahora no atiende solicitudes. No se ha cambiado nada.",
+  },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",
