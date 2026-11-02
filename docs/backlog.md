@@ -5934,8 +5934,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   integration (2026-09-24; #638, #808).
 
 - **A951. The box's lasting tunnel and public-certificate client.** Build approved; isolated helper profile accepted.
-  Follow the [plan amendment](superpowers/plans/2026-10-22-a951-connection.md#focused-d130d132-amendment-2026-10-23), obtain [routing revision 2](superpowers/specs/2026-10-23-a951-routing-v1-revision2.md) acceptance and finish the appliance amendments.
-  Live authority, upstream, privacy and runtime/provider gates remain open.
+  [Host/custody amendment](superpowers/specs/2026-11-02-a951-host-custody-amendment.md) defines the proposed local boundary. G1 mapping is G's item after D462.
+  E's next execution step is **BLOCKED on G7 real-host evidence: Docker/bench, owner back 3 November 2026**. Admission CLOSED; other scoped gates remain.
   [Detail](backlog/replication-cloud.md#a951-the-boxs-lasting-tunnel-and-public-certificate-client)
 
 - **Waitron retains:** the implemented Cloud connection screen and manager adapter; box-side

@@ -360,6 +360,33 @@ abort signal so deliberate shutdown does not record a service outage.
 
 ## A951 build intake
 
+### Host/custody amendment: 2 November 2026
+
+Review artifact [host/custody amendment](../superpowers/specs/2026-11-02-a951-host-custody-amendment.md):
+`waitron-a951-host-custody-v1` / `proposal-2026-11-02.1`, full-file SHA-256
+`50001abafc7c3edea270821e0a8570f8c722969d62132070a46d9cd3729956d2`.
+Accepted amendment digest: **NONE**; accepted executable consumer/runtime pair:
+**NONE**. Document review supplies neither bilateral acceptance nor host evidence.
+
+The amendment decides the proposed native caller/service and supervisor socket
+custody boundary and requires a fully populated exact-pin manifest and negative/
+valid-positive host matrix. Names of future executables are proposals, not shipped
+entries or measured hashes. The original helper file and its D130 acceptance digest
+below are unchanged; isolated-profile acceptance supplies no real host proof.
+
+**G1 mapping:** Lane G's future item after D462 maps appliance/helper closure,
+history, reconnect and intact-reboot semantics against this digest under D132's
+unchanged bounds. This local host amendment does not accept or implement that mapping.
+**G7 host evidence:** Lane E's post-publication A951 execution remains **BLOCKED**,
+waiting for Docker/bench with the owner on **3 November 2026**. Runtime admission
+stays CLOSED. The date is an assigned dependency, not an executed qualification.
+G2 current authority, G3 unchanged test-only staff, G4 upstream, G5 moves, G6 routing/
+privacy and remaining device/origin gates retain their scope. Production customer
+manifest empty; `.local` independent; no new owner build-permission question.
+
+The dated intake bodies below remain historical receipts with their original
+artifact digests; this entry does not rewrite them.
+
 ### A1018 dependency update: 24 October 2026
 
 At 04:07 the owner approved the [revised handover design](../superpowers/specs/2026-10-23-a1018-simple-handover-design.md),
