@@ -539,7 +539,7 @@ describe("promoteMirrorToPrimary", () => {
     const db = suite.db;
     await stampDeployment(db, "preproduction");
     await seedTenant(db);
-    const [loc] = await db
+    await db
       .insert(locations)
       .values({
         name: "Barra",
@@ -547,7 +547,6 @@ describe("promoteMirrorToPrimary", () => {
         operationDescription: "Venta en establecimiento",
       })
       .returning({ id: locations.id });
-    const locationId = loc!.id;
     const t = await db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
     const nif = t.rows[0]!.tax_id;
 
@@ -567,7 +566,6 @@ describe("promoteMirrorToPrimary", () => {
     await establishReservedStandbyIdentity(
       { ownerDb: db },
       {
-        locationId,
         standby,
         nodeName: "cloud",
         filingModule: "verifactu",

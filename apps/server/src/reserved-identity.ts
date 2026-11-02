@@ -4,6 +4,7 @@ import {
   insertReservedNodeTx,
   insertReservedSeriesTx,
   nodes,
+  venueLocationId,
   withTransaction,
   type Database,
   type Transaction,
@@ -45,7 +46,6 @@ export function generateStandbyIdentity(): StandbyIdentity {
 export async function establishReservedStandbyIdentity(
   deps: { ownerDb: Database },
   args: {
-    locationId: string;
     standby: StandbyPublicIdentity;
     nodeName: string;
     filingModule: string | null;
@@ -75,7 +75,7 @@ export async function establishReservedStandbyIdentity(
         throw new AppError("module.operation_invalid", { module: owner.name });
       await insertReservedNodeTx(tx, {
         id: standby.nodeId,
-        locationId: supplied.locationId,
+        locationId: await venueLocationId(tx),
         name: supplied.nodeName,
         filingModule: supplied.filingModule,
         taxModule: supplied.taxModule,
@@ -83,7 +83,7 @@ export async function establishReservedStandbyIdentity(
         endorsement: reserved.endorsement,
       });
       const standbyNode = {
-        locationId: brandLocationId(supplied.locationId),
+        locationId: brandLocationId(await venueLocationId(tx)),
         nodeId: brandNodeId(standby.nodeId),
       };
       for (const m of modules) {

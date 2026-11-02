@@ -296,7 +296,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     const pending = JSON.parse(
       await readFile(join(stateDir, "pending-adoption.json"), "utf8"),
     ) as PendingAdoption;
-    expect(pending.locationId).toBe(DESIGNATED.locationId);
+    expect(pending).not.toHaveProperty("locationId");
     expect(pending.originNodeId).toBe(DESIGNATED.nodeId);
     expect(pending.standby.nodeId).toBe(capturedStandby!.nodeId);
     expect(pending.standby.publicKey).toBe(capturedStandby!.publicKey);

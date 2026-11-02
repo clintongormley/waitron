@@ -72,7 +72,6 @@ describe("establishReservedStandbyIdentity", () => {
       establishReservedStandbyIdentity(
         { ownerDb: suite.db },
         {
-          locationId,
           standby,
           nodeName: "cloud",
           filingModule: "verifactu",
@@ -122,7 +121,6 @@ describe("establishReservedStandbyIdentity", () => {
   it("is idempotent: a second call with a fresh identity is a no-op (keeps the first)", async () => {
     const first = generateStandbyIdentity();
     const base = {
-      locationId,
       nodeName: "cloud",
       filingModule: null,
       taxModule: null,
@@ -178,7 +176,6 @@ describe("establishReservedStandbyIdentity", () => {
         establishReservedStandbyIdentity(
           { ownerDb: suite.db },
           {
-            locationId,
             standby,
             nodeName: "cloud",
             filingModule: "verifactu",
@@ -215,7 +212,6 @@ describe("establishReservedStandbyIdentity", () => {
         establishReservedStandbyIdentity(
           { ownerDb: suite.db },
           {
-            locationId,
             standby,
             nodeName: "cloud",
             filingModule: "verifactu",
@@ -245,7 +241,6 @@ describe("establishReservedStandbyIdentity", () => {
     await establishReservedStandbyIdentity(
       { ownerDb: suite.db },
       {
-        locationId,
         standby,
         nodeName: "cloud",
         filingModule: null,
@@ -270,7 +265,6 @@ describe("establishReservedStandbyIdentity", () => {
       establishReservedStandbyIdentity(
         { ownerDb: suite.db },
         {
-          locationId,
           standby,
           nodeName: "cloud",
           filingModule: null,
@@ -308,7 +302,6 @@ describe("establishReservedStandbyIdentity", () => {
         establishReservedStandbyIdentity(
           { ownerDb: suite.db },
           {
-            locationId,
             standby,
             nodeName: "cloud",
             filingModule: "verifactu",

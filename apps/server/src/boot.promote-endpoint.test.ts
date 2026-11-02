@@ -189,7 +189,6 @@ async function seedMirrorIdentity(db: Database, node: NodeDatabase): Promise<{ n
   await establishReservedStandbyIdentity(
     { ownerDb: db },
     {
-      locationId: MIRROR_LOCATION_ID,
       standby,
       nodeName: "cloud",
       filingModule: "verifactu",

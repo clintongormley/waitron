@@ -165,8 +165,8 @@ it("still adopts when the allocation-dependent module is disabled", async () => 
   expect(await suite.db.select().from(deployment)).toEqual([
     { id: 1, environment: "preproduction", stampedAt: expect.any(Date) },
   ]);
+  expect(await readPendingAdoption(stateDir)).not.toHaveProperty("locationId");
   expect(await readPendingAdoption(stateDir)).toMatchObject({
-    locationId: LOCATION,
     originNodeId: PRIMARY,
   });
 });
@@ -206,7 +206,6 @@ it("a pending allocated adoption refuses without creating a selling identity and
     .values({ id: LOCATION, name: "Venue", invoiceLocales: ["es"], operationDescription: "Venta" });
   await suite.db.insert(nodes).values({ id: PRIMARY, locationId: LOCATION, name: "Primary" });
   const pending: PendingAdoption = {
-    locationId: LOCATION,
     originNodeId: PRIMARY,
     standby: { nodeId: STANDBY, publicKey: "synthetic-public" },
     nodeName: "Spare",

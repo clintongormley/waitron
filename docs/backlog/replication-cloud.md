@@ -321,8 +321,8 @@ that slice 3 has to restore:
 - **Adopt copies no data, and an adopted mirror can no longer leave adoption-pending.** Adopt stamps
   the mirror's identity and config and writes the finish-adoption latch; the initial copy that used
   to bring the venue's rows went with the subscription. `runFinishAdoption` tries to establish the
-  reserved identity on every boot, and that attempt cannot succeed, because the standby's own `nodes`
-  row references a `locations` row the mirror does not have and nothing supplies. **Operator-visible
+  reserved identity on every boot and refuses with `mirror.venue_not_copied` while the database has
+  no venue row. The refusal precedes the standby node insert and does not depend on its foreign key. **Operator-visible
   consequence:** a box that adopts stays in adoption-pending boot for good — `/api/box/status` keeps
   answering `adoption: pending`, no mirror session or node-scoped read path is ever mounted, and each
   boot logs `adoption.establish_failed`. The full account is in

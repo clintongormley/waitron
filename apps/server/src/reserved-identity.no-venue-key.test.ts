@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -45,7 +44,6 @@ it("refuses a standby without a venue even after the node's venue foreign key is
     establishReservedStandbyIdentity(
       { ownerDb: suite.db },
       {
-        locationId: randomUUID(),
         standby,
         nodeName: "cloud",
         filingModule: null,

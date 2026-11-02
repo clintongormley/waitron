@@ -230,7 +230,6 @@ async function establish(
     establishReservedStandbyIdentity(
       { ownerDb: spare.db },
       {
-        locationId: LOCATION,
         standby: held.standby,
         nodeName: "Spare",
         filingModule: "verifactu",

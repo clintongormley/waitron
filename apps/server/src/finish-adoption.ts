@@ -26,24 +26,12 @@ export function assertAdoptionModules(modules: readonly WaitronModule[]): void {
 }
 
 /**
- * The full standby identity + reservation an adopted mirror records at adopt for a boot to establish.
- * Persisted on disk, not in the database, because the identity it describes has no row there.
- *
- * THAT STEP CANNOT SUCCEED TODAY — this is the one place that says why; everything else about
- * adoption points here. `establishReservedStandbyIdentity` (`reserved-identity.ts`) inserts the
- * standby's `nodes` row, whose NOT NULL `location_id` references `locations`, and an adopted mirror
- * holds no `locations` row: `adoptFromPrimary` refuses to run unless that table is EMPTY
- * (`assertNoOperationalVenue`, `packages/provisioning/src/tenant-guard.ts`), and nothing copies the
- * primary's rows here. Measured on this tree, against a directory migrated with every manifest set:
- * inserting that `nodes` row with a `location_id` naming no `locations` row is refused with
- * `errcode 787` and the whole message `FOREIGN KEY constraint failed` — this engine names NO
- * constraint, so nothing downstream can tell which key it was — and leaves zero `nodes` rows.
- * `runFinishAdoption` therefore logs `adoption.establish_failed` and keeps this latch, and an
- * adopted mirror stays adoption-pending until a replacement copy mechanism lands (`docs/backlog.md`
- * → *Replication, membership & failover*).
+ * The pending standby identity a boot establishes. Establishing refuses with
+ * `mirror.venue_not_copied` while this database holds no venue row (`reserved-identity.ts`), and
+ * nothing copies the main box's rows to a mirror yet, so an adopted mirror stays adoption-pending
+ * until a replacement copy mechanism lands (`docs/backlog.md` → Replication, membership & failover).
  */
 export interface PendingAdoption {
-  locationId: string;
   standby: StandbyPublicIdentity;
   nodeName: string;
   filingModule: string | null;
@@ -77,7 +65,6 @@ export async function readPendingAdoption(stateDir: string): Promise<PendingAdop
 /** The argument shape `establishReservedStandbyIdentity` takes — hoisted so the injectable `establish`
  * seat below matches it exactly. */
 type EstablishArgs = {
-  locationId: string;
   standby: StandbyPublicIdentity;
   nodeName: string;
   filingModule: string | null;
@@ -106,10 +93,8 @@ export async function runFinishAdoption(deps: {
   if (pending === null) return; // established (file unlinked) or never pending — nothing to finish.
   try {
     assertAdoptionModules(deps.modules);
-    // establish FIRST (its inserts FK to the venue's rows), then the ambient viewer, then clear the
-    // latch — order matters: the file must survive a throw in either step so the next boot retries.
+    // The file must survive a throw in either step so the next boot retries.
     await establish({
-      locationId: pending.locationId,
       standby: pending.standby,
       nodeName: pending.nodeName,
       filingModule: pending.filingModule,

@@ -112,7 +112,6 @@ function bundleDeps() {
 }
 function adoptionArgs(standby = generateStandbyIdentity()) {
   return {
-    locationId: LOCATION,
     standby,
     nodeName: "Standby",
     filingModule: null,
