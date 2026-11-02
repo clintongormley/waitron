@@ -50,7 +50,7 @@ export const VENUE_FISCAL_FIELD_PATHS = [
   "seriesCode",
   "fullSeriesCode",
   "rectificativeSeriesCode",
-  "location.operationDescription",
+  "operationDescription",
 ] as const;
 
 export type VenueFiscalFieldPath = (typeof VENUE_FISCAL_FIELD_PATHS)[number];
@@ -85,6 +85,6 @@ export function validateLegalName(name: string): void {
 
 export function validateOperationDescription(description: string): void {
   if (CONTROL_CHARS.test(description) || description.length > DESCRIPTION_MAX) {
-    refuse("location.operationDescription");
+    refuse("operationDescription");
   }
 }

@@ -235,7 +235,7 @@ it("validates a changed operation description through its own seat", () => {
   expect(() => FISCAL_SLOT.venueFields!.validateOperationDescription("x".repeat(501))).toThrow(
     expect.objectContaining({
       code: "setup.request_invalid",
-      params: { field: "location.operationDescription" },
+      params: { field: "operationDescription" },
     }),
   );
   expect(() =>

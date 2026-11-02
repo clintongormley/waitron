@@ -28,12 +28,10 @@ const context = {
     seriesCode: "A",
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
-    location: {
-      name: "Olivo",
-      city: "Madrid",
-      fiscalTerritory: "ES-common",
-      timeZone: "Europe/Madrid",
-    },
+    name: "Olivo",
+    city: "Madrid",
+    fiscalTerritory: "ES-common",
+    timeZone: "Europe/Madrid",
   },
 };
 const selected = {
@@ -232,8 +230,8 @@ it("automatically compares clocks and shows combined country, place, zone and lo
 });
 it("shows Canary local time rather than the browser or Madrid zone", async () => {
   const request = structuredClone(context);
-  request.venue.location = {
-    ...request.venue.location,
+  request.venue = {
+    ...request.venue,
     city: "Las Palmas",
     fiscalTerritory: "ES-canary",
     timeZone: "Atlantic/Canary",
@@ -763,7 +761,7 @@ it("the wizard PDF uses the reviewed Canary venue zone", async () => {
   vi.setSystemTime(instant);
   try {
     const request = structuredClone(context);
-    request.venue.location.timeZone = "Atlantic/Canary";
+    request.venue.timeZone = "Atlantic/Canary";
     const { el, api } = await mount({ request });
     api.stageNodeKey = async () => ({
       stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
