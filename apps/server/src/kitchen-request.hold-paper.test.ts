@@ -55,6 +55,10 @@ import "./errors.js";
 
 const AT = "2026-03-14T12:00:00.000Z";
 const LATER = "2026-03-14T12:05:00.000Z";
+/** A kitchen ticket prints its time in the process's own time zone (`hhmm`, kitchen-ticket.ts). */
+const ticketClock = (at: Date) =>
+  `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+const LATER_CLOCK = ticketClock(new Date(LATER));
 
 type Venue = Awaited<ReturnType<typeof setupSplitExtrasVenue>>;
 
@@ -156,7 +160,7 @@ const cancelledBurger = [
   "Grill",
   "Split extras",
   "1",
-  "13:05",
+  LATER_CLOCK,
   "GROUP 1",
   "1.000 x BURG",
   "",
@@ -476,7 +480,7 @@ describe("A773 hold paper: extras off and moves", () => {
         "Grill",
         "Split extras",
         "1",
-        "13:05",
+        LATER_CLOCK,
         "GROUP 1",
         "1.000 x BURG",
         "  CANCEL: Chips",
@@ -487,7 +491,7 @@ describe("A773 hold paper: extras off and moves", () => {
         "Fryer",
         "Split extras",
         "1",
-        "13:05",
+        LATER_CLOCK,
         "GROUP 1",
         "1.000 x CHIPS",
         "  > for BURG at Grill",
@@ -617,7 +621,7 @@ describe("A773 hold paper: extras off and moves", () => {
     station,
     "Split extras",
     "1",
-    "13:05",
+    LATER_CLOCK,
     `From ${from}`,
     "GROUP 1",
     "1.000 x BURG",
@@ -780,7 +784,7 @@ describe("A773 hold paper: edits", () => {
         "Grill",
         "Split extras",
         "1",
-        "13:05",
+        LATER_CLOCK,
         "GROUP 1",
         "-1.000 x BURG",
         "",
@@ -881,7 +885,7 @@ describe("A773 hold paper: added work", () => {
     station,
     "Split extras",
     "1",
-    "13:05",
+    LATER_CLOCK,
     "GROUP 1",
     ...lines,
     "",
@@ -1355,7 +1359,7 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
         "Fryer",
         "Split extras",
         "1",
-        "13:05",
+        LATER_CLOCK,
         "GROUP 1",
         "1.000 x CHIPS",
         "  > for BURG at Grill",
@@ -1496,7 +1500,7 @@ describe("A773 hold paper: cancels of a whole dish, and released work", () => {
         const after = await slips(tx, venue);
         const added = (name: string) => after[name]!.slice(before[name]!.length);
         const word = writer === "draft recall" ? "*** RECALLED ***" : "*** VOID ***";
-        const head = ["Split extras", "1", "13:05"];
+        const head = ["Split extras", "1", LATER_CLOCK];
         const grill = [word, "Grill", ...head, "1.000 x BURG", "  > with CHIPS from Fryer", ""];
         const fryer = [word, "Fryer", ...head, "1.000 x CHIPS", "  > for BURG at Grill", ""];
         expect(added("grill")).toEqual([grill]);

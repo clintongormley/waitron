@@ -82,6 +82,11 @@ async function parkedThenRelease<A, B>(
   return settled;
 }
 
+/** A kitchen ticket prints its time in the process's own time zone (`hhmm`, kitchen-ticket.ts). */
+const ticketClock = (at: Date) =>
+  `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+const AT_CLOCK = ticketClock(new Date("2026-03-14T12:00:00.000Z"));
+
 /**
  * A `deactivatePrinter` started while a kitchen fire is open never aborts the fire: the fire enqueues
  * its job, the deactivation lands only afterwards, and the printer ends up inactive.
@@ -293,7 +298,7 @@ describe("A773 pass release: a printer two pass screens share", () => {
       },
     ]);
 
-    const fire = "Grill\nSplit extras\n1\n13:00\nGROUP 1\n1.000 x BURG\n";
+    const fire = `Grill\nSplit extras\n1\n${AT_CLOCK}\nGROUP 1\n1.000 x BURG\n`;
     const printedAt = async (printerId: string) =>
       (
         await suite.db
