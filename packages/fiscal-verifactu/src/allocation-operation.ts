@@ -25,15 +25,18 @@ type SeriesBases = readonly { readonly code: string; readonly purpose: string }[
 
 export async function readModuleAllocationSeries(
   tx: Transaction,
-  node: ProvisionedNode,
+  node: Pick<ProvisionedNode, "nodeId">,
   requestedBases: SeriesBases,
 ): Promise<ActivationResult["series"]> {
   const bases = requestedBases.map((base) => ({ code: base.code, purpose: base.purpose }));
   const refuse = (reason: string): never => {
     throw new AppError("sif.allocation_invalid", { reason });
   };
-  const [storedNode] = await tx.select().from(nodes).where(eq(nodes.id, node.nodeId));
-  if (storedNode?.locationId !== node.locationId) return refuse("node_mismatch");
+  const [storedNode] = await tx
+    .select({ id: nodes.id })
+    .from(nodes)
+    .where(eq(nodes.id, node.nodeId));
+  if (storedNode === undefined) return refuse("node_mismatch");
   const [sif] = await tx
     .select({
       id: registroSif.id,

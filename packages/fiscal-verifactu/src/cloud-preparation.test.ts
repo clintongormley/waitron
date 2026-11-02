@@ -3,8 +3,9 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeEach, afterEach, expect, it, vi } from "vitest";
+import { eq, sql } from "drizzle-orm";
 import { locationId } from "@waitron/shared";
-import { deployment, invoiceSeries, tenants, withTransaction } from "@waitron/db";
+import { deployment, invoiceSeries, nodes, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { withOperationAuthority, type ModuleOperationPreparation } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -484,15 +485,6 @@ it.each(["shape", "signature", "binding", "allocation"])(
     });
   },
 );
-it("refuses reporting another location's retained allocation", async () => {
-  await activate();
-  await expect(
-    collectReport(undefined, {
-      ...node,
-      locationId: locationId(TENANT_A.locationId.replace("a000", "b000")),
-    }),
-  ).rejects.toMatchObject({ code: "sif.allocation_invalid", params: { reason: "node_mismatch" } });
-});
 it("refuses a retained report for a different taxpayer or environment", async () => {
   await activate();
   await suite.db.update(tenants).set({ taxId: "B12345678" });
@@ -583,4 +575,29 @@ it("keeps an already consumed receipt spent when the local environment refuses a
     code: "sif.allocation_invalid",
     params: { reason: "uncertain_prior_activation" },
   });
+});
+
+it("refuses reporting when the stored node is absent", async () => {
+  await activate();
+  await suite.db.execute(sql`pragma foreign_keys = off`);
+  try {
+    await suite.db.delete(nodes).where(eq(nodes.id, node.nodeId));
+    await expect(collectReport()).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "node_mismatch" },
+    });
+  } finally {
+    await suite.db.execute(sql`pragma foreign_keys = on`);
+  }
+});
+
+// A1301: deleted with cfg in S18
+it("reports a committed Cloud allocation without location scope", async () => {
+  await activate();
+  expect(
+    await collectReport(undefined, {
+      ...node,
+      locationId: locationId("f0000000-0000-4000-8000-000000000099"),
+    }),
+  ).toEqual(await collectReport());
 });

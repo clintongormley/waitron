@@ -33,9 +33,7 @@ async function install(nodeId: string, kind: CertKind, validUntil = END): Promis
 }
 
 function alertsAt(at: string, nodeId: string = TENANT_A.nodeId) {
-  return withTransaction(suite.db, (tx) =>
-    certificateAlerts(tx, { nodeId, locationId: TENANT_A.locationId }, new Date(at)),
-  );
+  return withTransaction(suite.db, (tx) => certificateAlerts(tx, { nodeId }, new Date(at)));
 }
 
 describe("certificateAlerts", () => {

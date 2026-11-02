@@ -628,6 +628,24 @@ it("checks dormant reservation signatures without current register confirmations
   pinned.paper = [custodian];
   expect(await verify()).toEqual(result("passed"));
 });
+it.each(["source", "target"])("requires a reservation's %s node to exist", async (missing) => {
+  await capture(false);
+  both((db) => {
+    for (const id of [node.nodeId, TENANT_A.nodeId2])
+      db.prepare("insert into nodes (id,location_id,name,created_at) values (?,?,?,?)").run(
+        id,
+        node.locationId,
+        "Retained node",
+        time,
+      );
+    reservation(db);
+    db.prepare("delete from nodes where id=?").run(
+      missing === "source" ? node.nodeId : TENANT_A.nodeId2,
+    );
+  });
+  pinned.paper = [custodian];
+  expect(await verify()).toEqual(result("invalid"));
+});
 it.each(["source_node_id", "node_id", "allocation_key", "installation_identity"])(
   "binds each reservation's %s",
   async (column) => {

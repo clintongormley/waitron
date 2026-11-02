@@ -28,7 +28,7 @@ import { freePorts } from "./testing/free-ports.js";
 import { copyFile, cp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { invoiceSeries, nodes, locations, openVenueDatabase } from "@waitron/db";
+import { invoiceSeries, nodes, openVenueDatabase } from "@waitron/db";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readModulePreparationHistory } from "@waitron/provisioning";
@@ -344,8 +344,7 @@ describe("selected-hour admission before archive placement", () => {
   it.each(["archive", "stream"] as const)(
     "%s recovery boots for trading twice without changing its selected hour or recovered counters",
     async (source) => {
-      await suite.db.delete(nodes).where(eq(nodes.locationId, TENANT_B.locationId));
-      await suite.db.delete(locations).where(eq(locations.id, TENANT_B.locationId));
+      await suite.db.delete(nodes).where(eq(nodes.id, TENANT_B.nodeId));
       const history = await recoveryInvoices();
       const credentialKey = Buffer.alloc(32, 7).toString("base64");
       await establishNodeIdentity(

@@ -13,12 +13,12 @@ type CertificateAlert = OngoingAlert & { severity: "warning" | "error" };
  * leave here: nothing that names the certificate's holder or serial. */
 export async function certificateAlerts(
   tx: Transaction,
-  deps: { nodeId: string; locationId: string },
+  deps: { nodeId: string },
   now: Date,
 ): Promise<CertificateAlert[]> {
   const row = await latestInstall(tx, deps.nodeId);
   if (row === null) return [];
-  const timeZone = await venueTimeZone(tx, deps.locationId);
+  const timeZone = await venueTimeZone(tx);
   const stage = certificateStage(row.kind, now, row.validUntil, timeZone);
   if (stage === null) return [];
   const date = localDate(row.validUntil, timeZone);

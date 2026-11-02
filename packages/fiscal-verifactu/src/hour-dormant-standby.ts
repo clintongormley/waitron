@@ -22,7 +22,6 @@ interface Dormant {
   version: 1;
   binding: OperationBinding;
   scope: { taxpayerNif: string; environment: "production" | "preproduction" };
-  locationId: string;
   bases: readonly { code: string; purpose: string }[];
 }
 interface Held {
@@ -49,7 +48,7 @@ export function isHourDormantInput(value: unknown): boolean {
 }
 function readDormant(value: unknown): Dormant {
   if (
-    !exact(value, ["kind", "version", "binding", "scope", "locationId", "bases"]) ||
+    !exact(value, ["kind", "version", "binding", "scope", "bases"]) ||
     value.kind !== "hour-dormant" ||
     value.version !== 1 ||
     !exact(value.binding, ["module", "action", "eventId", "sourceId", "targetNodeId"]) ||
@@ -63,8 +62,6 @@ function readDormant(value: unknown): Dormant {
     typeof value.scope.taxpayerNif !== "string" ||
     !value.scope.taxpayerNif.trim() ||
     !["production", "preproduction"].includes(value.scope.environment as string) ||
-    typeof value.locationId !== "string" ||
-    !value.locationId.trim() ||
     !Array.isArray(value.bases) ||
     !value.bases.every(
       (base) =>
@@ -199,19 +196,17 @@ async function configuration(
   binding: OperationBinding,
   requireTarget: boolean,
 ): Promise<Dormant> {
-  if (
-    primary.nodeId === standby.nodeId ||
-    primary.locationId !== standby.locationId ||
-    binding.sourceId !== primary.nodeId
-  )
+  if (primary.nodeId === standby.nodeId || binding.sourceId !== primary.nodeId)
     return refuse("node_mismatch");
-  const [source] = await tx.select().from(nodes).where(eq(nodes.id, primary.nodeId));
-  const [target] = await tx.select().from(nodes).where(eq(nodes.id, standby.nodeId));
-  if (
-    source?.locationId !== primary.locationId ||
-    (requireTarget && target === undefined) ||
-    (target !== undefined && target.locationId !== standby.locationId)
-  )
+  const [source] = await tx
+    .select({ id: nodes.id })
+    .from(nodes)
+    .where(eq(nodes.id, primary.nodeId));
+  const [target] = await tx
+    .select({ id: nodes.id })
+    .from(nodes)
+    .where(eq(nodes.id, standby.nodeId));
+  if (source === undefined || (requireTarget && target === undefined))
     return refuse("node_mismatch");
   const [activeSif] = await tx
     .select()
@@ -246,7 +241,6 @@ async function configuration(
     version: 1,
     binding: { ...binding, action: "reserve" },
     scope: { taxpayerNif: tenant.taxId, environment },
-    locationId: standby.locationId,
     bases: await liveSeriesBases(tx, primary),
   });
 }

@@ -58,7 +58,6 @@ export async function parentFixture(db: Database, seal = true) {
     db,
     ring,
     nodeId: TENANT_A.nodeId,
-    locationId: TENANT_A.locationId,
     environment: "preproduction",
     signal: controller.signal,
     clock: () => NOW,

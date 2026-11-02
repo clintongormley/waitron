@@ -60,7 +60,6 @@ async function fixture(
       ring: f.deps.ring,
       seat: options.seat ?? FISCAL_SLOT.certificate!,
       nodeId: f.deps.nodeId,
-      locationId: f.deps.locationId,
       environment: "preproduction",
       filing: () =>
         typeof options.filing === "function" ? options.filing() : (options.filing ?? true),

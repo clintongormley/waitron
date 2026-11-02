@@ -12,7 +12,6 @@ export interface CertificateReminderPassDeps {
   db: Database;
   seat: Pick<FiscalCertificateSeat, "reminders">;
   nodeId: string;
-  locationId: string;
   venueLanguage: "en" | "es";
   now(): Date;
   isPrimary(): boolean;
@@ -58,12 +57,7 @@ export async function runCertificateReminderPass(
     const claimed = await withTransaction(deps.db, async (tx) => {
       if (!active()) return null;
       const recipients = await readManagerEmailRecipients(tx, deps.venueLanguage);
-      return deps.seat.reminders.claim(
-        tx,
-        { nodeId: deps.nodeId, locationId: deps.locationId },
-        recipients,
-        deps.now(),
-      );
+      return deps.seat.reminders.claim(tx, { nodeId: deps.nodeId }, recipients, deps.now());
     });
     if (claimed === null) break;
     processed = true;

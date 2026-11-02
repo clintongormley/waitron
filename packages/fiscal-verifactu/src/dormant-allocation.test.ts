@@ -6,7 +6,7 @@ import { deployment, invoiceSeries, withTransaction, type Transaction } from "@w
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, TENANT_A, TENANT_B } from "../test/fixtures.js";
+import { seedTenants, TENANT_A } from "../test/fixtures.js";
 
 import * as standby from "./standby-allocation.js";
 import { fiscalReservations } from "./schema/reservations.js";
@@ -233,20 +233,6 @@ describe("persisting a named spare's dormant paper allocation", () => {
     },
   );
 
-  it("refuses a target in another location even if evidence and caller agree on its node id", async () => {
-    const event = { ...join, targetNodeId: TENANT_B.nodeId };
-    await expect(
-      establish(
-        evidence(allocation, event),
-        { ...context, ...event },
-        { ...target, nodeId: TENANT_B.nodeId },
-      ),
-    ).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "node_mismatch" },
-    });
-  });
-
   it("requires separately enrolled trust rather than a signer named by the supplied proof", async () => {
     await expect(establish(undefined, context, target, null)).rejects.toMatchObject({
       code: "sif.allocation_invalid",
@@ -361,4 +347,14 @@ describe("persisting a named spare's dormant paper allocation", () => {
     );
     expect(await rows("fiscal_reservations")).toEqual(before);
   });
+});
+
+// A1301: deleted with cfg in S18
+it("establishes a dormant allocation without target location scope", async () => {
+  expect(
+    await establish(undefined, context, {
+      ...target,
+      locationId: locationId("f0000000-0000-4000-8000-000000000099"),
+    }),
+  ).toEqual({ reservationEventId: join.eventId, allocationId: allocation.allocationId });
 });

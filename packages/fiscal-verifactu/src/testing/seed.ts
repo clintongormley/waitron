@@ -93,7 +93,6 @@ async function insertNode(tx: Transaction, location: string, label: string): Pro
   return brandNodeId(nodeRow.id);
 }
 
-/** Adds one node (+ location + a node-keyed series + a live SIF registration). */
 async function addNode(
   tx: Transaction,
   nif: string,
@@ -118,7 +117,7 @@ async function addNode(
 }
 
 /**
- * Inserts location → node → node-keyed series and registers a live Veri*Factu SIF identity
+ * Seeds a node and node-keyed series at the venue and registers a live Veri*Factu SIF identity
  * for the node, returning every id `appendToChain` needs. Each call gets its OWN fresh NIF and
  * node.
  */
@@ -155,7 +154,6 @@ export async function addDeviceToNode(db: Database, seed: SeededNode): Promise<S
   return { ...ids, deviceId };
 }
 
-/** Inserts one location + node, deliberately WITHOUT registering a SIF. */
 async function addBareNode(tx: Transaction, label: string): Promise<NodeId> {
   const location = await insertLocation(tx, label);
   return insertNode(tx, location, label);

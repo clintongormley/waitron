@@ -67,7 +67,7 @@ function mount(db: Database, readHealth: () => Promise<BoxHealth> = async () => 
     db,
     readHealth: vi.fn(readHealth),
     freeSpace: vi.fn<(personId: string) => Promise<FreedSpace>>(async () => FREED),
-    venue: { locationId: "location-1", language: "en" as const },
+    venue: { language: "en" as const },
     clockConfirm: {
       backend: new FakeFiscalBackend(db),
       witnesses: () => [],

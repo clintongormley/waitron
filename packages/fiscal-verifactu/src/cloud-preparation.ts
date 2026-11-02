@@ -227,7 +227,7 @@ export function createCloudAllocationFilePreparation(configuration: {
 
 export async function readCloudAllocationReport(
   db: Database,
-  node: ProvisionedNode,
+  node: Pick<ProvisionedNode, "nodeId">,
   configuration: {
     readonly receiptPath: string;
     readonly trust: ReceiptTrust;
@@ -267,10 +267,13 @@ export async function readCloudAllocationReport(
     !isDeepStrictEqual(prior.approval, approval)
   )
     refuse("reservation_mismatch");
-  const [storedNode] = await db.select().from(nodes).where(eq(nodes.id, node.nodeId));
+  const [storedNode] = await db
+    .select({ id: nodes.id })
+    .from(nodes)
+    .where(eq(nodes.id, node.nodeId));
   const tenant = await readTenant(db);
   const [stamp] = await db.select().from(deployment).where(eq(deployment.id, 1));
-  if (storedNode?.locationId !== node.locationId) refuse("node_mismatch");
+  if (storedNode === undefined) refuse("node_mismatch");
   if (tenant?.taxId !== prior.taxpayerNif) refuse("taxpayer_mismatch");
   if (stamp?.environment !== prior.environment) refuse("environment_mismatch");
   return {

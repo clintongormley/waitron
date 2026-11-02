@@ -396,11 +396,9 @@ it("accepts a personal certificate without inventing a subject taxpayer", async 
   await capture(personal);
   expect(await verify()).toEqual(result("passed"));
 });
-it("requires the captured source node to belong to its captured location", async () => {
+it("requires the captured source node to exist", async () => {
   await capture();
-  both((db) =>
-    db.prepare("update nodes set location_id=? where id=?").run(TENANT_A.nodeId, TENANT_A.nodeId),
-  );
+  both((db) => db.prepare("delete from nodes where id=?").run(TENANT_A.nodeId));
   expect(await verify()).toEqual(result("invalid"));
 });
 it("permits an explicitly absent fiscal predecessor only without certificate evidence", async () => {

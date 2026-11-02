@@ -1,7 +1,7 @@
 import "./errors.js";
 import { isDeepStrictEqual } from "node:util";
 import { AppError } from "@waitron/shared";
-import { invoiceSeries, nodes, type Transaction } from "@waitron/db";
+import { invoiceSeries, type Transaction } from "@waitron/db";
 import { and, eq, isNull } from "drizzle-orm";
 import { registroSif } from "./schema/sif.js";
 import {
@@ -167,17 +167,7 @@ export const ALLOCATED_FISCAL_STANDBY: StandbyProvisioning = {
     const dormant = await reserveHourDormant(tx, primary, standby, operation);
     if (dormant !== undefined) return dormant;
     const held = readPrepared(operation, "reserve", standby);
-    if (
-      primary.nodeId !== held.context.sourceId ||
-      primary.locationId !== standby.locationId ||
-      primary.nodeId === standby.nodeId
-    )
-      return refuse("node_mismatch");
-    const [target] = await tx
-      .select({ locationId: nodes.locationId })
-      .from(nodes)
-      .where(eq(nodes.id, standby.nodeId));
-    if (target !== undefined && target.locationId !== standby.locationId)
+    if (primary.nodeId !== held.context.sourceId || primary.nodeId === standby.nodeId)
       return refuse("node_mismatch");
     const [activeSif] = await tx
       .select({ id: registroSif.id })

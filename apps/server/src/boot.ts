@@ -2106,7 +2106,6 @@ async function bootServer(
       db,
       seat: enabledFiscal.certificate,
       nodeId: tradingContext.nodeId,
-      locationId: tradingContext.locationId,
       venueLanguage: venueLocale === "es-ES" ? "es" : "en",
       now,
       isPrimary: () => holders.singletonRole.current === "primary",
@@ -2336,7 +2335,6 @@ async function bootServer(
         seat: enabledFiscal.certificate,
         diagnosisRunner: certificateDiagnosis,
         nodeId: tradingContext.nodeId,
-        locationId: tradingContext.locationId,
         environment: config.environment,
         filing: filesRecords,
         now,
@@ -2728,7 +2726,6 @@ async function bootServer(
     serverAlertSources.push(
       certificateAlertSource(enabledFiscal.certificate, {
         nodeId: tradingContext.nodeId,
-        locationId: tradingContext.locationId,
       }),
     );
   }
@@ -2792,7 +2789,6 @@ async function bootServer(
     {
       db,
       venue: {
-        locationId: tradingContext.locationId,
         language: venueLocale === "es-ES" ? "es" : "en",
       },
       readHealth: () =>

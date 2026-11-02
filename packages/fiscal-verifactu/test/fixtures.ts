@@ -36,7 +36,6 @@ export const TENANT_A = {
 };
 
 export const TENANT_B = {
-  locationId: "b0000000-0000-4000-8000-000000000002",
   nodeId: brandNodeId("b0000000-0000-4000-8000-000000000004"),
 };
 
@@ -50,19 +49,22 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
     .onConflictDoNothing({ target: tenants.id });
-  await db.insert(locations).values({
-    id: TENANT_A.locationId,
-    name: "Local principal",
-    invoiceLocales: ["es"],
-    operationDescription: "Venta en establecimiento",
-  });
-  await db
-    .insert(nodes)
-    .values({ id: TENANT_A.nodeId, locationId: TENANT_A.locationId, name: "Node 1" });
+  const existing = await db.select({ id: locations.id }).from(locations).limit(2);
+  let venueId = existing.length === 1 ? existing[0]!.id : undefined;
+  if (venueId === undefined) {
+    await db.insert(locations).values({
+      id: TENANT_A.locationId,
+      name: "Local principal",
+      invoiceLocales: ["es"],
+      operationDescription: "Venta en establecimiento",
+    });
+    venueId = TENANT_A.locationId;
+  }
+  await db.insert(nodes).values({ id: TENANT_A.nodeId, locationId: venueId, name: "Node 1" });
   await db
     .insert(invoiceSeries)
     .values({ id: TENANT_A.seriesId, nodeId: TENANT_A.nodeId, code: "A" });
-  const { deviceId } = await seedDevice(db, { locationId: TENANT_A.locationId });
+  const { deviceId } = await seedDevice(db, { locationId: venueId });
   await db.insert(sales).values({
     id: TENANT_A.saleId,
     source: "device",
@@ -90,7 +92,7 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
 
 /**
  * Seeds the parents registro-sif.test.ts needs: the taxpayer row, and three nodes across
- * two locations — `TENANT_A.nodeId`/`nodeId2` (two nodes registering under one NIF, proving the
+ * one venue — `TENANT_A.nodeId`/`nodeId2` (two nodes registering under one NIF, proving the
  * installation-number counter is per (NIF, IdSIF), not per node) and `TENANT_B.nodeId` (a node
  * registering under a DIFFERENT NIF, proving the counter is not shared across identities either).
  *
@@ -104,18 +106,21 @@ export async function seedTenants(db: Database): Promise<void> {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "89890001K", legalName: "Waitron SL" })
     .onConflictDoNothing({ target: tenants.id });
-  await db.insert(locations).values(
-    [TENANT_A.locationId, TENANT_B.locationId].map((id) => ({
-      id,
+  const existing = await db.select({ id: locations.id }).from(locations).limit(2);
+  let venueId = existing.length === 1 ? existing[0]!.id : undefined;
+  if (venueId === undefined) {
+    await db.insert(locations).values({
+      id: TENANT_A.locationId,
       name: "Local principal",
       invoiceLocales: ["es"],
       operationDescription: "Venta en establecimiento",
-    })),
-  );
+    });
+    venueId = TENANT_A.locationId;
+  }
   await db.insert(nodes).values([
-    { id: TENANT_A.nodeId, locationId: TENANT_A.locationId, name: "Node 1" },
-    { id: TENANT_A.nodeId2, locationId: TENANT_A.locationId, name: "Node 2" },
-    { id: TENANT_B.nodeId, locationId: TENANT_B.locationId, name: "Node 1" },
+    { id: TENANT_A.nodeId, locationId: venueId, name: "Node 1" },
+    { id: TENANT_A.nodeId2, locationId: venueId, name: "Node 2" },
+    { id: TENANT_B.nodeId, locationId: venueId, name: "Node 1" },
   ]);
 }
 
@@ -265,7 +270,7 @@ async function insertLocationNodeSeries(
 }
 
 /**
- * Seeds location -> node -> invoice series and a till device, makes sure the one taxpayer row exists, and registers a
+ * Seeds a node, invoice series and till device at the venue, and registers a
  * LIVE Veri*Factu SIF identity (via `registerSif`) — everything `write-path.e2e.test.ts` needs for
  * `VerifactuBackend.recordSale`'s own `currentSif` lookup to succeed. `seedTenantNodeSif` above is
  * deliberately not reused for this: it seeds a ready-made SALE too (for `inmutabilidad.test.ts`'s

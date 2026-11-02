@@ -56,7 +56,6 @@ it("with no transport given, checks with AEAT's endpoint for the environment thr
       db: suite.db,
       ring,
       nodeId: TENANT_A.nodeId,
-      locationId: TENANT_A.locationId,
       environment: "preproduction",
       authorize: async () => ({ personId: "p-1" }),
     },

@@ -1,5 +1,5 @@
 import { beforeEach, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { deployment, invoiceSeries, nodes, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -80,7 +80,7 @@ async function rows() {
     reservations: await suite.db.select().from(fiscalReservations),
   };
 }
-async function reserve() {
+async function reserve(source = primary, target = standby) {
   return withOperationAuthority(reserveBinding, "administrator", (authority) =>
     FISCAL_OPERATIONS.configure!(host).prepare(
       {
@@ -90,7 +90,7 @@ async function reserve() {
       },
       (prepared) =>
         withTransaction(suite.db, (tx) =>
-          ALLOCATED_FISCAL_STANDBY.reserve(tx, primary, standby, prepared),
+          ALLOCATED_FISCAL_STANDBY.reserve(tx, source, target, prepared),
         ),
     ),
   );
@@ -106,6 +106,63 @@ async function establish(state: unknown, override: Partial<OperationBinding> = {
   );
 }
 
+it("refuses a missing primary before reserving dormant configuration", async () => {
+  await suite.db.execute(sql`pragma foreign_keys = off`);
+  try {
+    await suite.db.delete(nodes).where(eq(nodes.id, primary.nodeId));
+  } finally {
+    await suite.db.execute(sql`pragma foreign_keys = on`);
+  }
+  await expect(reserve()).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "node_mismatch" },
+  });
+  expect(history).toEqual([]);
+});
+it("reserves dormant configuration before the standby node exists", async () => {
+  await suite.db.delete(nodes).where(eq(nodes.id, standby.nodeId));
+  const reserved = await reserve();
+  expect(reserved.state).toMatchObject({ kind: "hour-dormant", binding: reserveBinding, bases });
+  expect(history).toEqual([]);
+});
+// A1301: deleted with cfg in S18
+it("reserves and establishes dormant state without reading the supplied location scope", async () => {
+  const reserved = await reserve(
+    { ...primary, locationId: locationId("a0000000-0000-4000-8000-000000000091") },
+    { ...standby, locationId: locationId("a0000000-0000-4000-8000-000000000092") },
+  );
+  await establish(reserved.state);
+  expect(value).toEqual({ version: 1, entries: [], dormant: [reserved.state] });
+});
+it("reads retained dormant state with exactly five keys", () => {
+  const state = {
+    kind: "hour-dormant",
+    version: 1,
+    binding: reserveBinding,
+    scope: { taxpayerNif: "89890001K", environment: "preproduction" },
+    bases,
+  };
+  expect(
+    readRetainedHourDormant([{ version: 1, entries: [], dormant: [state] }], reserveBinding),
+  ).toEqual(state);
+});
+it.each([false, true])(
+  "refuses obsolete six-key dormant state with a valid entry present: %s",
+  (withValidEntry) => {
+    const state = {
+      kind: "hour-dormant",
+      version: 1,
+      binding: reserveBinding,
+      scope: { taxpayerNif: "89890001K", environment: "preproduction" },
+      bases,
+    };
+    const obsolete = { ...state, locationId: primary.locationId };
+    const dormant = withValidEntry ? [obsolete, state] : [obsolete];
+    expect(() =>
+      readRetainedHourDormant([{ version: 1, entries: [], dormant }], reserveBinding),
+    ).toThrow(expect.objectContaining({ code: "sif.allocation_invalid" }));
+  },
+);
 it("admits a dormant standby with complete configuration and no fiscal name or hour intent", async () => {
   const before = await rows();
   const reserved = await reserve();
@@ -115,7 +172,6 @@ it("admits a dormant standby with complete configuration and no fiscal name or h
     version: 1,
     binding: reserveBinding,
     scope: { taxpayerNif: "89890001K", environment: "preproduction" },
-    locationId: primary.locationId,
     bases,
   });
   expect(history).toEqual([]);
@@ -128,7 +184,7 @@ it("admits a dormant standby with complete configuration and no fiscal name or h
   expect(history).toHaveLength(1);
 });
 
-it.each(["bases", "taxpayer", "environment", "source", "target", "event", "location"])(
+it.each(["bases", "taxpayer", "environment", "source", "target", "event"])(
   "refuses a dormant %s mismatch without fiscal changes or durable admission",
   async (fault) => {
     const reserved = await reserve();
@@ -136,7 +192,6 @@ it.each(["bases", "taxpayer", "environment", "source", "target", "event", "locat
       bases: typeof bases;
       scope: { taxpayerNif: string; environment: string };
       binding: OperationBinding;
-      locationId: string;
     };
     if (fault === "bases") state.bases.pop();
     if (fault === "taxpayer") state.scope.taxpayerNif = "different";
@@ -144,7 +199,6 @@ it.each(["bases", "taxpayer", "environment", "source", "target", "event", "locat
     if (fault === "source") state.binding = { ...state.binding, sourceId: "different" };
     if (fault === "target") state.binding = { ...state.binding, targetNodeId: primary.nodeId };
     if (fault === "event") state.binding = { ...state.binding, eventId: "different" };
-    if (fault === "location") state.locationId = "different";
     const before = await rows();
     await expect(establish(state)).rejects.toMatchObject({ code: "sif.allocation_invalid" });
     expect(await rows()).toEqual(before);
@@ -204,7 +258,6 @@ it.each([
   "binding",
   "blank-event",
   "same-node",
-  "empty-location",
   "bases",
   "base-shape",
   "bad-base",
@@ -222,7 +275,6 @@ it.each([
   if (fault === "binding") state.binding = [];
   if (fault === "blank-event") bound.eventId = " ";
   if (fault === "same-node") bound.sourceId = bound.targetNodeId;
-  if (fault === "empty-location") state.locationId = "";
   if (fault === "bases") state.bases = null;
   if (fault === "base-shape") state.bases = [{ code: "A", purpose: "standard", extra: true }];
   if (fault === "bad-base") state.bases = [...bases, { code: "bad label", purpose: "standard" }];
@@ -259,7 +311,12 @@ it.each(["missing", "source", "target", "malformed", "conflict"])(
       values.push({
         version: 1,
         entries: [],
-        dormant: [{ ...(reserved.state as object), locationId: "different" }],
+        dormant: [
+          {
+            ...(reserved.state as object),
+            scope: { taxpayerNif: "different", environment: "preproduction" },
+          },
+        ],
       });
     expect(() => readRetainedHourDormant(values, bound)).toThrow(
       expect.objectContaining({ code: "sif.allocation_invalid" }),
@@ -452,7 +509,10 @@ it("rejects changed establishment state beside an authentic prepared operation",
             ALLOCATED_FISCAL_STANDBY.establish(
               tx,
               standby,
-              { ...(state as object), locationId: "different" },
+              {
+                ...(state as object),
+                scope: { taxpayerNif: "different", environment: "preproduction" },
+              },
               operation,
             ),
           ),

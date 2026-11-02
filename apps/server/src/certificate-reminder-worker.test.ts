@@ -32,7 +32,6 @@ const deps = () => ({
   db: suite.db,
   seat,
   nodeId,
-  locationId,
   venueLanguage: "en" as "en" | "es",
   now: () => now,
   isPrimary: () => primary,

@@ -31,7 +31,6 @@ export interface CertificateCard {
 export interface CertificateCardDeps {
   db: Database;
   nodeId: string;
-  locationId: string;
   authorize(tx: Transaction): Promise<void>;
   nameOf(tx: Transaction, personId: string): Promise<string | null>;
 }
@@ -69,7 +68,7 @@ export async function readCertificateCard(
   return withTransaction(deps.db, async (tx) => {
     await deps.authorize(tx);
     const revision = await credentialRevision(tx, { purpose: "fiscal.aeat" });
-    const timeZone = await venueTimeZone(tx, deps.locationId);
+    const timeZone = await venueTimeZone(tx);
     const row = await latestInstall(tx, deps.nodeId);
     if (row === null) return { revision, timeZone, installed: null };
 

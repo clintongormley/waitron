@@ -111,7 +111,6 @@ it.each(["installed", "candidate"] as const)(
         ring: f.deps.ring,
         seat: FISCAL_SLOT.certificate!,
         nodeId: f.deps.nodeId,
-        locationId: f.deps.locationId,
         environment: "preproduction",
         filing: () => true,
         now: () => NOW,
