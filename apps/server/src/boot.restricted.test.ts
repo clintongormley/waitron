@@ -8,8 +8,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { recordHandoverRestrictionTx } from "@waitron/node-db";
-import type { StartedServer } from "./boot.js";
+import { readHandoverRestriction, recordHandoverRestrictionTx } from "@waitron/node-db";
+import type { StartedServer, StartServerSeams } from "./boot.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -65,7 +65,10 @@ afterEach(async () => {
   }
 });
 
-async function boot(options: { restricted: boolean }): Promise<{ port: number; venue: Venue }> {
+async function boot(options: {
+  restricted: boolean;
+  seams?: StartServerSeams;
+}): Promise<{ port: number; venue: Venue }> {
   beforeServerStarts();
   const venue = await setupVenue(suite.db);
   const nodeId = venue.cfg.nodeId;
@@ -113,7 +116,7 @@ async function boot(options: { restricted: boolean }): Promise<{ port: number; v
     WAITRON_MIN_TICK_MS: String(MIN_TICK_MS),
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
   };
-  server = await startServer(env, env);
+  server = await startServer(env, env, options.seams);
   await vi.waitFor(async () => {
     expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
   });
@@ -177,5 +180,85 @@ describe("a box holding a handover restriction starts restricted", () => {
   it("control: the same folder without the row starts the drain", async () => {
     await boot({ restricted: false });
     await vi.waitFor(() => expect(drain.calls).toBeGreaterThan(0), { timeout: 10_000 });
+  }, 60_000);
+});
+
+describe("a full start's stepdown, through its test seam", () => {
+  it("answers the caller, then closes and restarts, with the restriction on disk", async () => {
+    const restart = vi.fn();
+    let nodeId = "";
+    const seams: StartServerSeams = {
+      stepdown: {
+        restart,
+        mount: (app, stepDown) =>
+          app.post("/test-stepdown", async (c) =>
+            c.json(
+              await stepDown({
+                binding: {
+                  operationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                  scenario: "emergency",
+                  venue: { country: "ES", taxId: "B12345678", environment: "preproduction" },
+                  sourceNodeId: nodeId,
+                  destinationNodeId: "00000000-0000-4000-8000-0000000000aa",
+                  membership: { term: 1, digest: "a".repeat(64) },
+                },
+                kind: "superseded",
+                self: c,
+              }),
+            ),
+          ),
+      },
+    };
+    const { port, venue } = await boot({ restricted: false, seams });
+    nodeId = venue.cfg.nodeId;
+    const answer = await fetch(`http://127.0.0.1:${port}/test-stepdown`, { method: "POST" });
+    expect(await answer.json()).toEqual({ restarting: true, replayed: false });
+    await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    expect(await readHandoverRestriction(suite.node, nodeId)).toMatchObject({
+      kind: "superseded",
+    });
+    // The graceful close ran before the restart: the listener no longer answers.
+    await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
+  }, 60_000);
+
+  it("does not wait for the request that asked for it", async () => {
+    let restarted!: () => void;
+    const restart = vi.fn(() => restarted());
+    const restarting = new Promise<void>((done) => (restarted = done));
+    let nodeId = "";
+    const { port, venue } = await boot({
+      restricted: false,
+      seams: {
+        stepdown: {
+          restart,
+          // This route keeps running until the restart, so a stepdown that counted it would wait
+          // the whole admitted-work limit before restarting.
+          mount: (app, stepDown) =>
+            app.post("/test-stepdown", async (c) => {
+              const result = await stepDown({
+                binding: {
+                  operationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                  scenario: "emergency",
+                  venue: { country: "ES", taxId: "B12345678", environment: "preproduction" },
+                  sourceNodeId: nodeId,
+                  destinationNodeId: "00000000-0000-4000-8000-0000000000aa",
+                  membership: { term: 1, digest: "a".repeat(64) },
+                },
+                kind: "superseded",
+                self: c,
+              });
+              await restarting;
+              return c.json(result);
+            }),
+        },
+      },
+    });
+    nodeId = venue.cfg.nodeId;
+    const answer = fetch(`http://127.0.0.1:${port}/test-stepdown`, { method: "POST" }).catch(
+      () => undefined,
+    );
+    await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    server = undefined;
+    await answer;
   }, 60_000);
 });

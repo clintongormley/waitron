@@ -78,34 +78,111 @@ function once(close: () => unknown): () => unknown {
 }
 
 export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
-  const closers: { name: string; close(): unknown }[] = [
-    { name: "pendingCardLoop", close: () => h.pendingCardLoop },
-    { name: "tenderRefundLoop", close: () => h.tenderRefundLoop },
-    { name: "attendanceLoop", close: () => h.attendanceLoop },
-    { name: "attendanceEmailLoop", close: () => h.attendanceEmailLoop },
-    { name: "certificateReminderLoop", close: () => h.certificateReminderLoop },
-    { name: "certificateDiagnosis", close: () => h.certificateDiagnosis?.stop() },
-    { name: "invoiceEmailLoop", close: () => h.invoiceEmailLoop },
-    { name: "cloudWorker", close: () => h.cloudWorker },
-    { name: "cloudSnapshots", close: () => h.cloudSnapshots },
-    { name: "suggestionLoop", close: () => h.suggestionLoop },
-    { name: "unsubscribeFromChanges", close: h.unsubscribeFromChanges },
-    { name: "stopSealingNodeCommits", close: h.stopSealingNodeCommits },
+  const closers: BackgroundCloser[] = [
+    {
+      name: "pendingCardLoop",
+      close: () => h.pendingCardLoop,
+      reason: "waits for a loop the aborts already stopped",
+    },
+    {
+      name: "tenderRefundLoop",
+      close: () => h.tenderRefundLoop,
+      reason: "waits for a loop the aborts already stopped",
+    },
+    {
+      name: "attendanceLoop",
+      close: () => h.attendanceLoop,
+      reason: "waits for a loop the aborts already stopped",
+    },
+    {
+      name: "attendanceEmailLoop",
+      close: () => h.attendanceEmailLoop,
+      reason: "waits for a loop the aborts already stopped",
+    },
+    {
+      name: "certificateReminderLoop",
+      close: () => h.certificateReminderLoop,
+      reason: "waits for a loop the aborts already stopped",
+    },
+    { name: "certificateDiagnosis", close: () => h.certificateDiagnosis?.stop(), atStepdown: true },
+    {
+      name: "invoiceEmailLoop",
+      close: () => h.invoiceEmailLoop,
+      reason: "waits for a loop the aborts already stopped",
+    },
+    {
+      name: "cloudWorker",
+      close: () => h.cloudWorker,
+      reason: "waits for a loop the aborts already stopped",
+    },
+    {
+      name: "cloudSnapshots",
+      close: () => h.cloudSnapshots,
+      reason: "waits for a loop the aborts already stopped",
+    },
+    {
+      name: "suggestionLoop",
+      close: () => h.suggestionLoop,
+      reason: "waits for a loop the aborts already stopped",
+    },
+    {
+      name: "unsubscribeFromChanges",
+      close: h.unsubscribeFromChanges,
+      reason: "only stops hearing local changes",
+    },
+    {
+      name: "stopSealingNodeCommits",
+      close: h.stopSealingNodeCommits,
+      reason: "seals this box's own commits, sending nothing outside",
+    },
     // A refresh still running would otherwise run against the closed store and log a failure.
-    { name: "sealedState", close: () => h.sealedState.settled() },
-    { name: "menuActivation", close: () => h.menuActivation.stop() },
-    { name: "appendOnlyWatch", close: () => h.appendOnlyWatch.stop() },
-    { name: "freeSpaceWatch", close: () => h.freeSpaceWatch.stop() },
-    { name: "boxEmails", close: () => h.boxEmails.stop() },
-    { name: "liveEvents", close: () => h.liveEvents.close() },
-    { name: "tunnelController", close: () => h.tunnelController.abort() },
-    { name: "loop", close: () => h.loop },
-    { name: "tunnelWorker", close: () => h.tunnelWorker?.catch(() => {}) },
-    { name: "backupSupervisor", close: () => h.backupSupervisor.stop() },
-    { name: "demoPrinterLoop", close: () => h.demoPrinterLoop?.stop() },
-    { name: "clockWatch", close: () => h.clockWatch.stop() },
+    {
+      name: "sealedState",
+      close: () => h.sealedState.settled(),
+      // Called early, its result would be kept and a later refresh never awaited.
+      reason: "waits for a local refresh, which must be awaited at close, not before",
+    },
+    { name: "menuActivation", close: () => h.menuActivation.stop(), atStepdown: true },
+    {
+      name: "appendOnlyWatch",
+      close: () => h.appendOnlyWatch.stop(),
+      reason: "only reads this box's triggers",
+    },
+    {
+      name: "freeSpaceWatch",
+      close: () => h.freeSpaceWatch.stop(),
+      reason: "only reads this box's free space",
+    },
+    { name: "boxEmails", close: () => h.boxEmails.stop(), atStepdown: true },
+    {
+      name: "liveEvents",
+      close: () => h.liveEvents.close(),
+      reason: "only tells open screens of changes",
+    },
+    {
+      name: "tunnelController",
+      close: () => h.tunnelController.abort(),
+      reason: "the tunnel only carries requests, which the gate refuses",
+    },
+    { name: "loop", close: () => h.loop, reason: "waits for a loop the aborts already stopped" },
+    {
+      name: "tunnelWorker",
+      close: () => h.tunnelWorker?.catch(() => {}),
+      reason: "waits for the tunnel, which only carries requests",
+    },
+    {
+      name: "backupSupervisor",
+      close: () => h.backupSupervisor.stop(),
+      reason: "stops after the sending loop has finished",
+    },
+    { name: "demoPrinterLoop", close: () => h.demoPrinterLoop?.stop(), atStepdown: true },
+    { name: "clockWatch", close: () => h.clockWatch.stop(), atStepdown: true },
     // Litestream writes venue.db, so its stop is awaited before the store closes.
-    { name: "streamHost", close: () => h.streamHost.stop() },
+    {
+      name: "streamHost",
+      close: () => h.streamHost.stop(),
+      reason: "stops last, after anything that may still write venue.db",
+    },
   ];
   return {
     aborts: [

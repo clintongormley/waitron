@@ -73,6 +73,12 @@ import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { backgroundDuties, stopBackgroundDuties } from "./background-duties.js";
+import {
+  stepDown,
+  type StepDownDeps,
+  type StepDownRequest,
+  type StepDownResult,
+} from "./handover-stepdown.js";
 import { closeAll } from "./close-all.js";
 import { runDue } from "@waitron/scheduler";
 import type { TickResult } from "@waitron/scheduler";
@@ -870,6 +876,11 @@ function makeStartedServer(
   };
 }
 
+/** Docker restarts the box once it exits (`deploy/compose.yml`). */
+function restartProcess(): void {
+  process.kill(process.pid, "SIGTERM");
+}
+
 /** Test seams; production leaves them unset. */
 export interface StartServerSeams {
   stream?: Pick<StreamHostDeps, "walLimitBytes" | "spawn" | "store">;
@@ -882,6 +893,14 @@ export interface StartServerSeams {
   requestFromBox?: (c: Context) => boolean;
   /** The box's clock service; unset, the server talks to the host's socket. */
   boxHost?: BoxHostClient;
+  /**
+   * The full start's stepdown, handed to a test that mounts its own route behind the handover gate
+   * (no production route asks for a stepdown yet); `restart` stands in for the SIGTERM.
+   */
+  stepdown?: {
+    mount(app: Hono, stepDown: (request: StepDownRequest) => Promise<StepDownResult>): void;
+    restart(): void;
+  };
 }
 
 /**
@@ -1111,7 +1130,12 @@ async function bootServer(
   const health = createHealthState(now());
   const app = healthApp(health, now, { venueDir: config.venueDir });
   const handoverGate = createHandoverGate();
+  // Ahead of every other middleware, so once a stepdown closes it nothing behind it runs.
   app.use("*", handoverGate.middleware);
+  // A fault in Waitron if called: the seam's route answered before the start finished.
+  let stepDownHere: (request: StepDownRequest) => Promise<StepDownResult> = () =>
+    Promise.reject(new Error("stepdown called before the start finished"));
+  seams.stepdown?.mount(app, (request) => stepDownHere(request));
   const normalSetupRequests = new Set<Promise<void>>();
   // Ahead of the gate below, so a running backup recovery is named rather than "not ready".
   let ownerWriteFence: MiddlewareHandler = (_c, next) => next();
@@ -3138,7 +3162,7 @@ async function bootServer(
         );
       } finally {
         // On the NEXT tick, so the in-process caller's result is returned first.
-        setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
+        setTimeout(restartProcess, 0);
       }
     }
     return result;
@@ -3477,7 +3501,7 @@ async function bootServer(
     clockWatch,
     streamHost,
   });
-  return makeStartedServer(
+  const started = makeStartedServer(
     server,
     health,
     log,
@@ -3497,4 +3521,15 @@ async function bootServer(
             promoteLocalSecondaryToPrimary(promoteDeps, attestation),
         },
   );
+  const stepDownDeps: StepDownDeps = {
+    node: store.node,
+    nodeId: config.node.nodeId,
+    gate: handoverGate,
+    duties,
+    close: () => started.close(),
+    restart: seams.stepdown?.restart ?? restartProcess,
+    log,
+  };
+  stepDownHere = (request) => stepDown(stepDownDeps, request);
+  return started;
 }
