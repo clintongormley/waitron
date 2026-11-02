@@ -63,11 +63,10 @@ describe("the station error codes carry their declared params", () => {
     expect(error.params).toEqual({ stationId });
   });
 
-  it("constructs station.no_default naming the misconfigured location", () => {
-    const locationId = "33333333-3333-3333-3333-333333333333";
-    const error = new AppError("station.no_default", { locationId });
+  it("constructs station.no_default with no details", () => {
+    const error = new AppError("station.no_default", {});
     expect(error.code).toBe("station.no_default");
-    expect(error.params).toEqual({ locationId });
+    expect(error.params).toEqual({});
   });
 });
 

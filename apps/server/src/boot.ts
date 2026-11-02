@@ -2388,11 +2388,7 @@ async function bootServer(
   };
   for (const m of setsToMigrate) m.routes?.mount(app, routeCtx, log);
   // `dataNodeId`, not this node's own id: see its declaration above.
-  mountReportApi(
-    app,
-    { db, cfg: { nodeId: dataNodeId, locationId: tradingContext.locationId }, venueLocale },
-    log,
-  );
+  mountReportApi(app, { db, cfg: { nodeId: dataNodeId }, venueLocale }, log);
   mountOrdersApi(
     app,
     {
@@ -2693,7 +2689,6 @@ async function bootServer(
     contentSuggestionsAlertSource(),
     invoiceDeliveryAlertSource({ testPages }),
     stationOutputAlertSource({
-      locationId: tradingContext.locationId,
       stationStates: (tx, at) =>
         VENUE_SERVICE.stationStates(tx, { locationId: tradingContext.locationId }, at),
     }),

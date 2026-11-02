@@ -259,7 +259,6 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
         pollId: randomUUID(),
       });
       await attachPrinterToStation(tx, {
-        locationId: venue.cfg.locationId,
         stationId: venue.stationId,
         printerId: printer.id,
       });
@@ -276,11 +275,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
       expect(printedLines(added[0]!.payload).join(" ")).toContain(kitchenTicketWords("es").changed);
     } finally {
       await inTx(venue, (tx) =>
-        detachPrinterFromStation(
-          tx,
-          { locationId: venue.cfg.locationId },
-          { stationId: venue.stationId, printerId },
-        ),
+        detachPrinterFromStation(tx, { stationId: venue.stationId, printerId }),
       );
     }
   });
@@ -586,7 +581,6 @@ describe("cancelling an extra of a held dish (B11g)", () => {
         pollId: randomUUID(),
       });
       await attachPrinterToStation(tx, {
-        locationId: venue.cfg.locationId,
         stationId: barId,
         printerId: printer.id,
       });

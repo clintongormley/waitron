@@ -5,8 +5,6 @@ import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import {
   billPayments,
   invoiceSeries,
-  locations,
-  nodes,
   sales,
   saleSettlements,
   saleSubstitutions,
@@ -18,7 +16,6 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
-import { locationId } from "@waitron/shared";
 import { readFindBills } from "./find-bill-bills.js";
 import { parseBillsQuery, parseTransactionsQuery } from "./find-bill-query.js";
 import { readFindTransactions, resolveTransactionScope } from "./find-bill-transactions.js";
@@ -503,12 +500,11 @@ describe("Find Transactions SQL paging", () => {
       [counter, party.tabId].sort(),
     );
     expect(await inTx(venue, (tx) => resolveTransactionScope(tx, venue.cfg, correction))).toEqual({
-      locationId: venue.cfg.locationId,
       workingOrderIds: [party.tabId],
     });
     expect(
       await inTx(venue, (tx) => resolveTransactionScope(tx, venue.cfg, correctedSubstitute)),
-    ).toEqual({ locationId: venue.cfg.locationId, workingOrderIds: [counter, party.tabId].sort() });
+    ).toEqual({ workingOrderIds: [counter, party.tabId].sort() });
     const empty = (id: ReturnType<typeof sql>) => VENUE_SERVICE.orderInZones(venue.cfg, id, []);
     expect(
       (await inTx(venue, (tx) => readFindTransactions(tx, venue.cfg, query(), empty))).rows.map(
@@ -517,44 +513,17 @@ describe("Find Transactions SQL paging", () => {
     ).toEqual([unzoned]);
   });
 
-  it("uses issuing-node location for orderless invoices and retains a missing historical operator", async () => {
+  it("retains a missing historical operator", async () => {
     const missingPerson = randomUUID();
     const own = await invoice({ operatorId: missingPerson });
-    const { elsewhere, node } = await inTx(venue, async (tx) => {
-      const [current] = await tx
-        .select()
-        .from(locations)
-        .where(eq(locations.id, venue.cfg.locationId));
-      const [loc] = await tx
-        .insert(locations)
-        .values({ ...current!, id: randomUUID(), name: "Elsewhere" })
-        .returning({ id: locations.id });
-      const [n] = await tx
-        .insert(nodes)
-        .values({ name: "Remote", locationId: loc!.id })
-        .returning({ id: nodes.id });
-      return { elsewhere: loc!.id, node: n!.id };
-    });
-    const foreign = await invoice({ nodeId: node });
     expect((await list()).rows.map((r) => r.saleId)).toEqual([own]);
     expect((await list()).rows[0]!.staff).toEqual({ id: missingPerson, name: null });
     expect(await inTx(venue, (tx) => resolveTransactionScope(tx, venue.cfg, own))).toEqual({
-      locationId: venue.cfg.locationId,
       workingOrderIds: [],
     });
     await expect(
-      inTx(venue, (tx) => resolveTransactionScope(tx, venue.cfg, foreign)),
-    ).rejects.toMatchObject({ code: "sale.not_found" });
-    await expect(
       inTx(venue, (tx) => resolveTransactionScope(tx, venue.cfg, randomUUID())),
     ).rejects.toMatchObject({ code: "sale.not_found" });
-    expect(
-      (
-        await inTx(venue, (tx) =>
-          readFindTransactions(tx, { ...venue.cfg, locationId: locationId(elsewhere) }, query()),
-        )
-      ).rows.map((r) => r.saleId),
-    ).toEqual([foreign]);
   });
 });
 
@@ -677,7 +646,7 @@ describe("completed post-invoice refund Transactions", () => {
     ]);
     expect((await list({ type: "refund", method: "cash" })).total).toBe(0);
   });
-  it("keeps refund original-sale zone and location scope in addition to their distinct refund identity", async () => {
+  it("keeps refund original-sale zone scope in addition to their distinct refund identity", async () => {
     const allowed = await parked(venue, "Caña");
     const party = await seatedWith(venue, "Tarta");
     const own = await invoice({ workingOrderId: allowed });
@@ -692,22 +661,6 @@ describe("completed post-invoice refund Transactions", () => {
     expect(result.rows.map((r) => r.transactionId)).toEqual([`refund:${a.id}`, `sale:${own}`]);
     expect(result.total).toBe(2);
     expect((await list({ type: "refund" })).rows.map((r) => r.refundId)).toContain(b.id);
-    const otherLocation = await inTx(venue, async (tx) => {
-      const [current] = await tx
-        .select()
-        .from(locations)
-        .where(eq(locations.id, venue.cfg.locationId));
-      const [other] = await tx
-        .insert(locations)
-        .values({ ...current!, id: randomUUID(), name: "Other" })
-        .returning();
-      return other!.id;
-    });
-    expect(
-      await inTx(venue, (tx) =>
-        readFindTransactions(tx, { ...venue.cfg, locationId: locationId(otherLocation) }, query()),
-      ),
-    ).toMatchObject({ rows: [], total: 0 });
   });
   it("pages across invoices and refunds without collapsing shared sale ids and sorts signed amounts", async () => {
     const saleId = await invoice();

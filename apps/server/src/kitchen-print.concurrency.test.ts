@@ -132,7 +132,6 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
           pollId: `poll-${randomUUID()}`,
         });
         await attachPrinterToStation(tx, {
-          locationId: cfg.locationId,
           stationId: kitchen.id,
           printerId,
         });

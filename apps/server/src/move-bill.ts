@@ -93,7 +93,7 @@ export async function previewBillMoveAllergy(
   const [bill] = await tx
     .select({ partyId: workingOrders.partyId, status: workingOrders.status })
     .from(workingOrders)
-    .where(and(eq(workingOrders.id, billId), eq(workingOrders.locationId, cfg.locationId)));
+    .where(eq(workingOrders.id, billId));
   if (bill === undefined || bill.status === "abandoned")
     throw new AppError("tab.not_open", { tabId: billId });
   if (bill.status === "settled") throw new AppError("bill.paid", { workingOrderId: billId });
@@ -102,7 +102,7 @@ export async function previewBillMoveAllergy(
     throw new AppError("management.request_invalid", { field: "partyId" });
   if (options.otherPartyId === undefined)
     throw new AppError("management.request_invalid", { field: "otherPartyId" });
-  const table = await inspectTargetTable(tx, cfg, tableId, null, options);
+  const table = await inspectTargetTable(tx, tableId, null, options);
   if (table.holding === null) await refuseUnseatable(tx, cfg, table);
   await requireRelocatableBillEditors(
     tx,
@@ -352,7 +352,7 @@ async function resolveDestination(
 ): Promise<Destination> {
   if ("counter" in to) return { kind: "counter", zoneId: to.counter.zoneId };
   const { tableId } = to;
-  const table = await readTargetTable(tx, cfg, tableId, source, options);
+  const table = await readTargetTable(tx, tableId, source, options);
   if (table.holding !== null && table.holding === source) {
     throw new AppError("table.already_in_party", { tableId });
   }
@@ -374,12 +374,11 @@ export interface TargetTable {
  */
 export async function readTargetTable(
   tx: Transaction,
-  cfg: TradingContext,
   tableId: string,
   source: string | null,
   read: OtherPartyRead,
 ): Promise<TargetTable> {
-  const table = await inspectTargetTable(tx, cfg, tableId, source, read);
+  const table = await inspectTargetTable(tx, tableId, source, read);
   if (table.holding !== null && table.holding !== source)
     await checkAndBumpParty(tx, table.holding, read.expectedOtherPartyRevision!, "open");
   return table;
@@ -387,7 +386,6 @@ export async function readTargetTable(
 
 async function inspectTargetTable(
   tx: Transaction,
-  cfg: TradingContext,
   tableId: string,
   source: string | null,
   read: OtherPartyRead,
@@ -424,7 +422,7 @@ async function inspectTargetTable(
       needsMoving: needsMoving(diningTables.id).mapWith(Boolean),
     })
     .from(diningTables)
-    .where(and(eq(diningTables.id, tableId), eq(diningTables.locationId, cfg.locationId)));
+    .where(eq(diningTables.id, tableId));
   if (table === undefined) throw new AppError("table.not_found", { tableId });
   if (!table.inService) throw new AppError("table.inactive", { tableId });
   if (table.joined) throw new AppError("table.in_joined_table", { tableId });

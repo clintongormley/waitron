@@ -424,7 +424,7 @@ export class AdjustmentReportScreen extends LitElement {
   /**
    * Adjustments are never changed or removed, so between two reads a new row almost always arrives
    * at the top; a server clock stepping back, two adjustments saved in the same millisecond, or a
-   * change to the location's day cutover or time zone can place one lower. A refresh reads from the
+   * change to the venue's day cutover or time zone can place one lower. A refresh reads from the
    * top until it meets a row already shown, at most a largest page of rows.
    */
   async #readList(api: AdjustmentsApi, listed: Listed): Promise<ListRead> {

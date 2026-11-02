@@ -326,7 +326,7 @@ export async function moveDishesToStation(
       const [order] = await tx
         .select({ status: workingOrders.status, collectedAt: workingOrders.collectedAt })
         .from(workingOrders)
-        .where(and(eq(workingOrders.id, orderId), eq(workingOrders.locationId, cfg.locationId)));
+        .where(eq(workingOrders.id, orderId));
       if (order === undefined)
         throw new AppError("working_order.not_found", { workingOrderId: orderId });
       if (order.status === "abandoned")

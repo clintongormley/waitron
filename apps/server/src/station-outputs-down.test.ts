@@ -99,7 +99,6 @@ async function profile(formFactor: "kds" | "till"): Promise<string> {
 /** The dark-screen alerts' keys, every station open and the grill the default. */
 async function darkScreenAlertKeys(f: Awaited<ReturnType<typeof setup>>): Promise<string[]> {
   const source = stationOutputAlertSource({
-    locationId: f.venue.cfg.locationId,
     stationStates: async () =>
       new Map([
         [f.grill, { open: true, isDefault: true, active: true, name: "Cocina" }],
@@ -408,7 +407,6 @@ describe("station output status", () => {
       lastSeenAt: "2026-10-02T18:00:00.000Z",
     });
     const source = stationOutputAlertSource({
-      locationId: f.venue.cfg.locationId,
       stationStates: async () =>
         new Map([[f.bar, { open: false, isDefault: false, active: true, name: "Bar" }]]),
     });
@@ -444,7 +442,6 @@ describe("station output status", () => {
       tokenHash: "hash",
     });
     const source = stationOutputAlertSource({
-      locationId: f.venue.cfg.locationId,
       stationStates: async () =>
         new Map([[f.grill, { open: true, isDefault: true, active: true, name: "Cocina" }]]),
     });

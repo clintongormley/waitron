@@ -115,7 +115,6 @@ describe("corrections through order actions on a station's printers", () => {
         pollId: randomUUID(),
       });
       await attachPrinterToStation(tx, {
-        locationId: venue.cfg.locationId,
         stationId: venue.stationId,
         printerId: printer.id,
       });
@@ -175,11 +174,7 @@ describe("corrections through order actions on a station's printers", () => {
       expect((await papers())[2]).toContain("RIBEYE");
     } finally {
       await inTx(venue, async (tx) => {
-        await detachPrinterFromStation(
-          tx,
-          { locationId: venue.cfg.locationId },
-          { stationId: venue.stationId, printerId },
-        );
+        await detachPrinterFromStation(tx, { stationId: venue.stationId, printerId });
         await setStationPrinting(tx, { printHeldWork: false });
       });
     }
@@ -210,7 +205,6 @@ describe("corrections through order actions on a station's printers", () => {
         });
         for (const stationId of stationIds)
           await attachPrinterToStation(tx, {
-            locationId: venue.cfg.locationId,
             stationId,
             printerId: printer.id,
           });
@@ -268,11 +262,7 @@ describe("corrections through order actions on a station's printers", () => {
       await inTx(venue, async (tx) => {
         for (const [printerId, stationIds] of listed)
           for (const stationId of stationIds)
-            await detachPrinterFromStation(
-              tx,
-              { locationId: venue.cfg.locationId },
-              { stationId, printerId },
-            );
+            await detachPrinterFromStation(tx, { stationId, printerId });
         await clearRoutingCell(tx, venue.cfg, {
           row: { kind: "product", productId: beerId },
           zoneId: null,

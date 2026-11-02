@@ -715,7 +715,7 @@ async function readDeliveries(
 }
 
 export function orderInvoicePrinters(tx: Transaction): PrinterOffer {
-  return async (sale) => {
+  return async () => {
     const receipt = await tx
       .select({ id: printers.id, name: printers.name })
       .from(printers)
@@ -724,7 +724,7 @@ export function orderInvoicePrinters(tx: Transaction): PrinterOffer {
     const a4 = await tx
       .select({ id: pagePrinters.id, name: pagePrinters.name })
       .from(pagePrinters)
-      .where(and(eq(pagePrinters.locationId, sale.locationId), eq(pagePrinters.active, true)))
+      .where(eq(pagePrinters.active, true))
       .orderBy(asc(pagePrinters.name), asc(pagePrinters.id));
     return [
       ...receipt.map((printer) => ({ ...printer, kind: "receipt" as const })),

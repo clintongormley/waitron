@@ -64,7 +64,7 @@ export function mountStationTodayApi(
           return {
             destinations,
             authorizers,
-            openDishCount: await openDishCount(tx, cfg.locationId, id),
+            openDishCount: await openDishCount(tx, id),
           };
         }),
       );
@@ -135,7 +135,7 @@ export function mountStationTodayApi(
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           const destinations = await VENUE_SERVICE.stationDestinations(tx, cfg, id, new Date());
-          return { destinations, openDishCount: await openDishCount(tx, cfg.locationId, id) };
+          return { destinations, openDishCount: await openDishCount(tx, id) };
         }),
       );
     }),

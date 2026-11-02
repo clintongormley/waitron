@@ -1,7 +1,6 @@
 import { and, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
-import { type Transaction, workingOrderLines } from "@waitron/db";
+import { readVenueClock, type Transaction, workingOrderLines } from "@waitron/db";
 import { persons } from "@waitron/identity";
-import { readLocationClock } from "@waitron/reporting";
 import { AppError, businessDayAt, businessDayBounds, rawCentsToDecimal } from "@waitron/shared";
 import type { BillsQuery, BillRow, FindBillPage } from "./find-bill-types.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -68,7 +67,7 @@ export function findBillsRelation(cfg: TradingContext, inZones?: OrderZoneCondit
     left join sales s on s.working_order_id = wo.id
     left join invoice_series sr on sr.id = s.series_id
     left join unpaid_departures ud on ud.working_order_id = wo.id
-    where wo.location_id = ${cfg.locationId} and (${inZones?.(sql`wo.id`) ?? sql`1`})
+    where (${inZones?.(sql`wo.id`) ?? sql`1`})
       and (wo.status in ('open','placed') or (wo.status = 'settled' and wo.party_id is null
         and wo.collected_at is null and exists(select 1 from ticket_items ti where ti.working_order_id = wo.id)))
   ), bills as (
@@ -111,11 +110,7 @@ const selection = sql`r.id, r.opened_at, r.order_number, r.label, r.party_id, r.
   cast(r.owing_cents as text) as owing_cents, r.state, r.invoice_number, r.departed_at,
   r.order_status, r.collection_status`;
 
-async function projectBills(
-  tx: Transaction,
-  cfg: TradingContext,
-  raw: RawBill[],
-): Promise<BillRow[]> {
+async function projectBills(tx: Transaction, raw: RawBill[]): Promise<BillRow[]> {
   if (raw.length === 0) return [];
   const tables = await readPartyTables(
     tx,
@@ -141,7 +136,7 @@ async function projectBills(
       ),
     )
     .orderBy(persons.displayName, workingOrderLines.creditedTo);
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const clock = await readVenueClock(tx);
   const dayStart = businessDayBounds(clock, businessDayAt(clock, new Date())).startAt;
   return raw.map((row) => ({
     workingOrderId: row.id,
@@ -195,7 +190,7 @@ export async function readFindBills(
     select ${selection} from ranked r where ${where}
     order by r.search_rank, ${key} is null, ${key} ${direction}, r.id desc limit ${50} offset ${query.page * 50}`);
   return {
-    rows: await projectBills(tx, cfg, raw),
+    rows: await projectBills(tx, raw),
     total: counts[0]!.total,
     openCount: counts[0]!.open_count,
     page: query.page,
@@ -213,5 +208,5 @@ export async function readFindBill(
     sql`${findBillsRelation(cfg, inZones)} select ${selection} from bills r where r.id = ${workingOrderId} limit 1`,
   );
   if (rows.length === 0) throw new AppError("working_order.not_found", { workingOrderId });
-  return (await projectBills(tx, cfg, rows))[0]!;
+  return (await projectBills(tx, rows))[0]!;
 }

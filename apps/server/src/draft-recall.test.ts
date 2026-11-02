@@ -769,7 +769,6 @@ describe("party Recall to draft", () => {
       );
       await inTx(venue, (tx) =>
         attachPrinterToStation(tx, {
-          locationId: venue.cfg.locationId,
           stationId,
           printerId: printer.id,
         }),
@@ -1308,7 +1307,6 @@ describe("party Recall to draft", () => {
           pollId: randomUUID(),
         });
         await attachPrinterToStation(tx, {
-          locationId: venue.cfg.locationId,
           stationId: station,
           printerId: printer.id,
         });

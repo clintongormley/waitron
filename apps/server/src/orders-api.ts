@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { and, asc, eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { AppError, isUuid, isValidEmail } from "@waitron/shared";
 import {
   printers,
@@ -256,9 +256,7 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
         tx
           .select({ id: printers.id, name: printers.name })
           .from(printers)
-          .where(
-            and(eq(printers.locationId, deps.tradingContext.locationId), eq(printers.active, true)),
-          )
+          .where(eq(printers.active, true))
           .orderBy(asc(printers.name), asc(printers.id)),
       );
       return c.json(rows);

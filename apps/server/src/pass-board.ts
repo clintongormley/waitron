@@ -67,7 +67,6 @@ export async function listPassScreen(
   const ids = new Set(kept.map((item) => item.id));
   const orders = await readPassBoard(
     tx,
-    cfg.locationId,
     inArray(workingOrders.id, [...new Set(kept.map((item) => item.orderId))]),
   );
   const section = <T extends ExpoCourse | ExpoGroup>(
@@ -101,7 +100,6 @@ export async function listPassMonitor(
   const ids = new Set(kept.map((item) => item.id));
   const orders = await readPassBoard(
     tx,
-    cfg.locationId,
     inArray(workingOrders.id, [...new Set(kept.map((item) => item.orderId))]),
   );
   const section = <T extends ExpoCourse | ExpoGroup>(part: T): T | null => {
@@ -162,7 +160,7 @@ async function readCardRows(
   cards: SQL,
   nowMs: number,
 ): Promise<PassRow[]> {
-  const read = await readPassRows(tx, cfg.locationId, and(liveKitchenDishAt(cfg), cards)!, nowMs);
+  const read = await readPassRows(tx, and(liveKitchenDish(), cards)!, nowMs);
   if (read.length === 0) return [];
   const zones = await rowsWatchZones(tx, cfg, read);
   const phase = (row: Pick<PassRow, "requestedAt" | "firedAt" | "item">) =>
@@ -206,12 +204,6 @@ async function readCardRows(
   );
 }
 
-/** A live kitchen dish at this location. Every pass board read (`scopedItems`, `readCardRows`) and
- *  `firedPassDishes` read it, so the dark-pass alert counts only dishes a pass board would list. */
-function liveKitchenDishAt(cfg: TradingContext): SQL | undefined {
-  return and(eq(workingOrders.locationId, cfg.locationId), liveKitchenDish());
-}
-
 /** The live kitchen dishes the scope sees. */
 async function scopedItems(
   tx: Transaction,
@@ -233,7 +225,7 @@ async function scopedItems(
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(
       and(
-        liveKitchenDishAt(cfg),
+        liveKitchenDish(),
         scope.stationIds === null
           ? undefined
           : inArray(ticketItems.stationId, [...scope.stationIds]),
@@ -246,7 +238,7 @@ async function scopedItems(
   );
 }
 
-/** Every live kitchen dish at this location fired, or requested and not yet released, at or after
+/** Every live kitchen dish fired, or requested and not yet released, at or after
  *  `firedSince`, with its order's watched zone when `withZones`, else a null zone. */
 export async function firedPassDishes(
   tx: Transaction,
@@ -273,7 +265,7 @@ export async function firedPassDishes(
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(
       and(
-        liveKitchenDishAt(cfg),
+        liveKitchenDish(),
         or(
           gte(ticketItems.firedAt, firedSince),
           and(requestedItem(), gte(ticketItems.requestedAt, firedSince)),

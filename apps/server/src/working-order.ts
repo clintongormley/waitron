@@ -202,6 +202,7 @@ import {
   workingOrderStatus,
   insertInChunks,
   statementChunks,
+  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
@@ -814,11 +815,7 @@ export async function priceOrderLines(
             .select({ id: kitchenStations.id })
             .from(kitchenStations)
             .where(
-              and(
-                inArray(kitchenStations.id, namedStations),
-                eq(kitchenStations.locationId, cfg.locationId),
-                eq(kitchenStations.active, true),
-              ),
+              and(inArray(kitchenStations.id, namedStations), eq(kitchenStations.active, true)),
             )
         ).map((station) => station.id),
   );
@@ -1670,9 +1667,7 @@ export async function createOpenOrder(
         joined: joinedOutOfService(diningTables.id).mapWith(Boolean),
       })
       .from(diningTables)
-      .where(
-        and(eq(diningTables.id, deliveryTableId), eq(diningTables.locationId, cfg.locationId)),
-      );
+      .where(eq(diningTables.id, deliveryTableId));
     if (table === undefined) {
       throw new AppError("table.not_found", { tableId: deliveryTableId });
     }
@@ -1685,7 +1680,7 @@ export async function createOpenOrder(
       const [device] = await tx
         .select({ profileId: devices.deviceProfileId })
         .from(devices)
-        .where(and(eq(devices.id, cfg.origin.deviceId), eq(devices.locationId, cfg.locationId)));
+        .where(eq(devices.id, cfg.origin.deviceId));
       profileId = device?.profileId;
     }
     effectiveZoneId = (await VENUE_SERVICE.resolveNewOrderZone(tx, cfg, { profileId })).zoneId;
@@ -1724,7 +1719,7 @@ export async function createOpenOrder(
     id,
     source: cfg.origin.source,
     deviceId: cfg.origin.deviceId,
-    locationId: cfg.locationId,
+    locationId: await venueLocationId(tx),
     nodeId: cfg.nodeId,
     orderNumber,
     label,
@@ -2157,7 +2152,6 @@ export async function fireLines(
       id: workingOrderLines.id,
       makeAtStationId: workingOrderLines.makeAtStationId,
       stationActive: kitchenStations.active,
-      stationLocationId: kitchenStations.locationId,
     })
     .from(workingOrderLines)
     .leftJoin(kitchenStations, eq(kitchenStations.id, workingOrderLines.makeAtStationId))
@@ -2169,7 +2163,7 @@ export async function fireLines(
     );
   const chosenStations = new Map(
     chosenRows.flatMap((row) =>
-      row.makeAtStationId !== null && row.stationActive && row.stationLocationId === cfg.locationId
+      row.makeAtStationId !== null && row.stationActive
         ? [[row.id, row.makeAtStationId] as const]
         : [],
     ),
@@ -2204,16 +2198,9 @@ export async function fireLines(
     const [fallback] = await tx
       .select({ id: kitchenStations.id })
       .from(kitchenStations)
-      .where(
-        and(
-          eq(kitchenStations.locationId, cfg.locationId),
-          eq(kitchenStations.isDefault, true),
-          eq(kitchenStations.active, true),
-        ),
-      );
+      .where(and(eq(kitchenStations.isDefault, true), eq(kitchenStations.active, true)));
     fallbackStationId = fallback?.id ?? null;
-    if (fallbackStationId === null)
-      throw new AppError("station.no_default", { locationId: cfg.locationId });
+    if (fallbackStationId === null) throw new AppError("station.no_default", {});
   }
   const unrouted: FireableLine[] = [];
   const noReplacement: { stationId: string; productId: string }[] = [];
@@ -2226,7 +2213,7 @@ export async function fireLines(
     if (outcome?.kind === "no_replacement")
       noReplacement.push({ stationId: outcome.stationId, productId: line.productId! });
     if (options.unroutable !== "skip" && outcome?.kind !== "no_replacement")
-      throw new AppError("station.no_default", { locationId: cfg.locationId });
+      throw new AppError("station.no_default", {});
     unrouted.push(line);
     return false;
   });
@@ -2256,7 +2243,6 @@ export async function fireLines(
       ticketItems,
       and(eq(ticketItems.courseId, kitchenCourses.id), eq(ticketItems.workingOrderId, orderId)),
     )
-    .where(eq(kitchenCourses.locationId, cfg.locationId))
     .groupBy(kitchenCourses.id, kitchenCourses.displayOrder);
 
   const initiatedCourseIds = new Set(
@@ -4517,7 +4503,6 @@ async function readChoiceChangeableOrder(
       status: workingOrders.status,
       revision: workingOrders.revision,
       invoiceType: workingOrders.invoiceType,
-      locationId: workingOrders.locationId,
     })
     .from(workingOrders)
     .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));
@@ -5185,7 +5170,7 @@ export interface HeldOrder {
   label: string | null;
   /** What an edit of this copy sends back, so a save from a copy since changed is refused. */
   revision: number;
-  /** The receipt language staff chose for the order; absent while the location's own applies. */
+  /** The receipt language staff chose for the order; absent while the venue's own applies. */
   receiptLanguage?: string;
   /**
    * PARENT rows only, each dish's child lines nested as `extras`.
@@ -8524,12 +8509,8 @@ export interface ExpoOrder {
 }
 
 /** The venue's remaining kitchen work, with each party retained through its surviving family. */
-export async function listExpoQueue(
-  tx: Transaction,
-  cfg: TradingContext,
-  locationId?: string,
-): Promise<ExpoOrder[]> {
-  return readPassBoard(tx, locationId ?? cfg.locationId, sql`1 = 1`);
+export async function listExpoQueue(tx: Transaction): Promise<ExpoOrder[]> {
+  return readPassBoard(tx, sql`1 = 1`);
 }
 
 /** Ticket quantities already exclude service cancellations; serving consumes only that active work. */
@@ -8567,7 +8548,6 @@ export type PassRowRead = Omit<PassRow, "zoneId" | "stationWaitsNow" | "stationC
 /** Every live kitchen item `scope` selects, with the facts the pass card and release read. */
 export async function readPassRows(
   tx: Transaction,
-  _locationId: string,
   scope: SQL,
   nowMs: number,
 ): Promise<PassRowRead[]> {
@@ -8759,13 +8739,9 @@ export async function readPassRows(
 }
 
 /** Build every section of the selected pass orders before a pass screen or pass monitor narrows their items. */
-export async function readPassBoard(
-  tx: Transaction,
-  locationId: string,
-  scope: SQL,
-): Promise<ExpoOrder[]> {
+export async function readPassBoard(tx: Transaction, scope: SQL): Promise<ExpoOrder[]> {
   const nowMs = Date.now();
-  const rows = await readPassRows(tx, locationId, scope, nowMs);
+  const rows = await readPassRows(tx, scope, nowMs);
   // Maps keep insertion order, so the SQL order survives the grouping.
   const orders = new Map<string, ExpoOrder>();
   const sectionMaps = new Map<string, Map<string, ExpoCourse | ExpoGroup>>();
@@ -8950,7 +8926,7 @@ export interface TableState {
 }
 
 /**
- * Read the location's active tables with their occupancy. Every table a party holds shows that
+ * Read the venue's active tables with their occupancy. Every table a party holds shows that
  * party's bills: the open ones for its line count and total, and for the dishes still to serve every
  * bill of its family that is not abandoned, since a paid or presented bill's dishes are still
  * carried to the table. A party takes precedence over a delivery. A pending delivery has kitchen
@@ -8961,11 +8937,9 @@ export async function listTablesWithState(
   tx: Transaction,
   cfg: TradingContext,
   annotators: readonly FloorAnnotator[] = [],
-  locationId?: string,
   now: Date = new Date(),
   log?: Logger,
 ): Promise<TableState[]> {
-  const loc = locationId ?? cfg.locationId;
   const result = await tx.execute<{
     id: string;
     label: string;
@@ -9061,12 +9035,12 @@ export async function listTablesWithState(
       where ${foodOnItsWay()}
       group by delivery_table_id
     ) del on del.delivery_table_id = dt.id
-    where dt.location_id = ${loc} and ${tableInService(sql`dt.id`)}
+    where ${tableInService(sql`dt.id`)}
     order by dt.label
   `);
 
-  const today = await readTodayTables(tx, loc);
-  const { seated, facts } = await readSeatedParties(tx, loc, log);
+  const today = await readTodayTables(tx);
+  const { seated, facts } = await readSeatedParties(tx, log);
   const allergicParties = await VENUE_SERVICE.partiesWithAllergicGuests(tx, [
     ...new Set([...seated.values()].map((party) => party.id)),
   ]);
@@ -9136,7 +9110,7 @@ export async function listTablesWithState(
 
   if (annotators.length > 0) {
     const tableIds = states.map((s) => s.id);
-    const annCfg = { locationId: brandLocationId(loc) };
+    const annCfg = { locationId: brandLocationId(cfg.locationId) };
     for (const annotator of annotators) {
       const annotations = await annotator.annotate(tx, annCfg, now, tableIds);
       for (const s of states) {
@@ -9148,11 +9122,8 @@ export async function listTablesWithState(
   return states;
 }
 
-/** Today's plan for each of the location's tables that has a today's row, keyed by table. */
-async function readTodayTables(
-  tx: Transaction,
-  locationId: string,
-): Promise<Map<string, TableToday>> {
+/** Today's plan for each table that has a today's row, keyed by table. */
+async function readTodayTables(tx: Transaction): Promise<Map<string, TableToday>> {
   const rows = await tx
     .select({
       tableId: floorTodayTables.tableId,
@@ -9176,8 +9147,7 @@ async function readTodayTables(
     .innerJoin(diningTables, eq(diningTables.id, floorTodayTables.tableId))
     .leftJoin(floorTodayZones, eq(floorTodayZones.zoneId, diningTables.zoneId))
     .leftJoin(floorTodayJoinTables, eq(floorTodayJoinTables.tableId, floorTodayTables.tableId))
-    .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId))
-    .where(eq(diningTables.locationId, locationId));
+    .leftJoin(floorTodayJoins, eq(floorTodayJoins.id, floorTodayJoinTables.joinId));
   const copyParts = await tx.execute<{
     joined_id: string;
     joined_label: string;
@@ -9193,17 +9163,15 @@ async function readTodayTables(
     inner join floor_reset_tables joined_row on joined_row.id = joined_part.joined_reset_table_id
     inner join dining_tables joined_table on joined_table.id = joined_row.table_id
     inner join dining_tables part_table on part_table.id = part_row.table_id
-    where joined_table.location_id = ${locationId}
   `);
   const apart = await tx.execute<{ id: string }>(sql`
     select id from dining_tables
-    where location_id = ${locationId} and ${joinedTableApart(sql`dining_tables.id`)}
+    where ${joinedTableApart(sql`dining_tables.id`)}
   `);
   const splits = await tx.execute<{ joined_id: string; part_id: string; label: string }>(sql`
     select split.joined_table_id as joined_id, split.part_table_id as part_id, part_table.label
     from floor_today_split_parts split
     inner join dining_tables part_table on part_table.id = split.part_table_id
-    where part_table.location_id = ${locationId}
   `);
   const apartIds = new Set(apart.rows.map((row) => row.id));
   const joinedOf = new Map<string, { parts: Labelled[]; splitOff: Labelled[] }>();
@@ -9269,12 +9237,11 @@ interface Labelled {
 }
 
 /**
- * Each table of the location a party holds, with the party, and what else was read of each party,
+ * Each table a party holds, with the party, and what else was read of each party,
  * keyed by party.
  */
 async function readSeatedParties(
   tx: Transaction,
-  locationId: string,
   log: Logger | undefined,
 ): Promise<{ seated: Map<string, TableParty>; facts: Map<string, SeatedPartyFacts> }> {
   const members = await tx
@@ -9292,7 +9259,7 @@ async function readSeatedParties(
     .from(partyTables)
     .innerJoin(parties, eq(parties.id, partyTables.partyId))
     .innerJoin(diningTables, eq(diningTables.id, partyTables.tableId))
-    .where(and(isNull(partyTables.leftAt), eq(diningTables.locationId, locationId)))
+    .where(isNull(partyTables.leftAt))
     .orderBy(partyTables.joinedAt, sql`${partyTables}.rowid`);
   const firstZones = new Map<string, string>();
   for (const member of members) {

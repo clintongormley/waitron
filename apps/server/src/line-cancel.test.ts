@@ -1101,7 +1101,6 @@ describe("Cancel item service command", () => {
         pollId: randomUUID(),
       });
       await attachPrinterToStation(tx, {
-        locationId: venue.cfg.locationId,
         stationId: barId,
         printerId: printer.id,
       });

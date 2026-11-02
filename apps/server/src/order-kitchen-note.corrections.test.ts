@@ -4,7 +4,6 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   kitchenStations,
-  locations,
   orderGroups,
   printJobs,
   ticketItems,
@@ -16,7 +15,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { KitchenNoteScope, KitchenNoteSnapshot } from "@waitron/module";
 import { createPrinter } from "@waitron/printing";
 import { kitchenNotices, listStationNotices, writeKitchenNote } from "@waitron/venue-service";
-import { locationId, thousandthsToDecimal } from "@waitron/shared";
+import { thousandthsToDecimal } from "@waitron/shared";
 import {
   enqueueCorrectionSlips,
   enqueueOrderKitchenNoteChange,
@@ -70,7 +69,7 @@ async function printer(paperWidth: "58mm" | "80mm" = "80mm") {
       pollId: randomUUID(),
       paperWidth,
     });
-    await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId, printerId: p.id });
+    await attachPrinterToStation(tx, { stationId, printerId: p.id });
     return p.id;
   });
 }
@@ -78,7 +77,7 @@ async function printer(paperWidth: "58mm" | "80mm" = "80mm") {
 function read(scope: KitchenNoteScope) {
   return inTx(v, async (tx) =>
     "partyId" in scope
-      ? readPartyKitchenNote(tx, v.cfg, scope.partyId)
+      ? readPartyKitchenNote(tx, scope.partyId)
       : (await readOrderKitchenNotes(tx, [scope.workingOrderId])).get(scope.workingOrderId)!,
   );
 }
@@ -290,7 +289,6 @@ describe("saved kitchen note corrections", () => {
         if (!withPrinter) return { id, printerId: null };
         const p = await createPrinter(tx, { name, transport: "cloud_poll", pollId: randomUUID() });
         await attachPrinterToStation(tx, {
-          locationId: v.cfg.locationId,
           stationId: id,
           printerId: p.id,
         });
@@ -547,7 +545,7 @@ it("A807 prints one slip per printer for stations that share one", async () => {
     const station = async (name: string, dish: string, printerId: string) => {
       const { id } = await createStation(tx, v.cfg, { name });
       await routeProductTo(tx, v.cfg, v.productId(dish), id);
-      await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId: id, printerId });
+      await attachPrinterToStation(tx, { stationId: id, printerId });
       return id;
     };
     return {
@@ -597,30 +595,6 @@ it("does not correct retained work on an abandoned bill", async () => {
   const before = await v.db.select().from(printJobs);
   await inTx(v, (tx) =>
     enqueueOrderKitchenNoteChange(tx, v.cfg, [p.tabId], { before: "Old time", after: "New time" }),
-  );
-  expect(await v.db.select().from(kitchenNotices)).toEqual([]);
-  expect(await v.db.select().from(printJobs)).toEqual(before);
-});
-
-it("does not correct a different location's work when the supplied order ids cross the boundary", async () => {
-  await printer();
-  const p = await sent();
-  const [other] = await inTx(v, (tx) =>
-    tx
-      .insert(locations)
-      .values({
-        name: "Other restaurant",
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Restaurant",
-      })
-      .returning(),
-  );
-  const before = await v.db.select().from(printJobs);
-  await inTx(v, (tx) =>
-    enqueueOrderKitchenNoteChange(tx, { ...v.cfg, locationId: locationId(other!.id) }, [p.tabId], {
-      before: "Old time",
-      after: "New time",
-    }),
   );
   expect(await v.db.select().from(kitchenNotices)).toEqual([]);
   expect(await v.db.select().from(printJobs)).toEqual(before);

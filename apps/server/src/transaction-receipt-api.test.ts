@@ -10,8 +10,6 @@ import {
   drawerOpens,
   invoiceSeries,
   invoiceDeliveries,
-  locations,
-  nodes,
   printJobs,
   receiptReprints,
   saleLines,
@@ -156,34 +154,11 @@ it("reads paid and orderless original sales and a correction by their own identi
   }
   expect(await snapshot()).toEqual(before);
 });
-it("refuses malformed, missing and another-location sale IDs without side effects", async () => {
-  const id = await billlessSale(venue);
+it("refuses malformed and missing sale IDs without side effects", async () => {
+  await billlessSale(venue);
   const before = await jobs();
   for (const missing of ["bad", randomUUID()])
     expect(await get(missing)).toMatchObject({ status: 400, json: { code: "sale.not_found" } });
-  const otherNode = randomUUID(),
-    otherLocation = randomUUID();
-  await inTx(venue, async (tx) => {
-    const [location] = await tx
-      .select()
-      .from(locations)
-      .where(eq(locations.id, venue.cfg.locationId));
-    await tx.insert(locations).values({ ...location!, id: otherLocation, name: "Elsewhere" });
-    await tx.insert(nodes).values({ id: otherNode, locationId: otherLocation, name: "Other" });
-  });
-  const original = (await inTx(venue, (tx) => tx.select().from(sales).where(eq(sales.id, id))))[0]!;
-  const foreign = randomUUID();
-  await inTx(venue, (tx) =>
-    tx.insert(sales).values({
-      ...original,
-      id: foreign,
-      nodeId: otherNode,
-      invoiceNumber: 900001,
-      workingOrderId: null,
-      fiscalState: "not_applicable",
-    }),
-  );
-  expect(await get(foreign)).toMatchObject({ status: 400, json: { code: "sale.not_found" } });
   expect(await jobs()).toEqual(before);
 });
 it("GET needs a session but no print action; POST requires print-receipt", async () => {

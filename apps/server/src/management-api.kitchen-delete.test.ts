@@ -6,8 +6,6 @@ import {
   devices,
   deviceProfiles,
   kitchenStations,
-  kitchenCourses,
-  locations,
   products,
   printers,
   stationPrinters,
@@ -197,22 +195,9 @@ it.each(["courses", "stations"] as const)(
   },
 );
 it.each(["courses", "stations"] as const)(
-  "%s unknown, malformed and foreign ids are not found",
+  "%s unknown and malformed ids are not found",
   async (kind) => {
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Elsewhere", invoiceLocales: ["es-ES"], operationDescription: "Bar" })
-      .returning();
-    const foreign = randomUUID();
-    if (kind === "courses")
-      await suite.db
-        .insert(kitchenCourses)
-        .values({ id: foreign, locationId: location!.id, name: "Elsewhere" });
-    else
-      await suite.db
-        .insert(kitchenStations)
-        .values({ id: foreign, locationId: location!.id, name: "Elsewhere" });
-    for (const id of [randomUUID(), "not-a-uuid", foreign])
+    for (const id of [randomUUID(), "not-a-uuid"])
       for (const [method, suffix] of [
         ["GET", "/delete-impact"],
         ["DELETE", ""],

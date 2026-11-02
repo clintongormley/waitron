@@ -80,7 +80,6 @@ useVenueDb({
         })
       ).id;
       await attachPrinterToStation(tx, {
-        locationId: v.cfg.locationId,
         stationId: grill.id,
         printerId: kitchenPrinter,
       });

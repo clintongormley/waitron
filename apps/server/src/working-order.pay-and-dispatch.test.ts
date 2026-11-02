@@ -2624,8 +2624,8 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
       OPERATOR,
     );
 
-    const expoA = await asTenant(nodeA, (tx) => listExpoQueue(tx, nodeA));
-    const expoB = await asTenant(nodeB, (tx) => listExpoQueue(tx, nodeB));
+    const expoA = await asTenant(nodeA, (tx) => listExpoQueue(tx));
+    const expoB = await asTenant(nodeB, (tx) => listExpoQueue(tx));
 
     // Same tenant + location on both sides, each expo board holding BOTH orders (oldest-first: A
     // fired before B) — the reads do not separate by node.
@@ -2650,7 +2650,6 @@ async function kitchenPrinter(cfg: DeviceRequestConfig): Promise<string> {
       pollId: `poll-${randomUUID()}`,
     });
     await attachPrinterToStation(tx, {
-      locationId: cfg.locationId,
       stationId: station,
       printerId: id,
     });
@@ -3057,7 +3056,6 @@ describe("coursing editing verbs — sendLines racing recallLines (Task B1, two 
         pollId: `poll-${randomUUID()}`,
       });
       await attachPrinterToStation(tx, {
-        locationId: cfg.locationId,
         stationId: station,
         printerId,
       });
@@ -3188,7 +3186,6 @@ describe("coursing editing verbs — recallLines racing selected line release", 
           pollId: `poll-${randomUUID()}`,
         });
         await attachPrinterToStation(tx, {
-          locationId: cfg.locationId,
           stationId: station,
           printerId,
         });

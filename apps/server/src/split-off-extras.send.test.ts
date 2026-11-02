@@ -407,7 +407,6 @@ describe("sending split-off extras", () => {
         pollId: `poll-${randomUUID()}`,
       });
       await attachPrinterToStation(tx, {
-        locationId: cfg.locationId,
         stationId: fryer.id,
         printerId: printer.id,
       });
@@ -521,7 +520,6 @@ describe("sending split-off extras", () => {
         pollId: `poll-${randomUUID()}`,
       });
       await attachPrinterToStation(tx, {
-        locationId: cfg.locationId,
         stationId: fryer.id,
         printerId: printer.id,
       });

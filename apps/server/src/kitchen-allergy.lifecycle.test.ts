@@ -76,7 +76,7 @@ beforeEach(async () => {
       transport: "cloud_poll",
       pollId: randomUUID(),
     });
-    await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId, printerId: p.id });
+    await attachPrinterToStation(tx, { stationId, printerId: p.id });
   });
 });
 async function sent(

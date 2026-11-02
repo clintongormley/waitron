@@ -4782,7 +4782,7 @@ this is the default station" in place of the dates. The station choices require
 Prep stations itself has only Stations and Routes. The former Times tab and each station's
 "When it gets orders" link are retired. Station lists use name order, with the Default badge at
 its alphabetical place and a colour square on every Stations row. Add and Edit use
-`wt-colour-chooser`; a missing creation colour takes the first unused active-local station colour,
+`wt-colour-chooser`; a missing creation colour takes the first colour no active station uses,
 or red when all choices are occupied. The Edit window sets its four minutes fields two to a row.
 There is no station order field or drag handle.
 

@@ -210,7 +210,7 @@ it("keeps retained draft, group, course and ready station history through manage
     events: await v.db.select().from(orderDraftEvents),
     groups: await inTx(v, (tx) => listOrderGroups(tx, seated.partyId)),
     tab: await inTx(v, (tx) => readTabLines(tx, v.cfg, submitted.tabId)),
-    pass: await inTx(v, (tx) => listExpoQueue(tx, v.cfg)),
+    pass: await inTx(v, (tx) => listExpoQueue(tx)),
     rest: await inTx(v, (tx) => readRestOfOrder(tx, [submitted.tabId])),
   });
   const before = await history();

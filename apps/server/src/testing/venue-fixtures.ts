@@ -31,7 +31,7 @@ export interface Venue {
   seriesId: ReturnType<typeof brandSeriesId>;
   /** Orders a test opens directly come from the dashboard, so no device is seeded for them. */
   cfg: OriginConfig;
-  /** The location's provisioned default kitchen station — where `placeOrder` fires items, and the
+  /** The venue's provisioned default kitchen station — where `placeOrder` fires items, and the
    *  station the KDS device below binds to. */
   defaultStationId: string;
   cafeId: string;

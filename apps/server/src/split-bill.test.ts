@@ -446,7 +446,7 @@ async function printerAt(cfg: OriginConfig, stationId: string): Promise<string> 
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
     });
-    await attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId: id });
+    await attachPrinterToStation(tx, { stationId, printerId: id });
     return id;
   });
 }
@@ -839,7 +839,7 @@ describe("splitting a line the kitchen has", () => {
     // The party's table wins over the order's own label.
     await db.update(workingOrders).set({ label: "Terraza" }).where(eq(workingOrders.id, tabId));
 
-    const board = await asApp(cfg, (tx) => listExpoQueue(tx, cfg));
+    const board = await asApp(cfg, (tx) => listExpoQueue(tx));
 
     expect(Object.fromEntries(board.map((order) => [order.orderId, order.tableLabel]))).toEqual({
       [tabId]: "T1",

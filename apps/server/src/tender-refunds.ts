@@ -133,7 +133,6 @@ export async function beginSettledTenderRefund(
         source: "refund",
         key: refund.id,
         personId: refund.requestedBy,
-        locationId: refund.locationId,
         kind: "payment",
         at: refund.createdAt,
         offsetMinutes: 0,

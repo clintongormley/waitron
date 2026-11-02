@@ -489,7 +489,6 @@ async function printerAtStationOf(billId: string, lineNo: number): Promise<strin
       pollId: `poll-${randomUUID()}`,
     });
     await attachPrinterToStation(tx, {
-      locationId: v.cfg.locationId,
       stationId: station!.stationId,
       printerId: id,
     });
@@ -1056,7 +1055,6 @@ describe("sent work moved between a party's bills at two of its tables", () => {
         pollId: `poll-${randomUUID()}`,
       });
       await attachPrinterToStation(tx, {
-        locationId: v.cfg.locationId,
         stationId: stations[0]!.stationId,
         printerId: id,
       });

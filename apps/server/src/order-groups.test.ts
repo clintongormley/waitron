@@ -222,7 +222,7 @@ async function setupVenue(): Promise<Venue> {
       transport: "cloud_poll",
       pollId: `poll-${randomUUID()}`,
     });
-    await attachPrinterToStation(tx, { locationId: cfg.locationId, stationId, printerId });
+    await attachPrinterToStation(tx, { stationId, printerId });
     return {
       cfg,
       productId,
@@ -543,9 +543,7 @@ describe("permanent group numbers on kitchen work", () => {
       "Terrace 4, 9",
       "Terrace 7",
     ]);
-    const expo = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
-      (o) => o.orderId === into.tabId,
-    )!;
+    const expo = (await inTx((tx) => listExpoQueue(tx))).find((o) => o.orderId === into.tabId)!;
     expect(expo.groups.map((g) => g.numberPartyLabel)).toEqual(["Terrace 4, 9", "Terrace 7"]);
     const before = (await printed(v)).length;
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, into.tabId));
@@ -672,7 +670,7 @@ describe("permanent group numbers on kitchen work", () => {
       displayNumber: 5,
       numberPartyId: s.partyId,
     });
-    const expo = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find((o) => o.orderId === s.tabId)!;
+    const expo = (await inTx((tx) => listExpoQueue(tx))).find((o) => o.orderId === s.tabId)!;
     expect(expo.groups.map((g) => [g.position, g.displayNumber, g.numberPartyId])).toEqual([
       [1, 1, s.partyId],
       [2, 2, s.partyId],
@@ -4019,9 +4017,7 @@ describe("the kitchen and the pass read a party's groups", () => {
     const s = await specExample(v);
     const revision = await revisionOf(s.partyId);
 
-    const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
-      (row) => row.orderId === s.tabId,
-    )!;
+    const order = (await inTx((tx) => listExpoQueue(tx))).find((row) => row.orderId === s.tabId)!;
 
     expect(order.party).toEqual({ id: s.partyId, revision });
     expect(order.courses).toEqual([]);
@@ -4059,9 +4055,7 @@ describe("the kitchen and the pass read a party's groups", () => {
     const s = await specExample(v);
     await reorder(s.partyId, [s.desserts, s.mains, s.warm]);
 
-    const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
-      (row) => row.orderId === s.tabId,
-    )!;
+    const order = (await inTx((tx) => listExpoQueue(tx))).find((row) => row.orderId === s.tabId)!;
 
     expect(order.groups.map((group) => [group.groupId, group.position])).toEqual([
       [s.drinks, 1],
@@ -4081,9 +4075,7 @@ describe("the kitchen and the pass read a party's groups", () => {
       .set({ position: 4, createdAt: "2000-01-01T00:00:00.000Z" })
       .where(eq(orderGroups.id, s.desserts));
 
-    const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
-      (row) => row.orderId === s.tabId,
-    )!;
+    const order = (await inTx((tx) => listExpoQueue(tx))).find((row) => row.orderId === s.tabId)!;
 
     expect(order.groups.map((group) => group.groupId)).toEqual([
       s.drinks,
@@ -4108,7 +4100,7 @@ describe("the kitchen and the pass read a party's groups", () => {
         ),
       );
 
-    const board = await inTx((tx) => listExpoQueue(tx, v.cfg));
+    const board = await inTx((tx) => listExpoQueue(tx));
     const tab = board.find((row) => row.orderId === s.tabId)!;
     expect(tab.groups.find((group) => group.groupId === s.cold)).toMatchObject({
       position: 2,
@@ -4128,9 +4120,7 @@ describe("the kitchen and the pass read a party's groups", () => {
     // A round, not a group submission, leaves the fired line in no group.
     await inTx((tx) => addTabRound(tx, v.cfg, s.tabId, [line(v, "steak")]));
 
-    const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
-      (row) => row.orderId === s.tabId,
-    )!;
+    const order = (await inTx((tx) => listExpoQueue(tx))).find((row) => row.orderId === s.tabId)!;
 
     expect(order.groups[0]).toMatchObject({ groupId: null, position: null, state: null });
     expect(order.groups[0]!.items.map((item) => [item.name, "group" in item])).toEqual([
@@ -4148,9 +4138,7 @@ describe("the kitchen and the pass read a party's groups", () => {
       ]),
     );
 
-    const order = (await inTx((tx) => listExpoQueue(tx, v.cfg))).find(
-      (row) => row.orderId === tabId,
-    )!;
+    const order = (await inTx((tx) => listExpoQueue(tx))).find((row) => row.orderId === tabId)!;
     const [card] = (await inTx((tx) => listStationQueue(tx, v.stationId))).filter(
       (row) => row.orderId === tabId,
     );
@@ -4529,7 +4517,6 @@ describe("advance HOLD tickets (Task 6)", () => {
           pollId: `poll-${randomUUID()}`,
         });
         await attachPrinterToStation(tx, {
-          locationId: v.cfg.locationId,
           stationId: v.stationId,
           printerId: printer.id,
         });
@@ -5181,7 +5168,6 @@ describe("advance HOLD tickets (Task 6)", () => {
           pollId: `poll-${randomUUID()}`,
         });
         await attachPrinterToStation(tx, {
-          locationId: v.cfg.locationId,
           stationId: barId,
           printerId: printer.id,
         });
@@ -5335,7 +5321,6 @@ describe("advance HOLD tickets (Task 6)", () => {
             pollId: `poll-${randomUUID()}`,
           });
           await attachPrinterToStation(tx, {
-            locationId: v.cfg.locationId,
             stationId: barId,
             printerId: printer.id,
           });
@@ -5859,7 +5844,6 @@ describe("Fire now on one held dish", () => {
         { kind: "station", stationId: extraStation },
       );
       await attachPrinterToStation(tx, {
-        locationId: v.cfg.locationId,
         stationId: extraStation,
         printerId: v.printerId,
       });

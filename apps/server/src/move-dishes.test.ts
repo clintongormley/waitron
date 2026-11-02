@@ -652,7 +652,7 @@ async function printerFor(billId: string): Promise<string> {
       pollId: `poll-${randomUUID()}`,
     });
     for (const { stationId } of stations)
-      await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId, printerId: id });
+      await attachPrinterToStation(tx, { stationId, printerId: id });
     return id;
   });
 }

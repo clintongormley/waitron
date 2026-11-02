@@ -6,7 +6,6 @@ import { eq, getTableName, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
   kitchenCourses,
-  locations,
   orderDraftLines,
   products,
   ticketItems,
@@ -227,25 +226,13 @@ describe("removing a course", () => {
     expect(await courseRow(v, id)).toMatchObject([{ id, active: false }]);
   });
 
-  it("refuses an unknown or another venue's course with course.not_found, changing nothing", async () => {
+  it("refuses an unknown course with course.not_found, changing nothing", async () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
     const missing = randomUUID();
     await expect(inTx(v, (tx) => deleteCourse(tx, v.cfg, missing))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: missing },
-    });
-    const otherLocation = await inTx(v, async (tx) => {
-      const [location] = await tx
-        .insert(locations)
-        .values({ name: "Elsewhere", invoiceLocales: ["es-ES"], operationDescription: "Bar" })
-        .returning({ id: locations.id });
-      return location!.id;
-    });
-    const foreignCfg = { ...v.cfg, locationId: otherLocation as typeof v.cfg.locationId };
-    await expect(inTx(v, (tx) => deleteCourse(tx, foreignCfg, id))).rejects.toMatchObject({
-      code: "course.not_found",
-      params: { courseId: id },
     });
     expect(await courseRow(v, id)).toMatchObject([{ id, active: true }]);
   });

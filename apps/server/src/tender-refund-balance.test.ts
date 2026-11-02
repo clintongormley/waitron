@@ -235,11 +235,8 @@ describe("settled-tender refundable balances", () => {
     expect(await read(target.saleId)).toEqual([]);
   });
 
-  it("keeps another location's sale and a nonexistent sale out of scope", async () => {
+  it("keeps a nonexistent sale out of scope", async () => {
     const target = await paid();
-    await expect(
-      read(target.saleId, { ...cfg, locationId: locationId(randomUUID()) }),
-    ).rejects.toMatchObject({ code: "sale.not_found" });
     await expect(read(randomUUID())).rejects.toMatchObject({ code: "sale.not_found" });
     expect(await read(target.saleId)).toHaveLength(1);
   });

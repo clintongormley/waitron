@@ -6,7 +6,6 @@ import {
   deviceProfiles,
   drawerOpens,
   locations,
-  nodes,
   sales,
   saleLines,
   saleSettlements,
@@ -346,63 +345,6 @@ it("checks every original source zone for all four routes and admits them once a
   expect((await list(t.saleId)).status).toBe(200);
   expect((await status(t.refundId)).status).toBe(200);
   expect((await retry(t.refundId)).status).toBe(200);
-});
-
-it("scopes status and retry by the original sale's location", async () => {
-  const t = await target();
-  const [place] = await store.db
-    .select()
-    .from(locations)
-    .where(eq(locations.id, venue.cfg.locationId));
-  const otherLocation = randomUUID(),
-    otherNode = randomUUID();
-  await store.db.insert(locations).values({ ...place!, id: otherLocation, name: "Other" });
-  await store.db.insert(nodes).values({ id: otherNode, locationId: otherLocation, name: "Other" });
-  const [sale] = await store.db.select().from(sales).where(eq(sales.id, t.saleId));
-  const foreign = randomUUID(),
-    foreignTender = randomUUID(),
-    refundId = randomUUID();
-  await store.db.insert(sales).values({
-    ...sale!,
-    id: foreign,
-    nodeId: otherNode,
-    invoiceNumber: ++sequence,
-    workingOrderId: null,
-  });
-  await store.db.insert(tenders).values({
-    id: foreignTender,
-    saleId: foreign,
-    method: "cash",
-    amount: 1000,
-    settledAt: new Date().toISOString(),
-  });
-  await store.db.insert(tenderRefunds).values({
-    id: refundId,
-    saleId: foreign,
-    tenderId: foreignTender,
-    submissionId: randomUUID(),
-    fingerprint: "foreign",
-    appliedAmount: 100,
-    reason: "Return",
-    requestedBy: venue.supervisorId,
-    authorizedBy: venue.supervisorId,
-    source: "device",
-    deviceId: venue.deviceId,
-    nodeId: otherNode,
-    locationId: otherLocation,
-    method: "cash",
-    state: "completed",
-    completedAt: new Date().toISOString(),
-  });
-  const before = await effects();
-  for (const answer of [
-    await list(foreign),
-    await create(foreign, ask(foreignTender)),
-    await status(refundId),
-    await retry(refundId),
-  ])
-    expect(answer).toMatchObject({ status: 404, json: { code: "sale.not_found" } });
-  expect(await effects()).toEqual(before);
 });
 
 it.each(["cash", "manual", "connected"] as const)(

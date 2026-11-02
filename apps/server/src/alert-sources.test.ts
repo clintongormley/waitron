@@ -872,7 +872,6 @@ describe("stationOutputAlertSource", () => {
     await seedJob({ locationId, printerId, createdAt: minsAgo(3), status: "failed", attempts: 5 });
     let open = true;
     const source = stationOutputAlertSource({
-      locationId,
       stationStates: async () =>
         new Map([[station!.id, { open, isDefault: true, active: true, name: "Kitchen" }]]),
     });

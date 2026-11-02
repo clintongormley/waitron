@@ -54,8 +54,7 @@ import type { Logger } from "./logger.js";
  */
 export interface ReportApiDeps {
   db: Database;
-  /** `locationId` is this box's own location: the printers a report prints on, and its jobs. */
-  cfg: { nodeId: string; locationId: string };
+  cfg: { nodeId: string };
   /** The printed page's language when neither the person nor the browser names one. */
   venueLocale: SupportedLocale;
 }
@@ -140,10 +139,7 @@ function requireDeclarationType(raw: string | undefined): string {
 
 export { resolveVenueClock } from "@waitron/reporting";
 
-async function countOpenTables(
-  tx: Transaction,
-  nodeId: NodeId,
-): Promise<{ open: number; total: number }> {
+async function countOpenTables(tx: Transaction): Promise<{ open: number; total: number }> {
   // `cast(x as text)`: this engine has no `::` operator, and text keeps both counts one type for
   // `Number()`. A table is open while a party holds it (an active membership).
   const { rows } = await tx.execute<{ total: string; open: string }>(sql`
@@ -152,8 +148,7 @@ async function countOpenTables(
              select 1 from party_tables pt where pt.table_id = dt.id and pt.left_at is null
            )) as text) as open
     from dining_tables dt
-    join nodes n on n.location_id = dt.location_id
-    where n.id = ${nodeId} and ${tableInService(sql`dt.id`)}
+    where ${tableInService(sql`dt.id`)}
       and not ${joinedOutOfService(sql`dt.id`)}
   `);
   return { open: Number(rows[0]!.open), total: Number(rows[0]!.total) };
@@ -207,8 +202,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     );
   };
 
-  const activePrinters = () =>
-    and(eq(printers.locationId, deps.cfg.locationId), eq(printers.active, true));
+  const activePrinters = () => eq(printers.active, true);
 
   app.get("/management-api/reports/modelo-303", (c) =>
     run(c, log, async () => {
@@ -249,13 +243,12 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
     }),
   );
 
-  // The overview aggregates every node for the venue's CURRENT business day; only the open-tables
-  // count is location-scoped.
+  // The overview aggregates every node for the venue's CURRENT business day.
   app.get("/management-api/reports/overview", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const result = await gated(sessionId, REPORT_VIEW_PERMISSION, async (tx) => {
-        const { nodeId, clock } = await buildReportContext(tx);
+        const { clock } = await buildReportContext(tx);
         const businessDay = currentBusinessDay(clock);
         // No `nodeId`: venue-wide.
         const input = {
@@ -274,7 +267,7 @@ export function mountReportApi(app: Hono, deps: ReportApiDeps, log: Logger): voi
           cutoverChanges: clock.cutoverChanges,
           limit: 5,
         });
-        const openTables = await countOpenTables(tx, nodeId);
+        const openTables = await countOpenTables(tx);
         return {
           businessDay,
           takings: {

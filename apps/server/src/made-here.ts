@@ -244,7 +244,7 @@ export async function listMadeHereStations(tx: Transaction): Promise<Map<string,
   return byDevice;
 }
 
-/** Replace one device's list after checking every station belongs to this location and is live. */
+/** Replace one device's list after checking every station is live. */
 export async function setMadeHereStations(
   tx: Transaction,
   cfg: TradingContext,

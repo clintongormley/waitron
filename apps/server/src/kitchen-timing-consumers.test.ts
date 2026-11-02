@@ -87,7 +87,7 @@ describe("each station's own minutes across consumers", () => {
           const [queue] = await listStationQueue(tx, stationId);
           expect.soft(queue!.thresholds).toEqual(thresholds);
           expect.soft(queue!.items[0]!.band).toBe(band);
-          const expo = (await listExpoQueue(tx, v.cfg)).find((row) => row.orderId === billId)!;
+          const expo = (await listExpoQueue(tx)).find((row) => row.orderId === billId)!;
           expect.soft(expo.worstBand).toBe(band);
           expect.soft(expo.groups[0]!.items[0]!.thresholds).toEqual(thresholds);
           const signals = await readBillSignals(tx, [billId], now);
@@ -135,7 +135,7 @@ describe("each station's own minutes across consumers", () => {
     const reads = async () => {
       const readers = await inTx(v, async (tx) => ({
         queue: (await listStationQueue(tx, station!.id))[0]!.items[0]!.band,
-        pass: (await listExpoQueue(tx, v.cfg)).find((row) => row.orderId === tabId)!.worstBand,
+        pass: (await listExpoQueue(tx)).find((row) => row.orderId === tabId)!.worstBand,
         signals: (await readBillSignals(tx, [tabId], now)).get(tabId),
         overdue: (await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).map((row) => ({
           id: row.orderId,
@@ -190,7 +190,7 @@ describe("each station's own minutes across consumers", () => {
       const [card] = await listStationQueue(tx, kitchen!.id);
       expect(card!.queuedAt > heldAt).toBe(true);
       expect(card!.items.map((item) => item.band)).toEqual(["fresh"]);
-      expect((await listExpoQueue(tx, v.cfg)).map((row) => row.worstBand)).toEqual(["fresh"]);
+      expect((await listExpoQueue(tx)).map((row) => row.worstBand)).toEqual(["fresh"]);
       expect(await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).toEqual([]);
     });
   });

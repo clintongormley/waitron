@@ -2,7 +2,6 @@ import { expect, it } from "vitest";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { withTransaction } from "./tenancy.js";
 import { kitchenStations } from "./schema/kitchen-stations.js";
-import { locations } from "./schema/tenants.js";
 import { seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { nextStationColour } from "./station-colour.js";
@@ -19,41 +18,28 @@ async function venue(name: string) {
   return venueLocationId(suite.db);
 }
 
-async function location(name: string) {
-  const [row] = await suite.db
-    .insert(locations)
-    .values({
-      name,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant service",
-    })
-    .returning({ id: locations.id });
-  return row!.id;
-}
-
 it("sees colours inserted earlier in the caller's transaction", async () => {
   const locationId = await venue("Restaurant");
   const choices = await withTransaction(suite.db, async (tx) => {
-    const first = await nextStationColour(tx, locationId);
+    const first = await nextStationColour(tx);
     await tx.insert(kitchenStations).values({ locationId, name: "Kitchen", colour: first });
-    const second = await nextStationColour(tx, locationId);
+    const second = await nextStationColour(tx);
     await tx.insert(kitchenStations).values({ locationId, name: "Bar", colour: second });
-    return [first, second, await nextStationColour(tx, locationId)];
+    return [first, second, await nextStationColour(tx)];
   });
   expect(choices).toEqual(["red", "orange", "amber"]);
 });
 
-it.each(["inactive", "another location"] as const)("ignores %s station colours", async (scope) => {
+it("ignores inactive station colours", async () => {
   const locationId = await venue("Restaurant");
-  const otherId = scope === "another location" ? await location("Takeaway") : locationId;
   await withTransaction(suite.db, async (tx) => {
     await tx.insert(kitchenStations).values({ locationId, name: "Kitchen", colour: "red" });
     await tx.insert(kitchenStations).values({
-      locationId: otherId,
+      locationId,
       name: "Other station",
       colour: "orange",
-      active: scope !== "inactive",
+      active: false,
     });
-    expect(await nextStationColour(tx, locationId)).toBe("orange");
+    expect(await nextStationColour(tx)).toBe("orange");
   });
 });

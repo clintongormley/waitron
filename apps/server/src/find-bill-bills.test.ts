@@ -6,7 +6,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, inArray, sql } from "drizzle-orm";
 import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
 import {
-  locations,
   workingOrders,
   workingOrderLines,
   billPayments,
@@ -18,7 +17,6 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { readFindBills, readFindBill } from "./find-bill-bills.js";
 import { parseBillsQuery } from "./find-bill-query.js";
@@ -339,23 +337,6 @@ describe("Find Bills SQL paging", () => {
         code: "working_order.not_found",
       });
       expect((await readFindBill(tx, venue.cfg, unzoned, scope)).workingOrderId).toBe(unzoned);
-      const elsewhere = await tx
-        .insert(locations)
-        .values({
-          name: "Other place",
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Restaurant",
-          timeZone: "UTC",
-          dayCutover: "00:00",
-        })
-        .returning({ id: locations.id });
-      expect(
-        await readFindBills(
-          tx,
-          { ...venue.cfg, locationId: locationId(elsewhere[0]!.id) },
-          query(),
-        ),
-      ).toMatchObject({ rows: [], total: 0, openCount: 0 });
     });
   });
   it("retains missing-person credit, table names and exact row facts", async () => {

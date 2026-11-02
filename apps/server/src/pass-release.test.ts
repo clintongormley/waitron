@@ -962,7 +962,6 @@ describe("A773 pass release: paper", () => {
         pollId: randomUUID(),
       });
       await attachPrinterToStation(tx, {
-        locationId: v.cfg.locationId,
         stationId,
         printerId: p.id,
       });
@@ -1458,7 +1457,6 @@ describe("A773 pass release: races", () => {
           pollId: randomUUID(),
         });
         await attachPrinterToStation(tx, {
-          locationId: f.venue.cfg.locationId,
           stationId: f.cold,
           printerId: printer.id,
         });

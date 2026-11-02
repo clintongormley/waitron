@@ -40,7 +40,7 @@ async function onStationQueue(v: PartyVenue, stationId: string, billId: string):
 }
 
 async function onPass(v: PartyVenue, billId: string): Promise<boolean> {
-  const orders = await inTx(v, (tx) => listExpoQueue(tx, v.cfg));
+  const orders = await inTx(v, (tx) => listExpoQueue(tx));
   return orders.some((order) => order.orderId === billId);
 }
 

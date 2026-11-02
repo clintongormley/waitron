@@ -1890,11 +1890,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   server's check; "Madrid" passed both). The address search writes a comma-free province, but a
   provider's locality could still hold one. Left open by A1171 part 3.
 
-- **Legacy bill moves need a source-location check.** An unpaired `POST /api/bills/:id/move`
-  accepted a counter bill from another location into an answered party. The new allergy move
-  command checks the source location; the legacy request still needs its own fix and regression.
-  [Probe and scope](backlog/till.md#legacy-bill-moves-do-not-check-the-source-location).
-
 - **Remove the Filter's unused session-storage write.** Filter selections live in the active
   operator's app state and reset on sign-out. `till-app.ts` writes `waitron.dietFilter` but never
   reads it; the same write-only key exists at `1f88662fb`. Remove the redundant write without
@@ -6533,11 +6528,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   network printer's job, new print jobs, printers, page printers and the demo printer take the
   venue's id, `@waitron/printing` no longer exports `PrintConfig` or `PrintAgentConfig`, and
   `@waitron/layouts`' printer types carry no location. It leaves location reads for their owners:
-  `attachPrinterToStation`'s scope in `print-api.ts` and the local `PrintConfig` type in
-  `station-printers.ts` (S11b), the `locationId` that `alert-sources.ts`' `stationOutputAlertSource`
-  still declares and no longer reads (S11; `boot.ts`' argument, S18), the station screens read's scope in `station-outputs-down.ts` and
-  `receipt-print.ts`'s `cfg` handed to `readPrintedDepartmentReceipt` (both S18, with the module
-  contract's scope). Until the schema
+  the station screens read's scope in `station-outputs-down.ts` and `receipt-print.ts`'s `cfg`
+  handed to `readPrintedDepartmentReceipt` (both S18, with the module contract's scope). Until the schema
   slices drop `print_jobs.location_id`, `enqueuePrintJob` takes the venue id as an optional
   `venueId`, so a sale, a kitchen send or a payment's slips read it once, and the demo printer's
   boot lookup keeps its venue condition for `printers_local_key_key`. The working-time slices have their

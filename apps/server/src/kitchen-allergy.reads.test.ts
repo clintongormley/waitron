@@ -167,7 +167,7 @@ describe("A669 reads", () => {
       { id: sides[0]!.id, allergy: original },
     ]);
     for (const board of [
-      await inTx(v, async (tx) => ({ orders: await listExpoQueue(tx, v.cfg) })),
+      await inTx(v, async (tx) => ({ orders: await listExpoQueue(tx) })),
       await inTx(v, (tx) =>
         listPassScreen(tx, v.cfg, randomUUID(), { stationIds: [extra.station.id], zoneIds: null }),
       ),
@@ -200,7 +200,7 @@ describe("A669 reads", () => {
     );
     expect(
       new Map(
-        boardItems({ orders: await inTx(v, (tx) => listExpoQueue(tx, v.cfg)) }).map((item) => [
+        boardItems({ orders: await inTx(v, (tx) => listExpoQueue(tx)) }).map((item) => [
           item.id,
           item.allergy,
         ]),
@@ -243,7 +243,7 @@ describe("A669 reads", () => {
       ALLERGEN_NAMES.milk.en = "Future dictionary label";
       try {
         const board = await inTx(v, async (tx) => {
-          if (mode === "every") return { orders: await listExpoQueue(tx, v.cfg) };
+          if (mode === "every") return { orders: await listExpoQueue(tx) };
           const scope = { stationIds: [stationId], zoneIds: null };
           return mode === "pass"
             ? listPassScreen(tx, v.cfg, randomUUID(), scope)
@@ -309,7 +309,7 @@ describe("A669 reads", () => {
         p.tickets.map((ticket) => ticket.id).sort(),
       ]);
       read.mockClear();
-      await inTx(v, (tx) => listExpoQueue(tx, v.cfg));
+      await inTx(v, (tx) => listExpoQueue(tx));
       expect(read.mock.calls.map((call) => [...call[1]].sort())).toEqual([
         p.tickets.map((ticket) => ticket.id).sort(),
       ]);

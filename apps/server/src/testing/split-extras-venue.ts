@@ -39,7 +39,7 @@ export interface Venue {
   catalogueId: string;
 }
 
-/** A fresh location, till, node and assigned catalogue, returning the till's config. */
+/** A fresh venue, till, node and assigned catalogue, returning the till's config. */
 export async function setupVenue(): Promise<Venue> {
   await seedLegacySellingUnits(db);
   await seedVenue(db, {
@@ -84,7 +84,6 @@ export async function setupSplitExtrasVenue() {
       });
       printers[station] = printer.id;
       await attachPrinterToStation(tx, {
-        locationId: cfg.locationId,
         stationId: stations[station],
         printerId: printer.id,
       });
@@ -97,7 +96,6 @@ export async function setupSplitExtrasVenue() {
     printers.pass = pass.id;
     for (const stationId of [stations.grill, stations.fryer])
       await attachPrinterToStation(tx, {
-        locationId: cfg.locationId,
         stationId,
         printerId: pass.id,
       });

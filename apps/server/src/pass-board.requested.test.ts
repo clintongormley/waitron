@@ -148,7 +148,7 @@ describe("A773 pass board: reads", () => {
         thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
         band: "fresh",
       };
-      expect(await readPassBoard(tx, venue.cfg.locationId, onOrder(venue.party.tabId))).toEqual([
+      expect(await readPassBoard(tx, onOrder(venue.party.tabId))).toEqual([
         {
           orderId: venue.party.tabId,
           kitchenNote: null,
@@ -194,7 +194,7 @@ describe("A773 pass board: reads", () => {
         .mockReturnValueOnce(tenMinutes - 1)
         .mockReturnValue(tenMinutes);
       try {
-        const [order] = await readPassBoard(tx, venue.cfg.locationId, onOrder(venue.party.tabId));
+        const [order] = await readPassBoard(tx, onOrder(venue.party.tabId));
         const burger = order!.groups[0]!.items.find((item) => item.id === placed.burgerItem)!;
         expect([order!.openedMinutes, burger.band]).toEqual([9, "warm"]);
       } finally {
@@ -224,7 +224,6 @@ describe("A773 pass board: reads", () => {
       ).groups[0]!;
       const rows = await readPassRows(
         tx,
-        venue.cfg.locationId,
         sql`${workingOrderLines.groupId} = ${later.id}`,
         Date.now(),
       );
@@ -283,12 +282,7 @@ describe("A773 pass board: reads", () => {
         .where(eq(orderGroups.id, later.id));
       expect(kind!.requestKind).not.toBe("new_order");
 
-      const rows = await readPassRows(
-        tx,
-        venue.cfg.locationId,
-        onOrder(venue.party.tabId),
-        Date.now(),
-      );
+      const rows = await readPassRows(tx, onOrder(venue.party.tabId), Date.now());
       const byItem = new Map(rows.map((row) => [row.item.id, row]));
       expect(byItem.get(laterItem)).toMatchObject({
         partyId: venue.party.partyId,
@@ -313,12 +307,7 @@ describe("A773 pass board: reads", () => {
         .select({ createdAt: orderGroups.createdAt, requestKind: orderGroups.requestKind })
         .from(orderGroups)
         .where(eq(orderGroups.id, placed.groupId));
-      const rows = await readPassRows(
-        tx,
-        venue.cfg.locationId,
-        onOrder(venue.party.tabId),
-        Date.now(),
-      );
+      const rows = await readPassRows(tx, onOrder(venue.party.tabId), Date.now());
       expect(rows.map((row) => row.lineId)).toEqual([placed.burgerLine, placed.waterLine]);
       expect(rows[0]).toMatchObject({
         item: { id: placed.burgerItem, name: "BURG", firedAt: null },
@@ -364,9 +353,9 @@ describe("A773 pass board: reads", () => {
       });
       const chipsLine = await lineIdOf(tx, venue.party.tabId, "Chips");
       const secondBurger = second.groups[0]!.lineIds.find((id) => id !== chipsLine)!;
-      const extras = (
-        await readPassRows(tx, venue.cfg.locationId, onOrder(venue.party.tabId), Date.now())
-      ).filter((row) => row.group?.id === second.groups[0]!.id);
+      const extras = (await readPassRows(tx, onOrder(venue.party.tabId), Date.now())).filter(
+        (row) => row.group?.id === second.groups[0]!.id,
+      );
       expect(extras.map((row) => [row.lineId, row.extra])).toEqual([
         [secondBurger, false],
         [chipsLine, true],

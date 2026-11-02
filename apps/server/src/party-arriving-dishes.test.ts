@@ -322,7 +322,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     await move(b2, { tableId: m7 });
 
     const made = (await groupsOf(luis.partyId)).at(-1)!.id;
-    const board = await inTx(v, (tx) => listExpoQueue(tx, v.cfg));
+    const board = await inTx(v, (tx) => listExpoQueue(tx));
     const entry = board.find((o) => o.orderId === b2);
     expect(entry?.groups.map((g) => g.groupId)).toEqual([made]);
     const ready = await command(luis.partyId);
@@ -600,7 +600,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     expect(group).toMatchObject({ state: "fired", position: 1 });
     expect((await billRow(v, id)).status).toBe("placed");
     expect(await lineRows(id)).toEqual(before.map((l) => ({ ...l, groupId: group!.id })));
-    const entry = (await inTx(v, (tx) => listExpoQueue(tx, v.cfg))).find((o) => o.orderId === id);
+    const entry = (await inTx(v, (tx) => listExpoQueue(tx))).find((o) => o.orderId === id);
     expect(entry?.groups.map((g) => g.groupId)).toEqual([group!.id]);
   });
 
@@ -888,7 +888,6 @@ describe("an arriving held group's advance HOLD ticket", () => {
           pollId: `poll-${randomUUID()}`,
         });
         await attachPrinterToStation(tx, {
-          locationId: v.cfg.locationId,
           stationId: station.id,
           printerId: id,
         });
@@ -1081,7 +1080,6 @@ describe("A773 requested lifecycle: arrival", () => {
       });
       for (const stationId of active)
         await attachPrinterToStation(tx, {
-          locationId: v.cfg.locationId,
           stationId,
           printerId: id,
         });
@@ -1100,7 +1098,7 @@ describe("A773 requested lifecycle: arrival", () => {
         await setStationsWaitForPass(tx, false, stationIds);
         await setStationPrinting(tx, { printHeldWork: false });
         for (const stationId of active)
-          await detachPrinterFromStation(tx, v.cfg, { stationId, printerId });
+          await detachPrinterFromStation(tx, { stationId, printerId });
       });
     }
   }

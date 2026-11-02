@@ -6,23 +6,18 @@ import { moveDishesToStation, stillMovable, type StationMoveActor } from "./stat
 import type { TradingContext } from "./trading-context.js";
 import { firedQuantity } from "./kitchen-print.js";
 
-export async function openDishCount(
-  tx: Transaction,
-  locationId: string,
-  stationId: string,
-): Promise<number> {
+export async function openDishCount(tx: Transaction, stationId: string): Promise<number> {
   const [row] = await tx
     .select({ count: count() })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
-    .where(unfinishedAtStation(locationId, stationId));
+    .where(unfinishedAtStation(stationId));
   return row!.count;
 }
 
-function unfinishedAtStation(locationId: string, stationId: string) {
+function unfinishedAtStation(stationId: string) {
   return and(
-    eq(workingOrders.locationId, locationId),
     eq(ticketItems.stationId, stationId),
     eq(ticketItems.madeHere, false),
     gt(firedQuantity, workingOrderLines.servedQuantity),
@@ -62,7 +57,7 @@ export async function withStationDishes(
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
-    .where(unfinishedAtStation(cfg.locationId, id));
+    .where(unfinishedAtStation(id));
   if (dishes.length > 0 && choice === undefined) throw invalid("openDishes");
   await close(at);
   if (choice === "send") {

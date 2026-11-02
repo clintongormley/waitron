@@ -351,7 +351,7 @@ describe("charged cancellation read projections", () => {
       const items = queue.filter((row) => row.orderId === order.billId).flatMap((row) => row.items);
       expect(items.map((item) => item.quantity)).toEqual(cancelled === 3 ? [] : [quantity]);
     }
-    const pass = await inTx(venue, (tx) => listExpoQueue(tx, venue.cfg));
+    const pass = await inTx(venue, (tx) => listExpoQueue(tx));
     const items = pass
       .filter((row) => row.orderId === order.billId)
       .flatMap((row) => row.groups.flatMap((group) => group.items));
@@ -367,7 +367,6 @@ describe("charged cancellation read projections", () => {
       await attachPrinterToStation(tx, {
         stationId: extraStationId,
         printerId: venue.printerId,
-        locationId: venue.cfg.locationId,
       });
       await tx
         .update(orderGroups)

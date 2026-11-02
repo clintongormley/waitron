@@ -48,7 +48,6 @@ useVenueDb({
         localKey: MAC,
       });
       await attachPrinterToStation(tx, {
-        locationId: venue.cfg.locationId,
         stationId: station!.id,
         printerId,
       });

@@ -235,7 +235,7 @@ async function printerFor(billId: string): Promise<string> {
       pollId: `poll-${randomUUID()}`,
     });
     for (const { stationId } of stations)
-      await attachPrinterToStation(tx, { locationId: v.cfg.locationId, stationId, printerId: id });
+      await attachPrinterToStation(tx, { stationId, printerId: id });
     return id;
   });
 }
@@ -1197,7 +1197,6 @@ describe("A773 waiter request", () => {
       });
       for (const stationId of active)
         await attachPrinterToStation(tx, {
-          locationId: v.cfg.locationId,
           stationId,
           printerId: id,
         });
@@ -1209,7 +1208,7 @@ describe("A773 waiter request", () => {
       await inTx(v, async (tx) => {
         await setStationsWaitForPass(tx, false, stationIds);
         for (const stationId of active)
-          await detachPrinterFromStation(tx, v.cfg, { stationId, printerId });
+          await detachPrinterFromStation(tx, { stationId, printerId });
       });
     }
   }

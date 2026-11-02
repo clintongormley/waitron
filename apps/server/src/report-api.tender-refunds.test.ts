@@ -133,7 +133,7 @@ function app(onNode = nodeId) {
   const instance = new Hono();
   mountReportApi(
     instance,
-    { db: suite.db, cfg: { nodeId: onNode, locationId }, venueLocale: "es-ES" },
+    { db: suite.db, cfg: { nodeId: onNode }, venueLocale: "es-ES" },
     () => {},
   );
   return instance;

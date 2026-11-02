@@ -84,7 +84,6 @@ useVenueDb({
       });
       barPrinterId = printer.id;
       await attachPrinterToStation(tx, {
-        locationId: venue.cfg.locationId,
         stationId,
         printerId: printer.id,
       });
@@ -102,7 +101,6 @@ useVenueDb({
       });
       grillPrinterId = grillPrinter.id;
       await attachPrinterToStation(tx, {
-        locationId: venue.cfg.locationId,
         stationId: grill.id,
         printerId: grillPrinter.id,
       });
