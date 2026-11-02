@@ -4,22 +4,20 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
-  locations,
   saleLines,
   saleSettlements,
   sales,
   tenderRefunds,
   tenders,
-  workingOrders,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { locationId as brandLocationId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { mountReportApi } from "./report-api.js";
 
@@ -42,33 +40,25 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(DAY2));
   const db = suite.db;
-  await seedTenant(db);
-  const [place] = await db
-    .insert(locations)
-    .values({
-      name: "Returns",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Meals",
-      dayCutover: "05:00:00",
-    })
-    .returning();
-  locationId = place!.id;
-  nodeId = await seedNode(db, brandLocationId(locationId));
-  soldOn = (await seedDevice(db, { locationId, label: "Sale till" })).deviceId;
-  returnedOn = (await seedDevice(db, { locationId, label: "Refund till" })).deviceId;
+  await seedVenue(db, {
+    name: "Returns",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Meals",
+    dayCutover: "05:00:00",
+  });
+  locationId = await venueLocationId(db);
+  nodeId = await seedNode(db);
+  soldOn = (await seedDevice(db, { label: "Sale till" })).deviceId;
+  returnedOn = (await seedDevice(db, { label: "Refund till" })).deviceId;
   const [series] = await db.insert(invoiceSeries).values({ nodeId, code: "R" }).returning();
   saleId = randomUUID();
   tenderId = randomUUID();
-  const [order] = await db
-    .insert(workingOrders)
-    .values({
-      source: "device",
-      deviceId: soldOn,
-      nodeId,
-      locationId,
-      orderNumber: 1,
-    })
-    .returning();
+  const order = await seedWorkingOrder(db, {
+    source: "device",
+    deviceId: soldOn,
+    nodeId,
+    orderNumber: 1,
+  });
   await db.insert(sales).values({
     id: saleId,
     source: "device",
@@ -223,7 +213,7 @@ it("publishes a named negative cash-up once despite the provider evidence, prese
 });
 
 it("scopes the daily report by the refund node and includes it once in the venue overview", async () => {
-  const other = await seedNode(suite.db, brandLocationId(locationId));
+  const other = await seedNode(suite.db);
   await refund("completed", other);
   expect((await get("daily-close?businessDay=2026-08-05")).cash).toEqual({
     byOrigin: [],

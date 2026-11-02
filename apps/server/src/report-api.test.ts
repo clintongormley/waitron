@@ -3,16 +3,15 @@ import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
-  locations,
-  nodes,
   purchaseInvoiceVat,
   purchaseInvoices,
   sales,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import {
   addDecimal,
@@ -139,24 +138,14 @@ const suite = useVenueDb({
   setup: async (db) => {
     // seedTenant supplies the tax_id + legal_name the route reads back as the obligado identity.
     await seedTenant(db);
-    // The one venue's location/node/series, through the table definitions: the ids and
-    // `created_at`s are JavaScript `$defaultFn` generators a raw insert never reaches, and
-    // `invoice_locales` is encoded by the column's own write mapping.
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Main dining room",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    locationId = loc!.id;
-    ({ deviceId } = await seedDevice(db, { locationId }));
-    const [node] = await db
-      .insert(nodes)
-      .values({ locationId, name: "Node 1" })
-      .returning({ id: nodes.id });
-    nodeId = node!.id;
+    await seedVenue(db, {
+      name: "Main dining room",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    locationId = await venueLocationId(db);
+    ({ deviceId } = await seedDevice(db));
+    nodeId = await seedNode(db);
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "A" })

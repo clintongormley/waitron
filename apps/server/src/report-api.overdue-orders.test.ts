@@ -1,4 +1,4 @@
-import { floorTodayTables } from "@waitron/db";
+import { floorTodayTables, venueLocationId } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
@@ -8,8 +8,6 @@ import {
   diningTables,
   floorZones,
   kitchenStations,
-  locations,
-  nodes,
   products,
   ticketItems,
   withTransaction,
@@ -18,7 +16,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
 import { mountReportApi } from "./report-api.js";
@@ -58,18 +56,14 @@ async function seedFiredOrder(
       vatClass: "general",
     })
     .returning({ id: products.id });
-  const [order] = await db
-    .insert(workingOrders)
-    .values({
-      source: "dashboard",
-      deviceId: null,
-      locationId,
-      nodeId,
-      orderNumber: opts.orderNumber,
-      status: "open",
-    })
-    .returning({ id: workingOrders.id });
-  const orderId = order!.id;
+  const order = await seedWorkingOrder(db, {
+    source: "dashboard",
+    deviceId: null,
+    nodeId,
+    orderNumber: opts.orderNumber,
+    status: "open",
+  });
+  const orderId = order.id;
   // A quantity is a count of whole thousandths, so this line is one unit: a bare 1 would be accepted
   // in silence and mean a thousandth of a unit. The money columns are cents.
   const [line] = await db
@@ -120,21 +114,13 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Main dining room",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    locationId = loc!.id;
-    const [node] = await db
-      .insert(nodes)
-      .values({ locationId, name: "Node 1" })
-      .returning({ id: nodes.id });
-    nodeId = node!.id;
+    await seedVenue(db, {
+      name: "Main dining room",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    locationId = await venueLocationId(db);
+    nodeId = await seedNode(db);
     const [station] = await db
       .insert(kitchenStations)
       .values({ locationId, name: "Kitchen", isDefault: true })

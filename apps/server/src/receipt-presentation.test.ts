@@ -4,14 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  locations,
   invoiceSeries,
   sales,
   tenantReceipts,
+  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import {
   VENUE_SERVICE_MIGRATIONS,
@@ -29,18 +29,15 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS, MEDIA_MIGRATIONS],
 });
 async function fixture(header: "department" | "null" | "absent" = "department") {
-  const [place] = await suite.db
-    .insert(locations)
-    .values({
-      name: randomUUID(),
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Generic bootstrap",
-      addressLine1: "Current street",
-      city: "Madrid",
-    })
-    .returning();
-  const cfg = { locationId: locationId(place!.id) };
-  const nodeId = await seedNode(suite.db, cfg.locationId);
+  await seedVenue(suite.db, {
+    name: randomUUID(),
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Generic bootstrap",
+    addressLine1: "Current street",
+    city: "Madrid",
+  });
+  const cfg = { locationId: locationId(await venueLocationId(suite.db)) };
+  const nodeId = await seedNode(suite.db);
   const [department] = await suite.db
     .insert(departments)
     .values({ locationId: cfg.locationId, name: "Dining", tradingName: "Live brand" })
