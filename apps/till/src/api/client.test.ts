@@ -1924,6 +1924,41 @@ describe("TillApi", () => {
     );
   });
 
+  it("A773 pass reads both boards with the caller's signal", async () => {
+    const board = { held: [], toFire: [], inProgress: [], ready: [], overview: [] };
+    const answer = { board, stations: [], zones: null };
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(answer))
+      .mockResolvedValueOnce(jsonResponse(answer));
+    const api = new TillApi("", fetchStub);
+    const signal = new AbortController().signal;
+    expect(await api.getDevicePassBoard({ signal })).toEqual(answer);
+    expect(await api.getDevicePassMonitorBoard({ signal })).toEqual(answer);
+    expect(fetchStub.mock.calls.map(([url, init]) => [url, init.method, init.signal])).toEqual([
+      ["/api/device/pass-board", "GET", signal],
+      ["/api/device/pass-monitor-board", "GET", signal],
+    ]);
+  });
+
+  it("A773 pass Fire posts the ask as its body and returns the released ids", async () => {
+    const ask = {
+      submissionId: "sub-1",
+      target: { kind: "group" as const, partyId: "p-1", groupId: "g-1" },
+      ticketItemIds: ["ti-1", "ti-2"],
+      expectedContext: "ctx-1",
+    };
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ releasedTicketItemIds: ["ti-1"] }));
+    expect(await new TillApi("", fetchStub).releaseDevicePass(ask)).toEqual({
+      releasedTicketItemIds: ["ti-1"],
+    });
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/pass-screen/release",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    );
+    expect(JSON.parse(fetchStub.mock.calls[0]![1].body as string)).toEqual(ask);
+  });
+
   it("bumpCourseReady POSTs an empty object to the order+course /ready route (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 

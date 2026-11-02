@@ -133,12 +133,14 @@ import {
  * | POST /api/device/orders/:id/courses/:courseId/ready (display) | prepare-orders        | prepare-orders        |
  * | POST /api/device/parties/:id/groups/:gid/ready (display)  | prepare-orders             | prepare-orders        |
  * | POST /api/device/working-orders/:id/lines/move-station (display) | take-orders         | take-orders           |
+ * | POST /api/device/pass-screen/release (display or till pass) | prepare-orders, then run-the-pass | prepare-orders, run-the-pass |
  *
  * A management reprint (`POST /management-api/orders/:id/reprint`) checks `print-receipt` on the
  * device cookie it carries, if any (`orders-reprint.test.ts`).
  *
  * Not action-gated, so a signed-in person (or, for a display's reads, the device) is enough: every
- * read, including a display's `GET /api/device/stations` and the till's
+ * read, including a display's `GET /api/device/stations`, `GET /api/device/pass-board` and
+ * `GET /api/device/pass-monitor-board`, and the till's
  * `GET /api/invoice-delivery-options`, the POST previews (`/payments/preview`,
  * `/adjustments/preview`) and the dead-end checks (`/api/dead-ends/*`); the session, locale, schedule, profile-switch and device-equipment
  * routes (choosing equipment is not printing, paying or opening the drawer). Left ungated by
@@ -696,6 +698,7 @@ describe("a shared kitchen display", () => {
     [`/api/device/orders/${id}/courses/${id}/ready`, "prepare-orders"],
     [`/api/device/parties/${id}/groups/${id}/ready`, "prepare-orders"],
     [`/api/device/working-orders/${id}/lines/move-station`, "take-orders"],
+    ["/api/device/pass-screen/release", "prepare-orders"],
   ] as const) {
     it(`refuses the display's ${path.replaceAll(id, ":id")} without ${lacking}`, async () => {
       const cookie = await passDisplay(
@@ -708,6 +711,17 @@ describe("a shared kitchen display", () => {
       expect({ status: answer.status, error: answer.body.error }).toEqual(forbidden(lacking));
     });
   }
+
+  it("refuses the display's pass release with prepare-orders but without run-the-pass", async () => {
+    const cookie = await passDisplay(["prepare-orders"]);
+    const answer = await send(cookie, "POST", "/api/device/pass-screen/release", {
+      submissionId: randomUUID(),
+      target: { kind: "group", partyId: id, groupId: id },
+      ticketItemIds: [id],
+      expectedContext: "0".repeat(64),
+    });
+    expect({ status: answer.status, error: answer.body.error }).toEqual(forbidden("run-the-pass"));
+  });
 
   it("lets a display that prepares reach the station's own refusal for an unknown item", async () => {
     const cookie = await display(["act-as-kds", "prepare-orders"]);

@@ -11,7 +11,10 @@ export type TableSignal =
   | { kind: "unsent_draft"; ownerNames: string[] }
   /** Dishes the kitchen has made ready and nobody has served yet, counted in units per station. */
   | { kind: "ready"; byStation: ReadyAtStation[] }
-  /** The worst waiting band over fired dishes still to serve, each against its own station. */
+  /**
+   * The worst waiting band over dishes still to serve that were fired or are waiting for the pass,
+   * each against its own station; one waiting for the pass is timed from when it was asked for.
+   */
   | { kind: "long_wait"; band: "warm" | "overdue" | "forgotten" }
   /**
    * Dishes waiting in the party's held groups, counted as items: a counted dish by its quantity left

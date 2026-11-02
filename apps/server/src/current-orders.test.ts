@@ -1094,6 +1094,7 @@ function row(
     billStatus: "open",
     readyAt: null,
     firedAt: expect.any(String) as unknown as string,
+    requestedAt: expect.any(String) as unknown as string,
     workingOrderId: expect.any(String) as unknown as string,
     lineNo: expect.any(Number) as unknown as number,
     courseId: null,
@@ -1146,6 +1147,8 @@ describe("readCurrentOrders (spec §4)", () => {
         readyAt,
         kitchen: {
           state,
+          phase: ({ queued: "waiting", preparing: "preparing", ready: "ready" } as const)[state],
+          requestedAt: before.kitchen!.requestedAt,
           firedAt: before.kitchen!.firedAt,
           stationId: before.kitchen!.stationId,
           movable: state === "queued",
@@ -1361,6 +1364,8 @@ describe("readCurrentOrders (spec §4)", () => {
               servedAt: expect.any(String),
               kitchen: {
                 state: "queued",
+                phase: "waiting",
+                requestedAt: expect.any(String),
                 firedAt: expect.any(String),
                 stationId: expect.any(String),
                 movable: false,
@@ -1375,6 +1380,8 @@ describe("readCurrentOrders (spec §4)", () => {
               name: "croquetas",
               kitchen: {
                 state: "queued",
+                phase: "waiting",
+                requestedAt: expect.any(String),
                 firedAt: expect.any(String),
                 stationId: expect.any(String),
                 movable: true,
@@ -1394,6 +1401,8 @@ describe("readCurrentOrders (spec §4)", () => {
               name: "croquetas",
               kitchen: {
                 state: "queued",
+                phase: "waiting",
+                requestedAt: expect.any(String),
                 firedAt: expect.any(String),
                 stationId: expect.any(String),
                 movable: true,
@@ -1416,11 +1425,14 @@ describe("readCurrentOrders (spec §4)", () => {
               netAmount: "23.50",
               lineId: steak.id,
               firedAt: null,
+              requestedAt: null,
               workingOrderId: laterTab,
               name: "steak",
               released: false,
               kitchen: {
                 state: "queued",
+                phase: "held",
+                requestedAt: null,
                 firedAt: null,
                 stationId: expect.any(String),
                 movable: true,
@@ -1447,6 +1459,8 @@ describe("readCurrentOrders (spec §4)", () => {
           name: "flan",
           kitchen: {
             state: "queued",
+            phase: "waiting",
+            requestedAt: expect.any(String),
             firedAt: expect.any(String),
             stationId: expect.any(String),
             movable: true,
@@ -1471,6 +1485,8 @@ describe("readCurrentOrders (spec §4)", () => {
     expect(read.groups.map((g) => g.id)).toEqual([starters.id, mains.id]);
     expect(croq!.kitchen).toEqual({
       state: "queued",
+      phase: "waiting",
+      requestedAt: expect.any(String),
       firedAt: expect.any(String),
       stationId: expect.any(String),
       movable: true,
@@ -1479,6 +1495,8 @@ describe("readCurrentOrders (spec §4)", () => {
     expect(croq!.readyAt).toBeNull();
     expect(steak!.kitchen).toEqual({
       state: "ready",
+      phase: "ready",
+      requestedAt: expect.any(String),
       firedAt: expect.any(String),
       stationId: expect.any(String),
       movable: false,

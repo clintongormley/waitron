@@ -11,6 +11,8 @@ import {
   kitchenStations,
   pagePrinters,
   parties,
+  printJobs,
+  ticketItems,
   workingOrderLines,
   tenants,
   workingOrders,
@@ -65,7 +67,8 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { moveGuests } from "./testing/table-action-fixture.js";
-import { offerProducts } from "./testing/zone-offers.js";
+import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 
 /*
  * Route-to-zone map. Every till route, with where the zone it acts in is read from and the case that
@@ -207,6 +210,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | GET  /api/invoices/lookup                               | list, by order zone    | "shows a Deli invoice to the Deli ...", "fills ... twenty Deli invoices ..." |
  * | POST /api/device/orders/:id/courses/:courseId/ready | order, against the device's pass zones | refuses the display's POST /api/device/orders/:id/courses/:courseId/<verb> |
  * | POST /api/device/parties/:id/groups/:gid/ready | party, against the device's pass zones | refuses the display's POST /api/device/parties/:id/groups/:gid/<verb> |
+ * | POST /api/device/pass-screen/release | body party or order, against the profile's zones | "A773 pass release" below |
  *
  * The bill lookup searches party names, delivery labels and table labels as well as numbers, and
  * the invoice lookup the customer's legal name, so both are filtered like the other lists, reading
@@ -232,8 +236,9 @@ import { offerProducts } from "./testing/zone-offers.js";
  * ("a kitchen display" below; for the move route, "refuses a dish at a station the screen does not
  * work, and moves nothing" in `apps/server/src/device-api.station-move.test.ts`);
  * `/api/device/stations`, which needs a station screen and lists every active station;
- * `/api/device/pass-screen` and
- * `/api/device/pass-monitor`, scoped by the device's pass screen or pass monitor; `/api/expo/queue`
+ * `/api/device/pass-screen`, `/api/device/pass-board`,
+ * `/api/device/pass-monitor` and `/api/device/pass-monitor-board`, scoped by the device's pass
+ * screen or pass monitor ("A773 pass board" below); `/api/expo/queue`
  * and `/api/orders/:id/stations/:sid/advance`, which check the session only;
  * `/api/ticket-items/:id/advance`, which checks the session and that the dish is still at the
  * station the request names;
@@ -1467,6 +1472,107 @@ describe("a kitchen display's pass levers", () => {
       });
     });
   }
+});
+
+describe("A773 pass board", () => {
+  it("lists no card for a Requested burger outside the pass screen's or pass monitor's zones", async () => {
+    const grill = await inTx(v, (tx) =>
+      createStation(tx, v.cfg, { name: `Grill ${randomUUID().slice(0, 4)}` }),
+    );
+    const deliTablesBurger = await inTx(v, async (tx) => {
+      await routeProductTo(tx, v.cfg, v.productId("Burger"), grill.id);
+      await setStationsWaitForPass(tx, true, [grill.id]);
+      return (
+        await offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" })
+      ).offerFor(v.productId("Burger"));
+    });
+    const fire = async (tableId: string, menuItemId: string) => {
+      const seated = await seat(v, tableId);
+      const placed = await inTx(v, (tx) =>
+        placeGroups(tx, v.cfg, seated.partyId, {
+          groups: [{ lines: [{ menuItemId, quantity: "1" }], release: "fire" }],
+          operatorId: OPERATOR,
+        }),
+      );
+      return placed.groups[0]!.id;
+    };
+    const deliTable = await inTx(v, (tx) =>
+      createTable(tx, v.cfg, { label: `D${randomUUID().slice(0, 4)}`, zoneId: f.deliTables }),
+    );
+    const deliGroup = await fire(deliTable.id, deliTablesBurger);
+    const restGroup = await fire(await v.table(`R${randomUUID().slice(0, 4)}`), v.item("Burger"));
+    for (const [kind, path] of [
+      ["pass", "/api/device/pass-board"],
+      ["pass_monitor", "/api/device/pass-monitor-board"],
+    ] as const) {
+      const [kds] = await suite.db
+        .insert(deviceProfiles)
+        .values({ name: `Pass ${randomUUID()}`, formFactor: "kds", capabilities: [] })
+        .returning({ id: deviceProfiles.id });
+      const device = await enrolDeviceForTest(suite.db, v.cfg, {
+        name: `Pass ${randomUUID()}`,
+        profileId: kds!.id,
+        kitchenScreen: { kind, stationIds: null, zoneIds: [f.restTables, f.bar] },
+      });
+      const answer = await app.request(path, {
+        headers: { cookie: `${DEVICE_COOKIE}=${device.deviceId}.${device.token}` },
+      });
+      expect(answer.status).toBe(200);
+      const { board } = (await answer.json()) as {
+        board: Record<
+          "held" | "toFire" | "inProgress" | "ready",
+          { target: { kind: string; groupId?: string } }[]
+        >;
+      };
+      const groups = [...board.held, ...board.toFire, ...board.inProgress, ...board.ready].map(
+        (card) => card.target.groupId,
+      );
+      expect(groups).not.toContain(deliGroup);
+      expect(board.toFire.map((card) => card.target.groupId)).toContain(restGroup);
+    }
+  });
+});
+
+describe("A773 pass release", () => {
+  it.each([
+    [
+      "a party",
+      (x: Fixtures) => ({ kind: "group", partyId: x.deliParty, groupId: randomUUID() }),
+      deliTableZone,
+    ],
+    ["a bill", (x: Fixtures) => ({ kind: "bill", workingOrderId: x.deliOrder }), deliOrderZone],
+  ] as const)(
+    "refuses a till pass's release of %s outside its profile's zones, writing nothing",
+    async (_name, target, zone) => {
+      const device = await enrolDeviceForTest(suite.db, v.cfg, {
+        name: `Till pass ${randomUUID()}`,
+        profileId: restaurantProfile,
+        kitchenScreen: { kind: "pass", stationIds: null, zoneIds: null },
+      });
+      const deviceCookie = `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
+      const login = await app.request("/api/session", {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: deviceCookie },
+        body: JSON.stringify({ personId, pin: "5555" }),
+      });
+      expect(login.status).toBe(200);
+      const cookie = `${deviceCookie}; ${login.headers.get("set-cookie")!.split(";")[0]!}`;
+      const written = () =>
+        inTx(v, async (tx) => ({
+          items: await tx.select().from(ticketItems),
+          jobs: await tx.select().from(printJobs),
+        }));
+      const before = await written();
+      const answer = await send(cookie, "POST", "/api/device/pass-screen/release", {
+        submissionId: randomUUID(),
+        target: target(f),
+        ticketItemIds: [randomUUID()],
+        expectedContext: "0".repeat(64),
+      });
+      expect(answer).toEqual(notAllowed(zone(f)));
+      expect(await written()).toEqual(before);
+    },
+  );
 });
 
 describe("a Restaurant profile on another department's zone", () => {

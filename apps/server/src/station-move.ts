@@ -21,7 +21,12 @@ import type { TicketState, CorrectionItem, FiredItem } from "./kitchen-print.js"
 import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { heldItem } from "./kitchen-phase.js";
-import { heldPaperStations, printedHeldGroups, recordHeldPaper } from "./order-groups.js";
+import {
+  heldPaperStations,
+  holdPaperFor,
+  printedHeldGroups,
+  recordHeldPaper,
+} from "./order-groups.js";
 import { readLineCancellations } from "./line-service-state.js";
 import { runServiceCommand } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
@@ -30,6 +35,22 @@ import type { RoutingOnce } from "./working-order.js";
 import "./errors.js";
 
 export type Rerouted = ReadonlyMap<string, { stationId: string; stationName: string }>;
+
+export function unchosenAtClosedStation(
+  row: {
+    stationChosenAt: string | null;
+    stationRetainedAtRelease: boolean;
+    makeAtStationId: string | null;
+    stationId: string;
+  },
+  state: { active: boolean; open: boolean } | undefined,
+): boolean {
+  return (
+    !state ||
+    (!row.stationRetainedAtRelease &&
+      (!state.active || (row.stationChosenAt === null && row.makeAtStationId !== row.stationId)))
+  );
+}
 
 /** Rerouting a paid bill changes the ticket, not the line's make-at choice. */
 export async function rerouteHeldAtRelease(
@@ -74,14 +95,7 @@ export async function rerouteHeldAtRelease(
     const state = states.get(row.stationId);
     return !state || !state.active || !state.open;
   });
-  const unchosen = closed.filter((row) => {
-    const state = states.get(row.stationId);
-    return (
-      !state ||
-      (!row.stationRetainedAtRelease &&
-        (!state.active || (row.stationChosenAt === null && row.makeAtStationId !== row.stationId)))
-    );
-  });
+  const unchosen = closed.filter((row) => unchosenAtClosedStation(row, states.get(row.stationId)));
   const dishes = unchosen.filter((row) => row.parentLineId === null && row.productId !== null);
   const stranded = unchosen.filter((row) => row.parentLineId !== null || row.productId === null);
   const alertStranded = async () => {
@@ -162,7 +176,7 @@ export async function rerouteHeldAtRelease(
 }
 
 /**
- * Whether held work arriving at a station gets its group's HOLD paper there, by group then
+ * Whether unfired work on HOLD paper arriving at a station gets its group's HOLD paper there, by group then
  * station: true when the station is already recorded for the group, false when it is not but gets
  * the paper now, absent when it gets nothing until the fire. A station not recorded gets the paper
  * only when the group has HOLD paper somewhere, the station prints held work now, and it holds no
@@ -356,6 +370,7 @@ export async function moveDishesToStation(
                 stationId: ticketItems.stationId,
                 state: ticketItems.state,
                 firedAt: ticketItems.firedAt,
+                requestedAt: ticketItems.requestedAt,
                 madeHere: ticketItems.madeHere,
                 quantity: firedQuantity,
               })
@@ -392,16 +407,25 @@ export async function moveDishesToStation(
           stationId: request.stationId,
           moved: [],
         };
-      const printed = await printedHeldGroups(
+      const holdPaper = await holdPaperFor(
         tx,
-        moving.flatMap((row) => (row.groupId === null ? [] : [row.groupId])),
+        moving.flatMap((row) =>
+          row.groupId === null || row.firedAt !== null ? [] : [row.groupId],
+        ),
       );
+      const paperOf = (row: (typeof moving)[number]) =>
+        row.groupId === null ? undefined : holdPaper(row.groupId, row);
+      // A fired group's Requested dish is corrected at any station recorded for its group, so it
+      // joins the destination's HOLD paper whether or not the station it leaves had any.
+      const arrivesOnPaper = (row: (typeof moving)[number]) =>
+        paperOf(row) !== undefined ||
+        (row.groupId !== null && row.firedAt === null && row.requestedAt !== null);
       const byStation = new Map<string, typeof moving>();
       for (const row of moving)
         byStation.set(row.stationId!, [...(byStation.get(row.stationId!) ?? []), row]);
       for (const [oldStationId, lines] of byStation) {
         const corrections: CorrectionItem[] = lines.flatMap((row) => {
-          const group = row.groupId === null ? undefined : printed.get(row.groupId);
+          const group = paperOf(row);
           if (row.firedAt === null && group === undefined) return [];
           return [
             {
@@ -458,11 +482,7 @@ export async function moveDishesToStation(
       const paperAtDestination = await destinationHoldPaper(
         tx,
         request.stationId,
-        moving.flatMap((row) =>
-          row.firedAt === null && row.groupId !== null && printed.has(row.groupId)
-            ? [row.groupId]
-            : [],
-        ),
+        moving.flatMap((row) => (arrivesOnPaper(row) ? [row.groupId!] : [])),
         moving.map((row) => row.id),
       );
       for (const [oldStationId, lines] of byStation) {
@@ -478,7 +498,7 @@ export async function moveDishesToStation(
         if (fired.length > 0) await enqueueKitchenTickets(tx, cfg, orderId, fired, { from });
         for (const [groupId, recorded] of paperAtDestination) {
           const held: FiredItem[] = lines
-            .filter((row) => row.firedAt === null && row.groupId === groupId)
+            .filter((row) => row.groupId === groupId && arrivesOnPaper(row))
             .map((row) => ({
               workingOrderLineId: row.id,
               stationId: request.stationId,

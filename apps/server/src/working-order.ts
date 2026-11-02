@@ -32,12 +32,19 @@ import {
   refreshKitchenAllergyClashes,
 } from "./kitchen-allergy.js";
 import { passWaitingStations, requestHeldItems, requestStamps } from "./kitchen-release.js";
-import { heldItem, initiatedAt, initiatedItem } from "./kitchen-phase.js";
+import {
+  heldItem,
+  initiatedAt,
+  initiatedItem,
+  kitchenPhase,
+  type KitchenPhase,
+} from "./kitchen-phase.js";
 import {
   readLineCancellations,
   serviceQuantities,
   splitLineServiceState,
 } from "./line-service-state.js";
+import type { PassRow } from "./pass-card.js";
 import { copyRecalledSplit, isRecalledDish, refuseRecalledWrite } from "./draft-source.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
@@ -263,7 +270,7 @@ import {
   correctJoin,
   recordJoiningStations,
   onShownBill,
-  printedHeldGroups,
+  holdPaperFor,
   printHoldTickets,
   readReleaseReminders,
   readGroupNumberLabels,
@@ -1955,6 +1962,7 @@ export async function insertSplitExtras(
   {
     workingOrderLineId: string;
     stationId: string;
+    requestedAt: string | null;
     firedAt: string | null;
     quantity: number;
   }[]
@@ -2061,6 +2069,7 @@ export async function insertSplitExtras(
       .map((row) => ({
         workingOrderLineId: row.workingOrderLineId,
         stationId: row.stationId,
+        requestedAt: row.requestedAt,
         firedAt: row.firedAt,
         quantity: row.quantity!,
       }));
@@ -3150,6 +3159,19 @@ export interface VoidTarget {
   firedQuantity: number;
 }
 
+/** Each ticket item's `requested_at`, read in one select. */
+async function requestedAtOf(
+  tx: Transaction,
+  ticketItemIds: readonly string[],
+): Promise<Map<string, string | null>> {
+  if (ticketItemIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ id: ticketItems.id, requestedAt: ticketItems.requestedAt })
+    .from(ticketItems)
+    .where(inArray(ticketItems.id, [...ticketItemIds]));
+  return new Map(rows.map((row) => [row.id, row.requestedAt]));
+}
+
 /**
  * The caller checks that the bill and paid quantities allow removal. Corrections must precede
  * deletion because notices and slips read the removed rows.
@@ -3211,30 +3233,46 @@ export async function removeFromLine(
   // Before the delete or the reduction: the notice and the slip re-read the line.
   await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
   if (target.groupId !== null) {
-    const group = (await printedHeldGroups(tx, [target.groupId])).get(target.groupId);
-    if (group !== undefined) {
-      const held = childItems
-        .filter((item) => item.firedAt === null)
-        .map((item) => ({
-          workingOrderId: tabId,
-          workingOrderLineId: item.workingOrderLineId,
-          stationId: item.stationId,
-          quantity: removedQuantity(item),
-          groupId: target.groupId!,
-          group,
-        }));
-      if (target.ticketItemId !== null && target.firedAt === null) {
-        held.unshift({
-          workingOrderId: tabId,
-          workingOrderLineId: target.id,
-          stationId: target.stationId!,
-          quantity: removed ?? target.firedQuantity,
-          groupId: target.groupId,
-          group,
-        });
-      }
-      await correctHoldTickets(tx, cfg, held, { kind: "HOLD CANCELLED" });
-    }
+    const groupId = target.groupId;
+    const holdPaper = await holdPaperFor(tx, [groupId]);
+    const requestedAt =
+      target.ticketItemId === null || target.firedAt !== null
+        ? null
+        : (await requestedAtOf(tx, [target.ticketItemId])).get(target.ticketItemId)!;
+    const own =
+      target.ticketItemId === null
+        ? undefined
+        : holdPaper(groupId, { stationId: target.stationId, requestedAt, firedAt: target.firedAt });
+    const held = [
+      ...(own === undefined
+        ? []
+        : [
+            {
+              workingOrderId: tabId,
+              workingOrderLineId: target.id,
+              stationId: target.stationId!,
+              quantity: removed ?? target.firedQuantity,
+              groupId,
+              group: own,
+            },
+          ]),
+      ...childItems.flatMap((item) => {
+        const group = holdPaper(groupId, item);
+        return group === undefined
+          ? []
+          : [
+              {
+                workingOrderId: tabId,
+                workingOrderLineId: item.workingOrderLineId,
+                stationId: item.stationId,
+                quantity: removedQuantity(item),
+                groupId,
+                group,
+              },
+            ];
+      }),
+    ];
+    if (held.length > 0) await correctHoldTickets(tx, cfg, held, { kind: "HOLD CANCELLED" });
   }
   await bumpRevision(tx, [tabId]);
   if (removed === null) {
@@ -3315,30 +3353,52 @@ export async function removePortions(
   // Before the delete: the notice and the slip re-read the lines.
   await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
   const groupIds = [...new Set(targets.flatMap(({ groupId }) => groupId ?? []))];
-  const printed = await printedHeldGroups(tx, groupIds);
+  const holdPaper = await holdPaperFor(tx, groupIds);
+  const requested = await requestedAtOf(
+    tx,
+    targets.flatMap(({ ticketItemId, firedAt }) =>
+      ticketItemId === null || firedAt !== null ? [] : [ticketItemId],
+    ),
+  );
   const held = targets.flatMap((target) => {
-    const group = target.groupId === null ? undefined : printed.get(target.groupId);
-    if (group === undefined) return [];
-    const at = { workingOrderId: tabId, groupId: target.groupId!, group };
+    const groupId = target.groupId;
+    if (groupId === null) return [];
+    const own =
+      target.ticketItemId === null
+        ? undefined
+        : holdPaper(groupId, {
+            stationId: target.stationId,
+            requestedAt: requested.get(target.ticketItemId) ?? null,
+            firedAt: target.firedAt,
+          });
     return [
-      ...(target.ticketItemId !== null && target.firedAt === null
-        ? [
+      ...(own === undefined
+        ? []
+        : [
             {
-              ...at,
+              workingOrderId: tabId,
+              groupId,
+              group: own,
               workingOrderLineId: target.id,
               stationId: target.stationId!,
               quantity: target.firedQuantity,
             },
-          ]
-        : []),
-      ...childrenOf(target)
-        .filter((item) => item.firedAt === null)
-        .map((item) => ({
-          ...at,
-          workingOrderLineId: item.workingOrderLineId,
-          stationId: item.stationId,
-          quantity: item.firedQuantity,
-        })),
+          ]),
+      ...childrenOf(target).flatMap((item) => {
+        const group = holdPaper(groupId, item);
+        return group === undefined
+          ? []
+          : [
+              {
+                workingOrderId: tabId,
+                groupId,
+                group,
+                workingOrderLineId: item.workingOrderLineId,
+                stationId: item.stationId,
+                quantity: item.firedQuantity,
+              },
+            ];
+      }),
     ];
   });
   if (held.length > 0) await correctHoldTickets(tx, cfg, held, { kind: "HOLD CANCELLED" });
@@ -3358,8 +3418,8 @@ export async function removePortions(
 
 /**
  * Once an extra is off its dish, tell a kitchen that has the dish which extra to take off: a fired
- * dish, or a held one at a station that has its group's HOLD paper. A dish never sent, held with no HOLD
- * ticket queued, or going to no station tells it nothing.
+ * dish, or an unfired one on HOLD paper ({@link holdPaperFor}, asked with the dish's item). Any
+ * other dish, or one going to no station, tells it nothing.
  */
 async function tellKitchenOfCancelledExtra(
   tx: Transaction,
@@ -3380,7 +3440,7 @@ async function tellKitchenOfCancelledExtra(
     return;
   }
   if (extra.dishGroupId === null) return;
-  const group = (await printedHeldGroups(tx, [extra.dishGroupId])).get(extra.dishGroupId);
+  const group = (await holdPaperFor(tx, [extra.dishGroupId]))(extra.dishGroupId, item);
   if (group === undefined) return;
   await enqueueExtraCancelled(
     tx,
@@ -5540,6 +5600,13 @@ interface EditableOrder {
   firedCourseIds: Set<string>;
 }
 
+/** Whether the dish or any of its extras is Requested: sent by the waiter and not yet fired. */
+function hasRequestedPart(parent: EditableParent): boolean {
+  return [parent, ...parent.children].some(
+    ({ ticket }) => ticket !== null && ticket.firedAt === null && ticket.requestedAt !== null,
+  );
+}
+
 /**
  * What a line the kitchen has not fired is waiting for, in {@link EditableOrder.newWork}'s terms: a
  * Requested item was sent by the waiter; a held or recalled item waits to be sent; a line with no
@@ -6511,7 +6578,7 @@ async function applyLineEdits(
         });
       }
       nextOrdinal.set(cohortId, ordinal);
-      if (kitchen === "hold" && parent.groupId !== null)
+      if ((kitchen === "hold" || hasRequestedPart(parent)) && parent.groupId !== null)
         joinedHeld.push({ groupId: parent.groupId, lineIds: copyIds });
     }
   }
@@ -6527,7 +6594,11 @@ async function applyLineEdits(
       group = { rows: out.rows, contexts: out.lineContexts };
     }
     const groupId = as.joins === undefined ? (newGroups.get(as.kitchen) ?? null) : as.joins.groupId;
-    if (as.joins !== undefined && groupId !== null && as.kitchen === "hold") {
+    if (
+      as.joins !== undefined &&
+      groupId !== null &&
+      (as.kitchen === "hold" || hasRequestedPart(as.joins))
+    ) {
       joinedHeld.push({
         groupId,
         lineIds: group.rows.flatMap((row) => (row.parentLineId === null ? [row.id!] : [])),
@@ -6616,7 +6687,7 @@ async function applyLineEdits(
     orderId,
     insertedExtras.filter((item) => item.firedAt !== null),
   );
-  const printedAdded = await printedHeldGroups(
+  const holdPaper = await holdPaperFor(
     tx,
     addedToExisting.flatMap(({ parent }) => (parent.groupId === null ? [] : [parent.groupId])),
   );
@@ -6629,8 +6700,8 @@ async function applyLineEdits(
         ),
     )?.parent;
     const groupId = parent?.groupId ?? null;
-    const group = groupId === null ? undefined : printedAdded.get(groupId);
-    return item.firedAt === null && groupId !== null && group !== undefined
+    const group = groupId === null ? undefined : holdPaper(groupId, item);
+    return groupId !== null && group !== undefined
       ? [
           {
             workingOrderId: orderId,
@@ -6668,7 +6739,7 @@ async function applyLineEdits(
   const heldGroup = newGroups.get("hold");
   if (heldGroup !== undefined) await printHoldTickets(tx, cfg, [heldGroup]);
   // As a raise of the line itself would: `+N` at the stations that have its group's HOLD paper.
-  for (const { groupId, lineIds } of joinedHeld) await correctJoin(tx, cfg, groupId, lineIds);
+  await correctJoin(tx, cfg, joinedHeld);
   await refreshKitchenAllergyClashes(
     tx,
     cfg,
@@ -6716,7 +6787,7 @@ export function addedPortions(lineId: string, quantity: Decimal, requested: Deci
 }
 
 /**
- * The HOLD corrections an edit makes to held lines of groups whose HOLD ticket was queued: a
+ * The HOLD corrections an edit makes to unfired lines on HOLD paper ({@link holdPaperFor}): a
  * removed line is `cancelled`; a line whose quantity alone changes loses (`taken`) or gains
  * (`given`) the difference; any other change takes the line away as it read, at its old quantity,
  * and gives it back as it now reads, at its new one. `taken` and `cancelled` print before the line
@@ -6741,19 +6812,14 @@ async function planHeldCorrections(
     );
   const heldChanges = changes.filter(({ parent }) => held(parent));
   const heldRemoved = removed.filter(held);
-  const printed = await printedHeldGroups(tx, [
+  const holdPaper = await holdPaperFor(tx, [
     ...heldChanges.map(({ parent }) => parent.groupId!),
     ...heldRemoved.map((parent) => parent.groupId!),
   ]);
   const change = (parent: EditableParent, part: EditableLine, quantity: number): HeldChange[] => {
-    const group = printed.get(parent.groupId!);
-    if (
-      group === undefined ||
-      quantity <= 0 ||
-      part.ticket === null ||
-      part.ticket.firedAt !== null
-    )
-      return [];
+    if (quantity <= 0 || part.ticket === null) return [];
+    const group = holdPaper(parent.groupId!, part.ticket);
+    if (group === undefined) return [];
     return [
       {
         workingOrderId: orderId,
@@ -7838,8 +7904,14 @@ export interface StationQueueItem {
   group?: QueueGroup;
   /** The period this dish was confirmed sent after; absent when it was not. */
   afterPeriod?: string;
+  phase: KitchenPhase;
+  /** `null` while the item is held. */
+  requestedAt: string | null;
   /** `null` while the item is held or Requested (waiting for the pass). */
   firedAt: string | null;
+  readyAt: string | null;
+  /** Whether the item waited for the pass when it was requested. */
+  passControlled: boolean;
   /** Snapshotted at fire, so a later draft edit never changes what the kitchen already sees. */
   note: string | null;
   queuedAt: string;
@@ -8202,6 +8274,9 @@ export async function listStationQueues(
       courseName: kitchenCourses.name,
       courseDisplayOrder: kitchenCourses.displayOrder,
       firedAt: ticketItems.firedAt,
+      requestedAt: ticketItems.requestedAt,
+      readyAt: ticketItems.readyAt,
+      passControlled: ticketItems.passControlled,
       // The fire-time snapshot, not the live line.
       note: ticketItems.note,
       orderId: workingOrders.id,
@@ -8367,7 +8442,11 @@ export async function listStationQueues(
           ? null
           : { id: row.courseId, name: row.courseName!, displayOrder: row.courseDisplayOrder! },
       ...optional("group", queueGroup(row, numberLabels)),
+      phase: kitchenPhase(row),
+      requestedAt: row.requestedAt,
       firedAt: row.firedAt,
+      readyAt: row.readyAt,
+      passControlled: row.passControlled,
       note: row.note,
       queuedAt: row.queuedAt,
       // Rounded to the whole minute first: what the bands were tuned against.
@@ -8475,18 +8554,38 @@ export function liveKitchenDish(): SQL | undefined {
   );
 }
 
-/** Build every section of the selected pass orders before a pass screen or pass monitor narrows their items. */
-export async function readPassBoard(
+/** The stored facts the closed-station test reads, beside the row. */
+export type PassRowRead = Omit<PassRow, "zoneId" | "stationWaitsNow" | "stationClosed"> & {
+  stationChosenAt: string | null;
+  stationRetainedAtRelease: boolean;
+  makeAtStationId: string | null;
+  /** Read only to leave a served line out of the board's `worstBand`. */
+  servedAt: string | null;
+  deliveryTableId: string | null;
+};
+
+/** Every live kitchen item `scope` selects, with the facts the pass card and release read. */
+export async function readPassRows(
   tx: Transaction,
   _locationId: string,
   scope: SQL,
-): Promise<ExpoOrder[]> {
+  nowMs: number,
+): Promise<PassRowRead[]> {
   const rows = await tx
     .select({
       itemId: ticketItems.id,
       lineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
+      requestedAt: ticketItems.requestedAt,
+      readyAt: ticketItems.readyAt,
+      passControlled: ticketItems.passControlled,
+      stationChosenAt: ticketItems.stationChosenAt,
+      stationRetainedAtRelease: ticketItems.stationRetainedAtRelease,
+      makeAtStationId: workingOrderLines.makeAtStationId,
+      parentLineId: workingOrderLines.parentLineId,
+      recalled: sql<number>`${isRecalledDish(tx)}`,
       note: ticketItems.note,
       name: workingOrderLines.name,
       kitchenName: workingOrderLines.kitchenName,
@@ -8497,7 +8596,6 @@ export async function readPassBoard(
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
       lineNo: workingOrderLines.lineNo,
-      // Not exposed; read only to leave a served line out of `worstBand`.
       servedAt: workingOrderLines.servedAt,
       stationName: kitchenStations.name,
       // Per item, not per order: one order's items can span stations with different thresholds.
@@ -8512,7 +8610,12 @@ export async function readPassBoard(
       orderNumber: workingOrders.orderNumber,
       openedAt: workingOrders.openedAt,
       ...queueGroupColumns,
+      groupRequestKind: orderGroups.requestKind,
       groupCreatedAt: orderGroups.createdAt,
+      partyFirstGroupAt: sql<string | null>`(
+        select min(earlier.created_at) from order_groups earlier
+        where earlier.party_id = ${orderGroups.partyId}
+      )`,
       // Not exposed; read only to name the order's table (`orderTableLabels`).
       deliveryTableId: workingOrders.deliveryTableId,
       deliveryTableLabel: workingOrders.deliveryTableLabel,
@@ -8569,76 +8672,14 @@ export async function readPassBoard(
     })),
   );
 
-  const nowMs = Date.now();
-  // Maps keep insertion order, so the SQL order survives the grouping.
-  const orders = new Map<string, ExpoOrder>();
-  const sectionMaps = new Map<string, Map<string, ExpoCourse | ExpoGroup>>();
-  const groupCreatedAt = new Map<string, string>();
-  for (const row of rows) {
-    if (row.groupId !== null) groupCreatedAt.set(row.groupId, row.groupCreatedAt!);
-    let order = orders.get(row.orderId);
-    if (order === undefined) {
-      order = {
-        orderId: row.orderId,
-        kitchenNote: kitchenNotes.get(row.orderId)!.note,
-        orderNumber: row.orderNumber,
-        ...optional("formerNumbers", former.get(row.orderId)),
-        openedMinutes: minutesSince(row.openedAt, nowMs),
-        ...optional("party", queueParty(row)),
-        courses: [],
-        groups: [],
-        ...optional("tableLabel", tableLabels.get(row.orderId) ?? undefined),
-        worstBand: "fresh",
-      };
-      orders.set(row.orderId, order);
-      sectionMaps.set(row.orderId, new Map());
-    }
-    const sections = sectionMaps.get(row.orderId)!;
-    const group = queueGroup(row, numberLabels);
-    const byGroup = order.party !== undefined;
-    const sectionKey = (byGroup ? group?.id : row.courseId) ?? "__none__";
-    let section = sections.get(sectionKey);
-    if (section === undefined) {
-      if (byGroup) {
-        const expoGroup: ExpoGroup = {
-          groupId: group?.id ?? null,
-          position: group?.position ?? null,
-          displayNumber: group?.displayNumber ?? null,
-          numberPartyId: group?.numberPartyId ?? null,
-          ...(group?.numberPartyLabel === undefined
-            ? {}
-            : { numberPartyLabel: group.numberPartyLabel }),
-          state: group?.state ?? null,
-          fired: true,
-          items: [],
-        };
-        order.groups.push(expoGroup);
-        section = expoGroup;
-      } else {
-        const course: ExpoCourse = {
-          courseId: row.courseId,
-          courseName: row.courseId === null ? null : row.courseName!,
-          displayOrder: row.courseId === null ? null : row.courseDisplayOrder!,
-          fired: true,
-          items: [],
-        };
-        order.courses.push(course);
-        section = course;
-      }
-      sections.set(sectionKey, section);
-    }
+  return rows.map((row) => {
     const thresholds: StationThresholds = {
       warmAfterMinutes: row.warmAfterMinutes,
       overdueAfterMinutes: row.overdueAfterMinutes,
       forgottenAfterMinutes: row.forgottenAfterMinutes,
     };
-    // Rounded to the whole minute first, as in `listStationQueue`.
-    const band = classifyBand(
-      nowMs - minutesSince(row.queuedAt, nowMs) * 60_000,
-      nowMs,
-      thresholds,
-    );
-    section.items.push({
+    const group = queueGroup(row, numberLabels);
+    const item: ExpoItem = {
       id: row.itemId,
       allergy: allergies.get(row.itemId)?.originalBlock ?? null,
       name: kitchenPresentationName(row),
@@ -8665,10 +8706,126 @@ export async function readPassBoard(
       queuedAt: row.queuedAt,
       ...optional("group", group),
       thresholds,
-      band,
-    });
+      // Rounded to the whole minute first, as in `listStationQueue`.
+      band: classifyBand(nowMs - minutesSince(row.queuedAt, nowMs) * 60_000, nowMs, thresholds),
+    };
+    return {
+      item,
+      lineId: row.lineId,
+      orderId: row.orderId,
+      stationId: row.stationId,
+      partyId: row.partyId,
+      partyRevision: row.partyRevision,
+      course:
+        row.courseId === null
+          ? null
+          : { id: row.courseId, name: row.courseName!, displayOrder: row.courseDisplayOrder! },
+      group:
+        group === undefined
+          ? null
+          : {
+              id: group.id,
+              partyId: row.groupPartyId!,
+              state: group.state as "held" | "fired",
+              requestKind: row.groupRequestKind!,
+              position: group.position,
+              createdAt: row.groupCreatedAt!,
+              displayNumber: group.displayNumber,
+              ...optional("numberPartyLabel", group.numberPartyLabel),
+              partyFirstCreatedAt: row.partyFirstGroupAt!,
+            },
+      requestedAt: row.requestedAt,
+      firedAt: row.firedAt,
+      readyAt: row.readyAt,
+      passControlled: row.passControlled,
+      extra: row.parentLineId !== null,
+      remaining: row.quantity,
+      recalled: Boolean(row.recalled),
+      lineNo: row.lineNo,
+      order: {
+        orderNumber: row.orderNumber,
+        ...optional("tableLabel", tableLabels.get(row.orderId) ?? undefined),
+        kitchenNote: kitchenNotes.get(row.orderId)!.note,
+        ...optional("formerNumbers", former.get(row.orderId)),
+        openedAt: row.openedAt,
+      },
+      stationChosenAt: row.stationChosenAt,
+      stationRetainedAtRelease: row.stationRetainedAtRelease,
+      makeAtStationId: row.makeAtStationId,
+      servedAt: row.servedAt,
+      deliveryTableId: row.deliveryTableId,
+    };
+  });
+}
+
+/** Build every section of the selected pass orders before a pass screen or pass monitor narrows their items. */
+export async function readPassBoard(
+  tx: Transaction,
+  locationId: string,
+  scope: SQL,
+): Promise<ExpoOrder[]> {
+  const nowMs = Date.now();
+  const rows = await readPassRows(tx, locationId, scope, nowMs);
+  // Maps keep insertion order, so the SQL order survives the grouping.
+  const orders = new Map<string, ExpoOrder>();
+  const sectionMaps = new Map<string, Map<string, ExpoCourse | ExpoGroup>>();
+  const groupCreatedAt = new Map<string, string>();
+  for (const row of rows) {
+    if (row.group !== null) groupCreatedAt.set(row.group.id, row.group.createdAt);
+    let order = orders.get(row.orderId);
+    if (order === undefined) {
+      order = {
+        orderId: row.orderId,
+        kitchenNote: row.order.kitchenNote,
+        orderNumber: row.order.orderNumber,
+        ...optional("formerNumbers", row.order.formerNumbers),
+        openedMinutes: minutesSince(row.order.openedAt, nowMs),
+        ...optional("party", queueParty(row)),
+        courses: [],
+        groups: [],
+        ...optional("tableLabel", row.order.tableLabel),
+        worstBand: "fresh",
+      };
+      orders.set(row.orderId, order);
+      sectionMaps.set(row.orderId, new Map());
+    }
+    const sections = sectionMaps.get(row.orderId)!;
+    const group = row.item.group;
+    const byGroup = order.party !== undefined;
+    const sectionKey = (byGroup ? group?.id : row.course?.id) ?? "__none__";
+    let section = sections.get(sectionKey);
+    if (section === undefined) {
+      if (byGroup) {
+        const expoGroup: ExpoGroup = {
+          groupId: group?.id ?? null,
+          position: group?.position ?? null,
+          displayNumber: group?.displayNumber ?? null,
+          numberPartyId: group?.numberPartyId ?? null,
+          ...(group?.numberPartyLabel === undefined
+            ? {}
+            : { numberPartyLabel: group.numberPartyLabel }),
+          state: group?.state ?? null,
+          fired: true,
+          items: [],
+        };
+        order.groups.push(expoGroup);
+        section = expoGroup;
+      } else {
+        const course: ExpoCourse = {
+          courseId: row.course?.id ?? null,
+          courseName: row.course?.name ?? null,
+          displayOrder: row.course?.displayOrder ?? null,
+          fired: true,
+          items: [],
+        };
+        order.courses.push(course);
+        section = course;
+      }
+      sections.set(sectionKey, section);
+    }
+    section.items.push(row.item);
     if (row.firedAt === null) section.fired = false;
-    if (row.servedAt === null) order.worstBand = worstBand([order.worstBand, band]);
+    if (row.servedAt === null) order.worstBand = worstBand([order.worstBand, row.item.band]);
   }
   for (const order of orders.values()) {
     const made = (group: ExpoGroup) =>
@@ -8779,8 +8936,8 @@ export interface TableState {
   /** Those unserved lines whose ticket item is `ready`. */
   readyToServe: number;
   /**
-   * The worst age band over those unserved lines that were fired; a counter delivery does not feed
-   * it.
+   * The worst age band over those unserved lines that were fired or are waiting for the pass; a
+   * counter delivery does not feed it.
    */
   timingBand: TimingBand;
   today: TableToday;
@@ -8860,22 +9017,28 @@ export async function listTablesWithState(
              -- A count of whole cents read raw, cast to text and converted by rawCentsToDecimal in
              -- the mapping below -- see its doc comment for why it is text and not an integer cast.
              cast(coalesce(sum(wol.line_total) filter (where wo.status = 'open'), 0) as text) as tab_total,
-             -- KDS order-timing alerts (design §3/§6): the queued_at + thresholds of each unserved
-             -- kitchen line whose ticket item was fired (ti.fired_at is not null), so a HELD one does not
-             -- age here, one JSON object per line -- never a band label (§3's raw-material-in-SQL,
-             -- classified-in-JS split), reduced with classifyBand/worstBand in JS below. A line never
-             -- sent has no ticket_items row and is excluded, same as a served one.
+             -- KDS order-timing alerts (design §3/§6): the wait start + thresholds of each unserved
+             -- kitchen line whose ticket item was fired or requested, so a HELD one does not age
+             -- here, and a pass-controlled one ages from requested_at (D65); one JSON object per
+             -- line -- never a band label (§3's raw-material-in-SQL, classified-in-JS split),
+             -- reduced with classifyBand/worstBand in JS below. A line never sent has no
+             -- ticket_items row and is excluded, same as a served one.
              --
              -- json_group_array returns JSON TEXT rather than a value the driver parses, so the
              -- row mapping parses it.
              json_group_array(
                json_object(
-                 'queuedAt', ti.queued_at,
+                 'queuedAt',
+                 case when ti.pass_controlled then coalesce(ti.requested_at, ti.queued_at)
+                      else ti.queued_at end,
                  'warmAfterMinutes', ks.warm_after_minutes,
                  'overdueAfterMinutes', ks.overdue_after_minutes,
                  'forgottenAfterMinutes', ks.forgotten_after_minutes
                )
-             ) filter (where wol.served_at is null and ti.fired_at is not null) as unserved_lines
+             ) filter (
+               where wol.served_at is null
+                 and (ti.fired_at is not null or ti.requested_at is not null)
+             ) as unserved_lines
       from party_tables pt
       join family f on f.root = pt.party_id
       join working_orders wo

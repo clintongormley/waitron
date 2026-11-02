@@ -88,8 +88,8 @@ Everything not listed here needs more spec work first.
 1. **A773-2 — firing and the pass** (_The till, devices and table service_). Implement the
    [reviewed plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) for the remaining
    kitchen and pass work, following A773-1's Sent and New order panel. PR B is cut into four
-   ([slice plan](superpowers/plans/2026-11-01-a773-2b-requested-release.md)); B3–B4
-   remain, then PRs C–D. Four owner questions wait for B3's copy sheet.
+   ([slice plan](superpowers/plans/2026-11-01-a773-2b-requested-release.md)); B4 (the
+   screens) remains, then PRs C–D. The owner answered the copy sheet and its questions on 2026-11-02. One question remains open (`backlog/till.md`, A773-2).
    **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
    slices wait for A773-2.
 2. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
@@ -2521,9 +2521,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   leaves PRs B–D: Requested, scoped pass release, station
   settings and coverage warnings, ticket presentation and physical schema/configuration retirement.
   PR B is cut into B1–B4 by the [slice plan](superpowers/plans/2026-11-01-a773-2b-requested-release.md).
-  No station can be set to wait for the pass until PR C. Next: B3 (the pass board and the pass's
-  Fire), then B4 (the screens, the display setting, Columns). The slice plan outlines each and
-  lists, under "Left for B3 and B4", what B1's reviews and B2's plan left for them.
+  No station can be set to wait for the pass until PR C. B1–B3 built the server half: a dish can
+  wait for the pass, the pass has its own board read and its own Fire
+  ([B3's plan](superpowers/plans/2026-11-02-a773-2b3-pass-release.md)), and the till has the
+  client calls but no screen uses them. Next: B4 (the screens, the display setting, Columns);
+  the slice plan outlines it and lists, under "Left for B4", what B1–B3 left for it. B4 lands
+  once its words match the copy sheet the owner approved on 2026-11-02. Before PR C, the expo
+  board must stop reading a dish fired from a held group as overdue at once (it measures a dish
+  waiting for the pass from `queued_at`; "Left for B4").
   Recheck other lanes' reservations before each slice. A797's revised design, pictures
   and FYI landed on 2026-10-21; A803's pass/station tail follows this build.
   What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the
@@ -2544,6 +2549,26 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   so a 1024 px display draws tabs unless a column is hidden or collapsed. The kitchen's tabs keep
   the layout's order and hidden columns but not collapse, which the pass's narrow list keeps (slice 9c D9).
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
+
+- **Warn the pass before it fires dishes to a station whose printer or screen is down (left open
+  by A773-2 B3, decision D54).** Nothing warns the pass before its Fire: a closed station's
+  output-down alert rises only once the dish is released. A warning on the pass card is screen
+  work with new words, and no owner decision asks for it yet.
+
+- **An edit that adds an extra to a dish already sent, where the extra's station waits for the
+  pass and the dish's does not, prints no `+N` for the extra on that station's HOLD paper (left
+  open by A773-2 B3).** The pass's release ticket lists it when the pass fires.
+  [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
+
+- **Pin two pass-board rules no test holds (left open by A773-2 B3's reviews; both predate it).**
+  No suite fails if today's pass board marks a course section of an order with no party as fired,
+  or if a pass screen's zone that is listed but switched off is still read
+  (`passScopeOf`, `apps/server/src/pass-board.ts`). Add a case for each.
+
+- **A station move of dishes from several stations prints each station's slips in an order that
+  can change between runs (left open by A773-2 B3's reviews; predates it).** `moveDishesToStation`
+  groups dishes by station from a select with no `orderBy`. Order it, so tests can compare slips
+  in order.
 
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
   headings on a physical till. Keep drag only if it works reliably; Move to… and the held heading's

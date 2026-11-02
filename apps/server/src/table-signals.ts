@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { parentJoin, parentProducts, staffPresentationName } from "@waitron/catalogue";
 import {
@@ -19,7 +19,7 @@ import type { TableParty } from "./working-order.js";
 import { productSellable } from "./working-order.js";
 import { firedQuantity } from "./kitchen-print.js";
 
-/** A fired line with a record nobody has finished serving, with its station and waiting bands. */
+/** A fired or requested line nobody has finished serving, with its station and waiting bands. */
 interface KitchenLine {
   billId: string;
   stationId: string;
@@ -34,7 +34,7 @@ interface KitchenLine {
   readyWarningAfterMinutes: number;
 }
 
-/** The fired kitchen lines of these bills still to serve, excluding items made at the till. */
+/** The fired or requested kitchen lines of these bills still to serve, excluding made-here items. */
 async function readKitchenLines(
   tx: Transaction,
   billIds: readonly string[],
@@ -47,7 +47,8 @@ async function readKitchenLines(
       stationId: ticketItems.stationId,
       stationName: kitchenStations.name,
       state: ticketItems.state,
-      queuedAt: ticketItems.queuedAt,
+      // D65: a pass-controlled dish ages from when it was asked for, before and after the release.
+      queuedAt: sql<string>`case when ${ticketItems.passControlled} then coalesce(${ticketItems.requestedAt}, ${ticketItems.queuedAt}) else ${ticketItems.queuedAt} end`,
       readyAt: ticketItems.readyAt,
       quantity: firedQuantity,
       servedQuantity: workingOrderLines.servedQuantity,
@@ -71,7 +72,7 @@ async function readKitchenLines(
         inArray(workingOrderLines.workingOrderId, [...billIds]),
         isNull(workingOrderLines.servedAt),
         gt(firedQuantity, workingOrderLines.servedQuantity),
-        isNotNull(ticketItems.firedAt),
+        or(isNotNull(ticketItems.firedAt), isNotNull(ticketItems.requestedAt)),
         eq(ticketItems.madeHere, false),
       ),
     );

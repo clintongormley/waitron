@@ -44,6 +44,10 @@ afterEach(() => {
 
 const AT = "2026-03-14T12:00:00.000Z";
 const LATER = "2026-03-14T12:05:00.000Z";
+/** A kitchen ticket prints its time in the process's own time zone (`hhmm`, kitchen-ticket.ts). */
+const ticketClock = (at: Date) =>
+  `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+const LATER_CLOCK = ticketClock(new Date(LATER));
 const minutesAfterAt = (minutes: number) => new Date(Date.parse(AT) + minutes * 60_000);
 
 type Venue = Awaited<ReturnType<typeof setupSplitExtrasVenue>>;
@@ -243,7 +247,7 @@ describe("A773 requested lifecycle: alerts and slips", () => {
     });
   });
 
-  it("prints no HOLD CHANGED for a requested burger in a fired group whose HOLD ticket printed", async () => {
+  it("prints the HOLD CHANGED pair where the HOLD ticket printed, for a note on a requested burger in a fired group", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
@@ -269,7 +273,16 @@ describe("A773 requested lifecycle: alerts and slips", () => {
       vi.setSystemTime(new Date(LATER));
       await editLine(tx, venue, burger!.lineId, { note: "No salt" });
       const after = await allSlips(tx, venue);
-      for (const name of Object.keys(venue.printers))
+      const head = ["*** HOLD CHANGED ***", "Grill", "Split extras", "1", LATER_CLOCK, "GROUP 1"];
+      const pair = [
+        [...head, "-1.000 x BURG", ""].join("\n"),
+        [...head, "+1.000 x BURG", "  * No salt", ""].join("\n"),
+      ];
+      expect(newSince(before, after, "grill")).toEqual(pair);
+      expect(newSince(before, after, "pass")).toEqual(pair);
+      for (const name of Object.keys(venue.printers).filter(
+        (name) => name !== "grill" && name !== "pass",
+      ))
         expect(newSince(before, after, name)).toEqual([]);
     });
   });

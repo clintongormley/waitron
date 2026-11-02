@@ -888,6 +888,10 @@ declare module "@waitron/shared" {
      */
     "ticket.item_held": { ticketItemId: string };
     /**
+     * A pass's Fire named other dishes, or another digest, than the card it sees now: refresh it.
+     */
+    "ticket.pass_context_changed": Record<string, never>;
+    /**
      * A recall or station move named a line already preparing or ready. A move also refuses a line
      * sent out of the kitchen or partly served. Recalling un-fires a line back to held only while
      * nothing is cooking; the correction for a started line is a cancel.

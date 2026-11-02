@@ -209,7 +209,7 @@ describe("A773 requested lifecycle: readers", () => {
     });
   });
 
-  it("gives no ready or long-wait floor signal for a dish an hour into waiting for the pass (pin, D33)", async () => {
+  it("gives a long-wait floor signal and no ready one for a dish an hour into waiting for the pass (D65, Owner question 3)", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
@@ -227,9 +227,10 @@ describe("A773 requested lifecycle: readers", () => {
         new Map([[party.id, { bills: [bill], billRequestedAt: null, openedAt: AT }]]),
         Date.parse(AT) + 60 * 60_000,
       );
-      const kinds = signals.get(party.id)!.map((signal) => signal.kind);
-      expect(kinds).not.toContain("ready");
-      expect(kinds).not.toContain("long_wait");
+      const kitchen = signals
+        .get(party.id)!
+        .filter((signal) => signal.kind === "ready" || signal.kind === "long_wait");
+      expect(kitchen).toEqual([{ kind: "long_wait", band: "forgotten" }]);
     });
   });
 

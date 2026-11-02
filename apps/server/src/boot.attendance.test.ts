@@ -38,6 +38,7 @@ import * as attendance from "./attendance-loop.js";
 import * as emailWorker from "./attendance-email-worker.js";
 import * as email from "./attendance-email.js";
 import * as mdns from "./mdns.js";
+import * as deviceApi from "./device-api.js";
 import { recordAttendanceFact } from "./attendance-capture.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 
@@ -114,6 +115,7 @@ for (const enabled of [true, false]) {
         const loopSpy = vi.spyOn(attendance, "runAttendanceLoop");
         const mailSpy = vi.spyOn(emailWorker, "runAttendanceEmailLoop");
         const discoverSpy = vi.spyOn(discovery, "beginAttendanceDiscovery");
+        const deviceSpy = vi.spyOn(deviceApi, "mountDeviceApi");
         let other: string | undefined;
         if (enabled) {
           await withTransaction(suite.db, async (tx) => {
@@ -170,6 +172,9 @@ for (const enabled of [true, false]) {
           expect(loopSpy).toHaveBeenCalledTimes(enabled ? 1 : 0);
           expect(mailSpy).toHaveBeenCalledTimes(enabled ? 1 : 0);
           expect(discoverSpy).toHaveBeenCalledTimes(enabled ? 1 : 0);
+          const deviceDeps = deviceSpy.mock.calls[0]![1];
+          expect(deviceDeps.attendance).toBe(enabled ? recordAttendanceFact : undefined);
+          expect(deviceDeps.attendanceClock).toBeDefined();
           const deviceCookie = f.venue.cookie
             .split("; ")
             .find((cookie) => cookie.startsWith(`${DEVICE_COOKIE}=`))!;
@@ -253,6 +258,7 @@ for (const enabled of [true, false]) {
           loopSpy.mockRestore();
           mailSpy.mockRestore();
           discoverSpy.mockRestore();
+          deviceSpy.mockRestore();
           await rm(f.scratch, { recursive: true, force: true });
         }
       },

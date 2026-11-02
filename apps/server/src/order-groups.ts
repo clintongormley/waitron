@@ -58,7 +58,7 @@ import {
   printerMappings,
 } from "./kitchen-print.js";
 import type { FiredItem, HoldCorrection, TicketState } from "./kitchen-print.js";
-import { initiatedAt, initiatedItem } from "./kitchen-phase.js";
+import { initiatedAt, initiatedItem, kitchenPhase, type KitchenPhase } from "./kitchen-phase.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { trimQuantityForDisplay } from "./receipt-lines.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
@@ -439,14 +439,14 @@ export async function placeGroups(
       { routing },
     );
     if (group.joinGroupId !== undefined) {
-      await correctJoin(
-        tx,
-        cfg,
-        groupId,
-        inserted
-          .filter((row) => row.groupId === groupId && row.parentLineId == null)
-          .map((row) => row.id!),
-      );
+      await correctJoin(tx, cfg, [
+        {
+          groupId,
+          lineIds: inserted
+            .filter((row) => row.groupId === groupId && row.parentLineId == null)
+            .map((row) => row.id!),
+        },
+      ]);
     } else if (!fire) {
       await printHoldTickets(tx, cfg, [groupId]);
     }
@@ -875,10 +875,12 @@ async function releaseGroup(
   for (const [orderId, lineIds] of byOrder) {
     await fireOrderLines(tx, cfg, orderId, lineIds, fire, routing);
   }
+  const firstFood = (await nextFireKind(tx, partyId)) === "new_order";
   await tx
     .update(orderGroups)
     .set({
       state: "fired",
+      ...(firstFood ? { requestKind: "new_order" as const } : {}),
       firedAt: routing.at.toISOString(),
       remindAt: null,
       ...("deviceId" in firer
@@ -1371,7 +1373,10 @@ export async function startGroup(
   return group!.id;
 }
 
-/** new_order while the party has no group other than removed ones; added after. */
+/**
+ * new_order while the party has no fired group, added after: a held or removed group is not food
+ * the pass was asked to cook.
+ */
 export async function nextFireKind(
   tx: Transaction,
   partyId: string,
@@ -1379,7 +1384,7 @@ export async function nextFireKind(
   const [group] = await tx
     .select({ id: orderGroups.id })
     .from(orderGroups)
-    .where(and(eq(orderGroups.partyId, partyId), ne(orderGroups.state, "removed")))
+    .where(and(eq(orderGroups.partyId, partyId), eq(orderGroups.state, "fired")))
     .limit(1);
   return group === undefined ? "new_order" : "added";
 }
@@ -1757,7 +1762,10 @@ export interface CurrentOrderKitchen {
   state: TicketState;
   stationId: string;
   movable: boolean;
+  phase: KitchenPhase;
   /** Null while the item is held, or since it was recalled. */
+  requestedAt: string | null;
+  /** Null while the item is held or Requested, or since it was recalled. */
   firedAt: string | null;
 }
 
@@ -1781,6 +1789,9 @@ export interface CurrentOrderRow {
   netAmount: string;
   /** All kitchen components must be ready; no kitchen work leaves this null. */
   readyAt: string | null;
+  /** The earliest initiation of its kitchen components once every one is initiated, else null;
+   *  `firedAt` for a dish with no kitchen work. */
+  requestedAt: string | null;
   firedAt: string | null;
   nutrition?: LineNutrition;
   lineId: string;
@@ -2010,6 +2021,16 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
     const firedTimes = kitchenItems.flatMap((component) =>
       component.ticketFiredAt === null ? [] : [component.ticketFiredAt],
     );
+    const firedAt = allFired && isReleased(line) ? (firedTimes.sort()[0] ?? line.sentAt) : null;
+    const initiatedTimes = kitchenItems.map((component) =>
+      initiatedAt({ requestedAt: component.ticketRequestedAt, firedAt: component.ticketFiredAt }),
+    );
+    const requestedAt =
+      kitchenItems.length === 0
+        ? firedAt
+        : initiatedTimes.every((time) => time !== null)
+          ? initiatedTimes.sort()[0]!
+          : null;
     const readyTimes = kitchenItems.flatMap((component) =>
       component.ticketState === "ready" && component.ticketReadyAt !== null
         ? [component.ticketReadyAt]
@@ -2021,7 +2042,8 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
         sumDecimals(familyLines.map((component) => centsToDecimal(component.lineTotal))),
         MONEY_SCALE,
       ),
-      firedAt: allFired && isReleased(line) ? (firedTimes.sort()[0] ?? line.sentAt) : null,
+      firedAt,
+      requestedAt,
       readyAt:
         kitchenItems.length > 0 && allFired && readyTimes.length === kitchenItems.length
           ? readyTimes.sort().at(-1)!
@@ -2048,6 +2070,12 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
           ? null
           : {
               state: line.ticketState,
+              phase: kitchenPhase({
+                requestedAt: line.ticketRequestedAt,
+                firedAt: line.ticketFiredAt,
+                state: line.ticketState,
+              }),
+              requestedAt: line.ticketRequestedAt,
               firedAt: line.ticketFiredAt,
               stationId: line.stationId!,
               movable: stillMovable(
@@ -2188,7 +2216,64 @@ export async function printedHeldGroups(
   return new Map(rows.map((row) => [row.id, row.displayNumber]));
 }
 
-/** Changed held work on a queued HOLD ticket, identified by its permanent group number. */
+/** An unfired kitchen item as {@link holdPaperFor} judges it. */
+export interface HoldPaperItem {
+  stationId: string | null;
+  requestedAt: string | null;
+  firedAt: string | null;
+}
+
+export interface HoldPaper {
+  (groupId: string, item: HoldPaperItem): number | undefined;
+  /** Whether the group has HOLD paper that any item could be corrected on. */
+  has(groupId: string): boolean;
+}
+
+/**
+ * The HOLD paper number an unfired item is corrected under, or undefined for none (plan D56). A
+ * held group whose HOLD ticket printed corrects every unfired item; a fired group corrects only a
+ * Requested item at a station recorded as having the group's HOLD paper. A legacy-recalled item
+ * (neither stamp) in a fired group is corrected nowhere.
+ */
+export async function holdPaperFor(
+  tx: Transaction,
+  groupIds: readonly string[],
+): Promise<HoldPaper> {
+  if (groupIds.length === 0) return Object.assign(() => undefined, { has: () => false });
+  const ids = [...new Set(groupIds)];
+  const rows = await tx
+    .select({
+      id: orderGroups.id,
+      state: orderGroups.state,
+      displayNumber: orderGroups.displayNumber,
+      holdPrintedAt: orderGroups.holdPrintedAt,
+    })
+    .from(orderGroups)
+    .where(inArray(orderGroups.id, ids));
+  const groups = new Map(rows.map((row) => [row.id, row]));
+  const paper = await heldPaperStations(
+    tx,
+    rows.filter((row) => row.state === "fired").map((row) => row.id),
+  );
+  const judge = (groupId: string, item: HoldPaperItem) => {
+    const group = groups.get(groupId);
+    if (group === undefined || item.firedAt !== null) return undefined;
+    if (group.state === "held")
+      return group.holdPrintedAt === null ? undefined : group.displayNumber;
+    if (group.state !== "fired" || item.requestedAt === null || item.stationId === null)
+      return undefined;
+    return paper.get(groupId)?.has(item.stationId) === true ? group.displayNumber : undefined;
+  };
+  return Object.assign(judge, {
+    has: (groupId: string) => {
+      const group = groups.get(groupId);
+      if (group?.state === "held") return group.holdPrintedAt !== null;
+      return group?.state === "fired" && (paper.get(groupId)?.size ?? 0) > 0;
+    },
+  });
+}
+
+/** Changed unfired work on HOLD paper ({@link holdPaperFor}), identified by its permanent group number. */
 export interface HeldChange {
   workingOrderId: string;
   workingOrderLineId: string;
@@ -2231,7 +2316,7 @@ export async function correctHoldTickets(
 }
 
 /**
- * Records the stations that get the group's HOLD paper for this arriving held work under
+ * Records the stations that get the group's HOLD paper for this arriving unfired work on HOLD paper under
  * {@link heldPaperReach} and have a printer to print it. Runs before the `+N` is printed, which
  * reaches only recorded stations.
  */
@@ -2272,37 +2357,49 @@ async function heldItemsOf(
 }
 
 /**
- * `+N` for dish lines that just joined this group, at the stations that have its HOLD paper
- * ({@link recordJoiningStations}); nothing when its HOLD ticket was never queued.
+ * `+N` for dish lines that just joined each group, at the stations that have its HOLD paper
+ * ({@link recordJoiningStations}), for each item {@link holdPaperFor} corrects there. The paper is
+ * read once for every join: recording a joining station never changes its answers, since a held
+ * group's do not depend on stations and a fired group's take only items at stations already
+ * recorded.
  */
 export async function correctJoin(
   tx: Transaction,
   cfg: TradingContext,
-  groupId: string,
-  lineIds: readonly string[],
+  joins: readonly { groupId: string; lineIds: readonly string[] }[],
 ): Promise<void> {
-  const group = (await printedHeldGroups(tx, [groupId])).get(groupId);
-  if (group === undefined) return;
-  const joined = await tx
-    .select({
-      workingOrderId: ticketItems.workingOrderId,
-      workingOrderLineId: ticketItems.workingOrderLineId,
-      stationId: ticketItems.stationId,
-      quantity: firedQuantity,
-      firedAt: ticketItems.firedAt,
-      madeHere: ticketItems.madeHere,
-    })
-    .from(ticketItems)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
-    .where(onDishesOrTheirExtras(tx, lineIds))
-    .orderBy(asc(workingOrderLines.lineNo));
-  const changes = joined.map((item) => ({ ...item, groupId, group }));
-  // Made-here work is fired at once and gets no slip, so it never puts a station on paper.
-  await recordJoiningStations(
+  const holdPaper = await holdPaperFor(
     tx,
-    changes.filter((change) => change.firedAt === null && !change.madeHere),
+    joins.map((join) => join.groupId),
   );
-  await correctHoldTickets(tx, cfg, changes, { kind: "HOLD CHANGED", direction: "added" });
+  for (const { groupId, lineIds } of joins) {
+    if (!holdPaper.has(groupId)) continue;
+    const joined = await tx
+      .select({
+        workingOrderId: ticketItems.workingOrderId,
+        workingOrderLineId: ticketItems.workingOrderLineId,
+        stationId: ticketItems.stationId,
+        quantity: firedQuantity,
+        requestedAt: ticketItems.requestedAt,
+        firedAt: ticketItems.firedAt,
+        madeHere: ticketItems.madeHere,
+      })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(onDishesOrTheirExtras(tx, lineIds))
+      .orderBy(asc(workingOrderLines.lineNo));
+    const changes = joined.flatMap((item) => {
+      const group = holdPaper(groupId, item);
+      return group === undefined ? [] : [{ ...item, groupId, group }];
+    });
+    if (changes.length === 0) continue;
+    // Made-here work is fired at once and gets no slip, so it never puts a station on paper.
+    await recordJoiningStations(
+      tx,
+      changes.filter((change) => change.firedAt === null && !change.madeHere),
+    );
+    await correctHoldTickets(tx, cfg, changes, { kind: "HOLD CHANGED", direction: "added" });
+  }
 }
 
 /** Whether `quantity` is exactly the line's stored quantity; a malformed one is not. */

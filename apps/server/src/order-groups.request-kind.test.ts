@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import {
   orderGroups,
   parties,
@@ -8,6 +8,7 @@ import {
   ticketItems,
   withTransaction,
   workingOrderLines,
+  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -26,6 +27,9 @@ import {
   type GroupRelease,
 } from "./order-groups.js";
 import { submitGroups } from "./testing/group-submit-fixture.js";
+import { cancelLine } from "./testing/cancel-line.js";
+import { addTabRound, sendLines, updateHeldOrder } from "./testing/order-writer-fixture.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { OPERATOR } from "./testing/party-venue.js";
 import {
   fireNewOrder,
@@ -174,6 +178,126 @@ describe("A773 request kind", () => {
     const submitted = await submit([{ release: "fire", lines: [water()] }]);
     expect(await kinds([submitted.groups[0]!.id])).toEqual({
       [submitted.groups[0]!.id]: "new_order",
+    });
+  });
+
+  it("gives an edit's Fire now group new_order when the party's only group is held (D57)", async () => {
+    const submitted = await submit([{ release: "hold", lines: [burger()] }]);
+    const tabId = split.party.tabId;
+    // A dish the legacy tab Send fired outside any group is what lets the edit fire new work.
+    await inTx((tx) => addTabRound(tx, split.cfg, tabId, [burger()]));
+    const lines = await suite.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId));
+    const loose = lines.find((line) => line.groupId === null)!;
+    await inTx((tx) => sendLines(tx, split.cfg, tabId, [loose.lineNo]));
+    const groups = await suite.db
+      .select({ id: orderGroups.id, state: orderGroups.state })
+      .from(orderGroups)
+      .where(eq(orderGroups.partyId, split.party.partyId));
+    expect(groups).toEqual([{ id: submitted.groups[0]!.id, state: "held" }]);
+
+    const [order] = await suite.db
+      .select({ revision: workingOrders.revision })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, tabId));
+    await updateHeldOrder({ admission: testTradingAdmission(), db: suite.db }, split.cfg, tabId, {
+      operatorId: OPERATOR,
+      revision: order!.revision,
+      lines: [...lines.map((line) => ({ workingOrderLineId: line.id, ...burger() })), burger()],
+    });
+    const after = await suite.db
+      .select({ state: orderGroups.state, requestKind: orderGroups.requestKind })
+      .from(orderGroups)
+      .where(
+        and(
+          eq(orderGroups.partyId, split.party.partyId),
+          ne(orderGroups.id, submitted.groups[0]!.id),
+        ),
+      );
+    expect(after).toEqual([{ state: "fired", requestKind: "new_order" }]);
+  });
+
+  describe("A773 request kind — first food", () => {
+    async function groupRow(id: string) {
+      const [row] = await suite.db
+        .select({ state: orderGroups.state, requestKind: orderGroups.requestKind })
+        .from(orderGroups)
+        .where(eq(orderGroups.id, id));
+      return row;
+    }
+
+    async function lineNoOf(lineId: string) {
+      const [row] = await suite.db
+        .select({ lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.id, lineId));
+      return row!.lineNo;
+    }
+
+    it("gives starters sent after held mains new_order, and the mains keep next_course when fired", async () => {
+      const mains = (await submit([{ release: "hold", lines: [burger()] }])).groups[0]!.id;
+      const starters = (await submit([{ release: "fire", lines: [water()] }])).groups[0]!.id;
+      expect(await kinds([mains, starters])).toEqual({
+        [mains]: "next_course",
+        [starters]: "new_order",
+      });
+      const partyId = split.party.partyId;
+      const args = await command(partyId);
+      await inTx((tx) => fireGroup(tx, split.cfg, partyId, mains, args));
+      expect(await groupRow(mains)).toEqual({ state: "fired", requestKind: "next_course" });
+    });
+
+    async function fire(groupId: string) {
+      const partyId = split.party.partyId;
+      const args = await command(partyId);
+      await inTx((tx) => fireGroup(tx, split.cfg, partyId, groupId, args));
+    }
+
+    it("gives an all-held first send new_order when its group is fired", async () => {
+      const held = (await submit([{ release: "hold", lines: [burger()] }])).groups[0]!.id;
+      expect(await groupRow(held)).toEqual({ state: "held", requestKind: "next_course" });
+      await fire(held);
+      expect(await groupRow(held)).toEqual({ state: "fired", requestKind: "new_order" });
+    });
+
+    it("gives the first of two held groups fired new_order and the second next_course", async () => {
+      const [first, second] = (
+        await submit([
+          { release: "hold", lines: [burger()] },
+          { release: "hold", lines: [water()] },
+        ])
+      ).groups.map((group) => group.id) as [string, string];
+      await fire(first);
+      expect(await groupRow(first)).toEqual({ state: "fired", requestKind: "new_order" });
+      expect(await groupRow(second)).toEqual({ state: "held", requestKind: "next_course" });
+      await fire(second);
+      expect(await groupRow(second)).toEqual({ state: "fired", requestKind: "next_course" });
+    });
+
+    it("gives a send after a fired group whose dishes were all cancelled added", async () => {
+      const first = (await submit([{ release: "fire", lines: [water()] }])).groups[0]!;
+      const lineNo = await lineNoOf(first.lineIds[0]!);
+      await inTx((tx) => cancelLine(tx, split.cfg, split.party.tabId, lineNo));
+      expect(await groupRow(first.id)).toEqual({ state: "fired", requestKind: "new_order" });
+      const next = (await submit([{ release: "fire", lines: [burger()] }])).groups[0]!.id;
+      expect(await kinds([next])).toEqual({ [next]: "added" });
+    });
+
+    it("gives a send after an emptied held group new_order", async () => {
+      const held = (await submit([{ release: "hold", lines: [burger()] }])).groups[0]!;
+      const lineNo = await lineNoOf(held.lineIds[0]!);
+      await inTx((tx) => cancelLine(tx, split.cfg, split.party.tabId, lineNo));
+      expect(await groupRow(held.id)).toEqual({ state: "removed", requestKind: "next_course" });
+      const next = (await submit([{ release: "fire", lines: [water()] }])).groups[0]!.id;
+      expect(await kinds([next])).toEqual({ [next]: "new_order" });
+    });
+
+    it("gives a first Fire now send new_order and a second added", async () => {
+      const first = (await submit([{ release: "fire", lines: [water()] }])).groups[0]!.id;
+      const second = (await submit([{ release: "fire", lines: [burger()] }])).groups[0]!.id;
+      expect(await kinds([first, second])).toEqual({ [first]: "new_order", [second]: "added" });
     });
   });
 

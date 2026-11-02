@@ -2483,9 +2483,14 @@ check. No legacy move assertion was changed to hide this result.
 
 **A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
 with PRs B–D remaining. PR B is cut into B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
-B3–B4 remain, and no station can be set to wait for the pass until PR C. What B1 and
-[B2's task plan](../superpowers/plans/2026-11-01-a773-2b2-requested-lifecycle.md) leave to B3 and
-B4 is in the slice plan's "Left for B3 and B4". Old nonempty stamps remain in regression fixtures, outside the till's
+B4 remains, and no station can be set to wait for the pass until PR C. B3
+([task plan](../superpowers/plans/2026-11-02-a773-2b3-pass-release.md)) built the pass's board
+reads (`GET /api/device/pass-board`, `GET /api/device/pass-monitor-board`) and its Fire
+(`POST /api/device/pass-screen/release`), which gives a card's waiting dishes to their stations
+once; the HOLD paper corrections for dishes waiting for the pass; and the till's client calls,
+which no screen uses yet. What B1,
+[B2's task plan](../superpowers/plans/2026-11-01-a773-2b2-requested-lifecycle.md) and B3 leave to
+B4 is in the slice plan's "Left for B4". Old nonempty stamps remain in regression fixtures, outside the till's
 public contracts. Physical schema and configuration-transfer fields remain for Task 12.
 
 PRs B–D add Requested and scoped pass release, integrate the agreed columns and display policy,
@@ -2495,24 +2500,35 @@ rebuilding ticket items. Recheck current main and other lanes' actual reservatio
 each slice. A797's completed Q42 design revision, pictures and FYI landed on 2026-10-21; no new
 Q42 answer is required. New copy still follows the plan's wording-review gate.
 
-**Four owner questions, asked with B3's copy sheet** (B2's plan, "Owner questions"; each default
-is what the build does until answered, and none is reachable before PR C):
-1. A dish the pass already released is edited at a station that waits: the station gets the
-   corrected ticket at once (default), or the pass must press Fire again?
-2. Does a table whose dishes have waited long for the pass show the floor's "waiting long" mark?
-   Default: no.
-3. The adjustments report's stage for a cancelled dish that was waiting for the pass: "Unsent"
-   (default) or "Held"?
-4. Another station's dish waiting for the pass, in a cook's "rest of the order": keep the
-   "(on hold)" mark (default) or print no mark?
+**The owner's answers (2026-11-02)** to the nine questions B3 asked (B3's plan, "Owner
+questions"): the Spanish copy sheet is approved as written, and B4 may land once its words match
+it. A dish the pass already released and a waiter then edits goes to its station at once. A dish
+waiting for the pass counts towards the floor's "waiting long" mark, measured from when the waiter
+asked for it against its station's limits (B3's D65). The adjustments report calls a cancelled
+waiting dish "Unsent". A cook's "rest of the order" keeps "(on hold)" for another station's
+waiting dish. A table's first food the pass is asked to cook is its «Nuevo pedido» / New order, so
+an all-held first send does not use it up (B3's D57). The release ticket shows the allergy answer
+as it was when the dish was asked for, followed by an ALLERGY CHANGED slip if the answer has
+changed since. A side at a closed
+station is still sent there by the pass's Fire, as a waiter's fire does. A dish that waits for
+the pass and was served in full no longer blocks recording an unpaid departure (B2's D41: keep as
+built); its refusal's words are on the copy sheet.
 
-**A fifth owner question, to answer before PR C makes waiting reachable** (B2, #2392, decision
-D41 in B2's plan): a dish that waits for the pass, was never given to the kitchen, but has been
-served in full no longer blocks recording the table as an unpaid departure (`ordersWithUnfiredDish`);
-without that, nothing would ever let such a table leave unpaid. A dish served in part still
-blocks. Default: keep D41. The till's `unpaid_departure.unfired_dishes` message
-(`apps/till/src/i18n/codes.ts`) still says "not sent, on hold, or recalled" and needs wording for
-"waiting for the pass and not fully served", in English and Spanish, with B3's copy sheet.
+**One question still open** (lane C, 2026-11-02; B4 builds the answer): when a waiter fires one
+held dish on its own as the table's first food, its pass card says «Siguiente pase» / Next
+course. Recommended: «Nuevo pedido», as for a whole held course.
+
+**Before PR C:** the expo board (`listExpoQueue`) measures a dish waiting for the pass from
+`queued_at`, which firing a held group does not move, so the dish reads overdue the moment it is
+asked for. Measure it from `requested_at`, or stamp `queued_at` when it is asked for (B3's plan,
+"Left for B4 (and later)").
+
+**An edit that adds an extra at a waiting station.** If the dish's own station fires at once
+(Grill) while the extra's waits for the pass (Fryer), an edit adding onion rings to a burger
+already sent prints no `+1.000 x RINGS` on Fryer's HOLD paper; the pass's release ticket lists
+them when it fires. Today's code gives Fryer nothing on this path either. Adding it means a new
+read after `fireLines` and reordering slips on a shared printer (B3's plan, "Review answers (H4)",
+Minor 3, option (c)).
 
 The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
 [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md) govern the landed

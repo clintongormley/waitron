@@ -40,7 +40,7 @@ import {
 import { appendRecalledLine, type Draft, type DraftLineInput } from "./order-drafts.js";
 import { requireLiveCourse } from "./kitchen.js";
 import { requireMakeAtStation } from "./dead-ends.js";
-import type { PartyCommandArgs } from "./order-groups.js";
+import { holdPaperFor, type PartyCommandArgs } from "./order-groups.js";
 import { checkAndBumpParty, requireBillOfParty, runServiceCommand } from "./parties.js";
 import type { TradingContext } from "./trading-context.js";
 import { assertBillInvariant, refusePaidLines } from "./bill-payments.js";
@@ -357,23 +357,30 @@ export async function recallToDraft(
           wasStarted: false,
         }));
       await enqueueCorrectionSlips(tx, cfg, line.workingOrderId, fired, "RECALLED");
-      if (group?.state === "held" && group.holdPrintedAt !== null)
+      if (group !== undefined) {
+        const holdPaper = await holdPaperFor(tx, [group.id]);
         await enqueueHoldCorrections(
           tx,
           cfg,
           line.workingOrderId,
-          items
-            .filter((item) => item.firedAt === null)
-            .map((item) => ({
-              workingOrderLineId: item.workingOrderLineId,
-              stationId: item.stationId,
-              quantity: item.firedQuantity,
-              wasStarted: false,
-              group: group.displayNumber,
-              holdGroupId: group.id,
-            })),
+          items.flatMap((item) => {
+            const number = holdPaper(group.id, item);
+            return number === undefined
+              ? []
+              : [
+                  {
+                    workingOrderLineId: item.workingOrderLineId,
+                    stationId: item.stationId,
+                    quantity: item.firedQuantity,
+                    wasStarted: false,
+                    group: number,
+                    holdGroupId: group.id,
+                  },
+                ];
+          }),
           { kind: "HOLD CANCELLED" },
         );
+      }
       if (items.length > 0)
         await tx.delete(ticketItems).where(
           inArray(

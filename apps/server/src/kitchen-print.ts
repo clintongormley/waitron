@@ -952,7 +952,7 @@ export async function enqueueOrderKitchenNoteChange(
   }
 }
 
-/** A change to held work on a queued HOLD ticket: quantity `added` or `removed`, or cancelled. */
+/** A change to unfired work on HOLD paper: quantity `added` or `removed`, or cancelled. */
 export type HoldCorrection =
   { kind: "HOLD CHANGED"; direction: "added" | "removed" } | { kind: "HOLD CANCELLED" };
 
@@ -1043,7 +1043,7 @@ export async function enqueueStationMoved(
 }
 
 /**
- * Record a kitchen notice per item for a change to held work on a queued HOLD ticket — `changed`
+ * Record a kitchen notice per item for a change to unfired work on HOLD paper — `changed`
  * with its direction, or `void` for a cancellation — then enqueue a HOLD correction slip per item,
  * naming its group, as {@link enqueueCorrectionSlips} enqueues a slip.
  */
@@ -1080,6 +1080,7 @@ export interface CancelledExtra {
   /** Null when the dish has no kitchen item. */
   item: {
     firedAt: string | null;
+    requestedAt: string | null;
     stationId: string | null;
     state: TicketState;
     firedQuantity: number;
@@ -1103,6 +1104,7 @@ export async function readCancelledExtra(
       dishGroupId: workingOrderLines.groupId,
       ticketItemId: ticketItems.id,
       firedAt: ticketItems.firedAt,
+      requestedAt: ticketItems.requestedAt,
       stationId: ticketItems.stationId,
       state: ticketItems.state,
       firedQuantity,
@@ -1127,6 +1129,7 @@ export async function readCancelledExtra(
         ? null
         : {
             firedAt: found.firedAt,
+            requestedAt: found.requestedAt,
             stationId: found.stationId,
             state: found.state!,
             firedQuantity: found.firedQuantity,
@@ -1138,7 +1141,7 @@ export async function readCancelledExtra(
  * Record a `changed` notice on the dish naming `cancelledExtra`, then enqueue a slip of the dish as
  * it now stands with the extra to take off, as {@link enqueueCorrectionSlips} enqueues a slip:
  * headed CHANGED for fired work, or HOLD CHANGED with its group for an item carrying a `group`,
- * held work on a queued HOLD ticket. Call it after the extra's line is deleted, so the slip prints
+ * unfired work on HOLD paper. Call it after the extra's line is deleted, so the slip prints
  * the extras the dish keeps.
  */
 export async function enqueueExtraCancelled(

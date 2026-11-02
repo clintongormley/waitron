@@ -2164,6 +2164,8 @@ async function bootServer(
         },
         clockWitnesses,
         requestFromBox: seams.requestFromBox,
+        attendance: attendanceRecorder,
+        attendanceClock: tillClock,
       },
       log,
     );

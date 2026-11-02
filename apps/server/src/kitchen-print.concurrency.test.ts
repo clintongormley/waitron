@@ -1,16 +1,15 @@
-/**
- * A `deactivatePrinter` started while a kitchen fire is open never aborts the fire: the fire enqueues
- * its job, the deactivation lands only afterwards, and the printer ends up inactive.
- *
- * Narrower than its name: there is no hook inside `enqueueKitchenTickets`, so the fire parks AFTER
- * it returns, uncommitted. What is observed is the venue file's write queue — a second write
- * transaction does not start while the first is open — not an interleave inside this call path. The
- * mechanism is stated on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
- */
 import { randomUUID } from "node:crypto";
 import { count as countRows, eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
-import { locations, printJobs, printers, withTransaction, workingOrderLines } from "@waitron/db";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  deviceProfiles,
+  locations,
+  printJobs,
+  printers,
+  ticketItems,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -25,6 +24,15 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { enqueueKitchenTickets } from "./kitchen-print.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
+import { OPERATOR } from "./testing/party-venue.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
+import { VENUE_SERVICE } from "./modules.js";
+import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
+import { releasePassItems, type PassActor } from "./pass-release.js";
 import "./errors.js";
 
 const LOCALE = "es-ES";
@@ -74,6 +82,20 @@ async function parkedThenRelease<A, B>(
   return settled;
 }
 
+/** A kitchen ticket prints its time in the process's own time zone (`hhmm`, kitchen-ticket.ts). */
+const ticketClock = (at: Date) =>
+  `${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`;
+const AT_CLOCK = ticketClock(new Date("2026-03-14T12:00:00.000Z"));
+
+/**
+ * A `deactivatePrinter` started while a kitchen fire is open never aborts the fire: the fire enqueues
+ * its job, the deactivation lands only afterwards, and the printer ends up inactive.
+ *
+ * Narrower than its name: there is no hook inside `enqueueKitchenTickets`, so the fire parks AFTER
+ * it returns, uncommitted. What is observed is the venue file's write queue — a second write
+ * transaction does not start while the first is open — not an interleave inside this call path. The
+ * mechanism is stated on `assertExtraListForWrite` (`packages/catalogue/src/extras.ts`).
+ */
 describe("print-on-fire concurrency — the write queue around the mapping read", () => {
   it("a concurrent deactivatePrinter runs only after the fire commits, and never aborts it", async () => {
     // ---- Setup, committed before the two contending transactions are staged ----
@@ -176,5 +198,120 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
       .from(printers)
       .where(eq(printers.id, printerId));
     expect(printerRow[0]!.active).toBe(false);
+  });
+});
+
+describe("A773 pass release: a printer two pass screens share", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("prints once when both screens Fire the same card, and the other screen then shows it In progress", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-03-14T12:00:00.000Z") });
+    useSplitExtrasDb(suite.db);
+    const venue = await setupSplitExtrasVenue();
+    const item = await withTransaction(suite.db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      const group = (
+        await placeGroups(tx, venue.cfg, venue.party.partyId, {
+          operatorId: OPERATOR,
+          groups: [
+            {
+              lines: [{ menuItemId: venue.tables.offerFor(venue.products.burger), quantity: "1" }],
+              release: "fire",
+            },
+          ],
+        })
+      ).groups[0]!;
+      const [row] = await tx
+        .select({ id: ticketItems.id })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, group.lineIds[0]!));
+      return row!.id;
+    });
+    const screen = async (name: string): Promise<PassActor> => {
+      const [profile] = await withTransaction(suite.db, (tx) =>
+        tx
+          .insert(deviceProfiles)
+          .values({
+            name: `${name} profile`,
+            formFactor: "kds",
+            capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"],
+          })
+          .returning({ id: deviceProfiles.id }),
+      );
+      const joined = await enrolDeviceForTest(suite.db, venue.cfg, {
+        name,
+        profileId: profile!.id,
+        kitchenScreen: { kind: "pass", stationIds: [venue.stations.grill], zoneIds: null },
+      });
+      return { deviceId: joined.deviceId, personId: null };
+    };
+    const board = (by: PassActor) =>
+      withTransaction(suite.db, async (tx) => {
+        const pass = (
+          await VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, by.deviceId)
+        ).find((candidate) => candidate.kind === "pass")!;
+        return readScopedPassBoard(tx, venue.cfg, passScopeOf(pass));
+      });
+    const front = await screen("Front pass");
+    const back = await screen("Back pass");
+    const [frontCard] = (await board(front)).toFire;
+    const [backCard] = (await board(back)).toFire;
+    expect([frontCard!.releaseTicketItemIds, backCard!.releaseTicketItemIds]).toEqual([
+      [item],
+      [item],
+    ]);
+    const askOf = (card: typeof frontCard) => ({
+      submissionId: randomUUID(),
+      target: card!.target,
+      ticketItemIds: card!.releaseTicketItemIds,
+      expectedContext: card!.releaseContext,
+    });
+
+    const parked = gate();
+    const go = gate();
+    const first = withTransaction(suite.db, async (tx) => {
+      const released = await releasePassItems(tx, venue.cfg, front, askOf(frontCard));
+      parked.open();
+      await go.passed;
+      return released;
+    });
+    await Promise.race([parked.passed, first.then(undefined, () => undefined)]);
+    let secondStarted = false;
+    const second = withTransaction(suite.db, (tx) => {
+      secondStarted = true;
+      return releasePassItems(tx, venue.cfg, back, askOf(backCard));
+    });
+    const settled = Promise.allSettled([first, second]);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(secondStarted, "the second Fire started while the first was still open").toBe(false);
+    } finally {
+      go.open();
+    }
+    expect(await settled).toMatchObject([
+      { status: "fulfilled", value: { releasedTicketItemIds: [item] } },
+      {
+        status: "rejected",
+        reason: expect.objectContaining({ code: "ticket.pass_context_changed" }),
+      },
+    ]);
+
+    const fire = `Grill\nSplit extras\n1\n${AT_CLOCK}\nGROUP 1\n1.000 x BURG\n`;
+    const printedAt = async (printerId: string) =>
+      (
+        await suite.db
+          .select({ payload: printJobs.payload })
+          .from(printJobs)
+          .where(eq(printJobs.printerId, printerId))
+      ).map((job) => decodeTicket(job.payload));
+    expect({
+      grill: await printedAt(venue.printers.grill),
+      pass: await printedAt(venue.printers.pass),
+    }).toEqual({ grill: [fire], pass: [fire] });
+    const after = await board(back);
+    expect(after.toFire).toEqual([]);
+    expect(after.inProgress.map((card) => card.key)).toEqual([backCard!.key]);
   });
 });

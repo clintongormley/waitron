@@ -303,6 +303,10 @@ groups and the pass") to say B1 landed and B2–B4 remain, with this plan linked
   | `fireHeldLine`'s new group (`:596`) | fire | `next_course` |
   | `fireGroup` (held → fired) | unchanged | keeps `next_course` |
 
+  Superseded in part on 2026-11-02 by B3's D57: `nextFireKind` answers `new_order` while the party
+  has no fired group, and `releaseGroup` gives a held group fired as the party's first food
+  `new_order`.
+
   `nextFireKind(tx, partyId)` answers `new_order` when the party has no group whose state is not
   `removed`, else `added`. Reading it once before the loop matters: a submission listing its held
   group before its fire group must still give the fire group `new_order`. A counter order has no
@@ -1148,7 +1152,11 @@ reads `heldItem()` (D6). No exported signature changes.
   recall now clears the request time too (D20).
 - [ ] Ledger `Status: done` for B1 and the exact next step: B2's task plan.
 
-## Left for B3 and B4 (B1's per-task reviews, 2026-11-01; B2's plan, 2026-11-02)
+## Left for B4 (B1's per-task reviews, 2026-11-01; B2's plan, 2026-11-02; B3's plan, 2026-11-02)
+
+Renamed from "Left for B3 and B4" by B3 (2026-11-02). The points marked B3 below were answered by
+[B3's task plan](2026-11-02-a773-2b3-pass-release.md) (its Decisions D44–D65); what B3 left is
+under "From B3's plan" at the end.
 
 Each point was found by a B1 reviewer or B2's plan and is outside both PRs' scope; the review
 reports are kept with lane C's campaign notes, not in the repository. B1's points for B2 (D3's
@@ -1192,6 +1200,37 @@ fired, `releaseHeld`'s count, and the made-here extras' first step) were answere
     nothing for a released row whose kitchen `firedAt` is null, and B2 reads a Requested row as
     released.
   - **B3's copy sheet:** B2's Owner questions 1–4.
+- **From B3's plan** — the detail of each is in that plan's "Left for B4 (and later)":
+  - **B4:** the till's screens on the new board (`GET /api/device/pass-board`,
+    `GET /api/device/pass-monitor-board`, `POST /api/device/pass-screen/release`), the display
+    policy (B4.1–B4.3) passed as `display`, Columns, the monitor, the station's Held column, the
+    table screen's "at the pass", retiring today's three pass routes, guides and LOOK. The pass's
+    Ready levers read the card's `party` and items' `course` (D62); Fire stays off with a reason
+    while a dish (`extra: false`) sits at a closed station, and an extra there gets a note (D51).
+  - **B4:** the till's twin types of B3.3's queue and current-order fields, its Current orders row
+    state for a Requested dish, and its two test helpers outside `test/` that build fixtures from
+    `firedAt`; `ScreenSlot` gains the server's `switchedOff`.
+  - **B4:** department transfers' `requestedAt` with its widget (D55); `act-as-kds` through the
+    till's app mount gate (master Task 6).
+  - **B4's wording sheet:** the unpaid-departure refusal (D41), the closed-station alert, the pass
+    card's reason for a blocked dish and its note on an extra at a closed station (D51), and four
+    existing codes the release can answer whose wording reads oddly on a pass
+    (`party.not_open`, `management.request_invalid`, `device.forbidden_action`,
+    `service_zone.not_allowed`); `ticket.pass_context_changed`'s sentence holds only if the Fire
+    handler reloads the board.
+  - **B4:** a group card's `party` after a merge that leaves a paid bill on the closed party.
+  - **B4, before PR C:** the expo board (`listExpoQueue`) bands a Requested item from `queued_at`,
+    which `requestHeldItems` does not move, so a dish fired from a held group reads `forgotten` at
+    once. Band from `requested_at`, or stamp `queued_at` at the request.
+  - **Owner, open:** firing one held dish alone (`fireHeldLine`) as a table's first food keeps
+    `next_course`; B3 asked the owner whether it should be `new_order` (lane C's `questions.md`,
+    2026-11-02). B4 makes the change if the answer is yes.
+  - **Backlog follow-ups** (entries in `docs/backlog.md`, detail for the waiting extra in
+    `docs/backlog/till.md`): a pass warning before releasing to
+    a station whose output is down (D54); an edit adding an extra at a waiting station prints no
+    `+N` on its HOLD paper when the dish's own station fires at once; no suite pins `fired: false`
+    on today's pass board's course section, nor that a listed but switched-off pass-screen zone is
+    left out; the slip order of a several-station move can vary from run to run.
 
 ## B2 (outline): a requested dish through every service action
 
