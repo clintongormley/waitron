@@ -15,13 +15,13 @@ import {
   attendanceOperationFacts,
   WORKFORCE_MIGRATIONS,
 } from "@waitron/workforce";
-import type { AttendanceFact } from "@waitron/workforce";
+import type { AttendanceRecorder } from "./attendance-capture.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const run = <T>(f: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, f);
-let personId: string, other: string, locationId: string, elsewhere: string;
+let personId: string, other: string, locationId: string;
 const fact = () => ({
   source: "whole-payment" as const,
   key: "attempt:one",
@@ -32,7 +32,7 @@ const fact = () => ({
   offsetMinutes: 0,
   outcome: "qualified" as const,
 });
-async function capture(input: AttendanceFact & { outcome: "pending" | "qualified" | "refused" }) {
+async function capture(input: Parameters<AttendanceRecorder>[1]) {
   const { recordAttendanceFact } = await import("./attendance-capture.js");
   return run((tx) => recordAttendanceFact(tx, input));
 }
@@ -48,16 +48,9 @@ beforeEach(async () => {
         invoiceLocales: ["es"],
         operationDescription: "Restaurant",
       },
-      {
-        name: "Other",
-        timeZone: "UTC",
-        dayCutover: "04:00",
-        invoiceLocales: ["en"],
-        operationDescription: "Restaurant",
-      },
     ])
     .returning({ id: locations.id });
-  [locationId, elsewhere] = places.map((r) => r.id) as [string, string];
+  [locationId] = places.map((r) => r.id) as [string];
   const people = await suite.db
     .insert(persons)
     .values([
@@ -91,18 +84,16 @@ describe("transactional attendance operation capture", () => {
       expect(dirtied).toEqual({ ...before, dirtyRevision: 2 });
       const { beginAttendanceDiscovery, discoverAttendanceDays, nextAttendanceDay } =
         await import("./attendance-discovery.js");
-      await run((tx) => beginAttendanceDiscovery(tx, { locationId, generation: "after-settings" }));
+      await run((tx) => beginAttendanceDiscovery(tx, { generation: "after-settings" }));
       for (let n = 0; n < 15; n++) {
         const { more } = await run((tx) =>
-          discoverAttendanceDays(tx, { locationId, now: new Date(), batchSize: 100 }),
+          discoverAttendanceDays(tx, { now: new Date(), batchSize: 100 }),
         );
         if (!more) break;
         if (n === 14) throw new Error("cutover discovery did not settle");
       }
       expect(
-        await run((tx) =>
-          nextAttendanceDay(tx, { locationId, now: new Date("2026-01-06T03:00:00Z") }),
-        ),
+        await run((tx) => nextAttendanceDay(tx, { now: new Date("2026-01-06T03:00:00Z") })),
       ).toBeNull();
       expect(await suite.db.select().from(attendanceDayWork)).toEqual([
         expect.objectContaining({
@@ -144,13 +135,23 @@ describe("transactional attendance operation capture", () => {
       },
     ]);
   });
-  it("replay cannot replace the original actor, location or human request instant", async () => {
+  it("records an operation for the venue when given no location", async () => {
+    const withoutLocation: Parameters<AttendanceRecorder>[1] = fact();
+    delete withoutLocation.locationId;
+    await capture(withoutLocation);
+    expect(await suite.db.select().from(attendanceOperationFacts)).toMatchObject([
+      { key: "attempt:one", locationId, businessDay: "2026-01-05", outcome: "qualifying" },
+    ]);
+    expect(await suite.db.select().from(attendanceDayWork)).toMatchObject([
+      { locationId, businessDay: "2026-01-05", dirtyRevision: 1 },
+    ]);
+  });
+  it("replay cannot replace the original actor or human request instant", async () => {
     await capture({ ...fact(), outcome: "pending" });
     const original = (await suite.db.select().from(attendanceOperationFacts))[0]!;
     await capture({
       ...fact(),
       personId: other,
-      locationId: elsewhere,
       at: "2026-01-06T19:00:00Z",
       outcome: "qualified",
     });

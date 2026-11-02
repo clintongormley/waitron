@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { type Transaction, venueLocationId } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError, type Origin } from "@waitron/shared";
 import type {
@@ -188,7 +188,6 @@ export async function executeAttendanceCommand(
     question?.personId ??
     item?.personId ??
     (payload.action === "propose" ? payload.personId : requester);
-  const locationId = question?.locationId ?? null;
   await authority(tx, requester, authorizer, payload, personId, item);
   if (saved) return { commandId: saved.id, entryIds: saved.entryIds, replayed: true };
   if (command.expectedRevision !== (await readAttendanceRevision(tx, personId)))
@@ -207,7 +206,6 @@ export async function executeAttendanceCommand(
       }),
     ];
   } else if (payload.action === "request" || payload.action === "propose") {
-    if (question && payload.locationId !== question.locationId) invalid("question_location");
     let missingKinds = question?.missingKinds;
     if (question) {
       const entries = await readRecordedEntries(tx, { personId });
@@ -267,7 +265,7 @@ export async function executeAttendanceCommand(
     requestedByPersonId: requester,
     authorizedByPersonId: authorizer,
     personId,
-    locationId,
+    locationId: question ? await venueLocationId(tx) : null,
     questionId,
     action: payload.action,
     input: payload,

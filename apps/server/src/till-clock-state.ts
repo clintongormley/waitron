@@ -1,5 +1,4 @@
-import type { Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { readVenueClock, venueLocationId, type Transaction } from "@waitron/db";
 import { businessDayAt, businessDayBounds } from "@waitron/shared";
 import { readLatestLiveEntry, timeEntries } from "@waitron/workforce";
 import { and, eq, gte, lt, sql } from "drizzle-orm";
@@ -32,10 +31,10 @@ const liveKind = sql<LiveKind>`case when ${timeEntries.entryKind} = 'correction'
 
 export async function readTillClockState(
   tx: Transaction,
-  scope: { personId: string; locationId: string },
+  scope: { personId: string },
   at: Date,
 ): Promise<TillClockState> {
-  const clock = await readLocationClock(tx, scope.locationId);
+  const clock = await readVenueClock(tx);
   const businessDay = businessDayAt(clock, at);
   const bounds = businessDayBounds(clock, businessDay);
   const latest = await readLatestLiveEntry(tx, scope.personId);
@@ -55,7 +54,7 @@ export async function readTillClockState(
   const state = latest === undefined ? "out" : stateAfter[latest.entryKind as LiveKind];
   return {
     personId: scope.personId,
-    locationId: scope.locationId,
+    locationId: await venueLocationId(tx),
     businessDay,
     state,
     lastEntryId: latest?.entryId ?? null,

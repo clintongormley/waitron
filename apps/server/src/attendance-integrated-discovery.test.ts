@@ -84,11 +84,9 @@ async function payment(
 }
 async function discover(at = later) {
   for (let i = 0; i < 100; i++) {
-    const result = await run((tx) =>
-      discoverAttendanceDays(tx, { locationId, now: at, batchSize: 100 }),
-    );
+    const result = await run((tx) => discoverAttendanceDays(tx, { now: at, batchSize: 100 }));
     if (!result.more) {
-      await run((tx) => discoverAttendanceDays(tx, { locationId, now: at, batchSize: 100 }));
+      await run((tx) => discoverAttendanceDays(tx, { now: at, batchSize: 100 }));
       return;
     }
   }
@@ -99,7 +97,7 @@ it.each(["captured", "accepted_offline"] as const)(
   async (state) => {
     const key = await request();
     await payment("new-payment", state);
-    await run((tx) => beginAttendanceDiscovery(tx, { locationId, generation: "open-one" }));
+    await run((tx) => beginAttendanceDiscovery(tx, { generation: "open-one" }));
     const [day] = await suite.db.select().from(attendanceDayWork);
     await suite.db
       .update(attendanceDayWork)
@@ -147,7 +145,7 @@ it("remembers the exact attempted payment across restart and later capture", asy
     .update(payments)
     .set({ state: "captured", settledAt: later.toISOString() })
     .where(eq(payments.id, id));
-  await run((tx) => beginAttendanceDiscovery(tx, { locationId, generation: "open-two" }));
+  await run((tx) => beginAttendanceDiscovery(tx, { generation: "open-two" }));
   await discover(new Date(later.getTime() + 30_000));
   expect((await suite.db.select().from(attendanceOperationFacts))[0]!).toMatchObject({
     outcome: "qualifying",

@@ -23,13 +23,11 @@ function read(
   subject = f.personId,
   at = now,
   venueClock = clock,
-  locationId = f.locationId,
 ) {
   expect(api).toHaveProperty("readPersonHours", expect.any(Function));
   return f.run((tx) =>
     api.readPersonHours(tx, {
       personId: subject,
-      locationId,
       selection,
       clock: venueClock,
       now: at,
@@ -41,9 +39,7 @@ function manager(
   venueClock = clock,
 ) {
   expect(api).toHaveProperty("readManagerHours", expect.any(Function));
-  return f.run((tx) =>
-    api.readManagerHours(tx, { locationId: f.locationId, selection, clock: venueClock, now }),
-  );
+  return f.run((tx) => api.readManagerHours(tx, { selection, clock: venueClock, now }));
 }
 async function event(
   kind: "clockIn" | "clockOut" | "breakStart" | "breakEnd",
@@ -474,9 +470,6 @@ it.each(["", "bad", "2026-02-30", "9999-12-31", null])(
 );
 it("refuses empty scopes and unknown window kinds instead of reading the venue", async () => {
   await expect(read(undefined, "")).rejects.toMatchObject({ code: "attendance.invalid" });
-  await expect(read(undefined, f.personId, now, clock, "")).rejects.toMatchObject({
-    code: "attendance.invalid",
-  });
   await expect(read({ kind: "fortnight" } as unknown as HoursSelection)).rejects.toMatchObject({
     code: "attendance.invalid",
   });

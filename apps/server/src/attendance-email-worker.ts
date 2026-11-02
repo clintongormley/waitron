@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
-import { withTransaction, type Database } from "@waitron/db";
+import { readVenue, withTransaction, type Database } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import {
   attendanceMail,
@@ -19,13 +19,11 @@ import { realSleep } from "./loop.js";
 export type AttendanceEmailPassDeps = {
   db: Database;
   nodeId: string;
-  locationId: string;
   holder: string;
   now: () => Date;
   isPrimary: () => boolean;
   signal: AbortSignal;
   venueLocale: "en" | "es";
-  locationName: string;
   resolveDelivery: () => Promise<EmailDelivery>;
   send: AttendanceEmailSender;
 };
@@ -69,7 +67,6 @@ export async function runAttendanceEmailPass(
     if (!active()) return null;
     const now = deps.now();
     const eligible = and(
-      eq(attendanceQuestions.locationId, deps.locationId),
       eq(attendanceQuestions.active, true),
       eq(attendanceQuestions.kind, "missing-times"),
       isNull(attendanceQuestions.resolvedByEntryId),
@@ -93,7 +90,6 @@ export async function runAttendanceEmailPass(
     if (!candidate) return null;
     await reconcileAttendanceResponses(tx, candidate.person.id);
     const day = {
-      locationId: candidate.question.locationId,
       businessDay: candidate.question.businessDay,
       startAt: candidate.question.startAt,
       endAt: candidate.question.endAt,
@@ -101,7 +97,7 @@ export async function runAttendanceEmailPass(
     await retireObsoleteRotaQuestions(tx, day);
     const latest = await reconcileAttendanceDay(
       tx,
-      { nodeId: deps.nodeId, locationId: deps.locationId, personId: candidate.person.id, day },
+      { nodeId: deps.nodeId, personId: candidate.person.id, day },
       now,
     );
     const [current] = await candidates().where(
@@ -128,7 +124,7 @@ export async function runAttendanceEmailPass(
               ? ("en" as const)
               : deps.venueLocale,
         businessDay: current.question.businessDay,
-        locationName: deps.locationName,
+        venueName: (await readVenue(tx)).name,
         missingKinds:
           current.question.openEntryId === null ? current.question.missingKinds : ["out" as const],
       },

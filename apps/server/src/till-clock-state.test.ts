@@ -63,10 +63,8 @@ function event(at: string, subject = personId, node = nodeId) {
   };
 }
 
-async function read(at = "2026-01-05T12:00:00Z", place = locationId) {
-  return withTransaction(suite.db, (tx) =>
-    readTillClockState(tx, { personId, locationId: place }, new Date(at)),
-  );
+async function read(at = "2026-01-05T12:00:00Z") {
+  return withTransaction(suite.db, (tx) => readTillClockState(tx, { personId }, new Date(at)));
 }
 
 async function lastId() {
@@ -220,25 +218,25 @@ describe("till own clock state", () => {
     });
   });
 
-  it("keeps yesterday's open shift open", async () => {
-    await withTransaction(suite.db, (tx) => backend.clockIn(tx, event("2026-01-04T18:00:00Z")));
-    const [other] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Other venue",
-        invoiceLocales: ["es"],
-        operationDescription: "Restaurant",
-        timeZone: "UTC",
-        dayCutover: "00:00:00",
-      })
-      .returning({ id: locations.id });
-    expect(await read()).toMatchObject({
-      state: "working",
+  it("reads the state for the venue without being told a location", async () => {
+    expect(
+      await withTransaction(suite.db, (tx) =>
+        readTillClockState(tx, { personId }, new Date("2026-01-05T03:59:59Z")),
+      ),
+    ).toEqual({
+      personId,
+      locationId,
+      businessDay: "2026-01-04",
+      state: "out",
+      lastEntryId: null,
       firstClockIn: true,
     });
-    expect(await read("2026-01-05T12:00:00Z", other!.id)).toMatchObject({
+  });
+
+  it("keeps yesterday's open shift open", async () => {
+    await withTransaction(suite.db, (tx) => backend.clockIn(tx, event("2026-01-04T18:00:00Z")));
+    expect(await read()).toMatchObject({
       state: "working",
-      locationId: other!.id,
       firstClockIn: true,
     });
     await expect(

@@ -75,13 +75,13 @@ function inbox(subject = personId) {
   expect(api).toHaveProperty("readAttendanceInbox", expect.any(Function));
   return run((tx) => api.readAttendanceInbox(tx, subject));
 }
-function day(date = "2026-01-05", location = locationId, subject = personId) {
+function day(date = "2026-01-05", subject = personId) {
   expect(api).toHaveProperty("readAttendanceDay", expect.any(Function));
-  return run((tx) => api.readAttendanceDay(tx, { personId: subject, locationId: location, date }));
+  return run((tx) => api.readAttendanceDay(tx, { personId: subject, date }));
 }
-function queue(location = locationId) {
+function queue() {
   expect(api).toHaveProperty("readAttendanceManagerQueue", expect.any(Function));
-  return run((tx) => api.readAttendanceManagerQueue(tx, location));
+  return run((tx) => api.readAttendanceManagerQueue(tx));
 }
 function question(
   input: {
@@ -102,7 +102,6 @@ function question(
       {
         personId: input.subject ?? personId,
         day: {
-          locationId: input.location ?? locationId,
           businessDay: date,
           startAt: `${date}T04:00:00Z`,
           endAt: end.toISOString(),
@@ -136,8 +135,11 @@ it("returns an empty own inbox and one compatible subject revision for day and i
     revision: await run((tx) => readAttendanceRevision(tx, personId)),
     prompts: [],
     items: [],
-    locations: [],
+    locations: await suite.db
+      .select({ id: locations.id, name: locations.name, timeZone: locations.timeZone })
+      .from(locations),
   });
+  expect(value.locations.map((l) => l.id)).toEqual([locationId]);
   expect((await day()).revision).toBe(value.revision);
   expect(await queue()).toEqual({ locationId, items: [] });
 });
@@ -264,24 +266,6 @@ it("keeps a worker request as history while a manager proposal is a prompt with 
     proposal.entryIds[0],
   ]);
 });
-it("retains historical locations and their current named zones, excluding locations belonging only to others", async () => {
-  const historic = await seedLocation(suite.db);
-  await suite.db
-    .update(locations)
-    .set({ name: "Old venue", timeZone: "America/New_York" })
-    .where(eq(locations.id, historic));
-  await question({ location: historic });
-  await shift(other);
-  const value = await inbox();
-  expect(value.locations).toEqual([
-    { id: historic, name: "Old venue", timeZone: "America/New_York" },
-  ]);
-  expect(value.prompts[0]).toMatchObject({
-    locationId: historic,
-    locationName: "Old venue",
-    timeZone: "America/New_York",
-  });
-});
 it("keeps all scoped original and response history when a correction crosses a month", async () => {
   const { end } = await shift(personId, "2026-01-31");
   const response = await request(end, "2026-02-01T00:30:00Z");
@@ -359,10 +343,6 @@ it.each(["", "2026-02-30", "2026-1-5", "9999-12-31"])(
     await expect(day(date)).rejects.toMatchObject({ code: "attendance.invalid" });
   },
 );
-it("refuses an absent selected location without returning another location's record", async () => {
-  await shift();
-  await expect(day("2026-01-05", newId())).rejects.toMatchObject({ code: "attendance.invalid" });
-});
 
 it("a raw-library decline reopens a stored-resolved question with only its unanswered kind", async () => {
   const questionId = await question();
@@ -535,10 +515,9 @@ it("an approved missing out permits the next clock-in without closing a later ac
 });
 it("refuses empty reader scopes rather than reading the venue", async () => {
   await expect(inbox("")).rejects.toMatchObject({ code: "attendance.invalid" });
-  await expect(day("2026-01-05", locationId, "")).rejects.toMatchObject({
+  await expect(day("2026-01-05", "")).rejects.toMatchObject({
     code: "attendance.invalid",
   });
-  await expect(queue("")).rejects.toMatchObject({ code: "attendance.invalid" });
 });
 
 it("keeps recorded history scoped to the inbox subject even in a shared location", async () => {
@@ -591,6 +570,22 @@ it("selects calendar work dates from stored offsets after the location zone chan
     recorded.record.sessions.map((s) => [s.workDate, s.workedMinutes, s.startOffsetMinutes]),
   ).toEqual([["2026-01-06", 90, 120]]);
   expect(recorded.record.entries.map((e) => e.entry.offsetMinutes)).toEqual([120, 120]);
+});
+
+it("reads a person's day at the venue without being told a location", async () => {
+  await shift();
+  await suite.db
+    .update(locations)
+    .set({ timeZone: "Atlantic/Canary" })
+    .where(eq(locations.id, locationId));
+  const value = await run((tx) => api.readAttendanceDay(tx, { personId, date: "2026-01-05" }));
+  expect(value).toMatchObject({
+    personId,
+    locationId,
+    date: "2026-01-05",
+    timeZone: "Atlantic/Canary",
+  });
+  expect(value.record.sessions.map((s) => s.workedMinutes)).toEqual([480]);
 });
 
 it("approves an older missing out behind a newer actual in without closing the current shift", async () => {

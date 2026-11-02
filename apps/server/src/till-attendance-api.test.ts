@@ -312,45 +312,6 @@ it("records trusted requester and device, then replays before the old revision a
   expect(inbox.prompts).toEqual([]);
 });
 
-it("refuses arbitrary workplaces but permits a workplace where the worker has a question", async () => {
-  const valid = await command();
-  const [other] = await suite.db
-    .insert(locations)
-    .values({ name: "Other", invoiceLocales: ["es"], operationDescription: "Restaurant" })
-    .returning();
-  const path = `day?date=2026-01-05&locationId=${other!.id}`;
-  expect((await request(path)).status).toBe(403);
-  const body = {
-    ...valid,
-    locationId: other!.id,
-    changes: [
-      { target: { missingKind: "in" }, at: "2026-01-04T09:00:00Z", offsetMinutes: 60 },
-      { target: { missingKind: "out" }, at: "2026-01-04T17:00:00Z", offsetMinutes: 60 },
-    ],
-  };
-  const response = await request("commands", body);
-  expect(response.status).toBe(403);
-  expect(await response.json()).toMatchObject({ error: { code: "attendance.not_permitted" } });
-  await suite.db.insert(attendanceQuestions).values({
-    locationId: other!.id,
-    personId: venue.personId,
-    businessDay: "2026-01-04",
-    kind: "missing-times",
-    active: false,
-    shiftKey: "old-place",
-    evidenceKeys: ["retained"],
-    createdAt: instant.toISOString(),
-    inactiveReason: "retired",
-    startAt: "2026-01-04T04:00:00.000Z",
-    endAt: "2026-01-05T04:00:00.000Z",
-    missingKinds: ["in", "out"],
-  });
-  const day = await request(path);
-  expect(day.status).toBe(200);
-  body.expectedRevision = ((await day.json()) as { revision: string }).revision;
-  expect((await request("commands", body)).status).toBe(200);
-});
-
 it("requires the selected approver PIN even when the operator is an admin", async () => {
   const itemId = await pending();
   await suite.db.update(persons).set({ role: "admin" }).where(eq(persons.id, venue.personId));

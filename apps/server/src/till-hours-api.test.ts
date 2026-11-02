@@ -10,12 +10,7 @@ import {
   registerModulePermissions,
   sessions,
 } from "@waitron/identity";
-import {
-  WorkforceBackend,
-  attendanceQuestions,
-  timeEntries,
-  closePayPeriod,
-} from "@waitron/workforce";
+import { WorkforceBackend, timeEntries, closePayPeriod } from "@waitron/workforce";
 import { deviceOrigin } from "@waitron/shared";
 import type { PersonHours } from "@waitron/workforce/attendance-contract";
 import { ALL_MODULES } from "./modules.js";
@@ -148,46 +143,6 @@ it.each(["ended", "disabled", "deleted", "suspended", "admission", "profile", "l
     expect(snapshot()).toEqual(before);
   },
 );
-it("refuses a random workplace, and a person with clock entries everywhere once a second location row exists", async () => {
-  const [other] = await suite.db
-    .insert(locations)
-    .values({ name: "Historic", invoiceLocales: ["es"], operationDescription: "Restaurant" })
-    .returning();
-  const query = `locationId=${other!.id}&kind=month&date=2026-01-05`;
-  let response = await read(query);
-  expect(response.status).toBe(403);
-  expect(await response.json()).toMatchObject({ error: { code: "attendance.not_permitted" } });
-  await withTransaction(suite.db, async (tx) => {
-    const common = {
-      ...venue.cfg,
-      personId: venue.personId,
-      origin: deviceOrigin(venue.deviceId),
-      offsetMinutes: 0,
-    };
-    await backend.clockIn(tx, { ...common, at: "2026-01-06T09:00:00Z" });
-    await backend.clockOut(tx, { ...common, at: "2026-01-06T17:00:00Z" });
-  });
-  expect((await read(query)).status).toBe(403);
-  await suite.db.insert(attendanceQuestions).values({
-    locationId: other!.id,
-    personId: venue.personId,
-    businessDay: "2026-01-04",
-    kind: "missing-times",
-    active: false,
-    shiftKey: "old-place",
-    evidenceKeys: ["retained"],
-    createdAt: "2026-01-04T12:00:00.000Z",
-    inactiveReason: "retired",
-    startAt: "2026-01-04T04:00:00.000Z",
-    endAt: "2026-01-05T04:00:00.000Z",
-    missingKinds: ["in", "out"],
-  });
-  for (const place of [other!.id, venue.cfg.locationId]) {
-    response = await read(`locationId=${place}&kind=month&date=2026-01-05`);
-    expect(response.status, place).toBe(400);
-    expect(await response.json()).toMatchObject({ error: { code: "provisioning.second_venue" } });
-  }
-});
 it("scopes frozen snapshots and current entries to the session person", async () => {
   const [other] = await suite.db.select().from(persons).where(eq(persons.role, "admin"));
   await withTransaction(suite.db, async (tx) => {

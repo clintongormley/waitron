@@ -17,10 +17,7 @@ export function answerForQuestion(
   items: readonly CorrectionItem[],
 ): { resolvedByEntryId: string | null; missingKinds: ("in" | "out")[] } {
   const related = commands.filter(
-    (c) =>
-      c.questionId === question.id &&
-      c.personId === question.personId &&
-      c.locationId === question.locationId,
+    (c) => c.questionId === question.id && c.personId === question.personId,
   );
   const byId = new Map(entries.map((e) => [e.entryId, e]));
   const itemFor = new Map(

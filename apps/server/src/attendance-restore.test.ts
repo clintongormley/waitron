@@ -89,11 +89,11 @@ beforeEach(async () => {
       offsetMinutes: 60,
       outcome: "qualified",
     });
-    await beginAttendanceDiscovery(tx, { locationId, generation: "source-open" });
+    await beginAttendanceDiscovery(tx, { generation: "source-open" });
   });
 });
 function pass(db: Database) {
-  return runAttendancePass({ db, nodeId, locationId, now: () => now, isPrimary: () => true });
+  return runAttendancePass({ db, nodeId, now: () => now, isPrimary: () => true });
 }
 async function settle(db: Database) {
   for (let i = 0; i < 15; i++) if (!(await pass(db)).more) return;
@@ -152,16 +152,14 @@ describe("attendance after restoring database contents", () => {
     async (completed) => {
       if (completed) await settle(suite.db);
       else
-        await withTransaction(suite.db, (tx) =>
-          discoverAttendanceDays(tx, { locationId, now, batchSize: 2 }),
-        );
+        await withTransaction(suite.db, (tx) => discoverAttendanceDays(tx, { now, batchSize: 2 }));
       const before = await snapshot(suite.db);
       const restored = await restore();
       try {
         const db = restored.venue;
         expect(await snapshot(db)).toEqual(before);
         await withTransaction(db, (tx) =>
-          beginAttendanceDiscovery(tx, { locationId, generation: "restored-open" }),
+          beginAttendanceDiscovery(tx, { generation: "restored-open" }),
         );
         const first = await pass(db);
         expect(first).toEqual({ processed: false, more: true });

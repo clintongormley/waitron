@@ -80,13 +80,12 @@ describe("completed attendance day", () => {
       { questionId: q!.id, status: "pending" },
     ]);
   });
-  it("excludes another person, another location and both sides of the business-day window", async () => {
+  it("excludes another person and both sides of the business-day window", async () => {
     await f.open();
     await f.process({
       facts: [
         f.fact(),
         { ...f.fact("2026-01-05T20:00:00Z", "other"), personId: f.other },
-        { ...f.fact("2026-01-05T21:00:00Z", "elsewhere"), locationId: f.elsewhere },
         f.fact("2026-01-05T03:59:59Z", "before"),
         f.fact("2026-01-06T04:00:00Z", "after"),
       ],

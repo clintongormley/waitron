@@ -96,7 +96,7 @@ describe("accepted draft attendance capture", () => {
         finishTable(
           tx,
           { partyId, expectedPartyRevision: 0, operatorId: other },
-          { recorder: recordAttendanceFact, locationId: v.cfg.locationId },
+          { recorder: recordAttendanceFact },
         ),
       ),
     ).rejects.toMatchObject({
@@ -132,7 +132,7 @@ describe("accepted draft attendance capture", () => {
         finishTable(
           tx,
           { partyId, expectedPartyRevision: 0, operatorId: other },
-          { recorder: refusing, locationId: v.cfg.locationId },
+          { recorder: refusing },
         ),
       ),
     ).rejects.toMatchObject({
@@ -226,20 +226,18 @@ describe("accepted draft attendance capture", () => {
       [`${first.id}:${first.revision + 1}:submit`, "2026-01-05T12:00:00.000Z"],
     ]);
   });
-  it("discard records the current operator and keeps the draft's original location", async () => {
+  it("discard records the current operator", async () => {
     const first = await save();
     vi.setSystemTime(new Date("2026-01-05T14:00:00Z"));
     await run((tx) =>
       discardPartyDrafts(tx, partyId, other, {
         recorder: recordAttendanceFact,
-        locationId: v.cfg.locationId,
       }),
     );
     const before = await operations();
     await run((tx) =>
       discardPartyDrafts(tx, partyId, other, {
         recorder: recordAttendanceFact,
-        locationId: v.cfg.locationId,
       }),
     );
     expect(await operations()).toEqual(before);

@@ -839,7 +839,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
           recipient: JORDI_EMAIL,
           locale: "en" as const,
           businessDay: "2026-10-25",
-          locationName: LOCATION_NAME,
+          venueName: LOCATION_NAME,
           missingKinds: ["in" as const],
         };
         // As boot.ts builds it: no onFailure.

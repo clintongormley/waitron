@@ -715,7 +715,7 @@ async function existingExport(locale: "en" | "es"): Promise<Uint8Array> {
   const app = new Hono();
   mountAttendanceExportApi(
     app,
-    { db: suite.db, cfg: { locationId }, exporter: selectTimeRecordExport(ALL_MODULES) },
+    { db: suite.db, exporter: selectTimeRecordExport(ALL_MODULES) },
     logger,
   );
   const query = new URLSearchParams({

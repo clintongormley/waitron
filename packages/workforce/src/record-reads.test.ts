@@ -161,7 +161,7 @@ it("does not lose a correction that moves an end outside the requested window", 
   const ids = await correct(target, "2026-02-02T18:00:00Z");
   const summary = await run((tx) => backend.workSummary(tx, { personId, period: january }, rules));
   expect(summary.workedMinutes).toBe(40860);
-  const actual = await run((tx) => backend.getPlannedVsActual(tx, { locationId, period: january }));
+  const actual = await run((tx) => backend.getPlannedVsActual(tx, { period: january }));
   expect(actual.find((r) => r.personId === personId)?.workedMinutes).toBe(40860);
   const record = await query();
   expect(record.sessions[0]!.workedMinutes).toBe(40860);

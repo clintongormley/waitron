@@ -1,6 +1,6 @@
 import { makeRuleset } from "@waitron/workforce/test/fixtures.js";
 import { Hono } from "hono";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant } from "@waitron/db/testing/seed.js";
@@ -110,18 +110,14 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
   });
 
   it("GET /management-api/roster returns { version: null, shifts: [] } for an empty week", async () => {
-    const res = await send(
-      mountApp(),
-      "GET",
-      `/management-api/roster?locationId=${locationId}&period=2026-03-02`,
-    );
+    const res = await send(mountApp(), "GET", `/management-api/roster?period=2026-03-02`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ version: null, shifts: [] });
   });
 
   it("POST /management-api/roster creates a draft and returns { versionId } (201)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/roster", {
-      body: { locationId, period: "2026-03-09" },
+      body: { period: "2026-03-09" },
     });
     expect(res.status).toBe(201);
     expect((await res.json()) as { versionId: string }).toMatchObject({
@@ -129,40 +125,9 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
     });
   });
 
-  it("400s a non-UUID locationId on GET (shared.invalid_id, never a 500)", async () => {
-    const res = await send(
-      mountApp(),
-      "GET",
-      "/management-api/roster?locationId=not-a-uuid&period=2026-03-02",
-    );
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "shared.invalid_id" },
-    });
-  });
-
-  it("400s a GET /roster with no locationId (shared.invalid_id)", async () => {
-    const res = await send(mountApp(), "GET", "/management-api/roster?period=2026-03-02");
-    expect(res.status).toBe(400);
-    expect((await res.json()) as { error: { code: string } }).toMatchObject({
-      error: { code: "shared.invalid_id" },
-    });
-  });
-
-  it("400s a POST /roster whose locationId names no location (management.request_invalid, never a 500)", async () => {
-    const res = await send(mountApp(), "POST", "/management-api/roster", {
-      body: { locationId: crypto.randomUUID(), period: "2026-12-07" },
-    });
-    expect(await refusal(res)).toEqual([
-      400,
-      "management.request_invalid",
-      { field: "locationId" },
-    ]);
-  });
-
   it("400s a malformed period on POST (management.request_invalid)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/roster", {
-      body: { locationId, period: "not-a-date" },
+      body: { period: "not-a-date" },
     });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -171,8 +136,8 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
   });
 
   it("400s a POST /roster with a MALFORMED body (never a 500)", async () => {
-    // `readJsonBody` coerces the malformed body to `{}`, so `requireBodyUuid` rejects the missing
-    // locationId. Sent raw, since `send` would JSON.stringify a valid body.
+    // `readJsonBody` coerces the malformed body to `{}`, so `requirePeriod` rejects the missing
+    // period. Sent raw, since `send` would JSON.stringify a valid body.
     const res = await mountApp().request("/management-api/roster", {
       method: "POST",
       headers: { "content-type": "application/json", cookie: managerCookie },
@@ -184,7 +149,7 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
   it("400s a shaped-but-invalid calendar date on POST (2026-02-30 → request_invalid, never a 500)", async () => {
     // Shape passes the YYYY-MM-DD regex but Feb 30 is not a real day.
     const res = await send(mountApp(), "POST", "/management-api/roster", {
-      body: { locationId, period: "2026-02-30" },
+      body: { period: "2026-02-30" },
     });
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
@@ -193,11 +158,7 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
   });
 
   it("400s a shaped-but-invalid calendar date on GET (2026-13-01 → request_invalid, never a 500)", async () => {
-    const res = await send(
-      mountApp(),
-      "GET",
-      `/management-api/roster?locationId=${locationId}&period=2026-13-01`,
-    );
+    const res = await send(mountApp(), "GET", `/management-api/roster?period=2026-13-01`);
     expect(res.status).toBe(400);
     expect((await res.json()) as { error: { code: string } }).toMatchObject({
       error: { code: "management.request_invalid" },
@@ -211,7 +172,7 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
 
   it("403s a staff-role session (no schedule.manage)", async () => {
     const res = await send(mountApp(), "POST", "/management-api/roster", {
-      body: { locationId, period: "2026-03-09" },
+      body: { period: "2026-03-09" },
       cookie: staffCookie,
     });
     expect(res.status).toBe(403);
@@ -224,13 +185,12 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
 describe("mountWorkforceApi — shift routes", () => {
   async function draftVersion(period: string): Promise<string> {
     const res = await send(mountApp(), "POST", "/management-api/roster", {
-      body: { locationId, period },
+      body: { period },
     });
     return ((await res.json()) as { versionId: string }).versionId;
   }
   const shiftBody = (day: string) => ({
     personId,
-    locationId,
     startsAt: `${day}T09:00:00Z`,
     startsOffsetMinutes: 0,
     endsAt: `${day}T17:00:00Z`,
@@ -245,11 +205,7 @@ describe("mountWorkforceApi — shift routes", () => {
     });
     expect(res.status).toBe(201);
     const { shiftId } = (await res.json()) as { shiftId: string };
-    const roster = await send(
-      app,
-      "GET",
-      `/management-api/roster?locationId=${locationId}&period=2026-04-06`,
-    );
+    const roster = await send(app, "GET", `/management-api/roster?period=2026-04-06`);
     expect(
       ((await roster.json()) as { shifts: { id: string }[] }).shifts.map((s) => s.id),
     ).toContain(shiftId);
@@ -258,27 +214,24 @@ describe("mountWorkforceApi — shift routes", () => {
   it("accepts and stores an overnight shift across the summer-time change", async () => {
     const app = mountApp();
     const versionId = await draftVersion("2026-03-23");
-    const body = {
+    const shift = {
       personId,
-      locationId,
       startsAt: "2026-03-28T21:00:00Z",
       startsOffsetMinutes: 60,
       endsAt: "2026-03-29T02:00:00Z",
       endsOffsetMinutes: 120,
     };
-    const added = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, { body });
+    const added = await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
+      body: shift,
+    });
     expect(added.status).toBe(201);
     const { shiftId } = (await added.json()) as { shiftId: string };
-    const roster = await send(
-      app,
-      "GET",
-      `/management-api/roster?locationId=${locationId}&period=2026-03-23`,
-    );
+    const roster = await send(app, "GET", `/management-api/roster?period=2026-03-23`);
     expect(roster.status).toBe(200);
     expect(((await roster.json()) as { shifts: unknown[] }).shifts).toContainEqual({
       id: shiftId,
       rosterVersionId: versionId,
-      ...body,
+      ...shift,
     });
   });
 
@@ -316,11 +269,7 @@ describe("mountWorkforceApi — shift routes", () => {
       },
     });
     expect(res.status).toBe(204);
-    const roster = await send(
-      app,
-      "GET",
-      `/management-api/roster?locationId=${locationId}&period=2026-06-01`,
-    );
+    const roster = await send(app, "GET", `/management-api/roster?period=2026-06-01`);
     const shift = ((await roster.json()) as { shifts: Record<string, unknown>[] }).shifts.find(
       (s) => s.id === shiftId,
     );
@@ -396,7 +345,7 @@ describe("mountWorkforceApi — shift routes", () => {
     });
   });
 
-  it.each([["personId"], ["locationId"]])(
+  it.each([["personId"]])(
     "400s an add whose %s names no row (management.request_invalid, never a 500)",
     async (field) => {
       const app = mountApp();
@@ -449,13 +398,12 @@ describe("mountWorkforceApi — publish", () => {
     await seedConvenio();
     const app = mountApp();
     const create = await send(app, "POST", "/management-api/roster", {
-      body: { locationId, period: "2026-05-04" },
+      body: { period: "2026-05-04" },
     });
     const { versionId } = (await create.json()) as { versionId: string };
     await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
       body: {
         personId,
-        locationId,
         startsAt: "2026-05-04T09:00:00Z",
         startsOffsetMinutes: 0,
         endsAt: "2026-05-04T14:00:00Z",
@@ -471,14 +419,13 @@ describe("mountWorkforceApi — publish", () => {
     await seedConvenio();
     const app = mountApp();
     const create = await send(app, "POST", "/management-api/roster", {
-      body: { locationId, period: "2026-05-11" },
+      body: { period: "2026-05-11" },
     });
     const { versionId } = (await create.json()) as { versionId: string };
     // A 12h shift breaches the 9h ordinary-daily max AND owes a break — a non-empty breaches array.
     await send(app, "POST", `/management-api/roster/${versionId}/shifts`, {
       body: {
         personId,
-        locationId,
         startsAt: "2026-05-11T08:00:00Z",
         startsOffsetMinutes: 0,
         endsAt: "2026-05-11T20:00:00Z",
@@ -490,49 +437,37 @@ describe("mountWorkforceApi — publish", () => {
     const { breaches } = (await res.json()) as { breaches: { kind: string }[] };
     expect(breaches.map((b) => b.kind)).toContain("exceeds_daily_max");
     // Still published:
-    const roster = await send(
-      app,
-      "GET",
-      `/management-api/roster?locationId=${locationId}&period=2026-05-11`,
-    );
+    const roster = await send(app, "GET", `/management-api/roster?period=2026-05-11`);
     expect(((await roster.json()) as { version: { status: string } }).version.status).toBe(
       "published",
     );
   });
 
-  it("publishes without labour warnings when the location has no convenio_config (A585-7)", async () => {
+  it("publishes without labour warnings when the venue has no convenio_config (A585-7)", async () => {
     const app = mountApp();
-    // A DIFFERENT location with no convenio row.
-    const otherLoc = await withTransaction(suite.db, async (tx) => {
-      const [r] = await tx
-        .insert(locations)
-        .values({
-          name: "Annex",
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Sale on premises",
-        })
-        .returning({ id: locations.id });
-      return r!.id;
-    });
-    const create = await send(app, "POST", "/management-api/roster", {
-      body: { locationId: otherLoc, period: "2026-05-18" },
-    });
-    const { versionId } = (await create.json()) as { versionId: string };
-    const res = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ breaches: [] });
-    const roster = await send(
-      app,
-      "GET",
-      `/management-api/roster?locationId=${otherLoc}&period=2026-05-18`,
-    );
-    expect(await roster.json()).toMatchObject({ version: { id: versionId, status: "published" } });
+    // The suite shares its database: the venue's rules come back after the case.
+    const removed = await suite.db.delete(convenioConfig).returning();
+    try {
+      const create = await send(app, "POST", "/management-api/roster", {
+        body: { period: "2026-05-18" },
+      });
+      const { versionId } = (await create.json()) as { versionId: string };
+      const res = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ breaches: [] });
+      const roster = await send(app, "GET", `/management-api/roster?period=2026-05-18`);
+      expect(await roster.json()).toMatchObject({
+        version: { id: versionId, status: "published" },
+      });
+    } finally {
+      if (removed.length > 0) await suite.db.insert(convenioConfig).values(removed);
+    }
   });
 
   it("leaves the roster draft when resolving its labour rules fails unexpectedly", async () => {
     const app = mountApp();
     const create = await send(app, "POST", "/management-api/roster", {
-      body: { locationId, period: "2026-08-17" },
+      body: { period: "2026-08-17" },
     });
     const { versionId } = (await create.json()) as { versionId: string };
     const spy = vi
@@ -542,11 +477,7 @@ describe("mountWorkforceApi — publish", () => {
       const response = await send(app, "POST", `/management-api/roster/${versionId}/publish`);
       expect(response.status).toBe(500);
       expect(await response.json()).toEqual({ error: { code: "server.internal" } });
-      const read = await send(
-        app,
-        "GET",
-        `/management-api/roster?locationId=${locationId}&period=2026-08-17`,
-      );
+      const read = await send(app, "GET", `/management-api/roster?period=2026-08-17`);
       expect(await read.json()).toMatchObject({ version: { id: versionId, status: "draft" } });
     } finally {
       spy.mockRestore();
@@ -767,19 +698,16 @@ describe("mountWorkforceApi — planned-vs-actual", () => {
 });
 
 describe("roster warnings while planning", () => {
+  // The suite shares one database and one venue: each case starts with no roster and no rules.
+  beforeEach(async () => {
+    await suite.db.delete(shiftSwaps);
+    await suite.db.delete(shifts);
+    await suite.db.delete(rosterVersions);
+    await suite.db.delete(convenioConfig);
+  });
   async function warningLocation(withRules = true, overrides = {}) {
-    const [location] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Warnings",
-        timeZone: "Europe/Madrid",
-        invoiceLocales: ["es"],
-        operationDescription: "Restaurant",
-      })
-      .returning();
-    if (withRules)
-      await suite.db.insert(convenioConfig).values({ locationId: location!.id, ...overrides });
-    return location!.id;
+    if (withRules) await suite.db.insert(convenioConfig).values({ locationId, ...overrides });
+    return locationId;
   }
   async function version(
     locationId: string,
@@ -821,13 +749,8 @@ describe("roster warnings while planning", () => {
       .returning();
     return row!.id;
   }
-  const read = (locationId: string, period = "2026-03-02", cookie = managerCookie) =>
-    send(
-      mountApp(),
-      "GET",
-      `/management-api/roster/breaches?locationId=${locationId}&period=${period}`,
-      { cookie },
-    );
+  const read = (period = "2026-03-02", cookie = managerCookie) =>
+    send(mountApp(), "GET", `/management-api/roster/breaches?period=${period}`, { cookie });
 
   it("uses preferred drafts and adjacent weeks, keeps boundary rest warnings and returns the resolved rules", async () => {
     const loc = await warningLocation();
@@ -858,7 +781,7 @@ describe("roster warnings while planning", () => {
     await planned(loc, "2026-03-03T09:00:00Z", "2026-03-03T13:00:00Z");
     const sunday = await planned(loc, "2026-03-08T22:00:00Z", "2026-03-09T00:00:00Z", draft);
     const nextMonday = await planned(loc, "2026-03-09T05:00:00Z", "2026-03-09T09:00:00Z", next);
-    const response = await read(loc, "2026-03-04");
+    const response = await read("2026-03-04");
     expect(response.status).toBe(200);
     const body = (await response.json()) as {
       ruleset: unknown;
@@ -894,19 +817,17 @@ describe("roster warnings while planning", () => {
     ]);
   });
 
-  it("reads unattached shifts by their local calendar date and scopes them to this location", async () => {
+  it("reads unattached shifts by their local calendar date", async () => {
     const loc = await warningLocation();
     const included = await planned(loc, "2026-03-01T23:30:00Z", "2026-03-02T07:30:00Z", null, 60);
     const excluded = await planned(loc, "2026-03-08T23:30:00Z", "2026-03-09T07:30:00Z", null, 60);
-    const foreignLoc = await warningLocation();
-    const foreign = await planned(foreignLoc, "2026-03-02T08:00:00Z", "2026-03-02T20:00:00Z");
-    const response = await read(loc);
+    const response = await read();
     expect(response.status).toBe(200);
     const { breaches } = (await response.json()) as { breaches: Array<Record<string, unknown>> };
     expect(breaches.filter((b) => b.kind === "break_owed").map((b) => b.shiftId)).toEqual([
       included,
     ]);
-    expect(breaches.some((b) => b.shiftId === excluded || b.shiftId === foreign)).toBe(false);
+    expect(breaches.some((b) => b.shiftId === excluded)).toBe(false);
   });
 
   it("keeps day/week warnings in the requested week and omits the annual cap", async () => {
@@ -917,7 +838,7 @@ describe("roster warnings while planning", () => {
     });
     for (const day of ["2026-02-24", "2026-03-03", "2026-03-10"])
       await planned(loc, `${day}T09:00:00Z`, `${day}T13:00:00Z`);
-    const response = await read(loc);
+    const response = await read();
     expect(response.status).toBe(200);
     const { breaches } = (await response.json()) as { breaches: Array<Record<string, unknown>> };
     expect(breaches).toEqual([
@@ -951,7 +872,7 @@ describe("roster warnings while planning", () => {
         await planned(loc, `${date}T09:00:00Z`, `${date}T17:00:00Z`, null, 0, person);
       }
     await planned(loc, "2026-03-09T09:00:00Z", "2026-03-09T17:00:00Z");
-    const response = await read(loc);
+    const response = await read();
     expect(response.status).toBe(200);
     const { breaches } = (await response.json()) as { breaches: Array<Record<string, unknown>> };
     expect(breaches.filter((b) => b.kind === "weekly_rest_insufficient")).toEqual([
@@ -965,17 +886,34 @@ describe("roster warnings while planning", () => {
     ]);
   });
 
-  it("returns convenio.not_found when no labour rules row exists", async () => {
-    const loc = await warningLocation(false);
-    expect(await refusal(await read(loc))).toEqual([
-      409,
-      "convenio.not_found",
-      { locationId: loc },
+  it("reads the venue's warnings with no locationId", async () => {
+    const loc = await warningLocation(true, { maxOrdinaryDailyMinutes: 60 });
+    await planned(loc, "2026-03-03T09:00:00Z", "2026-03-03T13:00:00Z");
+    const response = await send(
+      mountApp(),
+      "GET",
+      "/management-api/roster/breaches?period=2026-03-02",
+    );
+    expect(response.status).toBe(200);
+    const { breaches } = (await response.json()) as { breaches: Array<Record<string, unknown>> };
+    expect(breaches.filter((b) => b.kind === "exceeds_daily_max")).toEqual([
+      {
+        kind: "exceeds_daily_max",
+        personId,
+        workDate: "2026-03-03",
+        plannedMinutes: 240,
+        maxMinutes: 60,
+      },
     ]);
   });
+
+  it("returns convenio.not_found when no labour rules row exists", async () => {
+    await warningLocation(false);
+    expect(await refusal(await read())).toEqual([409, "convenio.not_found", {}]);
+  });
   it("refuses staff and unauthenticated reads", async () => {
-    const loc = await warningLocation();
-    const denied = await read(loc, "2026-03-02", staffCookie);
+    await warningLocation();
+    const denied = await read("2026-03-02", staffCookie);
     expect(denied.status).toBe(403);
     expect(await refusal(denied)).toEqual([
       403,
@@ -985,13 +923,13 @@ describe("roster warnings while planning", () => {
     const response = await send(
       mountApp(),
       "GET",
-      `/management-api/roster/breaches?locationId=${loc}&period=2026-03-02`,
+      "/management-api/roster/breaches?period=2026-03-02",
       { cookie: null },
     );
     expect(response.status).toBe(401);
   });
   it.each(["", "2026-02-30", "not-a-date"])("refuses the invalid period %s", async (period) => {
-    const loc = await warningLocation();
-    expect((await read(loc, period)).status).toBe(400);
+    await warningLocation();
+    expect((await read(period)).status).toBe(400);
   });
 });

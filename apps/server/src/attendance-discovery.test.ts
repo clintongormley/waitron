@@ -4,7 +4,6 @@ import { asc, eq, sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   appendOrderAmendment,
-  devices,
   locations,
   locationDayCutoverChanges,
   newId,
@@ -37,7 +36,7 @@ const suite = useVenueDb({
 });
 const run = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, body);
 const backend = new WorkforceBackend();
-let locationId: string, otherLocation: string, personId: string, nodeId: string, deviceId: string;
+let locationId: string, personId: string, nodeId: string, deviceId: string;
 const now = new Date("2026-01-09T12:00:00Z");
 const scope = () => ({ locationId, now, batchSize: 2 });
 const event = (at: string) => ({
@@ -49,7 +48,7 @@ const event = (at: string) => ({
 });
 async function begin(generation = "open-one") {
   const { beginAttendanceDiscovery } = await import("./attendance-discovery.js");
-  return run((tx) => beginAttendanceDiscovery(tx, { locationId, generation }));
+  return run((tx) => beginAttendanceDiscovery(tx, { generation }));
 }
 async function pass(batchSize = 2) {
   const { discoverAttendanceDays } = await import("./attendance-discovery.js");
@@ -57,7 +56,7 @@ async function pass(batchSize = 2) {
 }
 async function next(at = now) {
   const { nextAttendanceDay } = await import("./attendance-discovery.js");
-  return run((tx) => nextAttendanceDay(tx, { locationId, now: at }));
+  return run((tx) => nextAttendanceDay(tx, { now: at }));
 }
 async function drain(batchSize = 2) {
   for (let i = 0; i < 100; i++) if (!(await pass(batchSize)).more) return;
@@ -82,26 +81,17 @@ async function evaluate() {
 }
 beforeEach(async () => {
   await seedTenant(suite.db);
-  const places = await suite.db
+  const [place] = await suite.db
     .insert(locations)
-    .values([
-      {
-        name: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "04:00",
-        invoiceLocales: ["es"],
-        operationDescription: "Restaurant",
-      },
-      {
-        name: "Other",
-        timeZone: "UTC",
-        dayCutover: "04:00",
-        invoiceLocales: ["en"],
-        operationDescription: "Restaurant",
-      },
-    ])
+    .values({
+      name: "Madrid",
+      timeZone: "Europe/Madrid",
+      dayCutover: "04:00",
+      invoiceLocales: ["es"],
+      operationDescription: "Restaurant",
+    })
     .returning({ id: locations.id });
-  [locationId, otherLocation] = places.map((r) => r.id) as [string, string];
+  locationId = place!.id;
   nodeId = await seedNode(suite.db, brandLocationId(locationId));
   deviceId = (await seedDevice(suite.db, { locationId: brandLocationId(locationId) })).deviceId;
   const [person] = await suite.db
@@ -112,6 +102,19 @@ beforeEach(async () => {
 });
 
 describe("durable attendance discovery", () => {
+  it("discovers the venue's day without being told a location", async () => {
+    await signIn("2026-01-05T12:00:00Z");
+    const { beginAttendanceDiscovery, discoverAttendanceDays, nextAttendanceDay } =
+      await import("./attendance-discovery.js");
+    await run((tx) => beginAttendanceDiscovery(tx, { generation: "venue-only" }));
+    for (let i = 0; i < 100; i++)
+      if (!(await run((tx) => discoverAttendanceDays(tx, { now, batchSize: 2 }))).more) break;
+    expect(await run((tx) => nextAttendanceDay(tx, { now }))).toEqual({
+      businessDay: "2026-01-05",
+      startAt: "2026-01-05T03:00:00.000Z",
+      endAt: "2026-01-06T03:00:00.000Z",
+    });
+  });
   it("keeps the day unavailable until the captured last source page is committed", async () => {
     await signIn("2026-01-05T08:00:00Z");
     await signIn("2026-01-05T12:00:00Z");
@@ -127,7 +130,6 @@ describe("durable attendance discovery", () => {
     expect(scan).toMatchObject({ generation: "open-one" });
     await drain();
     expect(await next()).toEqual({
-      locationId,
       businessDay: "2026-01-05",
       startAt: "2026-01-05T03:00:00.000Z",
       endAt: "2026-01-06T03:00:00.000Z",
@@ -141,7 +143,7 @@ describe("durable attendance discovery", () => {
     await signIn(at);
     await begin();
     await drain();
-    expect(await next(new Date(endAt))).toEqual({ locationId, businessDay, startAt, endAt });
+    expect(await next(new Date(endAt))).toEqual({ businessDay, startAt, endAt });
     expect(await next(new Date(Date.parse(endAt) - 1))).toBeNull();
   });
   it("uses cutover history, exact boundaries and oldest-first catchup without creating empty days", async () => {
@@ -216,31 +218,6 @@ describe("durable attendance discovery", () => {
     expect(await suite.db.select().from(attendanceSourceState)).toEqual(before);
     await drain();
     expect((await next())?.businessDay).toBe("2026-01-05");
-  });
-  it("uses captured location instead of a session's moved device and ignores another location", async () => {
-    const id = await signIn("2026-01-05T12:00:00Z");
-    await run((tx) =>
-      recordAttendanceFact(tx, {
-        source: "session",
-        key: id,
-        personId,
-        locationId,
-        kind: "sign-in",
-        at: "2026-01-05T12:00:00Z",
-        offsetMinutes: 60,
-        outcome: "qualified",
-      }),
-    );
-    await suite.db
-      .update(devices)
-      .set({ locationId: otherLocation })
-      .where(eq(devices.id, deviceId));
-    await signIn("2026-01-06T12:00:00Z");
-    await begin();
-    await drain();
-    expect((await rows()).map((r) => [r.locationId, r.businessDay])).toEqual([
-      [locationId, "2026-01-05"],
-    ]);
   });
   it("discovers retained unpaid amendments, discarded drafts, group events and bill requests", async () => {
     const partyId = newId(),
@@ -377,9 +354,7 @@ describe("durable attendance discovery", () => {
               }
             : Reflect.get(target, key, receiver),
       });
-    await run((tx) =>
-      beginAttendanceDiscovery(planning(tx), { locationId, generation: "open-one" }),
-    );
+    await run((tx) => beginAttendanceDiscovery(planning(tx), { generation: "open-one" }));
     await run((tx) => discoverAttendanceDays(planning(tx), scope()));
     const clockPlans = plans.filter((plan) => plan.some((line) => /\btime_entries\b/.test(line)));
     expect(clockPlans).not.toEqual([]);
@@ -395,11 +370,7 @@ describe("durable attendance discovery", () => {
     await run((tx) => backend.clockIn(tx, { ...event("2026-01-05T08:00:00Z"), nodeId: otherNode }));
     expect(
       await run((tx) =>
-        reconcileAttendanceBeforeClock(
-          tx,
-          { nodeId, locationId, personId },
-          new Date("2026-01-06T12:00:00Z"),
-        ),
+        reconcileAttendanceBeforeClock(tx, { nodeId, personId }, new Date("2026-01-06T12:00:00Z")),
       ),
     ).toBeNull();
     expect((await rows()).map((r) => r.businessDay)).toEqual(["2026-01-05"]);
@@ -701,9 +672,7 @@ it.each([
       .values({ locationId, effectiveBusinessDay: "2026-01-11", dayCutover: cutover });
     const answer = next(new Date(instant));
     await expect(answer).resolves.toEqual(
-      due
-        ? { locationId, businessDay: "2026-01-10", startAt: "2026-01-10T03:00:00.000Z", endAt }
-        : null,
+      due ? { businessDay: "2026-01-10", startAt: "2026-01-10T03:00:00.000Z", endAt } : null,
     );
     expect(await rows()).toEqual([{ ...before, endAt, nextDueAt: endAt }]);
   },
@@ -753,12 +722,12 @@ it("does not dirty any day for a device-only party event without a bill payment"
   expect(await rows()).toEqual([]);
 });
 
-it("qualifies a captured pending bill at its saved instant and location when the retained outcome arrives", async () => {
+it("qualifies a captured pending bill at its saved instant when the retained outcome arrives", async () => {
   const orderId = newId(),
     paymentId = newId();
   await suite.db
     .insert(workingOrders)
-    .values({ id: orderId, source: "dashboard", locationId: otherLocation, orderNumber: 1 });
+    .values({ id: orderId, source: "dashboard", locationId, orderNumber: 1 });
   await suite.db.insert(billPayments).values({
     id: paymentId,
     workingOrderId: orderId,
@@ -799,6 +768,92 @@ it("qualifies a captured pending bill at its saved instant and location when the
   expect(
     (await rows()).filter((r) => r.dirtyRevision !== r.evaluatedRevision).map((r) => r.businessDay),
   ).toEqual(["2026-01-05"]);
+});
+
+it("does not mark a day for draft or group events whose party has no order", async () => {
+  const partyId = newId(),
+    draftId = newId();
+  await suite.db.insert(parties).values({ id: partyId, openedBy: personId });
+  await suite.db
+    .insert(orderDrafts)
+    .values({ id: draftId, partyId, ownerId: personId, state: "discarded" });
+  await suite.db.insert(orderDraftEvents).values({
+    draftId,
+    kind: "discarded",
+    actorId: personId,
+    fromPerson: personId,
+    toPerson: personId,
+    detail: {},
+    createdAt: "2026-01-06T12:00:00Z",
+  });
+  await suite.db.insert(orderGroupEvents).values({
+    partyId,
+    kind: "reordered",
+    actorId: personId,
+    detail: {},
+    createdAt: "2026-01-07T12:00:00Z",
+  });
+  await begin();
+  await drain();
+  expect(await rows()).toEqual([]);
+});
+
+it("a captured event still marks its day after its party loses every order", async () => {
+  const partyId = newId(),
+    otherParty = newId(),
+    orderId = newId(),
+    draftId = newId(),
+    eventId = newId();
+  await suite.db.insert(parties).values([
+    { id: partyId, openedBy: personId },
+    { id: otherParty, openedBy: personId },
+  ]);
+  await suite.db
+    .insert(workingOrders)
+    .values({ id: orderId, source: "dashboard", locationId, nodeId, orderNumber: 1, partyId });
+  await suite.db
+    .insert(orderDrafts)
+    .values({ id: draftId, partyId, ownerId: personId, state: "discarded" });
+  await suite.db.insert(orderDraftEvents).values({
+    id: eventId,
+    draftId,
+    kind: "discarded",
+    actorId: personId,
+    fromPerson: personId,
+    toPerson: personId,
+    detail: {},
+    createdAt: "2026-01-06T12:00:00Z",
+  });
+  await run((tx) =>
+    recordAttendanceFact(tx, {
+      source: "draft",
+      key: `event:${eventId}`,
+      personId,
+      kind: "order",
+      at: "2026-01-06T12:00:00Z",
+      offsetMinutes: 60,
+      outcome: "qualified",
+    }),
+  );
+  await suite.db
+    .update(workingOrders)
+    .set({ partyId: otherParty })
+    .where(eq(workingOrders.id, orderId));
+  await evaluate();
+  await begin();
+  await drain();
+  expect(
+    (await rows()).filter((r) => r.dirtyRevision !== r.evaluatedRevision).map((r) => r.businessDay),
+  ).toEqual(["2026-01-06"]);
+  const [watch] = await suite.db
+    .select()
+    .from(attendanceSourceState)
+    .where(eq(attendanceSourceState.key, `event:${eventId}`));
+  expect(watch).toMatchObject({
+    source: "draft",
+    recordKind: "watch",
+    previousDays: ["2026-01-06"],
+  });
 });
 
 it("reassigns a future published shift to its new start-day after a scheduled cutover changes", async () => {

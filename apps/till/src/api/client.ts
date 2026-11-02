@@ -2036,7 +2036,6 @@ export type AbsenceKind = "holiday" | "sick_leave" | "leave" | "unpaid";
 /** One of my upcoming shifts (`GET /api/schedule/shifts`). */
 export interface MyShift {
   id: string;
-  locationId: string;
   startsAt: string;
   startsOffsetMinutes: number;
   endsAt: string;

@@ -1,5 +1,5 @@
 import { withTransaction, type Database } from "@waitron/db";
-import { and, eq, sql } from "drizzle-orm";
+import { and, sql } from "drizzle-orm";
 import { attendanceDayWork, processAttendanceDay } from "@waitron/workforce";
 import { discoverAttendanceDays, nextAttendanceDay } from "./attendance-discovery.js";
 import { readAttendanceFacts, readPlannedAttendanceShifts } from "./attendance-facts.js";
@@ -8,7 +8,6 @@ import { realSleep } from "./loop.js";
 export type AttendancePassDeps = {
   db: Database;
   nodeId: string;
-  locationId: string;
   now: () => Date;
   isPrimary: () => boolean;
 };
@@ -25,9 +24,8 @@ export async function runAttendancePass(
   return withTransaction(deps.db, async (tx) => {
     if (!deps.isPrimary()) return { processed: false, more: false };
     const now = deps.now();
-    const scope = { locationId: deps.locationId, now };
-    const discovery = await discoverAttendanceDays(tx, { ...scope, batchSize: 100 });
-    const day = await nextAttendanceDay(tx, scope);
+    const discovery = await discoverAttendanceDays(tx, { now, batchSize: 100 });
+    const day = await nextAttendanceDay(tx, { now });
     let appended = false;
     if (day !== null) {
       const result = await processAttendanceDay(tx, {
@@ -45,7 +43,6 @@ export async function runAttendancePass(
       .from(attendanceDayWork)
       .where(
         and(
-          eq(attendanceDayWork.locationId, deps.locationId),
           sql`${attendanceDayWork.nextDueAt} <= ${now.toISOString()}`,
           sql`${attendanceDayWork.endAt} <= ${now.toISOString()}`,
           sql`(${attendanceDayWork.dirtyRevision} > ${attendanceDayWork.evaluatedRevision} or json_array_length(${attendanceDayWork.deferredShiftIds}) > 0)`,

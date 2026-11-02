@@ -70,7 +70,7 @@ export interface AttendancePrompt {
   locationId: string;
   locationName: string;
   businessDay: string | null;
-  day: AttendanceDay | null;
+  day: (AttendanceDay & { locationId: string }) | null;
   kind: "automatic-out" | "missing-times" | "proposal";
   automaticEntryId: string | null;
   missingKinds: ClockEntryKind[];

@@ -10,7 +10,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
-  locations,
   newId,
   orderGroups,
   orderGroupEvents,
@@ -25,7 +24,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { AppError, locationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { createCourse, createStation } from "./kitchen.js";
@@ -238,26 +237,6 @@ describe("kitchen service attendance", () => {
     expect(facts.map((r) => r.key.split(":")[1]).sort()).toEqual(
       [party.tabId, split.billId].sort(),
     );
-  });
-  it("a kitchen transition uses its stored order location", async () => {
-    const order = await prepare("ticket-preparing");
-    const [other] = await suite.db
-      .insert(locations)
-      .values({ name: "Elsewhere", invoiceLocales: ["es-ES"], operationDescription: "Restaurant" })
-      .returning({ id: locations.id });
-    await withTransaction(suite.db, (tx) =>
-      advanceTicketItem(
-        tx,
-        { ...v.cfg, locationId: locationId(other!.id) },
-        order.ticketId,
-        "preparing",
-        { recorder: recordAttendanceFact, clock: v.clock, personId: v.operatorId },
-      ),
-    );
-    expect((await state()).facts.map((r) => [r.personId, r.locationId])).toEqual([
-      [v.operatorId, v.cfg.locationId],
-    ]);
-    expect((await state()).days.map((r) => r.locationId)).toEqual([v.cfg.locationId]);
   });
   it("a device-only group command supplies no worker activity", async () => {
     const order = await prepare("group-ready");

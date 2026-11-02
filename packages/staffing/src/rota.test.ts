@@ -63,7 +63,6 @@ type ShiftInput = {
 const api = staffing as unknown as {
   changeRotaWeek(
     t: Transaction,
-    c: Cfg,
     week: string,
   ): Promise<{ versionId: string; openSwaps: { swapId: string; fromShiftId: string }[] }>;
   readRotaWeek(t: Transaction, c: Cfg, week: string): Promise<RotaWeek>;
@@ -200,18 +199,15 @@ async function addSeason(cfg: Cfg, name: string, startsOn: string) {
 const hours = (r: RotaWeek) => r.days.map((d) => [d.businessDay, d.hasHours]);
 
 describe("the rota week", () => {
-  it("includes its location and clock zone for passive warning reads and candidate previews", async () => {
+  it("includes its clock zone for passive warning reads and candidate previews", async () => {
     const v = await venue();
     expect(await read(v)).toMatchObject({
-      locationId: v.cfg.locationId,
       timeZone: "Europe/Madrid",
     });
   });
   it("places a version's next-Monday shift on Sunday, keeps the previous Sunday's overflow visible and includes only local-date unattached shifts", async () => {
     const v = await venue();
-    const version = await tx((t) =>
-      backend.createRosterVersion(t, { ...v.cfg, period: "2026-11-30" }),
-    );
+    const version = await tx((t) => backend.createRosterVersion(t, { period: "2026-11-30" }));
     const sunday = await rawShift(v, version, "2026-12-07T00:00:00Z", "2026-12-07T02:00:00Z");
     const outside = await rawShift(v, version, "2026-11-29T23:30:00Z", "2026-11-30T01:00:00Z");
     const local = await rawShift(v, null, "2026-11-29T23:45:00Z", "2026-11-30T02:00:00Z");
@@ -243,9 +239,7 @@ describe("the rota week", () => {
   });
   it("lists approved absences touching the week, excludes pending leave, and prefers a draft beside a published week", async () => {
     const v = await venue();
-    const published = await tx((t) =>
-      backend.createRosterVersion(t, { ...v.cfg, period: "2026-11-30" }),
-    );
+    const published = await tx((t) => backend.createRosterVersion(t, { period: "2026-11-30" }));
     await tx(async (t) => {
       await backend.publishRoster(t, { versionId: published });
       await t.insert(absences).values([
@@ -259,9 +253,7 @@ describe("the rota week", () => {
         { personId: v.marc, kind: "holiday", startsOn: "2026-12-01", endsOn: "2026-12-02" },
       ]);
     });
-    const draft = await tx((t) =>
-      backend.createRosterVersion(t, { ...v.cfg, period: "2026-11-30" }),
-    );
+    const draft = await tx((t) => backend.createRosterVersion(t, { period: "2026-11-30" }));
     const r = await read(v);
     expect(r.version).toEqual({ id: draft, status: "draft", changedSincePublished: true });
     expect(r.absences).toEqual([{ personId: v.ana, startsOn: "2026-11-29", endsOn: "2026-11-30" }]);
@@ -514,9 +506,7 @@ describe("the rota writes", () => {
 describe("reviewed Rota boundaries", () => {
   it("refuses both an edit and deletion of an unattached shift in a published week", async () => {
     const v = await venue();
-    const version = await tx((t) =>
-      backend.createRosterVersion(t, { ...v.cfg, period: "2026-11-30" }),
-    );
+    const version = await tx((t) => backend.createRosterVersion(t, { period: "2026-11-30" }));
     await tx((t) => backend.publishRoster(t, { versionId: version }));
     const id = await rawShift(v, null, "2026-12-01T08:00:00Z", "2026-12-01T12:00:00Z");
     expect((await read(v)).shifts.map((s) => s.shiftId)).toContain(id);
@@ -600,7 +590,7 @@ describe("changing a published rota week", () => {
       ]);
     });
     expect(api.changeRotaWeek).toBeTypeOf("function");
-    const result = await tx((t) => api.changeRotaWeek(t, v.cfg, "2026-11-30"));
+    const result = await tx((t) => api.changeRotaWeek(t, "2026-11-30"));
     const copied = await read(v),
       copyId = copied.shifts[0]!.shiftId;
     expect(copyId).not.toBe(shiftId);
@@ -637,16 +627,16 @@ describe("changing a published rota week", () => {
   it("does not create a draft for an invalid week, a missing published week or an existing draft", async () => {
     const v = await venue();
     expect(api.changeRotaWeek).toBeTypeOf("function");
-    await expect(tx((t) => api.changeRotaWeek(t, v.cfg, "2026-12-01"))).rejects.toMatchObject({
+    await expect(tx((t) => api.changeRotaWeek(t, "2026-12-01"))).rejects.toMatchObject({
       code: "staffing.invalid",
       params: { field: "week" },
     });
-    await expect(tx((t) => api.changeRotaWeek(t, v.cfg, "2026-11-30"))).rejects.toMatchObject({
+    await expect(tx((t) => api.changeRotaWeek(t, "2026-11-30"))).rejects.toMatchObject({
       code: "staffing.invalid",
       params: { field: "week" },
     });
     await add(v);
-    await expect(tx((t) => api.changeRotaWeek(t, v.cfg, "2026-11-30"))).rejects.toMatchObject({
+    await expect(tx((t) => api.changeRotaWeek(t, "2026-11-30"))).rejects.toMatchObject({
       code: "roster.draft_exists",
     });
   });
@@ -655,12 +645,10 @@ describe("changing a published rota week", () => {
 describe("copying an unassigned shift", () => {
   it("keeps a copied unassigned shift under Not in a slot without inventing an assignment", async () => {
     const v = await venue();
-    const versionId = await tx((t) =>
-      backend.createRosterVersion(t, { ...v.cfg, period: "2026-11-30" }),
-    );
+    const versionId = await tx((t) => backend.createRosterVersion(t, { period: "2026-11-30" }));
     const original = await rawShift(v, versionId, "2026-12-01T08:00:00Z", "2026-12-01T12:00:00Z");
     await tx((t) => backend.publishRoster(t, { versionId }));
-    await tx((t) => api.changeRotaWeek(t, v.cfg, "2026-11-30"));
+    await tx((t) => api.changeRotaWeek(t, "2026-11-30"));
     const copied = await read(v);
     expect(copied.shifts).toHaveLength(1);
     expect(copied.shifts[0]!.shiftId).not.toBe(original);

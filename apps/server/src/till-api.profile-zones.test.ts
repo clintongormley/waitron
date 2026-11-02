@@ -98,9 +98,9 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/clock/break-end | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on break-end" |
  * Clock-route allowed control: till-clock-api.test.ts "allows admitted staff with only clock-in and no service-zone access".
  * | POST /api/box-clock/challenge, /api/box-clock/confirm | none: the box's own clock, never a zone's | till-box-clock-api.test.ts "serves a staff member whose till's profile has no selling action" |
- * | GET /api/attendance/inbox | none: own current/historical record | till-attendance-api.test.ts "rejects a profile without clock-in on inbox" |
- * | GET /api/attendance/hours | none: own current/historical workplace | till-hours-api.test.ts "refuses a random workplace and admits a recorded historical workplace"; allowed: "clock-only staff read their own completed hours passively without recording activity" |
- * | GET /api/attendance/day | none: own current/historical workplace | till-attendance-api.test.ts "refuses arbitrary workplaces but permits recorded historical workplaces" |
+ * | GET /api/attendance/inbox | none: own record | till-attendance-api.test.ts "rejects a profile without clock-in on inbox" |
+ * | GET /api/attendance/hours | none: own record | till-hours-api.test.ts "clock-only staff read their own completed hours passively without recording activity" |
+ * | GET /api/attendance/day | none: own record | till-attendance-api.test.ts "serves own history to clock-only staff without service zones and keeps reads passive" |
  * | GET /api/attendance/commands/:commandId | none: requester-owned receipt | till-attendance-api.test.ts "hides foreign receipts and refuses another worker's question, item and target even for an admin operator" |
  * | GET /api/attendance/items/:itemId/approvers | none: own worker request | same foreign-item case in till-attendance-api.test.ts |
  * | POST /api/attendance/commands | none: own question/item/target scope | same foreign-item case in till-attendance-api.test.ts |

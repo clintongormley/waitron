@@ -1,27 +1,28 @@
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, captureError, newId, nowIso } from "@waitron/db";
+import { afterEach, describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS, captureError, newId, nowIso, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { AppError } from "@waitron/shared";
 import type { WorkTimeRuleset } from "@waitron/workforce";
 import { resolveWorkTimeRuleset } from "./convenio.js";
 import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
-import { seedConvenioConfig, seedLocation } from "../test/fixtures.js";
+import { seedConvenioConfig } from "../test/fixtures.js";
 
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
-    await seedTenant(db);
+    await seedVenue(db);
   },
 });
 
-// A fresh location per test, so the one database this suite opens keeps each test's
-// convenio_config row isolated on its own location key — the tests stay order-independent. It has
-// to be: `resetPerTest: false` above keeps the taxpayer row the setup seeds, so nothing empties
-// the tables between tests.
-//
+// `resetPerTest: false` keeps the venue the setup seeds, so each test's convenio_config row is
+// removed after it.
+afterEach(async () => {
+  await suite.db.execute(sql`delete from convenio_config`);
+});
+
 // `id` and `created_at` come from the table's `$defaultFn`, which drizzle runs per insert rather
 // than the database supplying a DEFAULT, so each RAW insert below names both itself.
 
@@ -48,16 +49,25 @@ const DEFAULT_RULESET: WorkTimeRuleset = {
 };
 
 describe("resolveWorkTimeRuleset", () => {
+  it("resolves the venue's rules without being told a location", async () => {
+    await seedConvenioConfig(suite.db, {
+      locationId: await venueLocationId(suite.db),
+      workingDaysPerWeek: 6,
+    });
+    const ruleset = await resolveWorkTimeRuleset(suite.db);
+    expect(ruleset.workingDaysPerWeek).toBe(6);
+  });
+
   it("resolves a default row to the ET/default ruleset", async () => {
-    const locationId = await seedLocation(suite.db);
+    const locationId = await venueLocationId(suite.db);
     await seedConvenioConfig(suite.db, { locationId });
-    const ruleset = await resolveWorkTimeRuleset(suite.db, { locationId });
+    const ruleset = await resolveWorkTimeRuleset(suite.db);
     expect(ruleset).toEqual(DEFAULT_RULESET);
   });
 
   it("resolves a fully-customised row, mapping the period_net enum and the scaled premiums", async () => {
     // Every field set to a distinct non-default, so a mapping that dropped or crossed a column shows.
-    const locationId = await seedLocation(suite.db);
+    const locationId = await venueLocationId(suite.db);
     await suite.db.execute(sql`
       insert into convenio_config (
         id, created_at,
@@ -69,7 +79,7 @@ describe("resolveWorkTimeRuleset", () => {
       ) values (${newId()}, ${nowIso()},
         ${locationId}, 6, 'period_net', 120, 60, 470, 2100, 780, 500, 300, 20, 2400, 90,
         1380, 300, 2500, 1250, true)`);
-    const ruleset = await resolveWorkTimeRuleset(suite.db, { locationId });
+    const ruleset = await resolveWorkTimeRuleset(suite.db);
     expect(ruleset).toEqual({
       workingDaysPerWeek: 6,
       overtimeModel: "period-net",
@@ -95,28 +105,27 @@ describe("resolveWorkTimeRuleset", () => {
   // ruleset field hold numbers a hundredfold apart. The half-percent case is the one a
   // fraction-versus-percentage mix-up cannot round away.
   it("reads a whole-percent night premium back as a percentage", async () => {
-    const locationId = await seedLocation(suite.db);
+    const locationId = await venueLocationId(suite.db);
     await suite.db.execute(sql`
       insert into convenio_config (id, created_at, location_id, night_premium_pct)
       values (${newId()}, ${nowIso()}, ${locationId}, 2500)`);
-    const ruleset = await resolveWorkTimeRuleset(suite.db, { locationId });
+    const ruleset = await resolveWorkTimeRuleset(suite.db);
     expect(ruleset.nightPremiumPct).toBe(25);
   });
 
   it("reads a half-percent night premium back as a percentage", async () => {
-    const locationId = await seedLocation(suite.db);
+    const locationId = await venueLocationId(suite.db);
     await suite.db.execute(sql`
       insert into convenio_config (id, created_at, location_id, night_premium_pct)
       values (${newId()}, ${nowIso()}, ${locationId}, 1250)`);
-    const ruleset = await resolveWorkTimeRuleset(suite.db, { locationId });
+    const ruleset = await resolveWorkTimeRuleset(suite.db);
     expect(ruleset.nightPremiumPct).toBe(12.5);
   });
 
-  it("throws convenio.not_found when no convenio_config row exists for the location", async () => {
-    const locationId = await seedLocation(suite.db);
-    const error = await captureError(() => resolveWorkTimeRuleset(suite.db, { locationId }));
+  it("throws convenio.not_found when no convenio_config row exists for the venue", async () => {
+    const error = await captureError(() => resolveWorkTimeRuleset(suite.db));
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("convenio.not_found");
-    expect((error as AppError).params).toEqual({ locationId });
+    expect((error as AppError).params).toEqual({});
   });
 });

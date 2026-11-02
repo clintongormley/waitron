@@ -5,13 +5,11 @@ export type AttendanceFact = Readonly<{
   source: AttendanceSource;
   key: string;
   personId: string;
-  locationId: string;
   kind: ActivityKind;
   at: string;
   offsetMinutes: number;
 }>;
 export type AttendanceDay = Readonly<{
-  locationId: string;
   businessDay: string;
   startAt: string;
   endAt: string;
@@ -31,13 +29,12 @@ export type AttendanceQuestion = Readonly<{
 export type PlannedAttendanceShift = Readonly<{
   id: string;
   personId: string;
-  locationId: string;
   startsAt: string;
   endsAt: string;
   rosterVersionId: string;
 }>;
 export type AttendanceDayInput = Readonly<{
-  // A clock caller has complete evidence for one worker, not a completed location scan.
+  // A clock caller has complete evidence for one worker, not a completed scan of the day.
   personId?: string;
   day: AttendanceDay;
   facts: readonly AttendanceFact[];

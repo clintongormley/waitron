@@ -6480,8 +6480,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   and makes its shared fiscal fixtures reuse one venue. The contract's node location ids remain for
   S18; the schema changes remain for S20–S28. S9 landed (#2389): bookings and staffing read the venue; staffing's season,
   day-plan and month reads still hand venue-service a `{ locationId }` scope, which S6 and S8 leave as
-  an ignored `_cfg` and S18 removes, and its rota verbs keep theirs for the workforce roster calls S13
-  changes. S10 landed (#2396): printing serves the venue. Any of the box's print agents may claim a
+  an ignored `_cfg` and S18 removes, and its rota verbs keep theirs as an unread `_cfg`, which S18
+  removes. S10 landed (#2396): printing serves the venue. Any of the box's print agents may claim a
   network printer's job, new print jobs, printers, page printers and the demo printer take the
   venue's id, `@waitron/printing` no longer exports `PrintConfig` or `PrintAgentConfig`, and
   `@waitron/layouts`' printer types carry no location. It leaves location reads for their owners:

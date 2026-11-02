@@ -17,7 +17,6 @@ export interface ListShiftsForPersonInput {
 
 export interface PersonShiftRow {
   id: string;
-  locationId: string;
   startsAt: string;
   startsOffsetMinutes: number;
   endsAt: string;
@@ -57,14 +56,13 @@ export async function listShiftsForPerson(
 ): Promise<PersonShiftRow[]> {
   const { rows } = await tx.execute<{
     id: string;
-    location_id: string;
     starts_at: string;
     starts_offset_minutes: number;
     ends_at: string;
     ends_offset_minutes: number;
     roster_version_id: string | null;
   }>(sql`
-    select shifts.id, shifts.location_id, starts_at, starts_offset_minutes, ends_at,
+    select shifts.id, starts_at, starts_offset_minutes, ends_at,
       ends_offset_minutes, roster_version_id
     from shifts
     join roster_versions rv on rv.id = shifts.roster_version_id and rv.status = 'published'
@@ -74,7 +72,6 @@ export async function listShiftsForPerson(
     order by starts_at`);
   return rows.map((r) => ({
     id: r.id,
-    locationId: r.location_id,
     startsAt: r.starts_at,
     startsOffsetMinutes: r.starts_offset_minutes,
     endsAt: r.ends_at,

@@ -947,37 +947,33 @@ describe("DashboardApi", () => {
 });
 
 describe("DashboardApi — roster", () => {
-  it("getRoster GETs the snapshot with the location + period query", async () => {
+  it("getRoster GETs the snapshot for the period", async () => {
     const snapshot = { version: null, shifts: [] };
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(snapshot));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.getRoster("loc-1", "2026-03-02")).toEqual(snapshot);
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "/management-api/roster?locationId=loc-1&period=2026-03-02",
-      {
-        method: "GET",
-        credentials: "include",
-        signal: expect.any(AbortSignal),
-      },
-    );
+    expect(await api.getRoster("2026-03-02")).toEqual(snapshot);
+    expect(fetchImpl).toHaveBeenCalledWith("/management-api/roster?period=2026-03-02", {
+      method: "GET",
+      credentials: "include",
+      signal: expect.any(AbortSignal),
+    });
   });
 
-  it("createRosterVersion POSTs { locationId, period }", async () => {
+  it("createRosterVersion POSTs { period }", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ versionId: "v1" }, true, 201));
     const api = new DashboardApi("", fetchImpl);
-    expect(await api.createRosterVersion("loc-1", "2026-03-02")).toEqual({ versionId: "v1" });
+    expect(await api.createRosterVersion("2026-03-02")).toEqual({ versionId: "v1" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/roster", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ locationId: "loc-1", period: "2026-03-02" }),
+      body: JSON.stringify({ period: "2026-03-02" }),
     });
   });
 
   it("addShift POSTs the shift under the version and returns { shiftId }", async () => {
     const input = {
       personId: "p1",
-      locationId: "loc-1",
       startsAt: "2026-03-02T09:00:00Z",
       startsOffsetMinutes: 0,
       endsAt: "2026-03-02T13:00:00Z",
@@ -1171,7 +1167,6 @@ describe("DashboardApi — whoami + my schedule (staff self-service)", () => {
     const rows = [
       {
         id: "sh1",
-        locationId: "loc-1",
         startsAt: "2026-05-04T09:00:00Z",
         startsOffsetMinutes: 0,
         endsAt: "2026-05-04T17:00:00Z",

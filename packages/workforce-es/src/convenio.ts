@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import type { Database, Transaction } from "@waitron/db";
+import { venueLocationId, type Database, type Transaction } from "@waitron/db";
 import { AppError, basisPointsToDecimal, centsToDecimal } from "@waitron/shared";
 import type { OvertimeModel, WorkTimeRuleset } from "@waitron/workforce";
 import { convenioConfig } from "./schema/convenio-config.js";
@@ -33,13 +33,10 @@ function moneyNum(cents: number | null): number | null {
 }
 
 /**
- * Resolves the location's `convenio_config` row into the regime-neutral `WorkTimeRuleset`
- * the generic engine consumes. Throws `convenio.not_found` when no row is configured for the location.
+ * Resolves the venue's `convenio_config` row into the regime-neutral `WorkTimeRuleset`
+ * the generic engine consumes. Throws `convenio.not_found` when the venue has none.
  */
-export async function resolveWorkTimeRuleset(
-  tx: Transaction | Database,
-  params: { locationId: string },
-): Promise<WorkTimeRuleset> {
+export async function resolveWorkTimeRuleset(tx: Transaction | Database): Promise<WorkTimeRuleset> {
   const rows = await tx
     .select({
       workingDaysPerWeek: convenioConfig.workingDaysPerWeek,
@@ -61,13 +58,11 @@ export async function resolveWorkTimeRuleset(
       breaksCountAsWorked: convenioConfig.breaksCountAsWorked,
     })
     .from(convenioConfig)
-    .where(eq(convenioConfig.locationId, params.locationId))
+    .where(eq(convenioConfig.locationId, await venueLocationId(tx)))
     .limit(1);
   const row = rows[0];
   if (row === undefined) {
-    throw new AppError("convenio.not_found", {
-      locationId: params.locationId,
-    });
+    throw new AppError("convenio.not_found", {});
   }
   // The `.select({...})` above aliases every column to its exact `WorkTimeRuleset` field name and
   // narrows to precisely the ruleset's columns (no id/createdAt), so `...row` supplies all

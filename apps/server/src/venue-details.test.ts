@@ -1462,13 +1462,12 @@ describe("workforce facts after venue corrections", () => {
       payRate: 1500,
     });
     const versionId = await withTransaction(suite.db, (tx) =>
-      backend.createRosterVersion(tx, { locationId: venue.cfg.locationId, period: "2026-10-05" }),
+      backend.createRosterVersion(tx, { period: "2026-10-05" }),
     );
     await withTransaction(suite.db, async (tx) => {
       await backend.addShift(tx, {
         versionId,
         personId,
-        locationId: venue.cfg.locationId,
         startsAt: "2026-10-05T23:30:00Z",
         startsOffsetMinutes: 120,
         endsAt: "2026-10-06T00:30:00Z",

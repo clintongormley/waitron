@@ -355,14 +355,12 @@ describe("accepted order attendance", () => {
     expect((await line(id)).note).toBe("No salt");
     expect(await operations()).toEqual([]);
   });
-
   it("discarded unpaid edits remain readable as last activity", async () => {
     const id = await parked();
     await act("line", id);
     await abandonHeldOrder({ db: suite.db }, v.cfg, id);
     const facts = await run((tx) =>
       readAttendanceFacts(tx, {
-        locationId: v.cfg.locationId,
         businessDay: "2026-01-05",
         startAt: "2026-01-05T03:00:00.000Z",
         endAt: "2026-01-06T03:00:00.000Z",

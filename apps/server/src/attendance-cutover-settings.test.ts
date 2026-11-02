@@ -55,11 +55,11 @@ it("an admitted future cutover change does not block activity on its already dis
   });
   const now = new Date("2026-01-05T12:00:00Z");
   await withTransaction(suite.db, (tx) =>
-    beginAttendanceDiscovery(tx, { locationId, generation: "before-settings" }),
+    beginAttendanceDiscovery(tx, { generation: "before-settings" }),
   );
   for (let n = 0; n < 20; n++) {
     const { more } = await withTransaction(suite.db, (tx) =>
-      discoverAttendanceDays(tx, { locationId, now, batchSize: 100 }),
+      discoverAttendanceDays(tx, { now, batchSize: 100 }),
     );
     if (!more) break;
     if (n === 19) throw new Error("future rota discovery did not settle");
@@ -146,11 +146,11 @@ it("a Save that moves today's end makes attendance evaluate today up to the new 
   });
   const saveAt = new Date("2026-01-07T12:00:00Z");
   await withTransaction(suite.db, (tx) =>
-    beginAttendanceDiscovery(tx, { locationId, generation: "moved-end" }),
+    beginAttendanceDiscovery(tx, { generation: "moved-end" }),
   );
   for (let n = 0; n < 20; n++) {
     const { more } = await withTransaction(suite.db, (tx) =>
-      discoverAttendanceDays(tx, { locationId, now: saveAt, batchSize: 100 }),
+      discoverAttendanceDays(tx, { now: saveAt, batchSize: 100 }),
     );
     if (!more) break;
     if (n === 19) throw new Error("rota discovery did not settle");
@@ -201,7 +201,7 @@ it("a Save that moves today's end makes attendance evaluate today up to the new 
     }),
   );
   const day = await withTransaction(suite.db, (tx) =>
-    nextAttendanceDay(tx, { locationId, now: new Date("2026-01-08T05:00:00.000Z") }),
+    nextAttendanceDay(tx, { now: new Date("2026-01-08T05:00:00.000Z") }),
   );
   expect(day).toMatchObject({ businessDay: "2026-01-07", endAt: "2026-01-08T05:00:00.000Z" });
   expect(await suite.db.select().from(attendanceDayWork)).toEqual([

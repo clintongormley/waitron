@@ -19,22 +19,16 @@ export async function retireObsoleteRotaQuestions(
       and(
         sql`${attendanceQuestions.shiftKey} = 'rota:' || ${shifts.id}`,
         eq(shifts.personId, attendanceQuestions.personId),
-        eq(shifts.locationId, attendanceQuestions.locationId),
         gte(shifts.startsAt, new Date(day.startAt).toISOString()),
         lt(shifts.startsAt, new Date(day.endAt).toISOString()),
       ),
     )
     .leftJoin(
       rosterVersions,
-      and(
-        eq(rosterVersions.id, shifts.rosterVersionId),
-        eq(rosterVersions.locationId, attendanceQuestions.locationId),
-        eq(rosterVersions.status, "published"),
-      ),
+      and(eq(rosterVersions.id, shifts.rosterVersionId), eq(rosterVersions.status, "published")),
     )
     .where(
       and(
-        eq(attendanceQuestions.locationId, day.locationId),
         eq(attendanceQuestions.businessDay, day.businessDay),
         eq(attendanceQuestions.active, true),
         eq(attendanceQuestions.kind, "missing-times"),

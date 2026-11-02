@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import {
   deviceProfiles,
   devices,
-  locations,
+  readVenueClock,
   withTransaction,
   type Database,
   type Transaction,
@@ -38,9 +38,7 @@ import { assertStillSignedIn, requireSession } from "./till-session.js";
 import { reconcileAttendanceBeforeClock } from "./attendance-discovery.js";
 import { parseAttendanceCommand, parseAttendanceDayQuery } from "./attendance-request.js";
 import { withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
-import { readLocationClock } from "@waitron/reporting";
 import { parseHoursQuery } from "./hours-request.js";
-import { assertOwnAttendanceLocation } from "./attendance-own-scope.js";
 import type { Logger } from "./logger.js";
 
 export interface TillAttendanceApiDeps {
@@ -142,13 +140,8 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           await admit(tx, deps, session);
-          await assertOwnAttendanceLocation(tx, {
-            personId: session.personId,
-            locationId: scope.locationId,
-            currentLocationId: deps.cfg.locationId,
-          });
           const now = deps.now();
-          const clock = await readLocationClock(tx, scope.locationId);
+          const clock = await readVenueClock(tx);
           return readPersonHours(tx, { ...scope, personId: session.personId, clock, now });
         }),
       );
@@ -167,15 +160,7 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
             deps.now(),
           );
           await reconcileAttendanceResponses(tx, session.personId);
-          const inbox = await readAttendanceInbox(tx, session.personId);
-          if (!inbox.locations.some((location) => location.id === deps.cfg.locationId)) {
-            const current = await tx
-              .select({ id: locations.id, name: locations.name, timeZone: locations.timeZone })
-              .from(locations)
-              .where(eq(locations.id, deps.cfg.locationId));
-            inbox.locations.push(...current);
-          }
-          return inbox;
+          return readAttendanceInbox(tx, session.personId);
         }),
       );
     }),
@@ -187,11 +172,6 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           await admit(tx, deps, session);
-          await assertOwnAttendanceLocation(tx, {
-            personId: session.personId,
-            locationId: scope.locationId,
-            currentLocationId: deps.cfg.locationId,
-          });
           return readAttendanceDay(tx, { ...scope, personId: session.personId });
         }),
       );
@@ -249,12 +229,6 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
         withTransaction(deps.db, async (tx) => {
           await admit(tx, deps, session);
           if ("itemId" in command) await ownItem(tx, session.personId, command.itemId);
-          if (command.action === "request")
-            await assertOwnAttendanceLocation(tx, {
-              personId: session.personId,
-              locationId: command.locationId,
-              currentLocationId: deps.cfg.locationId,
-            });
           const authorizedByPersonId =
             override === undefined
               ? session.personId

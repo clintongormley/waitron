@@ -36,7 +36,6 @@ import {
   orderGroups,
   ticketItems,
   workingOrderLines,
-  workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -1481,16 +1480,11 @@ export async function applyAdjustment(
       }
       const revision = await readOrderRevision(tx, args.orderId);
       if (attendance !== undefined) {
-        const [order] = await tx
-          .select({ locationId: workingOrders.locationId })
-          .from(workingOrders)
-          .where(eq(workingOrders.id, args.orderId));
         await captureOrderEdit(
           tx,
           attendance,
           args.orderId,
           args.operatorId,
-          order!.locationId,
           revision,
           "adjustment",
           activity?.at,

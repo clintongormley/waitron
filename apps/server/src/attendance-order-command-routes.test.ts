@@ -1,15 +1,10 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { closingEditsForTest } from "./testing/party-close-fixture.js";
-import {
-  placeOrder,
-  setOrderInvoiceChoice,
-  setOrderReceiptLanguage,
-} from "./testing/order-writer-fixture.js";
+import { placeOrder } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
-  locations,
   newId,
   orderAmendments,
   parties,
@@ -21,7 +16,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { AppError, locationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { mountTillApi } from "./till-api.js";
@@ -221,44 +216,6 @@ describe("accepted till order command attendance", () => {
     expect((await state()).facts).toEqual([]);
     expect((await state()).days).toEqual([]);
   });
-  it.each(["invoice-choice"] as const)(
-    "%s uses the stored order location rather than the caller's config",
-    async (action) => {
-      const id = await prepare(action);
-      const [other] = await suite.db
-        .insert(locations)
-        .values({
-          name: "Another location",
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Restaurant",
-        })
-        .returning({ id: locations.id });
-      const cfg = { ...v.cfg, locationId: locationId(other!.id) };
-      const attendance = { recorder: recordAttendanceFact, clock: v.clock, personId: v.operatorId };
-      if (action === "invoice-choice")
-        await setOrderInvoiceChoice(
-          suite.db,
-          v.backend,
-          cfg,
-          id,
-          { revision: 0, invoiceType: "F2", recipient: null, delivery: { medium: "receipt" } },
-          undefined,
-          attendance,
-        );
-      else
-        await setOrderReceiptLanguage(
-          suite.db,
-          cfg,
-          id,
-          { revision: 0, language: "es-ES" },
-          attendance,
-        );
-      expect((await state()).facts.map((r) => [r.personId, r.locationId, r.at])).toEqual([
-        [v.operatorId, v.cfg.locationId, "2026-01-05T16:40:00.000Z"],
-      ]);
-      expect((await state()).days.map((r) => r.locationId)).toEqual([v.cfg.locationId]);
-    },
-  );
   it.each([false, true])(
     "the real unpaid-departure route captures its admitted placement atomically (recorder refused: %s)",
     async (refused) => {

@@ -1,8 +1,7 @@
 import "./errors.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql, type SQL } from "drizzle-orm";
-import { billPayments, type Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { billPayments, readVenueClock, venueLocationId, type Transaction } from "@waitron/db";
 import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
 import {
   attendanceDayWork,
@@ -24,17 +23,16 @@ import { readTillClockState, type TillClockState } from "./till-clock-state.js";
 /** The state it read, or `null` when it reconciled a day and the caller must read it again. */
 export async function reconcileAttendanceBeforeClock(
   tx: Transaction,
-  scope: { nodeId: string; locationId: string; personId: string },
+  scope: { nodeId: string; personId: string },
   at: Date,
 ): Promise<TillClockState | null> {
   const state = await readTillClockState(tx, scope, at);
   if (state.state === "out") return state;
   const start = await readLatestLiveEntry(tx, scope.personId, { kind: "in" });
   if (!start) return state;
-  const clock = await readLocationClock(tx, scope.locationId);
+  const clock = await readVenueClock(tx);
   const businessDay = businessDayAt(clock, new Date(start.eventAt));
   const day = {
-    locationId: scope.locationId,
     businessDay,
     ...businessDayBounds(clock, businessDay),
   };
@@ -42,20 +40,15 @@ export async function reconcileAttendanceBeforeClock(
   const [saved] = await tx
     .select()
     .from(attendanceDayWork)
-    .where(
-      and(
-        eq(attendanceDayWork.locationId, scope.locationId),
-        eq(attendanceDayWork.businessDay, businessDay),
-      ),
-    );
+    .where(eq(attendanceDayWork.businessDay, businessDay));
   if (!saved) await enqueueAttendanceDay(tx, day);
-  await reconcileAttendanceDay(tx, { ...scope, day }, at);
+  await reconcileAttendanceDay(tx, { nodeId: scope.nodeId, personId: scope.personId, day }, at);
   return null;
 }
 
 export async function reconcileAttendanceDay(
   tx: Transaction,
-  scope: { nodeId: string; locationId: string; personId: string; day: AttendanceDay },
+  scope: { nodeId: string; personId: string; day: AttendanceDay },
   at: Date,
 ): Promise<AttendanceDayResult> {
   const { day } = scope;
@@ -66,7 +59,6 @@ export async function reconcileAttendanceDay(
     .where(
       and(
         eq(attendanceOperationFacts.personId, scope.personId),
-        eq(attendanceOperationFacts.locationId, scope.locationId),
         eq(attendanceOperationFacts.businessDay, businessDay),
         eq(attendanceOperationFacts.outcome, "pending"),
       ),
@@ -85,7 +77,7 @@ export async function reconcileAttendanceDay(
         .from(attendanceSourceState)
         .where(
           and(
-            eq(attendanceSourceState.locationId, scope.locationId),
+            eq(attendanceSourceState.locationId, await venueLocationId(tx)),
             eq(attendanceSourceState.source, "whole-payment"),
             eq(attendanceSourceState.recordKind, "watch"),
             eq(attendanceSourceState.key, fact.key),
@@ -110,7 +102,7 @@ type SourceRow = {
   position: number;
   key: string;
   personId: string | null;
-  locationId: string | null;
+  attributed: number;
   at: string | null;
   outcome: string | null;
   relatedId?: string | null;
@@ -123,60 +115,60 @@ const rowSources: readonly RowSource[] = [
     source: "session",
     key: "rows",
     table: sql`sessions`,
-    fields: sql`e.id as key, e.person_id as personId, d.location_id as locationId, e.opened_at as at, 'qualifying' as outcome`,
+    fields: sql`e.id as key, e.person_id as personId, 1 as attributed, e.opened_at as at, 'qualifying' as outcome`,
     joins: sql`join devices d on d.id = e.device_id`,
   },
   {
     source: "order",
     key: "rows",
     table: sql`order_amendments`,
-    fields: sql`e.id as key, e.actor_id as personId, o.location_id as locationId, e.event_at as at, 'qualifying' as outcome`,
+    fields: sql`e.id as key, e.actor_id as personId, 1 as attributed, e.event_at as at, 'qualifying' as outcome`,
     joins: sql`join working_orders o on o.id = e.working_order_id`,
   },
   {
     source: "draft",
     key: "rows",
     table: sql`order_draft_events`,
-    fields: sql`'event:' || e.id as key, e.actor_id as personId, (select min(o.location_id) from working_orders o where o.party_id = d.party_id having count(distinct o.location_id) = 1) as locationId, e.created_at as at, 'qualifying' as outcome`,
+    fields: sql`'event:' || e.id as key, e.actor_id as personId, exists(select 1 from working_orders o where o.party_id = d.party_id) as attributed, e.created_at as at, 'qualifying' as outcome`,
     joins: sql`join order_drafts d on d.id = e.draft_id`,
   },
   {
     source: "group",
     key: "rows",
     table: sql`order_group_events`,
-    fields: sql`'group:' || e.id as key, e.actor_id as personId, (select min(o.location_id) from working_orders o where o.party_id = e.party_id having count(distinct o.location_id) = 1) as locationId, e.created_at as at, 'qualifying' as outcome`,
+    fields: sql`'group:' || e.id as key, e.actor_id as personId, exists(select 1 from working_orders o where o.party_id = e.party_id) as attributed, e.created_at as at, 'qualifying' as outcome`,
   },
   {
     source: "bill-payment",
     key: "rows",
     table: sql`bill_payments`,
-    fields: sql`e.id as key, e.requested_by as personId, o.location_id as locationId, e.created_at as at, case when e.received_at is not null then 'qualifying' else e.state end as outcome`,
+    fields: sql`e.id as key, e.requested_by as personId, 1 as attributed, e.created_at as at, case when e.received_at is not null then 'qualifying' else e.state end as outcome`,
     joins: sql`join working_orders o on o.id = e.working_order_id`,
   },
   {
     source: "rota",
     key: "shifts",
     table: sql`shifts`,
-    fields: sql`'shift:' || e.id as key, e.person_id as personId, case when v.location_id = e.location_id then e.location_id end as locationId, e.starts_at as at, v.status as outcome`,
+    fields: sql`'shift:' || e.id as key, e.person_id as personId, 1 as attributed, e.starts_at as at, v.status as outcome`,
     joins: sql`left join roster_versions v on v.id = e.roster_version_id`,
   },
   {
     source: "rota",
     key: "versions",
     table: sql`roster_versions`,
-    fields: sql`'version:' || e.id as key, null as personId, e.location_id as locationId, null as at, e.status as outcome`,
+    fields: sql`'version:' || e.id as key, null as personId, 1 as attributed, null as at, e.status as outcome`,
   },
   {
     source: "operation",
     key: "rows",
     table: sql`attendance_operation_facts`,
-    fields: sql`e.source || ':' || e.key as key, e.person_id as personId, e.location_id as locationId, e.at as at, e.outcome as outcome`,
+    fields: sql`e.source || ':' || e.key as key, e.person_id as personId, 1 as attributed, e.at as at, e.outcome as outcome`,
   },
 ];
 
-function scanScope(locationId: string) {
+function scanScope(venueId: string) {
   return and(
-    eq(attendanceSourceState.locationId, locationId),
+    eq(attendanceSourceState.locationId, venueId),
     eq(attendanceSourceState.recordKind, "scan"),
   );
 }
@@ -198,15 +190,16 @@ async function endpoints(tx: Transaction) {
 /** Call once for each open-store generation; retained SQLite rowids are not restore identities. */
 export async function beginAttendanceDiscovery(
   tx: Transaction,
-  scope: { locationId: string; generation: string },
+  scope: { generation: string },
 ): Promise<void> {
   if (!scope.generation)
     throw new AppError("attendance.invalid", { reason: "empty discovery generation" });
-  const clock = await readLocationClock(tx, scope.locationId);
-  await tx.delete(attendanceSourceState).where(scanScope(scope.locationId));
+  const clock = await readVenueClock(tx);
+  const venueId = await venueLocationId(tx);
+  await tx.delete(attendanceSourceState).where(scanScope(venueId));
   for (const endpoint of await endpoints(tx)) {
     await tx.insert(attendanceSourceState).values({
-      locationId: scope.locationId,
+      locationId: venueId,
       ...endpoint,
       recordKind: "scan",
       generation: scope.generation,
@@ -218,33 +211,33 @@ export async function beginAttendanceDiscovery(
   }
 }
 
-async function dirtyDay(tx: Transaction, locationId: string, businessDay: string): Promise<void> {
+async function dirtyDay(tx: Transaction, businessDay: string): Promise<void> {
   const [saved] = await tx
     .select()
     .from(attendanceDayWork)
-    .where(
-      and(
-        eq(attendanceDayWork.locationId, locationId),
-        eq(attendanceDayWork.businessDay, businessDay),
-      ),
-    );
+    .where(eq(attendanceDayWork.businessDay, businessDay));
   if (saved) {
     await tx
       .update(attendanceDayWork)
       .set({ dirtyRevision: sql`${attendanceDayWork.dirtyRevision} + 1` })
       .where(eq(attendanceDayWork.id, saved.id));
   } else {
-    const clock = await readLocationClock(tx, locationId);
+    const clock = await readVenueClock(tx);
     await enqueueAttendanceDay(tx, {
-      locationId,
       businessDay,
       ...businessDayBounds(clock, businessDay),
     });
   }
 }
 
-async function remember(tx: Transaction, scan: Scan, row: SourceRow, now: Date): Promise<void> {
-  const clock = await readLocationClock(tx, scan.locationId);
+async function remember(
+  tx: Transaction,
+  venueId: string,
+  scan: Scan,
+  row: SourceRow,
+  now: Date,
+): Promise<void> {
+  const clock = await readVenueClock(tx);
   const instants = [...(row.instants ?? []), ...(row.at === null ? [] : [row.at])];
   if (scan.source === "clock" && row.relatedId) {
     const { rows } = await tx.execute<{ at: string; relatedId: string | null }>(sql`
@@ -260,14 +253,13 @@ async function remember(tx: Transaction, scan: Scan, row: SourceRow, now: Date):
     row.outcome === "qualifying" ||
     (scan.source === "rota" && row.outcome === "published");
   const days =
-    row.locationId === scan.locationId &&
+    row.attributed === 1 &&
     (row.personId !== null || (scan.source === "rota" && row.key.startsWith("version:"))) &&
     qualifies
       ? [...new Set(instants.map((at) => businessDayAt(clock, new Date(at))))].sort()
       : [];
   const fingerprint = JSON.stringify([
     row.personId,
-    row.locationId,
     row.at,
     row.outcome,
     row.relatedId ?? null,
@@ -275,7 +267,7 @@ async function remember(tx: Transaction, scan: Scan, row: SourceRow, now: Date):
     days,
   ]);
   const predicate = and(
-    eq(attendanceSourceState.locationId, scan.locationId),
+    eq(attendanceSourceState.locationId, venueId),
     eq(attendanceSourceState.source, scan.source),
     eq(attendanceSourceState.recordKind, "watch"),
     eq(attendanceSourceState.key, row.key),
@@ -293,12 +285,11 @@ async function remember(tx: Transaction, scan: Scan, row: SourceRow, now: Date):
       .where(eq(attendanceSourceState.id, previous.id));
     return;
   }
-  for (const day of new Set([...(previous?.previousDays ?? []), ...days]))
-    await dirtyDay(tx, scan.locationId, day);
+  for (const day of new Set([...(previous?.previousDays ?? []), ...days])) await dirtyDay(tx, day);
   await tx
     .insert(attendanceSourceState)
     .values({
-      locationId: scan.locationId,
+      locationId: venueId,
       source: scan.source,
       key: row.key,
       recordKind: "watch",
@@ -337,7 +328,7 @@ async function capturedRow(tx: Transaction, source: Source, row: SourceRow): Pro
   }
   Object.assign(row, {
     personId: fact.personId,
-    locationId: fact.locationId,
+    attributed: 1,
     at: fact.at,
     outcome,
   });
@@ -347,7 +338,7 @@ async function sourcePage(tx: Transaction, scan: Scan, limit: number): Promise<S
   if (scan.source === "clock") {
     return (
       await tx.execute<SourceRow>(
-        sql`select sequence_no as position, id as key, person_id as personId, ${scan.locationId} as locationId, event_at as at, entry_kind as outcome, coalesce(corrects_entry_id, responds_to_entry_id) as relatedId from time_entries where node_id = ${scan.key} and sequence_no > ${scan.cursor} and sequence_no <= ${scan.endpoint} order by sequence_no limit ${limit}`,
+        sql`select sequence_no as position, id as key, person_id as personId, 1 as attributed, event_at as at, entry_kind as outcome, coalesce(corrects_entry_id, responds_to_entry_id) as relatedId from time_entries where node_id = ${scan.key} and sequence_no > ${scan.cursor} and sequence_no <= ${scan.endpoint} order by sequence_no limit ${limit}`,
       )
     ).rows;
   }
@@ -383,7 +374,7 @@ async function watchedRow(tx: Transaction, watch: Scan): Promise<SourceRow | und
       end: string;
       id: string;
     }>(
-      sql`select person_id as personId, starts_at as at, ends_at as end, id from shifts where roster_version_id = ${key} and location_id = ${watch.locationId} order by starts_at, id`,
+      sql`select person_id as personId, starts_at as at, ends_at as end, id from shifts where roster_version_id = ${key} order by starts_at, id`,
     );
     row.instants = planned.map((p) => p.at);
     row.detail = JSON.stringify(planned);
@@ -393,7 +384,7 @@ async function watchedRow(tx: Transaction, watch: Scan): Promise<SourceRow | und
 
 export async function discoverAttendanceDays(
   tx: Transaction,
-  scope: { locationId: string; now: Date; batchSize: number },
+  scope: { now: Date; batchSize: number },
 ): Promise<{ more: boolean }> {
   if (
     !Number.isFinite(scope.now.getTime()) ||
@@ -402,13 +393,14 @@ export async function discoverAttendanceDays(
     scope.batchSize > 100
   )
     throw new AppError("attendance.invalid", { reason: "invalid discovery batch" });
-  let scans = await tx.select().from(attendanceSourceState).where(scanScope(scope.locationId));
+  const venueId = await venueLocationId(tx);
+  let scans = await tx.select().from(attendanceSourceState).where(scanScope(venueId));
   if (scans.length === 0) {
-    await beginAttendanceDiscovery(tx, { locationId: scope.locationId, generation: randomUUID() });
-    scans = await tx.select().from(attendanceSourceState).where(scanScope(scope.locationId));
+    await beginAttendanceDiscovery(tx, { generation: randomUUID() });
+    scans = await tx.select().from(attendanceSourceState).where(scanScope(venueId));
   }
   const generation = scans[0]!.generation!;
-  const clock = await readLocationClock(tx, scope.locationId);
+  const clock = await readVenueClock(tx);
   const rotaScan = scans.find((s) => s.source === "rota" && s.key === "shifts");
   if (
     rotaScan &&
@@ -430,7 +422,7 @@ export async function discoverAttendanceDays(
       const [created] = await tx
         .insert(attendanceSourceState)
         .values({
-          locationId: scope.locationId,
+          locationId: venueId,
           ...endpoint,
           recordKind: "scan",
           generation,
@@ -450,7 +442,8 @@ export async function discoverAttendanceDays(
   const scan = scans.find((s) => !s.completed);
   if (scan) {
     const page = await sourcePage(tx, scan, scope.batchSize);
-    for (const row of page) await remember(tx, scan, row, new Date(scope.now.getTime() - 30_000));
+    for (const row of page)
+      await remember(tx, venueId, scan, row, new Date(scope.now.getTime() - 30_000));
     const cursor = page.length === scope.batchSize ? page.at(-1)!.position : scan.endpoint!;
     const completed = cursor === scan.endpoint;
     const fingerprint =
@@ -466,7 +459,7 @@ export async function discoverAttendanceDays(
   if (scan) return { more: scans.some((s) => !s.completed) };
   const due = () =>
     and(
-      eq(attendanceSourceState.locationId, scope.locationId),
+      eq(attendanceSourceState.locationId, venueId),
       eq(attendanceSourceState.recordKind, "watch"),
       sql`${attendanceSourceState.nextDueAt} <= ${scope.now.toISOString()}`,
     );
@@ -482,9 +475,9 @@ export async function discoverAttendanceDays(
       continue;
     }
     const row = await watchedRow(tx, watch);
-    if (row) await remember(tx, watch, row, scope.now);
+    if (row) await remember(tx, venueId, watch, row, scope.now);
     else {
-      for (const day of watch.previousDays) await dirtyDay(tx, scope.locationId, day);
+      for (const day of watch.previousDays) await dirtyDay(tx, day);
       await tx
         .update(attendanceSourceState)
         .set({ fingerprint: "deleted", previousDays: [], nextDueAt: null })
@@ -501,19 +494,21 @@ export async function discoverAttendanceDays(
 
 export async function nextAttendanceDay(
   tx: Transaction,
-  scope: { locationId: string; now: Date },
+  scope: { now: Date },
 ): Promise<AttendanceDay | null> {
   if (!Number.isFinite(scope.now.getTime()))
     throw new AppError("attendance.invalid", { reason: "invalid attendance instant" });
-  const scans = await tx.select().from(attendanceSourceState).where(scanScope(scope.locationId));
+  const scans = await tx
+    .select()
+    .from(attendanceSourceState)
+    .where(scanScope(await venueLocationId(tx)));
   if (scans.length === 0 || scans.some((s) => !s.completed)) return null;
-  const clock = await readLocationClock(tx, scope.locationId);
+  const clock = await readVenueClock(tx);
   const future = await tx
     .select()
     .from(attendanceDayWork)
     .where(
       and(
-        eq(attendanceDayWork.locationId, scope.locationId),
         eq(attendanceDayWork.evaluatedRevision, 0),
         sql`${attendanceDayWork.endAt} > ${scope.now.toISOString()}`,
       ),
@@ -537,7 +532,6 @@ export async function nextAttendanceDay(
     .from(attendanceDayWork)
     .where(
       and(
-        eq(attendanceDayWork.locationId, scope.locationId),
         sql`${attendanceDayWork.nextDueAt} <= ${scope.now.toISOString()}`,
         sql`${attendanceDayWork.endAt} <= ${scope.now.toISOString()}`,
         sql`(${attendanceDayWork.dirtyRevision} > ${attendanceDayWork.evaluatedRevision} or json_array_length(${attendanceDayWork.deferredShiftIds}) > 0)`,
@@ -568,7 +562,6 @@ export async function nextAttendanceDay(
   }
   if (!work) return null;
   const day = {
-    locationId: work.locationId,
     businessDay: work.businessDay,
     startAt: work.startAt,
     endAt: work.endAt,

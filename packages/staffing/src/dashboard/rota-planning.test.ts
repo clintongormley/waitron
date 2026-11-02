@@ -49,7 +49,6 @@ async function mount(missing = false) {
     if (path.includes("/rota?"))
       return {
         ...rotaWeek(),
-        locationId: "location",
         version: {
           id: "draft",
           status: published && !changed ? "published" : "draft",
@@ -200,7 +199,7 @@ describe("planning warnings and publication", () => {
     const grid = el.shadowRoot!.querySelector("rota-by-area")!;
     expect(grid.shadowRoot!.querySelector("[data-slot=filled]")!.textContent).toContain("9 h rest");
     expect(request).toHaveBeenCalledWith(
-      "/management-api/roster/breaches?locationId=location&period=2026-11-30",
+      "/management-api/roster/breaches?period=2026-11-30",
       "GET",
       undefined,
       { passive: true },

@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
-  locations,
   newId,
   orderDraftEvents,
   orderDraftLines,
@@ -231,23 +230,8 @@ describe("draft-event attendance in table combines", () => {
           outcome: "qualifying",
         }),
       ]);
-      const [originalLocation] = await suite.db.select().from(locations);
-      const [elsewhere] = await suite.db
-        .insert(locations)
-        .values({
-          ...originalLocation!,
-          id: crypto.randomUUID(),
-          name: "Elsewhere",
-          addressLine1: "Other address",
-        })
-        .returning();
-      await suite.db
-        .update(workingOrders)
-        .set({ locationId: elsewhere!.id })
-        .where(eq(workingOrders.status, "open"));
       const facts = await run((tx) =>
         readAttendanceFacts(tx, {
-          locationId: v.cfg.locationId,
           businessDay: "2026-01-05",
           startAt: "2026-01-05T00:00:00Z",
           endAt: "2026-01-06T00:00:00Z",
@@ -256,7 +240,6 @@ describe("draft-event attendance in table combines", () => {
       expect(facts.filter((f) => f.key === `event:${events[0]!.id}`)).toEqual([
         expect.objectContaining({
           personId: v.operatorId,
-          locationId: v.cfg.locationId,
           at: "2026-01-05T16:40:00.000Z",
         }),
       ]);

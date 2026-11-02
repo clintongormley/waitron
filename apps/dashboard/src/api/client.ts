@@ -1015,7 +1015,6 @@ export interface PairingModeState {
 
 export interface RosterVersion {
   id: string;
-  locationId: string;
   periodStart: string;
   periodEnd: string;
   status: "draft" | "published" | "superseded";
@@ -1026,7 +1025,6 @@ export interface RosterVersion {
 export interface Shift {
   id: string;
   personId: string;
-  locationId: string;
   startsAt: string;
   startsOffsetMinutes: number;
   endsAt: string;
@@ -1041,7 +1039,6 @@ export interface RosterSnapshot {
 
 export interface ShiftInput {
   personId: string;
-  locationId: string;
   startsAt: string;
   startsOffsetMinutes: number;
   endsAt: string;
@@ -1114,7 +1111,6 @@ export type AbsenceKind = "holiday" | "sick_leave" | "leave" | "unpaid";
 
 export interface MyShift {
   id: string;
-  locationId: string;
   startsAt: string;
   startsOffsetMinutes: number;
   endsAt: string;
@@ -4186,18 +4182,12 @@ export class DashboardApi {
     return this.#request<LocationSummary[]>("/management-api/locations", "GET");
   }
 
-  getRoster(locationId: string, period: string): Promise<RosterSnapshot> {
-    return this.#request<RosterSnapshot>(
-      `/management-api/roster?locationId=${locationId}&period=${period}`,
-      "GET",
-    );
+  getRoster(period: string): Promise<RosterSnapshot> {
+    return this.#request<RosterSnapshot>(`/management-api/roster?period=${period}`, "GET");
   }
 
-  createRosterVersion(locationId: string, period: string): Promise<{ versionId: string }> {
-    return this.#request<{ versionId: string }>("/management-api/roster", "POST", {
-      locationId,
-      period,
-    });
+  createRosterVersion(period: string): Promise<{ versionId: string }> {
+    return this.#request<{ versionId: string }>("/management-api/roster", "POST", { period });
   }
 
   addShift(versionId: string, input: ShiftInput): Promise<{ shiftId: string }> {

@@ -1,14 +1,15 @@
-import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import { afterEach, describe, expect, it } from "vitest";
+import { CORE_MIGRATIONS, venueLocationId, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
+import { jobOrigin } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { WorkforceBackend, WORKFORCE_MIGRATIONS } from "@waitron/workforce";
 import { resolveWorkTimeRuleset } from "./convenio.js";
 import { WORKFORCE_ES_MIGRATIONS } from "./migrations.js";
-import { seedConvenioConfig, seedEmployment, seedLocation, seedPerson } from "../test/fixtures.js";
+import { seedConvenioConfig, seedEmployment, seedPerson } from "../test/fixtures.js";
 
 const backend = new WorkforceBackend();
 
@@ -16,8 +17,13 @@ const suite = useVenueDb({
   resetPerTest: false,
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS, WORKFORCE_ES_MIGRATIONS],
   setup: async (db) => {
-    await seedTenant(db);
+    await seedVenue(db);
   },
+});
+
+// `resetPerTest: false` keeps the venue; each case's convenio_config row is removed after it.
+afterEach(async () => {
+  await suite.db.execute(sql`delete from convenio_config`);
 });
 
 function run<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -54,8 +60,8 @@ async function clockDay(
 describe("workSummary driven by a resolved convenio_config ruleset", () => {
   it("reproduces today's numbers exactly from a DEFAULT convenio_config row", async () => {
     // Five 9h days against a 40h week: 2700 worked, 300 overtime, each day 60 over its 480 target.
-    const locationId = await seedLocation(suite.db);
-    const nodeId = await seedNode(suite.db, brandLocationId(locationId));
+    const locationId = await venueLocationId(suite.db);
+    const nodeId = await seedNode(suite.db);
     const personId = await seedPerson(suite.db, "es-default");
     await seedEmployment(suite.db, { personId, contractedMinutesPerWeek: 2400 });
     await seedConvenioConfig(suite.db, { locationId });
@@ -63,7 +69,7 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
       await clockDay(personId, nodeId, day, "08:00", "17:00");
     }
 
-    const ruleset = await run((tx) => resolveWorkTimeRuleset(tx, { locationId }));
+    const ruleset = await run((tx) => resolveWorkTimeRuleset(tx));
     const summary = await run((tx) =>
       backend.workSummary(
         tx,
@@ -90,21 +96,13 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
   });
 
   it("changes only the headline when the convenio's overtime_model is flipped to period_net", async () => {
-    // Same worked data, two convenio_config rows differing ONLY in overtime_model. A 9h day then a 7h
-    // day is 60 daily-accrual but 0 period-net against a full-week baseline.
-    const dailyLoc = await seedLocation(suite.db);
-    const dailyNode = await seedNode(suite.db, brandLocationId(dailyLoc));
-    const periodLoc = await seedLocation(suite.db);
+    // Same worked data, two convenio_config rows differing ONLY in overtime_model, read one after
+    // the other. A 9h day then a 7h day is 60 daily-accrual but 0 period-net against a full-week
+    // baseline.
+    const locationId = await venueLocationId(suite.db);
+    const dailyNode = await seedNode(suite.db);
     const personId = await seedPerson(suite.db, "es-model");
     await seedEmployment(suite.db, { personId, contractedMinutesPerWeek: 2400 });
-    await seedConvenioConfig(suite.db, {
-      locationId: dailyLoc,
-      overtimeModel: "daily_accrual",
-    });
-    await seedConvenioConfig(suite.db, {
-      locationId: periodLoc,
-      overtimeModel: "period_net",
-    });
     await clockDay(personId, dailyNode, "2026-01-05", "08:00", "17:00"); // 9h
     await clockDay(personId, dailyNode, "2026-01-06", "09:00", "16:00"); // 7h
 
@@ -112,8 +110,11 @@ describe("workSummary driven by a resolved convenio_config ruleset", () => {
       personId,
       period: { start: "2026-01-05", end: "2026-01-12" },
     } as const;
-    const dailyRuleset = await run((tx) => resolveWorkTimeRuleset(tx, { locationId: dailyLoc }));
-    const periodRuleset = await run((tx) => resolveWorkTimeRuleset(tx, { locationId: periodLoc }));
+    await seedConvenioConfig(suite.db, { locationId, overtimeModel: "daily_accrual" });
+    const dailyRuleset = await run((tx) => resolveWorkTimeRuleset(tx));
+    await suite.db.execute(sql`delete from convenio_config`);
+    await seedConvenioConfig(suite.db, { locationId, overtimeModel: "period_net" });
+    const periodRuleset = await run((tx) => resolveWorkTimeRuleset(tx));
     const daily = await run((tx) => backend.workSummary(tx, query, dailyRuleset));
     const period = await run((tx) => backend.workSummary(tx, query, periodRuleset));
 

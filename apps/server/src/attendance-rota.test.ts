@@ -62,7 +62,6 @@ async function send(method: string, path: string, body?: unknown) {
 async function version() {
   return withTransaction(suite.db, (tx) =>
     backend.createRosterVersion(tx, {
-      locationId,
       period: "2026-01-05",
     }),
   );

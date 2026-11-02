@@ -121,7 +121,6 @@ export interface PendingSwapRow {
   createdAt: string;
 }
 
-/** Not location-scoped: `shift_swaps` has no location. */
 export async function listPendingSwaps(tx: Transaction): Promise<PendingSwapRow[]> {
   const { rows } = await tx.execute<{
     id: string;

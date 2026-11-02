@@ -203,7 +203,6 @@ describe("own clock reconciliation at the business-day boundary", () => {
     await fact("2026-01-05T18:00:00Z", other!.id);
     await withTransaction(suite.db, (tx) =>
       beginAttendanceDiscovery(tx, {
-        locationId: venue.cfg.locationId,
         generation: "partly-scanned",
       }),
     );

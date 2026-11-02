@@ -1,5 +1,5 @@
 import { and, asc, eq, isNull } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { venueLocationId, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { assertAttendanceDay } from "./attendance-state.js";
 import type { AttendanceQuestion } from "./attendance-types.js";
@@ -40,7 +40,6 @@ function asQuestion(row: QuestionRow): AttendanceQuestion {
     id: row.id,
     personId: row.personId,
     day: {
-      locationId: row.locationId,
       businessDay: row.businessDay,
       startAt: row.startAt,
       endAt: row.endAt,
@@ -115,7 +114,6 @@ export async function upsertAttendanceQuestion(
     .where(
       and(
         eq(attendanceQuestions.personId, input.personId),
-        eq(attendanceQuestions.locationId, input.day.locationId),
         eq(attendanceQuestions.shiftKey, input.shiftKey),
       ),
     );
@@ -137,7 +135,7 @@ export async function upsertAttendanceQuestion(
       .insert(attendanceQuestions)
       .values({
         personId: input.personId,
-        locationId: input.day.locationId,
+        locationId: await venueLocationId(tx),
         businessDay: input.day.businessDay,
         startAt: new Date(input.day.startAt).toISOString(),
         endAt: new Date(input.day.endAt).toISOString(),
@@ -198,7 +196,6 @@ export async function mergeAttendanceQuestions(
   if (canonical.id === duplicate.id) return;
   if (
     canonical.personId !== duplicate.personId ||
-    canonical.locationId !== duplicate.locationId ||
     canonical.businessDay !== duplicate.businessDay ||
     canonical.startAt !== duplicate.startAt ||
     canonical.endAt !== duplicate.endAt ||

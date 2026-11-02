@@ -59,7 +59,6 @@ import {
   openVenueDatabase,
   withTransaction,
   applicationVersion,
-  locations,
   type Database,
   type SingletonRole,
 } from "@waitron/db";
@@ -2053,16 +2052,10 @@ async function bootServer(
   let attendanceLoop: Promise<void> | undefined;
   let attendanceEmailLoop: Promise<void> | undefined;
   if (workforceEnabled && isSingletonPrimary) {
-    await withTransaction(db, (tx) =>
-      beginAttendanceDiscovery(tx, {
-        locationId: tradingContext.locationId,
-        generation: randomUUID(),
-      }),
-    );
+    await withTransaction(db, (tx) => beginAttendanceDiscovery(tx, { generation: randomUUID() }));
     attendanceLoop = runAttendanceLoop({
       db,
       nodeId: tradingContext.nodeId,
-      locationId: tradingContext.locationId,
       now,
       isPrimary: () => holders.singletonRole.current === "primary",
       signal: attendanceController.signal,
@@ -2073,20 +2066,14 @@ async function bootServer(
       attendanceController.abort();
       await attendanceLoop;
     });
-    const [location] = await db
-      .select({ name: locations.name })
-      .from(locations)
-      .where(eq(locations.id, tradingContext.locationId));
     attendanceEmailLoop = runAttendanceEmailLoop({
       db,
       nodeId: tradingContext.nodeId,
-      locationId: tradingContext.locationId,
       holder: tradingContext.nodeId,
       now,
       isPrimary: () => holders.singletonRole.current === "primary",
       signal: attendanceController.signal,
       venueLocale: venueLocale === "es-ES" ? "es" : "en",
-      locationName: location!.name,
       resolveDelivery: () =>
         resolveEmailDelivery(db, ring, config.devMode || tradingContext.practiceMode === true),
       send: createAttendanceEmailSender(),
@@ -2434,7 +2421,7 @@ async function bootServer(
       app,
       {
         db,
-        cfg: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
+        cfg: { nodeId: tradingContext.nodeId },
         now,
         exporter: selectTimeRecordExport(setsToMigrate),
       },

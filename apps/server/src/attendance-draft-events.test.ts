@@ -5,15 +5,7 @@ import {
   takeOverDraftForTest as takeOverDraft,
 } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
-import {
-  locations,
-  orderDraftEvents,
-  orderDraftLines,
-  orderDrafts,
-  workingOrders,
-  withTransaction,
-} from "@waitron/db";
+import { orderDraftEvents, orderDraftLines, orderDrafts, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -102,10 +94,9 @@ const state = async () => ({
   facts: await suite.db.select().from(attendanceOperationFacts),
   days: await suite.db.select().from(attendanceDayWork),
 });
-async function factsAt(locationId: string = v.cfg.locationId) {
+async function factsAt() {
   return run((tx) =>
     readAttendanceFacts(tx, {
-      locationId,
       businessDay: "2026-01-05",
       startAt: "2026-01-05T00:00:00Z",
       endAt: "2026-01-06T00:00:00Z",
@@ -123,33 +114,15 @@ async function assertSnapshots(
   );
   for (const event of events)
     expect((await factsAt()).filter((f) => f.key === `event:${event.id}`)).toEqual([
-      expect.objectContaining({ personId: actor, locationId: v.cfg.locationId, at }),
+      expect.objectContaining({ personId: actor, at }),
     ]);
 }
 describe("natural draft-event attendance snapshots", () => {
-  it("captures creation by its event identity and retains the original location after a later move", async () => {
+  it("captures creation by its event identity", async () => {
     await save();
     const { events } = await state();
     expect(events).toHaveLength(1);
     await assertSnapshots(events, "2026-01-05T09:00:00.000Z", OPERATOR);
-    const [originalLocation] = await suite.db.select().from(locations);
-    const [elsewhere] = await suite.db
-      .insert(locations)
-      .values({
-        ...originalLocation!,
-        id: crypto.randomUUID(),
-        name: "Elsewhere",
-        addressLine1: "Other address",
-      })
-      .returning();
-    await suite.db
-      .update(workingOrders)
-      .set({ locationId: elsewhere!.id })
-      .where(eq(workingOrders.partyId, partyId));
-    await assertSnapshots(events, "2026-01-05T09:00:00.000Z", OPERATOR);
-    expect(
-      (await factsAt(elsewhere!.id)).filter((f) => f.key === `event:${events[0]!.id}`),
-    ).toEqual([]);
   });
   it.each([false, true])(
     "takeover snapshots every derived event under the taker (own draft: %s)",
@@ -204,7 +177,6 @@ describe("natural draft-event attendance snapshots", () => {
     await run((tx) =>
       discardPartyDrafts(tx, partyId, other, {
         recorder: recordAttendanceFact,
-        locationId: v.cfg.locationId,
       }),
     );
     const events = (await state()).events.filter(
@@ -213,7 +185,7 @@ describe("natural draft-event attendance snapshots", () => {
     expect(events).toHaveLength(2);
     await assertSnapshots(events, "2026-01-05T15:00:00.000Z", other);
   });
-  it("an absorbed draft retains the mover, original source location and supplied command instant", async () => {
+  it("an absorbed draft retains the mover and supplied command instant", async () => {
     const from = await save();
     const target = await seat(v, await v.table("Target"));
     const into = await save(OPERATOR, target.partyId);

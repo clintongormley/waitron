@@ -1,6 +1,5 @@
 import { and, asc, eq, gte, lt, sql } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { readVenueClock, type Transaction } from "@waitron/db";
 import { offsetMinutes } from "@waitron/venue-service";
 import { rosterVersions, shifts } from "@waitron/workforce";
 import type { AttendanceDay, AttendanceFact, PlannedAttendanceShift } from "@waitron/workforce";
@@ -11,33 +10,30 @@ export async function readAttendanceFacts(
   tx: Transaction,
   day: AttendanceDay,
 ): Promise<AttendanceFact[]> {
-  const clock = await readLocationClock(tx, day.locationId);
-  // Captured operations retain their location across later device and party changes.
+  const clock = await readVenueClock(tx);
   const { rows } = await tx.execute<SourceFact>(sql`
-    with retained(source, key, personId, locationId, kind, at) as (
-      select 'session', s.id, s.person_id, d.location_id, 'sign-in', s.opened_at
+    with retained(source, key, personId, kind, at) as (
+      select 'session', s.id, s.person_id, 'sign-in', s.opened_at
       from sessions s join devices d on d.id = s.device_id
-      where d.location_id = ${day.locationId}
       union all
-      select 'order', a.id, a.actor_id, o.location_id, 'order', a.event_at
+      select 'order', a.id, a.actor_id, 'order', a.event_at
       from order_amendments a join working_orders o on o.id = a.working_order_id
-      where o.location_id = ${day.locationId}
       union all
-      select 'draft', 'event:' || e.id, e.actor_id, min(o.location_id), 'order', e.created_at
+      select 'draft', 'event:' || e.id, e.actor_id, 'order', e.created_at
       from order_draft_events e join order_drafts d on d.id = e.draft_id
       join working_orders o on o.party_id = d.party_id
-      group by e.id having count(distinct o.location_id) = 1 and min(o.location_id) = ${day.locationId}
+      group by e.id
       union all
-      select 'draft', 'group:' || e.id, e.actor_id, min(o.location_id), 'order', e.created_at
+      select 'draft', 'group:' || e.id, e.actor_id, 'order', e.created_at
       from order_group_events e join working_orders o on o.party_id = e.party_id
       where e.actor_id is not null
-      group by e.id having count(distinct o.location_id) = 1 and min(o.location_id) = ${day.locationId}
+      group by e.id
       union all
-      select 'bill-payment', p.id, p.requested_by, o.location_id, 'payment', p.created_at
+      select 'bill-payment', p.id, p.requested_by, 'payment', p.created_at
       from bill_payments p join working_orders o on o.id = p.working_order_id
-      where o.location_id = ${day.locationId} and p.received_at is not null
+      where p.received_at is not null
       union all
-      select 'clock', e.id, e.person_id, ${day.locationId}, 'break', e.event_at
+      select 'clock', e.id, e.person_id, 'break', e.event_at
       from time_entries e
       where (e.entry_kind in ('break_start', 'break_end') or (
         e.entry_kind = 'correction' and e.correction_status = 'approved'
@@ -47,8 +43,8 @@ export async function readAttendanceFacts(
     where julianday(r.at) >= julianday(${day.startAt}) and julianday(r.at) < julianday(${day.endAt})
     and not exists (select 1 from attendance_operation_facts f where f.source = r.source and f.key = r.key)
     union all
-    select source, key, person_id, location_id, kind, at from attendance_operation_facts
-    where location_id = ${day.locationId} and at >= ${day.startAt} and at < ${day.endAt}
+    select source, key, person_id, kind, at from attendance_operation_facts
+    where at >= ${day.startAt} and at < ${day.endAt}
     and outcome = 'qualifying'
   `);
   return rows
@@ -74,22 +70,14 @@ export async function readPlannedAttendanceShifts(
     .select({
       id: shifts.id,
       personId: shifts.personId,
-      locationId: shifts.locationId,
       startsAt: shifts.startsAt,
       endsAt: shifts.endsAt,
       rosterVersionId: rosterVersions.id,
     })
     .from(shifts)
-    .innerJoin(
-      rosterVersions,
-      and(
-        eq(shifts.rosterVersionId, rosterVersions.id),
-        eq(shifts.locationId, rosterVersions.locationId),
-      ),
-    )
+    .innerJoin(rosterVersions, eq(shifts.rosterVersionId, rosterVersions.id))
     .where(
       and(
-        eq(shifts.locationId, day.locationId),
         eq(rosterVersions.status, "published"),
         gte(shifts.startsAt, day.startAt),
         lt(shifts.startsAt, day.endAt),

@@ -24,7 +24,6 @@ const run = <T>(f: (tx: Transaction) => Promise<T>) => withTransaction(suite.db,
 let locationId: string, personId: string, other: string, nodeId: string;
 const now = new Date("2026-01-08T04:01:00.000Z");
 const day = (businessDay = "2026-01-05") => ({
-  locationId,
   businessDay,
   startAt: `${businessDay}T04:00:00.000Z`,
   endAt: `${businessDay.slice(0, 8)}${String(Number(businessDay.slice(8)) + 1).padStart(2, "0")}T04:00:00.000Z`,
@@ -104,19 +103,13 @@ describe("durable own attendance questions", () => {
       { questionId: first, status: "pending", claimToken: null, recipient: null },
     ]);
   });
-  it("same source key at two locations or two people makes separate obligations", async () => {
-    const elsewhere = await seedLocation(suite.db);
+  it("same source key for two people makes separate obligations", async () => {
     await run(async (tx) => {
       await upsertAttendanceQuestion(tx, question(), now);
-      await upsertAttendanceQuestion(
-        tx,
-        { ...question(), day: { ...day(), locationId: elsewhere } },
-        now,
-      );
       await upsertAttendanceQuestion(tx, { ...question(), personId: other }, now);
     });
-    expect(await suite.db.select().from(attendanceQuestions)).toHaveLength(3);
-    expect(await own()).toHaveLength(2);
+    expect(await suite.db.select().from(attendanceQuestions)).toHaveLength(2);
+    expect(await own()).toHaveLength(1);
   });
   it("newly earlier evidence keeps the existing uncovered interval's question and reminder", async () => {
     const input = {

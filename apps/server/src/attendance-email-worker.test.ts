@@ -57,13 +57,11 @@ const smtp = { url: "smtp://127.0.0.1:1025", from: "venue@example.test" };
 const deps = () => ({
   db: suite.db,
   nodeId,
-  locationId,
   holder: "node:attendance",
   now: () => now,
   isPrimary: () => primary,
   signal: controller.signal,
   venueLocale: "en" as "en" | "es",
-  locationName: "Madrid",
   resolveDelivery: async (): Promise<EmailDelivery> => ({ mode: "smtp", smtp }),
   send,
 });
@@ -112,12 +110,9 @@ async function seedMissing(date = "2026-01-05", open = false) {
   await process(date);
 }
 async function seedRota() {
-  const versionId = await run((tx) =>
-    backend.createRosterVersion(tx, { locationId, period: "2026-01-05" }),
-  );
+  const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-01-05" }));
   const shiftId = await run((tx) =>
     backend.addShift(tx, {
-      locationId,
       personId,
       versionId,
       startsAt: "2026-01-05T09:00:00Z",
@@ -264,6 +259,16 @@ describe("missing-attendance delivery worker", () => {
       expect(send.mock.calls[0]![0].locale).toBe(expected);
     },
   );
+  it("sends a reminder naming the venue without being told a location", async () => {
+    await seedMissing();
+    await suite.db.update(locations).set({ name: "Sevilla" }).where(eq(locations.id, locationId));
+    expect(await pass()).toEqual({ processed: true });
+    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0]![0]).toMatchObject({
+      businessDay: "2026-01-05",
+      venueName: "Sevilla",
+    });
+  });
   it("does not send if storage refuses to retain the claim", async () => {
     await seedMissing();
     const before = await mail();
@@ -473,7 +478,7 @@ describe("missing-attendance delivery worker", () => {
         recipient: "worker@example.test",
         locale: "es",
         businessDay: "2026-01-05",
-        locationName: "Madrid",
+        venueName: "Madrid",
         missingKinds: ["in", "out"],
       });
       await suite.db

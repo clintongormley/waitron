@@ -110,7 +110,6 @@ export interface StaffingMonth {
 }
 
 export interface RotaWeek {
-  locationId: string;
   timeZone: string;
   week: string;
   version: { id: string; status: "draft" | "published"; changedSincePublished: boolean } | null;

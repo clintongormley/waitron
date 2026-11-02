@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
-  locations,
   newId,
   orderGroupEvents,
   orderGroups,
@@ -163,7 +162,6 @@ describe("accepted group attendance snapshots", () => {
       expect(saved.days.map((r) => r.dirtyRevision)).toEqual([1]);
       const facts = await withTransaction(suite.db, (tx) =>
         readAttendanceFacts(tx, {
-          locationId: v.cfg.locationId,
           businessDay: "2026-01-05",
           startAt: "2026-01-05T00:00:00Z",
           endAt: "2026-01-06T00:00:00Z",
@@ -190,29 +188,6 @@ describe("accepted group attendance snapshots", () => {
       json: { code: "attendance.invalid" },
     });
     expect(await state()).toEqual(before);
-  });
-  it("a captured group keeps its original location when its party's bills move", async () => {
-    const p = await prepare();
-    expect(await command(api(recordAttendanceFact), "fire", p)).toMatchObject({ status: 200 });
-    const [other] = await suite.db
-      .insert(locations)
-      .values({ name: "Elsewhere", invoiceLocales: ["es-ES"], operationDescription: "Restaurant" })
-      .returning();
-    await suite.db
-      .update(workingOrders)
-      .set({ locationId: other!.id })
-      .where(eq(workingOrders.partyId, p.partyId));
-    const facts = await withTransaction(suite.db, (tx) =>
-      readAttendanceFacts(tx, {
-        locationId: v.cfg.locationId,
-        businessDay: "2026-01-05",
-        startAt: "2026-01-05T00:00:00Z",
-        endAt: "2026-01-06T00:00:00Z",
-      }),
-    );
-    expect(facts.filter((f) => f.personId === v.operatorId && f.kind === "order")).toEqual([
-      expect.objectContaining({ locationId: v.cfg.locationId, at: "2026-01-05T16:40:00.000Z" }),
-    ]);
   });
   it("a device-only release is not attributed to the command's operator", async () => {
     const p = await prepare();

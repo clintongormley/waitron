@@ -2,9 +2,9 @@ import { CORE_MIGRATIONS, captureError, withTransaction } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { listShiftsForPerson } from "./schedule-reads.js";
 import { acceptSwap, decideSwap } from "./shift-swaps.js";
 import { WorkforceBackend } from "./clocking.js";
@@ -55,6 +55,12 @@ async function countRows(query: ReturnType<typeof sql>): Promise<number> {
   return Number(result.rows[0]!.n);
 }
 
+async function clearRoster(): Promise<void> {
+  await suite.db.execute(sql`delete from shift_swaps`);
+  await suite.db.execute(sql`delete from shifts`);
+  await suite.db.execute(sql`delete from roster_versions`);
+}
+
 const UNKNOWN_ID = "00000000-0000-0000-0000-00000000dead";
 
 async function attachedVersion(shiftId: string): Promise<string | null> {
@@ -68,7 +74,6 @@ describe("publishRoster", () => {
   it("keeps shift planning and published own reads free of the retired free-text role", async () => {
     const versionId = await run((tx) =>
       backend.createRosterVersion(tx, {
-        locationId,
         period: "2035-02-05",
       }),
     );
@@ -76,14 +81,13 @@ describe("publishRoster", () => {
       backend.addShift(tx, {
         versionId,
         personId,
-        locationId,
         startsAt: "2035-02-05T09:00:00Z",
         startsOffsetMinutes: 0,
         endsAt: "2035-02-05T17:00:00Z",
         endsOffsetMinutes: 0,
       }),
     );
-    const draft = await run((tx) => backend.getRoster(tx, { locationId, period: "2035-02-05" }));
+    const draft = await run((tx) => backend.getRoster(tx, { period: "2035-02-05" }));
     expect(draft.shifts[0]!.id).toBe(shiftId);
     expect(draft.shifts[0]).not.toHaveProperty("role");
     await run((tx) => backend.updateShift(tx, { shiftId, endsAt: "2035-02-05T16:00:00Z" }));
@@ -98,7 +102,6 @@ describe("publishRoster", () => {
     expect(own).toEqual([
       {
         id: shiftId,
-        locationId,
         startsAt: "2035-02-05T09:00:00Z",
         startsOffsetMinutes: 0,
         endsAt: "2035-02-05T16:00:00Z",
@@ -140,15 +143,13 @@ describe("publishRoster", () => {
     expect(await attachedVersion(shiftId)).toBe(versionId);
   });
 
-  it("attaches only same-location, in-period draft shifts (the predicates are not vacuous)", async () => {
-    // Three null-version shifts differing in exactly one attribute each. publishedByPersonId is
-    // omitted here.
+  it("attaches only in-period draft shifts (the predicate is not vacuous)", async () => {
+    // Two null-version shifts differing only in their date. publishedByPersonId is omitted here.
     const versionId = await insertRosterVersion(suite.db, {
       locationId,
       periodStart: "2026-03-02",
       periodEnd: "2026-03-08",
     });
-    const otherLocation = await seedLocation(suite.db);
 
     const inPeriod = await insertDraftShift(suite.db, {
       personId,
@@ -162,18 +163,11 @@ describe("publishRoster", () => {
       startsAt: "2026-04-01T09:00:00Z",
       endsAt: "2026-04-01T17:00:00Z",
     });
-    const wrongLocation = await insertDraftShift(suite.db, {
-      personId,
-      locationId: otherLocation,
-      startsAt: "2026-03-03T09:00:00Z",
-      endsAt: "2026-03-03T17:00:00Z",
-    });
 
     await run((tx) => backend.publishRoster(tx, { versionId }));
 
     expect(await attachedVersion(inPeriod)).toBe(versionId);
     expect(await attachedVersion(outOfPeriod)).toBeNull();
-    expect(await attachedVersion(wrongLocation)).toBeNull();
   });
 
   it("matches a shift by its LOCAL wall date, not its UTC instant", async () => {
@@ -304,10 +298,15 @@ describe("publishRoster", () => {
 });
 
 describe("createRosterVersion", () => {
+  it("opens and reads a week's draft without being told a location", async () => {
+    const period = "2034-01-02";
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { period }));
+    const roster = await run((tx) => backend.getRoster(tx, { period }));
+    expect(roster.version?.id).toBe(versionId);
+  });
+
   it("inserts a draft for the week (period_start = the Monday, period_end = +6 days) and returns its id", async () => {
-    const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { locationId, period: "2026-03-02" }),
-    );
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-03-02" }));
     const row = await suite.db.execute<{
       status: string;
       period_start: string;
@@ -321,25 +320,23 @@ describe("createRosterVersion", () => {
     expect(row.rows[0]!.published_at).toBeNull();
   });
 
-  it("refuses a second draft for the same (location, week) — roster.draft_exists", async () => {
-    await run((tx) => backend.createRosterVersion(tx, { locationId, period: "2026-03-09" }));
+  it("refuses a second draft for the same week — roster.draft_exists", async () => {
+    await run((tx) => backend.createRosterVersion(tx, { period: "2026-03-09" }));
     const code = await codeOfRejection(() =>
-      run((tx) => backend.createRosterVersion(tx, { locationId, period: "2026-03-09" })),
+      run((tx) => backend.createRosterVersion(tx, { period: "2026-03-09" })),
     );
     expect(code).toBe("roster.draft_exists");
   });
 
-  it("allows a draft for a DIFFERENT week at the same location", async () => {
-    await run((tx) => backend.createRosterVersion(tx, { locationId, period: "2026-03-16" }));
-    const other = await run((tx) =>
-      backend.createRosterVersion(tx, { locationId, period: "2026-03-23" }),
-    );
+  it("allows a draft for a DIFFERENT week", async () => {
+    await run((tx) => backend.createRosterVersion(tx, { period: "2026-03-16" }));
+    const other = await run((tx) => backend.createRosterVersion(tx, { period: "2026-03-23" }));
     expect(other).toEqual(expect.any(String));
   });
 
   it("normalizes a non-Monday period to that week's Monday (no mid-week rosters)", async () => {
     const versionId = await run(
-      (tx) => backend.createRosterVersion(tx, { locationId, period: "2026-11-04" }), // a Wednesday
+      (tx) => backend.createRosterVersion(tx, { period: "2026-11-04" }), // a Wednesday
     );
     const row = await suite.db.execute<{ period_start: string; period_end: string }>(
       sql`select period_start, period_end from roster_versions where id = ${versionId}`,
@@ -351,36 +348,17 @@ describe("createRosterVersion", () => {
   it("refuses a second draft for two DIFFERENT non-Monday days in the SAME week — roster.draft_exists", async () => {
     // Without normalization the draft_exists guard keys on the exact period_start, so two mid-week
     // days would each fork a draft for one calendar week.
-    await run((tx) => backend.createRosterVersion(tx, { locationId, period: "2026-11-11" })); // Wednesday
+    await run((tx) => backend.createRosterVersion(tx, { period: "2026-11-11" })); // Wednesday
     const code = await codeOfRejection(() =>
-      run((tx) => backend.createRosterVersion(tx, { locationId, period: "2026-11-12" })),
+      run((tx) => backend.createRosterVersion(tx, { period: "2026-11-12" })),
     ); // Thursday, same week
     expect(code).toBe("roster.draft_exists");
-  });
-
-  it("refuses a locationId that names no location — management.request_invalid, no row written", async () => {
-    const refusal = await refusalOf(() =>
-      run((tx) =>
-        backend.createRosterVersion(tx, { locationId: UNKNOWN_ID, period: "2026-12-07" }),
-      ),
-    );
-    expect(refusal).toEqual({
-      code: "management.request_invalid",
-      params: { field: "locationId" },
-    });
-    expect(
-      await countRows(
-        sql`select count(*) as n from roster_versions where location_id = ${UNKNOWN_ID}`,
-      ),
-    ).toBe(0);
   });
 });
 
 describe("getRoster / getRosterVersion", () => {
   it("returns the draft version and its attached shifts for the week", async () => {
-    const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { locationId, period: "2026-04-06" }),
-    );
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-04-06" }));
     const shiftId = await insertDraftShift(suite.db, {
       personId,
       locationId,
@@ -388,7 +366,7 @@ describe("getRoster / getRosterVersion", () => {
       endsAt: "2026-04-06T17:00:00Z",
       rosterVersionId: versionId,
     });
-    const snapshot = await run((tx) => backend.getRoster(tx, { locationId, period: "2026-04-06" }));
+    const snapshot = await run((tx) => backend.getRoster(tx, { period: "2026-04-06" }));
     expect(snapshot.version?.id).toBe(versionId);
     expect(snapshot.version?.status).toBe("draft");
     expect(snapshot.shifts.map((s) => s.id)).toEqual([shiftId]);
@@ -397,16 +375,16 @@ describe("getRoster / getRosterVersion", () => {
 
   it("getRoster with a non-Monday day returns the same week's roster (normalized)", async () => {
     const versionId = await run(
-      (tx) => backend.createRosterVersion(tx, { locationId, period: "2026-11-16" }), // Monday
+      (tx) => backend.createRosterVersion(tx, { period: "2026-11-16" }), // Monday
     );
     const snapshot = await run(
-      (tx) => backend.getRoster(tx, { locationId, period: "2026-11-18" }), // Wednesday, same week
+      (tx) => backend.getRoster(tx, { period: "2026-11-18" }), // Wednesday, same week
     );
     expect(snapshot.version?.id).toBe(versionId);
   });
 
   it("returns { version: null, shifts: [] } for a week with no roster", async () => {
-    const snapshot = await run((tx) => backend.getRoster(tx, { locationId, period: "2026-05-04" }));
+    const snapshot = await run((tx) => backend.getRoster(tx, { period: "2026-05-04" }));
     expect(snapshot).toEqual({ version: null, shifts: [] });
   });
 
@@ -417,17 +395,15 @@ describe("getRoster / getRosterVersion", () => {
       periodEnd: "2026-06-07",
     });
     await run((tx) => backend.publishRoster(tx, { versionId }));
-    const snapshot = await run((tx) => backend.getRoster(tx, { locationId, period: "2026-06-01" }));
+    const snapshot = await run((tx) => backend.getRoster(tx, { period: "2026-06-01" }));
     expect(snapshot.version?.id).toBe(versionId);
     expect(snapshot.version?.status).toBe("published");
   });
 
   it("getRosterVersion returns the row, or throws roster.not_found for an unknown id", async () => {
-    const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { locationId, period: "2026-07-06" }),
-    );
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-07-06" }));
     const row = await run((tx) => backend.getRosterVersion(tx, { versionId }));
-    expect(row.locationId).toBe(locationId);
+    expect(row.id).toBe(versionId);
     const code = await codeOfRejection(() =>
       run((tx) =>
         backend.getRosterVersion(tx, {
@@ -457,9 +433,7 @@ describe("addShift", () => {
   }
 
   it("inserts a shift attached to the draft version and returns its id", async () => {
-    const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { locationId, period: "2026-08-03" }),
-    );
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-08-03" }));
     const shiftId = await run((tx) => backend.addShift(tx, shiftInput(versionId)));
     const row = await suite.db.execute<{ roster_version_id: string; person_id: string }>(
       sql`select roster_version_id, person_id from shifts where id = ${shiftId}`,
@@ -489,9 +463,7 @@ describe("addShift", () => {
   });
 
   it("rejects a non-positive interval (starts >= ends) — shift.invalid", async () => {
-    const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { locationId, period: "2026-08-17" }),
-    );
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-08-17" }));
     const code = await codeOfRejection(() =>
       run((tx) =>
         backend.addShift(
@@ -507,9 +479,7 @@ describe("addShift", () => {
   });
 
   it("rejects an UNPARSEABLE startsAt/endsAt — shift.invalid", async () => {
-    const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { locationId, period: "2026-10-05" }),
-    );
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-10-05" }));
     expect(
       await codeOfRejection(() =>
         run((tx) => backend.addShift(tx, shiftInput(versionId, { startsAt: "not-a-timestamp" }))),
@@ -523,31 +493,13 @@ describe("addShift", () => {
   });
 
   it("refuses a personId that names no person — management.request_invalid, no row written", async () => {
-    const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { locationId, period: "2026-12-14" }),
-    );
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2026-12-14" }));
     const refusal = await refusalOf(() =>
       run((tx) => backend.addShift(tx, shiftInput(versionId, { personId: UNKNOWN_ID }))),
     );
     expect(refusal).toEqual({
       code: "management.request_invalid",
       params: { field: "personId" },
-    });
-    expect(
-      await countRows(sql`select count(*) as n from shifts where roster_version_id = ${versionId}`),
-    ).toBe(0);
-  });
-
-  it("refuses a locationId that names no location — management.request_invalid, no row written", async () => {
-    const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { locationId, period: "2026-12-21" }),
-    );
-    const refusal = await refusalOf(() =>
-      run((tx) => backend.addShift(tx, shiftInput(versionId, { locationId: UNKNOWN_ID }))),
-    );
-    expect(refusal).toEqual({
-      code: "management.request_invalid",
-      params: { field: "locationId" },
     });
     expect(
       await countRows(sql`select count(*) as n from shifts where roster_version_id = ${versionId}`),
@@ -569,12 +521,11 @@ describe("addShift", () => {
 
 describe("updateShift / removeShift", () => {
   async function draftShift(period: string): Promise<{ versionId: string; shiftId: string }> {
-    const versionId = await run((tx) => backend.createRosterVersion(tx, { locationId, period }));
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { period }));
     const shiftId = await run((tx) =>
       backend.addShift(tx, {
         versionId,
         personId,
-        locationId,
         startsAt: `${period}T09:00:00Z`,
         startsOffsetMinutes: 0,
         endsAt: `${period}T17:00:00Z`,
@@ -687,12 +638,11 @@ describe("updateShift / removeShift", () => {
 
 describe("a shift's times are stored in one spelling", () => {
   async function addOn(period: string, startsAt: string, endsAt: string) {
-    const versionId = await run((tx) => backend.createRosterVersion(tx, { locationId, period }));
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { period }));
     const shiftId = await run((tx) =>
       backend.addShift(tx, {
         versionId,
         personId,
-        locationId,
         startsAt,
         startsOffsetMinutes: 0,
         endsAt,
@@ -735,15 +685,12 @@ describe("a shift's times are stored in one spelling", () => {
   });
 
   it("refuses an interval inside one second — shift.invalid, not a raw CHECK error", async () => {
-    const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { locationId, period: "2027-01-18" }),
-    );
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2027-01-18" }));
     const rejection = await captureError(() =>
       run((tx) =>
         backend.addShift(tx, {
           versionId,
           personId,
-          locationId,
           startsAt: "2027-01-18T09:00:00Z",
           startsOffsetMinutes: 0,
           endsAt: "2027-01-18T09:00:00.500Z",
@@ -758,15 +705,12 @@ describe("a shift's times are stored in one spelling", () => {
   });
 
   it("refuses a year outside 0000–9999, whose ISO spelling has another width", async () => {
-    const versionId = await run((tx) =>
-      backend.createRosterVersion(tx, { locationId, period: "2027-01-25" }),
-    );
+    const versionId = await run((tx) => backend.createRosterVersion(tx, { period: "2027-01-25" }));
     const rejection = await captureError(() =>
       run((tx) =>
         backend.addShift(tx, {
           versionId,
           personId,
-          locationId,
           startsAt: "2027-01-25T09:00:00Z",
           startsOffsetMinutes: 0,
           endsAt: "+010000-01-01T00:00:00Z",
@@ -786,14 +730,13 @@ describe("a shift's times are stored in one spelling", () => {
       backend.addShift(tx, {
         versionId,
         personId,
-        locationId,
         startsAt: "2027-02-01T10:00:00+02:00",
         startsOffsetMinutes: 0,
         endsAt: "2027-02-01T09:30:00Z",
         endsOffsetMinutes: 0,
       }),
     );
-    const snapshot = await run((tx) => backend.getRoster(tx, { locationId, period: "2027-02-01" }));
+    const snapshot = await run((tx) => backend.getRoster(tx, { period: "2027-02-01" }));
     expect(snapshot.shifts.map((shift) => shift.startsAt)).toEqual([
       "2027-02-01T08:00:00Z",
       "2027-02-01T09:00:00Z",
@@ -817,14 +760,11 @@ describe("a shift's times are stored in one spelling", () => {
 });
 
 describe("getPlannedVsActual", () => {
+  // One venue across the suite: each case starts with no roster.
+  beforeEach(clearRoster);
   const week = { start: "2026-03-02", end: "2026-03-09" }; // Mon..Sun, half-open
-  async function seedSession(
-    person: string,
-    loc: string,
-    inAt: string,
-    outAt: string,
-  ): Promise<void> {
-    const node = await seedNode(suite.db, brandLocationId(loc));
+  async function seedSession(person: string, inAt: string, outAt: string): Promise<void> {
+    const node = await seedNode(suite.db);
     await insertTimeEntry(suite.db, {
       nodeId: node,
       personId: person,
@@ -838,10 +778,10 @@ describe("getPlannedVsActual", () => {
       eventAt: outAt,
     });
   }
-  // `publishRoster` attaches every in-period null-version shift at `loc`.
-  async function publishWeek(loc: string): Promise<void> {
+  // `publishRoster` attaches every in-period null-version shift.
+  async function publishWeek(): Promise<void> {
     const versionId = await insertRosterVersion(suite.db, {
-      locationId: loc,
+      locationId,
       periodStart: week.start,
       periodEnd: "2026-03-08",
     });
@@ -849,19 +789,16 @@ describe("getPlannedVsActual", () => {
   }
 
   it("matches a PUBLISHED planned shift to its worked session, and reports late minutes", async () => {
-    const loc = await seedLocation(suite.db);
     const p = await seedPerson(suite.db, `pva-${crypto.randomUUID()}`);
     await insertDraftShift(suite.db, {
       personId: p,
-      locationId: loc,
+      locationId,
       startsAt: "2026-03-02T09:00:00Z",
       endsAt: "2026-03-02T13:00:00Z",
     });
-    await publishWeek(loc); // the shift is now on a published version
-    await seedSession(p, loc, "2026-03-02T09:15:00Z", "2026-03-02T13:00:00Z");
-    const rows = await run((tx) =>
-      backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
-    );
+    await publishWeek(); // the shift is now on a published version
+    await seedSession(p, "2026-03-02T09:15:00Z", "2026-03-02T13:00:00Z");
+    const rows = await run((tx) => backend.getPlannedVsActual(tx, { period: week }));
     const row = rows.find((r) => r.personId === p && r.workDate === "2026-03-02")!;
     expect(row.plannedMinutes).toBe(240);
     expect(row.workedMinutes).toBe(225);
@@ -871,20 +808,17 @@ describe("getPlannedVsActual", () => {
   });
 
   it("flags a no-show (published shift, not worked) and an unplanned day (worked, not planned)", async () => {
-    const loc = await seedLocation(suite.db);
     const noShowPerson = await seedPerson(suite.db, `ns-${crypto.randomUUID()}`);
     await insertDraftShift(suite.db, {
       personId: noShowPerson,
-      locationId: loc,
+      locationId,
       startsAt: "2026-03-03T09:00:00Z",
       endsAt: "2026-03-03T17:00:00Z",
     });
-    await publishWeek(loc);
+    await publishWeek();
     const unplannedPerson = await seedPerson(suite.db, `up-${crypto.randomUUID()}`);
-    await seedSession(unplannedPerson, loc, "2026-03-04T09:00:00Z", "2026-03-04T12:00:00Z");
-    const rows = await run((tx) =>
-      backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
-    );
+    await seedSession(unplannedPerson, "2026-03-04T09:00:00Z", "2026-03-04T12:00:00Z");
+    const rows = await run((tx) => backend.getPlannedVsActual(tx, { period: week }));
     const noShow = rows.find((r) => r.personId === noShowPerson)!;
     expect(noShow.noShow).toBe(true);
     expect(noShow.workedMinutes).toBe(0);
@@ -896,33 +830,30 @@ describe("getPlannedVsActual", () => {
   it("counts only the PUBLISHED version's shifts — excludes drafts and superseded versions", async () => {
     // "Planned" is the currently-published roster (owner decision), so a draft and a superseded
     // version must not manufacture phantom no-shows.
-    const loc = await seedLocation(suite.db);
     const p = await seedPerson(suite.db, `pub-${crypto.randomUUID()}`);
     await insertDraftShift(suite.db, {
       personId: p,
-      locationId: loc,
+      locationId,
       startsAt: "2026-03-02T09:00:00Z",
       endsAt: "2026-03-02T13:00:00Z",
     });
-    await publishWeek(loc);
+    await publishWeek();
     // B supersedes A; publishWeek attaches only null-version shifts, so 03-02 stays on A.
     await insertDraftShift(suite.db, {
       personId: p,
-      locationId: loc,
+      locationId,
       startsAt: "2026-03-03T09:00:00Z",
       endsAt: "2026-03-03T17:00:00Z",
     });
-    await publishWeek(loc);
+    await publishWeek();
     // Inserted after the last publish, so it stays a draft.
     await insertDraftShift(suite.db, {
       personId: p,
-      locationId: loc,
+      locationId,
       startsAt: "2026-03-04T09:00:00Z",
       endsAt: "2026-03-04T17:00:00Z",
     });
-    const rows = await run((tx) =>
-      backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
-    );
+    const rows = await run((tx) => backend.getPlannedVsActual(tx, { period: week }));
     const plannedDays = rows
       .filter((r) => r.personId === p && r.plannedMinutes > 0)
       .map((r) => r.workDate);
@@ -930,41 +861,19 @@ describe("getPlannedVsActual", () => {
   });
 
   it("excludes a session whose local day is OUTSIDE the window, includes one inside", async () => {
-    const loc = await seedLocation(suite.db);
     const p = await seedPerson(suite.db, `bound-${crypto.randomUUID()}`);
     // The widened fetch grabs the days either side of the window; the filter must drop them.
-    await seedSession(p, loc, "2026-03-01T09:00:00Z", "2026-03-01T12:00:00Z");
-    await seedSession(p, loc, "2026-03-08T09:00:00Z", "2026-03-08T12:00:00Z");
-    await seedSession(p, loc, "2026-03-09T09:00:00Z", "2026-03-09T12:00:00Z");
-    const rows = await run((tx) =>
-      backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
-    );
+    await seedSession(p, "2026-03-01T09:00:00Z", "2026-03-01T12:00:00Z");
+    await seedSession(p, "2026-03-08T09:00:00Z", "2026-03-08T12:00:00Z");
+    await seedSession(p, "2026-03-09T09:00:00Z", "2026-03-09T12:00:00Z");
+    const rows = await run((tx) => backend.getPlannedVsActual(tx, { period: week }));
     const days = rows.filter((r) => r.personId === p).map((r) => r.workDate);
     expect(days).toEqual(["2026-03-08"]);
   });
 
-  it("scopes shifts to the queried location — another location's published shifts do not leak in", async () => {
-    const loc = await seedLocation(suite.db);
-    const other = await seedLocation(suite.db);
-    const p = await seedPerson(suite.db, `scope-${crypto.randomUUID()}`);
-    await insertDraftShift(suite.db, {
-      personId: p,
-      locationId: other,
-      startsAt: "2026-03-05T09:00:00Z",
-      endsAt: "2026-03-05T13:00:00Z",
-    });
-    await publishWeek(other);
-    const rows = await run((tx) =>
-      backend.getPlannedVsActual(tx, { locationId: loc, period: week }),
-    );
-    expect(rows.filter((r) => r.personId === p)).toEqual([]);
-  });
-
   it("returns [] for a window with no shifts and no sessions", async () => {
-    const loc = await seedLocation(suite.db);
     const rows = await run((tx) =>
       backend.getPlannedVsActual(tx, {
-        locationId: loc,
         period: { start: "2026-12-07", end: "2026-12-14" },
       }),
     );
@@ -973,8 +882,8 @@ describe("getPlannedVsActual", () => {
 });
 
 describe("copyPublishedToDraft", () => {
+  beforeEach(clearRoster);
   async function publishedWeek() {
-    const locationId = await seedLocation(suite.db);
     const versionId = await insertRosterVersion(suite.db, { locationId });
     const shiftId = await insertDraftShift(suite.db, {
       locationId,
@@ -990,7 +899,6 @@ describe("copyPublishedToDraft", () => {
   }
 
   it("copies an empty published period without inventing shifts or swaps", async () => {
-    const locationId = await seedLocation(suite.db);
     const versionId = await insertRosterVersion(suite.db, {
       locationId,
       periodStart: "2026-05-01",
@@ -1003,7 +911,6 @@ describe("copyPublishedToDraft", () => {
     expect(
       await run((tx) => backend.getRosterVersion(tx, { versionId: result.versionId })),
     ).toMatchObject({
-      locationId,
       periodStart: "2026-05-01",
       periodEnd: "2026-05-10",
       status: "draft",
@@ -1021,7 +928,7 @@ describe("copyPublishedToDraft", () => {
     ]);
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     const failure = results.find((result) => result.status === "rejected") as PromiseRejectedResult;
-    expect(failure.reason).toMatchObject({ code: "roster.draft_exists", params: { locationId } });
+    expect(failure.reason).toMatchObject({ code: "roster.draft_exists", params: {} });
     expect(
       await countRows(
         sql`select count(*) as n from roster_versions where location_id=${locationId} and status='draft'`,
@@ -1030,7 +937,7 @@ describe("copyPublishedToDraft", () => {
   });
 
   it("copies every shift field, keeps the published rows, and switches staff visibility only on publication", async () => {
-    const { locationId, versionId, shiftId } = await publishedWeek();
+    const { versionId, shiftId } = await publishedWeek();
     const original = await suite.db.execute(sql`select * from shifts where id=${shiftId}`);
     const versionBefore = await suite.db.execute(
       sql`select * from roster_versions where id=${versionId}`,
@@ -1052,7 +959,6 @@ describe("copyPublishedToDraft", () => {
     ).toEqual(versionBefore.rows);
     const draft = await run((tx) => backend.getRosterVersion(tx, { versionId: result.versionId }));
     expect(draft).toMatchObject({
-      locationId,
       periodStart: "2026-01-05",
       periodEnd: "2026-01-11",
       status: "draft",
@@ -1061,13 +967,9 @@ describe("copyPublishedToDraft", () => {
     });
     const own = () =>
       run((tx) => listShiftsForPerson(tx, { personId, from: "2026-01-05", to: "2026-01-12" }));
-    expect(
-      (await own()).filter((row) => row.locationId === locationId).map((row) => row.id),
-    ).toEqual([shiftId]);
+    expect((await own()).map((row) => row.id)).toEqual([shiftId]);
     await run((tx) => backend.publishRoster(tx, { versionId: result.versionId }));
-    expect(
-      (await own()).filter((row) => row.locationId === locationId).map((row) => row.id),
-    ).toEqual([copyId]);
+    expect((await own()).map((row) => row.id)).toEqual([copyId]);
     expect((await run((tx) => backend.getRosterVersion(tx, { versionId }))).status).toBe(
       "superseded",
     );
@@ -1099,12 +1001,12 @@ describe("copyPublishedToDraft", () => {
     ).toEqual({ code: "roster.not_found", params: { rosterVersionId: UNKNOWN_ID } });
   });
 
-  it("refuses a second draft for the same location and period", async () => {
+  it("refuses a second draft for the same period", async () => {
     const { locationId, versionId } = await publishedWeek();
     await insertRosterVersion(suite.db, { locationId });
     expect(
       await refusalOf(() => run((tx) => backend.copyPublishedToDraft(tx, { versionId }))),
-    ).toEqual({ code: "roster.draft_exists", params: { locationId } });
+    ).toEqual({ code: "roster.draft_exists", params: {} });
     expect(
       await countRows(
         sql`select count(*) as n from roster_versions where location_id=${locationId}`,

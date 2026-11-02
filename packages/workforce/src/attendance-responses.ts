@@ -5,12 +5,7 @@ import { recordRoot } from "./record-projection.js";
 import { correctionGroupCanApply } from "./corrections.js";
 import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
-import {
-  locations,
-  locationBusinessDaySettings,
-  locationDayCutoverChanges,
-  type Transaction,
-} from "@waitron/db";
+import { locationBusinessDaySettings, readVenueClock, type Transaction } from "@waitron/db";
 import { readRecordedEntries } from "./record-reads.js";
 import { attendanceQuestions } from "./schema/attendance.js";
 import { attendanceResponseCommands } from "./schema/attendance-responses.js";
@@ -27,20 +22,10 @@ export async function readAttendanceRevision(tx: Transaction, personId: string):
     .from(attendanceResponseCommands)
     .where(eq(attendanceResponseCommands.personId, personId))
     .orderBy(attendanceResponseCommands.id);
-  const clocks = await tx
-    .select({ id: locations.id, timeZone: locations.timeZone, dayCutover: locations.dayCutover })
-    .from(locations)
-    .orderBy(locations.id);
-  const settings = await tx
-    .select()
-    .from(locationBusinessDaySettings)
-    .orderBy(locationBusinessDaySettings.locationId);
-  const cutovers = await tx
-    .select()
-    .from(locationDayCutoverChanges)
-    .orderBy(locationDayCutoverChanges.locationId, locationDayCutoverChanges.effectiveBusinessDay);
+  const clock = await readVenueClock(tx);
+  const settings = await tx.select().from(locationBusinessDaySettings);
   return createHash("sha256")
-    .update(JSON.stringify({ personId, entries, questions, commands, clocks, settings, cutovers }))
+    .update(JSON.stringify({ personId, entries, questions, commands, clock, settings }))
     .digest("hex");
 }
 

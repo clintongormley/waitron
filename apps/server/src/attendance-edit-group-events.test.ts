@@ -5,7 +5,6 @@ import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.j
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
-  locations,
   newId,
   orderDraftEvents,
   orderDraftLines,
@@ -24,7 +23,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
-import { readAttendanceFacts } from "./attendance-facts.js";
 import { submitDraft } from "./order-drafts.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
@@ -185,16 +183,6 @@ async function state() {
     days: await suite.db.select().from(attendanceDayWork),
   };
 }
-async function factsAt(locationId: string = v.cfg.locationId) {
-  return run((tx) =>
-    readAttendanceFacts(tx, {
-      locationId,
-      businessDay: "2026-01-05",
-      startAt: "2026-01-05T00:00:00Z",
-      endAt: "2026-01-06T00:00:00Z",
-    }),
-  );
-}
 describe("group events from draft submission and order editing", () => {
   it.each(actions)(
     "%s snapshots derived groups under the editor at the command instant",
@@ -223,27 +211,6 @@ describe("group events from draft submission and order editing", () => {
           .map((e) => [`group:${e.id}`, v.operatorId, v.cfg.locationId, "2026-01-05T16:40:00.000Z"])
           .sort(),
       );
-      const [other] = await suite.db
-        .insert(locations)
-        .values({ name: "Other", invoiceLocales: ["es-ES"], operationDescription: "Restaurant" })
-        .returning();
-      await suite.db
-        .update(workingOrders)
-        .set({ locationId: other!.id })
-        .where(eq(workingOrders.partyId, p.partyId));
-      expect(
-        (await factsAt())
-          .filter((f) => f.key.startsWith("group:") && f.personId === v.operatorId)
-          .map((f) => [f.key, f.locationId, f.at])
-          .sort(),
-      ).toEqual(
-        events.map((e) => [`group:${e.id}`, v.cfg.locationId, "2026-01-05T16:40:00.000Z"]).sort(),
-      );
-      expect(
-        (await factsAt(other!.id)).filter(
-          (f) => f.key.startsWith("group:") && f.personId === v.operatorId,
-        ),
-      ).toEqual([]);
     },
   );
   it.each(["submit-draft", "add-group", "remove-group"] as const)(

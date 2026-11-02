@@ -1,7 +1,13 @@
 import "./errors.js";
 import type { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { locations, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  locations,
+  venueLocationId,
+  withTransaction,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import {
   authorizeManager,
   persons,
@@ -11,7 +17,6 @@ import {
 import type { ModuleTimeRecordExport } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { createErrorBoundary, requireManagementSession } from "@waitron/server-kit";
-import { assertOwnAttendanceLocation } from "./attendance-own-scope.js";
 import {
   parseAttendanceExportOptions,
   parseAttendanceExportQuery,
@@ -22,7 +27,6 @@ import type { Logger } from "./logger.js";
 
 interface ExportDeps {
   db: Database;
-  cfg: { locationId: string };
   exporter?: ModuleTimeRecordExport;
 }
 const run = createErrorBoundary(
@@ -31,7 +35,6 @@ const run = createErrorBoundary(
     "management_session.expired": 401,
     "person.suspended": 403,
     "authorization.not_permitted": 403,
-    "attendance.not_permitted": 403,
   },
   "workforce.failed",
 );
@@ -62,12 +65,6 @@ export function mountAttendanceExportApi(app: Hono, deps: ExportDeps, log: Logge
         const locationId = parseAttendanceExportOptions(new URL(c.req.url).searchParams);
         await requireLocation(tx, locationId);
         const canExportAll = roleHasPermission(viewer.role, "report.export");
-        if (!canExportAll)
-          await assertOwnAttendanceLocation(tx, {
-            personId: viewer.personId,
-            locationId,
-            currentLocationId: deps.cfg.locationId,
-          });
         return { available: deps.exporter !== undefined, canExportAll };
       });
       c.header("Cache-Control", "no-store");
@@ -87,12 +84,6 @@ export function mountAttendanceExportApi(app: Hono, deps: ExportDeps, log: Logge
             mode,
           );
           await requireLocation(tx, selection.locationId);
-          if (mode === "own")
-            await assertOwnAttendanceLocation(tx, {
-              personId: viewerId,
-              locationId: selection.locationId,
-              currentLocationId: deps.cfg.locationId,
-            });
           if (personId !== undefined) {
             const [subject] = await tx
               .select({ id: persons.id })
@@ -103,7 +94,7 @@ export function mountAttendanceExportApi(app: Hono, deps: ExportDeps, log: Logge
           }
           if (!deps.exporter) return { selection, format: null };
           const format = await deps.exporter.prepare(tx, {
-            locationId: selection.locationId,
+            locationId: await venueLocationId(tx),
             personId: mode === "own" ? viewerId : personId,
             period: { start: selection.from, end: selection.before },
             audience: selection.audience,
@@ -122,15 +113,7 @@ export function mountAttendanceExportApi(app: Hono, deps: ExportDeps, log: Logge
           captured.selection.format === "pdf"
             ? await renderAttendancePdf(document)
             : renderAttendanceCsv(document);
-        await withTransaction(deps.db, async (tx) => {
-          const viewerId = await authorize(tx, token, mode, false);
-          if (mode === "own")
-            await assertOwnAttendanceLocation(tx, {
-              personId: viewerId,
-              locationId: captured.selection.locationId,
-              currentLocationId: deps.cfg.locationId,
-            });
-        });
+        await withTransaction(deps.db, (tx) => authorize(tx, token, mode, false));
         c.header(
           "Content-Type",
           captured.selection.format === "pdf" ? "application/pdf" : "text/csv; charset=utf-8",

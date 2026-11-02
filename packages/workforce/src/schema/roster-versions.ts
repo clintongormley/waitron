@@ -14,13 +14,13 @@ import {
 import { persons } from "@waitron/identity";
 
 /**
- * `superseded` is written when a newer version is published for the same (location, exact period);
+ * `superseded` is written when a newer version is published for the same exact period;
  * it keeps its `published_at` stamp, because it was published.
  */
 export const rosterVersionStatus = enumType(["draft", "published", "superseded"]);
 
 /**
- * A snapshot of a location's schedule for a date period — planning data, so ordinary mutable rows. The
+ * A snapshot of the venue's schedule for a date period — planning data, so ordinary mutable rows. The
  * tamper-evidence obligation (art. 34.9) is on the record of hours worked, which is `time_entries`.
  */
 export const rosterVersions = table(

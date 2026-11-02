@@ -144,19 +144,18 @@ export class StaffingApi {
   }
   watchRotaWarnings(
     queries: QueryController,
-    locationId: string,
     week: string,
     apply: (read: { breaches: RosterBreach[]; ruleset: WorkTimeRuleset | null }) => void,
   ): Promise<void> {
     return queries.watch(
       "rota-warnings",
       {
-        key: `staffing:rota-warnings:${locationId}:${week}`,
+        key: `staffing:rota-warnings:${week}`,
         dependencies: QUERY_DEPENDENCIES["rota-warnings"].map((type) => ({ type })),
         read: async () => {
           try {
             return await this.request<{ breaches: RosterBreach[]; ruleset: WorkTimeRuleset }>(
-              `/management-api/roster/breaches?locationId=${encodeURIComponent(locationId)}&period=${encodeURIComponent(week)}`,
+              `/management-api/roster/breaches?period=${encodeURIComponent(week)}`,
               "GET",
               undefined,
               { passive: true },

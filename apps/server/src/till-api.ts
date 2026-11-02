@@ -1444,7 +1444,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
                   source: "session",
                   key: opened.id,
                   personId: opened.personId,
-                  locationId: current.locationId,
                   kind: "sign-in",
                   at: stored!.openedAt,
                   offsetMinutes: 0,

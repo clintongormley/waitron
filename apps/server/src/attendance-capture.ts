@@ -1,9 +1,8 @@
 import "./errors.js";
 import { and, eq, sql } from "drizzle-orm";
-import { newId, workingOrders } from "@waitron/db";
+import { newId, readVenueClock, venueLocationId } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
-import { readLocationClock } from "@waitron/reporting";
 import { AppError, businessDayAt, businessDayBounds } from "@waitron/shared";
 import { offsetMinutes } from "@waitron/venue-service";
 import {
@@ -15,7 +14,10 @@ import type { ActivityKind, AttendanceFact, AttendanceSource } from "@waitron/wo
 
 export type AttendanceRecorder = (
   tx: Transaction,
-  fact: AttendanceFact & { outcome: "pending" | "qualified" | "refused" },
+  fact: AttendanceFact & {
+    outcome: "pending" | "qualified" | "refused";
+    locationId?: string;
+  },
 ) => Promise<void>;
 
 export async function captureKitchenActivity(
@@ -28,15 +30,10 @@ export async function captureKitchenActivity(
   if (attendance === undefined || !personId || orderIds.length === 0) return;
   const at = attendance.clock.now().instant.toISOString();
   for (const id of new Set(orderIds)) {
-    const [order] = await tx
-      .select({ locationId: workingOrders.locationId })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id));
     await attendance.recorder(tx, {
       source: "order",
       key: `service:${id}:${commandKey}`,
       personId,
-      locationId: order!.locationId,
       kind: "order",
       at,
       offsetMinutes: 0,
@@ -59,7 +56,6 @@ export const recordAttendanceFact: AttendanceRecorder = async (tx, fact) => {
   if (
     !fact.key ||
     !fact.personId ||
-    !fact.locationId ||
     !Number.isFinite(instant.getTime()) ||
     sourceKinds[fact.source] !== fact.kind ||
     !["pending", "qualified", "refused"].includes(fact.outcome)
@@ -87,10 +83,7 @@ export const recordAttendanceFact: AttendanceRecorder = async (tx, fact) => {
       .update(attendanceOperationFacts)
       .set({ outcome })
       .where(eq(attendanceOperationFacts.sequence, existing.sequence));
-    const scope = and(
-      eq(attendanceDayWork.locationId, existing.locationId),
-      eq(attendanceDayWork.businessDay, existing.businessDay),
-    );
+    const scope = eq(attendanceDayWork.businessDay, existing.businessDay);
     const [work] = await tx.select().from(attendanceDayWork).where(scope);
     if (work) {
       await tx
@@ -98,9 +91,8 @@ export const recordAttendanceFact: AttendanceRecorder = async (tx, fact) => {
         .set({ dirtyRevision: sql`${attendanceDayWork.dirtyRevision} + 1` })
         .where(scope);
     } else {
-      const clock = await readLocationClock(tx, existing.locationId);
+      const clock = await readVenueClock(tx);
       await enqueueAttendanceDay(tx, {
-        locationId: existing.locationId,
         businessDay: existing.businessDay,
         ...businessDayBounds(clock, existing.businessDay),
       });
@@ -108,13 +100,14 @@ export const recordAttendanceFact: AttendanceRecorder = async (tx, fact) => {
     return;
   }
   const at = new Date(Math.floor(instant.getTime() / 1000) * 1000);
-  const clock = await readLocationClock(tx, fact.locationId);
+  const clock = await readVenueClock(tx);
+  const venueId = await venueLocationId(tx);
   const businessDay = businessDayAt(clock, at);
   await tx.insert(attendanceOperationFacts).values({
     source: fact.source,
     key: fact.key,
     personId: fact.personId,
-    locationId: fact.locationId,
+    locationId: venueId,
     kind: fact.kind,
     at: at.toISOString(),
     offsetMinutes: offsetMinutes(at.getTime(), clock.timeZone),
@@ -123,22 +116,15 @@ export const recordAttendanceFact: AttendanceRecorder = async (tx, fact) => {
   });
   const [savedDay] = await tx
     .select({
-      locationId: attendanceDayWork.locationId,
       businessDay: attendanceDayWork.businessDay,
       startAt: attendanceDayWork.startAt,
       endAt: attendanceDayWork.endAt,
     })
     .from(attendanceDayWork)
-    .where(
-      and(
-        eq(attendanceDayWork.locationId, fact.locationId),
-        eq(attendanceDayWork.businessDay, businessDay),
-      ),
-    );
+    .where(eq(attendanceDayWork.businessDay, businessDay));
   await enqueueAttendanceDay(
     tx,
     savedDay ?? {
-      locationId: fact.locationId,
       businessDay,
       ...businessDayBounds(clock, businessDay),
     },
