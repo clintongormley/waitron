@@ -8936,8 +8936,8 @@ export interface TableState {
   /** Those unserved lines whose ticket item is `ready`. */
   readyToServe: number;
   /**
-   * The worst age band over those unserved lines that were fired; a counter delivery does not feed
-   * it.
+   * The worst age band over those unserved lines that were fired or are waiting for the pass; a
+   * counter delivery does not feed it.
    */
   timingBand: TimingBand;
   today: TableToday;

@@ -2354,11 +2354,11 @@ export interface TableState {
   pendingToServe: number;
   readyToServe: number;
   /**
-   * The worst age band across the unserved lines fired to a kitchen station (not made here) of
-   * every bill of the party's family that is not abandoned, paid ones included (a held dish does not
-   * age here); `"fresh"` for a free table. Only the REDUCED band is sent, not the per-line ages and
-   * thresholds, so the floor cannot re-derive it locally: it is fixed until the next
-   * `getTablesState` fetch.
+   * The worst age band across the unserved lines fired to, or waiting for the pass at, a kitchen
+   * station (not made here) of every bill of the party's family that is not abandoned, paid ones
+   * included (a held dish does not age here); `"fresh"` for a free table. Only the REDUCED band is
+   * sent, not the per-line ages and thresholds, so the floor cannot re-derive it locally: it is
+   * fixed until the next `getTablesState` fetch.
    */
   timingBand: TimingBand;
   /**

@@ -176,7 +176,7 @@ export async function rerouteHeldAtRelease(
 }
 
 /**
- * Whether held work arriving at a station gets its group's HOLD paper there, by group then
+ * Whether unfired work on HOLD paper arriving at a station gets its group's HOLD paper there, by group then
  * station: true when the station is already recorded for the group, false when it is not but gets
  * the paper now, absent when it gets nothing until the fire. A station not recorded gets the paper
  * only when the group has HOLD paper somewhere, the station prints held work now, and it holds no

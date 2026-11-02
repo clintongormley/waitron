@@ -2273,7 +2273,7 @@ export async function holdPaperFor(
   });
 }
 
-/** Changed held work on a queued HOLD ticket, identified by its permanent group number. */
+/** Changed unfired work on HOLD paper ({@link holdPaperFor}), identified by its permanent group number. */
 export interface HeldChange {
   workingOrderId: string;
   workingOrderLineId: string;
@@ -2316,7 +2316,7 @@ export async function correctHoldTickets(
 }
 
 /**
- * Records the stations that get the group's HOLD paper for this arriving held work under
+ * Records the stations that get the group's HOLD paper for this arriving unfired work on HOLD paper under
  * {@link heldPaperReach} and have a printer to print it. Runs before the `+N` is printed, which
  * reaches only recorded stations.
  */

@@ -206,8 +206,8 @@ async function readCardRows(
   );
 }
 
-/** A live kitchen dish at this location. `scopedItems` and `firedPassDishes` both read it, so the
- *  dark-pass alert counts only dishes a pass board would list. */
+/** A live kitchen dish at this location. Every pass board read (`scopedItems`, `readCardRows`) and
+ *  `firedPassDishes` read it, so the dark-pass alert counts only dishes a pass board would list. */
 function liveKitchenDishAt(cfg: TradingContext): SQL | undefined {
   return and(eq(workingOrders.locationId, cfg.locationId), liveKitchenDish());
 }
