@@ -41,7 +41,9 @@ function seed() {
         ...request,
         country: "GB",
         taxId: "123456789",
-        location: { ...request.location, fiscalTerritory: "GB-vat", timeZone: "Europe/London" },
+
+        fiscalTerritory: "GB-vat",
+        timeZone: "Europe/London",
         admin: {
           displayName: "Target owner",
           email: "target@example.test",

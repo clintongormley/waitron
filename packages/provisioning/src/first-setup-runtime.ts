@@ -19,7 +19,7 @@ import {
   type FirstSetupCoordinator,
   type FirstSetupHold,
 } from "./first-setup-state.js";
-import { planVenue } from "./venue-plan.js";
+import { planVenue, VENUE_FIELDS } from "./venue-plan.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
@@ -133,7 +133,7 @@ export function createFirstSetupRuntime(options: {
     freeze: async (request, environment, ids, intent) => {
       const selection = venueFiscalSelection(
         modules,
-        request.location.fiscalTerritory,
+        request.fiscalTerritory,
         options.moduleConfig,
       );
       const selected = enabledModules(modules, selection.config);
@@ -182,11 +182,8 @@ export function createFirstSetupRuntime(options: {
         throw new AppError("setup.attempt_conflict", {});
       const selected = enabledModules(
         modules,
-        venueFiscalSelection(
-          modules,
-          state.frozen.request.location.fiscalTerritory,
-          options.moduleConfig,
-        ).config,
+        venueFiscalSelection(modules, state.frozen.request.fiscalTerritory, options.moduleConfig)
+          .config,
       );
       if (
         !isDeepStrictEqual(
@@ -213,7 +210,7 @@ export function createFirstSetupRuntime(options: {
         context.country,
         context.taxId,
         context.environment,
-        state.frozen.request.location,
+        Object.fromEntries(VENUE_FIELDS.map((field) => [field, state.frozen.request[field]])),
         context.bases,
         state.frozen.modules.map(({ module, version }) => ({ module, version })),
         state.frozen.configurationImport ?? null,

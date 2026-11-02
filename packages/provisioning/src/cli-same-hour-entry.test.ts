@@ -79,7 +79,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     "tax-id": "50000000R",
     "legal-name": "Olivo SL",
     "taxpayer-domicile": "Mayor 1 Madrid",
-    "location-name": "Olivo",
+    "venue-name": "Olivo",
     territory: "ES-common",
     locale: "es-ES",
     "operation-description": "Restaurant",

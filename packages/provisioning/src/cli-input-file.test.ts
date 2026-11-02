@@ -35,7 +35,7 @@ const args = [
   "Restaurant SL",
   "--taxpayer-domicile",
   "Calle Mayor 1, Madrid",
-  "--location-name",
+  "--venue-name",
   "Restaurant",
   "--territory",
   "ES-common",

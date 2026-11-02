@@ -25,19 +25,17 @@ function request(taxId = "B12345678"): VenueRequest {
     country: "ES",
     taxId,
     legalName: "Deli SL",
-    location: {
-      name: "Mostrador",
-      fiscalTerritory: "ES-common",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "venta en establecimiento",
-      addressLine1: "Calle Mayor 1",
-      addressLine2: null,
-      postalCode: "28013",
-      city: "Madrid",
-      province: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00:00",
-    },
+    name: "Mostrador",
+    fiscalTerritory: "ES-common",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "venta en establecimiento",
+    addressLine1: "Calle Mayor 1",
+    addressLine2: null,
+    postalCode: "28013",
+    city: "Madrid",
+    province: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00:00",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {
@@ -65,7 +63,7 @@ it("A725 fresh provisioning starts with one red default kitchen", async () => {
 
 it("an English venue's default kitchen station is named in English", async () => {
   const english = request("B10000015");
-  english.location.invoiceLocales = ["en-GB"];
+  english.invoiceLocales = ["en-GB"];
   const created = await applyVenue(planVenue(english, ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
@@ -159,7 +157,7 @@ describe("applyVenue: the one taxpayer row", () => {
       modules: ALL_MODULES,
     });
     const shortCutover = request("B10000005");
-    shortCutover.location.dayCutover = "06:00";
+    shortCutover.dayCutover = "06:00";
     const retry = applyVenue(planVenue(shortCutover, ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -354,10 +352,10 @@ describe("applyVenue", () => {
 
   it("puts the seeded counter and handheld profiles in the venue's department, starting at its counter zone, and the kitchen in none", async () => {
     const venue = request("B10101010");
-    await applyVenue(
-      planVenue({ ...venue, location: { ...venue.location, name: "Harbour Bar" } }, ALL_MODULES),
-      { db: suite.db, modules: ALL_MODULES },
-    );
+    await applyVenue(planVenue({ ...venue, name: "Harbour Bar" }, ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
 
     const scopes = await suite.db.execute<{
       name: string;
@@ -517,7 +515,7 @@ describe("applyVenue", () => {
       modules: ALL_MODULES,
     });
     const secondRequest = request("B12121212");
-    secondRequest.location.name = "Another venue";
+    secondRequest.name = "Another venue";
 
     await expect(
       applyVenue(planVenue(secondRequest, ALL_MODULES), {
@@ -667,7 +665,7 @@ describe("applyVenue", () => {
     const collidingPlan: VenueAction[] = [
       { kind: "ensure-tenant", country: "ES", taxId, legalName: "Deli SL" },
       {
-        kind: "create-location",
+        kind: "create-venue",
         name: "Mostrador",
         fiscalTerritory: "ES-common",
         invoiceLocales: ["es-ES"],
@@ -720,7 +718,7 @@ describe("applyVenue", () => {
       legalName: "Deli SL",
     };
     const createLocation: VenueAction = {
-      kind: "create-location",
+      kind: "create-venue",
       name: "Mostrador",
       fiscalTerritory: "ES-common",
       invoiceLocales: ["es-ES"],
@@ -755,7 +753,7 @@ describe("applyVenue", () => {
         message: "applyVenue: seed-device-profiles before seed-admin",
       },
       {
-        name: "create-node before create-location",
+        name: "create-node before create-venue",
         plan: [
           ensure,
           {
@@ -765,7 +763,7 @@ describe("applyVenue", () => {
             taxModule: "vat",
           } as VenueAction,
         ],
-        message: "applyVenue: create-node before create-location",
+        message: "applyVenue: create-node before create-venue",
       },
       {
         name: "seed-module before create-node",
@@ -889,7 +887,7 @@ it.each([
       ),
     );
     const changed = request("B55664422");
-    Object.assign(changed.location, { [field]: value });
+    Object.assign(changed, { [field]: value });
     await expect(
       applyVenue(planVenue(changed, ALL_MODULES), { db: suite.db, modules: ALL_MODULES }),
     ).rejects.toMatchObject({ code: "provisioning.second_venue" });
@@ -923,7 +921,7 @@ it("reuses the current dated start without clearing the location timeline", asyn
     .insert(locationBusinessDaySettings)
     .values({ locationId: first.locationId, revision: 3 });
   const current = request("B10000008");
-  current.location.dayCutover = "07:00";
+  current.dayCutover = "07:00";
   await expect(
     applyVenue(planVenue(current, ALL_MODULES), {
       db: suite.db,

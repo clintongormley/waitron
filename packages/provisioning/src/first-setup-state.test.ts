@@ -11,6 +11,7 @@ import {
   inspectFirstSetupMarker,
   assertVenueFirstSetupAllowed,
   type FirstSetupFrozen,
+  parseState,
 } from "./first-setup-state.js";
 import * as durable from "./durable-host-json.js";
 vi.mock("./durable-host-json.js", { spy: true });
@@ -40,19 +41,17 @@ function frozen(): FirstSetupFrozen {
       taxId: "B12345678",
       legalName: "Olivo SL",
       taxpayerDomicile: "Calle Fiscal 1",
-      location: {
-        name: "Olivo",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurante",
-        addressLine1: "Calle Mayor 1",
-        addressLine2: null,
-        postalCode: "28001",
-        city: "Madrid",
-        province: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00",
-      },
+      name: "Olivo",
+      fiscalTerritory: "ES-common",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Restaurante",
+      addressLine1: "Calle Mayor 1",
+      addressLine2: null,
+      postalCode: "28001",
+      city: "Madrid",
+      province: "Madrid",
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00",
       seriesCode: "A",
       fullSeriesCode: "F",
       rectificativeSeriesCode: "R",
@@ -87,6 +86,51 @@ afterEach(async () => {
       .writeDurableHostJson,
   );
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+
+it("refuses a frozen request that still nests a location object", async () => {
+  const f = await fixture();
+  const state = await f.claim();
+  const {
+    name,
+    fiscalTerritory,
+    invoiceLocales,
+    operationDescription,
+    addressLine1,
+    addressLine2,
+    postalCode,
+    city,
+    province,
+    timeZone,
+    dayCutover,
+    ...identity
+  } = state.frozen.request;
+  const location = {
+    name,
+    fiscalTerritory,
+    invoiceLocales,
+    operationDescription,
+    addressLine1,
+    addressLine2,
+    postalCode,
+    city,
+    province,
+    timeZone,
+    dayCutover,
+  };
+  state.frozen.request = { ...identity, location } as unknown as FirstSetupFrozen["request"];
+  expect(() => parseState(state, f.options.venueDir, f.options.stateDir)).toThrowError(
+    expect.objectContaining({ code: "setup.attempt_invalid" }),
+  );
+});
+
+it("accepts the flat request", async () => {
+  const f = await fixture();
+  const input = frozen();
+  const request = input.request;
+  const state = await f.claim({ ...input, request });
+  expect(state.frozen.request).toEqual(request);
+  expect((await f.store.read())?.frozen.request).toEqual(request);
 });
 
 it("does not read a bound venue replaced by a symlink after claiming", async () => {

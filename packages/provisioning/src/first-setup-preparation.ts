@@ -52,11 +52,8 @@ export function createFirstSetupPreparation(options: Options) {
   const assertSelection = (state: FirstSetupState) => {
     const selected = enabledModules(
       modules,
-      venueFiscalSelection(
-        modules,
-        state.frozen.request.location.fiscalTerritory,
-        options.moduleConfig,
-      ).config,
+      venueFiscalSelection(modules, state.frozen.request.fiscalTerritory, options.moduleConfig)
+        .config,
     );
     if (
       !isDeepStrictEqual(

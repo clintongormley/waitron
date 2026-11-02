@@ -31,7 +31,7 @@ it("the installed command refuses a missing host-state directory before creating
     "tax-id": "50000000R",
     "legal-name": "Olivo SL",
     "taxpayer-domicile": "Mayor 1 Madrid",
-    "location-name": "Olivo",
+    "venue-name": "Olivo",
     territory: "ES-common",
     locale: "es-ES",
     "operation-description": "Restaurant",

@@ -88,7 +88,7 @@ const USAGE = [
   "  keyring                                            generate the credential key ring",
   "  venue    [--venue-dir <path>] [--country <cc>] [--tax-id <nif>] [--legal-name <name>]",
   "           [--taxpayer-domicile <address>]",
-  "           [--location-name <name>] [--territory <t>] [--locale <l>]...",
+  "           [--venue-name <name>] [--territory <t>] [--locale <l>]...",
   "           [--operation-description <text>] [--address-line1 <text>] [--address-line2 <text>]",
   "           [--postal-code <code>] [--city <name>] [--province <name>] [--time-zone <tz>]",
   "           [--day-cutover <HH:MM>] [--series-code <code>] [--full-series-code <code>]",
@@ -165,7 +165,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       "tax-id": { type: "string" },
       "legal-name": { type: "string" },
       "taxpayer-domicile": { type: "string" },
-      "location-name": { type: "string" },
+      "venue-name": { type: "string" },
       territory: { type: "string" },
       locale: { type: "string", multiple: true },
       "operation-description": { type: "string" },
@@ -207,7 +207,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     if (taxpayerDomicile === "") {
       throw new AppError("setup.request_invalid", { field: "taxpayerDomicile" });
     }
-    const locationName = await resolveOption(values["location-name"], "location name: ", deps);
+    const venueName = await resolveOption(values["venue-name"], "venue name: ", deps);
     const fiscalTerritory = await resolveOption(
       values.territory,
       "fiscal territory (e.g. ES-common): ",
@@ -260,19 +260,17 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       taxId,
       legalName,
       taxpayerDomicile,
-      location: {
-        name: locationName,
-        fiscalTerritory,
-        invoiceLocales,
-        operationDescription,
-        addressLine1,
-        addressLine2: addressLine2Raw === "" ? null : addressLine2Raw,
-        postalCode,
-        city,
-        province,
-        timeZone,
-        dayCutover,
-      },
+      name: venueName,
+      fiscalTerritory,
+      invoiceLocales,
+      operationDescription,
+      addressLine1,
+      addressLine2: addressLine2Raw === "" ? null : addressLine2Raw,
+      postalCode,
+      city,
+      province,
+      timeZone,
+      dayCutover,
       seriesCode,
       fullSeriesCode,
       rectificativeSeriesCode,
@@ -289,7 +287,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     };
     const runtime = deps.configureFirstSetup?.(venueDir);
     const installed = runtime?.modules ?? deps.configureVenueModules?.(venueDir) ?? deps.modules;
-    const selection = venueFiscalSelection(installed, request.location.fiscalTerritory);
+    const selection = venueFiscalSelection(installed, request.fiscalTerritory);
     const fiscalConfig = selection.config;
     // The regime's own rules on the fields just typed, through the seat the setup wizard uses, before
     // anything is minted (CLAUDE.md §5). A regime that files nothing offers no seat.
@@ -298,7 +296,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       seriesCode: request.seriesCode,
       fullSeriesCode: request.fullSeriesCode ?? "FF",
       rectificativeSeriesCode: request.rectificativeSeriesCode,
-      operationDescription: request.location.operationDescription,
+      operationDescription: request.operationDescription,
     });
     const modules = enabledModules(installed, fiscalConfig);
 

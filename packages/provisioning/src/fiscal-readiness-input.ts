@@ -21,7 +21,7 @@ export function fiscalReadinessInput(args: {
     country: args.venue.country,
     taxId: args.venue.taxId,
     legalName: args.venue.legalName,
-    fiscalTerritory: args.venue.location.fiscalTerritory,
+    fiscalTerritory: args.venue.fiscalTerritory,
     submissionTarget: args.contribution.activationReadinessTarget?.(args.secret) ?? null,
     certificateFingerprint,
     certificateKind: typeof raw?.certKind === "string" ? raw.certKind : null,

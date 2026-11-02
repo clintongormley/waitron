@@ -44,7 +44,7 @@ const VENUE_ARGS = [
   "Acme SL",
   "--taxpayer-domicile",
   "Calle Fiscal 8, 28013 Madrid",
-  "--location-name",
+  "--venue-name",
   "Centro",
   "--territory",
   "ES-common",

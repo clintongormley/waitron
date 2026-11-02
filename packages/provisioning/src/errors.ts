@@ -72,7 +72,7 @@ declare module "@waitron/shared" {
      * `applyVenue` by the callers that read the existing identities first. */
     "provisioning.tenant_identity_mismatch": Record<string, never>;
     /** The `invoice_locales` list must hold one or two entries — the rule the
-     * `locations_invoice_locales_len` CHECK enforces (`packages/db/src/schema/tenants.ts`). `count`
+     * receipt-language length check enforces (`packages/db/src/schema/tenants.ts`). `count`
      * IS echoed: operator-typed configuration, never a secret. */
     "provisioning.invalid_locales": { count: number };
     /** Each series needs a distinct `(node_id, code)` key or applyVenue drops the later one.

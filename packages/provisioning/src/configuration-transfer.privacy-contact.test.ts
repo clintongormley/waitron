@@ -141,7 +141,9 @@ async function targetVenue(taxId = "123456789") {
         ...request,
         country: "GB",
         taxId,
-        location: { ...request.location, fiscalTerritory: "GB-vat", timeZone: "Europe/London" },
+
+        fiscalTerritory: "GB-vat",
+        timeZone: "Europe/London",
         admin: {
           displayName: "Owner",
           email: "owner@example.test",
