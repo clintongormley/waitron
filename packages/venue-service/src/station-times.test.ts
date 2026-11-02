@@ -10,8 +10,10 @@ import {
   tenants,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { readHolidayFacts } from "./holidays.js";
 import { saveSpecialDay } from "./special-days.js";
@@ -32,17 +34,15 @@ beforeAll(() => {
 });
 
 async function fixture(tx: Transaction) {
-  const [location] = await tx
-    .insert(locations)
-    .values({
-      name: "Venue",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00:00",
-    })
-    .returning();
-  const cfg = { locationId: locationId(location!.id) };
+  await seedVenue(tx, {
+    name: "Venue",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00:00",
+  });
+  const venueId = await venueLocationId(tx);
+  const cfg = { locationId: locationId(venueId) };
   const stations = await tx
     .insert(kitchenStations)
     .values([
@@ -64,19 +64,17 @@ async function fixture(tx: Transaction) {
 describe("station times", () => {
   it("shows an empty routing model before the venue adds its first prep station", async () => {
     await db.transaction(async (tx) => {
-      const [venue] = await tx
-        .insert(locations)
-        .values({
-          name: "New venue",
-          invoiceLocales: ["en-GB"],
-          operationDescription: "Hospitality",
-          timeZone: "Europe/Madrid",
-          dayCutover: "06:00:00",
-        })
-        .returning();
+      await seedVenue(tx, {
+        name: "New venue",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00:00",
+      });
+      const venueId = await venueLocationId(tx);
       const model = await routingModel(
         tx,
-        { locationId: locationId(venue!.id) },
+        { locationId: locationId(venueId) },
         new Date("2026-10-02T18:00:00Z"),
       );
       expect(model.stations).toEqual([]);

@@ -5,13 +5,14 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import type { CountryPack } from "@waitron/country";
 import {
   CORE_MIGRATIONS,
-  locations,
   tenants,
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { listVenueReadiness, type VenueScope } from "./operations.js";
@@ -106,19 +107,17 @@ async function venue() {
     .insert(tenants)
     .values({ id: 1, country: "ZZ", taxId: "X0000000", legalName: "Invented SL" })
     .onConflictDoNothing();
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: `Casa ${randomUUID()}`,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Hostelería",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00",
-      province: "Northshire",
-      city: "Villa Real",
-    })
-    .returning({ id: locations.id });
-  const cfg: VenueScope = { locationId: brandLocationId(location!.id) };
+  await seedVenue(db, {
+    name: `Casa ${randomUUID()}`,
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Hostelería",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00",
+    province: "Northshire",
+    city: "Villa Real",
+  });
+  const venueId = await venueLocationId(db);
+  const cfg: VenueScope = { locationId: brandLocationId(venueId) };
   return { cfg };
 }
 type Venue = Awaited<ReturnType<typeof venue>>;

@@ -8,12 +8,13 @@ import {
   deviceProfiles,
   devices,
   floorZones,
-  locations,
   kitchenStations,
   withTransaction,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import {
   readServiceDeleteSettings,
@@ -72,11 +73,13 @@ const suite = useVenueDb({
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 
 async function fixture(tx: Transaction, suffix = "") {
-  const [venue] = await tx
-    .insert(locations)
-    .values({ name: randomUUID(), invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
-    .returning();
-  const cfg = { locationId: locationId(venue!.id) };
+  await seedVenue(tx, {
+    name: randomUUID(),
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+  });
+  const venueId = await venueLocationId(tx);
+  const cfg = { locationId: locationId(venueId) };
   const ds = await tx
     .insert(departments)
     .values([
@@ -216,15 +219,11 @@ it("delete starting zone advances only within allowed surviving zones and Every 
 it("delete last screen zone leaves an explicit empty parent on disabled devices and profiles", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);
+    const { deviceId } = await seedDevice(tx, { profileId: f.explicit, label: "Off screen" });
     const [d] = await tx
-      .insert(devices)
-      .values({
-        ...f.cfg,
-        deviceProfileId: f.explicit,
-        label: "Off screen",
-        tokenHash: "hash",
-        active: false,
-      })
+      .update(devices)
+      .set({ active: false })
+      .where(eq(devices.id, deviceId))
       .returning();
     await tx.insert(deviceProfileKitchenScreens).values({
       deviceProfileId: f.explicit,
@@ -773,15 +772,11 @@ it("delete preserves defaults when the removed zone was not default", async () =
 it("zone deletion reports device choices and clears only the deleted zone references", async () => {
   await run(async (tx) => {
     const f = await fixture(tx);
-    const [device] = await tx
-      .insert(devices)
-      .values({
-        ...f.cfg,
-        deviceProfileId: f.explicit,
-        label: "Restaurant till",
-        tokenHash: randomUUID(),
-      })
-      .returning();
+    const { deviceId } = await seedDevice(tx, {
+      profileId: f.explicit,
+      label: "Restaurant till",
+    });
+    const device = { id: deviceId };
     const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, f.cfg, device!.id);
     await VENUE_SERVICE.setDeviceZoneSelection(tx, f.cfg, device!.id, {
       ...current,

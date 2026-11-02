@@ -11,12 +11,13 @@ import {
 import {
   CORE_MIGRATIONS,
   floorZones,
-  locations,
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId } from "@waitron/shared";
 import { readOpeningHoursModel, replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import type { MenuWeekDay } from "./menu-timetable-types.js";
@@ -55,16 +56,14 @@ const AT = new Date("2030-10-07T10:00:00Z");
 const TUESDAY = 2;
 
 async function venue() {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: `Venue ${randomUUID()}`,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
-    })
-    .returning({ id: locations.id });
-  const cfg: VenueScope = { locationId: brandLocationId(location!.id) };
+  await seedVenue(db, {
+    name: `Venue ${randomUUID()}`,
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Hospitality",
+    timeZone: "Europe/Madrid",
+  });
+  const venueId = await venueLocationId(db);
+  const cfg: VenueScope = { locationId: brandLocationId(venueId) };
   const [zone] = await db
     .insert(floorZones)
     .values({ locationId: cfg.locationId, name: "Dining room", displayOrder: 0 })

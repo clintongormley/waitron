@@ -8,7 +8,6 @@ import {
   CORE_MIGRATIONS,
   FOREIGN_KEY_VIOLATION,
   isRefusal,
-  locations,
   parties,
   refusalOn,
   triggerRaised,
@@ -16,7 +15,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE_MIGRATIONS } from "../migrations.js";
 import { billIdentities, billNumberAllocations } from "./bill-identities.js";
 
@@ -24,22 +23,16 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS, VENUE_SERVICE_MIGRATIONS],
 });
 const actor = randomUUID();
-let locationId: string;
 let partyId: string;
 let nextOrderNumber = 1;
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Dining room",
-      invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
-      timeZone: "UTC",
-    })
-    .returning();
-  locationId = location!.id;
+  await seedVenue(suite.db, {
+    name: "Dining room",
+    invoiceLocales: ["en"],
+    operationDescription: "Restaurant",
+    timeZone: "UTC",
+  });
   partyId = await newParty();
 });
 
@@ -49,10 +42,11 @@ async function newParty(): Promise<string> {
 }
 
 async function newBill(party: string | null = partyId): Promise<string> {
-  const [order] = await suite.db
-    .insert(workingOrders)
-    .values({ locationId, partyId: party, orderNumber: nextOrderNumber++, source: "dashboard" })
-    .returning();
+  const order = await seedWorkingOrder(suite.db, {
+    partyId: party,
+    orderNumber: nextOrderNumber++,
+    source: "dashboard",
+  });
   return order!.id;
 }
 
