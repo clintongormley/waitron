@@ -477,6 +477,12 @@ describe("A773 pass board: scoped", () => {
       await setStationsWaitForPass(tx, false, [venue.stations.grill]);
       const notWaiting = await readScopedPassBoard(tx, venue.cfg, EVERY);
       expect(notWaiting.held[0]!.items).toEqual([
+        expect.objectContaining({ id: burgerItem, phase: "held", informational: false }),
+      ]);
+
+      await setStationsWaitForPass(tx, true, [venue.stations.bar]);
+      const barWaiting = await readScopedPassBoard(tx, venue.cfg, EVERY);
+      expect(barWaiting.held[0]!.items).toEqual([
         expect.objectContaining({ id: burgerItem, phase: "held", informational: true }),
       ]);
     });

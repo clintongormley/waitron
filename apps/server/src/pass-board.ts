@@ -1,7 +1,13 @@
 import "./errors.js";
 import { and, eq, gte, inArray, isNull, or, type SQL } from "drizzle-orm";
 import { worstBand } from "@waitron/shared";
-import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  kitchenStations,
+  orderGroups,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { ResolvedKitchenScreen } from "@waitron/module";
 import type { TradingContext } from "./trading-context.js";
@@ -135,7 +141,21 @@ export async function readScopedPassBoard(
   if (billIds.length > 0)
     keys.push(and(inArray(workingOrders.id, billIds), isNull(workingOrderLines.groupId))!);
   const rows = keys.length === 0 ? [] : await readCardRows(tx, cfg, or(...keys)!, nowMs);
-  return buildPassBoard(rows, scope, display);
+  return buildPassBoard(rows, scope, display, await aStationInViewWaits(tx, scope));
+}
+
+/** Active stations only: a deactivated station left waiting must not dim the pass unexplained. */
+async function aStationInViewWaits(tx: Transaction, scope: PassScope): Promise<boolean> {
+  if (scope.stationIds !== null && scope.stationIds.length === 0) return false;
+  const conditions = [eq(kitchenStations.waitsForPass, true), eq(kitchenStations.active, true)];
+  if (scope.stationIds !== null)
+    conditions.push(inArray(kitchenStations.id, [...scope.stationIds]));
+  const [found] = await tx
+    .select({ id: kitchenStations.id })
+    .from(kitchenStations)
+    .where(and(...conditions))
+    .limit(1);
+  return found !== undefined;
 }
 
 /** One card's rows, for the release. */

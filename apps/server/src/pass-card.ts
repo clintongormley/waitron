@@ -168,10 +168,13 @@ export function passCardRelease(
 
 type Column = "held" | "toFire" | "inProgress" | "ready";
 
-function cardItem(row: PassRow, scope: PassScope): PassCardItem {
+function isPassWork(row: PassRow): boolean {
+  return phaseOf(row) === "held" ? row.stationWaitsNow : row.passControlled;
+}
+
+function cardItem(row: PassRow, scope: PassScope, dims: boolean): PassCardItem {
   const phase = phaseOf(row);
   const visible = passSees(scope, row);
-  const passWork = phase === "held" ? row.stationWaitsNow : row.passControlled;
   return {
     ...row.item,
     lineId: row.lineId,
@@ -181,7 +184,7 @@ function cardItem(row: PassRow, scope: PassScope): PassCardItem {
     requestedAt: row.requestedAt,
     readyAt: row.readyAt,
     visible,
-    informational: !visible || !passWork,
+    informational: !visible || (dims && !isPassWork(row)),
     passControlled: row.passControlled,
     course: row.course,
     stationClosed: row.stationClosed,
@@ -207,9 +210,14 @@ interface Placed {
   heldOrder: [string, string, number];
 }
 
-function placeCard(key: string, cardRows: PassRow[], scope: PassScope): Placed | null {
+function placeCard(
+  key: string,
+  cardRows: PassRow[],
+  scope: PassScope,
+  dims: boolean,
+): Placed | null {
   cardRows.sort(itemOrder);
-  const items = cardRows.map((row) => cardItem(row, scope));
+  const items = cardRows.map((row) => cardItem(row, scope, dims));
   if (!items.some((item) => item.visible)) return null;
   const first = cardRows[0]!;
   const group = first.group;
@@ -279,15 +287,18 @@ export function buildPassBoard(
   rows: readonly PassRow[],
   scope: PassScope,
   display: { showNonPassStations: boolean } = { showNonPassStations: true },
+  aStationInViewWaits = false,
 ): PassBoard {
   const live = rows.filter((row) => !row.recalled && row.remaining > 0);
+  // Until the pass controls something in its view, nothing in view is dimmed (D89).
+  const dims = aStationInViewWaits || live.some((row) => passSees(scope, row) && isPassWork(row));
   const byCard = new Map<string, PassRow[]>();
   for (const row of live) {
     const key = passCardKey(row);
     byCard.set(key, [...(byCard.get(key) ?? []), row]);
   }
   const placed = [...byCard]
-    .map(([key, cardRows]) => placeCard(key, cardRows, scope))
+    .map(([key, cardRows]) => placeCard(key, cardRows, scope, dims))
     .filter((entry): entry is Placed => entry !== null);
   const column = (name: Column, order: (a: Placed, b: Placed) => number) =>
     placed

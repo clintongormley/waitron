@@ -1,7 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { deviceProfiles, parties, ticketItems, withTransaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  kitchenStations,
+  parties,
+  ticketItems,
+  withTransaction,
+} from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -212,5 +218,127 @@ describe("A773 pass board: ages and party", () => {
     const card = groupCard(await board(), groupId);
     expect(card.target).toMatchObject({ kind: "group", partyId: current.party.partyId });
     expect(card.party).toEqual({ id: current.party.partyId, revision: stored.revision });
+  });
+});
+
+describe("A773 pass board: dimming", () => {
+  const burgerWithChips = (venue: Venue) => ({
+    ...burger(venue),
+    extras: [
+      {
+        listId: venue.lists.burger,
+        picks: [{ productId: venue.products.chips, quantity: 1 }],
+      },
+    ],
+  });
+
+  /** A Fire now group of a burger with chips on `partyId`; the chips split off to Fryer. */
+  async function fireBurgerWithChips(tx: Transaction, venue: Venue, partyId: string) {
+    const placed = await placeGroups(tx, venue.cfg, partyId, {
+      operatorId: OPERATOR,
+      groups: [{ lines: [burgerWithChips(venue)], release: "fire" }],
+    });
+    return placed.groups[0]!.id;
+  }
+
+  const items = (pass: PassBoard) => cards(pass).flatMap((card) => card.items);
+  const atStation = (pass: PassBoard, stationId: string) => {
+    const found = items(pass).filter((item) => item.stationId === stationId);
+    expect(found).toHaveLength(1);
+    return found[0]!;
+  };
+  const read = (scope: PassScope) =>
+    withTransaction(db, (tx) => readScopedPassBoard(tx, current.cfg, scope));
+
+  it("1. dims nothing at a venue where no station waits, and counts every dish", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: at("12:00") });
+    current = await setupSplitExtrasVenue();
+    const { grill, fryer } = current.stations;
+    await withTransaction(db, (tx) => fireBurgerWithChips(tx, current, current.party.partyId));
+    vi.setSystemTime(at("12:25"));
+    const calm = await read(EVERY);
+    expect(items(calm)).toHaveLength(2);
+    for (const item of items(calm))
+      expect(item).toMatchObject({ visible: true, informational: false });
+    expect(atStation(calm, grill).band).toBe("forgotten");
+    expect(atStation(calm, fryer).visible).toBe(true);
+    expect(calm.overview).toHaveLength(2);
+    for (const fact of calm.overview) expect(fact.informational).toBe(false);
+
+    await withTransaction(db, (tx) => setStationsWaitForPass(tx, true, [current.stations.bar]));
+    const barWaits = await read(EVERY);
+    expect(items(barWaits).map((item) => item.informational)).toEqual([true, true]);
+  });
+
+  it("2. dims nothing when the only waiting station is out of the pass's view", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: at("12:00") });
+    current = await setupSplitExtrasVenue();
+    const { grill, fryer, bar } = current.stations;
+    await withTransaction(db, async (tx) => {
+      await fireBurgerWithChips(tx, current, current.party.partyId);
+      await setStationsWaitForPass(tx, true, [fryer]);
+    });
+    const pass = await read({ stationIds: [grill, bar], zoneIds: null });
+    expect(atStation(pass, grill).informational).toBe(false);
+  });
+
+  it("3. keeps a dish out of the pass's view informational while dimming nothing in view", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: at("12:00") });
+    current = await setupSplitExtrasVenue();
+    const { grill, fryer } = current.stations;
+    await withTransaction(db, (tx) => fireBurgerWithChips(tx, current, current.party.partyId));
+    const pass = await read({ stationIds: [grill], zoneIds: null });
+    expect(atStation(pass, fryer)).toMatchObject({ visible: false, informational: true });
+    expect(atStation(pass, grill)).toMatchObject({ visible: true, informational: false });
+  });
+
+  it("4. keeps dimming while the board holds pass work, after its station stops waiting", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: at("12:00") });
+    current = await setupSplitExtrasVenue();
+    const { grill, fryer } = current.stations;
+    const { requestedGroup, releasedGroup } = await withTransaction(db, async (tx) => {
+      const other = await seatAnotherParty(tx, current, "Released first");
+      const releasedGroup = await fireBurgerWithChips(tx, current, other);
+      await setStationsWaitForPass(tx, true, [grill]);
+      const placed = await placeGroups(tx, current.cfg, current.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [burger(current)], release: "fire" }],
+      });
+      return { requestedGroup: placed.groups[0]!.id, releasedGroup };
+    });
+    const check = (pass: PassBoard) => {
+      const requested = groupCard(pass, requestedGroup).items;
+      expect(requested).toHaveLength(1);
+      expect(requested[0]).toMatchObject({ phase: "requested", passControlled: true });
+      const fryerDish = groupCard(pass, releasedGroup).items.find(
+        (item) => item.stationId === fryer,
+      );
+      expect(fryerDish?.phase).not.toBe("requested");
+      expect(fryerDish?.phase).not.toBe("held");
+      expect(fryerDish!.passControlled).toBe(false);
+      return { requested: requested[0]!, fryerDish: fryerDish! };
+    };
+    const waiting = check(await read(EVERY));
+    expect(waiting.requested.informational).toBe(false);
+    expect(waiting.fryerDish.informational).toBe(true);
+
+    await withTransaction(db, (tx) => setStationsWaitForPass(tx, false, [grill]));
+    const stopped = check(await read(EVERY));
+    expect(stopped.fryerDish.informational).toBe(true);
+  });
+
+  it("6. ignores an inactive station left waiting", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: at("12:00") });
+    current = await setupSplitExtrasVenue();
+    const { grill, fryer, bar } = current.stations;
+    await withTransaction(db, async (tx) => {
+      await fireBurgerWithChips(tx, current, current.party.partyId);
+      await setStationsWaitForPass(tx, true, [bar]);
+      await tx.update(kitchenStations).set({ active: false }).where(eq(kitchenStations.id, bar));
+    });
+    for (const scope of [EVERY, { stationIds: [grill, fryer, bar], zoneIds: null }]) {
+      const pass = await read(scope);
+      expect(items(pass).map((item) => item.informational)).toEqual([false, false]);
+    }
   });
 });

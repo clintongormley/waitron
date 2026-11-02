@@ -660,3 +660,63 @@ describe("A773 pass board: release set", () => {
     expect(board.inProgress.map((card) => card.releaseTicketItemIds)).toEqual([[]]);
   });
 });
+
+describe("A773 pass board: dimming", () => {
+  it("5. dims non-pass-work dishes in view only when a station in view waits, and Fire never reads it", () => {
+    const scope: PassScope = { stationIds: [grill, fryer, bar], zoneIds: null };
+    const rows = [
+      released({ id: "grill-1", state: "preparing", passControlled: false, lineNo: 1 }),
+      released({
+        id: "fryer-1",
+        stationId: fryer,
+        state: "queued",
+        passControlled: false,
+        lineNo: 2,
+      }),
+      held({ id: "bar-1", stationId: bar, stationWaitsNow: false, lineNo: 3 }),
+      released({
+        id: "cold-1",
+        stationId: cold,
+        state: "queued",
+        passControlled: false,
+        lineNo: 4,
+      }),
+    ];
+    const informational = (board: PassBoard) =>
+      Object.fromEntries(
+        cards(board).flatMap((card) => card.items.map((item) => [item.id, item.informational])),
+      );
+
+    const calm = buildPassBoard(rows, scope, { showNonPassStations: true }, false);
+    expect(informational(calm)).toEqual({
+      "grill-1": false,
+      "fryer-1": false,
+      "bar-1": false,
+      "cold-1": true,
+    });
+
+    const waiting = buildPassBoard(rows, scope, { showNonPassStations: true }, true);
+    expect(informational(waiting)).toEqual({
+      "grill-1": true,
+      "fryer-1": true,
+      "bar-1": true,
+      "cold-1": true,
+    });
+
+    const calmHidden = buildPassBoard(rows, scope, { showNonPassStations: false }, false);
+    expect(cards(calmHidden).flatMap((card) => card.items.map((item) => item.id))).toEqual([
+      "grill-1",
+      "fryer-1",
+      "bar-1",
+    ]);
+
+    const waitingHidden = buildPassBoard(rows, scope, { showNonPassStations: false }, true);
+    expect(cards(waitingHidden).flatMap((card) => card.items)).toEqual([]);
+    expect(waitingHidden.overview).toEqual([]);
+
+    const release = (board: PassBoard) =>
+      cards(board).map((card) => [card.releaseTicketItemIds, card.releaseContext]);
+    for (const board of [waiting, calmHidden, waitingHidden])
+      expect(release(board)).toEqual(release(calm));
+  });
+});
