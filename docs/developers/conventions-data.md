@@ -5729,23 +5729,6 @@ refund. Those cases cover this action's admission boundary, not every future que
 These excerpts retain the root instruction receipts from `CLAUDE.md` at
 `1d03a7c42142478f6ecabc834f08ffd58bd04d07`. They are not new measurements.
 
-### Optional request field defaults
-
-- **Default optional request fields only when absent, and check enum types before comparing values.**
-  Explicit null and coerced arrays passed modifier validation. A field whose null is itself a value
-  is deliberately outside the rule — an extras list's `maxPicks`, an extras item's `maxQuantity`,
-  the seat-a-table route's `guestCount` and the setup request's `taxpayerDomicile` among them.
-
-### Personal log field naming rule
-
-- **A detail or log field holding a person's name, email or tax number uses a name on
-  `PERSONAL_LOG_KEYS` or a path on `PERSONAL_LOG_PATHS` (`apps/server/src/log-personal-data.ts`),
-  which the server's logger masks in every line it writes; the answer keeps it. Name it for whose
-  it is (`guestName`, `customerTaxId`), never a bare `name` or `taxId` (the listed bare `taxId` is
-  the venue's own): the list is flat across every code.** Cost: staff names and emails reached the
-  sign-in-free recovery page. Guard: `scripts/personal-log-params.test.ts`, weaker than its name:
-  reads text. [Limits](conventions-data.md#root-receipts-moved-on-2026-10-31).
-
 ### English-only code and its exceptions
 
 - **General code is English only** (owner, 2026-09-07 and 2026-10-19), including literals, comments,
@@ -5778,15 +5761,6 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   (`quoteIdent`/`quoteLiteral`) or validate and throw.
   Neither is not acceptable; "the callers only pass safe values" is the §1 defect class.
 
-### Write-path tables guard
-
-- **The tables `scripts/write-path-tables.json` lists request code may read and never write, and
-  the database does not refuse the write.** A write of one of them lives only in the files that
-  JSON names. Guard: `scripts/write-path-tables.test.ts` is
-  the whole of the enforcement, and weaker than its name — it reads TEXT and judges a FILE, not a
-  call chain. Receipt:
-  [conventions-data.md](conventions-data.md#the-tables-scriptswrite-path-tablesjson-lists-are-read-only-to-the-application-and-one-guard-is-the-whole-of-the-enforcement).
-
 ### Two-database lock and save order
 
 - **Across `venue.db` and `node.db`, take `node.db`'s write lock outside `venue.db`'s; save
@@ -5794,15 +5768,6 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   exception); write `node.db` through `withNodeTransaction`, since `withTransaction` refuses the node
   handle at compile time.** The two files have independent write queues. Nothing guards the first
   two. [Rules and sites](conventions-data.md#a-local-row-belongs-to-one-node-so-no-foreign-key-may-join-a-local-table-to-a-ledgerstate-one).
-
-### Refused statements and full-disk transactions
-
-- **A refused statement normally backs out itself, not its transaction; full-disk and explicit
-  ROLLBACK/FAIL variants are exceptions.** Catch full-disk refusals outside the whole `withTransaction`
-  in tests. After `storage.disk_full` ends a transaction, later statements in its body must remain
-  refused inside the write queue; an intervening outside transaction defeats that protection.
-  Guards: `packages/store/src/disk-full.test.ts` and `write-queue.test.ts`, weaker than their names:
-  page limits, not a real disk; at-commit cases are stand-ins. No guard enforces the test catch rule.
 
 ### Spare file deletion and release
 
@@ -5815,55 +5780,12 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   Guard: `scripts/spare-space.test.ts`, weaker than its name: reads text.
   [Cost and detail](conventions-data.md#the-boxs-spare-file).
 
-### Backup staging turn
-
-- **Anything that writes or deletes in `<state>/backup-staging` does it inside the staging turn**
-  (`apps/server/src/backup-staging-turn.ts`), **except the start's clean-up (`freeSpaceAtStart`),
-  which runs while no backup supervisor is running in this process**. Guard:
-  `scripts/backup-staging-touchers.test.ts`, weaker than its name — it reads text and never checks
-  that a file takes the turn; the turn is in-process only. Receipt:
-  [conventions-data.md](conventions-data.md#backup-staging-is-touched-only-inside-the-staging-turn).
-
-### Money column conversion
-
-- **Money columns hold whole cents; convert at the row with `decimalToCents`, `centsToDecimal`,
-  or `rawCentsToDecimal` for raw SQL (`cast(x as text)`).** Above it use exact `Decimal`; sum JSON
-  amounts in JavaScript at money scale. Nothing guards this boundary or makes mistakes loud.
-  Narrower guards: `packages/db/src/schema/columns.test.ts`, `packages/shared/src/conventions.test.ts`.
-
-### Table classification and append-only marking
-
-- **Classify new tables `ledger`, `state` or `local` in their module; use `appendOnly()` for
-  uncorrectable tables and `migrationOptionsFor(...)` when migrating.** Classification alone is not
-  the trigger set; triggers cannot prevent `DROP TABLE`. Marking an existing table append-only must
-  be disclosed in the PR because first start can raise `append_only.triggers_restored`.
-  Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts`,
-  `scripts/apply-migrations-callers.test.ts`; the last is weaker than its name: call shape, not sets.
-
-### Live logins stored as hashes
-
-- **Store anything that works as a live login as a hash.** Guards: database-copy cases in
-  `apps/server/src/me-api.test.ts`, `apps/server/src/till-api.test.ts` and the stored-hash case in
-  `packages/identity/src/management-session.test.ts`, weaker than the rule: limited credentials,
-  only the dashboard hash tried as a token; new login tables unguarded.
-
 ### Rebuild rehearsal on node:sqlite
 
 - **Rehearse a drizzle table rebuild on `node:sqlite`, never the `sqlite3` command line**: macOS's
   `sqlite3` 3.51.0 refuses the rename the app's SQLite 3.54.0 runs (`no such column: __new_…`), so
   the rehearsal fails a sound migration. Nothing guards it.
   [Receipt](conventions-data.md#a-drizzle-table-rebuild-is-rehearsed-on-nodesqlite-never-the-sqlite3-cli).
-
-### The drawer rule's guard limits
-
-- **Printing never opens the drawer. Cash and hand-keyed card enqueue separate audited `drawer`
-  jobs; documents contain no drawer commands and connected-card payments open nothing.** Device drawer
-  choice precedes profile default, never follows receipt printer; require active printer with drawer
-  and profile `open-cash-drawer`. Taking cash separately requires `take-cash` through `assertTakesCash`.
-  Manual open needs an active device/session plus `cash.drawer` or the PIN of someone holding it and uses that same
-  drawer; dashboard calibration is the exception. Never manually resend drawer jobs.
-  Guards, weaker than the rule: named drawer/cash/refund/calibration/resend suites only; new routes
-  unguarded. [Detail](conventions-ui.md).
 
 ### No external dependency on the sale path, and the planned failover
 
@@ -5875,52 +5797,3 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   `docs/backlog.md` → _Replication, membership & failover — residuals_. Detail:
   [conventions-data.md](conventions-data.md).
 
-### The bucket stream's guard limits
-
-- **The bucket stream never waits on the bucket to sell or fails `/health`; its local checkpoint
-  can hold the write lock and delay sales.** Fifteen minutes behind raises `backup.stream_behind`
-  unless a stopped/refused/unusable-settings alert explains it. Guards: stream loop/pause e2e and
-  health bucket-copy cases, weaker than the rule: named cases only; stream cases skip without binaries.
-
-### The fiscal record table's triggers and the append-only watch
-
-- **`registros_facturacion` is immutable: never work around its append-only update/delete triggers.**
-  Triggers are the whole enforcement and cannot prevent `DROP TABLE`. Boot restores missing triggers
-  on existing tables; boot and the trading watch refuse changed/missing triggers. `append-only-watch`
-  is weaker than its name: stored text only, only tables migrated at start.
-
-### The clock-behind stop, clock confirmation and the box clock
-
-- **More than a minute behind the latest fiscal record, write no record and take/refund no new
-  money unless a clock confirmation covers it.** After replay, call `refuseWhileClockBehind` before
-  reader/refund/drawer work; pause both refund recovery loops. Recheck card-refund send/outcome in
-  their dating transaction after provider waits. Still store money already moved.
-  **Clock confirmation lifts the stop for one step back, with no gap limit; once a record is written
-  under it, readings stay within a minute of the latest record written since.** Sources: AEAT, two
-  agreeing devices at different addresses (not while the stop found at start-up lasts), an
-  administrator's own device, or a till's time confirmed on it by an administrator at any time or,
-  during a stop found at start-up once AEAT has not answered or cannot be asked, by a staff member
-  signed in on it (owner, 2026-10-31); never a box device outside development. Guards: clock-behind-stop, payments clock-behind, fiscal
-  chain/restart/confirmation, clock-confirm route and `apps/server/src/clock-watch.start-up.test.ts`
-  suites, weaker than the rule: only named routes/readings/requests; new money routes unguarded.
-  **The box sets its clock only through the host service, from AEAT, a till's time (a staff
-  member's during start-up, an administrator's at any time) or an administrator's own device — never from devices alone and never while it keeps time
-  over the internet — and every step it verifies, or sees move the clock by over a second, is
-  alerted and emailed.** Guards: `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
-  `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the
-  rule: the handler's suite runs stubs, not systemd; the route suites cover the named routes only.
-  [Detail](conventions-data.md#the-box-sets-its-own-clock).
-
-### New installation names on restore and promotion, and the countdown pages
-
-- **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion use five symbols for the box's UTC minute,
-  after another machine's clock agrees within 30 seconds (no confirmation); a minute whose name is
-  already in a history the box reads is not taken (the box waits for the next free one if it starts within 150 seconds, and otherwise
-  refuses with when it can; the setup and restore pages count that down and check again by themselves; owner, 2026-10-30, A1207), and no
-  other name or record refuses or moves it (owner, 2026-10-29, A1207), except that an attempt whose
-  own pick is ahead of the box's clock is refused until the clock reaches it. Start again keeps no record of the names it deletes (owner, 2026-10-29,
-  A1206): a box and the machine confirming its clock, wrong by the same amount, can repeat a name. Setup/restore wait
-  90–150 seconds; promotion does not. [Detail](conventions-data.md). Only preproduction throwaway
-  skips second-clock/history checks; refuse it outside preproduction. Restore takes one source;
-  working-time chain continues from its head. Guards: hour-selection/hour-clock/minute-selection-
-  unknown-name suites (the last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`.

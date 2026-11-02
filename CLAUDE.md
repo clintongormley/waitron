@@ -231,8 +231,7 @@ called weaker than its name, the topic file lists what it does not see.
   Required fields are marked; invalid fields get inline errors and one localized bottom message on its
   own line above buttons, never a top summary, with the action disabled until fixed. Request refusals alone never disable it; field refusals appear under that field (owner,
   2026-09-29). Saves stay quiet and disabled until the draft changes, using `draftScopeFor`,
-  `saveActionState` and a save-handler early return (owner, 2026-10-07, A331;
-  [receipt](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02)). Other actions stay quiet while awaiting a choice,
+  `saveActionState` and a save-handler early return (owner, 2026-10-07, A331). Other actions stay quiet while awaiting a choice,
   selection or load, or barred by row state; use their own colour when actionable or sending (owner,
   2026-10-08, A416/A427). Exceptions are in the Forms contract; nothing guards these across screens.
   A hint is the placeholder; short explanations are hints, not “?” buttons (owner, 2026-10-03; unguarded,
@@ -307,7 +306,7 @@ called weaker than its name, the topic file lists what it does not see.
 - **Dashboard login offers methods without revealing account enrolment.** Never query account status
   or passkey enrolment to choose the public screen. A modal passkey prompt requires an explicit
   action: navigation, refresh, logout and session expiry never open one. Save the authenticated email and the successful method only with Remember selected, never
-  in tab storage. [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
+  in tab storage.
 - **A login refusal never reveals account existence** (owner, 2026-09-30): unknown, suspended,
   pending, wrong-secret and till-profile-inadmissible accounts answer `password.invalid` or `pin.invalid`
   after the same hashing work, as one sentence with no field marked. Only missing/malformed
@@ -337,9 +336,10 @@ called weaker than its name, the topic file lists what it does not see.
   `event.stopPropagation()` before re-emitting**, or, for a composed trigger such as `input`, the
   consumer observes the change twice. App screens and app-owned components may name their own
   events plainly.
-- **A retained hardware registration must remain re-addable after deactivation.** Enable brings
-  each back under its existing id; a deleted printer, card reader or device returns with a new id.
-  [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
+- **A retained hardware registration must remain re-addable after deactivation.** Discovery finds
+  disabled printers and card readers, and a disabled device's browser asks to rejoin; Enable brings
+  each back under its existing id. A deleted printer, card reader or device is matched by neither
+  and returns with a new id.
 - **A narrower roll in a wider receipt printer needs an explicit print area before native
   centring.** Guard: `apps/server/src/receipt-ticket.test.ts`.
 - **The hardware transport seam is `@waitron/print-agent`, and it is database-free.** It imports no
@@ -365,7 +365,7 @@ called weaker than its name, the topic file lists what it does not see.
   venue's network); its Move choice is the owner's one exception to never suggesting a removal
   (A1098). Guard: the never-delete cases in
   `apps/server/src/recovery-surface.test.ts`, weaker than their name: they read the text tables,
-  not the page. [Receipt](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
+  not the page.
 
 ### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md#root-detail-moved-on-2026-10-26)
 
@@ -394,12 +394,12 @@ called weaker than its name, the topic file lists what it does not see.
 - **General code is English only** (owner, 2026-09-07 and 2026-10-19), including literals, comments,
   identifiers, file names, seeds, starter content and tests. Exceptions: `packages/fiscal-verifactu`,
   AEAT wire names, translation files/guides and Spain-specific packages (`country-es`, `workforce-es`,
-  reporting's modelo 303) for official Spain-only text/terms (owner, 2026-10-20, A913), and starter
-  content's words in other languages, which go in the writing package's `src/starter-content.ts`,
-  which the guard skips by exact path (owner, 2026-10-20, A918).
+  reporting's modelo 303) for official Spain-only text/terms (owner, 2026-10-20, A913).
   [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02). Country packs
   also provide English and own demo data; Spain receipts use the venue's receipt language, never English. Starter content is English
-  in code and translated at setup; non-English screen tests read expected strings. Domain terms
+  in code and translated at setup; its words in other languages go in the writing package's
+  `src/starter-content.ts`, which the guard skips by exact path (owner, 2026-10-20, A918);
+  non-English screen tests read expected strings. Domain terms
   have one declaring module vocabulary; fiscal terms never enter the base.
   Guard: `scripts/english-only.test.ts`, weaker than its name: listed words and packages only, no apps;
   review greps the diff.
@@ -472,7 +472,7 @@ called weaker than its name, the topic file lists what it does not see.
   Guards: `packages/store/src/disk-full.test.ts` and
   `write-queue.test.ts`, weaker than their names: page limits, not a real disk; at-commit cases are
   stand-ins. No guard enforces
-  the test catch rule. [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02).
+  the test catch rule.
 - **Identify result-code 1811 refusals by their words, never `isRefusal` alone.**
   Use `restrictRefused`/`triggerRaised` in `packages/db/src/constraint-target.ts`. Nothing guards it.
 - **A full disk is not one error code; code 14 also names a missing folder.**
@@ -533,7 +533,6 @@ called weaker than its name, the topic file lists what it does not see.
   uncorrectable tables and `migrationOptionsFor(...)` when migrating.** Classification alone is not
   the trigger set; triggers cannot prevent `DROP TABLE`. Marking an existing table
   append-only must be disclosed in the PR because first start can raise `append_only.triggers_restored`.
-  [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02).
   Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts`,
   `scripts/apply-migrations-callers.test.ts`; the last is weaker than its name: call shape, not sets.
 - **A new append-only table travels in both its module's exported migration descriptor and

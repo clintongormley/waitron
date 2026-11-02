@@ -4250,16 +4250,6 @@ and
 These excerpts retain the root instruction receipts from `CLAUDE.md` at
 `1d03a7c42142478f6ecabc834f08ffd58bd04d07`. They are not new measurements.
 
-### Coverage thresholds: every package holds the bar
-
-- **Coverage thresholds: every package, and the root project, holds `98/98/98/95`** (owner decision
-  2026-09-23). A new package holds it from its first commit. The bar is negotiable only
-  where the rest of a gap could be closed solely by tests that assert nothing useful, and a gap is
-  never closed by hiding code a test could reach — adding an exclude or an ignore comment over it, or
-  moving it under `src/testing/`. Guard: `scripts/coverage-thresholds.test.ts`, weaker than its name —
-  it reads each config's `thresholds` literal as TEXT and never reads an exclude or an ignore comment.
-  More: [ci-and-gates.md](ci-and-gates.md).
-
 ### A mutation floor of 90 in every mutation-tested package
 
 - **A mutation floor of 90 breaks the run in every mutation-tested package — `ui`, `ui-core`,

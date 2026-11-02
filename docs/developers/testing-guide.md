@@ -3474,28 +3474,6 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 These excerpts retain the root instruction receipts from `CLAUDE.md` at
 `1d03a7c42142478f6ecabc834f08ffd58bd04d07`. They are not new measurements.
 
-### Chunked inserts for orders that grow
-
-- **An insert whose rows grow with an order must go through `insertInChunks` or `statementChunks`**;
-  the table round's `insertTabRound` does not yet, and no sweep has read every insert (see the backlog).
-  Cost: a 2,001-dish order passed locally and failed CI. Guard: the bound-value case in
-  `packages/store/src/index.test.ts`, weaker than the rule: it proves the store's connections, not
-  that growing inserts are chunked. [Runtime limits and receipt](testing-guide.md#root-receipts-moved-on-2026-10-31).
-
-### The venue watchdog's real timer turn
-
-- **Synchronous `node:sqlite` tests need a real timer turn for the venue watchdog; `useVenueDb`
-  yields after each test.** Guards: `packages/db/src/testing/venue-db.test.ts` and
-  `packages/store/src/venue-liveness.test.ts`, weaker than the rule: only the helper/default options
-  and store loaded before fake clocks; manually opened folders get no helper turn.
-
-### Containers in tests and the label pnpm reap reads
-
-- **No test suite under `packages/` or `apps/` starts a container; the rigs under `bench/` do.**
-  **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, and with it off an INTERRUPTED run
-  leaks containers; `pnpm reap` removes them by label and age — but not every rig stamps the label.
-  Never a blanket `docker volume prune`, and `docker volume inspect` before any manual `rm`.
-
 ### Pinned Litestream and versitygw for the stream tests
 
 - **Install pinned Litestream and versitygw before stream loop/pause tests:**
@@ -3517,11 +3495,6 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   block are ignored without a word. Nothing guards it. Receipt:
   [testing-guide.md](testing-guide.md#vitest-reads-a-browsers-connecttimeout-from-the-outer-config-only).
 
-### How pnpm reap finds orphaned vitest workers
-
-- **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
-  `pnpm reap` sweeps these, scoped by ppid 1 AND the shapes vitest leaves in `ps`, never a bare `vitest` match.
-
 ### The browser diagnostic pause and its page.viewport hang
 
 - **A diagnostic pauses a browser test page only after its file has been silent for 60 seconds
@@ -3530,26 +3503,6 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   pause, and repeated pauses reproduced the hang locally (A1307). Guard:
   `scripts/vitest-file-progress.test.mjs`, weaker than its name: this reporter only, fake pages, not
   Chromium. Receipt: [ci-and-gates.md](ci-and-gates.md#a-browser-file-silent-past-its-time-limits-gets-a-stack-sample).
-
-### Locating the unfinished package in a silent shard
-
-- **Locate the unfinished package before diagnosing a silent shard as database contention.** A
-  Vitest test timer does not bound a browser whose event loop has stopped; use an outer deadline,
-  and never a retry as proof of repair. Browser shards use the diagnostic deadline wrapper; guard:
-  `scripts/ci-workflow.test.mjs`, weaker than its name — reads text, never runs the deadline.
-
-### A project's own maxWorkers and its guard
-
-- **On Vitest 4.1.12 a project's own `maxWorkers` wins, and the outer config's is only the fallback**.
-  **A cap that must apply to every project still belongs on the outer config.** Guard:
-  `scripts/fiscal-test-budget.test.ts`, weaker than its name — it pins one arrangement, not how
-  Vitest resolves the limit.
-
-### Summed waits and the spawn timeout budget guard
-
-- **A test's timeout must exceed the SUM of its waits plus untimed work.** Guard:
-  `scripts/spawn-timeout-budget.test.ts`, weaker than its name: text scan of `scripts/` only,
-  checks only the largest single wait; packages/apps unguarded.
 
 ### Passkey tests and already-loaded modules
 
@@ -3575,12 +3528,6 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   own `coverage.include`. `include`/`exclude` still replace rather than merge, and a config
   measuring nothing still exits 0 with the thresholds intact, so read the per-file table rather than
   the exit code.
-
-### The coverage include guard's limits
-
-- **A package config names its own source tree in `coverage.include`.** Guard:
-  `scripts/coverage-thresholds.test.ts`, weaker than its name: looks for one exact string;
-  include paths are not package-anchored.
 
 ### Checks inside every database test's hooks
 

@@ -2206,24 +2206,6 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 These excerpts retain the root instruction receipts from `CLAUDE.md` at
 `1d03a7c42142478f6ecabc834f08ffd58bd04d07`. They are not new measurements.
 
-### A refusal names a self-service next step
-
-- **A refusal explains what happened and what each choice does; offer any needed administrator or owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody else.** The only exceptions are a state only a bug can produce, identified at the site as a fault in Waitron (owner, 2026-10-25), the till's full-disk strip, «Tell a manager» (owner, 2026-10-28, A1127 Q4), and the two backup-room alerts, which name no next step (owner, 2026-10-28, A1167). Nothing guards it. Receipt: [conventions-ui.md](conventions-ui.md#refusals-name-a-self-service-next-step).
-
-### New or changed forms use the Forms contract
-
-- **New or changed forms use [design-system.md](design-system.md) → Forms.**
-  Required fields are marked; invalid fields get inline errors and one localized bottom message on its
-  own line above buttons, never a top summary, with the action disabled until fixed. Request refusals alone never disable it; field refusals
-  appear under that field (owner, 2026-09-29).
-  Saves stay quiet and disabled until the draft changes, using `draftScopeFor`, `saveActionState` and
-  a save-handler early return (owner, 2026-10-07, A331). Other actions stay quiet while awaiting a choice,
-  selection or load, or barred by row state; use their own colour when actionable or sending (owner,
-  2026-10-08, A416/A427). Exceptions are in the Forms contract; nothing guards these across screens.
-  A hint is the placeholder; short explanations are hints, not “?” buttons (owner, 2026-10-03; unguarded,
-  A237). Inputs have semantic `name`s, never widget ids. Other dated decisions and the sign-in exception:
-  [conventions-ui.md](conventions-ui.md).
-
 ### A screen change updates its guide
 
 - **A screen change updates its guide in English and, where a twin exists, Spanish.**
@@ -2253,45 +2235,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   legal name (not a location). The account menu (a person-icon `wt-row-actions` popover holding
   Account settings, Theme, Language and Log out) sits at the trailing edge only when a session exists.
 
-### Dashboard login offers methods
-
-- **Dashboard login offers methods without revealing account enrolment.** Never query account status
-  or passkey enrolment to choose the public screen. A modal passkey prompt requires an explicit
-  action: navigation, refresh, logout and session expiry never open one. Save the authenticated email
-  and the successful method only with Remember selected, never in tab storage.
-
-### A retained hardware registration stays re-addable
-
-- **A retained hardware registration must remain re-addable after deactivation.** Discovery finds
-  disabled printers and card readers, and a disabled device's browser asks to rejoin; Enable brings
-  each back under its existing id. A deleted printer, card reader or device is matched by neither
-  and returns with a new id.
-
 ### The hardware transport seam
 
 - **The hardware transport seam is `@waitron/print-agent`, and it is database-free.** It imports no
   other package in this repo, and `@waitron/printing` depends on IT, never the reverse. The guard is
   the `import-x/no-restricted-paths` zone in `eslint.config.js`, not the empty `dependencies` block.
-
-### The unauthenticated recovery page's fixed strings and redacted log tail
-
-- **The unauthenticated recovery page's title and action are fixed strings chosen by the error
-  code (after a Start again Move, an answer naming the set-aside folder takes their place); its log tail is the file's last lines, whichever start or running server wrote them,
-  written through `redactSecrets` and the personal-data mask (except the frozen-process watchdog's
-  own line, which goes through neither), and HTML-escaped** (owner decision 2026-09-26; the tail's span and the personal-data mask are A980
-  S10's defaults, open to the owner).
-  `redactSecrets` masks only a password in a URL, which is why no code's params and no logged
-  message may carry a secret. Its one password form, for `setup.start_again_files_found`, takes
-  the administrator password over HTTPS only (cost if not: a password sent in plain text on the
-  venue's network); its Move choice is the owner's one exception to never suggesting a removal
-  (A1098). Guard: the never-delete cases in
-  `apps/server/src/recovery-surface.test.ts`, weaker than their name: they read the text tables,
-  not the page.
-
-### A login refusal never reveals account existence
-
-- **A login refusal never reveals account existence** (owner, 2026-09-30): unknown, suspended,
-  pending, wrong-secret and till-profile-inadmissible accounts answer `password.invalid` or `pin.invalid`
-  after the same hashing work, as one sentence with no field marked. Only missing/malformed input marks
-  a field; the real cause is a log-only `reason`. Owner-approved exception: `passkey.not_registered`.
-  Guards: identity login and route suites, weaker than the set looks: no new sign-in route is covered.
