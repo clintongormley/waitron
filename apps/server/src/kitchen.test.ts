@@ -464,7 +464,7 @@ describe("kitchen-station config", () => {
     });
   });
 
-  it("createStation preserves a foreign-key error and updateStation names an invalid effective threshold", async () => {
+  it("createStation preserves a database error and updateStation names an invalid effective threshold", async () => {
     const cfg = await setupVenue();
     await db.execute(sql`
       create trigger kitchen_stations_refuse_insert before insert on kitchen_stations

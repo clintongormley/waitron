@@ -460,7 +460,7 @@ export async function notifyKitchenAllergyDestination(
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
     .innerJoin(workingOrders, eq(workingOrders.id, ticketItems.workingOrderId))
     .leftJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
-    .where(and(inArray(ticketItems.id, [...ticketItemIds])));
+    .where(inArray(ticketItems.id, [...ticketItemIds]));
   const copies = await VENUE_SERVICE.readTicketAllergies(
     tx,
     rows.map((row) => row.id),
