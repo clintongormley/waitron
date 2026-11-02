@@ -491,9 +491,24 @@ The public `POST /management-api/fiscal-records/remedy` route refuses every reme
 Client-supplied enablement and operator fields cannot grant authority. No production action is
 enabled. The HTTP adapter covers synthetic corrections to stored invoice facts for rejected records
 and records accepted with errors. The separately gated synthetic absent-original operation is
-described below. Corrective-invoice workflows, resolution of existing held cancellations, brake
+described below. The corrective HTTP adapter, resolution of existing held cancellations, brake
 release and staff cancellation/refund qualification remain Task 8 work. The live second-correction
 prerequisite is recorded in the dated entry below.
+
+**2 November 2026, Task 8 synthetic corrective-invoice transaction.** The internal operation
+uses the existing core correction writer, which now accepts a management session and still checks
+`sale.rectify`. The remedy operation separately checks the live administrator's `fiscal.remedy`
+permission and its server policy. It requires a current alta with a matching rejection or
+accepted-with-errors case and delivery evidence; unknown outcomes, duplicate conflicts and an
+already generated cancellation are refused. It binds the original sale and issuing node from the
+selected record and host, then writes the corrective sale, its numbered R5, delivery and case event
+in one transaction. The earlier sale, fiscal rows and tenders remain unchanged in these tests.
+Retries compare the complete decision and return the saved sale, record and event without another
+number or payment. A failed resolution rolls the accounting and number allocation back.
+
+`record-remedy-corrective.test.ts` exercises this internal transaction with real accounting and
+fiscal writers. The public HTTP route continues to refuse corrective-invoice requests; its adapter
+and actual staff refund integration remain unfinished. No new production remedy is enabled.
 
 **2 November 2026, Task 8 synthetic absent-original cancellation.** An administrator explicitly
 selects the operation for a current rejected alta with matching case evidence. Unknown outcomes,

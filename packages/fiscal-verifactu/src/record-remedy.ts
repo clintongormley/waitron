@@ -171,3 +171,5 @@ export async function applyRecordCorrection(
   });
   return { registroId: appended.id, eventId: event.id };
 }
+
+export { applyCorrectiveInvoice } from "./record-remedy-corrective.js";
