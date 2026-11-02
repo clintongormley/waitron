@@ -161,7 +161,7 @@ it.each<[string, string, string]>([
   [
     "the node set's tables without its handover index",
     "drop index node_handover_one_open_uq",
-    "node.db lacks the node tables",
+    "node.db lacks the node set's tables or indexes",
   ],
   ["a view", "create view v as select 1", "node.db holds a table"],
   [
@@ -169,7 +169,11 @@ it.each<[string, string, string]>([
     "create trigger tr after insert on node_mode begin select 1; end",
     "node.db holds a table",
   ],
-  ["only part of the node set", "drop table node_primary_key", "node.db lacks the node tables"],
+  [
+    "only part of the node set",
+    "drop table node_primary_key",
+    "node.db lacks the node set's tables or indexes",
+  ],
   [
     "another table in place of one of the node set's",
     "drop table node_primary_key; create table t(x)",
@@ -183,7 +187,7 @@ it.each<[string, string, string]>([
   [
     "the node set's tables without its journal",
     "drop table __drizzle_migrations_node",
-    "node.db lacks the node tables",
+    "node.db lacks the node set's tables or indexes",
   ],
   [
     "a mirror link",

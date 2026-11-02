@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { generateNodeKeyPair } from "@waitron/membership";
+import { AppError } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
 import {
   HANDOVER_KINDS,
@@ -32,15 +33,23 @@ describe("signEnvelope", () => {
     expect(Object.keys(envelope).sort()).toEqual(["body", "purpose", "signature", "signerNodeId"]);
   });
 
-  it("refuses a body holding a number JSON cannot carry, at any depth", () => {
+  it("throws a fault, not a refusal, for a body holding a number JSON cannot carry, at any depth", () => {
     const cases: [unknown, string][] = [
       [{ n: Number.NaN }, "body.n"],
       [{ a: { b: Number.POSITIVE_INFINITY } }, "body.a.b"],
       [{ list: [1, Number.NEGATIVE_INFINITY] }, "body.list.1"],
     ];
     for (const [bad, field] of cases) {
-      expect(() => signEnvelope("status", bad as never, m1), field).toThrow(
-        expect.objectContaining({ code: "handover.request_invalid", params: { field } }),
+      let thrown: unknown;
+      try {
+        signEnvelope("status", bad as never, m1);
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown, field).toBeInstanceOf(Error);
+      expect(thrown, field).not.toBeInstanceOf(AppError);
+      expect((thrown as Error).message, field).toBe(
+        `a handover body holds a non-finite number at ${field}`,
       );
     }
     expect(signEnvelope("status", { n: 1.5, z: -0, list: [0] }, m1).body).toEqual({

@@ -497,7 +497,7 @@ function nodeRefusal(connection: DatabaseSync, nodeId: string | undefined): stri
         NODE_INDEXES.some((index) => index.name === found.name && index.table === found.tbl_name);
   if (!objects.every(ours)) return "node.db holds a table";
   if (objects.length !== tables.length + NODE_INDEXES.length)
-    return "node.db lacks the node tables";
+    return "node.db lacks the node set's tables or indexes";
   // SQLite counts from the smallest index unless told not to; a damaged index alone must not
   // make a readable table count as empty.
   const count = (name: string, where = "", ...values: string[]) =>

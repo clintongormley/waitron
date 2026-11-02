@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 import { canonicalize, signBytes, verifyBytes } from "@waitron/membership";
 import type { CanonicalValue } from "@waitron/membership";
-import { AppError } from "@waitron/shared";
-import "./errors.js";
 
 export const HANDOVER_KINDS = [
   "query",
@@ -46,7 +44,10 @@ function signedMessage(purpose: string, signerNodeId: string, body: unknown): st
 // The signed form spells a non-finite number as `null`, so one signature would cover both bodies.
 function refuseNonFinite(value: unknown, field: string): void {
   if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new AppError("handover.request_invalid", { field });
+    // A fault in Waitron: only bodies this box built are signed, and JSON from a peer cannot hold one.
+    if (!Number.isFinite(value)) {
+      throw new Error(`a handover body holds a non-finite number at ${field}`);
+    }
     return;
   }
   if (value === null || typeof value !== "object") return;
