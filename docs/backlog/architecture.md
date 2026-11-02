@@ -1009,11 +1009,117 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   Group-route and course-deletion service-step suites use English names for their own courses.
   The printer-test-page suite uses an English printer sample and retains its bilingual words
   and accented-character checks.
+  Payment-slip table labels and print-preview plain samples use English; translated receipt
+  wording and accented-character samples remain.
+  Native server floor-annotation and kitchen/floor read-model suites use English location,
+  operation, station, table and contact samples; their Spanish locale keys remain.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
   glyph cases. Preserve text lengths when translating remaining printing samples. Low priority.
   [Detail](architecture.md#a913s-fix-items-general-code-english-only)
+
+## A1308. Rationalise the tables, background jobs, environment variables and files
+
+- **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
+  2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
+  [design](../superpowers/specs/2026-11-02-rationalisation/README.md) is written and builder-checked,
+  and **waits for the owner's approval before any work starts**. It proposes 242 tables → 148 in
+  eight migration sets instead of sixteen, one job runner, 111 product environment variables → 51,
+  and one state-folder layout. The owner chose that A760's squash runs first, merged into the eight
+  sets. If approved, it absorbs A1301's schema slices (S20–S28, S23's `venue_settings` included).
+  It also renames every leftover "tenant" name: the `tenants` table becomes `taxpayer`, and
+  names that mean the venue or box get that name (owner, 2026-11-02; design §5 U9).
+
+## A1301. Remove the "location" concept: the venue holds everything a location held
+
+- **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
+  2026-11-01, high priority; nothing new is built on locations meanwhile). The design is written and
+  reviewed: its settings move to a new one-row `venue_settings` table, and the work is cut into
+  slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
+  every design question (lane B's A1268 does the working-time hashes; the working-time export names
+  the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
+  slices. Still open: S12 (S12a–S12c), F3, S18, S19 and the schema slices S20–S28; every other
+  slice has landed.
+  `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
+  `venueLocationId` are on main for the remaining consumer slices (S1, #2379).
+  `@waitron/db/testing/seed.js` has `seedVenue` and `seedWorkingOrder`, and
+  `scripts/a1301-seed-codemod.mjs` rewrites the common shapes and reports the rest (F1, #2383).
+  S18 waits for S2–S17, and the schema slices S20–S28 get a plan of their own, which first settles
+  what the venue id sent to Cloud and naming the backup folder becomes.
+
+  What the landed slices left, by owner:
+
+  - **S12a** (left by S11, #2411): the device admission checks in `order-kitchen-note-api.ts`,
+    `party-allergy-api.ts`, `line-cancel-api.ts`, `tender-refund-api.ts` and
+    `tender-refund-authorization.ts`, and the bill move route's source-bill location check in
+    `till-api.ts` (an allergy move), whose case "move refuses a source bill from another location"
+    in `till-api.allergy-move.test.ts` is deleted with it.
+  - **S18:** the contract's node location ids remain for S18 (S3, #2387). Staffing's season,
+    day-plan and month reads still hand venue-service a `{ locationId }` scope, which S6 and S8
+    leave as an ignored `_cfg` and S18 removes, and its rota verbs keep theirs as an unread
+    `_cfg`, which S18 removes (S9, #2389). Printing leaves location reads for their owners: the
+    station screens read's scope in `station-outputs-down.ts` and `receipt-print.ts`'s `cfg`
+    handed to `readPrintedDepartmentReceipt` (both S18, with the module contract's scope; S10,
+    #2396). The attendance recorder keeps an unread optional `locationId` for S18 (S13, #2397).
+    Venue-service's exported functions keep their scope parameter as an unread `_cfg` until S18
+    removes it (S6, #2394). The calendar's exported readers keep an unread `_cfg` until S18;
+    `saveHolidayArea` reads the venue row twice (for the address, then for its id) because
+    `readVenue`'s `Venue` carries no id; S18 can drop the second read when `venueLocationId` goes
+    (S8, #2405). Left for S18 by S11 (#2411): the unread `_cfg` in `kitchen.ts`, `dead-ends.ts`
+    and `kitchen-allergy.ts`, the `VENUE_SERVICE.stationStates` scopes in `kitchen.ts` and
+    `station-move.ts`, the floor annotator's `cfg`, and `receipt-guests.ts`'s `cfg`. The node and
+    storage ids remain for S18 and the schema slices (S16, #2402).
+  - **The schema slices S20–S28:** the schema changes remain for S20–S28 (S3, #2387). Until the
+    schema slices drop `print_jobs.location_id`, `enqueuePrintJob` takes the venue id as an
+    optional `venueId`, so a sale, a kitchen send or a payment's slips read it once, and the demo
+    printer's boot lookup keeps its venue condition for `printers_local_key_key` (S10, #2396).
+    S25 still needs to drop the node's venue foreign key (S4, #2388). Calendar rows still written
+    with a `location_id` take `venueLocationId` (S8, #2405). Until the schema slices drop the
+    columns, the configuration import sets every column whose foreign key points at `locations`
+    to the importing venue's row (`venueLocationId`); the export no longer carries
+    `fire_control`, whose column A773-2 removes (S17, #2415). Two raw
+    `insert into working_orders` statements (`working-order.test.ts`'s `seedForeignNodeOrder`,
+    `station-order-migration.test.ts`): the schema slice that drops `working_orders.location_id`
+    changes them (F5, #2403).
+  - **Fixture lines the helpers could not take:** F5 (#2403), F2 (#2410) and F4 (#2412) list the
+    lines they left (fixed ids the helpers cannot keep, second-location cases and standby copies)
+    with their owning slice in their commit messages and PR bodies. Reporting's
+    `seedVenueWithSeries` and `seedOpenOrder` and workforce's `seedLocation` still write a raw
+    second location when a cross-location case calls them again; the code slices that delete
+    those cases remove that branch. fiscal-verifactu's own helpers and the tests outside F2's list
+    (`certificate-install`, `seed-single-venue`, `void-issue-clock`) are S3's. Left as they were
+    by F4: rows written under fixed ids that a backup, archive, `trading.env` or assertion names
+    (most `recovery*` and `restore*` suites, `hour-promotion`, `hour-recovery`,
+    `rebuild-first-start`, `node-config.location`, `promote-endpoint-e2e`), devices planted under
+    a join request's id, cases needing no taxpayer row (`reset-request`), and second-location
+    cases whose code slice deletes them.
+
+  [Design](../superpowers/specs/2026-11-01-a1301-remove-location-design.md),
+  [plan](../superpowers/plans/2026-11-01-a1301-remove-location.md),
+  [working-time plan](../superpowers/plans/2026-11-02-a1301-working-time-slices.md)
+
+## A1241. Continue the dashboard test sample-name cleanup, one small slice per PR
+
+- **A1241. Continue the dashboard test sample-name cleanup, one small slice per PR.**
+  Historical-category and renamed-parent samples in the sales-category suite, plus catalogue,
+  device and floor-plan suites still carry Spanish sample names.
+  Device-profile samples still need cleanup, including printer-loading, accessibility states
+  and departments. The unsaved-profile suite still has a Spanish narrowed-device sample.
+  The `devices-screen.test.ts` suite still needs its
+  disabled-device, till, pairing, kitchen-screen profile, returning-device station and printer
+  sample names cleaned.
+  The order-list suite still uses `Mesa 5` as a table sample.
+  Its `orders-screen.a11y.test.ts` twin still uses `Mesa 5`, `Barra` and `Oficina` samples.
+  Menu-preview accessibility states still use `Terraza` as a sample menu name.
+  Audit the remaining `Terraza` occurrences in the menu-screen, look-card and equipment-label
+  test suites before the next cleanup slices.
+  Order, printer and API suites also need their printer/venue samples audited.
+  The order-detail suite does not check its `row.tables` sample independently of `party.tables`.
+  Keep Spanish-language checks, recorded receipt snapshots and the unit-screen accent-search
+  fixture `Gin & Tónic`. This slice skips `apps/dashboard/src/widgets/alerts-bell.test.ts`,
+  which the in-flight A1089 reply-evidence branch changes. Recheck live branch paths before
+  the next slice.
 
 ## Decisions and deliberate limits
 
