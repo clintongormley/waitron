@@ -7,6 +7,7 @@ import {
   nodeHandoverEvents,
   nodeHandoverOperations,
   nodeHandoverRestriction,
+  type HandoverOperationState,
 } from "./schema/node-handover.js";
 
 export { HANDOVER_CLOSED_STATES };
@@ -61,12 +62,12 @@ export async function advanceHandoverOperationTx(
   tx: NodeTransaction,
   nodeId: string,
   operationId: string,
-  to: string,
+  to: HandoverOperationState,
   waitingReason: string | null,
 ): Promise<void> {
   const updated = await tx
     .update(nodeHandoverOperations)
-    .set({ state: to as HandoverOperation["state"], waitingReason, updatedAt: now() })
+    .set({ state: to, waitingReason, updatedAt: now() })
     .where(
       and(
         eq(nodeHandoverOperations.nodeId, nodeId),

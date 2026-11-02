@@ -22,7 +22,9 @@ export const HANDOVER_STATES = [
 
 export type HandoverState = (typeof HANDOVER_STATES)[number];
 
-type Steps = Readonly<Partial<Record<HandoverState | "start", readonly HandoverState[]>>>;
+type Steps = Readonly<
+  { start: readonly [HandoverState] } & Partial<Record<HandoverState, readonly HandoverState[]>>
+>;
 
 // The plan's Formats → progress states table; `start` is a box with no row for the operation yet.
 const STEPS: Readonly<Record<HandoverRole, Record<HandoverScenario, Steps>>> = {
@@ -76,6 +78,11 @@ export function nextState(
   if (allowed?.includes(to) !== true)
     throw new AppError("handover.step_out_of_order", { from, to });
   return to;
+}
+
+/** The state a box records when it begins an operation in this role and scenario. */
+export function initialState(role: HandoverRole, scenario: HandoverScenario): HandoverState {
+  return STEPS[role][scenario].start[0];
 }
 
 /** Open until one of the four closing states. */

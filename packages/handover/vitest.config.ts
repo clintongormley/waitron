@@ -5,6 +5,8 @@ export default defineConfig({
     globals: true,
     clearMocks: false,
     exclude: [...configDefaults.exclude, "**/.stryker-tmp/**"],
+    // One worker: v8 under-merges branch coverage across workers.
+    maxWorkers: 1,
     coverage: {
       provider: "v8",
       include: ["src/**/*.ts"],

@@ -147,7 +147,12 @@ describe("node.db's handover tables", () => {
       ).toBe(true);
     });
 
-    for (const closed of ["return_abandoned", "return_complete", "replaced", "abandoned"]) {
+    for (const closed of [
+      "return_abandoned",
+      "return_complete",
+      "replaced",
+      "abandoned",
+    ] as const) {
       it(`a closed operation (${closed}) lets a new one begin`, async () => {
         await begin(operation());
         await withNodeTransaction(suite.node, (tx) =>

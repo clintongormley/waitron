@@ -7,7 +7,7 @@ export {
 } from "./envelope.js";
 export { bindingFingerprint, parseBinding } from "./binding.js";
 export type { HandoverBinding, HandoverScenario } from "./binding.js";
-export { HANDOVER_STATES, isOpen, nextState } from "./states.js";
+export { HANDOVER_STATES, initialState, isOpen, nextState } from "./states.js";
 export type { HandoverRole, HandoverState } from "./states.js";
 export type {
   HandoverKind,

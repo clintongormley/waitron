@@ -1,6 +1,6 @@
 import { AppError } from "@waitron/shared";
 import { describe, expect, it } from "vitest";
-import { HANDOVER_STATES, isOpen, nextState } from "./states.js";
+import { HANDOVER_STATES, initialState, isOpen, nextState } from "./states.js";
 import type { HandoverRole, HandoverState } from "./states.js";
 import type { HandoverScenario } from "./binding.js";
 
@@ -194,6 +194,20 @@ describe("nextState", () => {
         }
       }
     }
+  });
+});
+
+describe("initialState", () => {
+  it.each<[HandoverRole, HandoverScenario, HandoverState]>([
+    ["source", "controlled", "prepared"],
+    ["source", "emergency", "source_superseded"],
+    ["destination", "controlled", "prepared"],
+    ["destination", "emergency", "prepared"],
+  ])("a %s in a %s operation starts at %s", (role, scenario, state) => {
+    expect(initialState(role, scenario)).toBe(state);
+    expect(ALLOWED.filter((s) => s[0] === role && s[1] === scenario && s[2] === null)).toEqual([
+      [role, scenario, null, state],
+    ]);
   });
 });
 

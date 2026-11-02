@@ -32,6 +32,24 @@ describe("signEnvelope", () => {
     expect(Object.keys(envelope).sort()).toEqual(["body", "purpose", "signature", "signerNodeId"]);
   });
 
+  it("refuses a body holding a number JSON cannot carry, at any depth", () => {
+    const cases: [unknown, string][] = [
+      [{ n: Number.NaN }, "body.n"],
+      [{ a: { b: Number.POSITIVE_INFINITY } }, "body.a.b"],
+      [{ list: [1, Number.NEGATIVE_INFINITY] }, "body.list.1"],
+    ];
+    for (const [bad, field] of cases) {
+      expect(() => signEnvelope("status", bad as never, m1), field).toThrow(
+        expect.objectContaining({ code: "handover.request_invalid", params: { field } }),
+      );
+    }
+    expect(signEnvelope("status", { n: 1.5, z: -0, list: [0] }, m1).body).toEqual({
+      n: 1.5,
+      z: -0,
+      list: [0],
+    });
+  });
+
   it("lists the ten kinds", () => {
     expect(HANDOVER_KINDS).toEqual([
       "query",
@@ -147,6 +165,48 @@ describe("verifyEnvelope", () => {
   it("a body the signed form cannot spell is `malformed`", () => {
     const good = json(signEnvelope("query", body, m1)) as Record<string, unknown>;
     expect(verifyEnvelope({ ...good, body: { n: 1n } }, "query", publicKeyOf)).toEqual({
+      valid: false,
+      reason: "malformed",
+    });
+  });
+
+  it("a signature spelled other than as the signer wrote it is `malformed`, so evidence keeps one digest", () => {
+    const good = json(signEnvelope("query", body, m1)) as Record<string, string>;
+    const signature = good.signature!;
+    expect(signature).toMatch(/^[A-Za-z0-9+/]{86}==$/);
+    // The same 64 bytes: the last character before the padding carries four bits base64 ignores.
+    const lastIndex = 85;
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const lastValue = alphabet.indexOf(signature[lastIndex]!);
+    const sameBytes =
+      signature.slice(0, lastIndex) +
+      alphabet[lastValue ^ 0b0001]! +
+      signature.slice(lastIndex + 1);
+    expect(Buffer.from(sameBytes, "base64")).toEqual(Buffer.from(signature, "base64"));
+    const respellings = [
+      `${signature}!`,
+      signature.slice(0, -2),
+      sameBytes,
+      signature.replace(/\+/g, "-").replace(/\//g, "_"),
+      ` ${signature}`,
+    ].filter((spelling) => spelling !== signature);
+    expect(respellings.length).toBeGreaterThanOrEqual(4);
+    expect(verifyEnvelope(good, "query", publicKeyOf).valid).toBe(true);
+    for (const spelling of respellings) {
+      expect(
+        verifyEnvelope({ ...good, signature: spelling }, "query", publicKeyOf),
+        spelling,
+      ).toEqual({
+        valid: false,
+        reason: "malformed",
+      });
+    }
+  });
+
+  it("a signature of the right spelling but not 64 bytes is `malformed`", () => {
+    const good = json(signEnvelope("query", body, m1)) as Record<string, string>;
+    const short = Buffer.alloc(63, 1).toString("base64");
+    expect(verifyEnvelope({ ...good, signature: short }, "query", publicKeyOf)).toEqual({
       valid: false,
       reason: "malformed",
     });

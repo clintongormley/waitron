@@ -8,6 +8,7 @@ describe("the package barrel", () => {
       "HANDOVER_STATES",
       "bindingFingerprint",
       "envelopeDigest",
+      "initialState",
       "isOpen",
       "nextState",
       "parseBinding",

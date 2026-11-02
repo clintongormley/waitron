@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { canonicalize, signBytes, verifyBytes } from "@waitron/membership";
 import type { CanonicalValue } from "@waitron/membership";
+import { AppError } from "@waitron/shared";
+import "./errors.js";
 
 export const HANDOVER_KINDS = [
   "query",
@@ -41,11 +43,28 @@ function signedMessage(purpose: string, signerNodeId: string, body: unknown): st
   return canonicalize({ purpose, signerNodeId, body: body as CanonicalValue });
 }
 
+// The signed form spells a non-finite number as `null`, so one signature would cover both bodies.
+function refuseNonFinite(value: unknown, field: string): void {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new AppError("handover.request_invalid", { field });
+    return;
+  }
+  if (value === null || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) refuseNonFinite(child, `${field}.${key}`);
+}
+
+/** Ed25519 signatures are 64 bytes; one spelling each, so an envelope's digest cannot be changed. */
+function isCanonicalSignature(signature: string): boolean {
+  const bytes = Buffer.from(signature, "base64");
+  return bytes.length === 64 && bytes.toString("base64") === signature;
+}
+
 export function signEnvelope<B extends CanonicalValue>(
   kind: HandoverKind,
   body: B,
   signer: { nodeId: string; privateKey: string },
 ): SignedHandoverEnvelope<B> {
+  refuseNonFinite(body, "body");
   const purpose = purposeOf(kind);
   return {
     purpose,
@@ -69,7 +88,8 @@ export function verifyEnvelope<B>(
     Object.keys(envelope).sort().join() !== ENVELOPE_KEYS.join() ||
     typeof purpose !== "string" ||
     typeof signerNodeId !== "string" ||
-    typeof signature !== "string"
+    typeof signature !== "string" ||
+    !isCanonicalSignature(signature)
   ) {
     return { valid: false, reason: "malformed" };
   }

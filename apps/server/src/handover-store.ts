@@ -2,6 +2,7 @@ import { canonicalize, type CanonicalValue } from "@waitron/membership";
 import { withNodeTransaction, type NodeDatabase } from "@waitron/db";
 import {
   bindingFingerprint,
+  initialState,
   nextState,
   type HandoverBinding,
   type HandoverRole,
@@ -15,16 +16,11 @@ import {
   readHandoverOperation,
 } from "@waitron/node-db";
 import { AppError, type ErrorCode } from "@waitron/shared";
+import "./errors.js";
 
 export interface HandoverStoreDeps {
   readonly node: NodeDatabase;
   readonly nodeId: string;
-}
-
-function firstState(role: HandoverRole, binding: HandoverBinding): HandoverState {
-  const first =
-    role === "source" && binding.scenario === "emergency" ? "source_superseded" : "prepared";
-  return nextState(role, binding.scenario, null, first);
 }
 
 export function beginHandover(
@@ -32,7 +28,7 @@ export function beginHandover(
   binding: HandoverBinding,
   role: HandoverRole,
 ): Promise<"created" | "replayed"> {
-  const state = firstState(role, binding);
+  const state = initialState(role, binding.scenario);
   return withNodeTransaction(deps.node, (tx) =>
     beginHandoverOperationTx(tx, {
       nodeId: deps.nodeId,
