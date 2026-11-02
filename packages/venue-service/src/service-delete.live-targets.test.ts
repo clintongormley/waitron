@@ -287,7 +287,7 @@ describe("deleted service targets", () => {
       await run((tx) => service.readPrintedDepartmentReceipt(tx, f.cfg, f.gone, "80mm")),
     ).toEqual({ receipt: { email: "history@example.com" }, logo: null });
   });
-  it("provisions active defaults without adopting retained defaults or another location", async () => {
+  it("provisions active defaults without adopting retained defaults", async () => {
     const f = await fixture();
     await run(async (tx) => {
       await tx.update(departments).set({ isDefault: true }).where(eq(departments.id, f.gone));

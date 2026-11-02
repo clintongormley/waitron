@@ -25,6 +25,8 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
     async run(tx, node) {
       const staffLanguage = await readStarterStaffLanguage(tx, node);
       const venue = await readVenue(tx);
+      let venueId: string | undefined;
+      const venueRowId = async () => (venueId ??= await venueLocationId(tx));
       // Through the insert builder: `id` and `created_at` are `$defaultFn` generators, which only
       // the builder runs. Read-then-insert is safe because a seed runs inside `withTransaction`,
       // which holds the file's write lock for its whole body.
@@ -50,7 +52,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           const [inserted] = await tx
             .insert(departments)
             .values({
-              locationId: await venueLocationId(tx),
+              locationId: await venueRowId(),
               name: venue.name,
               tradingName: venue.name,
               isDefault: true,
@@ -92,7 +94,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         const zone = await tx
           .insert(floorZones)
           .values({
-            locationId: await venueLocationId(tx),
+            locationId: await venueRowId(),
             name: starterName(STARTER_ZONE_NAMES, COUNTER_ZONE_NAME, staffLanguage),
             displayOrder: 0,
             active: true,
@@ -106,7 +108,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         await tx
           .insert(zoneServicePolicies)
           .values({
-            locationId: await venueLocationId(tx),
+            locationId: await venueRowId(),
             zoneId: zone[0]!.id,
             departmentId,
             isCounterDefault: true,

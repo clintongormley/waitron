@@ -132,19 +132,18 @@ describe("department receipt storage", () => {
       await suite.db.select().from(departments).where(eq(departments.id, f.id)),
     ).toContainEqual(expect.objectContaining({ id: f.id, isDefault: true, active: false }));
   });
-  it("refuses another location and unknown ids without changing the saved row", async () => {
+  it("refuses unknown ids without changing the saved row", async () => {
     const a = await fixture();
     await scoped((tx) =>
       receipts.writeDepartmentReceipt(tx, a.cfg, a.id, { phone: "+34911234567" }),
     );
-    for (const id of [randomUUID()]) {
-      await expect(
-        scoped((tx) => receipts.writeDepartmentReceipt(tx, a.cfg, id, { phone: "+34917654321" })),
-      ).rejects.toMatchObject({ code: "department.not_found" });
-      await expect(
-        scoped((tx) => receipts.readDepartmentReceipt(tx, a.cfg, id)),
-      ).rejects.toMatchObject({ code: "department.not_found" });
-    }
+    const id = randomUUID();
+    await expect(
+      scoped((tx) => receipts.writeDepartmentReceipt(tx, a.cfg, id, { phone: "+34917654321" })),
+    ).rejects.toMatchObject({ code: "department.not_found" });
+    await expect(
+      scoped((tx) => receipts.readDepartmentReceipt(tx, a.cfg, id)),
+    ).rejects.toMatchObject({ code: "department.not_found" });
     expect(await scoped((tx) => receipts.readDepartmentReceipt(tx, a.cfg, a.id))).toEqual({
       phone: "+34911234567",
     });
@@ -187,13 +186,12 @@ describe("department receipt storage", () => {
       ).toEqual({ receipt: { phone: "+34911234567" }, logo: null, unreadable: true });
     },
   );
-  it("marks a department not found in this location as unreadable", async () => {
+  it("marks an unknown department as unreadable", async () => {
     const a = await fixture();
-    for (const id of [randomUUID()]) {
-      expect(
-        await scoped((tx) => receipts.readPrintedDepartmentReceipt(tx, a.cfg, id, "80mm")),
-      ).toEqual({ receipt: {}, logo: null, unreadable: true });
-    }
+    const id = randomUUID();
+    expect(
+      await scoped((tx) => receipts.readPrintedDepartmentReceipt(tx, a.cfg, id, "80mm")),
+    ).toEqual({ receipt: {}, logo: null, unreadable: true });
   });
   it("a readable document without a logo key, or with a kept logo, is not unreadable", async () => {
     const f = await fixture();
@@ -478,7 +476,7 @@ describe("receipt department lookups", () => {
     }
     expect(await scoped((tx) => receipts.receiptDefaultDepartment(tx, f.cfg))).toBeNull();
   });
-  it("reads the recorded disabled sale department within its location", async () => {
+  it("reads the recorded disabled sale department", async () => {
     const f = await fixture(false);
     const nodeId = await seedNode(suite.db, f.cfg.locationId);
     const [series] = await suite.db.insert(invoiceSeries).values({ nodeId, code: "F" }).returning();
@@ -509,7 +507,7 @@ describe("receipt department lookups", () => {
       await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForSale(tx, f.cfg, sale!.id)),
     ).toBe(f.id);
   });
-  it("reads authoritative order context without borrowing a default or another location", async () => {
+  it("reads authoritative order context without borrowing a default", async () => {
     const f = await fixture();
     const nodeId = await seedNode(suite.db, f.cfg.locationId);
     const [order] = await suite.db
@@ -534,19 +532,10 @@ describe("receipt department lookups", () => {
       await scoped((tx) => receipts.VENUE_SERVICE.receiptDepartmentForOrder(tx, f.cfg, order!.id)),
     ).toBe(f.id);
   });
-  it("ignores a deleted designated default and returns no department for an empty location", async () => {
+  it("ignores a deleted designated default", async () => {
     const f = await fixture(false);
     expect(
       await scoped((tx) => receipts.VENUE_SERVICE.receiptDefaultDepartment(tx, f.cfg)),
-    ).toBeNull();
-    const [empty] = await suite.db
-      .insert(locations)
-      .values({ name: "Empty", invoiceLocales: ["es-ES"], operationDescription: "Hospitality" })
-      .returning();
-    expect(
-      await scoped((tx) =>
-        receipts.receiptDefaultDepartment(tx, { locationId: locationId(empty!.id) }),
-      ),
     ).toBeNull();
   });
   // A1301: deleted with cfg in S18

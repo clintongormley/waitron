@@ -912,7 +912,7 @@ describe("readSpecialDayPlan", () => {
     expect(found!.plan.seasonIdOn).toEqual(new Map([["2030-12-13", null]]));
   });
 
-  it("answers null for a special day it does not hold or another location's", async () => {
+  it("answers null for a special day it does not hold", async () => {
     const v = await venue();
     expect(await scoped((tx) => readSpecialDayPlan(tx, v.cfg, randomUUID()))).toBeNull();
   });

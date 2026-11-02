@@ -141,7 +141,7 @@ describe("zone closed times", () => {
       { zoneId: v.terrace, date: "2030-12-25", ranges: [{ kind: "closed", ...night[0]! }] },
     ]);
   });
-  it("refuses a foreign or switched-off department's zone without changing its rows", async () => {
+  it("refuses a switched-off department's zone without changing its rows", async () => {
     const b = await venue();
     await tx((db) => replaceZoneClosedWeek(db, b.cfg, b.terrace, week(), 0));
     await tx((db) => createDepartment(db, b.cfg, { name: "Other", orderStart: "counter" }));
@@ -311,7 +311,7 @@ describe("zones closed at an instant", () => {
     expect([...(await closedAt("2030-11-29T21:30:00Z"))]).toEqual([]);
     expect([...(await closedAt("2030-12-06T21:30:00Z"))]).toEqual([v.terrace]);
   });
-  it("scopes the batch to this location and the selected zones", async () => {
+  it("scopes the batch to the selected zones", async () => {
     const v = await venue();
     for (const [cfg, id] of [
       [v.cfg, v.terrace],

@@ -241,22 +241,22 @@ describe("replaceMenuWeek writes season weeks", () => {
     );
   });
 
-  it("refuses a season it does not know, or another venue's, writing nothing", async () => {
+  it("refuses a season it does not know, writing nothing", async () => {
     const v = await venue();
-    for (const seasonId of [randomUUID()])
-      await expect(
-        scoped((tx) =>
-          replaceMenuWeek(
-            tx,
-            v.cfg,
-            v.departmentId,
-            menuWeek([{ periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" }]),
-            AT,
-            0,
-            { seasonId },
-          ),
+    const seasonId = randomUUID();
+    await expect(
+      scoped((tx) =>
+        replaceMenuWeek(
+          tx,
+          v.cfg,
+          v.departmentId,
+          menuWeek([{ periodId: v.lunch, startsAt: "13:00", endsAt: "16:00" }]),
+          AT,
+          0,
+          { seasonId },
         ),
-      ).rejects.toMatchObject({ code: "season.not_found", params: { seasonId } });
+      ),
+    ).rejects.toMatchObject({ code: "season.not_found", params: { seasonId } });
     expect(await scoped((tx) => readSeasons(tx, v.cfg))).toEqual([]);
   });
 
@@ -388,22 +388,22 @@ describe("replaceZoneClosedWeek writes season weeks", () => {
     expect(await zoneTuesdays(v)).toEqual(everySeason([{ startsAt: "13:00", endsAt: "16:00" }]));
   });
 
-  it("refuses a season it does not know, or another venue's, writing nothing", async () => {
+  it("refuses a season it does not know, writing nothing", async () => {
     const v = await venue();
-    for (const seasonId of [randomUUID()])
-      await expect(
-        scoped((tx) =>
-          replaceZoneClosedWeek(
-            tx,
-            v.cfg,
-            v.zoneId,
-            closedWeek([{ startsAt: "13:00", endsAt: "16:00" }]),
-            0,
-            AT,
-            { seasonId },
-          ),
+    const seasonId = randomUUID();
+    await expect(
+      scoped((tx) =>
+        replaceZoneClosedWeek(
+          tx,
+          v.cfg,
+          v.zoneId,
+          closedWeek([{ startsAt: "13:00", endsAt: "16:00" }]),
+          0,
+          AT,
+          { seasonId },
         ),
-      ).rejects.toMatchObject({ code: "season.not_found", params: { seasonId } });
+      ),
+    ).rejects.toMatchObject({ code: "season.not_found", params: { seasonId } });
     expect(await scoped((tx) => readSeasons(tx, v.cfg))).toEqual([]);
   });
 
@@ -782,17 +782,17 @@ describe("saveSeasonWeeks", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("refuses a season it does not know, or another venue's, writing nothing", async () => {
+  it("refuses a season it does not know, writing nothing", async () => {
     const p = await painted();
     const before = await stored(p);
-    for (const seasonId of [randomUUID()])
-      for (const input of [
-        {},
-        { departments: [{ departmentId: p.departmentId, days: menuWeek([]) }] },
-      ])
-        await expect(
-          scoped((tx) => saveSeasonWeeks(tx, p.cfg, seasonId, input, AT, 0)),
-        ).rejects.toMatchObject({ code: "season.not_found", params: { seasonId } });
+    const seasonId = randomUUID();
+    for (const input of [
+      {},
+      { departments: [{ departmentId: p.departmentId, days: menuWeek([]) }] },
+    ])
+      await expect(
+        scoped((tx) => saveSeasonWeeks(tx, p.cfg, seasonId, input, AT, 0)),
+      ).rejects.toMatchObject({ code: "season.not_found", params: { seasonId } });
     expect(await stored(p)).toEqual(before);
   });
 

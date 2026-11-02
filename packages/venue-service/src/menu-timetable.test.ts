@@ -946,7 +946,7 @@ describe("the menu a zone starts on", () => {
       });
   });
 
-  it("is refused for a zone of an inactive department, or of another venue", async () => {
+  it("is refused for a zone of an inactive department", async () => {
     const v = await timed();
     await scoped((tx) =>
       (async () => {
@@ -1060,15 +1060,13 @@ describe("a special date's menu timetable", () => {
     );
   });
 
-  it("refuses another venue's department, and a department that does not exist", async () => {
+  it("refuses a department that does not exist", async () => {
     const v = await timed();
-    const unknown = randomUUID();
-    for (const departmentId of [unknown]) {
-      await expect(saveDay({ ...v, restaurant: departmentId }, CHRISTMAS)).rejects.toMatchObject({
-        code: "department.not_found",
-        params: { departmentId },
-      });
-    }
+    const departmentId = randomUUID();
+    await expect(saveDay({ ...v, restaurant: departmentId }, CHRISTMAS)).rejects.toMatchObject({
+      code: "department.not_found",
+      params: { departmentId },
+    });
   });
 });
 
@@ -2227,7 +2225,7 @@ describe("department service periods", () => {
     });
   });
 
-  it("offers no department-list menus without periods and refuses a different venue's zone", async () => {
+  it("offers no department-list menus without periods", async () => {
     const v = await venue({ timetable: false });
     const result = await scoped((tx) =>
       listZoneOffers(tx, v.cfg, v.barra, { at: madrid(FRIDAY, "13:59") }),
@@ -2749,7 +2747,7 @@ describe("department service periods", () => {
     expect(service.orderableMenuIds).toHaveLength(4);
   });
 
-  it("reports an empty department closed and refuses a different venue's department", async () => {
+  it("reports an empty department closed", async () => {
     const v = await serviceVenue();
     expect(await scoped((tx) => resolveDepartmentService(tx, v.cfg, v.deli, AT))).toEqual({
       keepOpen: null,

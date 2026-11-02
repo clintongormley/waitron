@@ -359,7 +359,7 @@ describe("device zone selection", () => {
     expect(await read(f)).toEqual(accepted.value);
   });
 
-  it("refuses a foreign, deleted or unknown device", async () => {
+  it("refuses a deleted or unknown device", async () => {
     const f = await fixture();
     await expect(read(f, randomUUID())).rejects.toMatchObject({ code: "device.not_found" });
     await run((tx) =>

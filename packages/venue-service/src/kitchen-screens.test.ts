@@ -270,7 +270,7 @@ describe("a profile's kitchen screens", () => {
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({});
   });
 
-  it("refuses an unknown station or zone, one at another location, or one switched off", async () => {
+  it("refuses an unknown station or zone, or one switched off", async () => {
     const venue = await seedVenue();
     const offStation = await seedStation(venue.cfg.locationId, "Old grill");
     await db
@@ -670,7 +670,7 @@ describe("the kitchen screens a device chooses", () => {
     ).resolves.toEqual(invalid("zoneIds", "empty", "pass"));
   });
 
-  it("refuses an unknown station or zone, one at another location, or one switched off", async () => {
+  it("refuses an unknown station or zone, or one switched off", async () => {
     const { venue, till } = await kitchen();
     await db
       .update(kitchenStations)

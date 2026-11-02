@@ -325,7 +325,7 @@ describe("keeping a zone open today", () => {
   });
 });
 
-it("keeps removal available after the department closes and refuses a foreign zone", async () => {
+it("keeps removal available after the department closes", async () => {
   const f = await zoneFixture("01:00");
   await run((tx) =>
     VENUE_SERVICE.keepZoneOpen(tx, f.cfg, f.zoneId, { until: "00:30" }, at("23:00")),
@@ -545,7 +545,7 @@ it("a zone offers nothing and refuses on a whole-venue closed day", async () => 
   expect(await zoneRows(f)).toEqual(before);
 });
 
-it("the zone read answers nothing for an unreadable clock and refuses a foreign zone", async () => {
+it("the zone read answers nothing for an unreadable clock", async () => {
   const f = await zoneFixture();
   await suite.db
     .update(locations)

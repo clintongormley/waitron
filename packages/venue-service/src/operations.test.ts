@@ -297,7 +297,7 @@ describe("new department service periods", () => {
     expect(periods.rows).toEqual([{ name: STARTER_PERIOD_NAMES.Open.es, menu_id: menu.id }]);
   });
 
-  it("places the location's menu in Open on weekdays", async () => {
+  it("places the venue's menu in Open on weekdays", async () => {
     const menu = await scoped((tx) => createCatalogue(tx, { name: `Menu ${randomUUID()}` }));
     const id = brandLocationId(await seedLocation(`New ${randomUUID()}`));
     await db.update(locations).set({ catalogueId: menu.id }).where(eq(locations.id, id));
@@ -316,7 +316,7 @@ describe("new department service periods", () => {
     );
   });
 
-  it("leaves a menu-less location without periods", async () => {
+  it("leaves a menu-less venue without periods", async () => {
     const emptyId = brandLocationId(await seedLocation(`Empty ${randomUUID()}`));
     const empty = await scoped((tx) =>
       createDepartment(tx, { locationId: emptyId }, { name: "Restaurant", orderStart: "counter" }),
@@ -1757,7 +1757,7 @@ describe("departments", () => {
     ]);
   });
 
-  it("refuses department deactivation outside this venue and keeps the foreign department active", async () => {
+  it("refuses department deactivation of an unknown department", async () => {
     const here = { locationId: brandLocationId(await seedLocation("Venue")) };
     await scoped(async (tx) => {
       await createDepartment(tx, here, {
@@ -1765,28 +1765,27 @@ describe("departments", () => {
         orderStart: "table",
       });
     });
-    for (const departmentId of [UNKNOWN_ID]) {
-      await expect(
-        rejection(
-          scoped((tx) =>
-            deleteDepartment(
-              tx,
-              here,
-              {
-                removeSets: async () => {},
-                readImpact: async () => ({ refusals: [], removes: [] }),
-                clear: async () => {},
-              },
-              departmentId,
-              new Date("2026-10-11T12:00:00Z"),
-            ),
+    const departmentId = UNKNOWN_ID;
+    await expect(
+      rejection(
+        scoped((tx) =>
+          deleteDepartment(
+            tx,
+            here,
+            {
+              removeSets: async () => {},
+              readImpact: async () => ({ refusals: [], removes: [] }),
+              clear: async () => {},
+            },
+            departmentId,
+            new Date("2026-10-11T12:00:00Z"),
           ),
         ),
-      ).resolves.toEqual({
-        code: "department.not_found",
-        params: { departmentId },
-      });
-    }
+      ),
+    ).resolves.toEqual({
+      code: "department.not_found",
+      params: { departmentId },
+    });
   });
 
   it("refuses to remove the venue's last active department", async () => {
@@ -3346,7 +3345,7 @@ describe("findOrderServiceZones", () => {
     });
   });
 
-  it("reads nothing for an empty list or another location", async () => {
+  it("reads nothing for an empty list", async () => {
     const venue = await seedSellingVenue();
     await scoped(async (tx) => {
       const order = await openOrder(tx, venue, 1);

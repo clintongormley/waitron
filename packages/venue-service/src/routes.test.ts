@@ -1701,7 +1701,7 @@ describe("venue service management routes", () => {
     }
   });
 
-  it("refuses invalid policy values, unauthorized writes and another venue's department", async () => {
+  it("refuses invalid policy values and unauthorized writes", async () => {
     const fx = await fixture();
     const created = await send(
       fx.app,
@@ -2189,15 +2189,13 @@ describe("venue service management routes", () => {
 
   it("lists only the venue's live departments and zones for a manager", async () => {
     const fx = await fixture();
-    for (const venue of [fx]) {
-      const scope = { locationId: venue.locationId };
-      const department = await withTransaction(db, (tx) =>
-        createDepartment(tx, scope, { name: "Restaurant", orderStart: "table" }),
-      );
-      await withTransaction(db, (tx) =>
-        configureZone(tx, scope, { zoneId: venue.zoneId, departmentId: department.id }),
-      );
-    }
+    const scope = { locationId: fx.locationId };
+    const department = await withTransaction(db, (tx) =>
+      createDepartment(tx, scope, { name: "Restaurant", orderStart: "table" }),
+    );
+    await withTransaction(db, (tx) =>
+      configureZone(tx, scope, { zoneId: fx.zoneId, departmentId: department.id }),
+    );
     await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, fx.zoneId));
     const path = "/management-api/venue-service/departments-and-zones";
 
@@ -2620,7 +2618,7 @@ describe("routing cell route", () => {
     expect(await cellsOf(fx)).toEqual([{ ...allTerrace, target: noPrep }]);
   });
 
-  it("refuses a malformed address, an unknown subject (route.subject_not_found) and a foreign or inactive zone/station (route.station_inactive, the zone code)", async () => {
+  it("refuses a malformed address, an unknown subject (route.subject_not_found) and an inactive zone/station (route.station_inactive, the zone code)", async () => {
     const fx = await fixture();
     await servedZone(fx);
     const category = { kind: "category", categoryId: fx.categoryId };

@@ -276,7 +276,7 @@ describe("the Opening hours year read", () => {
     expect(dayOf(await read(v, 2028), "2028-02-29")!.seasonId).toBe(v.seasons.Winter);
   });
 
-  it("sends the same statements for one department as for three, not one per day", async () => {
+  it("sends the same statements for one department as for several, not one per day", async () => {
     const statementsFor = async (v: Venue) =>
       run(async (tx) => {
         const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
@@ -753,7 +753,7 @@ describe("the Opening hours month read", () => {
     expect(tables.filter((table) => table === "locations")).toHaveLength(1);
   });
 
-  it("sends the same statements for one department as for three, not one per day or department", async () => {
+  it("sends the same statements for one department as for several, not one per day or department", async () => {
     const statementsFor = async (v: { cfg: VenueScope }) =>
       run(async (tx) => {
         const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })

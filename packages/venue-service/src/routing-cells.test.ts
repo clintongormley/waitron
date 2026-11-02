@@ -428,7 +428,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     expect(await readStoredCells(f)).toEqual([]);
   });
 
-  it("refuses an inactive or foreign-location station", async () => {
+  it("refuses an inactive or unknown station", async () => {
     const f = await setup();
     const address: CellAddress = { row: { kind: "category", categoryId: f.drinks }, zoneId: null };
     for (const stationId of [f.switchedOff, randomUUID()])
@@ -438,7 +438,7 @@ describe("setRoutingCell / clearRoutingCell", () => {
     expect(await readStoredCells(f)).toEqual([]);
   });
 
-  it("refuses an inactive or foreign zone", async () => {
+  it("refuses an inactive or unknown zone", async () => {
     const f = await setup();
     await scoped(async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${f.inside}`),
