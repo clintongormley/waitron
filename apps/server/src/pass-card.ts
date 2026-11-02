@@ -25,6 +25,7 @@ export interface PassRow {
   group: {
     id: string;
     partyId: string;
+    partyRevision: number;
     state: "held" | "fired";
     requestKind: OrderGroupRequestKind;
     position: number;
@@ -242,7 +243,6 @@ function placeCard(key: string, cardRows: PassRow[], scope: PassScope): Placed |
     void openedAt;
     orders.set(row.orderId, { orderId: row.orderId, ...order });
   }
-  const partyRow = cardRows.find((row) => row.partyId !== null && row.partyRevision !== null);
   const release = passCardRelease(target, cardRows, scope);
   const card: PassCard = {
     key,
@@ -251,9 +251,7 @@ function placeCard(key: string, cardRows: PassRow[], scope: PassScope): Placed |
     requestedAt: initiated[0] ?? null,
     readyAt: column === "ready" ? (readyTimes.at(-1) ?? null) : null,
     allReady,
-    ...(group !== null && partyRow !== undefined
-      ? { party: { id: partyRow.partyId!, revision: partyRow.partyRevision! } }
-      : {}),
+    ...(group !== null ? { party: { id: group.partyId, revision: group.partyRevision } } : {}),
     orders: [...orders.values()],
     ...(group === null
       ? {}

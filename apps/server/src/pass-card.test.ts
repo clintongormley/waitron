@@ -30,6 +30,7 @@ type Group = NonNullable<PassRow["group"]>;
 const groupG: Group = {
   id: "group-g",
   partyId: party,
+  partyRevision: 7,
   state: "fired",
   requestKind: "added",
   position: 1,

@@ -8596,6 +8596,9 @@ export async function readPassRows(
         select min(earlier.created_at) from order_groups earlier
         where earlier.party_id = ${orderGroups.partyId}
       )`,
+      groupPartyRevision: sql<number | null>`(
+        select own.revision from parties own where own.id = ${orderGroups.partyId}
+      )`,
       // Not exposed; read only to name the order's table (`orderTableLabels`).
       deliveryTableId: workingOrders.deliveryTableId,
       deliveryTableLabel: workingOrders.deliveryTableLabel,
@@ -8659,6 +8662,8 @@ export async function readPassRows(
       forgottenAfterMinutes: row.forgottenAfterMinutes,
     };
     const group = queueGroup(row, numberLabels);
+    const ageFrom =
+      row.firedAt === null && row.requestedAt !== null ? row.requestedAt : row.queuedAt;
     const item: ExpoItem = {
       id: row.itemId,
       allergy: allergies.get(row.itemId)?.originalBlock ?? null,
@@ -8686,8 +8691,9 @@ export async function readPassRows(
       queuedAt: row.queuedAt,
       ...optional("group", group),
       thresholds,
-      // Rounded to the whole minute first, as in `listStationQueue`.
-      band: classifyBand(nowMs - minutesSince(row.queuedAt, nowMs) * 60_000, nowMs, thresholds),
+      // Rounded to the whole minute first, as in `listStationQueue`. A Requested dish's
+      // `queued_at` is still its insert, so it is aged from the request.
+      band: classifyBand(nowMs - minutesSince(ageFrom, nowMs) * 60_000, nowMs, thresholds),
     };
     return {
       item,
@@ -8706,6 +8712,7 @@ export async function readPassRows(
           : {
               id: group.id,
               partyId: row.groupPartyId!,
+              partyRevision: row.groupPartyRevision!,
               state: group.state as "held" | "fired",
               requestKind: row.groupRequestKind!,
               position: group.position,
