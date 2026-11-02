@@ -5,11 +5,12 @@ import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
   floorPlanSets,
-  locations,
   withTransaction,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId, type LocationId } from "@waitron/shared";
 import { linkFloorPlanSet, readFloorPlanSets } from "./floor-plan-set-store.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -23,11 +24,13 @@ const suite = useVenueDb({
 });
 
 async function venue(tx: Transaction) {
-  const [place] = await tx
-    .insert(locations)
-    .values({ name: randomUUID(), invoiceLocales: ["en-GB"], operationDescription: "Hospitality" })
-    .returning();
-  const cfg = { locationId: locationId(place!.id) };
+  await seedVenue(tx, {
+    name: randomUUID(),
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Hospitality",
+  });
+  const placeId = await venueLocationId(tx);
+  const cfg = { locationId: locationId(placeId) };
   const restaurant = await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" });
   const bar = await createDepartment(tx, cfg, { name: "Bar", orderStart: "table" });
   return { cfg, restaurant: restaurant.id, bar: bar.id };

@@ -14,14 +14,13 @@ import {
 import {
   CORE_MIGRATIONS,
   kitchenStations,
-  locations,
   products,
+  venueLocationId,
   withTransaction,
-  workingOrders,
 } from "@waitron/db";
 import { randomUUID } from "node:crypto";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
@@ -32,12 +31,12 @@ const suite = useVenueDb({
 });
 
 async function venue() {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Main", invoiceLocales: ["en"], operationDescription: "Restaurant" })
-    .returning({ id: locations.id });
-  return { locationId: location!.id as LocationId };
+  await seedVenue(suite.db, {
+    name: "Main",
+    invoiceLocales: ["en"],
+    operationDescription: "Restaurant",
+  });
+  return { locationId: (await venueLocationId(suite.db)) as LocationId };
 }
 
 it("deleting a category removes its own and its subtree's category cells and keeps product cells", async () => {
@@ -123,7 +122,7 @@ it("deleting a category removes its own and its subtree's category cells and kee
 });
 
 it("an open order keeps its copied category label after the category is deleted", async () => {
-  const { locationId } = await venue();
+  await venue();
   await withTransaction(suite.db, async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Menu" });
     const category = await createCategory(tx, { name: "Bakery" });
@@ -146,20 +145,16 @@ it("an open order keeps its copied category label after the category is deleted"
       unitPrice: "2.00",
       vatClass: "general",
     });
-    const [order] = await tx
-      .insert(workingOrders)
-      .values({
-        source: "dashboard",
-        deviceId: null,
-        locationId,
-        orderNumber: 1,
-        label: "Historical",
-      })
-      .returning({ id: workingOrders.id });
+    const order = await seedWorkingOrder(tx, {
+      source: "dashboard",
+      deviceId: null,
+      orderNumber: 1,
+      label: "Historical",
+    });
     // Raw SQL so the stored counts are written literally; `id` is named because only the insert
     // builder generates one.
     await tx.execute(sql`
-      insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, line_total, category) values (${randomUUID()}, ${order!.id}, 1, ${product.id}, 'Bread', '{"en":"Bread"}', 1000,
+      insert into working_order_lines (id, working_order_id, line_no, product_id, name, descriptions, quantity, unit_price_gross, vat_class, line_total, category) values (${randomUUID()}, ${order.id}, 1, ${product.id}, 'Bread', '{"en":"Bread"}', 1000,
          200, 'reduced', 200, 'Bakery')
     `);
 
@@ -174,7 +169,7 @@ it("an open order keeps its copied category label after the category is deleted"
     }>(sql`
       select category, cast(quantity as text) as quantity, vat_class,
              cast(line_total as text) as line_total
-        from working_order_lines where working_order_id = ${order!.id}
+        from working_order_lines where working_order_id = ${order.id}
     `);
     expect(snapshot.rows).toEqual([
       { category: "Bakery", quantity: "1000", vat_class: "reduced", line_total: "200" },

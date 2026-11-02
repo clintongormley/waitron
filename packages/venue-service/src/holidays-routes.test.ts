@@ -6,13 +6,14 @@ import { getCountryPack } from "@waitron/country-packs";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  locations,
   tenants,
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   hashSessionToken,
@@ -84,17 +85,15 @@ interface Fixture {
 
 async function fixture(address: Address = {}): Promise<Fixture> {
   const made = await withTransaction(db, async (tx) => {
-    const [location] = await tx
-      .insert(locations)
-      .values({
-        name: `Venue ${randomUUID()}`,
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-        province: address.province === undefined ? "Sevilla" : address.province,
-        city: address.city === undefined ? "Sevilla" : address.city,
-      })
-      .returning();
+    await seedVenue(tx, {
+      name: `Venue ${randomUUID()}`,
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+      timeZone: "Europe/Madrid",
+      province: address.province === undefined ? "Sevilla" : address.province,
+      city: address.city === undefined ? "Sevilla" : address.city,
+    });
+    const venueId = await venueLocationId(tx);
     const person = async (role: "manager" | "supervisor" | "staff") => {
       const [row] = await tx
         .insert(persons)
@@ -103,7 +102,7 @@ async function fixture(address: Address = {}): Promise<Fixture> {
       return (await startManagementSession(tx, { personId: row!.id })).token;
     };
     return {
-      cfg: { locationId: locationId(location!.id) },
+      cfg: { locationId: locationId(venueId) },
       manager: await person("manager"),
       supervisor: await person("supervisor"),
       staff: await person("staff"),

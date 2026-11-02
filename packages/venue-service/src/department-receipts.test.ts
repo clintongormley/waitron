@@ -3,17 +3,16 @@ import { describe, expect, it, vi } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
   CORE_MIGRATIONS,
-  locations,
   invoiceSeries,
   sales,
-  workingOrders,
   floorZones,
+  venueLocationId,
   withTransaction,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { locationId } from "@waitron/shared";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { eq, sql } from "drizzle-orm";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import {
@@ -33,11 +32,15 @@ const pair = {
   "80mm": { widthDots: 8, heightDots: 1, data: "QA==" },
 };
 async function fixture(active = true) {
-  const [place] = await suite.db
-    .insert(locations)
-    .values({ name: randomUUID(), invoiceLocales: ["es-ES"], operationDescription: "Hospitality" })
-    .returning();
-  const cfg = { locationId: locationId(place!.id), receiptLanguages: ["es-ES", "ca-ES"] };
+  await seedVenue(suite.db, {
+    name: randomUUID(),
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Hospitality",
+  });
+  const cfg = {
+    locationId: locationId(await venueLocationId(suite.db)),
+    receiptLanguages: ["es-ES", "ca-ES"],
+  };
   const [dept] = await suite.db
     .insert(departments)
     .values({
@@ -431,7 +434,7 @@ describe("department receipt storage", () => {
 describe("receipt department lookups", () => {
   it("never substitutes the designated default for a missing or null sale header", async () => {
     const f = await fixture(false);
-    const nodeId = await seedNode(suite.db, f.cfg.locationId);
+    const nodeId = await seedNode(suite.db);
     const [series] = await suite.db.insert(invoiceSeries).values({ nodeId, code: "F" }).returning();
     const [sale] = await suite.db
       .insert(sales)
@@ -478,7 +481,7 @@ describe("receipt department lookups", () => {
   });
   it("reads the recorded disabled sale department", async () => {
     const f = await fixture(false);
-    const nodeId = await seedNode(suite.db, f.cfg.locationId);
+    const nodeId = await seedNode(suite.db);
     const [series] = await suite.db.insert(invoiceSeries).values({ nodeId, code: "F" }).returning();
     const [sale] = await suite.db
       .insert(sales)
@@ -509,11 +512,12 @@ describe("receipt department lookups", () => {
   });
   it("reads authoritative order context without borrowing a default", async () => {
     const f = await fixture();
-    const nodeId = await seedNode(suite.db, f.cfg.locationId);
-    const [order] = await suite.db
-      .insert(workingOrders)
-      .values({ nodeId, locationId: f.cfg.locationId, source: "readiness_test", orderNumber: 1 })
-      .returning();
+    const nodeId = await seedNode(suite.db);
+    const order = await seedWorkingOrder(suite.db, {
+      nodeId,
+      source: "readiness_test",
+      orderNumber: 1,
+    });
     expect(
       await scoped((tx) => receipts.receiptDepartmentForOrder(tx, f.cfg, order!.id)),
     ).toBeNull();

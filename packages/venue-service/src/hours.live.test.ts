@@ -11,11 +11,12 @@ import {
   subscribeToChanges,
   tenants,
   withTransaction,
-  workingOrders,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { saveHolidayArea } from "./holidays.js";
@@ -56,19 +57,17 @@ const reaches = (types: Set<string>, query: readonly string[]) =>
 it("refreshes Calendar and routing from special days, clock and daily station status", async () => {
   const at = new Date("2026-10-06T10:00:00Z");
   const { cfg, departmentId, bar, kitchen } = await withTransaction(db, async (tx) => {
-    const [location] = await tx
-      .insert(locations)
-      .values({
-        name: `Venue ${randomUUID()}`,
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-      })
-      .returning();
+    await seedVenue(tx, {
+      name: `Venue ${randomUUID()}`,
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+      timeZone: "Europe/Madrid",
+    });
+    const venueId = await venueLocationId(tx);
     const [department] = await tx
       .insert(departments)
       .values({
-        locationId: location!.id,
+        locationId: venueId,
         name: "Deli",
         tradingName: "Deli",
         isDefault: true,
@@ -77,13 +76,13 @@ it("refreshes Calendar and routing from special days, clock and daily station st
     const [barRow, kitchenRow] = await tx
       .insert(kitchenStations)
       .values([
-        { locationId: location!.id, name: "Bar" },
-        { locationId: location!.id, name: "Kitchen", isDefault: true },
-        { locationId: location!.id, name: "Deli pass" },
+        { locationId: venueId, name: "Bar" },
+        { locationId: venueId, name: "Kitchen", isDefault: true },
+        { locationId: venueId, name: "Deli pass" },
       ])
       .returning();
     return {
-      cfg: { locationId: locationId(location!.id) } as VenueScope,
+      cfg: { locationId: locationId(venueId) } as VenueScope,
       departmentId: department!.id,
       bar: barRow!.id,
       kitchen: kitchenRow!.id,
@@ -130,11 +129,8 @@ it("refreshes Calendar and routing from special days, clock and daily station st
   const today = await announced((tx) => setStationToday(tx, cfg, bar, "closed", at));
   expect(reaches(today, calendar)).toEqual([]);
   expect(reaches(today, routing)).toEqual(["station_day_states"]);
-  const [order] = await withTransaction(db, (tx) =>
-    tx
-      .insert(workingOrders)
-      .values({ source: "dashboard", locationId: cfg.locationId, orderNumber: 1 })
-      .returning({ id: workingOrders.id }),
+  const order = await withTransaction(db, (tx) =>
+    seedWorkingOrder(tx, { source: "dashboard", orderNumber: 1 }),
   );
   const unrelated = await announced((tx) =>
     tx.insert(kitchenNotices).values({
@@ -163,18 +159,16 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Invented SL" })
       .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
-    const [location] = await tx
-      .insert(locations)
-      .values({
-        name: `Venue ${randomUUID()}`,
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-        province: "Lleida",
-        city: "Vielha",
-      })
-      .returning();
-    return { locationId: locationId(location!.id) } as VenueScope;
+    await seedVenue(tx, {
+      name: `Venue ${randomUUID()}`,
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+      timeZone: "Europe/Madrid",
+      province: "Lleida",
+      city: "Vielha",
+    });
+    const venueId = await venueLocationId(tx);
+    return { locationId: locationId(venueId) } as VenueScope;
   });
   const calendar = QUERY_DEPENDENCIES["named-days"];
   const holidays = QUERY_DEPENDENCIES.holidays;
@@ -209,16 +203,14 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
 it("daily station status refreshes routing and special days refresh Opening hours", async () => {
   const at = new Date("2026-10-06T10:00:00Z");
   const { cfg, bar, dateId } = await withTransaction(db, async (tx) => {
-    const [location] = await tx
-      .insert(locations)
-      .values({
-        name: `Retained ${randomUUID()}`,
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-      })
-      .returning();
-    const cfg = { locationId: locationId(location!.id) };
+    await seedVenue(tx, {
+      name: `Retained ${randomUUID()}`,
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+      timeZone: "Europe/Madrid",
+    });
+    const venueId = await venueLocationId(tx);
+    const cfg = { locationId: locationId(venueId) };
     const [bar] = await tx
       .insert(kitchenStations)
       .values([

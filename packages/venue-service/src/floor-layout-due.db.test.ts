@@ -5,11 +5,12 @@ import {
   CORE_MIGRATIONS,
   floorPlanSets,
   floorZones,
-  locations,
   withTransaction,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import type { ZoneFloorLayout } from "@waitron/module";
 import { locationId, type LocationId } from "@waitron/shared";
 import { linkFloorPlanSet } from "./floor-plan-set-store.js";
@@ -57,17 +58,15 @@ async function newSet(
 
 async function fixture() {
   return run(async (tx) => {
-    const [venue] = await tx
-      .insert(locations)
-      .values({
-        name: "Venue",
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-        dayCutover: "06:00:00",
-      })
-      .returning();
-    const cfg = { locationId: locationId(venue!.id) };
+    await seedVenue(tx, {
+      name: "Venue",
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+      timeZone: "Europe/Madrid",
+      dayCutover: "06:00:00",
+    });
+    const venueId = await venueLocationId(tx);
+    const cfg = { locationId: locationId(venueId) };
     const restaurant = (
       await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
     ).id;

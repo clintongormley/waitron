@@ -12,11 +12,13 @@ import {
   CORE_MIGRATIONS,
   floorZones,
   locations,
+  venueLocationId,
   withTransaction,
   type Database,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, type BusinessDayClock } from "@waitron/shared";
 import {
   readDayPlan,
@@ -67,17 +69,14 @@ const SATURDAY = 6;
 const SUNDAY = 0;
 
 async function venue(options: { oneSeason?: boolean } = {}) {
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: `House ${randomUUID()}`,
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Hospitality",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00",
-    })
-    .returning({ id: locations.id });
-  const cfg: VenueScope = { locationId: brandLocationId(location!.id) };
+  await seedVenue(db, {
+    name: `House ${randomUUID()}`,
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Hospitality",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00",
+  });
+  const cfg: VenueScope = { locationId: brandLocationId(await venueLocationId(db)) };
   const zones = await db
     .insert(floorZones)
     .values([
@@ -204,16 +203,13 @@ describe("resolveDepartmentDays", () => {
   });
 
   it("answers no hours and no season when the venue has no seasons", async () => {
-    const [location] = await db
-      .insert(locations)
-      .values({
-        name: `House ${randomUUID()}`,
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-      })
-      .returning({ id: locations.id });
-    const cfg: VenueScope = { locationId: brandLocationId(location!.id) };
+    await seedVenue(db, {
+      name: `House ${randomUUID()}`,
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Hospitality",
+      timeZone: "Europe/Madrid",
+    });
+    const cfg: VenueScope = { locationId: brandLocationId(await venueLocationId(db)) };
     const departmentId = await scoped(
       async (tx) => (await createDepartment(tx, cfg, { name: "Bar", orderStart: "table" })).id,
     );

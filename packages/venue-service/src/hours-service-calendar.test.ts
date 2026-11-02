@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, catalogues, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, catalogues, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { readCalendarDays } from "./hours.js";
 import { readSpecialDaysModel } from "./named-days.js";
@@ -20,17 +21,15 @@ const at = new Date("2026-10-06T10:00:00Z");
 
 async function fixture() {
   return withTransaction(suite.db, async (tx) => {
-    const [venue] = await tx
-      .insert(locations)
-      .values({
-        name: randomUUID(),
-        invoiceLocales: ["en-GB"],
-        operationDescription: "Hospitality",
-        timeZone: "Europe/Madrid",
-        dayCutover: "04:30:00",
-      })
-      .returning();
-    const cfg = { locationId: locationId(venue!.id) };
+    await seedVenue(tx, {
+      name: randomUUID(),
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+      timeZone: "Europe/Madrid",
+      dayCutover: "04:30:00",
+    });
+    const venueId = await venueLocationId(tx);
+    const cfg = { locationId: locationId(venueId) };
     const [department, inactive] = await tx
       .insert(departments)
       .values([

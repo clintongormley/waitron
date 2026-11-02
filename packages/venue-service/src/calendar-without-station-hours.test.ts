@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, venueLocationId, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId } from "@waitron/shared";
 import { readCalendarDays } from "./hours.js";
 import { readOpeningHoursModel } from "./menu-timetable.js";
@@ -22,17 +23,14 @@ it.each(["calendar", "special days", "opening hours"] as const)(
     const rollback = new Error("roll back the schema probe");
     await expect(
       withTransaction(suite.db, async (tx) => {
-        const [venue] = await tx
-          .insert(locations)
-          .values({
-            name: randomUUID(),
-            invoiceLocales: ["en-GB"],
-            operationDescription: "Hospitality",
-            timeZone: "Europe/Madrid",
-            dayCutover: "06:00:00",
-          })
-          .returning();
-        const cfg = { locationId: locationId(venue!.id) };
+        await seedVenue(tx, {
+          name: randomUUID(),
+          invoiceLocales: ["en-GB"],
+          operationDescription: "Hospitality",
+          timeZone: "Europe/Madrid",
+          dayCutover: "06:00:00",
+        });
+        const cfg = { locationId: locationId(await venueLocationId(tx)) };
         const [special] = await tx
           .insert(specialDays)
           .values({ locationId: cfg.locationId, name: "Annual closure", repeatsYearly: true })
