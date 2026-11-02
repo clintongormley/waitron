@@ -23,7 +23,8 @@ import { hourFirstFiscalFixture } from "./hour-first-fiscal.js";
 import { keepHourRecoveryDocument } from "./hour-recovery-delivery.js";
 import { MODULE, PASSWORD } from "./first-fiscal.js";
 import { createFirstSetupBackupRecovery } from "../src/first-setup-backup-recovery.js";
-import { encryptArtifact, decryptArtifact } from "../src/artifact-cipher.js";
+import { decryptArtifact } from "../src/artifact-cipher.js";
+import { sealFixtureArtifact } from "./fixture-salt.js";
 import { packArchive, unpackArchive } from "../src/backup-archive.js";
 import { establishNodeIdentity } from "../src/node-identity.js";
 import { seedTermZeroMembership } from "../src/membership-seed.js";
@@ -283,7 +284,7 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
           JSON.stringify({ reference: "prepared-hours", complete: true, records: [] }),
         ),
       });
-      const artifact = encryptArtifact(packArchive(entries), f.restore.recoveryKey);
+      const artifact = sealFixtureArtifact(packArchive(entries), f.restore.recoveryKey);
       service = createFirstSetupBackupRecovery({
         ...f.roots,
         environment: "preproduction",

@@ -19,6 +19,7 @@ import * as sources from "./first-setup-backup-source.js";
 import { createFirstSetupBackupRecovery } from "./first-setup-backup-recovery.js";
 import { request as ownerRequest } from "../test/first-fiscal.js";
 import { encryptArtifact, decryptArtifact } from "./artifact-cipher.js";
+import { sealFixtureArtifact } from "../test/fixture-salt.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 
@@ -119,7 +120,7 @@ async function selectedRepair() {
     ),
   });
   f.request.source.artifact = Uint8Array.from(
-    encryptArtifact(packArchive(entries), f.restore.recoveryKey),
+    sealFixtureArtifact(packArchive(entries), f.restore.recoveryKey),
   );
   const service = recovery(f.options);
   const session = await service.open(f.request, { onBox: false });

@@ -35,7 +35,8 @@ import {
 import "../src/operation-authentication.js";
 import { buildManifest } from "../src/backup-manifest.js";
 import { packArchive, unpackArchive } from "../src/backup-archive.js";
-import { decryptArtifact, encryptArtifact } from "../src/artifact-cipher.js";
+import { decryptArtifact } from "../src/artifact-cipher.js";
+import { sealFixtureArtifact } from "./fixture-salt.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "../src/recovery-backup-preview.js";
 import { restoreFromStream } from "../src/restore-stream.js";
 import { recoveryStreamSourceId } from "../src/recovery-source.js";
@@ -316,7 +317,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
   });
   const database = join(root, "archive.db");
   await suite.db.archiveTo(database);
-  const artifact = encryptArtifact(
+  const artifact = sealFixtureArtifact(
     packArchive([
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       { name: "db.dump", bytes: await readFile(database) },

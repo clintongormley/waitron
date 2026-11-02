@@ -12,7 +12,8 @@ import { createFirstSetupBackupRecovery } from "../src/first-setup-backup-recove
 import * as sources from "../src/first-setup-backup-source.js";
 import * as stateSecrets from "../src/state-secrets.js";
 import { request as ownerRequest } from "./first-fiscal.js";
-import { encryptArtifact, decryptArtifact } from "../src/artifact-cipher.js";
+import { decryptArtifact } from "../src/artifact-cipher.js";
+import { sealFixtureArtifact } from "./fixture-salt.js";
 import { packArchive, unpackArchive, type ArchiveEntry } from "../src/backup-archive.js";
 import { recoverySelectPastWaits } from "../src/testing/hour-test-clock.js";
 
@@ -111,7 +112,7 @@ export async function selectedRepair(
     ),
   });
   f.request.source.artifact = Uint8Array.from(
-    encryptArtifact(packArchive(entries), f.restore.recoveryKey),
+    sealFixtureArtifact(packArchive(entries), f.restore.recoveryKey),
   );
   const service = recovery(f.options);
   const session = await service.open(f.request, { onBox: false });

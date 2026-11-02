@@ -4,6 +4,7 @@ import {
   decryptArtifact,
   encryptArtifact,
   encryptArtifactAsync,
+  encryptArtifactWithSalt,
   KDF_BY_VERSION,
   VERSION,
 } from "./artifact-cipher.js";
@@ -97,5 +98,44 @@ describe("artifact cipher", () => {
     expect(off.length).toBe(sync.length);
     // Fresh salt and IV each time, so the two frames differ past the magic and version.
     expect(off.equals(sync)).toBe(false);
+  });
+
+  const saltOf = (framed: Buffer) => framed.subarray(5, 21);
+
+  it("draws a fresh salt for every seal, synchronous or off the main thread", async () => {
+    const plaintext = randomBytes(64);
+    const first = encryptArtifact(plaintext, "pw-000000000000");
+    const second = encryptArtifact(plaintext, "pw-000000000000");
+    const third = await encryptArtifactAsync(plaintext, "pw-000000000000");
+    const fourth = await encryptArtifactAsync(plaintext, "pw-000000000000");
+    expect(saltOf(first).equals(saltOf(second))).toBe(false);
+    expect(saltOf(third).equals(saltOf(fourth))).toBe(false);
+  });
+
+  it("seals under a given salt into a frame the ordinary reader opens", () => {
+    const plaintext = randomBytes(4096);
+    const salt = randomBytes(16);
+    const framed = encryptArtifactWithSalt(plaintext, "recovery-key-123", salt);
+    expect(saltOf(framed).equals(salt)).toBe(true);
+    expect(decryptArtifact(framed, "recovery-key-123").equals(plaintext)).toBe(true);
+    expect(() => decryptArtifact(framed, "wrong-passphrase")).toThrowError(
+      expect.objectContaining({ code: "recovery.passphrase_invalid" }),
+    );
+  });
+
+  it("still draws a fresh IV under a repeated salt, so two seals differ byte for byte", () => {
+    const plaintext = randomBytes(64);
+    const salt = randomBytes(16);
+    const first = encryptArtifactWithSalt(plaintext, "pw-000000000000", salt);
+    const second = encryptArtifactWithSalt(plaintext, "pw-000000000000", salt);
+    expect(saltOf(first).equals(saltOf(second))).toBe(true);
+    expect(first.subarray(21, 33).equals(second.subarray(21, 33))).toBe(false);
+    expect(first.equals(second)).toBe(false);
+  });
+
+  it("refuses a salt that is not 16 bytes, which the reader could not find again", () => {
+    expect(() =>
+      encryptArtifactWithSalt(randomBytes(8), "pw-000000000000", randomBytes(15)),
+    ).toThrow(RangeError);
   });
 });

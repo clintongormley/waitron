@@ -11,7 +11,8 @@ import { createFirstSetupBackupRecovery } from "../src/first-setup-backup-recove
 import * as sources from "../src/first-setup-backup-source.js";
 
 import { request as ownerRequest } from "./first-fiscal.js";
-import { encryptArtifact, decryptArtifact } from "../src/artifact-cipher.js";
+import { decryptArtifact } from "../src/artifact-cipher.js";
+import { sealFixtureArtifact } from "./fixture-salt.js";
 import { packArchive, unpackArchive } from "../src/backup-archive.js";
 
 import { recoverySelectPastWaits } from "../src/testing/hour-test-clock.js";
@@ -117,7 +118,7 @@ export async function repairFixture() {
     ),
   });
   f.request.source.artifact = Uint8Array.from(
-    encryptArtifact(packArchive(entries), f.restore.recoveryKey),
+    sealFixtureArtifact(packArchive(entries), f.restore.recoveryKey),
   );
   return f;
 }

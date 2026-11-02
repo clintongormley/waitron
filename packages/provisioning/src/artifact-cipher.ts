@@ -28,6 +28,17 @@ export function encryptArtifact(plaintext: Uint8Array, passphrase: string): Buff
   return frameUnderKey(plaintext, salt, deriveKey(passphrase, salt, KDF_BY_VERSION[VERSION]));
 }
 
+/** `encryptArtifact` under a salt the caller chose, with a fresh IV; product writers keep
+ * `encryptArtifact`'s fresh salt. A repeated salt lets a cached key derivation be reused. */
+export function encryptArtifactWithSalt(
+  plaintext: Uint8Array,
+  passphrase: string,
+  salt: Buffer,
+): Buffer {
+  if (salt.length !== SALT_LEN) throw new RangeError(`salt must be ${SALT_LEN} bytes`);
+  return frameUnderKey(plaintext, salt, deriveKey(passphrase, salt, KDF_BY_VERSION[VERSION]));
+}
+
 /** `encryptArtifact` with the key derived on the thread pool; the same frame, opened by
  * `decryptArtifact`. */
 export async function encryptArtifactAsync(
