@@ -76,7 +76,7 @@ async function stationDeleteRules(tx: Transaction, cfg: TradingContext, id: stri
         or(isNull(ticketItems.firedAt), inArray(ticketItems.state, ["queued", "preparing"])),
       ),
     );
-  const orderLabels = await orderTableLabels(tx, cfg.locationId, [
+  const orderLabels = await orderTableLabels(tx, [
     ...new Map(preparation.map((row) => [row.id, row])).values(),
   ]);
   const unsent = await tx

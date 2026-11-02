@@ -1,24 +1,17 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
-import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TrustedClock } from "@waitron/fiscal";
-import { floorZones, diningTables, floorTodayTables, locations } from "@waitron/db";
+import { diningTables } from "@waitron/db";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
-import {
-  expectRevision,
-  mergeOf,
-  plannedZone,
-  todayRow,
-  withRevision,
-} from "./testing/floor-today-venue.js";
+import { expectRevision, mergeOf, plannedZone, withRevision } from "./testing/floor-today-venue.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import "./errors.js";
 
@@ -190,53 +183,6 @@ describe("merging free tables", () => {
         body: { error: { code: "management.request_invalid", params: { field: "seats" } } },
       });
     }
-    expect(await mergeOf(v, a)).toBeNull();
-  });
-
-  it("refuses another venue's table as not found, either way, and changes nothing", async () => {
-    const { a } = await twoTables();
-    const elsewhere = randomUUID();
-    const other = randomUUID();
-    await inTx(v, async (tx) => {
-      await tx.insert(locations).values({
-        id: elsewhere,
-        name: "Other",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurant",
-      });
-      const [zone] = await tx
-        .insert(floorZones)
-        .values({ locationId: elsewhere, name: "Other tables" })
-        .returning({ id: floorZones.id });
-      await tx.insert(diningTables).values({
-        id: other,
-        locationId: elsewhere,
-        zoneId: zone!.id,
-        label: `Elsewhere ${other.slice(0, 6)}`,
-      });
-      await tx.insert(floorTodayTables).values({
-        tableId: other,
-        seats: 4,
-        x: 40,
-        y: 0,
-        width: 8,
-        height: 8,
-        shape: "rect",
-        rotation: 0,
-      });
-    });
-    const [beforeA, beforeOther] = [await todayRow(v, a), await todayRow(v, other)];
-
-    expect(await refusal(today(a, "merge", { targetId: other, side: "right", seats: 8 }))).toEqual({
-      status: 404,
-      body: { error: { code: "table.not_found", params: { tableId: other } } },
-    });
-    expect(await refusal(today(other, "merge", { targetId: a, side: "right", seats: 8 }))).toEqual({
-      status: 404,
-      body: { error: { code: "table.not_found", params: { tableId: other } } },
-    });
-    expect(await todayRow(v, a)).toEqual(beforeA);
-    expect(await todayRow(v, other)).toEqual(beforeOther);
     expect(await mergeOf(v, a)).toBeNull();
   });
 });

@@ -144,7 +144,7 @@ export function moduleCoreServices(
   return {
     seatTable: (tx, req) => seatTable(tx, dashboard, req),
     floorDeletion: floorDeletionFor(cfg, removals),
-    floorPlanSets: floorPlanSetsFor(cfg),
+    floorPlanSets: floorPlanSetsFor(),
   };
 }
 

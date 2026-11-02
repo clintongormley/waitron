@@ -26,11 +26,11 @@ export interface DiningTable {
 
 export async function listTables(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   now: Date,
   options: { includeDisabled?: boolean } = {},
 ): Promise<DiningTable[]> {
-  const businessDay = options.includeDisabled ? null : await todayBusinessDay(tx, cfg, now);
+  const businessDay = options.includeDisabled ? null : await todayBusinessDay(tx, now);
   return tx
     .select({
       id: diningTables.id,
@@ -43,7 +43,6 @@ export async function listTables(
     .innerJoin(floorZones, eq(floorZones.id, diningTables.zoneId))
     .where(
       and(
-        eq(diningTables.locationId, cfg.locationId),
         eq(floorZones.active, true),
         options.includeDisabled
           ? undefined
@@ -62,7 +61,7 @@ export interface FloorZone {
 
 export async function listZones(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   _options: { includeInactive?: boolean } = {},
 ): Promise<FloorZone[]> {
   void _options;
@@ -74,26 +73,20 @@ export async function listZones(
       active: floorZones.active,
     })
     .from(floorZones)
-    .where(and(eq(floorZones.locationId, cfg.locationId), eq(floorZones.active, true)))
+    .where(eq(floorZones.active, true))
     .orderBy(floorZones.displayOrder);
 }
 
 export async function updateZone(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   id: string,
   patch: { name?: string; displayOrder?: number },
 ): Promise<void> {
   const [target] = await tx
     .select({ id: floorZones.id })
     .from(floorZones)
-    .where(
-      and(
-        eq(floorZones.id, id),
-        eq(floorZones.locationId, cfg.locationId),
-        eq(floorZones.active, true),
-      ),
-    );
+    .where(and(eq(floorZones.id, id), eq(floorZones.active, true)));
   if (target === undefined) throw new AppError("zone.not_found", { zoneId: id });
   const set: { name?: string; displayOrder?: number } = {};
   if (patch.name !== undefined) set.name = patch.name;

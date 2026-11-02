@@ -9,10 +9,10 @@ import {
   floorTodayZones,
   floorZones,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { FloorPlanSets } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 /**
@@ -57,43 +57,28 @@ export function layoutCounts(
   return { onPlan, spare };
 }
 
-async function setsOfLocation(
-  tx: Transaction,
-  cfg: TradingContext,
-  setIds: readonly string[],
-): Promise<string[]> {
+async function existingSets(tx: Transaction, setIds: readonly string[]): Promise<string[]> {
   if (setIds.length === 0) return [];
   const rows = await tx
     .select({ id: floorPlanSets.id })
     .from(floorPlanSets)
-    .where(
-      and(eq(floorPlanSets.locationId, cfg.locationId), inArray(floorPlanSets.id, [...setIds])),
-    );
+    .where(inArray(floorPlanSets.id, [...setIds]));
   const held = new Set(rows.map((row) => row.id));
   return setIds.filter((id) => held.has(id));
 }
 
-async function zonesOfLocation(
-  tx: Transaction,
-  cfg: TradingContext,
-  zoneIds: readonly string[],
-): Promise<string[]> {
+async function existingZones(tx: Transaction, zoneIds: readonly string[]): Promise<string[]> {
   if (zoneIds.length === 0) return [];
   const rows = await tx
     .select({ id: floorZones.id })
     .from(floorZones)
-    .where(and(eq(floorZones.locationId, cfg.locationId), inArray(floorZones.id, [...zoneIds])));
+    .where(inArray(floorZones.id, [...zoneIds]));
   const held = new Set(rows.map((row) => row.id));
   return zoneIds.filter((id) => held.has(id));
 }
 
-async function copyLayouts(
-  tx: Transaction,
-  cfg: TradingContext,
-  fromSetId: string,
-  toSetId: string,
-): Promise<void> {
-  const held = await setsOfLocation(tx, cfg, [fromSetId, toSetId]);
+async function copyLayouts(tx: Transaction, fromSetId: string, toSetId: string): Promise<void> {
+  const held = await existingSets(tx, [fromSetId, toSetId]);
   for (const setId of [fromSetId, toSetId])
     if (!held.includes(setId)) throw new AppError("floor_plan_set.not_found", { setId });
   const plans = await tx
@@ -158,14 +143,13 @@ function inBatches<T>(rows: readonly T[], size = 1000): T[][] {
 
 async function readLayouts(
   tx: Transaction,
-  cfg: TradingContext,
   requestedZones: readonly string[],
   requestedPairs: readonly { setId: string; zoneId: string }[],
 ): ReturnType<FloorPlanSets["readLayouts"]> {
-  const zoneIds = await zonesOfLocation(tx, cfg, [
+  const zoneIds = await existingZones(tx, [
     ...new Set([...requestedZones, ...requestedPairs.map((p) => p.zoneId)]),
   ]);
-  const setIds = await setsOfLocation(tx, cfg, [...new Set(requestedPairs.map((p) => p.setId))]);
+  const setIds = await existingSets(tx, [...new Set(requestedPairs.map((p) => p.setId))]);
   if (zoneIds.length === 0) return { tableCounts: new Map(), layouts: [] };
   const zoneHeld = new Set(zoneIds);
   const setHeld = new Set(setIds);
@@ -253,41 +237,33 @@ async function readLayouts(
   return { tableCounts, layouts };
 }
 
-async function zonesShowing(
-  tx: Transaction,
-  cfg: TradingContext,
-  setId: string,
-): Promise<string[]> {
+async function zonesShowing(tx: Transaction, setId: string): Promise<string[]> {
   const rows = await tx
     .select({ zoneId: floorTodayZones.zoneId })
     .from(floorTodayZones)
     .innerJoin(floorZones, eq(floorZones.id, floorTodayZones.zoneId))
-    .where(and(eq(floorTodayZones.setId, setId), eq(floorZones.locationId, cfg.locationId)))
+    .where(eq(floorTodayZones.setId, setId))
     .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
   return rows.map((row) => row.zoneId);
 }
 
-export function floorPlanSetsFor(cfg: TradingContext): FloorPlanSets {
+export function floorPlanSetsFor(): FloorPlanSets {
   return {
     async create(tx) {
       const [row] = await tx
         .insert(floorPlanSets)
-        .values({ locationId: cfg.locationId })
+        .values({ locationId: await venueLocationId(tx) })
         .returning({ id: floorPlanSets.id });
       return row!.id;
     },
-    copyLayouts: (tx, fromSetId, toSetId) => copyLayouts(tx, cfg, fromSetId, toSetId),
-    readLayouts: (tx, zoneIds, pairs) => readLayouts(tx, cfg, zoneIds, pairs),
-    zonesShowing: (tx, setId) => zonesShowing(tx, cfg, setId),
+    copyLayouts,
+    readLayouts,
+    zonesShowing,
   };
 }
 
-export async function removeSets(
-  tx: Transaction,
-  cfg: TradingContext,
-  requested: readonly string[],
-): Promise<void> {
-  const setIds = await setsOfLocation(tx, cfg, requested);
+export async function removeSets(tx: Transaction, requested: readonly string[]): Promise<void> {
+  const setIds = await existingSets(tx, requested);
   if (setIds.length === 0) return;
   const plans = await tx
     .select({ id: floorPlans.id })

@@ -30,12 +30,14 @@ import {
   joinedOutOfService,
   needsMoving,
   resetRowMoves,
+  readVenueClock,
   shortNameColumns,
+  venueLocationId,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { TableRemoval } from "@waitron/module";
-import { readLocationClock, venueMomentAt } from "@waitron/reporting";
+import { venueMomentAt } from "@waitron/reporting";
 import { AppError, NEW_TABLE_SIZE, groupStep, shortNameKey } from "@waitron/shared";
 import {
   blockedMoves,
@@ -102,12 +104,8 @@ function targetRow(target: Target) {
   };
 }
 
-export async function todayBusinessDay(
-  tx: Transaction,
-  cfg: TradingContext,
-  now: Date,
-): Promise<string | null> {
-  return venueMomentAt(now, await readLocationClock(tx, cfg.locationId))?.businessDay ?? null;
+export async function todayBusinessDay(tx: Transaction, now: Date): Promise<string | null> {
+  return venueMomentAt(now, await readVenueClock(tx))?.businessDay ?? null;
 }
 
 /** The layout a reset makes today's plan from. */
@@ -131,7 +129,7 @@ export async function resetZone(
   onto: ResetOnto | "due",
 ): Promise<number | null> {
   await requireZone(tx, cfg, zoneId);
-  const day = await todayBusinessDay(tx, cfg, now);
+  const day = await todayBusinessDay(tx, now);
   if (day === null) return null;
   if (onto !== "due") return resetZoneOn(tx, cfg, removals, zoneId, day, now, onto);
   const { states, rows } = await zoneLayoutsOn(tx, cfg, [zoneId], now, day);
@@ -233,7 +231,7 @@ async function resetZoneFor(
   }
 
   const master = placedAsRead(await layoutTables(tx, zoneId, layout?.id ?? null));
-  const live = await zoneTables(tx, cfg, zoneId);
+  const live = await zoneTables(tx, zoneId);
   const targets = targetsFromMaster(
     master.map((row) => ({
       id: row.id,
@@ -330,7 +328,7 @@ const joinedReset = alias(floorResetTables, "taken_back_joined");
 const partReset = alias(floorResetTables, "taken_back_part");
 const groupPart = alias(floorResetTables, "group_part");
 
-function zoneTables(tx: Transaction, cfg: TradingContext, zoneId: string) {
+function zoneTables(tx: Transaction, zoneId: string) {
   return tx
     .select({
       id: diningTables.id,
@@ -339,7 +337,7 @@ function zoneTables(tx: Transaction, cfg: TradingContext, zoneId: string) {
       shortName: diningTables.shortName,
     })
     .from(diningTables)
-    .where(and(eq(diningTables.locationId, cfg.locationId), eq(diningTables.zoneId, zoneId)));
+    .where(eq(diningTables.zoneId, zoneId));
 }
 
 export interface CatchUp {
@@ -391,13 +389,7 @@ async function catchUpPass(
       eq(floorResetTableParts.joinedResetTableId, floorResetTables.id),
     )
     .leftJoin(groupPart, eq(groupPart.id, floorResetTableParts.partResetTableId))
-    .where(
-      and(
-        eq(floorZones.id, zoneId),
-        eq(floorZones.locationId, cfg.locationId),
-        eq(floorZones.active, true),
-      ),
-    );
+    .where(and(eq(floorZones.id, zoneId), eq(floorZones.active, true)));
   if (zoneRows.length === 0) throw new AppError("zone.not_found", { zoneId });
   // A pending joined row's group, by reset row, so a joined table still to create is in it too.
   // Once the joined table's row is applied, the group no longer waits.
@@ -443,8 +435,7 @@ async function catchUpPass(
       splitOffFrom: floorTodaySplitParts.joinedTableId,
     })
     .from(diningTables)
-    .leftJoin(floorTodaySplitParts, eq(floorTodaySplitParts.partTableId, diningTables.id))
-    .where(eq(diningTables.locationId, cfg.locationId));
+    .leftJoin(floorTodaySplitParts, eq(floorTodaySplitParts.partTableId, diningTables.id));
   const inZone = venueTables.filter((table) => table.zoneId === zoneId);
   const takenElsewhere = new Set(
     venueTables.filter((table) => table.zoneId !== zoneId).map((table) => table.label),
@@ -712,7 +703,7 @@ async function catchUpPass(
     const [created] = await tx
       .insert(diningTables)
       .values({
-        locationId: cfg.locationId,
+        locationId: await venueLocationId(tx),
         zoneId,
         label: target.label,
         ...shortNameColumns(target.shortName),
@@ -989,7 +980,7 @@ export async function ensureToday(
   removals: readonly TableRemoval[],
   now: Date,
 ): Promise<string | null> {
-  const day = await todayBusinessDay(tx, cfg, now);
+  const day = await todayBusinessDay(tx, now);
   if (day === null) return null;
   const zones = await tx
     .select({ zoneId: floorZones.id, businessDay: floorTodayZones.businessDay })
@@ -997,7 +988,6 @@ export async function ensureToday(
     .leftJoin(floorTodayZones, eq(floorTodayZones.zoneId, floorZones.id))
     .where(
       and(
-        eq(floorZones.locationId, cfg.locationId),
         eq(floorZones.active, true),
         or(
           exists(

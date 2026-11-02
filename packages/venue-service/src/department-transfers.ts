@@ -484,7 +484,7 @@ export async function listDepartmentTransferDestinations(
   return choices;
 }
 
-async function summarizeTransfers(tx: Transaction, cfg: VenueScope, rows: DepartmentTransfer[]) {
+async function summarizeTransfers(tx: Transaction, rows: DepartmentTransfer[]) {
   if (rows.length === 0) return [];
   const source = alias(departments, "transfer_source_department");
   const destination = alias(departments, "transfer_destination_department");
@@ -514,7 +514,6 @@ async function summarizeTransfers(tx: Transaction, cfg: VenueScope, rows: Depart
     );
   const labels = await orderTableLabels(
     tx,
-    cfg.locationId,
     identities.map((row) => ({
       id: row.orderId,
       partyId: row.partyId,
@@ -551,7 +550,7 @@ export async function listIncomingDepartmentTransfers(
   receiver: DepartmentTransferReceiver,
 ) {
   if (!(await receives(tx, cfg, receiver.departmentId, receiver))) return null;
-  return summarizeTransfers(tx, cfg, await listDepartmentTransfers(tx, cfg, receiver.departmentId));
+  return summarizeTransfers(tx, await listDepartmentTransfers(tx, cfg, receiver.departmentId));
 }
 
 export async function readIncomingDepartmentTransfer(
@@ -562,7 +561,7 @@ export async function readIncomingDepartmentTransfer(
 ) {
   const request = await pendingRequest(tx, cfg, requestId);
   await checkReceiver(tx, cfg, request.destinationDepartmentId, receiver);
-  return (await summarizeTransfers(tx, cfg, [request]))[0]!;
+  return (await summarizeTransfers(tx, [request]))[0]!;
 }
 
 export async function listSentDepartmentTransfers(
@@ -589,7 +588,7 @@ export async function listSentDepartmentTransfers(
     if (context.departmentId !== sender.departmentId)
       throw new AppError("department_transfer.not_allowed", {});
   }
-  return summarizeTransfers(tx, cfg, rows);
+  return summarizeTransfers(tx, rows);
 }
 
 export async function listDepartmentSentTransfers(
@@ -624,5 +623,5 @@ export async function listDepartmentSentTransfers(
     .orderBy(asc(departmentTransferRequests.createdAt), asc(departmentTransferRequests.id));
   if (rows.some((row) => row.status === "pending"))
     await assertDepartment(tx, cfg, sender.departmentId);
-  return summarizeTransfers(tx, cfg, rows);
+  return summarizeTransfers(tx, rows);
 }

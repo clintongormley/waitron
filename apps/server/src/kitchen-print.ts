@@ -400,10 +400,10 @@ async function readStations(
 /** The order's table, as {@link orderTableLabels} names it. */
 export async function orderTableLabel(
   tx: Transaction,
-  cfg: TradingContext,
+  _cfg: TradingContext,
   orderId: string,
 ): Promise<string | null> {
-  return (await readOrderHeader(tx, cfg, orderId)).tableLabel;
+  return (await readOrderHeader(tx, orderId)).tableLabel;
 }
 
 /** What a kitchen paper for an order is headed with. */
@@ -418,7 +418,7 @@ interface OrderHeader {
 /** Each order's number and table ({@link orderTableLabels}), keyed by order. */
 async function readOrderHeaders(
   tx: Transaction,
-  cfg: TradingContext,
+
   orderIds: readonly string[],
 ): Promise<Map<string, OrderHeader>> {
   const orders = await tx
@@ -432,7 +432,7 @@ async function readOrderHeaders(
     })
     .from(workingOrders)
     .where(inArray(workingOrders.id, [...orderIds]));
-  const labels = await orderTableLabels(tx, cfg.locationId, orders);
+  const labels = await orderTableLabels(tx, orders);
   return new Map(
     orders.map((order) => [
       order.id,
@@ -447,12 +447,8 @@ async function readOrderHeaders(
   );
 }
 
-async function readOrderHeader(
-  tx: Transaction,
-  cfg: TradingContext,
-  orderId: string,
-): Promise<OrderHeader> {
-  return (await readOrderHeaders(tx, cfg, [orderId])).get(orderId)!;
+async function readOrderHeader(tx: Transaction, orderId: string): Promise<OrderHeader> {
+  return (await readOrderHeaders(tx, [orderId])).get(orderId)!;
 }
 
 /**
@@ -593,7 +589,7 @@ async function planKitchenTickets(
     known === undefined
       ? await readStations(tx, stationIds)
       : new Map(stationIds.map((id) => [id, known.stations.get(id)!]));
-  const order = await readOrderHeader(tx, cfg, orderId);
+  const order = await readOrderHeader(tx, orderId);
   const partyName = (await readPartyNames(tx, [orderId])).get(orderId)!;
   const kitchenNote = (await readOrderKitchenNotes(tx, [orderId])).get(orderId)!.note;
 
@@ -1295,7 +1291,7 @@ async function printCorrectionSlips(
     ...(unread.length === 0 ? [] : await buildTicketItems(tx, cfg, unread, language)),
   ]);
   const stationNames = await readStations(tx, stationIds);
-  const header = await readOrderHeader(tx, cfg, orderId);
+  const header = await readOrderHeader(tx, orderId);
   const kitchenNote = (await readOrderKitchenNotes(tx, [orderId])).get(orderId)!.note;
 
   const printersByStation = new Map<string, (EscSetting & { printerId: string })[]>();

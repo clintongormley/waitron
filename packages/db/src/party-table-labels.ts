@@ -102,7 +102,7 @@ export interface TableNames {
   shown: string;
 }
 
-/** Each of `tableIds` that exists, by its own name and its shown name, in any location. */
+/** Each of `tableIds` that exists, by its own name and its shown name. */
 export async function tableNames(
   tx: Transaction,
   tableIds: readonly string[],
@@ -240,12 +240,11 @@ interface LabelledOrder {
  * The table each order belongs to, keyed by order. A party bill names the tables
  * {@link billPartyTableLabels} gives its party, together ({@link partyTablesName}), or its own label
  * when that list is empty. Any other order names the shown name, as {@link partyTableLabels} reads
- * it, of the table of `locationId` it is delivered to, else the name kept when that table was let
+ * it, of the table it is delivered to, else the name kept when that table was let
  * go, else its own label; null for an unlabelled walk-up.
  */
 export async function orderTableLabels(
   tx: Transaction,
-  locationId: string,
   orders: readonly LabelledOrder[],
 ): Promise<Map<string, string | null>> {
   const partyIds = [...new Set(orders.flatMap((order) => order.partyId ?? []))];
@@ -258,12 +257,10 @@ export async function orderTableLabels(
   const shownById = new Map(
     deliveredTo.length === 0
       ? []
-      : (
-          await readShownNames(
-            tx,
-            and(eq(diningTables.locationId, locationId), inArray(diningTables.id, deliveredTo)),
-          )
-        ).map((row) => [row.id, shown(row)]),
+      : (await readShownNames(tx, inArray(diningTables.id, deliveredTo))).map((row) => [
+          row.id,
+          shown(row),
+        ]),
   );
   const labels = new Map<string, string | null>();
   for (const order of orders) {

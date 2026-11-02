@@ -17,14 +17,12 @@ import { diningTables } from "./schema/dining-tables.js";
 import { floorTodayJoins, floorTodayJoinTables, floorTodayTables } from "./schema/floor-plans.js";
 import { floorZones } from "./schema/floor-zones.js";
 import { parties, partyTables } from "./schema/parties.js";
-import { locations } from "./schema/tenants.js";
 import { seedVenue } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
 import { withTransaction } from "./tenancy.js";
 import { venueLocationId } from "./venue.js";
 
 let LOCATION: string;
-const OTHER_LOCATION = "cccccccc-0000-4000-8000-000000000002";
 const OPERATOR = "cccccccc-2222-4000-8000-000000000001";
 
 describe("party table labels", () => {
@@ -40,12 +38,6 @@ describe("party table labels", () => {
       operationDescription: "Hostelería",
     });
     LOCATION = await venueLocationId(suite.db);
-    await suite.db.insert(locations).values({
-      id: OTHER_LOCATION,
-      name: "Other room",
-      invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
-    });
   });
 
   /**
@@ -552,7 +544,7 @@ describe("party table labels", () => {
       });
       expect(
         await inTx((tx) =>
-          orderTableLabels(tx, LOCATION, [
+          orderTableLabels(tx, [
             delivered("bar", bar),
             delivered("c3", c3),
             delivered("c4", c4),
@@ -576,7 +568,7 @@ describe("party table labels", () => {
       await nameToday(window, `Window ${s}`);
       expect(
         await inTx((tx) =>
-          orderTableLabels(tx, LOCATION, [
+          orderTableLabels(tx, [
             {
               id: "delivered",
               partyId: null,
@@ -596,15 +588,15 @@ describe("party table labels", () => {
     });
   });
 
-  async function table(label: string, locationId = LOCATION): Promise<string> {
+  async function table(label: string): Promise<string> {
     const [row] = await inTx(async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId, name: label })
+        .values({ locationId: LOCATION, name: label })
         .returning({ id: floorZones.id });
       return tx
         .insert(diningTables)
-        .values({ locationId, label, zoneId: zone!.id })
+        .values({ locationId: LOCATION, label, zoneId: zone!.id })
         .returning({ id: diningTables.id });
     });
     return row!.id;
@@ -621,7 +613,7 @@ describe("party table labels", () => {
       const deliveryTableId = await table("Bar 1");
       expect(
         await inTx((tx) =>
-          orderTableLabels(tx, LOCATION, [
+          orderTableLabels(tx, [
             { id: "bill", partyId, deliveryTableId, deliveryTableLabel: null, label: "Anna" },
           ]),
         ),
@@ -632,7 +624,7 @@ describe("party table labels", () => {
       const partyId = await party([{ label: "Table 23", ...LEFT }]);
       expect(
         await inTx((tx) =>
-          orderTableLabels(tx, LOCATION, [
+          orderTableLabels(tx, [
             { id: "bill", partyId, deliveryTableId: null, deliveryTableLabel: null, label: "Anna" },
           ]),
         ),
@@ -645,7 +637,7 @@ describe("party table labels", () => {
       await merge(merged, survivor);
       expect(
         await inTx((tx) =>
-          orderTableLabels(tx, LOCATION, [
+          orderTableLabels(tx, [
             {
               id: "bill",
               partyId: merged,
@@ -660,10 +652,9 @@ describe("party table labels", () => {
 
     it("names an order of no party after the table it is delivered to, else its label, else nothing", async () => {
       const deliveryTableId = await table("Terrace 3");
-      const elsewhere = await table("Terrace 3", OTHER_LOCATION);
       expect(
         await inTx((tx) =>
-          orderTableLabels(tx, LOCATION, [
+          orderTableLabels(tx, [
             {
               id: "delivered",
               partyId: null,
@@ -685,13 +676,6 @@ describe("party table labels", () => {
               deliveryTableLabel: null,
               label: null,
             },
-            {
-              id: "elsewhere",
-              partyId: null,
-              deliveryTableId: elsewhere,
-              deliveryTableLabel: null,
-              label: "Peter",
-            },
           ]),
         ),
       ).toEqual(
@@ -699,7 +683,6 @@ describe("party table labels", () => {
           ["delivered", "Terrace 3"],
           ["labelled", "Martha"],
           ["walk-up", null],
-          ["elsewhere", "Peter"],
         ]),
       );
     });
@@ -707,7 +690,7 @@ describe("party table labels", () => {
     it("names an order whose delivery table was let go after the name kept for it", async () => {
       expect(
         await inTx((tx) =>
-          orderTableLabels(tx, LOCATION, [
+          orderTableLabels(tx, [
             {
               id: "released",
               partyId: null,
@@ -721,7 +704,7 @@ describe("party table labels", () => {
     });
 
     it("answers an empty map when asked about no order", async () => {
-      expect(await inTx((tx) => orderTableLabels(tx, LOCATION, []))).toEqual(new Map());
+      expect(await inTx((tx) => orderTableLabels(tx, []))).toEqual(new Map());
     });
   });
 });

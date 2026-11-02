@@ -50,16 +50,13 @@ function joins(
     })),
   );
 }
-async function inventory(tx: Transaction, cfg: TradingContext, zoneIds: readonly string[]) {
+async function inventory(tx: Transaction, zoneIds: readonly string[]) {
   const zones = await tx
     .select({ id: floorZones.id })
     .from(floorZones)
-    .where(and(eq(floorZones.locationId, cfg.locationId), inArray(floorZones.id, [...zoneIds])));
+    .where(inArray(floorZones.id, [...zoneIds]));
   const ids = zones.map((zone) => zone.id);
-  const tables = await tx
-    .select()
-    .from(diningTables)
-    .where(and(eq(diningTables.locationId, cfg.locationId), inArray(diningTables.zoneId, ids)));
+  const tables = await tx.select().from(diningTables).where(inArray(diningTables.zoneId, ids));
   tables.sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id));
   const plans = await tx.select().from(floorPlans).where(inArray(floorPlans.zoneId, ids));
   const saved = await tx.select().from(floorPlanTables).where(inArray(floorPlanTables.zoneId, ids));
@@ -149,16 +146,16 @@ export function floorDeletionFor(
   removals: readonly TableRemoval[],
 ): FloorDeletion {
   return {
-    removeSets: (tx, setIds) => removeSets(tx, cfg, setIds),
+    removeSets,
     async readImpact(tx, zoneIds, now) {
-      const floor = await inventory(tx, cfg, zoneIds);
+      const floor = await inventory(tx, zoneIds);
       return {
         refusals: await refusalsFor(tx, cfg, removals, floor.tables, now),
         removes: floor.removes,
       };
     },
     async clear(tx, zoneIds, now) {
-      const floor = await inventory(tx, cfg, zoneIds);
+      const floor = await inventory(tx, zoneIds);
       const [refusal] = await refusalsFor(tx, cfg, removals, floor.tables, now);
       if (refusal)
         throw new AppError(refusal.code as ErrorCode, refusal.params as ErrorParams[ErrorCode]);
@@ -200,25 +197,11 @@ export function floorDeletionFor(
       await tx
         .update(diningTables)
         .set({ planTableId: null })
-        .where(
-          and(
-            eq(diningTables.locationId, cfg.locationId),
-            inArray(diningTables.planTableId, masterIds),
-          ),
-        );
-      const locationZones = tx
-        .select({ id: floorZones.id })
-        .from(floorZones)
-        .where(eq(floorZones.locationId, cfg.locationId));
+        .where(inArray(diningTables.planTableId, masterIds));
       await tx
         .update(floorResetTables)
         .set({ planTableId: null })
-        .where(
-          and(
-            inArray(floorResetTables.zoneId, locationZones),
-            inArray(floorResetTables.planTableId, masterIds),
-          ),
-        );
+        .where(inArray(floorResetTables.planTableId, masterIds));
       await tx
         .delete(floorPlanTableParts)
         .where(inArray(floorPlanTableParts.joinedTableId, masterIds));

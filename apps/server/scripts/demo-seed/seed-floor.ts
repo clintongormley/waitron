@@ -249,7 +249,7 @@ export async function seedFloor(
   for (const departmentId of [defaultPolicy.department_id, deliDepartmentId]) {
     setOf.set(
       departmentId,
-      await createFloorPlanSet(tx, cfg, floorPlanSetsFor(cfg), { departmentId, name: setName }),
+      await createFloorPlanSet(tx, cfg, floorPlanSetsFor(), { departmentId, name: setName }),
     );
   }
   for (const [zoneKey, zoneId] of zoneIds) {

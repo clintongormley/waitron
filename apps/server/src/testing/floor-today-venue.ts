@@ -295,7 +295,7 @@ export async function standardAndDinner(
         .set({ floorPlanSetId: setId })
         .where(eq(menuPeriods.id, d.lunchPeriod));
       const { revision } = await readLayout(tx, v.cfg, { setId, zoneId: d.zoneId });
-      const day = await todayBusinessDay(tx, v.cfg, now);
+      const day = await todayBusinessDay(tx, now);
       return updateLayout(tx, v.cfg, REMOVALS, d.zoneId, day, now, {
         setId,
         layoutRevision: revision,

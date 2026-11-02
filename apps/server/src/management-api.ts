@@ -140,7 +140,7 @@ export interface ManagementApiDeps {
   db: Database;
   cfg: { nodeId: string };
   /**
-   * The venue config whose location the zone, table, station and course routes are scoped to — the
+   * The venue config the zone, table, station and course routes use — the
    * same value `mountTillApi` receives. Optional so harnesses that never reach those routes can omit
    * it; a request that does reach one without it fails closed (`requireVenueCfg`).
    */
@@ -314,17 +314,11 @@ function requireSetId(id: string): string {
   return id;
 }
 
-async function requireLiveZone(tx: Transaction, cfg: TradingContext, id: string): Promise<void> {
+async function requireLiveZone(tx: Transaction, id: string): Promise<void> {
   const [zone] = await tx
     .select({ id: floorZones.id })
     .from(floorZones)
-    .where(
-      and(
-        eq(floorZones.id, id),
-        eq(floorZones.locationId, cfg.locationId),
-        eq(floorZones.active, true),
-      ),
-    );
+    .where(and(eq(floorZones.id, id), eq(floorZones.active, true)));
   if (zone === undefined) throw new AppError("zone.not_found", { zoneId: id });
 }
 
@@ -1473,7 +1467,7 @@ export function mountManagementApi(
       if (body.displayOrder !== undefined)
         patch.displayOrder = parseDisplayOrder(body.displayOrder);
       await withVenueAuth(deps, sessionId, async (tx) => {
-        await requireLiveZone(tx, cfg, id);
+        await requireLiveZone(tx, id);
         if (Object.keys(patch).length > 0) await updateZone(tx, cfg, id, patch);
       });
       return c.body(null, 204);
@@ -1487,7 +1481,7 @@ export function mountManagementApi(
       const cfg = requireVenueCfg(deps);
       return c.json(
         await withVenueAuth(deps, sessionId, async (tx) => {
-          await requireLiveZone(tx, cfg, id);
+          await requireLiveZone(tx, id);
           return readZoneDeleteImpact(
             tx,
             cfg,
@@ -1509,7 +1503,7 @@ export function mountManagementApi(
         throw new AppError("management.request_invalid", { field: "body" });
       return c.json(
         await withVenueAuth(deps, sessionId, async (tx) => {
-          await requireLiveZone(tx, cfg, id);
+          await requireLiveZone(tx, id);
           return deleteZone(
             tx,
             cfg,
