@@ -38,6 +38,7 @@ import {
   serviceQuantities,
   splitLineServiceState,
 } from "./line-service-state.js";
+import type { PassRow } from "./pass-card.js";
 import { copyRecalledSplit, isRecalledDish, refuseRecalledWrite } from "./draft-source.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
@@ -8475,18 +8476,36 @@ export function liveKitchenDish(): SQL | undefined {
   );
 }
 
-/** Build every section of the selected pass orders before a pass screen or pass monitor narrows their items. */
-export async function readPassBoard(
+/** The stored facts the closed-station test reads, beside the row. */
+export type PassRowRead = Omit<PassRow, "zoneId" | "stationWaitsNow" | "stationClosed"> & {
+  stationChosenAt: string | null;
+  stationRetainedAtRelease: boolean;
+  makeAtStationId: string | null;
+  /** Read only to leave a served line out of the board's `worstBand`. */
+  servedAt: string | null;
+};
+
+/** Every live kitchen item `scope` selects, with the facts the pass card and release read. */
+export async function readPassRows(
   tx: Transaction,
   _locationId: string,
   scope: SQL,
-): Promise<ExpoOrder[]> {
+): Promise<PassRowRead[]> {
   const rows = await tx
     .select({
       itemId: ticketItems.id,
       lineId: ticketItems.workingOrderLineId,
+      stationId: ticketItems.stationId,
       state: ticketItems.state,
       firedAt: ticketItems.firedAt,
+      requestedAt: ticketItems.requestedAt,
+      readyAt: ticketItems.readyAt,
+      passControlled: ticketItems.passControlled,
+      stationChosenAt: ticketItems.stationChosenAt,
+      stationRetainedAtRelease: ticketItems.stationRetainedAtRelease,
+      makeAtStationId: workingOrderLines.makeAtStationId,
+      parentLineId: workingOrderLines.parentLineId,
+      recalled: sql<number>`${isRecalledDish(tx)}`,
       note: ticketItems.note,
       name: workingOrderLines.name,
       kitchenName: workingOrderLines.kitchenName,
@@ -8497,7 +8516,6 @@ export async function readPassBoard(
       unitName: workingOrderLines.unitName,
       unitPrecision: workingOrderLines.unitPrecision,
       lineNo: workingOrderLines.lineNo,
-      // Not exposed; read only to leave a served line out of `worstBand`.
       servedAt: workingOrderLines.servedAt,
       stationName: kitchenStations.name,
       // Per item, not per order: one order's items can span stations with different thresholds.
@@ -8512,6 +8530,7 @@ export async function readPassBoard(
       orderNumber: workingOrders.orderNumber,
       openedAt: workingOrders.openedAt,
       ...queueGroupColumns,
+      groupRequestKind: orderGroups.requestKind,
       groupCreatedAt: orderGroups.createdAt,
       // Not exposed; read only to name the order's table (`orderTableLabels`).
       deliveryTableId: workingOrders.deliveryTableId,
@@ -8570,75 +8589,14 @@ export async function readPassBoard(
   );
 
   const nowMs = Date.now();
-  // Maps keep insertion order, so the SQL order survives the grouping.
-  const orders = new Map<string, ExpoOrder>();
-  const sectionMaps = new Map<string, Map<string, ExpoCourse | ExpoGroup>>();
-  const groupCreatedAt = new Map<string, string>();
-  for (const row of rows) {
-    if (row.groupId !== null) groupCreatedAt.set(row.groupId, row.groupCreatedAt!);
-    let order = orders.get(row.orderId);
-    if (order === undefined) {
-      order = {
-        orderId: row.orderId,
-        kitchenNote: kitchenNotes.get(row.orderId)!.note,
-        orderNumber: row.orderNumber,
-        ...optional("formerNumbers", former.get(row.orderId)),
-        openedMinutes: minutesSince(row.openedAt, nowMs),
-        ...optional("party", queueParty(row)),
-        courses: [],
-        groups: [],
-        ...optional("tableLabel", tableLabels.get(row.orderId) ?? undefined),
-        worstBand: "fresh",
-      };
-      orders.set(row.orderId, order);
-      sectionMaps.set(row.orderId, new Map());
-    }
-    const sections = sectionMaps.get(row.orderId)!;
-    const group = queueGroup(row, numberLabels);
-    const byGroup = order.party !== undefined;
-    const sectionKey = (byGroup ? group?.id : row.courseId) ?? "__none__";
-    let section = sections.get(sectionKey);
-    if (section === undefined) {
-      if (byGroup) {
-        const expoGroup: ExpoGroup = {
-          groupId: group?.id ?? null,
-          position: group?.position ?? null,
-          displayNumber: group?.displayNumber ?? null,
-          numberPartyId: group?.numberPartyId ?? null,
-          ...(group?.numberPartyLabel === undefined
-            ? {}
-            : { numberPartyLabel: group.numberPartyLabel }),
-          state: group?.state ?? null,
-          fired: true,
-          items: [],
-        };
-        order.groups.push(expoGroup);
-        section = expoGroup;
-      } else {
-        const course: ExpoCourse = {
-          courseId: row.courseId,
-          courseName: row.courseId === null ? null : row.courseName!,
-          displayOrder: row.courseId === null ? null : row.courseDisplayOrder!,
-          fired: true,
-          items: [],
-        };
-        order.courses.push(course);
-        section = course;
-      }
-      sections.set(sectionKey, section);
-    }
+  return rows.map((row) => {
     const thresholds: StationThresholds = {
       warmAfterMinutes: row.warmAfterMinutes,
       overdueAfterMinutes: row.overdueAfterMinutes,
       forgottenAfterMinutes: row.forgottenAfterMinutes,
     };
-    // Rounded to the whole minute first, as in `listStationQueue`.
-    const band = classifyBand(
-      nowMs - minutesSince(row.queuedAt, nowMs) * 60_000,
-      nowMs,
-      thresholds,
-    );
-    section.items.push({
+    const group = queueGroup(row, numberLabels);
+    const item: ExpoItem = {
       id: row.itemId,
       allergy: allergies.get(row.itemId)?.originalBlock ?? null,
       name: kitchenPresentationName(row),
@@ -8665,10 +8623,124 @@ export async function readPassBoard(
       queuedAt: row.queuedAt,
       ...optional("group", group),
       thresholds,
-      band,
-    });
+      // Rounded to the whole minute first, as in `listStationQueue`.
+      band: classifyBand(nowMs - minutesSince(row.queuedAt, nowMs) * 60_000, nowMs, thresholds),
+    };
+    return {
+      item,
+      lineId: row.lineId,
+      orderId: row.orderId,
+      stationId: row.stationId,
+      partyId: row.partyId,
+      partyRevision: row.partyRevision,
+      course:
+        row.courseId === null
+          ? null
+          : { id: row.courseId, name: row.courseName!, displayOrder: row.courseDisplayOrder! },
+      group:
+        group === undefined
+          ? null
+          : {
+              id: group.id,
+              partyId: row.groupPartyId!,
+              state: group.state as "held" | "fired",
+              requestKind: row.groupRequestKind!,
+              position: group.position,
+              createdAt: row.groupCreatedAt!,
+              displayNumber: group.displayNumber,
+              ...optional("numberPartyLabel", group.numberPartyLabel),
+            },
+      requestedAt: row.requestedAt,
+      firedAt: row.firedAt,
+      readyAt: row.readyAt,
+      passControlled: row.passControlled,
+      extra: row.parentLineId !== null,
+      remaining: row.quantity,
+      recalled: Boolean(row.recalled),
+      lineNo: row.lineNo,
+      order: {
+        orderNumber: row.orderNumber,
+        ...optional("tableLabel", tableLabels.get(row.orderId) ?? undefined),
+        kitchenNote: kitchenNotes.get(row.orderId)!.note,
+        ...optional("formerNumbers", former.get(row.orderId)),
+        openedAt: row.openedAt,
+      },
+      stationChosenAt: row.stationChosenAt,
+      stationRetainedAtRelease: row.stationRetainedAtRelease,
+      makeAtStationId: row.makeAtStationId,
+      servedAt: row.servedAt,
+    };
+  });
+}
+
+/** Build every section of the selected pass orders before a pass screen or pass monitor narrows their items. */
+export async function readPassBoard(
+  tx: Transaction,
+  locationId: string,
+  scope: SQL,
+): Promise<ExpoOrder[]> {
+  const rows = await readPassRows(tx, locationId, scope);
+  const nowMs = Date.now();
+  // Maps keep insertion order, so the SQL order survives the grouping.
+  const orders = new Map<string, ExpoOrder>();
+  const sectionMaps = new Map<string, Map<string, ExpoCourse | ExpoGroup>>();
+  const groupCreatedAt = new Map<string, string>();
+  for (const row of rows) {
+    if (row.group !== null) groupCreatedAt.set(row.group.id, row.group.createdAt);
+    let order = orders.get(row.orderId);
+    if (order === undefined) {
+      order = {
+        orderId: row.orderId,
+        kitchenNote: row.order.kitchenNote,
+        orderNumber: row.order.orderNumber,
+        ...optional("formerNumbers", row.order.formerNumbers),
+        openedMinutes: minutesSince(row.order.openedAt, nowMs),
+        ...optional("party", queueParty(row)),
+        courses: [],
+        groups: [],
+        ...optional("tableLabel", row.order.tableLabel),
+        worstBand: "fresh",
+      };
+      orders.set(row.orderId, order);
+      sectionMaps.set(row.orderId, new Map());
+    }
+    const sections = sectionMaps.get(row.orderId)!;
+    const group = row.item.group;
+    const byGroup = order.party !== undefined;
+    const sectionKey = (byGroup ? group?.id : row.course?.id) ?? "__none__";
+    let section = sections.get(sectionKey);
+    if (section === undefined) {
+      if (byGroup) {
+        const expoGroup: ExpoGroup = {
+          groupId: group?.id ?? null,
+          position: group?.position ?? null,
+          displayNumber: group?.displayNumber ?? null,
+          numberPartyId: group?.numberPartyId ?? null,
+          ...(group?.numberPartyLabel === undefined
+            ? {}
+            : { numberPartyLabel: group.numberPartyLabel }),
+          state: group?.state ?? null,
+          fired: true,
+          items: [],
+        };
+        order.groups.push(expoGroup);
+        section = expoGroup;
+      } else {
+        const course: ExpoCourse = {
+          courseId: row.course?.id ?? null,
+          courseName: row.course?.name ?? null,
+          displayOrder: row.course?.displayOrder ?? null,
+          fired: true,
+          items: [],
+        };
+        order.courses.push(course);
+        section = course;
+      }
+      sections.set(sectionKey, section);
+    }
+    section.items.push(row.item);
     if (row.firedAt === null) section.fired = false;
-    if (row.servedAt === null) order.worstBand = worstBand([order.worstBand, band]);
+    if (row.servedAt === null) order.worstBand = worstBand([order.worstBand, row.item.band]);
   }
   for (const order of orders.values()) {
     const made = (group: ExpoGroup) =>
