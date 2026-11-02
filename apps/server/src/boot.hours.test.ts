@@ -132,7 +132,7 @@ for (const enabled of [true, false]) {
             `/api/attendance/hours?kind=week`,
             "/management-api/me/attendance/inbox",
             `/management-api/me/attendance/hours?kind=month`,
-            `/management-api/me/attendance/day?locationId=${venue.cfg.locationId}&date=2026-01-05`,
+            "/management-api/me/attendance/day?date=2026-01-05",
             `/management-api/me/attendance/commands/${crypto.randomUUID()}`,
             `/management-api/attendance/hours?kind=pay-period`,
           ];

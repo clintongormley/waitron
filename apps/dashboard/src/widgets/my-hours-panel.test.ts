@@ -27,7 +27,6 @@ const inbox = () => ({
 });
 const day = (): AttendanceDayView => ({
   personId: "p1",
-  locationId: "venue",
   date: "2026-01-05",
   timeZone: "Europe/Madrid",
   revision: "day-current",

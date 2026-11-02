@@ -156,12 +156,12 @@ for (const enabled of [true, false]) {
             });
           const paths = [
             "/api/attendance/inbox",
-            `/api/attendance/day?date=2026-01-05&locationId=${venue.cfg.locationId}`,
+            "/api/attendance/day?date=2026-01-05",
             `/api/attendance/commands/${crypto.randomUUID()}`,
             `/api/attendance/items/${crypto.randomUUID()}/approvers?action=approve`,
             "/management-api/attendance/lookups",
-            `/management-api/attendance/queue?locationId=${venue.cfg.locationId}`,
-            `/management-api/attendance/day?personId=${venue.personId}&locationId=${venue.cfg.locationId}&date=2026-01-05`,
+            "/management-api/attendance/queue",
+            `/management-api/attendance/day?personId=${venue.personId}&date=2026-01-05`,
             `/management-api/attendance/commands/${crypto.randomUUID()}`,
           ];
           if (enabled && mode === "primary") {
@@ -198,10 +198,7 @@ for (const enabled of [true, false]) {
             expect(write.status).toBe(200);
             resultIds = ((await write.json()) as AttendanceCommandResult).entryIds;
             const beforeExplicit = statements.length;
-            const queue = await get(
-              `/management-api/attendance/queue?locationId=${venue.cfg.locationId}`,
-              managerCookie,
-            );
+            const queue = await get("/management-api/attendance/queue", managerCookie);
             expect(queue.status).toBe(200);
             expect(await queue.json()).toMatchObject({
               items: [{ id: resultIds[0], status: "waiting-manager" }],

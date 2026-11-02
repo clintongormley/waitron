@@ -29,10 +29,9 @@ function inbox(personId = "ana", revision = "r1"): AttendanceInbox {
     timeZone: "Europe/Madrid",
   };
 }
-function day(date = "2026-10-14", personId = "ana", locationId = "venue"): AttendanceDayView {
+function day(date = "2026-10-14", personId = "ana"): AttendanceDayView {
   return {
     personId,
-    locationId,
     date,
     timeZone: "Europe/Madrid",
     revision: "r1",

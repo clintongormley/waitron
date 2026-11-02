@@ -126,13 +126,13 @@ async function pending() {
 }
 const routes = [
   ["inbox", undefined],
-  ["day?date=2026-01-05&locationId=LOCATION", undefined],
+  ["day?date=2026-01-05", undefined],
   ["commands/ID", undefined],
   ["items/ID/approvers?action=approve", undefined],
   ["commands", { commandId: "invalid" }],
 ] as const;
 function pathOf(path: string) {
-  return path.replace("LOCATION", venue.cfg.locationId).replace("ID", randomUUID());
+  return path.replace("ID", randomUUID());
 }
 
 it("serves own history to clock-only staff without service zones and keeps reads passive", async () => {
@@ -146,7 +146,7 @@ it("serves own history to clock-only staff without service zones and keeps reads
     items: [],
     prompts: [],
   });
-  const day = await request(`day?date=2026-01-05&locationId=${venue.cfg.locationId}`);
+  const day = await request("day?date=2026-01-05");
   expect(day.status).toBe(200);
   expect(await day.json()).toMatchObject({
     personId: venue.personId,
@@ -159,7 +159,7 @@ it("serves own history to clock-only staff without service zones and keeps reads
   ).toBe(lastSeenAt);
 });
 
-it("offers the configured workplace for a first correction before any clock history", async () => {
+it("offers a first correction before any clock history", async () => {
   const [worker] = await suite.db
     .insert(persons)
     .values({ displayName: "New worker", role: "staff", pinHash: hashPin("5678") })
@@ -174,11 +174,8 @@ it("offers the configured workplace for a first correction before any clock hist
   expect(inbox.personId).toBe(worker!.id);
   expect(inbox.items).toEqual([]);
   expect(inbox.prompts).toEqual([]);
-  const day = await request(
-    `day?date=2026-01-04&locationId=${venue.cfg.locationId}`,
-    undefined,
-    cookie,
-  );
+  expect(inbox.timeZone).toBe("Europe/Madrid");
+  const day = await request("day?date=2026-01-04", undefined, cookie);
   expect(day.status).toBe(200);
   expect(await day.json()).toMatchObject({ personId: worker!.id, record: { entries: [] } });
   const submitted = await request(
@@ -200,6 +197,7 @@ it("offers the configured workplace for a first correction before any clock hist
   const result = (await submitted.json()) as AttendanceCommandResult;
   expect(result.entryIds).toHaveLength(2);
   const refreshed = (await (await request("inbox", undefined, cookie)).json()) as AttendanceInbox;
+  expect(refreshed.timeZone).toBe("Europe/Madrid");
   expect(refreshed.items).toMatchObject([
     { personId: worker!.id, status: "waiting-manager", requestEntryIds: result.entryIds },
   ]);
@@ -372,8 +370,8 @@ it("rejects malformed queries, ids and forged attribution without appending", as
     "commands/not-an-id",
     `commands/${randomUUID()}?personId=foreign`,
     `items/${randomUUID()}/approvers?action=approve&action=decline`,
-    `day?date=2026-02-30&locationId=${venue.cfg.locationId}`,
-    `day?date=2026-01-05&locationId=${venue.cfg.locationId}&personId=${managerId}`,
+    "day?date=2026-02-30",
+    `day?date=2026-01-05&personId=${managerId}`,
   ]) {
     const response = await request(path);
     expect(response.status, path).toBe(400);

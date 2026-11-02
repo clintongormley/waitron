@@ -20,11 +20,7 @@ import {
   readManagerHours,
 } from "@waitron/workforce";
 import type { AttendanceLookups } from "@waitron/workforce/attendance-contract";
-import {
-  parseAttendanceCommand,
-  parseAttendanceDayQuery,
-  parseAttendanceLocationQuery,
-} from "./attendance-request.js";
+import { parseAttendanceCommand, parseAttendanceDayQuery } from "./attendance-request.js";
 import type { Logger } from "./logger.js";
 import type { ModuleTimeRecordExport } from "@waitron/module";
 import { mountAttendanceExportApi } from "./attendance-export-api.js";
@@ -179,7 +175,7 @@ export function mountManagementAttendanceApi(
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           await authorize(tx, token);
-          parseAttendanceLocationQuery(new URL(c.req.url).searchParams);
+          noQuery(c);
           return readAttendanceManagerQueue(tx);
         }),
       );

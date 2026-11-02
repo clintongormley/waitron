@@ -52,7 +52,6 @@ async function mount(failedRefresh = false) {
         : url.includes("/day?")
           ? {
               personId: "p1",
-              locationId: "venue",
               date: "2026-01-05",
               timeZone: "Europe/Madrid",
               revision: "day-r",

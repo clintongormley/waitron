@@ -242,25 +242,31 @@ function query(value: string, mode: "worker" | "manager" = "worker") {
   return request.parseAttendanceDayQuery(new URLSearchParams(value), mode);
 }
 it("parses exact worker and manager day scopes with normalized identifiers", () => {
-  expect(query(`date=2026-02-28&locationId=${locationId.toUpperCase()}`)).toEqual({
+  expect(query("date=2026-02-28")).toEqual({ date: "2026-02-28" });
+  expect(query(`date=2026-02-28&personId=${personId.toUpperCase()}`, "manager")).toEqual({
     date: "2026-02-28",
-    locationId,
+    personId,
   });
-  expect(query(`date=2026-02-28&locationId=${locationId}&personId=${personId}`, "manager")).toEqual(
-    { date: "2026-02-28", locationId, personId },
-  );
+  for (const [value, mode] of [
+    [`date=2026-02-28&locationId=${locationId}`, "worker"],
+    [`date=2026-02-28&locationId=${locationId}&personId=${personId}`, "manager"],
+  ] as const) {
+    expect(() => query(value, mode)).toThrow(
+      expect.objectContaining({ code: "management.request_invalid" }),
+    );
+  }
 });
 it.each(
   single([
     "",
-    `date=2026-02-30&locationId=${locationId}`,
-    `date=2026-2-8&locationId=${locationId}`,
+    "date=2026-02-30",
+    "date=2026-2-8",
     `date=2026-02-28&locationId=`,
     `date=2026-02-28&locationId=nope`,
-    `date=2026-02-28&locationId=${locationId}&personId=${personId}`,
-    `date=2026-02-28&locationId=${locationId}&date=2026-02-28`,
+    `date=2026-02-28&personId=${personId}`,
+    "date=2026-02-28&date=2026-02-28",
     `date=2026-02-28&locationId=${locationId}&locationId=${locationId}`,
-    `date=2026-02-28&locationId=${locationId}&nodeId=${personId}`,
+    `date=2026-02-28&nodeId=${personId}`,
   ]),
 )("refuses a malformed or widened worker day scope %#", (value) => {
   expect(() => query(value)).toThrow(
@@ -269,32 +275,18 @@ it.each(
 });
 it.each(
   single([
-    `date=2026-02-28&locationId=${locationId}`,
-    `date=2026-02-28&locationId=${locationId}&personId=`,
-    `date=2026-02-28&locationId=${locationId}&personId=nope`,
-    `date=2026-02-28&locationId=${locationId}&personId=${personId}&personId=${personId}`,
+    "date=2026-02-28",
+    "date=2026-02-28&personId=",
+    "date=2026-02-28&personId=nope",
+    `date=2026-02-28&personId=${personId}&personId=${personId}`,
   ]),
 )("refuses an absent or duplicated manager subject %#", (value) => {
   expect(() => query(value, "manager")).toThrow(
     expect.objectContaining({ code: "management.request_invalid" }),
   );
 });
-it("requires an exact location-only scope for a manager queue", () => {
-  expect(request).toHaveProperty("parseAttendanceLocationQuery", expect.any(Function));
-  expect(
-    request.parseAttendanceLocationQuery(
-      new URLSearchParams(`locationId=${locationId.toUpperCase()}`),
-    ),
-  ).toEqual({ locationId });
-  for (const value of [
-    "",
-    `locationId=${locationId}&personId=${personId}`,
-    `locationId=${locationId}&locationId=${locationId}`,
-  ]) {
-    expect(() => request.parseAttendanceLocationQuery(new URLSearchParams(value))).toThrow(
-      expect.objectContaining({ code: "management.request_invalid" }),
-    );
-  }
+it("manager queue takes no query", () => {
+  expect(request).not.toHaveProperty("parseAttendanceLocationQuery");
 });
 
 it.each(single([null, [], "", "not-a-uuid"]))(

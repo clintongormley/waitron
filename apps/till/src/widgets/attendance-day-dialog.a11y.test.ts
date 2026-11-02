@@ -23,7 +23,6 @@ describe.each(["light", "dark"] as const)("chosen attendance day in %s", (theme)
         ] as const) {
           const view: AttendanceDayView = {
             personId: "worker",
-            locationId: "deli",
             date: "2026-10-14",
             timeZone: "Europe/Madrid",
             revision: "revision",

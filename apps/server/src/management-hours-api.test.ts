@@ -112,13 +112,13 @@ function routes() {
   return [
     own + "inbox",
     own + path(),
-    own + `day?locationId=${venue.cfg.locationId}&date=2026-01-05`,
+    own + "day?date=2026-01-05",
     own + `commands/${crypto.randomUUID()}`,
     own + "commands",
     "/management-api/attendance/" + path("pay-period"),
   ];
 }
-it("ordinary staff read only their own record and configured workplace without the manager permission", async () => {
+it("ordinary staff read only their own record without the manager permission", async () => {
   const response = await ask(own + path());
   expect(response.status).toBe(200);
   const value = (await response.json()) as PersonHours;
@@ -133,7 +133,7 @@ it("ordinary staff read only their own record and configured workplace without t
   expect(await inbox.json()).toMatchObject({
     personId: venue.personId,
   });
-  const day = await ask(own + `day?locationId=${venue.cfg.locationId}&date=2026-01-05`);
+  const day = await ask(own + "day?date=2026-01-05");
   expect(day.status).toBe(200);
   expect(await day.json()).toMatchObject({ personId: venue.personId, revision: await revision() });
   await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, venue.personId));

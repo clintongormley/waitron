@@ -139,7 +139,7 @@ it("returns an empty own inbox and one compatible subject revision for day and i
   });
   expect(value.timeZone).toBe("Europe/Madrid");
   expect((await day()).revision).toBe(value.revision);
-  expect(await queue()).toEqual({ locationId, items: [] });
+  expect(await queue()).toEqual({ items: [] });
 });
 it("gives the inbox the venue's zone and no place list", async () => {
   await suite.db
@@ -584,7 +584,6 @@ it("reads a person's day at the venue without being told a location", async () =
   const value = await run((tx) => api.readAttendanceDay(tx, { personId, date: "2026-01-05" }));
   expect(value).toMatchObject({
     personId,
-    locationId,
     date: "2026-01-05",
     timeZone: "Atlantic/Canary",
   });

@@ -16,10 +16,9 @@ class AttendanceManagerLeaveApp extends LitElement {
           viewer: { personId: "manager", canSelfApprove: false },
           people: [{ personId: "worker", displayName: "Ana Worker" }],
         });
-      if (path.endsWith("/queue")) return Response.json({ locationId: "shop", items: [] });
+      if (path.endsWith("/queue")) return Response.json({ items: [] });
       return Response.json({
         personId: "worker",
-        locationId: "shop",
         date: "2026-10-14",
         timeZone: "Europe/Madrid",
         revision: "revision",

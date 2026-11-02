@@ -15,7 +15,6 @@ const command: OwnAttendanceCommand = {
 const saved = { commandId: command.commandId, entryIds: ["answer"], replayed: false };
 const day: AttendanceDayView = {
   personId: "worker",
-  locationId: "place",
   date: "2026-01-05",
   timeZone: "Europe/Madrid",
   revision: "current-revision",

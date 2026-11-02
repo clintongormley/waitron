@@ -175,7 +175,6 @@ export async function clockApp(
     })),
     getAttendanceDay: vi.fn().mockImplementation(async (date: string) => ({
       personId: state.personId,
-      locationId: "venue",
       date,
       revision: "revision",
       timeZone: "Europe/Madrid",

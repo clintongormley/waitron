@@ -82,7 +82,6 @@ export interface AttendanceInbox {
 }
 export interface AttendanceDayView {
   personId: string;
-  locationId: string;
   date: string;
   timeZone: string;
   revision: string;
@@ -90,7 +89,6 @@ export interface AttendanceDayView {
   items: CorrectionItem[];
 }
 export interface AttendanceManagerQueue {
-  locationId: string;
   items: CorrectionItem[];
 }
 

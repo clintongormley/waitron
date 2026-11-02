@@ -10,7 +10,6 @@ afterEach(cleanupWidgets);
 function view(): AttendanceDayView {
   return {
     personId: "worker",
-    locationId: "deli",
     date: "2026-10-14",
     timeZone: "Europe/Madrid",
     revision: "revision",

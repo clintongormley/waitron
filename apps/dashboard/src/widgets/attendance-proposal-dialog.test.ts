@@ -326,7 +326,6 @@ describe("attendance correction time and reason", () => {
 it("uses the selected day view's zone when constructing a missing-time proposal", async () => {
   const view = {
     personId: "worker",
-    locationId: "shop",
     date: "2026-10-14",
     timeZone: "America/New_York",
     revision: "rev",

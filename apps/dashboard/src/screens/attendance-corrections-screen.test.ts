@@ -50,7 +50,6 @@ const item: CorrectionItem = {
 };
 const day: AttendanceDayView = {
   personId: "worker",
-  locationId: "shop",
   date: "2026-10-14",
   timeZone: "Europe/Madrid",
   revision: "revision-1",
@@ -194,7 +193,6 @@ async function mount(
       }
       if (path.endsWith("/queue"))
         return Response.json({
-          locationId: "shop",
           items: data.items.filter((row) =>
             ["waiting-manager", "waiting-worker", "disputed"].includes(row.status),
           ),
@@ -204,7 +202,6 @@ async function mount(
         return Response.json({
           ...data.day,
           personId: args.get("personId"),
-          locationId: "shop",
           date: args.get("date"),
           ...(args.get("personId") === "manager"
             ? { items: [], record: { ...data.day.record, entries: [] } }

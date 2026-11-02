@@ -11,7 +11,6 @@ import type {
 const modules = import.meta.glob<typeof import("./attendance.js")>("./attendance.ts");
 const worker = "10000000-0000-4000-8000-000000000001";
 const manager = "10000000-0000-4000-8000-000000000002";
-const locationId = "10000000-0000-4000-8000-000000000003";
 const itemId = "10000000-0000-4000-8000-000000000004";
 const nodeId = "10000000-0000-4000-8000-000000000005";
 const command: AttendanceCommand = {
@@ -34,7 +33,6 @@ const lookups: AttendanceLookups = {
 };
 const day: AttendanceDayView = {
   personId: worker,
-  locationId,
   date: "2026-10-13",
   timeZone: "Europe/Madrid",
   revision: "subject-revision",
@@ -114,8 +112,8 @@ async function client(
 }
 
 describe("dashboard attendance wire and live reads", () => {
-  it("reads minimal names/current viewer, an exact worker day and location queue with session cookies", async () => {
-    const queue: AttendanceManagerQueue = { locationId, items: [pending] };
+  it("reads minimal names/current viewer, an exact worker day and queue with session cookies", async () => {
+    const queue: AttendanceManagerQueue = { items: [pending] };
     const { api, requests } = await client((path) =>
       path.endsWith("/lookups") ? lookups : path.includes("/day?") ? day : queue,
     );
@@ -145,7 +143,7 @@ describe("dashboard attendance wire and live reads", () => {
         : path.includes("/day?")
           ? day
           : path.endsWith("/queue")
-            ? { locationId, items: [] }
+            ? { items: [] }
             : saved,
     );
     await api.background.lookups();
@@ -182,11 +180,7 @@ describe("dashboard attendance wire and live reads", () => {
 
   it("query identities distinguish scope and declare every record/revision source; their reads stay passive", async () => {
     const { api, requests, activity } = await client((path) =>
-      path.endsWith("/lookups")
-        ? lookups
-        : path.includes("/day?")
-          ? day
-          : { locationId, items: [] },
+      path.endsWith("/lookups") ? lookups : path.includes("/day?") ? day : { items: [] },
     );
     const lookup = api.lookupsQuery(),
       queue = api.queueQuery(),
@@ -218,10 +212,10 @@ describe("dashboard attendance wire and live reads", () => {
   it("successful commands update a mounted shared query even with a silent change feed", async () => {
     const cache = new LiveData();
     caches.push(cache);
-    let queue: AttendanceManagerQueue = { locationId, items: [pending] };
+    let queue: AttendanceManagerQueue = { items: [pending] };
     const { api } = await client((_path, init) => {
       if (init.method === "POST") {
-        queue = { locationId, items: [] };
+        queue = { items: [] };
         return saved;
       }
       return queue;
@@ -246,7 +240,7 @@ describe("dashboard attendance wire and live reads", () => {
               }),
               { status: 409 },
             )
-          : { locationId, items: [pending] },
+          : { items: [pending] },
       cache,
     );
     const watched = cache.observe(api.queueQuery(), () => {});
@@ -265,14 +259,14 @@ describe("dashboard attendance wire and live reads", () => {
 it("a resolved receipt refreshes mounted records without a POST when the feed is silent", async () => {
   const cache = new LiveData();
   caches.push(cache);
-  let queue: AttendanceManagerQueue = { locationId, items: [pending] };
+  let queue: AttendanceManagerQueue = { items: [pending] };
   const { api, requests } = await client(
     (path) => (path.includes("/commands/") ? { ...saved, replayed: true } : queue),
     cache,
   );
   const watched = cache.observe(api.queueQuery(), () => {});
   await expect.poll(() => watched.snapshot.value?.items.length).toBe(1);
-  queue = { locationId, items: [] };
+  queue = { items: [] };
   expect(await api.background.command(command.commandId)).toEqual({ ...saved, replayed: true });
   await expect.poll(() => watched.snapshot.value?.items.length).toBe(0);
   expect(requests.every((request) => request.init.method === "GET")).toBe(true);
@@ -293,7 +287,7 @@ it.each([
   caches.push(cache);
   let revision = "before";
   const { api, requests, activity } = await client(
-    (path) => (path.includes("/day?") ? { ...day, revision } : { locationId, items: [] }),
+    (path) => (path.includes("/day?") ? { ...day, revision } : { items: [] }),
     cache,
   );
   const queue = cache.observe(api.queueQuery(), () => {});

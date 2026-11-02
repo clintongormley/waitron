@@ -119,7 +119,6 @@ describe("attendance client", () => {
       "/api/attendance/day?date=2026-10-25",
       {
         personId: "ana",
-        locationId: "old/location",
         date: "2026-10-25",
         timeZone: "Europe/Madrid",
         revision: "r2",
