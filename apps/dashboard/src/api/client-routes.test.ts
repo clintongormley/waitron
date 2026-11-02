@@ -453,7 +453,7 @@ describe("DashboardApi routes", () => {
     expect(callsOf(fetchImpl)).toEqual([["/management-api/receipt-preview", "POST", draft]]);
   });
 
-  it("reads the location's receipt language", async () => {
+  it("reads the venue's receipt language", async () => {
     const answer = {
       language: "ca-ES",
       choices: ["es-ES", "ca-ES", "gl-ES", "eu-ES"],

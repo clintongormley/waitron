@@ -97,12 +97,10 @@ async function refusal(res: Response): Promise<[number, string, unknown]> {
   return [res.status, body.error.code, body.error.params];
 }
 
-describe("mountWorkforceApi — locations + roster read/create", () => {
-  it("GET /management-api/locations lists the tenant's locations", async () => {
+describe("mountWorkforceApi — roster read/create", () => {
+  it("GET /management-api/locations is gone", async () => {
     const res = await send(mountApp(), "GET", "/management-api/locations");
-    expect(res.status).toBe(200);
-    const rows = (await res.json()) as { id: string; name: string }[];
-    expect(rows).toContainEqual({ id: locationId, name: "Main", timeZone: "Europe/Madrid" });
+    expect(res.status).toBe(404);
   });
 
   it("GET /management-api/roster returns { version: null, shifts: [] } for an empty week", async () => {
@@ -162,7 +160,9 @@ describe("mountWorkforceApi — locations + roster read/create", () => {
   });
 
   it("401s an unauthenticated request", async () => {
-    const res = await send(mountApp(), "GET", "/management-api/locations", { cookie: null });
+    const res = await send(mountApp(), "GET", "/management-api/roster?period=2026-03-02", {
+      cookie: null,
+    });
     expect(res.status).toBe(401);
   });
 

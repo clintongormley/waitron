@@ -54,12 +54,11 @@ function chooseWeek(week: HTMLElement, value: string): void {
 
 describe("planned-actual-screen", () => {
   it("loads staff and the week's rows on connect, resolving the person name", async () => {
-    const api = stubApi({ getLocations: vi.fn() });
+    const api = stubApi();
     const { el } = await mountWidget<PlannedActualScreen>("dashboard-planned-actual-screen", {
       api,
     });
     await flush(el);
-    expect(api.getLocations).not.toHaveBeenCalled();
     const monday = mondayOf(today());
     expect(api.getPlannedVsActual).toHaveBeenCalledWith(
       monday,
