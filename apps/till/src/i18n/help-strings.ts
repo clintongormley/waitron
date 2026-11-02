@@ -43,7 +43,7 @@ export const helpEn = {
   "help.more.transfers":
     "Asks another department to take over the current tab, and shows the tabs other departments send you to accept or decline. Your department stays responsible for a tab until the other accepts it. A tab offered to your department, or still yours in the zones this device serves, shows how many items it has, then how many are unsent, held, waiting or ready.",
   "help.more.pass":
-    "Opens the pass: the open orders, each with its dishes grouped by course, or by group on a table's bill, and which of them are ready.",
+    "Opens the pass: a card for each group a table sends, or each counter order, in columns from held to ready.",
   "help.person.fix_hours":
     "Opens your clock record for today, or for another day or place you choose, to fix a time or add a missing clock-in and clock-out or break. A supervisor, manager or admin other than you approves the change with their PIN; an admin may approve their own.",
   "help.kitchen.card":
@@ -56,7 +56,7 @@ export const helpEn = {
   "help.kitchen.merge":
     "Switches between a board for each station and one board for all of them, where each dish names its station. This device remembers the choice.",
   "help.pass.card":
-    "One card per order, its dishes by course, or by group on a table's bill. The minutes count from when the order was opened. The left edge takes the brand colour, then turns red, as its dishes wait, by their stations' late flags; a dish that waits too long says Forgotten.",
+    "One card for each group a table sends, across its bills, or for each counter order. Its minutes count from when the waiter sent it, or on a Ready card from when its last dish was ready. The left edge takes the brand colour, then turns red, as its dishes wait, by their stations' late flags; a dish that waits too long says Forgotten. Dimmed dishes are shown for information only: dishes this pass does not cover and, once a station it covers waits for the pass, dishes of the stations that do not and dishes sent before their station began waiting.",
   "help.pass.cards_part": "Order cards",
   "help.pass.ready":
     "Marks every fired dish of this course or group Ready, at every station, not only the ones this screen shows. Held dishes do not change.",
@@ -105,7 +105,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.more.transfers":
     "Pide a otro departamento que se haga cargo de la cuenta actual y muestra las cuentas que otros departamentos te envían para aceptarlas o rechazarlas. Tu departamento sigue siendo responsable hasta que el otro la acepte. Una cuenta que se ofrece a tu departamento, o que sigue siendo de tu departamento en las zonas que atiende este dispositivo, muestra cuántos artículos tiene y cuántos están sin enviar, en espera, esperando o listos.",
   "help.more.pass":
-    "Abre el pase: los pedidos abiertos, cada uno con sus platos agrupados por curso, o por grupo en la cuenta de una mesa, y cuáles están listos.",
+    "Abre el pase: una tarjeta por cada grupo que envía una mesa, o por cada pedido de mostrador, en columnas de en espera a listo.",
   "help.person.fix_hours":
     "Abre tu registro de fichajes de hoy, o de otro día o lugar que elijas, para corregir una hora o añadir una entrada y salida o un descanso que faltan. Un supervisor, encargado o administrador que no seas tú aprueba el cambio con su PIN; un administrador puede aprobar el suyo.",
   "help.kitchen.card":
@@ -118,7 +118,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.kitchen.merge":
     "Cambia entre un tablero por estación y un solo tablero para todas, donde cada plato indica su estación. Este dispositivo recuerda la elección.",
   "help.pass.card":
-    "Una tarjeta por pedido, con sus platos por curso, o por grupo en la cuenta de una mesa. Los minutos cuentan desde que se abrió el pedido. El borde izquierdo toma el color de marca y luego pasa a rojo mientras sus platos esperan, según los avisos de demora de sus estaciones; un plato que espera demasiado dice Olvidado.",
+    "Una tarjeta por cada grupo que envía una mesa, en todas sus cuentas, o por cada pedido de mostrador. Sus minutos cuentan desde que el camarero lo envió o, en una tarjeta lista, desde que su último plato estuvo listo. El borde izquierdo toma el color de marca y luego pasa a rojo mientras sus platos esperan, según los avisos de demora de sus estaciones; un plato que espera demasiado dice Olvidado. Los platos atenuados se muestran solo como información: los que este pase no cubre y, cuando una estación que cubre espera al pase, los de las estaciones que no esperan y los enviados antes de que su estación empezara a esperar.",
   "help.pass.cards_part": "Tarjetas de pedido",
   "help.pass.ready":
     "Marca como listos todos los platos ya marchados de este curso o grupo, en todas las estaciones, no solo las que muestra esta pantalla. Los platos en espera no cambian.",

@@ -1,8 +1,9 @@
-import { ContentLanguageController, baseStyles } from "@waitron/ui";
+import { ContentLanguageController, HelpModeController, baseStyles } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import type { TimingBand } from "@waitron/shared";
 import type { PassBoard } from "../api/client.js";
+import { helpText } from "../i18n/help-strings.js";
 import { t } from "../i18n/t.js";
 import { type BoardMeasure, columnsFit } from "../state/kitchen-board-fit.js";
 import { type ColumnKey, type ColumnState, PASS_COLUMNS } from "../state/kitchen-columns.js";
@@ -20,6 +21,7 @@ import { kitchenPortionKey, portionGroups } from "../state/portion-groups.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { dishLine } from "./dish-format.js";
 import { groupName } from "./group-name.js";
+import { helpBadge, kitchenHelpStyles } from "./help-badge.js";
 import {
   columnHeading,
   dishAllergens,
@@ -66,6 +68,7 @@ export class TillPassBoard extends LitElement {
     kitchenAllergyStyles,
     orderNumberStyles,
     kitchenBoardStyles,
+    kitchenHelpStyles,
     css`
       :host {
         display: block;
@@ -83,8 +86,14 @@ export class TillPassBoard extends LitElement {
         margin: 0 0 var(--wt-space-2);
       }
 
-      .board-head wt-button {
+      .columns-anchor {
+        display: flex;
         margin-inline-start: auto;
+      }
+
+      .lever-anchor {
+        display: flex;
+        flex-direction: column;
       }
 
       .overdue-count {
@@ -343,6 +352,10 @@ export class TillPassBoard extends LitElement {
   /** Reprint is a till's; the screen decides, and a monitor never draws it. */
   @property({ type: Boolean }) showReprint = false;
 
+  /** Badges are drawn only while help is on, so with help off no screen draws one. */
+  readonly #help = new HelpModeController(this);
+  #cardBadgeDrawn = false;
+  #leverBadgeDrawn = false;
   #measured?: BoardMeasure;
   #resizing?: ResizeObserver;
 
@@ -374,6 +387,8 @@ export class TillPassBoard extends LitElement {
   }
 
   override render() {
+    this.#cardBadgeDrawn = false;
+    this.#leverBadgeDrawn = false;
     const views = passCardViews(this.board, this.mode, this.runsPass, this.now);
     const overdue = passOverdueCount(views);
     const shown = this.columns.order.filter(
@@ -389,12 +404,20 @@ export class TillPassBoard extends LitElement {
             : html`<p class="overdue-count" data-overdue-count>
                 ${overdue} ${t("station.overdue_count")}
               </p>`
-        }<wt-button
-          data-columns-open
-          variant="secondary"
-          @click=${(event: Event) =>
-            this.#emit("open-columns", { opener: event.currentTarget as HTMLElement })}
-          >${t("station.columns")}</wt-button
+        }<span class="help-anchor help-inset columns-anchor"
+          ><wt-button
+            data-columns-open
+            variant="secondary"
+            @click=${(event: Event) =>
+              this.#emit("open-columns", { opener: event.currentTarget as HTMLElement })}
+            >${t("station.columns")}</wt-button
+          >${
+            this.#help.on
+              ? helpBadge("help.kitchen.columns", t("station.columns"), {
+                  guide: "kitchen-service.kitchen-screen",
+                })
+              : nothing
+          }</span
         >
       </div>
       <slot name="status"></slot>
@@ -427,7 +450,9 @@ export class TillPassBoard extends LitElement {
     const { card } = view;
     const accent =
       view.column === "held" ? "held" : view.band === null ? "" : this.#accentClasses(view.band);
-    return html`<article class="ticket ${accent}" data-card=${card.key}>
+    const badge = this.#help.on && !this.#cardBadgeDrawn;
+    this.#cardBadgeDrawn = true;
+    return html`<article class="ticket help-anchor help-inset ${accent}" data-card=${card.key}>
       <div class="ticket-head">
         ${view.kindWord === null ? nothing : html`<span class="kind">${view.kindWord}</span>`}
         ${card.orders.map(
@@ -451,7 +476,13 @@ export class TillPassBoard extends LitElement {
       </ul>
       ${this.#fire(view)}${this.#groupReady(view)}${view.courseReady.map((course) =>
         this.#courseReady(view, course),
-      )}${this.#reprints(view)}
+      )}${this.#reprints(view)}${
+        badge
+          ? helpBadge("help.pass.card", helpText("help.kitchen.cards_part"), {
+              guide: "kitchen-service.service-lifetime",
+            })
+          : nothing
+      }
     </article>`;
   }
 
@@ -535,27 +566,42 @@ export class TillPassBoard extends LitElement {
     const { card } = view;
     if (!view.groupReady || card.target.kind !== "group") return nothing;
     const name = card.group === undefined ? "" : groupName(card.group);
-    return html`<button
-      class="lever ready"
-      data-group-ready=${card.target.groupId}
-      aria-label=${`${t("expo.group_ready")} ${name}`}
-      @click=${() => this.#emit("pass-group-ready", { key: card.key })}
-    >
-      ${t("expo.group_ready")}
-    </button>`;
+    return this.#withLeverBadge(
+      t("expo.group_ready"),
+      html`<button
+        class="lever ready"
+        data-group-ready=${card.target.groupId}
+        aria-label=${`${t("expo.group_ready")} ${name}`}
+        @click=${() => this.#emit("pass-group-ready", { key: card.key })}
+      >
+        ${t("expo.group_ready")}
+      </button>`,
+    );
   }
 
   #courseReady(view: CardView, course: { orderId: string; courseId: string }): TemplateResult {
     const name =
       view.card.items.find((item) => item.course?.id === course.courseId)?.course?.name ?? "";
-    return html`<button
-      class="lever ready"
-      data-ready=${course.courseId}
-      aria-label=${`${t("expo.ready")} ${name}`}
-      @click=${() => this.#emit("pass-course-ready", { key: view.card.key, ...course })}
-    >
-      ${t("expo.ready")}
-    </button>`;
+    return this.#withLeverBadge(
+      t("expo.ready"),
+      html`<button
+        class="lever ready"
+        data-ready=${course.courseId}
+        aria-label=${`${t("expo.ready")} ${name}`}
+        @click=${() => this.#emit("pass-course-ready", { key: view.card.key, ...course })}
+      >
+        ${t("expo.ready")}
+      </button>`,
+    );
+  }
+
+  /** The first lever drawn sits in a wrapper that holds its badge beside it, never inside it. */
+  #withLeverBadge(label: string, lever: TemplateResult): TemplateResult {
+    if (!this.#help.on || this.#leverBadgeDrawn) return lever;
+    this.#leverBadgeDrawn = true;
+    return html`<span class="help-anchor help-inset lever-anchor"
+      >${lever}${helpBadge("help.pass.ready", label)}</span
+    >`;
   }
 
   /** Its accessible name is the slotted text: a one-bill card's heading gives the bill, and a card

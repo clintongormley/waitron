@@ -188,8 +188,11 @@ export class TillPassScreen extends LitElement {
   /** A Fire out or unanswered, by card key; an unanswered one is resent unchanged (B3 D48). */
   readonly #asks = new Map<string, PassReleaseAsk>();
   @state() private leverError?: { code: string; card: string };
-  @state() private tableChanged = false;
-  #tableChangedNext = false;
+  /** A failed reprint stays until the next reprint press; no read clears it. */
+  @state() private reprintErrorCode?: string;
+  /** The refresh sentence, with the table a Ready refusal names; Fire's names none. */
+  @state() private tableChanged: { table?: string } | null = null;
+  #tableChangedNext: { table?: string } | null = null;
   /** Each board's layout, read from storage once and never again on a refresh. */
   readonly #columns = new Map<string, ColumnState>();
 
@@ -283,7 +286,7 @@ export class TillPassScreen extends LitElement {
   async #reload(signal?: AbortSignal, probe = false): Promise<void> {
     const boardId = this.#boardId();
     if (boardId === null) {
-      this.#tableChangedNext = false;
+      this.#tableChangedNext = null;
       return;
     }
     const request = ++this.#request;
@@ -300,7 +303,7 @@ export class TillPassScreen extends LitElement {
       this.stale = false;
       this.#lastGoodAt = new Date();
       this.tableChanged = this.#tableChangedNext;
-      this.#tableChangedNext = false;
+      this.#tableChangedNext = null;
     } catch (error) {
       if (
         probe &&
@@ -339,8 +342,8 @@ export class TillPassScreen extends LitElement {
       };
       this.#asks.set(key, ask);
     }
-    this.tableChanged = false;
-    this.#tableChangedNext = false;
+    this.tableChanged = null;
+    this.#tableChangedNext = null;
     this.leverError = undefined;
     this.sending = new Set([...this.sending, key]);
     let reload = true;
@@ -359,7 +362,7 @@ export class TillPassScreen extends LitElement {
         else if (this.#isCurrent(boardId)) {
           rechoose = code === "device.unauthorized" && this.#followsChoice();
           if (code === "ticket.pass_context_changed" || code === "party.not_open" || rechoose)
-            this.#tableChangedNext = true;
+            this.#tableChangedNext = {};
           else
             this.leverError = {
               code: code ?? "server.internal",
@@ -373,6 +376,70 @@ export class TillPassScreen extends LitElement {
       this.sending = sending;
     }
     if (reload && this.#isCurrent(boardId)) await (rechoose ? this.#loadChoice() : this.#reload());
+  }
+
+  async #groupReady(boardId: BoardId, key: string): Promise<void> {
+    const card = this.board.inProgress.find((offered) => offered.key === key);
+    if (card?.target.kind !== "group" || card.party === undefined) return;
+    const { partyId, groupId } = card.target;
+    const command = {
+      submissionId: crypto.randomUUID(),
+      expectedPartyRevision: card.party.revision,
+    };
+    this.tableChanged = null;
+    this.#tableChangedNext = null;
+    this.leverError = undefined;
+    try {
+      await (this.#onDevice()
+        ? this.api.bumpDeviceGroupReady(partyId, groupId, command)
+        : this.api.bumpGroupReady(partyId, groupId, command));
+    } catch (error) {
+      if (this.#switched(error)) return;
+      if (this.#isCurrent(boardId)) {
+        if ((error as { code?: string } | null)?.code === "party.out_of_date") {
+          const first = card.orders[0];
+          this.#tableChangedNext = { table: first?.tableLabel ?? `#${first?.orderNumber ?? ""}` };
+        } else this.#leverRefused(card, error);
+      }
+    }
+    if (this.#isCurrent(boardId)) await this.#reload();
+  }
+
+  /** Unlike a group Ready press, a course Ready press leaves the refresh sentence. */
+  async #courseReady(
+    boardId: BoardId,
+    key: string,
+    orderId: string,
+    courseId: string,
+  ): Promise<void> {
+    const card = this.board.inProgress.find((offered) => offered.key === key);
+    this.leverError = undefined;
+    try {
+      await (this.#onDevice()
+        ? this.api.bumpDeviceCourseReady(orderId, courseId)
+        : this.api.bumpCourseReady(orderId, courseId));
+    } catch (error) {
+      if (this.#switched(error)) return;
+      if (this.#isCurrent(boardId)) this.#leverRefused(card, error);
+    }
+    if (this.#isCurrent(boardId)) await this.#reload();
+  }
+
+  #leverRefused(card: PassCard | undefined, error: unknown): void {
+    this.leverError = {
+      code: (error as { code?: string } | null)?.code ?? "server.internal",
+      card: card === undefined ? "" : cardLabel(card),
+    };
+  }
+
+  async #reprint(boardId: BoardId, orderId: string): Promise<void> {
+    this.reprintErrorCode = undefined;
+    try {
+      await this.api.reprintOrder(orderId);
+    } catch (error) {
+      if (this.#isCurrent(boardId))
+        this.reprintErrorCode = (error as { code?: string } | null)?.code ?? "server.internal";
+    }
   }
 
   /**
@@ -517,10 +584,26 @@ export class TillPassScreen extends LitElement {
       .columns=${this.#columnsFor(boardId)}
       .now=${this.#clockNow()}
       .sending=${this.sending}
+      .showReprint=${!this.#onDevice()}
       .reducedMotion=${this.reducedMotion}
       @pass-fire=${(event: Event) => {
         event.stopPropagation();
         void this.#fire(boardId, (event as CustomEvent<{ key: string }>).detail.key);
+      }}
+      @pass-group-ready=${(event: Event) => {
+        event.stopPropagation();
+        void this.#groupReady(boardId, (event as CustomEvent<{ key: string }>).detail.key);
+      }}
+      @pass-course-ready=${(event: Event) => {
+        event.stopPropagation();
+        const { key, orderId, courseId } = (
+          event as CustomEvent<{ key: string; orderId: string; courseId: string }>
+        ).detail;
+        void this.#courseReady(boardId, key, orderId, courseId);
+      }}
+      @pass-reprint=${(event: Event) => {
+        event.stopPropagation();
+        void this.#reprint(boardId, (event as CustomEvent<{ orderId: string }>).detail.orderId);
       }}
       @toggle-column=${(event: Event) => {
         event.stopPropagation();
@@ -537,6 +620,13 @@ export class TillPassScreen extends LitElement {
         ${this.stale ? html`<till-stale-since .since=${this.#lastGoodAt}></till-stale-since>` : nothing}
       </p>
       ${
+        this.reprintErrorCode
+          ? html`<p class="error" role="alert" slot="status" data-reprint-error>
+              ${codeMessage(this.reprintErrorCode)}
+            </p>`
+          : nothing
+      }
+      ${
         this.leverError
           ? html`<p class="error" role="alert" slot="status" data-lever-error>
               ${this.leverError.card}: ${codeMessage(this.leverError.code)}
@@ -546,6 +636,14 @@ export class TillPassScreen extends LitElement {
       ${
         this.tableChanged
           ? html`<p class="table-changed" role="status" slot="status" data-table-changed>
+              ${
+                this.tableChanged.table === undefined
+                  ? nothing
+                  : t("station.table_changed_named").replace(
+                      "{table}",
+                      () => this.tableChanged!.table!,
+                    )
+              }
               ${t("station.table_changed")}
             </p>`
           : nothing
