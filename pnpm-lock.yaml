@@ -1800,9 +1800,6 @@ importers:
       '@waitron/node-db':
         specifier: workspace:*
         version: link:../node-db
-      '@waitron/reporting':
-        specifier: workspace:*
-        version: link:../reporting
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared

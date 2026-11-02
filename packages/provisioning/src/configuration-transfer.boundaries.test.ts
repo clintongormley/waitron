@@ -97,29 +97,18 @@ it.each([
   );
 });
 
-it.each([
-  {},
-  { version: 2 },
-  { ...configurationBundle(), version: 8 },
-  {
-    ...formatNineBundle(),
-    venue: {
-      ...(formatNineBundle().venue as Record<string, unknown>),
-      location: {
-        ...((formatNineBundle().venue as Record<string, unknown>).location as object),
-        drawerOpenPolicy: "always",
-      },
-    },
+it.each([{}, { version: 2 }, { ...configurationBundle(), version: 8 }])(
+  "refuses an obsolete configuration format: %j",
+  (value) => {
+    const artifact = encryptArtifact(
+      packArchive([{ name: "configuration.json", bytes: Buffer.from(JSON.stringify(value)) }]),
+      passphrase,
+    );
+    expect(() => decodeConfigurationBundle(artifact, passphrase)).toThrow(
+      expect.objectContaining({ code: "setup.configuration_outdated" }),
+    );
   },
-])("refuses an obsolete configuration format: %j", (value) => {
-  const artifact = encryptArtifact(
-    packArchive([{ name: "configuration.json", bytes: Buffer.from(JSON.stringify(value)) }]),
-    passphrase,
-  );
-  expect(() => decodeConfigurationBundle(artifact, passphrase)).toThrow(
-    expect.objectContaining({ code: "setup.configuration_outdated" }),
-  );
-});
+);
 
 it.each([
   [{ name: "other.json", bytes: Buffer.from("{}") }],

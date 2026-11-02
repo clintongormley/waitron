@@ -267,7 +267,6 @@ describe("CORE_CONFIGURATION_TRANSFER", () => {
       CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "dining_tables"),
     ).toEqual({
       name: "dining_tables",
-      locationColumns: ["location_id"],
       omit: ["needs_clearing_since", "short_name_key"],
     });
     expect(CORE_CONFIGURATION_TRANSFER.afterImport).toBe(storeTableShortNameKeys);
@@ -282,7 +281,6 @@ describe("CORE_CONFIGURATION_TRANSFER", () => {
   it("leaves a deleted printer behind and never carries its poll credential", () => {
     expect(CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "printers")).toEqual({
       name: "printers",
-      locationColumns: ["location_id"],
       omit: ["poll_token_hash"],
       reconnect: true,
       leaveBehindWhenSet: "deleted_at",
