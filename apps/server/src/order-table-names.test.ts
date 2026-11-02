@@ -11,10 +11,10 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
-import { dashboardOrderAt } from "./testing/session-device.js";
 import { listCounterWaiting, listHeldOrders } from "./working-order.js";
 
 let venue: BillVenue;
@@ -33,9 +33,10 @@ describe("A765 table names in order lists", () => {
     async (status) => {
       const id = randomUUID();
       await withTransaction(venue.db, (tx) =>
-        tx.insert(workingOrders).values({
+        seedWorkingOrder(tx, {
           id,
-          ...dashboardOrderAt(venue.cfg.locationId),
+          source: "dashboard",
+          deviceId: null,
           nodeId: venue.cfg.nodeId,
           orderNumber: 204,
           status,
@@ -72,9 +73,10 @@ describe("A765 table names in order lists", () => {
         });
         await tx.insert(partyTables).values({ partyId: party!.id, tableId: table.id });
       }
-      await tx.insert(workingOrders).values({
+      await seedWorkingOrder(tx, {
         id,
-        ...dashboardOrderAt(venue.cfg.locationId),
+        source: "dashboard",
+        deviceId: null,
         nodeId: venue.cfg.nodeId,
         orderNumber: 201,
         partyId: party!.id,
@@ -109,9 +111,10 @@ describe("A765 table names in order lists", () => {
           .update(floorTodayTables)
           .set({ name: `Today ${status}` })
           .where(eq(floorTodayTables.tableId, table.id));
-        await tx.insert(workingOrders).values({
+        await seedWorkingOrder(tx, {
           id,
-          ...dashboardOrderAt(venue.cfg.locationId),
+          source: "dashboard",
+          deviceId: null,
           nodeId: venue.cfg.nodeId,
           orderNumber: status === "open" ? 202 : 203,
           status,

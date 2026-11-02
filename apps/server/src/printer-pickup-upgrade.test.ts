@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { afterAll, expect, it } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { installChangeFeed, locations, printers, runMigrations } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { installChangeFeed, printers, runMigrations, venueLocationId } from "@waitron/db";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -81,15 +81,12 @@ const suite = useVenueDb({
 });
 
 it("upgrades populated printers through the pre-canvas-retirement schema without changing settings, holder or device choices", async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Bar",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
-    })
-    .returning({ id: locations.id });
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant",
+  });
+  const venueId = await venueLocationId(suite.db);
   const profileId = randomUUID();
   const deviceId = randomUUID();
   await suite.db.execute(
@@ -97,11 +94,11 @@ it("upgrades populated printers through the pre-canvas-retirement schema without
   );
   // A drizzle insert names every column today's schema has, which this older schema may lack.
   await suite.db.execute(
-    sql`insert into devices (id, location_id, device_profile_id, label, token_hash, enrolled_at, created_at) values (${deviceId}, ${location!.id}, ${profileId}, 'Bar till', 'seeded', '2026-10-12T12:00:00.000Z', '2026-10-12T12:00:00.000Z')`,
+    sql`insert into devices (id, location_id, device_profile_id, label, token_hash, enrolled_at, created_at) values (${deviceId}, ${venueId}, ${profileId}, 'Bar till', 'seeded', '2026-10-12T12:00:00.000Z', '2026-10-12T12:00:00.000Z')`,
   );
   const printerId = randomUUID();
   await suite.db.execute(
-    sql`insert into printers (id, location_id, name, transport, host, portable, paper_width, resolution) values (${printerId}, ${location!.id}, 'Portable', 'network_tcp', '10.0.0.9', 1, '58mm', '203dpi')`,
+    sql`insert into printers (id, location_id, name, transport, host, portable, paper_width, resolution) values (${printerId}, ${venueId}, 'Portable', 'network_tcp', '10.0.0.9', 1, '58mm', '203dpi')`,
   );
   await suite.db.execute(
     sql`update devices set receipt_printer_id = ${printerId}, payment_slip_printer_id = ${printerId} where id = ${deviceId}`,

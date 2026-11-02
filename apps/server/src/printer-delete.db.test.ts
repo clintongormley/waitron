@@ -12,7 +12,6 @@ import {
   invoiceSeries,
   kitchenPrintJobs,
   kitchenStations,
-  locations,
   printerHolders,
   printers,
   printJobs,
@@ -21,11 +20,11 @@ import {
   stationPrinters,
   subscribeToChanges,
   withTransaction,
-  workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   MAX_DELIVERY_ATTEMPTS,
   PRINTER_DELETED,
@@ -198,14 +197,14 @@ async function newSale(): Promise<string> {
  * Printer P ("Counter printer", portable, with a drawer) and its every kind of link; printer Q the
  * control beside it in each; Z with nothing; D switched off with one waiting job.
  */
-async function seedVenue() {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
-    .returning();
-  const locationId = location!.id;
-  const nodeId = await seedNode(suite.db, brandLocationId(locationId));
+async function seedVenueWithPrinters() {
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Sale on premises",
+  });
+  const locationId = await venueLocationId(suite.db);
+  const nodeId = await seedNode(suite.db);
   await suite.db.insert(invoiceSeries).values({ nodeId, code: "F", purpose: "standard" });
   const cfg = { locationId };
 
@@ -260,29 +259,28 @@ async function seedVenue() {
   const device = async (values: {
     label: string;
     profileId: string;
-    location?: string;
     active?: boolean;
     receipt?: string;
     slip?: string;
     drawer?: string;
     invoice?: string;
-  }) =>
-    (
-      await suite.db
-        .insert(devices)
-        .values({
-          locationId: values.location ?? locationId,
-          deviceProfileId: values.profileId,
-          label: values.label,
-          tokenHash: randomUUID(),
-          active: values.active ?? true,
-          receiptPrinterId: values.receipt ?? null,
-          paymentSlipPrinterId: values.slip ?? null,
-          cashDrawerPrinterId: values.drawer ?? null,
-          invoicePrinterId: values.invoice ?? null,
-        })
-        .returning({ id: devices.id })
-    )[0]!.id;
+  }) => {
+    const { deviceId } = await seedDevice(suite.db, {
+      label: values.label,
+      profileId: values.profileId,
+    });
+    await suite.db
+      .update(devices)
+      .set({
+        active: values.active ?? true,
+        receiptPrinterId: values.receipt ?? null,
+        paymentSlipPrinterId: values.slip ?? null,
+        cashDrawerPrinterId: values.drawer ?? null,
+        invoicePrinterId: values.invoice ?? null,
+      })
+      .where(eq(devices.id, deviceId));
+    return deviceId;
+  };
   const ana = await device({
     label: "Handheld Ana",
     profileId: waiters,
@@ -391,10 +389,7 @@ async function seedVenue() {
     authorizedBy: "manager-one",
     reason: "calibration",
   });
-  const [order] = await suite.db
-    .insert(workingOrders)
-    .values({ source: "dashboard", locationId, orderNumber: 1 })
-    .returning({ id: workingOrders.id });
+  const order = await seedWorkingOrder(suite.db, { source: "dashboard", orderNumber: 1 });
   await suite.db.insert(kitchenPrintJobs).values({
     printJobId: exhausted,
     workingOrderId: order!.id,
@@ -430,7 +425,7 @@ async function seedVenue() {
   };
 }
 
-type Venue = Awaited<ReturnType<typeof seedVenue>>;
+type Venue = Awaited<ReturnType<typeof seedVenueWithPrinters>>;
 
 function expectedImpactOfP(v: Venue): DeleteImpact {
   return {
@@ -504,7 +499,7 @@ const LIVE = (v: Venue) => [v.jobs.queued, v.jobs.printing, v.jobs.retryable, v.
 
 describe("the printer delete impact", () => {
   it("names every job, receipt, holder, device, profile, default and station the delete touches, and writes nothing", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithPrinters();
     const before = await snapshot();
 
     const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.P));
@@ -514,7 +509,7 @@ describe("the printer delete impact", () => {
   });
 
   it("names a device under an inherited default only where that default serves it: a portable one only for its holder", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithPrinters();
     // Ana keeps holding P and goes back to Use default for receipts and slips.
     await suite.db
       .update(devices)
@@ -548,7 +543,7 @@ describe("the printer delete impact", () => {
   });
 
   it("answers an empty impact for a printer nothing refers to, and for a switched-off one only its own work", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithPrinters();
 
     expect(await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.Z))).toEqual({
       target: { id: v.Z, name: "Spare printer" },
@@ -565,15 +560,11 @@ describe("the printer delete impact", () => {
   });
 
   it("lists each item's targets in label order: numbers by value, letters ignoring case", async () => {
-    const v = await seedVenue();
-    for (const label of ["Till 10", "till 3", "Till 2"])
-      await suite.db.insert(devices).values({
-        locationId: v.cfg.locationId,
-        deviceProfileId: v.bar,
-        label,
-        tokenHash: randomUUID(),
-        receiptPrinterId: v.Z,
-      });
+    const v = await seedVenueWithPrinters();
+    for (const label of ["Till 10", "till 3", "Till 2"]) {
+      const { deviceId } = await seedDevice(suite.db, { label, profileId: v.bar });
+      await suite.db.update(devices).set({ receiptPrinterId: v.Z }).where(eq(devices.id, deviceId));
+    }
 
     const impact = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.Z));
 
@@ -583,7 +574,7 @@ describe("the printer delete impact", () => {
   });
 
   it("answers printer.not_found for a deleted or unknown printer", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithPrinters();
     await withTransaction(suite.db, (tx) => deletePrinter(tx, v.Z, NOW));
 
     for (const id of [v.Z, randomUUID()]) {
@@ -594,7 +585,7 @@ describe("the printer delete impact", () => {
   });
 
   it("names a disabled device inheriting the printer as its profile's default, and not a deleted one", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithPrinters();
     const [series] = await suite.db.select().from(invoiceSeries);
     const tillCfg: TradingContext = {
       nodeId: brandNodeId(series!.nodeId),
@@ -615,19 +606,11 @@ describe("the printer delete impact", () => {
       position: 0,
       isDefault: true,
     });
-    const deliDevice = async (label: string) =>
-      (
-        await suite.db
-          .insert(devices)
-          .values({
-            locationId: v.cfg.locationId,
-            deviceProfileId: deli!.id,
-            label,
-            tokenHash: randomUUID(),
-            active: false,
-          })
-          .returning({ id: devices.id })
-      )[0]!.id;
+    const deliDevice = async (label: string) => {
+      const { deviceId } = await seedDevice(suite.db, { label, profileId: deli!.id });
+      await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+      return deviceId;
+    };
     const gone = await deliDevice("Deli till");
     const spare = await deliDevice("Deli spare");
     await withTransaction(suite.db, (tx) => deleteDevice(tx, tillCfg, gone, NOW));
@@ -650,7 +633,7 @@ describe("the printer delete impact", () => {
 
 describe("deleting a printer", () => {
   it("returns the impact it read and leaves exactly what the spec says, every other row as it was", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithPrinters();
     const before = await snapshot();
     const read = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.P));
 
@@ -661,7 +644,7 @@ describe("deleting a printer", () => {
   });
 
   it("clears every matching choice and link, including an inactive device's, and promotes no other default", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithPrinters();
 
     await withTransaction(suite.db, (tx) => deletePrinter(tx, v.P, NOW));
 
@@ -710,7 +693,7 @@ describe("deleting a printer", () => {
   });
 
   it("recomputes inside the delete: work and settings added after the read are ended and removed, and a job finished meanwhile stays finished", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithPrinters();
     const read = await withTransaction(suite.db, (tx) => readPrinterDeleteImpact(tx, v.P));
     expect(read).toEqual(expectedImpactOfP(v));
 
@@ -793,7 +776,7 @@ describe("deleting a printer", () => {
   });
 
   it("leaves a device on the profile's deleted cash-drawer default with no drawer, not the other listed one", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithPrinters();
     const drawerOf = (deviceId: string) =>
       withTransaction(suite.db, (tx) => resolveDevicePrinterId(tx, deviceId, "cash_drawer"));
     expect(await drawerOf(v.barTill)).toBe(v.P);
@@ -814,7 +797,7 @@ describe("deleting a printer", () => {
   });
 
   it("deletes a printer nothing refers to and a switched-off one", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithPrinters();
     const before = await snapshot();
 
     await withTransaction(suite.db, (tx) => deletePrinter(tx, v.Z, NOW));
@@ -827,7 +810,7 @@ describe("deleting a printer", () => {
   });
 
   it("answers printer.not_found to a second delete and writes nothing", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithPrinters();
     await withTransaction(suite.db, (tx) => deletePrinter(tx, v.P, NOW));
     const before = await snapshot();
 
@@ -840,7 +823,7 @@ describe("deleting a printer", () => {
   });
 
   it("rolls back every ending and removal when the final write is refused, and publishes no change", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithPrinters();
     await installChangeFeed(suite.db, CORE_CHANGE_SOURCES);
     const heard: ResourceIdentity[] = [];
     const unsubscribe = subscribeToChanges((change) => heard.push(...change.resources));
@@ -875,7 +858,7 @@ describe("deleting a printer", () => {
   });
 
   it("is unlike Disable, which keeps ordinary waiting jobs, settings and holder, and can be undone by Enable", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithPrinters();
     const before = await snapshot();
 
     // What the deactivate route runs.

@@ -5,17 +5,16 @@ import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
-  locations,
-  nodes,
   printers,
   printJobs,
   saleLines,
   sales,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   CATALOGUE_MIGRATIONS,
   createCatalogue,
@@ -139,21 +138,14 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     await seedLegacySellingUnits(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Main dining room",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    locationId = loc!.id;
-    ({ deviceId } = await seedDevice(db, { locationId }));
-    const [node] = await db
-      .insert(nodes)
-      .values({ locationId, name: "Node 1" })
-      .returning({ id: nodes.id });
-    nodeId = node!.id;
+    await seedVenue(db, {
+      name: "Main dining room",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    locationId = await venueLocationId(db);
+    ({ deviceId } = await seedDevice(db));
+    nodeId = await seedNode(db);
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "A" })

@@ -6,18 +6,17 @@ import {
   CORE_MIGRATIONS,
   drawerOpens,
   invoiceSeries,
-  locations,
   printers,
   sales,
   saleVoids,
   tenderRefunds,
   tenders,
   withTransaction,
-  workingOrders,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { formatInvoiceNumber } from "@waitron/core";
 import type { PersonalDataPart, PersonalDataSubject } from "@waitron/module";
@@ -48,14 +47,10 @@ const suite = useVenueDb({
 });
 
 async function seedPlace(db: Database): Promise<Place> {
-  await seedTenant(db);
-  const [location] = await db
-    .insert(locations)
-    .values({ name: "Actions", invoiceLocales: ["en"], operationDescription: "Meals" })
-    .returning();
-  const locationId = brandLocationId(location!.id);
-  const nodeId = await seedNode(db, locationId);
-  const { deviceId } = await seedDevice(db, { locationId });
+  await seedVenue(db, { name: "Actions", invoiceLocales: ["en"], operationDescription: "Meals" });
+  const locationId = brandLocationId(await venueLocationId(db));
+  const nodeId = await seedNode(db);
+  const { deviceId } = await seedDevice(db);
   const series: Record<string, string> = {};
   for (const code of ["TA", "TB"]) {
     const [row] = await db
@@ -166,15 +161,11 @@ async function seedBillPayment(
   bill: { method: "cash" | "card"; applied: number },
 ): Promise<{ workingOrderId: string; billPaymentId: string }> {
   orderNumber += 1;
-  const [order] = await db
-    .insert(workingOrders)
-    .values({
-      source: "dashboard",
-      locationId: at.locationId,
-      nodeId: at.nodeId,
-      orderNumber,
-    })
-    .returning();
+  const order = await seedWorkingOrder(db, {
+    source: "dashboard",
+    nodeId: at.nodeId,
+    orderNumber,
+  });
   const [payment] = await db
     .insert(billPayments)
     .values({

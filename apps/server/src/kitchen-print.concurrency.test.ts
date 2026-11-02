@@ -3,17 +3,17 @@ import { count as countRows, eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
-  locations,
   printJobs,
   printers,
   ticketItems,
   withTransaction,
   workingOrderLines,
+  venueLocationId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { assignCatalogueToVenue, createCatalogue, createProduct } from "@waitron/catalogue";
 import { createPrinter, deactivatePrinter } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
@@ -101,16 +101,13 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
     // ---- Setup, committed before the two contending transactions are staged ----
     await seedTenant(suite.db);
     await seedLegacySellingUnits(suite.db);
-    const [loc] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Bar",
-        invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    const locationId = loc!.id;
-    const nodeId = await seedNode(suite.db, brandLocationId(locationId));
+    await seedVenue(suite.db, {
+      name: "Bar",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+    });
+    const locationId = await venueLocationId(suite.db);
+    const nodeId = await seedNode(suite.db);
     const cfg: OriginConfig = {
       origin: jobOrigin("dashboard"),
       nodeId: brandNodeId(nodeId),

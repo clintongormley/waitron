@@ -5,8 +5,6 @@ import {
   CORE_MIGRATIONS,
   devices,
   invoiceSeries,
-  locations,
-  nodes,
   saleLines,
   sales,
   tenders,
@@ -15,7 +13,7 @@ import {
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
-import { seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   IDENTITY_MIGRATIONS,
   hashPin,
@@ -35,7 +33,6 @@ const noopLog: Logger = () => {};
 
 let deviceId: string;
 let nodeId: string;
-let locationId: string;
 let seriesId: string;
 let managerCookie: string;
 let supervisorCookie: string;
@@ -200,22 +197,13 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Main dining room",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    locationId = loc!.id;
-    ({ deviceId } = await seedDevice(db, { locationId, label: "Bar 1" }));
-    const [node] = await db
-      .insert(nodes)
-      .values({ locationId, name: "Node 1" })
-      .returning({ id: nodes.id });
-    nodeId = node!.id;
+    await seedVenue(db, {
+      name: "Main dining room",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    ({ deviceId } = await seedDevice(db, { label: "Bar 1" }));
+    nodeId = await seedNode(db);
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "A" })

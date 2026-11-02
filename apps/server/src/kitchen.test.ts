@@ -8,15 +8,15 @@ import {
   catalogues,
   kitchenCourses,
   kitchenStations,
-  locations,
   products,
+  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   AppError,
   DEFAULT_READY_WARNING_AFTER_MINUTES,
@@ -51,19 +51,13 @@ beforeAll(() => {
 });
 
 async function setupVenue(): Promise<TradingContext> {
-  await seedTenant(db);
-  // Inserted through the table definitions, not as raw SQL: the ids and `created_at` come from
-  // `$defaultFn` generators, which a raw insert never reaches.
-  const [loc] = await db
-    .insert(locations)
-    .values({
-      name: "Main bar",
-      invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const locationId = loc!.id;
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  await seedVenue(db, {
+    name: "Main bar",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Venta en establecimiento",
+  });
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
   return {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),

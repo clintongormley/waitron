@@ -13,6 +13,7 @@ import {
   products,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   setRoutingCell,
@@ -222,22 +223,17 @@ it("keeps retained draft, group, course and ready station history through manage
     await setProfileKitchenScreens(tx, v.cfg, profile!.id, {
       station: { stationIds: null, zoneIds: null },
     });
-    const [device] = await tx
-      .insert(devices)
-      .values({
-        locationId: v.cfg.locationId,
-        deviceProfileId: profile!.id,
-        label: "Off dessert display",
-        active: false,
-        tokenHash: randomUUID(),
-      })
-      .returning();
+    const { deviceId } = await seedDevice(tx, {
+      profileId: profile!.id,
+      label: "Off dessert display",
+    });
+    await tx.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
     await setDeviceKitchenScreens(tx, v.cfg, {
-      deviceId: device!.id,
+      deviceId,
       profileId: profile!.id,
       screens: [{ kind: "station", stationIds: [station.id], zoneIds: null }],
     });
-    return device!;
+    return { id: deviceId, deviceProfileId: profile!.id };
   });
   const bound = await remove("stations", station.id);
   expect(bound.status).toBe(409);

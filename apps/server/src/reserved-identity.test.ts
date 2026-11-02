@@ -7,11 +7,11 @@ import {
   tryGetCredential,
   type KeyRing,
 } from "@waitron/credentials";
-import { deployment, invoiceSeries, locations, nodes, withTransaction } from "@waitron/db";
+import { deployment, invoiceSeries, venueLocationId, withTransaction } from "@waitron/db";
 import { ALLOCATED_FISCAL_STANDBY, currentSif } from "@waitron/fiscal-verifactu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { LocationId } from "@waitron/shared";
 import type { Endorsement } from "@waitron/membership";
@@ -44,21 +44,14 @@ describe("establishReservedStandbyIdentity", () => {
   let NIF: string;
 
   // A fresh tenant per test: the idempotency case starts from an unsealed vault, so it cannot share a
-  // tenant with the establish case (which seals one). Tenants accumulate for the suite, each on its own
-  // NIF via seedTenant's counter.
+  // tenant with the establish case (which seals one).
   beforeEach(async () => {
-    await seedTenant(suite.db);
-    // Through the table definition: `locations.id` is a `$defaultFn(newId)` value, not a SQL DEFAULT,
-    // so a raw insert omitting it returns nothing to brand.
-    const [loc] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Barra",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    locationId = loc!.id as LocationId;
+    await seedVenue(suite.db, {
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    locationId = brandLocationId(await venueLocationId(suite.db));
     const t = await suite.db.execute<{ tax_id: string }>(
       sql`select tax_id from tenants where id = 1`,
     );
@@ -329,11 +322,10 @@ describe("establishReservedStandbyIdentity", () => {
 
   async function preparedReservation(standby: StandbyIdentity) {
     const primary = {
-      nodeId: brandNodeId(crypto.randomUUID()),
+      nodeId: await seedNode(suite.db),
       locationId: brandLocationId(locationId),
     };
     await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
-    await suite.db.insert(nodes).values({ id: primary.nodeId, locationId, name: "Primary" });
     await withTransaction(suite.db, (tx) =>
       registerSif(tx, { nodeId: primary.nodeId, nif: NIF, idSistemaInformatico: "W1" }),
     );

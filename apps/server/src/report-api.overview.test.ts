@@ -1,4 +1,4 @@
-import { floorTodayTables } from "@waitron/db";
+import { floorTodayTables, venueLocationId } from "@waitron/db";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -13,8 +13,6 @@ import {
   parties,
   partyTables,
   invoiceSeries,
-  locations,
-  nodes,
   nowIso,
   saleLines,
   sales,
@@ -23,7 +21,7 @@ import {
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import type { Logger } from "./logger.js";
@@ -144,32 +142,20 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
     // Default time_zone (Europe/Madrid) + day_cutover (06:00:00) — resolveVenueClock reads them back
     // and currentBusinessDay anchors the overview on the venue clock.
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Main dining room",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    locationId = loc!.id;
-    ({ deviceId } = await seedDevice(db, { locationId }));
-    const [node] = await db
-      .insert(nodes)
-      .values({ locationId, name: "Node 1" })
-      .returning({ id: nodes.id });
-    nodeId = node!.id;
+    await seedVenue(db, {
+      name: "Main dining room",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    locationId = await venueLocationId(db);
+    ({ deviceId } = await seedDevice(db));
+    nodeId = await seedNode(db);
     // A SECOND node at the SAME location — no sales of its own. The venue-wide vs node-scoped test
     // below mounts report-api pointed at THIS node to prove the overview aggregates the other node's
     // sale (venue-wide) while the daily close scoped to this node stays empty.
-    const [node2] = await db
-      .insert(nodes)
-      .values({ locationId, name: "Node 2" })
-      .returning({ id: nodes.id });
-    secondNodeId = node2!.id;
+    secondNodeId = await seedNode(db);
     const [series] = await db
       .insert(invoiceSeries)
       .values({ nodeId, code: "A" })

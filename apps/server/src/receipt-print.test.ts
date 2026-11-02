@@ -363,7 +363,6 @@ async function deviceWithout(
   capability: string,
 ): Promise<DeviceRequestConfig> {
   const { deviceId } = await seedDevice(suite.db, {
-    locationId: cfg.locationId,
     capabilities: CAPABILITY_FLAGS.filter((flag) => flag !== capability),
   });
   return { ...cfg, origin: deviceOrigin(deviceId) };
@@ -1533,7 +1532,6 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
     capabilities: string[] = [...CAPABILITY_FLAGS],
   ): Promise<DeviceRequestConfig> {
     const { deviceId } = await seedDevice(suite.db, {
-      locationId: cfg.locationId,
       label: name,
       capabilities,
     });
@@ -1643,17 +1641,18 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
         capabilities: [...CAPABILITY_FLAGS],
       })
       .returning({ id: deviceProfiles.id });
-    const [device] = await suite.db
-      .insert(devices)
-      .values({
-        locationId: cfg.locationId,
-        label: `Display ${randomUUID()}`,
-        tokenHash: "scrypt$00$00",
-        deviceProfileId: profile!.id,
-        receiptPrinterId: printerId,
-        cashDrawerPrinterId: printerId,
-      })
-      .returning({ id: devices.id });
+    const device = {
+      id: (
+        await seedDevice(suite.db, {
+          label: `Display ${randomUUID()}`,
+          profileId: profile!.id,
+        })
+      ).deviceId,
+    };
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: printerId, cashDrawerPrinterId: printerId })
+      .where(eq(devices.id, device.id));
     const display = { ...cfg, origin: deviceOrigin(device!.id) };
 
     await sale(display, product, "cash");

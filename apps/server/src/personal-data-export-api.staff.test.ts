@@ -4,9 +4,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
 import { ADJUSTMENTS_MIGRATIONS, adjustments, recordAdjustment } from "@waitron/adjustments";
-import { CORE_MIGRATIONS, locations, withTransaction, workingOrders } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   IDENTITY_MIGRATIONS,
   endManagementSession,
@@ -19,7 +19,7 @@ import {
 } from "@waitron/identity";
 import type { PersonalDataPart, PersonalDataSubject } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { decimal, locationId as brandLocationId } from "@waitron/shared";
+import { decimal } from "@waitron/shared";
 import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import { ALL_MODULE_PERMISSIONS } from "./modules.js";
 import {
@@ -47,7 +47,6 @@ const MARTA = {
 const exportModules = ALL_MODULES.filter((m) => m.name === "identity" || m.name === "adjustments");
 const logger = vi.fn();
 let nodeId: string;
-let venueLocationId: string;
 let ids: Record<"admin" | "otherAdmin" | "manager" | "supervisor" | "staff" | "marta", string>;
 let tokens: Record<"admin" | "otherAdmin" | "manager" | "supervisor" | "staff", string>;
 let martaToken: string;
@@ -121,18 +120,13 @@ beforeEach(async () => {
   duringBuild = undefined;
   extraContent = '{"extra":true}\n';
   logger.mockClear();
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Venue",
-      invoiceLocales: ["es"],
-      operationDescription: "Sale on premises",
-      timeZone: "Europe/Madrid",
-    })
-    .returning();
-  venueLocationId = location!.id;
-  nodeId = await seedNode(suite.db, brandLocationId(location!.id));
+  await seedVenue(suite.db, {
+    name: "Venue",
+    invoiceLocales: ["es"],
+    operationDescription: "Sale on premises",
+    timeZone: "Europe/Madrid",
+  });
+  nodeId = await seedNode(suite.db);
   const rows = await suite.db
     .insert(persons)
     .values([
@@ -368,10 +362,11 @@ describe("GET /management-api/staff/:id/personal-data/export", () => {
   });
 
   it("gives an admin her adjustments.json, listed in her README in Spanish", async () => {
-    const [order] = await suite.db
-      .insert(workingOrders)
-      .values({ source: "dashboard", deviceId: null, locationId: venueLocationId, orderNumber: 43 })
-      .returning({ id: workingOrders.id });
+    const order = await seedWorkingOrder(suite.db, {
+      source: "dashboard",
+      deviceId: null,
+      orderNumber: 43,
+    });
     await withTransaction(suite.db, (tx) =>
       recordAdjustment(tx, {
         workingOrderId: order!.id,

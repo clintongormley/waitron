@@ -3,9 +3,9 @@ import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   IDENTITY_MIGRATIONS,
   IDLE_TIMEOUT_MS,
@@ -17,7 +17,6 @@ import {
 } from "@waitron/identity";
 import type { PersonalDataPart, PersonalDataSubject } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import {
   mountPersonalDataExportApi,
@@ -110,18 +109,14 @@ beforeEach(async () => {
   subjects = [];
   duringBuild = undefined;
   logger.mockClear();
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Venue",
-      invoiceLocales: ["es"],
-      operationDescription: "Sale on premises",
-      timeZone: "Europe/Madrid",
-    })
-    .returning();
-  locationId = location!.id;
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  await seedVenue(suite.db, {
+    name: "Venue",
+    invoiceLocales: ["es"],
+    operationDescription: "Sale on premises",
+    timeZone: "Europe/Madrid",
+  });
+  locationId = await venueLocationId(suite.db);
+  nodeId = await seedNode(suite.db);
   const [marta, colleague] = await suite.db
     .insert(persons)
     .values([

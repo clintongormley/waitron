@@ -10,11 +10,11 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readOrderPreviewItems } from "./order-preview.js";
 import { listCounterWaiting, listHeldOrders } from "./working-order.js";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
-import { dashboardOrderAt } from "./testing/session-device.js";
 
 let venue: BillVenue;
 useVenueDb({
@@ -32,9 +32,10 @@ describe("A738 order previews", () => {
     await withTransaction(venue.db, async (tx) => {
       const [station] = await tx.select({ id: kitchenStations.id }).from(kitchenStations).limit(1);
       for (const [i, id] of orders.entries()) {
-        await tx.insert(workingOrders).values({
+        await seedWorkingOrder(tx, {
           id,
-          ...dashboardOrderAt(venue.cfg.locationId),
+          source: "dashboard",
+          deviceId: null,
           nodeId: venue.cfg.nodeId,
           orderNumber: 100 + i,
           status: "open",

@@ -8,7 +8,6 @@ import {
   deviceProfiles,
   devices,
   kitchenStations,
-  locations,
   nowIso,
   pagePrinters,
   printAgents,
@@ -21,9 +20,11 @@ import {
   installChangeFeed,
   subscribeToChanges,
   CORE_CHANGE_SOURCES,
+  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { enqueuePrintJob, MAX_DELIVERY_ATTEMPTS, PRINTER_DELETED } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
@@ -63,20 +64,16 @@ function nextNif(): string {
 }
 
 async function seedTenantWithLocation(): Promise<Tenant> {
-  // Through the table definitions: `tenants.created_at` and `locations.id` are `$defaultFn`
-  // generators a raw insert never reaches.
+  // Through the table definition: `tenants.created_at` is a `$defaultFn` generator a raw insert never reaches.
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
-  const [loc] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Barra",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  return { locationId: loc!.id };
+  await seedVenue(suite.db, {
+    name: "Barra",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
+  });
+  return { locationId: await venueLocationId(suite.db) };
 }
 
 beforeAll(async () => {
@@ -1068,16 +1065,13 @@ describe("printer delete routes (printer.manage)", () => {
       isDefault: true,
     });
     const deviceLabel = `Handheld ${randomUUID()}`;
-    const [device] = await suite.db
-      .insert(devices)
-      .values({
-        locationId: tenantA.locationId,
-        deviceProfileId: profile!.id,
-        label: deviceLabel,
-        tokenHash: randomUUID(),
-        receiptPrinterId: printerId,
-      })
-      .returning({ id: devices.id });
+    const device = {
+      id: (await seedDevice(suite.db, { label: deviceLabel, profileId: profile!.id })).deviceId,
+    };
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: printerId })
+      .where(eq(devices.id, device.id));
     await suite.db.insert(printerHolders).values({ printerId, deviceId: device!.id });
     const jobId = await enqueue(printerId, new Uint8Array([1]));
     const device_ = { id: device!.id, name: deviceLabel };

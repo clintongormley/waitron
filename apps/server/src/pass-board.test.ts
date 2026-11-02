@@ -3,14 +3,9 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import {
-  deviceProfiles,
-  devices,
-  passItemMarks,
-  ticketItems,
-  workingOrderLines,
-} from "@waitron/db";
+import { deviceProfiles, passItemMarks, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { routeProductTo } from "./testing/zone-offers.js";
@@ -48,18 +43,12 @@ async function passDevices(v: PartyVenue, count: number): Promise<string[]> {
       .insert(deviceProfiles)
       .values({ name: `Pass ${randomUUID()}`, formFactor: "kds" })
       .returning({ id: deviceProfiles.id });
-    const rows = await tx
-      .insert(devices)
-      .values(
-        Array.from({ length: count }, (_, n) => ({
-          locationId: v.cfg.locationId,
-          deviceProfileId: profile!.id,
-          label: `Pass screen ${n + 1} ${randomUUID()}`,
-          tokenHash: randomUUID(),
-        })),
-      )
-      .returning({ id: devices.id });
-    return rows.map((row) => row.id);
+    const deviceIds: string[] = [];
+    for (let n = 0; n < count; n++) {
+      const label = `Pass screen ${n + 1} ${randomUUID()}`;
+      deviceIds.push((await seedDevice(tx, { label, profileId: profile!.id })).deviceId);
+    }
+    return deviceIds;
   });
 }
 

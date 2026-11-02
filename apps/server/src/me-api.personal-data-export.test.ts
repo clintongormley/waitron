@@ -4,19 +4,24 @@ import { describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   invoiceSeries,
-  locations,
   nodes,
   sales,
   saleVoids,
   withTransaction,
-  workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedNode,
+  seedTenant,
+  seedWorkingOrder,
+  seedVenue,
+} from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ADJUSTMENTS_MIGRATIONS, adjustments, recordAdjustment } from "@waitron/adjustments";
-import { decimal, jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { decimal, jobOrigin } from "@waitron/shared";
 import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
 import { savePrivacyContact } from "@waitron/provisioning";
@@ -89,17 +94,14 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
   });
 
   it("adds the working-time record when workforce and an exporter are enabled", async () => {
-    await seedTenant(suite.db);
-    const [location] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Venue",
-        invoiceLocales: ["es"],
-        operationDescription: "Sale on premises",
-        timeZone: "Europe/Madrid",
-      })
-      .returning({ id: locations.id });
-    await suite.db.insert(nodes).values({ id: NODE_ID, locationId: location!.id, name: "Box" });
+    await seedVenue(suite.db, {
+      name: "Venue",
+      invoiceLocales: ["es"],
+      operationDescription: "Sale on premises",
+      timeZone: "Europe/Madrid",
+    });
+    const venueId = await venueLocationId(suite.db);
+    await suite.db.insert(nodes).values({ id: NODE_ID, locationId: venueId, name: "Box" });
     const [row] = await suite.db
       .insert(persons)
       .values({ displayName: "Marta Canary", role: "staff" })
@@ -133,14 +135,13 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
   });
 
   it("adds the actions file for a person who authorised a void", async () => {
-    await seedTenant(suite.db);
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Venue", invoiceLocales: ["en"], operationDescription: "Meals" })
-      .returning({ id: locations.id });
-    const locationId = brandLocationId(location!.id);
-    const nodeId = await seedNode(suite.db, locationId);
-    const { deviceId } = await seedDevice(suite.db, { locationId });
+    await seedVenue(suite.db, {
+      name: "Venue",
+      invoiceLocales: ["en"],
+      operationDescription: "Meals",
+    });
+    const nodeId = await seedNode(suite.db);
+    const { deviceId } = await seedDevice(suite.db);
     const [series] = await suite.db
       .insert(invoiceSeries)
       .values({ nodeId, code: "TA", purpose: "standard" })
@@ -211,14 +212,16 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
 
   describe("a person with one comp she asked for", () => {
     async function compAskedFor(personId: string): Promise<void> {
-      const [location] = await suite.db
-        .insert(locations)
-        .values({ name: "Dining room", invoiceLocales: ["en"], operationDescription: "Meals" })
-        .returning({ id: locations.id });
-      const [order] = await suite.db
-        .insert(workingOrders)
-        .values({ source: "dashboard", deviceId: null, locationId: location!.id, orderNumber: 41 })
-        .returning({ id: workingOrders.id });
+      await seedVenue(suite.db, {
+        name: "Dining room",
+        invoiceLocales: ["en"],
+        operationDescription: "Meals",
+      });
+      const order = await seedWorkingOrder(suite.db, {
+        source: "dashboard",
+        deviceId: null,
+        orderNumber: 41,
+      });
       await withTransaction(suite.db, (tx) =>
         recordAdjustment(tx, {
           workingOrderId: order!.id,

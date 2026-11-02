@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  locations,
   openVenueDatabase,
   readNodeMembership,
   stampDeployment,
@@ -11,9 +10,10 @@ import {
   type Database,
   type NodeDatabase,
   type VenueDatabase,
+  venueLocationId,
 } from "@waitron/db";
 import { NODE_FILE, VENUE_FILE } from "@waitron/store";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   readNodeMode,
@@ -33,7 +33,6 @@ import {
   type NodeStanding,
 } from "@waitron/membership";
 import { verifySecretAsync } from "@waitron/identity";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { adoptFromPrimary } from "./adopt.js";
 import { assembleMirrorBundle } from "./mirror-bundle.js";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -109,16 +108,13 @@ beforeAll(async () => {
   await writeFile(join(aState, "tls", "ca.key"), "public-test-ca-key");
   const aStore = await openStore(aDir);
   await stampDeployment(aStore.venue, "preproduction");
-  await seedTenant(aStore.venue);
-  const [loc] = await aStore.venue
-    .insert(locations)
-    .values({
-      name: "Barra",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const aId = await seedNode(aStore.venue, brandLocationId(loc!.id));
+  await seedVenue(aStore.venue, {
+    name: "Barra",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
+  });
+  const venueId = await venueLocationId(aStore.venue);
+  const aId = await seedNode(aStore.venue);
   await establishNodeIdentity({ ownerDb: aStore.venue, node: aStore.node, ring: RING_A }, aId);
   await setNodeMode({ venue: aStore.venue, node: aStore.node }, aId, "primary");
   const aSecret = await mintBreakGlassSecret({ venue: aStore.venue, node: aStore.node }, aId);
@@ -158,7 +154,7 @@ beforeAll(async () => {
           relayUrl: "https://relay.test",
           boxHostname: "waitron.local",
           accountKey: "test-account-key",
-          designated: { nodeId: aId, locationId: loc!.id },
+          designated: { nodeId: aId, locationId: venueId },
           standby,
         });
       },

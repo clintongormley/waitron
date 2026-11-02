@@ -5,18 +5,18 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   kitchenPrintJobLines,
   kitchenPrintJobs,
-  locations,
   orderGroups,
   printJobs,
   parties,
   ticketItems,
   withTransaction,
   workingOrderLines,
+  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -102,16 +102,17 @@ interface Venue {
 async function setupVenue(): Promise<Venue> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  const [location] = await db
-    .insert(locations)
-    .values({ name: "Dining room", invoiceLocales: [LOCALE], operationDescription: "Restaurante" })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
+  await seedVenue(db, {
+    name: "Dining room",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Restaurante",
+  });
+  const locationId = await venueLocationId(db);
   const kitchenStationId = await seedKitchenStation(db, {
     locationId: brandLocationId(locationId),
     name: "Kitchen",
   });
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  const nodeId = await seedNode(db);
   const cfg = await deviceRequestCfg(db, {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),

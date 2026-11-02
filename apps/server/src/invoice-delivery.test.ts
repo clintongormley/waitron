@@ -20,7 +20,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   createPrinter,
   enqueuePrintJob,
@@ -33,7 +33,7 @@ import { recordSale } from "@waitron/core";
 import { readPrivacyContact, savePrivacyContact } from "@waitron/provisioning";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { FiledReceipt, FiscalBackend, TrustedClock } from "@waitron/fiscal";
-import { jobOrigin, locationId, nodeId, seriesId } from "@waitron/shared";
+import { jobOrigin, nodeId, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import {
   claimInvoicePrintJobs,
@@ -80,19 +80,14 @@ async function issue(full = true) {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
   const [saved] = await suite.db.select().from(locations);
-  const location =
-    saved ??
-    (
-      await suite.db
-        .insert(locations)
-        .values({
-          name: "Bar",
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Sale on premises",
-        })
-        .returning()
-    )[0];
-  const nodeId = await seedNode(suite.db, locationId(location!.id));
+  if (saved === undefined) {
+    await seedVenue(suite.db, {
+      name: "Bar",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Sale on premises",
+    });
+  }
+  const nodeId = await seedNode(suite.db);
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId, code: "F", purpose: full ? "full" : "standard" })

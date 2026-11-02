@@ -14,6 +14,7 @@ import {
 import { createCatalogue } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -562,14 +563,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as ProfileRow;
 
-    const location = await suite.db.execute<{ id: string }>(sql`select id from locations  limit 1`);
-    // Through the table definition, whose `$defaultFn` generators a raw SQL insert never reaches.
-    await suite.db.insert(devices).values({
-      locationId: location.rows[0]!.id,
-      label: uniqueName("Bound device"),
-      tokenHash: "scrypt$00$00",
-      deviceProfileId: id,
-    });
+    await seedDevice(suite.db, { profileId: id, label: uniqueName("Bound device") });
 
     const res = await app.request(`/management-api/device-profiles/${id}`, {
       method: "DELETE",
@@ -843,18 +837,14 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       }),
     });
     const { id } = (await created.json()) as ProfileRow;
-    const location = await suite.db.execute<{ id: string }>(sql`select id from locations limit 1`);
-    const [device] = await suite.db
-      .insert(devices)
-      .values({
-        locationId: location.rows[0]!.id,
-        label: uniqueName("Listed device"),
-        tokenHash: "scrypt$00$00",
-        deviceProfileId: id,
-        receiptPrinterId: p1,
-        paymentSlipPrinterId: p2,
-      })
-      .returning({ id: devices.id });
+    const device = {
+      id: (await seedDevice(suite.db, { profileId: id, label: uniqueName("Listed device") }))
+        .deviceId,
+    };
+    await suite.db
+      .update(devices)
+      .set({ receiptPrinterId: p1, paymentSlipPrinterId: p2 })
+      .where(eq(devices.id, device.id));
 
     const kept = await app.request(`/management-api/device-profiles/${id}`, {
       method: "PUT",
@@ -1326,21 +1316,14 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         });
         expect(created.status).toBe(201);
         const { id } = (await created.json()) as ProfileRow;
-        const location = await suite.db.execute<{ id: string }>(
-          sql`select id from locations limit 1`,
-        );
-        const [device] = await suite.db
-          .insert(devices)
-          .values({
-            locationId: location.rows[0]!.id,
-            label: uniqueName("On stale profile"),
-            tokenHash: "scrypt$00$00",
-            deviceProfileId: id,
-            receiptPrinterId: q,
-            paymentSlipPrinterId: q,
-            cashDrawerPrinterId: q,
-          })
-          .returning({ id: devices.id });
+        const device = {
+          id: (await seedDevice(suite.db, { profileId: id, label: uniqueName("On stale profile") }))
+            .deviceId,
+        };
+        await suite.db
+          .update(devices)
+          .set({ receiptPrinterId: q, paymentSlipPrinterId: q, cashDrawerPrinterId: q })
+          .where(eq(devices.id, device.id));
         // The device holds R, which it does not use: a save that reached device settling would
         // release it.
         await suite.db.update(printers).set({ portable: true }).where(eq(printers.id, r));
@@ -1507,21 +1490,13 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       const { id } = (await created.json()) as ProfileRow;
       const deviceName = uniqueName("Grill screen");
       const deviceId = await withTransaction(suite.db, async (tx) => {
-        const [device] = await tx
-          .insert(devices)
-          .values({
-            locationId: venueCfg.locationId,
-            label: deviceName,
-            tokenHash: "scrypt$00$00",
-            deviceProfileId: id,
-          })
-          .returning({ id: devices.id });
+        const { deviceId } = await seedDevice(tx, { profileId: id, label: deviceName });
         await VENUE_SERVICE.setDeviceKitchenScreens(tx, venueCfg, {
-          deviceId: device!.id,
+          deviceId,
           profileId: id,
           screens: [{ kind: "station", stationIds: [grill, cold], zoneIds: null }],
         });
-        return device!.id;
+        return deviceId;
       });
       const renamed = uniqueName("Renamed");
 

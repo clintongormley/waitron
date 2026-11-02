@@ -2,9 +2,9 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { locations, withTransaction } from "@waitron/db";
+import { withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPinThrottle, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { loadKeyRing } from "@waitron/credentials";
@@ -39,16 +39,14 @@ async function setup(role: "manager" | "staff" = "manager") {
   const session = await withTransaction(suite.db, (tx) =>
     startManagementSession(tx, { personId: person!.id }),
   );
-  const [place] = await suite.db
-    .insert(locations)
-    .values({
-      name: "PIN venue",
-      timeZone: "Europe/Madrid",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Restaurant service",
-    })
-    .returning({ id: locations.id });
-  const writingNodeId = await seedNode(suite.db, locationId(place!.id));
+  await seedVenue(suite.db, {
+    name: "PIN venue",
+    timeZone: "Europe/Madrid",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Restaurant service",
+  });
+  const venueId = await venueLocationId(suite.db);
+  const writingNodeId = await seedNode(suite.db);
   const app = new Hono();
   mountPaymentsApi(
     app,
@@ -59,7 +57,7 @@ async function setup(role: "manager" | "staff" = "manager") {
       clock: systemClock(),
       cfg: {
         nodeId: writingNodeId,
-        locationId: locationId(place!.id),
+        locationId: locationId(venueId),
         locale: "es-ES",
         invoiceLocales: ["es-ES"],
         tipsEnabled: false,

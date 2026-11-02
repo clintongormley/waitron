@@ -3,16 +3,16 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
-  locations,
   invoiceSeries,
   sales,
   workingOrders,
   floorZones,
   tenantReceipts,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { locationId, nodeId as brandNodeId } from "@waitron/shared";
 import {
   departments,
@@ -28,12 +28,14 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
 });
 async function fixture(nullHeader = false) {
-  const [place] = await suite.db
-    .insert(locations)
-    .values({ name: randomUUID(), invoiceLocales: ["es-ES"], operationDescription: "Hospitality" })
-    .returning();
-  const cfg = { locationId: locationId(place!.id) };
-  const nodeId = await seedNode(suite.db, cfg.locationId);
+  await seedVenue(suite.db, {
+    name: randomUUID(),
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Hospitality",
+  });
+  const venueId = await venueLocationId(suite.db);
+  const cfg = { locationId: locationId(venueId) };
+  const nodeId = await seedNode(suite.db);
   const [primary] = await suite.db
     .insert(departments)
     .values({ locationId: cfg.locationId, name: "Dining", tradingName: "Dining" })
@@ -48,16 +50,12 @@ async function fixture(nullHeader = false) {
       active: true,
     })
     .returning();
-  const [order] = await suite.db
-    .insert(workingOrders)
-    .values({
-      nodeId,
-      locationId: cfg.locationId,
-      source: "readiness_test",
-      orderNumber: 1,
-      status: "open",
-    })
-    .returning();
+  const order = await seedWorkingOrder(suite.db, {
+    nodeId,
+    source: "readiness_test",
+    orderNumber: 1,
+    status: "open",
+  });
   const [zone] = await suite.db
     .insert(floorZones)
     .values({ locationId: cfg.locationId, name: "Dining zone" })

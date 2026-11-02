@@ -3,14 +3,13 @@ import { strFromU8, unzipSync } from "fflate";
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { ALL_MODULES } from "@waitron/composition";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import type { PersonalDataPart } from "@waitron/module";
 import { savePrivacyContact } from "@waitron/provisioning";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { PERSONAL_DATA_README_WORDS } from "./i18n/personal-data-readme.js";
 import {
   mountPersonalDataExportApi,
@@ -75,17 +74,13 @@ async function readme(app: Hono, acceptLanguage?: string): Promise<string> {
 const lines = (text: string) => text.trimEnd().split("\n");
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Venue",
-      invoiceLocales: ["es"],
-      operationDescription: "Sale on premises",
-      timeZone: "Europe/Madrid",
-    })
-    .returning();
-  nodeId = await seedNode(suite.db, brandLocationId(location!.id));
+  await seedVenue(suite.db, {
+    name: "Venue",
+    invoiceLocales: ["es"],
+    operationDescription: "Sale on premises",
+    timeZone: "Europe/Madrid",
+  });
+  nodeId = await seedNode(suite.db);
   const [marta] = await suite.db
     .insert(persons)
     .values({ displayName: "Marta López", email: "marta@example.test", role: "staff" })
