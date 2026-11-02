@@ -763,8 +763,9 @@ declare module "@waitron/shared" {
      */
     "tab.transfer_modifier_line": { tabId: string; lineNo: number };
     /**
-     * A split onto a new bill named a line whose kitchen ticket is held (neither fired nor
-     * requested) and whose group is not held (a recalled dish, or a held round with no group).
+     * A split onto a new bill named a line whose kitchen ticket, or an extra's, is held (neither
+     * fired nor requested) and whose group is not held (a recalled dish, or a held round with no
+     * group).
      * `lineNo` is the offending source line.
      */
     "tab.split_held_line": { tabId: string; lineNo: number };

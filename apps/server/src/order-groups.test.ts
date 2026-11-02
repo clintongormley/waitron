@@ -3822,7 +3822,7 @@ describe("the pass by group (D1)", () => {
     ]);
   });
 
-  it("reads a group ready only once every fired kitchen item of it is ready", async () => {
+  it("reads a group ready only once every asked-for kitchen item of it that is not yet served is ready", async () => {
     const v = await setupVenue();
     const s = await specExampleOnTwoBills(v);
     const readyOf = async (groupId: string) =>
