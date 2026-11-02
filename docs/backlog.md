@@ -6457,7 +6457,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   shapes and reports the rest, so F2–F5 can start. S5 landed (#2386): the default and extra menus
   and the receipt languages are read from the one venue (`readVenueInvoiceLocales` in `@waitron/db`
   reads the languages alone), the menu routes moved to `/management-api/venue/…`, and
-  `location.not_found` is gone. S9 moved bookings and staffing onto the venue; staffing's season,
+  `location.not_found` is gone. S9 landed (#2389): bookings and staffing read the venue; staffing's season,
   day-plan and month reads still hand venue-service a `{ locationId }` scope, which S6 and S8 leave as
   an ignored `_cfg` and S18 removes, and its rota verbs keep theirs for the workforce roster calls S13
   changes. The working-time slices have their
@@ -6475,8 +6475,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `till-api.test.ts` comment (F5), `apps/server/scripts/demo-seed/seed-catalogue.ts` (S19), and the
   English and Spanish guide `content-and-images.md`, whose receipt-language paragraph still speaks
   of "the location's default".
-  `floor-delete.test.ts`'s "empty and foreign zone selections…" case still leaves a second
-  location behind; it is the file's last case today (S9).
+
+- **The A1301 plan's rule for a second location in a shared test database is out of date.** It
+  says a slice "may not delete that case" and lands after the owning slice; the watcher's standing
+  rule of 2026-11-01 lets a slice delete another slice's cross-location half instead, as S9 (#2389)
+  did for `floor-delete.test.ts`'s last case on S7's behalf. Reword the plan's rule to match.
 
 - **The venue's menu routes are named unlike their neighbours.** S5 moved them to
   `/management-api/venue/…`, as the A1301 plan chose, while the other venue routes are one
