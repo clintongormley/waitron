@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import {
-  locations,
   orderGroupEvents,
   orderGroups,
   parties,
@@ -253,30 +252,6 @@ describe("attendance for dishes arriving in a party", () => {
     expect(await command(api(), action, p)).toMatchObject({ status: 200 });
     expect((await state()).facts).toEqual([]);
     expect((await state()).days).toEqual([]);
-  });
-  it("keeps the snapshot when the destination party later changes location", async () => {
-    const p = await prepare("move-party");
-    expect(await command(api(recordAttendanceFact), "move-party", p)).toMatchObject({
-      status: 200,
-    });
-    const saved = await state();
-    expect(saved.facts).toHaveLength(1);
-    const [other] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Elsewhere",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurant",
-      })
-      .returning();
-    await suite.db
-      .update(workingOrders)
-      .set({ locationId: other!.id })
-      .where(eq(workingOrders.partyId, p.destination!.partyId));
-    expect((await factsAt()).filter((f) => f.key === saved.facts[0]!.key)).toEqual([
-      expect.objectContaining({ locationId: v.cfg.locationId, at: "2026-01-05T16:40:00.000Z" }),
-    ]);
-    expect((await factsAt(other!.id)).filter((f) => f.key === saved.facts[0]!.key)).toEqual([]);
   });
 });
 

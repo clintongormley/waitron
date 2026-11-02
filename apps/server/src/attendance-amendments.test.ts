@@ -4,7 +4,6 @@ import { placeOrder } from "./testing/order-writer-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
-  locations,
   newId,
   orderAmendments,
   parties,
@@ -17,7 +16,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPinThrottle, persons } from "@waitron/identity";
-import { AppError, locationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { readAttendanceFacts } from "./attendance-facts.js";
@@ -238,32 +237,15 @@ describe("amendment attendance in the command transaction", () => {
       expect(await state()).toEqual(before);
     },
   );
-  it("marking an order placed captures its stored location with the writer's original clock reading", async () => {
+  it("marking an order placed captures the writer's original clock reading", async () => {
     const id = await parked();
-    const [other] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Another venue",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurant",
-      })
-      .returning({ id: locations.id });
     const now = v.clock.now();
     vi.spyOn(v.clock, "now")
       .mockReturnValueOnce(now)
       .mockImplementation(() => {
         throw new Error("second amendment clock");
       });
-    await run((tx) =>
-      markOrderPlaced(
-        tx,
-        v.clock,
-        { ...v.cfg, locationId: locationId(other!.id) },
-        id,
-        worker,
-        recordAttendanceFact,
-      ),
-    );
+    await run((tx) => markOrderPlaced(tx, v.clock, v.cfg, id, worker, recordAttendanceFact));
     await expectFact(id, "order_placed");
   });
   it("an empty cancellation reason changes neither command nor attendance", async () => {

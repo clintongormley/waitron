@@ -355,7 +355,6 @@ describe("accepted order attendance", () => {
     expect((await line(id)).note).toBe("No salt");
     expect(await operations()).toEqual([]);
   });
-
   it("discarded unpaid edits remain readable as last activity", async () => {
     const id = await parked();
     await act("line", id);

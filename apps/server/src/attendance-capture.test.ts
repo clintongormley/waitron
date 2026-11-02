@@ -15,13 +15,13 @@ import {
   attendanceOperationFacts,
   WORKFORCE_MIGRATIONS,
 } from "@waitron/workforce";
-import type { AttendanceFact } from "@waitron/workforce";
+import type { AttendanceRecorder } from "./attendance-capture.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
 });
 const run = <T>(f: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, f);
-let personId: string, other: string, locationId: string, elsewhere: string;
+let personId: string, other: string, locationId: string;
 const fact = () => ({
   source: "whole-payment" as const,
   key: "attempt:one",
@@ -32,7 +32,7 @@ const fact = () => ({
   offsetMinutes: 0,
   outcome: "qualified" as const,
 });
-async function capture(input: AttendanceFact & { outcome: "pending" | "qualified" | "refused" }) {
+async function capture(input: Parameters<AttendanceRecorder>[1]) {
   const { recordAttendanceFact } = await import("./attendance-capture.js");
   return run((tx) => recordAttendanceFact(tx, input));
 }
@@ -48,16 +48,9 @@ beforeEach(async () => {
         invoiceLocales: ["es"],
         operationDescription: "Restaurant",
       },
-      {
-        name: "Other",
-        timeZone: "UTC",
-        dayCutover: "04:00",
-        invoiceLocales: ["en"],
-        operationDescription: "Restaurant",
-      },
     ])
     .returning({ id: locations.id });
-  [locationId, elsewhere] = places.map((r) => r.id) as [string, string];
+  [locationId] = places.map((r) => r.id) as [string];
   const people = await suite.db
     .insert(persons)
     .values([
@@ -144,13 +137,22 @@ describe("transactional attendance operation capture", () => {
       },
     ]);
   });
-  it("replay cannot replace the original actor, location or human request instant", async () => {
+  it("records an operation for the venue when given no location", async () => {
+    const { locationId: _omitted, ...withoutLocation } = fact();
+    await capture(withoutLocation);
+    expect(await suite.db.select().from(attendanceOperationFacts)).toMatchObject([
+      { key: "attempt:one", locationId, businessDay: "2026-01-05", outcome: "qualifying" },
+    ]);
+    expect(await suite.db.select().from(attendanceDayWork)).toMatchObject([
+      { locationId, businessDay: "2026-01-05", dirtyRevision: 1 },
+    ]);
+  });
+  it("replay cannot replace the original actor or human request instant", async () => {
     await capture({ ...fact(), outcome: "pending" });
     const original = (await suite.db.select().from(attendanceOperationFacts))[0]!;
     await capture({
       ...fact(),
       personId: other,
-      locationId: elsewhere,
       at: "2026-01-06T19:00:00Z",
       outcome: "qualified",
     });
