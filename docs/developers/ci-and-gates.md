@@ -755,7 +755,7 @@ the default one; `test:shard` already names `default` and `blob`. Guard: the fil
 `scripts/ci-workflow.test.mjs`, weaker than its name — it reads `ci.yml` as text, and finds a test
 command only in a `Run the … shard` step or the stream step.
 
-In a browser project the same reporter also attaches Chrome's debugger to each test page it finds when a file starts, and leaves it attached; see "A browser file that runs 60 seconds gets a stack sample" below.
+In a browser project the same reporter also attaches Chrome's debugger to each test page it finds when a file starts, and leaves it attached; see "A browser file silent past its time limits gets a stack sample" below.
 
 A file whose `end` line comes more than 90 seconds after its `start` line also gets a GitHub
 warning annotation (`::warning title=Slow test file::`), because one file that long holds up its
@@ -798,13 +798,31 @@ five-second outer deadline returned 124. Disposable-copy controls removing
 collection output, hook-start output and selector enforcement failed two, five
 and five reporter checks respectively; the restored reporter passed all 27.
 
-### A browser file that runs 60 seconds gets a stack sample
+### A browser file silent past its time limits gets a stack sample
 
 This runs whether or not `WAITRON_TEST_TRACE_FILES` is set. In a browser project,
 `scripts/vitest-file-progress.mjs` attaches Chrome's debugger (a Playwright CDP
 session) to each test page as files start, and leaves it attached for the rest of
-the run. Every 5 seconds it looks for files that have run 60 seconds without ending.
-For each, it pauses every page with a frame whose address contains the file's path
+the run. It records, for every file, when the file last reported anything: its start,
+its collection, a case starting or ending, or a hook starting or ending. Every 5
+seconds it looks for files that have been silent for longer than 60 seconds plus, for the
+running case that allows longest, its own `timeout` (or, with none, the project's
+`testTimeout`) and the project's `hookTimeout`, once for each try its `retry` and `repeats`
+allow; with no case running, the project's `testTimeout` and `hookTimeout`. A timeout
+missing from the configuration adds nothing to that sum. The sum does not count a timeout
+argument given to a hook or to an `onTestFinished` or `onTestFailed` callback (Vitest 4.1.12
+hands the reporter's `onHookStart` only the hook's name and entity, and the callbacks report
+nothing), a second such callback (they run one after another with no event between them),
+several hooks of one kind registered in one suite (Vitest reports one start and one end for
+them all), an `aroundEach` or `aroundAll` hook (no report at all), or a retry's delay; only the
+60-second margin covers those. A running case's timeout, the project's `hookTimeout`, or, while
+no case is running, the project's `testTimeout`, of 0 or less or `Infinity` (a case's `Infinity`
+arrives from a browser project as `null`), means Vitest's timer sets no limit, so the file is not
+paused while that holds; the first time it is skipped for this reason it gets one `stack:` line saying
+`what is running may have no time limit (0 or less, or Infinity), so its page is not paused now`.
+How long a file
+has run overall is not the trigger: a healthy file can run for minutes.
+For each such file, it pauses every page with a frame whose address contains the file's path
 and prints `[file-progress] stack:` lines. A file no page shows yet gets one line
 saying so and is looked for again at each later check; once a page shows it, it is
 sampled, and never again. Each sampled page gives one of these:
@@ -815,8 +833,8 @@ sampled, and never again. Each sampled page gives one of these:
   experiment below). The positions are in the code the browser was served, after
   Vite's transform, so they can differ from the source file's lines.
 - `no JavaScript paused within 3s and the page answers`: no pause arrived within 3
-  seconds, and the page answered a one-line evaluation (`Runtime.evaluate` of `0`)
-  within 2 seconds.
+  seconds, and the page answered `Debugger.disable`, `Debugger.enable` and a one-line
+  evaluation (`Runtime.evaluate` of `0`), all within 2 seconds.
 - `no JavaScript paused within 3s and the page did not answer in 2s`: neither came
   back.
 - `the pause request was refused (<message>); the page answers`, or the same ending
@@ -827,7 +845,9 @@ A file in a project with no browser gets no `stack:` line. A failure to attach, 
 an error while sampling, is printed as a `stack:` line rather than thrown.
 
 Every pause is resumed, including one that arrives after the sample stopped
-waiting. The protocol describes `Debugger.pause` as "Stops on the next JavaScript
+waiting. When no pause arrives within 3 seconds, the reporter also sends
+`Debugger.disable` then `Debugger.enable` to that page before the one-line
+evaluation, so a pause still waiting cannot stop a later test's script. The protocol describes `Debugger.pause` as "Stops on the next JavaScript
 statement." (`js_protocol.json` in the ChromeDevTools devtools-protocol repository,
 and playwright-core 1.64.1's `types/protocol.d.ts`). On 1 November 2026, a Node
 script drove headless Chromium through Playwright against a page with no scripts
@@ -858,6 +878,8 @@ Experiments, 1 November 2026, in headless Chromium:
   (`its page was running JavaScript:` and one frame, `raf`); the file's 3 tests
   passed.
 
+These ran the reporter as it was before A1307, which timed a sample from the file's start.
+
 Cost: whole-shard cost was not measured. A local script ran that same Vitest command
 (default thresholds, so no page was paused) six times, interleaved, three with the
 debugger attached and three with a subclass skipping the attach. The means of the whole command's wall-clock time, start-up included, were
@@ -868,8 +890,34 @@ Run `pnpm exec vitest run scripts/vitest-file-progress.test.mjs` for the stack
 checks too. With a fake page and a fake debugger connection, they check one attach
 per page, the printed frames, each no-pause and refused-pause line, the 3- and
 2-second bounds, that every pause is resumed, that a file no page shows yet is
-sampled at a later check and named once, and that a project with no browser prints
-nothing. No real browser runs in them.
+sampled at a later check and named once, that a project with no browser prints
+nothing, that a file reporting cases and hooks is never paused, the silence bound
+from each timeout (including a timeout of 0 or less, `Infinity`, and a case's `null`), that concurrent cases
+each keep their own timeout until their own result, that retries and repeats multiply a case's
+timeout and the hook timeout, that a file skipped for an unlimited case is paused later once a
+bounded case goes silent past its limit, and the disable-and-enable after an unanswered pause. No real browser runs in them.
+
+Why the trigger is silence (A1307): on main CI run `41372526118`, `test-dashboard (2)`,
+the case "A461 visual Menus Structure 390 'en-GB' 'dark'" in
+`apps/dashboard/src/screens/menus-screen.test.ts` failed with "Hook timed out in
+30000ms": its `onTestFinished(() => page.viewport(1280, 844))` hook hung from the same
+instant the reporter, then pausing any file that had run 60 seconds, printed a stack
+for that file at 112.5 seconds. The file was healthy. On 2 November 2026, locally in `apps/dashboard`, a scratch test calling `page.viewport` 300
+times while a scratch reporter sent `Debugger.pause` every 25 ms and resumed every
+pause at once hung a call for over 5 seconds in 3 of 3 runs (at rounds 42, 35 and
+10); without the pausing reporter, 3 runs of 300 calls never hung. Which step of
+Vitest's handshake is lost was not isolated. A probe on an idle page found that a
+`Debugger.pause` stays waiting and pauses the page's next script (one pause event
+when the page next ran a script), and that `Debugger.disable` sent before that script
+cancels it (no pause event after disable then enable).
+
+Two real-Chromium runs in `apps/dashboard` on 2 November 2026, with the reporter
+told to sample after 1 second instead of 60 (its limit then came to 46 seconds: 1
+plus the project's 15-second `testTimeout` and 30-second `hookTimeout`): over
+`menus-screen.test.ts` (607 cases, all passed), the longest gap between two reports
+from the file was 3.8 seconds and no `stack:` line was printed, while `main`'s
+reporter with the same setting paused the page 1.4 seconds in. A scratch case that
+looped forever was sampled at 46.1 seconds, its stack naming the looping function.
 
 
 ### A browser shard reports before its job limit

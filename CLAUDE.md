@@ -669,6 +669,12 @@ browser test** — most of these rules exist because a test passed while proving
   `pnpm reap` sweeps these, scoped by ppid 1 AND the shapes vitest leaves in `ps`, never a bare `vitest` match.
 - **Concurrent coverage runs must not share a package's report directory, and an intentional second
   one belongs OUTSIDE the package.**
+- **A diagnostic pauses a browser test page only after its file has been silent for 60 seconds
+  beyond its running cases' time limits and the project's hook time limit, and cancels a pause left
+  waiting**: a `page.viewport` call hung until its 30-second hook timeout from the instant of a
+  pause, and repeated pauses reproduced the hang locally (A1307). Guard:
+  `scripts/vitest-file-progress.test.mjs`, weaker than its name: this reporter only, fake pages, not
+  Chromium. Receipt: [ci-and-gates.md](docs/developers/ci-and-gates.md#a-browser-file-silent-past-its-time-limits-gets-a-stack-sample).
 - **Locate the unfinished package before diagnosing a silent shard as database contention.** A
   Vitest test timer does not bound a browser whose event loop has stopped; use an outer deadline,
   and never a retry as proof of repair. Browser shards use the diagnostic deadline wrapper; guard:
