@@ -6289,6 +6289,16 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   move and also shrinks the denominator `mutation-ui-aggregate`'s bar of 90 is measured against.
   Owner's call. `packages/ui/src/vitest-pointer-gestures.ts` (A720 Part 4) is in the same position.
 
+- **Check that the nightly `mutation-db` shards now finish well inside 25 minutes.** A1309
+  (#2401) packs db's mutation shards by a committed per-file cost table
+  (`packages/db/mutation-costs.json`, about 720 s of estimated work each) instead of by file size,
+  and removed the test helper's reset checks whose mutants changed nothing and ran to Stryker's
+  timeout. Pull-request CI never runs the nightly packing, so the first nightly `mutation.yml` run
+  after 2026-11-02 is the proof: read each `mutation-db (N)` job's duration. A shard above about
+  20 minutes means the table needs refreshing with `scripts/mutation-costs.mjs` from that run's
+  reports (receipt in `docs/developers/ci-and-gates.md`, "db's mutation shards are packed by
+  estimated cost").
+
 - **`mutation.yml` repeats one shard-and-merge job pair three times** — OPEN.
   [Detail](backlog/ci.md#mutationyml-repeats-one-shard-and-merge-job-pair-three-times).
 
