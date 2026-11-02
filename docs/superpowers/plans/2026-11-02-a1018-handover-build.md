@@ -237,9 +237,10 @@ the owner.
    `:2662`, `:2731`, `:2891`, `:2973`, `:3170`) and this plan has not traced which of them a
    request reaches; stopping the named duties is enough and changes nothing a request reads.
    The 180 seconds is a starting value, to be measured in the owner's rehearsal. **The request
-   that asks for the stepdown gets its answer first**: inside that request the stepdown only
-   records the restriction and closes the gate; everything after — stopping duties, waiting for
-   admitted requests, the close and the restart — runs after the answer is sent, as promotion
+   that asks for the stepdown gets its answer first**: inside that request the stepdown records
+   the restriction, closes the gate and signals the outside-facing duties to stop (decision 3);
+   the waiting — for those duties, for admitted requests — the close and the restart run after the
+   answer is sent, as promotion
    answers first and signals itself on the next tick (`boot.ts:3089-3091`). Run inside the
    request, the close would cut the requester's own connection 500 ms in
    (`apps/server/src/close-listener.ts:28,44`) and its answer would be lost.
@@ -248,11 +249,13 @@ the owner.
    clock watch asks AEAT whenever `filesRecords()` is true (`apps/server/src/clock-watch.ts:281`);
    the card sweep runs in every role (`boot.ts:505-512`). Design §2 step 1 says no new filing or
    payment work starts once the restriction is on disk, and counts "background jobs … and module
-   writers" in that. So the stepdown aborts and awaits, before it waits for requests, the duties
-   **named** in Task 2.4 — each one that files, sends to an outside service or device, or is a
+   writers" in that. So the stepdown signals, inside the request and right after closing the gate,
+   and later awaits, the duties **named** in Task 2.4 — each one that files, sends to an outside service or device, or is a
    module's own background writer — using the same stops `stopWork` makes at close
-   (`boot.ts:3400-3437`). The rest of `stopWork` stays with the close, each with its reason
-   recorded in Task 2.4's test. A pass already in flight finishes, because each loop checks its abort
+   (`boot.ts:3400-3437`), moved into a named table both use. Signalling inside the request
+   matters: a loop whose sleep ended between the answer and a later signal would start a new pass
+   (`apps/server/src/loop.ts:54-56`). The rest of `stopWork` stays with the close, each with its
+   reason recorded in that table. A pass already in flight finishes, because each loop checks its abort
    after a pass (`apps/server/src/loop.ts:77-80`), so a request already sent to AEAT or a card
    provider waits only to its own deadline (design §2 step 2).
 4. **Peers ask each other with a signed request, not a person's password.** The chart is kept off
@@ -382,14 +385,16 @@ a box holds at most one open operation. The two early closings:
   offer failed (Task 5.3 records it at once), or the box restarted between recording `prepared`
   and the stepdown's node transaction (the next start records it, Task 3.4). Nothing can have
   relied on such an operation: M1 captures no final copy unless it holds the restriction
-  (`handover.not_stepped_down`, Task 4.7), so M2 can never accept one. On M2: when M1's signed
-  status shows that operation `prepared` or `abandoned` and no restriction (Task 5.4). A
+  (`handover.not_stepped_down`, Task 4.7), so M2 can never accept one. On M2: only when M1's
+  signed status reports that operation `abandoned` (Task 5.4). A
   destination whose source **has** stepped down is never abandoned; it completes or is replaced
   (design §7).
 - **`replaced`** — the design §7 crash case: a controlled operation X that reached only
   `prepared` on M2, closed by an emergency declaration Y that names it (Task 7.3). M1, if it had
-  stepped down for X, moves X to `replaced` when M2's return request for Y names X, and begins Y
-  as source at `source_superseded` in the same node transaction (Task 10.3). Its restriction,
+  stepped down for X, moves X to `replaced` when M2's return request for Y names X, then begins Y
+  as source at `source_superseded` — in that order, in one node transaction (Task 10.3). The
+  one-open index refuses the other order: a probe on SQLite's partial unique index printed
+  `UNIQUE constraint failed` for insert-first and succeeded for update-first. Its restriction,
   which names X, is not rewritten: it already names the same successor.
 
 A box waiting at a step records a `waiting_reason` (a code from the errors registry) beside its
@@ -508,6 +513,37 @@ modules' non-database state (`apps/server/src/backup-sources.ts:50-62`).
 | `module-preparation-state.json` | state | source-only, summarised | it holds module operation history, including the minute selections (`packages/provisioning/src/module-preparation-state.ts:73-83`; backed up as `secrets/module-evidence/fiscal-verifactu/hour-history.json` through `FISCAL_HOUR_BACKUP_STATE`, `packages/fiscal-verifactu/src/hour-backup-state.ts:49`). M2 keeps its own file. Task 4.5 finds, by a test, whether M2's minute selection sees every name M1 used from the copy alone; if it does not, M1's projected history travels as the retained `module-evidence` file the restore path already places (`apps/server/src/first-setup-backup-recovery.ts:551-582`) |
 | Litestream's `.venue.db-litestream/` | state | rebuildable | never copied; the new primary opens a new generation |
 
+### Crash windows: what a restart or a lost answer does at each step
+
+Two review rounds each found a box left stuck by a restart between two writes. So every step that
+writes both `venue.db` and `node.db`, or crosses a network answer, is listed here with what happens
+at each point and the test that covers it. The rule behind every row: **a step is recorded
+before the request that depends on it is sent, every request is repeated from that record, and
+every receiver answers a repeat from what it stored the first time.** A row added later keeps the
+same shape.
+
+| Step | Restart or lost answer at… | What happens | Test |
+| --- | --- | --- | --- |
+| M1 starts a controlled handover (Task 5.3): `node.db` `prepared` → offer to M2 → stepdown's node transaction | after `prepared`, before the stepdown's node transaction (offer unsent, unanswered or answered) | M1's next start moves it to `abandoned` and sells (Task 3.4); M2, if it recorded `prepared`, closes when M1's status reports `abandoned` (Task 5.4) | 3.4 "a source operation left at `prepared`…"; 5.3 "a stepdown that throws…"; 5.4 "M1's status reporting… `abandoned`" |
+| | the offer was refused, or the stepdown threw | M1 records `abandoned` at once and keeps selling | 5.3 |
+| Stepdown (Task 2.4): restriction → gate → signal duties → answer → await duties → admitted requests → close → restart | anywhere after the restriction's node transaction, or the answer is lost | M1 starts restricted; a repeated request is answered from the stored operation by the restricted start | 2.6; 5.3 "a retry after the restart…"; 2.4 "the caller… receives its full answer body" |
+| Capture (Task 4.7): copy file → `final_state` event | after the file, before the event | the next request captures again from an unchanged `venue.db` (a restricted start writes nothing to it, Task 2.2) and records one event | 4.7 "a crash between the copy and the event…" |
+| M2 fetches the copy (Task 5.4) | any point | the duty retries every 5 s while M2 is at `prepared`; partial files are discarded | 5.4 |
+| M2 accepts (Task 5.5): `node.db` `copy_accepted` → post acceptance → M1 records `filing_relinquished` → answer → M2 records `filing_assumed` | M2 restarts after `copy_accepted`, or the answer is lost | the posting duty re-posts the same stored acceptance; M1 answers its stored relinquishment byte for byte | 5.5 "M2 restarted at `copy_accepted`…"; 5.6 "a repeated acceptance…"; 5.8 "a reboot of M1 between relinquishment and M2's assumption…" |
+| M2 places the copy (Task 5.7): file swap → `copy_placed` event | mid-swap; after the swap, before the event | mid-swap: placed again from the kept `accepted.db`; after the swap: the live digest equals the indicator's, so only the event is recorded | 5.7 |
+| Activation (Tasks 5.8, 7.4): one `venue.db` transaction (module activation, `trading.env`, chart; handover rows with it or right after) → `node.db` role and `activated` → restart | before the venue commit | still a mirror at `filing_assumed` / `emergency_declared`; the page repeats the activation | 5.8 "a lost activation answer…"; 7.5 "a reboot between declaration and activation…" |
+| | after the venue commit, before the `node.db` records | `finishPromotedRole` makes it primary (`promoted-role.ts:39-62`); Task 5.8b writes any missing handover rows and records `activated`; the start check does not count the source; it sells | 5.8b "M2 killed between…"; 7.4 "a crash after the activation commit…" |
+| | the answer is lost | a repeat answers `activated` and takes no second name | 5.8; 7.4 |
+| M2 hands its chart to M1 (Tasks 5.10, 10.4) | the post is lost, or M1 is off | the return watch re-posts while M1 reports an older term | 10.4 "posts M2's chart…" |
+| Emergency declaration (Task 7.3): one node transaction (old controlled operation to `replaced` first, then the new one) | before or after the commit; the answer is lost | before: nothing recorded, the person presses again; after: the same operation id answers the stored declaration | 7.3; 7.5 |
+| Returning M1 learns it was superseded (Tasks 3.3, 3.4): restriction → restricted start | before the restriction | the next start asks again and writes it | 3.4; 7.5 "M1 comes back while M2 is at `emergency_declared`…" |
+| Return batch (Tasks 10.3–10.7, 11.2): M1 writes the batch file and `return_pending` → answer → M2 applies in one `venue.db` transaction → `node.db` state → receipt | M1 restarts after the file; the answer is lost | the same request (same heads) is answered from the stored file, byte for byte | 10.3 "the same request twice…" |
+| | M2 restarts after the apply commit, before its `node.db` record | the watch asks again; the apply changes nothing the second time; the state is recorded | 10.6 "a crash after the apply commit…" |
+| | M1 holds a replaced X when Y's request arrives | one node transaction: X to `replaced`, then Y begun | 10.3 |
+| Carry on as the main box (Task 3.5): event → restart | after the event | the next start asks the peers again (decision 10) | 3.5 "the next start asks the peers again" |
+| Old box will not return (Task 13.5) | before or after the `node.db` record | before: nothing changed; after: closed, and a new handover may begin | 13.5 |
+| Rejoin wipe (Task 13.4): `wipe_started` event → `venue.db` removed → `node.db` removed | between the two removals | the next run finds `wipe_started` and finishes the wipe without judging again | 13.4 "a crash after `venue.db` is removed…" |
+
 ---
 
 ## Fiscal boundary, slice by slice
@@ -530,7 +566,7 @@ and `git diff origin/main -- packages/fiscal-verifactu/src/write-path.e2e.test.t
 | 3 Boot check | **FISCAL** | decides, before the first filing pass, whether a box may file (A947 5a's place) |
 | 4 Final copy | **FISCAL** | new read-only code in `packages/fiscal-verifactu` (chain summary, whole-chain check) |
 | 4b Payment collection owner | no | payments only; full review for concurrency |
-| 5a The relinquished fact | **FISCAL — LOUD** | adds a version 2 approval, written only by a promotion, to the append-only `fiscal_allocations` (`packages/fiscal-verifactu/src/classification.ts:10`, `schema/allocations.ts:26`); version 1 stays readable; also changes the generic module operation contract (`packages/module/src/operation-preparation.ts:15-26,125`) and the server's host of it, a cross-package contract |
+| 5a The relinquished fact | **FISCAL — LOUD** | adds a version 2 approval, written only by a promotion, to the append-only `fiscal_allocations` (`packages/fiscal-verifactu/src/classification.ts:10`, `schema/allocations.ts:26`); version 1 stays readable; also changes the generic module operation contract (`ModuleRecoveryFacts`, `packages/module/src/operation-preparation.ts:15-26`) and the server's promotion path (`apps/server/src/node-operation-preparation.ts`), a cross-package contract |
 | 5 Controlled, server | **FISCAL** | activates a fresh fiscal identity on M2; M2 then files M1's copied records |
 | 6 Controlled, screens | no, unless Task 6.4 must change `packages/fiscal-verifactu/src/setup/` (then FISCAL) | screens and guides; lands after 5 |
 | 7 Emergency, server | **FISCAL** | as 5, under a declaration; Task 7.4b, if built, changes `hour-selection.ts` |
@@ -713,7 +749,7 @@ full path.
 | 4 | The final copy and its indicator | **yes** | no | 8 | 2 | — |
 | 4b | Payment collection belongs to one box (A764) | no | no | 4 | 0 | — |
 | 5a | The relinquished fact (crosses the module operation contract) | **yes, loud** | no | 4 | 0 | — |
-| 5 | Controlled handover, server | **yes** | yes (`venue.db`, new `handover` set) | 11 | 3, 4, 4b, 5a (real boxes: A947 3b) | — |
+| 5 | Controlled handover, server | **yes** | yes (`venue.db`, new `handover` set) | 12 | 3, 4, 4b, 5a (real boxes: A947 3b) | — |
 | 6 | Controlled handover, screens and guide | no | no | 6 | 5 | — |
 | 7 | Emergency handover, server | **yes** | yes (`venue.db`, `handover` set) | 7 (+ 7.4b only if Q2 is (b)) | 5 (real boxes: A947 3b; continuous copy: 3c) | Q2, Task 7.4b only |
 | 8 | Emergency declaration page and guide | no | no | 4 | 6, 7 | — |
@@ -1061,10 +1097,14 @@ The allowed list for a stepdown, used by Task 2.4: `GET /health`, `GET /api/node
 
 #### Task 2.4: The stepdown, in order
 
-**Files:** Create `apps/server/src/handover-stepdown.ts`; modify `boot.ts` (add
-`quiesceOutsideWork` to the full start's teardown beside `stopWork`, `:3400-3437`, and make the
-later close skip each stop it already made; wire `stepDown` with the gate and the restart used
-after promotion, `:3079-3092`). Test `apps/server/src/handover-stepdown.test.ts`.
+**Files:** Create `apps/server/src/handover-stepdown.ts` and `apps/server/src/background-duties.ts`;
+modify `boot.ts`: today's `stopWork` is an unnamed function written inline (`:3400-3437`), so its
+stops move into a **named table**, `backgroundDuties`, one entry per duty
+`{ name, signal(): void, settled(): Promise<void>, atStepdown: boolean, reason?: string }` —
+`signal` aborts the duty's controller or calls its `stop()` without awaiting, `settled` awaits it.
+`stopWork` becomes "signal every entry, then await every entry"; the stepdown uses the entries
+marked `atStepdown`; each stop runs once whichever comes first. Wire `stepDown` with the gate and
+the restart used after promotion, `:3079-3092`. Test `apps/server/src/handover-stepdown.test.ts`.
 
 **Interfaces — Consumes:** `beginHandover`, `advanceHandover` (Task 1.5),
 `recordHandoverRestrictionTx` (Task 1.4), `HandoverGate` (Task 2.3). **Produces:**
@@ -1073,10 +1113,13 @@ after promotion, `:3079-3092`). Test `apps/server/src/handover-stepdown.test.ts`
 1. in ONE node transaction: the operation row at `source_stepped_down` (for `handed-over`) and the
    restriction (successor = destination) — before anything is acknowledged;
 2. `gate.close({ allowed: STEPDOWN_ALLOWED, self })` — new requests refused `handover.stepping_down`;
+3. **signal** every duty marked `atStepdown` to stop — synchronously, still inside the request, so
+   no loop whose sleep ends after this point starts a new pass (each loop checks its signal before
+   a pass, `apps/server/src/loop.ts:54-56`, and its sleep takes the signal, `:84`);
 then `stepDown` resolves, the route sends its answer, and **after the answer** (scheduled with
 `setTimeout(…, 0)` as promotion does, `boot.ts:3089-3091`, so the response is written first —
 decision 2):
-3. `quiesceOutsideWork()` aborts and awaits, at once, these named duties — each one that files,
+4. **await** those duties' `settled()`. The duties marked `atStepdown` are these — each one that files,
    sends to an outside service or device, or is a module's own background writer (design §2 step
    1; decision 3): the drain loop (`controller`, the loop that runs `singletonPass`); the card
    sweep (`pendingCardController`); tender-refund recovery (`tenderRefundController`); the Cloud
@@ -1088,13 +1131,12 @@ decision 2):
    the demo printer loop (`demoPrinterLoop?.stop()`, `:2128`); backups (`backupSupervisor.stop()`)
    and Litestream (`streamHost.stop()`). A pass already in flight finishes (decision 3). **Left to
    the close**, as today: the change subscription, the sealing of node commits and the sealed-state
-   refresh, the append-only watch, the free-space watch and the live events. The test lists every
-   member of `stopWork` and, for each left to the close, a one-line reason read from what it calls;
-   a member found to send anything outside, or to be a module's writer, joins the named list
-   instead of getting a reason;
-4. `gate.settled(HANDOVER_ADMITTED_WORK_LIMIT_MS)`, logging `handover.admitted_work_cut` with the
+   refresh, the append-only watch, the free-space watch and the live events. Each entry left to
+   the close carries a one-line `reason` read from what it calls; an entry found to send anything
+   outside, or to be a module's writer, is marked `atStepdown` instead;
+5. `gate.settled(HANDOVER_ADMITTED_WORK_LIMIT_MS)`, logging `handover.admitted_work_cut` with the
    method and path of each request still inside;
-5. the existing graceful close (which no longer repeats step 3's stops), then SIGTERM.
+6. the existing graceful close (whose `stopWork` skips the entries already stopped), then SIGTERM.
 `HANDOVER_ADMITTED_WORK_LIMIT_MS = 180_000`. `stepDown` never calls `tradingAdmission.requireRestart()`
 and never writes `holders.singletonRole` (decision 2).
 
@@ -1104,8 +1146,11 @@ and never writes `holders.singletonRole` (decision 2).
   sees its connection closed); "the restriction is on disk before the answer" (read it from a
   second store handle inside the route's answer seam); "every named duty is stopped before the
   request wait begins, and each stop runs exactly once across the stepdown and the close";
-  "every `stopWork` member is either named or carries a reason" (the list in the test equals
-  `stopWork`'s); "the trading admission still reads `ready` during the wait"; "a request still
+  "every `backgroundDuties` entry is either `atStepdown` or carries a reason" (a runtime check on
+  the table both the close and the stepdown use); **"no named duty starts a new pass after the
+  restriction is written"** (each duty seam records pass starts; one duty's sleep is made to end
+  between the answer and the await: control — signal after the answer instead, and that duty
+  records a pass); "the trading admission still reads `ready` during the wait"; "a request still
   running at the limit is cut and logged by route, and the stepdown proceeds" (fake timers); "a
   second call for the same binding answers `replayed` and does not restart twice".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-stepdown.test.ts` — FAIL.
@@ -1195,14 +1240,17 @@ start, the pending-adoption start (`boot.ts:1540-1579`) and the waiting start (T
 `apps/server/src/peer-status-api.test.ts`.
 
 **Interfaces — Produces:** `POST /api/node/peer-status`, body a `query` envelope
-`{ nonce: string (16–64 chars), atMs: number }` signed by the asking box; answer a `status` envelope
-signed by this box: `{ heldMembership: SignedMembershipDocument | null, restriction: { kind, successorNodeId, operationId } | null, openOperation: { operationId, role, scenario, state } | null, nonce }`.
+`{ nonce: string (16–64 chars), atMs: number, operationId?: string }` signed by the asking box;
+answer a `status` envelope signed by this box: `{ heldMembership: SignedMembershipDocument | null, restriction: { kind, successorNodeId, operationId } | null, openOperation: { operationId, role, scenario, state } | null, requestedOperation: { operationId, role, scenario, state } | null, nonce }`.
+`requestedOperation` is the state of the operation the query names, **open or closed** — so a
+peer can see `abandoned` (Task 5.4), which `openOperation` never shows.
 Refusals: `handover.peer_unknown` (403) when the signer is not a key `peerKeyOf` knows or is
 `evicted` in the held chart; `handover.request_invalid` (400).
 
 - [ ] **Step 1: Write the failing tests.** "a box the chart lists gets a signed status echoing its
   nonce"; "a stranger's key is refused 403 `handover.peer_unknown`"; "an evicted box is refused";
-  "the answer verifies with this box's key and fails with any other"; "the restricted and the
+  "the answer verifies with this box's key and fails with any other"; "a query naming a closed
+  operation gets its closed state in `requestedOperation`"; "the restricted and the
   pending-adoption starts answer it too".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/peer-status-api.test.ts` — FAIL.
 - [ ] **Step 3: Implement.** The chart is not served to unsigned callers (decision 4).
@@ -1287,12 +1335,23 @@ box's `node.db` where this box is the destination and reached `activated`, open 
 - at least one counted peer answers with nothing newer → `proceed`;
 - no counted peer answers within `timeoutMs` (default 5 s each), or every counted peer's address
   equals `ownOrigin` or is empty → `wait`.
-`openOperation` — an open operation in which this box is the source, or the destination before
-`activated` — never returns `proceed`. Before the check, a source operation still at `prepared`
-(a restart between Task 5.3's `prepared` and the stepdown's node transaction) is moved to
-`abandoned` with an event, and does not count: the box never stepped down, so no copy of it can
-have been accepted (Formats → progress states). A source operation past `prepared` cannot reach
-this check, because its restriction sends the start to the restricted start first (Task 2.1).
+`openOperation` — an open operation in which this box is the **source** — never returns
+`proceed`. A destination's operation never blocks a start: a destination before activation is a
+read-only mirror that files nothing, and **the check runs only on a box whose mode is not
+`mirror`**, as today's peer reconcile does (`apps/server/src/boot.ts:1599`). Two repairs run
+first, so that no restart leaves a half-recorded step behind:
+- a **source** operation still at `prepared` (a restart between Task 5.3's `prepared` and the
+  stepdown's node transaction) is moved to `abandoned` with an event: the box never stepped down,
+  so no copy of it can have been accepted (Formats → progress states). A source operation past
+  `prepared` cannot reach the check, because its restriction sends the start to the restricted
+  start first (Task 2.1);
+- a **destination** operation still before `activated` on a box that is no longer a mirror — a
+  restart between the activation's `venue.db` commit and its `node.db` record, which
+  `finishPromotedRole` turns into a primary at this same start (`apps/server/src/promoted-role.ts:39-62`,
+  called at `boot.ts:1588`) — is finished by Task 5.8b: it writes any missing handover venue rows
+  and records `activated`. Its source then counts in `activatedFrom`.
+Slice 3 lands before `handover_activations` exists, so Task 3.4 provides the repair hook and Task
+5.8b fills it.
 
 - [ ] **Step 1: Write the failing tests** (pure, stand-in `ask` and `joined`): one per rule above;
   **"a main box whose chart lists a pending spare at the same address, with no `nodes` row for
@@ -1306,7 +1365,7 @@ this check, because its restriction sends the start to the restricted start firs
   holds M1's `nodes` row and its chart lists M1 `sell-only`), with its control "the same chart and
   rows without the activated operation waits"; "a destination whose operation is `activated` and
   still `return_pending` proceeds"; "a source operation left at `prepared` is moved to
-  `abandoned` and the box proceeds".
+  `abandoned` and the box proceeds"; "a mirror runs no check".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/boot-peer-check.test.ts` — FAIL.
 - [ ] **Step 3: Implement**, and wire it in `boot.ts`; `superseded` writes the restriction and
   takes the restricted start (Task 2.1); `wait` takes the waiting start (Task 3.5). Add a boot
@@ -1333,8 +1392,7 @@ required. Pressing it signs the person in by email (`password.invalid` for every
 failure), requires `node.promote`, records a `node_handover_events` row
 `{ kind: "carried_on_without_peer", detail: { personId, peerNodeIds, chartTerm } }`, and restarts
 into a normal start **for this start only** (decision 10). Refusal when this box holds a
-restriction, or an open operation in which it is the source or the destination before `activated`
-(the same rule as Task 3.4): `handover.known_handover` — "This box has already handed over
+restriction, or an open operation in which it is the source (the same rule as Task 3.4): `handover.known_handover` — "This box has already handed over
 to {successor}. It cannot carry on as the main box." with no choice but the status page link
 (design §4: it cannot undo a known handover).
 
@@ -1553,7 +1611,8 @@ without capturing again.
 - [ ] **Step 1: Write the failing tests.** "the indicator's digest is the SHA-256 of the file it
   names"; "the summaries are read from the captured file" (a row written to the live file after
   capture — through a test-only handle — does not appear); "a second call returns the same
-  envelope byte for byte"; "refused on a box that has not stepped down"; "verifies with this box's
+  envelope byte for byte"; "a crash between the copy and the event: the next call captures again
+  and records one event"; "refused on a box that has not stepped down"; "verifies with this box's
   key".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/handover exec vitest run src/indicator.test.ts` and `pnpm --filter @waitron/server exec vitest run src/handover-capture.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
@@ -1667,33 +1726,56 @@ filing to this box.
 **How old shapes stay readable.** The new fact goes in a **version 2** approval, written only by
 the promotion path. Version 1 — today's exact key set — is not changed and stays readable
 everywhere it is read today, meaning "not relinquished". This is not compatibility code for
-pre-live data (CLAUDE.md §3 forbids that): version-1 approvals keep arriving from sources that
-can never carry the field. The fiscal package "still reads old Cloud receipts until their
-retirement" (`docs/backlog/fiscal.md:1078-1081`; the Cloud registry that signed them is gone,
-A1189), and every other builder — paper, custody, conflict recovery, setup, throwaway — keeps
-writing version 1 unchanged. So no reader that accepts version 1 today stops accepting it.
+pre-live data (CLAUDE.md §3 forbids that): every other builder — paper, custody, conflict
+recovery, setup, throwaway — keeps writing version 1, and the fiscal package "still reads old
+Cloud receipts until their retirement" (`docs/backlog/fiscal.md:1078-1081`; no new ones arrive,
+since the Cloud registry that signed them was dropped, A1189). So no reader that accepts version 1
+today stops accepting it.
 
-#### Task 5a.1: The generic module contract carries the fact
+#### Task 5a.1: The promotion path carries the fact to the module
 
-**Files:** `packages/module/src/operation-preparation.ts` (`ModuleRecoveryFacts`, `:15-26`, gains
-`oldMachineRelinquished: boolean`; the host's `run(binding, key, isolation, body)`, `:125`, takes
-`isolation: { oldMachineOffline: boolean; oldMachineRelinquished: boolean; noParallelRecovery: boolean }`);
-`apps/server/src/node-operation-preparation.ts` (the stored scope's `isolation`, `:64`; the facts it
-hands the module, `:115-121`, where `oldMachineOffline` defaults to `true` when no isolation is set —
-`oldMachineRelinquished` defaults to `false` there; the `run` it implements, `:190-210`); every
-caller of `run` (find them with `git grep -n "\.run(" -- apps/server/src | grep -i isolation` and
-by the type error the new field raises). The field name is regime-neutral, so the module
-boundary still learns nothing about Veri*Factu (`scripts/module-seams.test.ts`). Tests in
-`packages/module/src/operation-preparation.test.ts` and a new
+**How a promotion reaches the module today** (traced on `61bfdfe405`): `POST /management-api/promote`
+calls `nodePreparation.withPromotion(operation, body, body, …)` (`apps/server/src/promote-api.ts:116-125`);
+`withPromotion` (`apps/server/src/node-operation-preparation.ts:259-280`) calls `invoke`
+(`:137-185`), which checks the held context — today only `oldNodeNeutralised` and
+`noParallelRecovery` (`Context`, `:40-43`; checks `:149-153`) — and opens the operation scope with
+**no isolation** (`:159-160`). The module's facts are then built by `readRecoveryFacts`
+(`:104-131`) with `oldMachineOffline: isolation?.oldMachineOffline ?? true` (`:119`). Isolation is
+set only by `withLiveRecovery` (`:187-210`), used for the conflict switch; and setting it makes
+`authorize` call `assertLive` (`:91`), which refuses `node.read_only` unless the box is already
+primary (`:69-77`) — so a mirror's promotion cannot use it.
+
+**Files:**
+- `apps/server/src/node-operation-preparation.ts`: `Context` gains `oldMachineRelinquished?: unknown`;
+  `invoke` refuses a promote whose value is present and not a boolean, and stores it in the scope
+  as a **new field, `promotion: { oldMachineRelinquished: boolean }`, not as `isolation`**, so
+  `assertLive` is never reached; `readRecoveryFacts` returns `oldMachineRelinquished` from that
+  field (default `false`) and `oldMachineOffline: isolation?.oldMachineOffline ?? !relinquished`.
+  `withLiveRecovery`'s isolation and its callers are unchanged.
+- `packages/module/src/operation-preparation.ts`: `ModuleRecoveryFacts` (`:15-26`) gains
+  `oldMachineRelinquished: boolean`. The host's `run(binding, key, isolation, body)` (`:125`, the
+  live-recovery entry) is unchanged. The name is regime-neutral, so the module boundary still
+  learns nothing about Veri*Factu (`scripts/module-seams.test.ts`).
+- The places that build recovery facts by hand set `oldMachineRelinquished: false`:
+  `apps/server/src/recovery-preparation.ts:73-76` (its `Pick` of the three facts), `:183-187`,
+  `:366-370`; `apps/server/src/first-setup-backup-recovery.ts:697-702`;
+  `apps/server/src/recovery-entry.ts:73-77`; and any further site the new required field's type
+  errors name.
+
+Tests in `packages/module/src/operation-preparation.test.ts` and a new
 `apps/server/src/node-operation-preparation.test.ts` (none exists on `61bfdfe405`).
 
-- [ ] **Step 1: Write the failing tests.** "the facts a module receives carry the isolation's
-  `oldMachineRelinquished`"; "with no isolation, it is `false` and `oldMachineOffline` is still
-  `true`" (today's default, unchanged); "every existing caller passes `false`".
+- [ ] **Step 1: Write the failing tests.** **"a promotion on a mirror with
+  `oldMachineRelinquished: true` reaches the module as `oldMachineOffline: false,
+  oldMachineRelinquished: true`, and is not refused `node.read_only`"** (control: pass it as
+  isolation instead, and the call is refused `node.read_only` — the reason it is a separate
+  field); "a promotion without it reaches the module as offline `true`, relinquished `false`, as
+  today"; "a non-boolean value is refused"; "a conflict switch's facts are unchanged, with
+  relinquished `false`"; each hand-built site writes `false`.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/module exec vitest run src/operation-preparation.test.ts` and `pnpm --filter @waitron/server exec vitest run src/node-operation-preparation.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** them — PASS; from the root `pnpm exec vitest run scripts/module-seams.test.ts`; typecheck `@waitron/module` and `@waitron/server`.
-- [ ] **Step 5: Commit** `git commit -s -m "module: a recovery operation can say the old box relinquished its work"`.
+- [ ] **Step 4: Run** them — PASS; then `pnpm --filter @waitron/server exec vitest run src/promote-api.test.ts src/recovery-preparation.test.ts src/recovery-entry.test.ts` (whichever exist; list them with `ls`), from the root `pnpm exec vitest run scripts/module-seams.test.ts`, and typecheck `@waitron/module` and `@waitron/server`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a promotion can say the old box relinquished its work, without the live-box check"`.
 
 #### Task 5a.2: The promotion preparation writes a version 2 approval
 
@@ -1833,15 +1915,18 @@ chart (`handover.destination_not_spare`); its `contactUrl` is non-empty and diff
 box's advertised origin (`handover.destination_unaddressable`, the case every real venue is in
 until A947 3b); it answers a signed peer query within 5 s (`handover.destination_unreachable`).
 Then it begins its own operation (role source, `prepared`), posts the offer, and calls `stepDown`
-with this request as `self`. If the offer is refused or not answered, it records `abandoned` with
-the reason and answers that refusal; the box keeps selling, because it never stepped down. On
+with this request as `self`. If the offer is refused or not answered, **or `stepDown` throws
+before its node transaction commits**, it records `abandoned` with the reason and answers that
+refusal; the box keeps selling, because it never stepped down. On
 success it answers `{ handoverPage: "<M2 contactUrl>/handover/<operationId>" }` — sent before the
 quiesce and the restart (Task 2.4). The same operation id and inputs return the stored answer; changed inputs
 refuse `handover.operation_conflict`.
 
 - [ ] **Step 1: Write the failing tests.** One per refusal (each also asserts no node.db row and
   no restart); "a person without `node.promote` is refused"; "an offer M2 refuses leaves the
-  operation `abandoned`, the box selling, and a new handover allowed"; "a valid start records
+  operation `abandoned`, the box selling, and a new handover allowed"; "a stepdown that throws
+  before its node transaction leaves the operation `abandoned` and M2's next status read sees
+  it"; "a valid start records
   `prepared`, offers, steps down and the caller receives the page address"; "a retry after the restart is answered by the
   restricted start from the stored operation" (Task 2.1's `routes` gains this read).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-source-start-api.test.ts` — FAIL.
@@ -1856,15 +1941,21 @@ refuse `handover.operation_conflict`.
 into `<state>/handover/<operationId>/received.db`, retrying every 5 seconds while M1 restarts.
 Test `apps/server/src/handover-fetch.test.ts`.
 
-While it waits, each attempt also reads M1's signed status (Task 3.1): if M1 shows this operation
-`prepared` or `abandoned` and holds no restriction, M1 never stepped down, so M2 records
-`abandoned` and stops (Formats → progress states). If M1 shows a restriction, M2 keeps waiting —
-a stepped-down M1 is never left behind by an abandon (design §7).
+While it waits, each attempt also reads M1's signed status for this operation (Task 3.1's
+`requestedOperation`): **only when M1 reports it `abandoned`** does M2 record `abandoned` and stop.
+M1 at `prepared` is not enough: M2 answers the offer before M1's stepdown starts, so M2's first
+status read can land while M1 is still `prepared` and about to step down (review round 3, C2).
+M1 itself turns a `prepared` it will never step down for into `abandoned` — on a failed offer or
+a failed stepdown (Task 5.3) and at its next start (Task 3.4) — so the abandon M2 waits for always
+comes while M1 runs. A stepped-down M1 never reports `abandoned` (Task 1.3), so it is never left
+behind.
 
 - [ ] **Step 1: Write the failing tests.** "fetches once M1's restricted start answers"; "a
   partial download is discarded and fetched again"; "stops when the operation leaves `prepared`";
-  "M1's status showing `abandoned` and no restriction closes M2's operation as `abandoned`";
-  "M1's status showing a restriction keeps M2 waiting".
+  "M1's status reporting the operation `abandoned` closes M2's operation as `abandoned`";
+  **"M2's status read landing between M1's `prepared` and its stepdown keeps M2 waiting, and the
+  fetch then succeeds"** (control: with round 2's rule, `prepared` and no restriction, M2 closes
+  and the later fetch is refused); "M1's status showing a restriction keeps M2 waiting".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-fetch.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS.
@@ -1889,13 +1980,17 @@ indicator's (`handover.copy_mismatch`); `PRAGMA integrity_check` is `ok`
 (`handover.key_ring_mismatch`); each module's summary, **recomputed from the received file**,
 equals the indicator's (`handover.summary_mismatch`, naming the module). On success: the file is
 kept at `<state>/handover/<operationId>/accepted.db`, `copy_accepted` is recorded with the
-acceptance envelope, and only then is the acceptance posted to M1.
+acceptance envelope, and only then is the acceptance posted to M1. The posting is a duty that runs
+while the operation is at `copy_accepted`, every 5 seconds, so a lost answer or a restart of
+either box re-posts the same stored acceptance and gets M1's same stored relinquishment (Task
+5.6); on receiving it M2 records `filing_assumed` (Task 5.7).
 
 - [ ] **Step 1: Write the failing tests.** One per check, built from a real capture (Task 4.7) and
   then altered: "one row written after capture" (`handover.copy_mismatch`); "a copy whose bytes
   match but whose indicator lists one fewer record in a chain" (`handover.summary_mismatch`); "a
   copy with one record's amount changed and a re-signed indicator" (`handover.chain_broken`); and
-  so on. "Nothing is posted to M1 before `copy_accepted` is on disk" (the post seam reads node.db).
+  so on. "Nothing is posted to M1 before `copy_accepted` is on disk" (the post seam reads node.db);
+  "M2 restarted at `copy_accepted` posts the same acceptance again and records `filing_assumed`".
   Control: the unaltered copy is accepted.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-compare.test.ts` — FAIL.
 - [ ] **Step 3: Implement.** One-line comment: the summaries are recomputed from the received
@@ -1935,13 +2030,19 @@ is never touched); add the file to `REPLACES` in `scripts/backup-room-note.test.
 restarts; at start it places the copy under the house rules (Global Constraints → "Replacing or
 removing the live `venue.db`": `lockVenueDatabase`, `deleteBackupRoomNote` first, the old file and
 its side files moved aside as `restoreDatabase` does, `apps/server/src/restore.ts:661-694`,
-Litestream's folder removed) and records `copy_placed` as an event. If Task 4.5's probe made the
-minute history a transferred item, the retained `module-evidence` file is placed here too.
+Litestream's folder removed) and records `copy_placed` as an event. `accepted.db` is **copied**
+into place and kept until `copy_placed` is recorded, and "already placed" is decided by the live
+`venue.db`'s SHA-256 equalling the indicator's digest — so a restart after the swap and before the
+event records the event without placing again, and a restart mid-swap places again from the kept
+file. If Task 4.5's probe made the minute history a transferred item, the retained
+`module-evidence` file is placed here too.
 
 - [ ] **Step 1: Write the failing tests.** "places once; a reboot between `filing_assumed` and
-  placement places once"; "the backup-room note is gone before `venue.db` changes" (control:
-  without the deletion, the note survives and the test prints it); "`.venue.db-litestream/` is
-  removed"; "`node.db` is byte-for-byte unchanged"; "`venue.lock` is never unlinked".
+  placement places once"; **"a reboot after the swap and before `copy_placed` records the event
+  and does not place again"**; "a reboot mid-swap places from the kept `accepted.db`"; "the
+  backup-room note is gone before `venue.db` changes" (control: without the deletion, the note
+  survives and the test prints it); "`.venue.db-litestream/` is removed"; "the swap does not
+  touch `node.db`; its only change is the `copy_placed` event"; "`venue.lock` is never unlinked".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-place-copy.test.ts` and, from the root, `pnpm exec vitest run scripts/backup-room-note.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** them — PASS.
@@ -1955,16 +2056,19 @@ minute history a transferred item, the retained `module-evidence` file is placed
 **Interfaces — Produces:** `POST /api/node/handover/:operationId/activate` with
 `{ signIn: { email, password, totp? }, comparisonId }`: the person signs in against the placed copy
 (`password.invalid` for every credential failure) and must hold `node.promote` there; the clock
-comparison is the existing preparation's (`hour-setup-clock.ts`); the operation's isolation
-(Task 5a.1) is `{ oldMachineOffline: false, oldMachineRelinquished: true, noParallelRecovery: true }`,
-which reaches `createHourPromotionPreparation`
-(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:108-110`) with `oldMachineAbsent: false`,
-justified by the recorded relinquishment; the next free minute (decision 7). It calls
-`promoteMirrorToPrimary(deps, { oldNodeNeutralised: true })` with the operator's id as authority;
-writes the `handover_activations` row with the relinquishment as evidence in the same venue
-transaction as the activation; then records `activated` in node.db (venue first, node after; a
-re-run finds the committed chart and only records the state); then restarts as the promotion
-route does.
+comparison is the existing preparation's (`hour-setup-clock.ts`). It promotes through the same
+path the promote route uses — `nodePreparation.withPromotion(operation, signIn, context, …)`
+(`apps/server/src/promote-api.ts:116-125`) with `context = { oldNodeNeutralised: true,
+noParallelRecovery: true, oldMachineRelinquished: true }`, justified by the recorded
+relinquishment — so the module receives `oldMachineOffline: false, oldMachineRelinquished: true`
+(Task 5a.1) and `createHourPromotionPreparation`
+(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:108-110`) stores a version 2 approval
+(Task 5a.2); the next free minute (decision 7). Promotion's one venue transaction holds the module
+activation, `trading.env` and the new chart (`apps/server/src/promote.ts:268-284`); the
+`handover_activations` row goes in that transaction if the runner can carry it, otherwise in the
+next venue transaction, keyed by operation id. Then the role (`promote.ts:297-301`) and
+`activated` are recorded in node.db (venue first, node after); then it restarts as the promotion
+route does. A restart anywhere after the venue commit is finished by Task 5.8b.
 
 - [ ] **Step 1: Write the failing tests.** "activates under a new SIF and series, with M1's SIF
   untouched" (`registro_sif` rows for M1 unchanged); "the stored approval says relinquished, not
@@ -1973,11 +2077,37 @@ route does.
   name" (`fiscal_allocations` count unchanged); "a reboot of M1 between relinquishment and M2's
   assumption leaves M1 restricted, and M2's retry of the acceptance gets the same relinquishment";
   "activate before `filing_assumed` is refused `handover.step_out_of_order`"; "a person without
-  `node.promote` in the placed copy is refused".
+  `node.promote` in the placed copy is refused"; "on a mirror, the activation is not refused
+  `node.read_only`".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-activation.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS; then `pnpm --filter @waitron/server exec vitest run src/promote.test.ts src/promoted-role.test.ts src/boot.promote.test.ts`.
 - [ ] **Step 5: Commit** `git commit -s -m "server: the spare activates its own identity after a fresh sign-in, recording that the old box relinquished"`.
+
+#### Task 5.8b: A start that finds an activation half-recorded finishes it
+
+**Files:** `apps/server/src/handover-activation-repair.ts`, called from Task 3.4's repair hook,
+before the start check. Test `apps/server/src/handover-activation-repair.test.ts` (Review Focus 4).
+
+**Interfaces — Produces:** for an open operation in which this box is the destination, still
+before `activated`, on a box whose mode is no longer `mirror`: if this box's own held chart, signed
+with its own key, names it `serving-primary` (the same test `finishPromotedRole` uses,
+`apps/server/src/promoted-role.ts:46-58`), or a `handover_activations` row exists for the
+operation, the activation committed in `venue.db`. The repair then writes any missing handover
+venue rows (the `handover_activations` row; for an emergency, the unknown-interval gap item),
+each keyed by operation id so nothing is written twice, and records `activated` in node.db.
+Otherwise it changes nothing. Its source joins `activatedFrom` (Task 3.4).
+
+- [ ] **Step 1: Write the failing tests** (real `startServer`, a crash seam between the venue
+  commit and the node.db record): **"M2 killed between the activation's `venue.db` commit and its
+  `node.db` record restarts and sells"**, with M1 switched off (control: without the repair, the
+  start check waits and the test prints `acceptingSales: false`); "the missing
+  `handover_activations` row is written once"; "the emergency's unknown interval is written
+  once"; "a mirror that never activated is left alone".
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-activation-repair.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** it — PASS; then `src/boot-peer-check.test.ts src/promoted-role.test.ts`.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a start finishes a handover activation whose node.db record was lost"`.
 
 #### Task 5.9: The new main box takes over the old box's payment collection
 
@@ -2183,8 +2313,9 @@ naming it; `reason` empty or over 500 characters; the source still answers a sig
 the operation (`emergency`, role destination) at `emergency_declared` and the signed declaration
 as an event. **Crash replacement (design §7):** if this box holds an open controlled operation for
 the same source with only `prepared` recorded — no `copy_accepted`, no `filing_assumed`, no
-`activated` — that operation moves to `replaced` with an event naming the new one, and the
-declaration's `replaces` names it; with anything later recorded, the declaration is refused
+`activated` — that operation moves to `replaced` with an event naming the new one **before** the
+new operation is inserted, in the same node transaction (the one-open index refuses the other
+order, Formats), and the declaration's `replaces` names it; with anything later recorded, the declaration is refused
 `handover.controlled_unresolved` (409).
 
 - [ ] **Step 1: Write the failing tests.** One per refusal (each asserting no node.db row); "a
@@ -2202,19 +2333,20 @@ declaration's `replaces` names it; with anything later recorded, the declaration
 Test `apps/server/src/handover-emergency-activation.test.ts`.
 
 **Interfaces — Produces:** `POST /api/node/handover/:operationId/activate` accepts an emergency
-operation at `emergency_declared`, with the same sign-in and clock comparison; facts
-`{ oldMachineAbsent: false, oldMachineOffline: true, oldMachineRelinquished: false, noParallelRecovery: true }`,
-justified by the recorded declaration; the next free minute (Q2's default). In the activation's
-venue transaction: the `handover_activations` row with the declaration as evidence and a
+operation at `emergency_declared`, with the same sign-in and clock comparison, through the same
+`withPromotion` path with `context = { oldNodeNeutralised: true, noParallelRecovery: true,
+oldMachineRelinquished: false }`, so the module receives `oldMachineOffline: true`, justified by
+the recorded declaration; the next free minute (Q2's default). With the activation, as Task 5.8
+places them: the `handover_activations` row with the declaration as evidence and a
 `handover_gap_items` row `{ kind: "unknown_interval", interval_from: lastChangeAtMs, interval_to: null }`;
-then `activated` in node.db. A start that finds `activated` without the venue rows writes them
-(both are keyed by operation id, so a re-run writes nothing twice).
+then `activated` in node.db. A restart between is finished by Task 5.8b.
 
 - [ ] **Step 1: Write the failing tests.** "takes the next free minute" (fake clock; the same as
   a controlled activation in the same harness); "the stored approval says offline, not
   relinquished"; "writes the activation and the unknown interval with the activation"; "a crash
-  after the activation commit and before the venue rows: the next start writes them once"; "a lost
-  answer and a retry take no second name".
+  after the activation commit and before the handover rows or the node.db record: the next start
+  writes them once and sells" (Task 5.8b's repair); "a lost answer and a retry take no second
+  name".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-emergency-activation.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS.
@@ -2419,8 +2551,8 @@ operation as source at `source_superseded` from M2's status; a controlled M1 alr
 `filing_relinquished`. **The design §7 crash case:** an M1 that stepped down for a controlled
 operation X, which M2 then replaced by an emergency declaration Y (Task 7.3), still holds X open at
 `source_stepped_down`; when the return request for Y names X in its declaration's `replaces`, M1
-moves X to `replaced` and begins Y as source at `source_superseded` in one node transaction, so
-the one-open-operation index is never broken. Its restriction, naming X, is left as it is. Test `apps/server/src/handover-return-source.test.ts`.
+first moves X to `replaced`, then begins Y as source at `source_superseded`, in one node
+transaction — the other order is refused by the one-open-operation index (Formats). Its restriction, naming X, is left as it is. Test `apps/server/src/handover-return-source.test.ts`.
 
 **Interfaces — Produces:** the batch envelope stored at `<state>/handover/<operationId>/return-<sequence>.json`
 keyed by the request digest; the same request answers the same bytes; a request with other heads
@@ -2430,7 +2562,7 @@ is a new sequence. M1 records `return_pending`.
   "another destination is refused"; "a box that is not restricted refuses
   `handover.not_stepped_down`"; "a controlled M1 answers an empty-records batch"; "an M1 holding X
   at `source_stepped_down` asked for Y, which replaces X, closes X as `replaced` and answers Y's
-  batch"; "a request for Y that does not name X is refused while X is open".
+  batch" (it also asserts the update runs before the insert); "a request for Y that does not name X is refused while X is open".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-return-source.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** it — PASS.
@@ -2443,8 +2575,14 @@ scenario: every minute, a signed peer query to the source; when it answers restr
 the batch with M2's heads; M2's operation moves to `return_pending`). Test
 `apps/server/src/handover-return-watch.test.ts`.
 
+Whenever the source's status reports a chart older than M2's, the watch posts M2's chart to the
+source's `/api/node/membership` (Task 3.3) — so a lost post from Task 5.10, or an M1 that was off
+when it was made, still ends up holding the chart that fences it, which its rejoin needs
+(`apps/server/src/rejoin.ts:43-46`).
+
 - [ ] **Step 1: Write the failing tests.** "asks every minute until the source answers
-  restricted"; "requests with M2's head for each of the source's chains"; "stops once the
+  restricted"; "posts M2's chart to a source reporting an older term, until it reports the new
+  one"; "requests with M2's head for each of the source's chains"; "stops once the
   operation is `return_complete` or `return_abandoned`"; "after a controlled activation it asks at
   once".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-return-watch.test.ts` — FAIL.
@@ -2490,7 +2628,8 @@ times and the larger wait, and records M1's incident token as evidence without a
   later, and an earlier one never moves it earlier"; "applying the same batch twice changes
   nothing"; "a pass in flight on a paused chain finishes before the batch applies" (server); "a
   batch with missing records leaves the operation `return_pending` with
-  `handover.returned_originals_waiting`".
+  `handover.returned_originals_waiting`"; "a crash after the apply commit and before the
+  `node.db` record: the next pass applies nothing new and records the state".
 - [ ] **Step 2: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/handover-return.apply.test.ts` and `pnpm --filter @waitron/server exec vitest run src/handover-return-apply.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** them — PASS; then `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/drain.test.ts src/write-path.e2e.test.ts src/inmutabilidad.test.ts`.
@@ -2795,12 +2934,19 @@ on M1's page. Test `handover-wipe-gates.test.ts`.
 **Files:** `apps/server/src/rejoin.ts` (`rejoinAsSecondary`, `:39-62`) requires `judgeWipe` to pass
 when this box's `node.db` holds a handover operation; the wipe keeps `<state>/handover-archive/`.
 The wipe already removes `node.db` (`db-wipe.ts:20-28`), so the restriction and the operation rows
-go with it — the only way a restriction ends. No archive is deleted by any code here: deletion
+go with it — the only way a restriction ends. **A crash mid-wipe must not strand the box:** the
+wipe removes `venue.db` before `node.db` (`DATABASE_FILES = [VENUE_FILE, NODE_FILE]`,
+`packages/store/src/index.ts:49`), so a crash between the two leaves `node.db`'s restriction with no
+`venue.db` — no held chart, so a re-run would be refused `rejoin.not_fenced`
+(`apps/server/src/rejoin.ts:43-46`) and no gate could pass again. So before deleting anything the
+rejoin records a `wipe_started` event in `node.db` (with the gate result that allowed it); a start
+or a re-run that finds `wipe_started` finishes the wipe without judging again. No archive is deleted by any code here: deletion
 waits for A664's retention policy, and while a reconciliation item or filing case names one of its
 records it must not happen (design §5). Tests in `rejoin.test.ts`.
 
 - [ ] Failing tests: "refused while a gate fails"; "after a pass, the box wipes and keeps its
-  archive"; **"after the wipe and re-adoption, the box starts with no restriction and can later
+  archive"; **"a crash after `venue.db` is removed and before `node.db` is: the next run finishes
+  the wipe"** (control: without the event, the re-run is refused `rejoin.not_fenced`); **"after the wipe and re-adoption, the box starts with no restriction and can later
   be a handover's destination"** (a fresh `node.db`, then Task 5.2's offer accepted); "no code
   path deletes an archive" (a text guard over `apps/server/src`, weaker than its name: it reads
   text). Implement; PASS. Guide: `servers.md` `{#old-box-becomes-spare}`.
@@ -3005,4 +3151,32 @@ None was rejected. The owner questions are unchanged; the slice table changes on
 | Minor: `payments.node_id` has a foreign key to `nodes` | read `payments.ts:106-110` | Applied. Task 4b.1 names the fixture growth |
 | Minor: Task 3.7 understated how many suites change | read `till-reroute-e2e.test.ts:154` (seeds both boxes' rows) | Applied. Task 3.7 now expects several |
 | Fiscal marks | — | Unchanged except Slice 5a's row, which now names the contract change. Every slice still runs the golden huella and `inmutabilidad` suites unedited |
+
+---
+
+## Review round 3: what changed
+
+A narrow check of revision `fc045dc3d3` (`/Users/clintongormley/waitron-campaign/a1018/review-3.md`).
+Each finding was checked on `61bfdfe405` before acting; none was rejected. Because rounds 2 and 3
+each found a new stuck-box case, the whole class was swept: the new "Crash windows" table under
+Formats lists every step that writes both databases or crosses a network answer, what a restart
+at each point does, and the test. The sweep found three cases the review did not name (rows
+"M2 accepts", "M2 places the copy", "Rejoin wipe"). The owner questions are unchanged; the slice
+table changes only in Slice 5 (11 tasks to 12, adding Task 5.8b).
+
+| Finding | Checked by | What changed |
+| --- | --- | --- |
+| C1 (Critical) M2 stuck if it restarts between the activation's two writes | read `promoted-role.ts:39-62` (primary from its own signed chart), `boot.ts:1588` (runs first at every start), `boot.ts:1599` (today's peer reconcile skips mirrors), `promote.ts:268-301` (venue transaction, then role) | Applied. Task 3.4: an open operation blocks a start only where the box is the source; the check runs only on a box not in mirror mode; a repair hook runs first. New Task 5.8b fills the hook: a destination before `activated` whose own chart names it primary, or whose `handover_activations` row exists, gets its missing venue rows and `activated`, and its source joins `activatedFrom`. Task 3.5's refusal follows. Test: "M2 killed between the activation's `venue.db` commit and its `node.db` record restarts and sells". This supersedes round 2's "or the destination before `activated`" |
+| C2 (Critical) M2's abandon races M1's stepdown | read Task 5.3's order (M2 answers the offer before M1's stepdown starts) and Task 3.1's status (open operation only) | Applied. Task 3.1's status gains `requestedOperation`, open or closed. Task 5.4: M2 abandons only when M1 reports `abandoned`, never on `prepared`. Test where M2's read lands between M1's `prepared` and its stepdown, with round 2's rule as the control |
+| I1 the relinquished fact never reaches a promotion | read `promote-api.ts:116-125` → `withPromotion` (`node-operation-preparation.ts:259-280`) → `invoke` (`:137-185`, scope with no isolation `:159-160`) → `readRecoveryFacts` (`:104-131`, offline defaults true `:119`); `assertLive` (`:69-77`, called `:91`) | Applied. Task 5a.1 rewritten: the promotion's held context gains `oldMachineRelinquished`, stored in a new scope field, not `isolation`, so `assertLive` is never reached; the module contract change is only `ModuleRecoveryFacts`; the live-recovery `run` is unchanged (the plan had mislabelled `:190-210`, which is `withLiveRecovery`). The hand-built fact sites are listed (`recovery-preparation.ts:73-76,183-187,366-370`, `first-setup-backup-recovery.ts:697-702`, `recovery-entry.ts:73-77`). Tasks 5.8 and 7.4 promote through `withPromotion`. Test on a mirror, with "pass it as isolation" as the control |
+| I2 stopping duties after the answer lets a pass start | read `loop.ts:54-56` (signal checked before each pass), `:84` (the sleep takes the signal) | Applied. Task 2.4 signals every named duty inside the request right after closing the gate, and only waits after the answer. Test: "no named duty starts a new pass after the restriction is written", with signalling after the answer as the control |
+| M1 statement order for "close X, begin Y" | probe outside the repo on Node's SQLite with the partial unique index: insert-first printed `UNIQUE constraint failed: ops.node_id`; update-first succeeded | Applied in Formats, Task 7.3 and Task 10.3, with the order asserted in 10.3's test |
+| M2 `stopWork` is unnamed, so a "list equals stopWork" test compares nothing | read `boot.ts:3400-3437` | Applied. Task 2.4 moves the stops into a named `backgroundDuties` table that both the close and the stepdown use; the test is a runtime check on that table |
+| M3 a stepdown that throws after a successful offer leaves `prepared` open | read Task 5.3 | Applied: recorded as `abandoned` on that path too, with a test |
+| M4 "version 1 keeps arriving from old Cloud receipts" overstates the source | read `docs/backlog/fiscal.md:1078-1081` | Applied: old receipts are still read until their retirement; no new ones arrive; version 1 keeps being written by every other builder |
+| Sweep: M2 accepting, then restarting before the acceptance reached M1 | read Task 5.5 (posted once, from the request path) | Added: a posting duty that re-posts while at `copy_accepted`, and its test |
+| Sweep: placement's swap and event are two steps | read Task 5.7, whose test also said `node.db` was unchanged while the task records an event in it | Added: placement copies and keeps `accepted.db`, and decides "already placed" by digest; two crash tests; the contradictory test wording fixed |
+| Sweep: the rejoin wipe removes `venue.db` before `node.db` | read `packages/store/src/index.ts:47-49`, `db-wipe.ts:22-26`, `rejoin.ts:43-46` | Added: a `wipe_started` event before any deletion, so a crash between the two removals is finished by the next run instead of being refused `rejoin.not_fenced` |
+| Sweep: capture, chart hand-off, return apply | read Tasks 4.7, 5.10, 10.4, 10.6 | Added: a capture crash test (4.7), the chart re-posted by the return watch (10.4), and an apply crash test (10.6) |
+| Fiscal marks | — | Unchanged. Slice 5a's row now names `ModuleRecoveryFacts` and the server's promotion path as the contract it crosses. Every slice still runs the golden huella and `inmutabilidad` suites unedited |
 
