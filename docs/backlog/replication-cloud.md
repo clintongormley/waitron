@@ -85,6 +85,9 @@ source, operation, key and sole-recovery gates, no new hard-stop demand and no s
 
 The shared Cloud contract home remains `docs/waitron-integration-contract.md`
 in the Cloud repository.
+Four questions for Cloud were sent on 2026-11-02 to the campaign watcher for Cloud's lane G: the
+authentication bridge, the declaration's provider-resource field, a hosted M2 not in M1's chart,
+and Cloud's resource journal bound to the same operation. No local slice waits for the answer.
 Wire details, the node-local inventory, Cloud authorisation mapping, separately authorised
 implementation and joint behavioural/adverse controls remain open. Runtime checks are UNRUN
 for this docs task; no provider work is authorised.
