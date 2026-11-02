@@ -727,39 +727,10 @@ it("a pending day's late answer stays hidden when the selection changes without 
   await m.el.updateComplete;
   expect(m.root.querySelector("[data-day]")).toBeNull();
 });
-it("a missing selected location blocks an edited proposal without overwriting its draft", async () => {
-  const m = await mount({ live: true });
-  await details(m.root);
-  await click(m.root, "[data-retime]");
-  const form = m.root.querySelector<LitElement>("dashboard-attendance-proposal-dialog")!;
-  await form.updateComplete;
-  await change(form.shadowRoot!, "attendanceReason", "Preserve my draft");
-  m.data.lookups.locations = [];
-  m.data.lookups.people = [];
-  m.liveData!.invalidate([{ type: "locations" }]);
-  await expect
-    .poll(
-      () =>
-        (m.root.querySelector("[name=attendanceLocation]") as HTMLElement & { options: unknown[] })
-          .options.length,
-    )
-    .toBe(0);
-  await form.updateComplete;
-  expect(
-    (form.shadowRoot!.querySelector("[name=attendanceReason]") as HTMLElement & { value: string })
-      .value,
-  ).toBe("Preserve my draft");
-  expect(
-    (form.shadowRoot!.querySelector("[data-save]") as HTMLElement & { disabled: boolean }).disabled,
-  ).toBe(true);
-  form.dispatchEvent(
-    new CustomEvent("proposal-save", {
-      detail: { changes: item.changes, reason: "Preserve my draft" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  expect(m.commands).toEqual([]);
+it("has no Location field and reads the queue as soon as lookups arrive", async () => {
+  const m = await mount();
+  expect(m.root.querySelector('[name="attendanceLocation"]')).toBeNull();
+  await expect.poll(() => m.reads.some((read) => read.path.endsWith("/queue"))).toBe(true);
 });
 it("a passive read's recovery clears its own failure and leaves a completed selected day", async () => {
   const m = await mount({ live: true });
@@ -929,7 +900,7 @@ it("proposes an explicit missing break pair as one command", async () => {
     reason: "Forgot the break",
   });
 });
-it("a failed newly selected queue can be reread before choosing a date, and passive lookup refresh keeps the current day", async () => {
+it("a failed queue reread can be retried before choosing a date, and passive lookup refresh keeps the current day", async () => {
   const m = await mount({ live: true });
   m.failReads();
   m.liveData!.invalidate([{ type: "time_entries" }]);

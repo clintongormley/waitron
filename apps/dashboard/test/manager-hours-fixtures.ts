@@ -161,7 +161,7 @@ export async function mountManagerHours(
     options.theme,
   );
   const root = mounted.el.shadowRoot!;
-  await expect.poll(() => root.querySelector('[name="attendanceLocation"]')).toBeTruthy();
+  await expect.poll(() => root.querySelector('[name="attendancePerson"]')).toBeTruthy();
   return {
     ...mounted,
     root,
