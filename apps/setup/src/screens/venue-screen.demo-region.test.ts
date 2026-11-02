@@ -62,14 +62,12 @@ for (const locale of ["en-GB", "es-ES"] as const)
       const patches = await submit(el);
       expect(patches).toHaveLength(1);
       expect(patches[0]).toMatchObject({
-        demoLocationNameSource: "automatic",
+        demoVenueNameSource: "automatic",
         venue: {
-          location: {
-            name: "Can Delgado",
-            province: "Balears, Illes",
-            postalCode: "07001",
-            invoiceLocales: ["es-ES"],
-          },
+          name: "Can Delgado",
+          province: "Balears, Illes",
+          postalCode: "07001",
+          invoiceLocales: ["es-ES"],
         },
       });
     });
@@ -84,8 +82,8 @@ for (const locale of ["en-GB", "es-ES"] as const)
         expect((await native(el, "name")).value).toBe(name);
         expect(await submit(el)).toMatchObject([
           {
-            demoLocationNameSource: "custom",
-            venue: { location: { name, province: "Barcelona", invoiceLocales: ["ca-ES"] } },
+            demoVenueNameSource: "custom",
+            venue: { name, province: "Barcelona", invoiceLocales: ["ca-ES"] },
           },
         ]);
       },
@@ -108,10 +106,10 @@ for (const locale of ["en-GB", "es-ES"] as const)
       expect(field(el, "name").invalid).toBe(true);
     });
     it("treats a restored nonempty unmarked draft as custom", async () => {
-      const el = await mount({ mode: "demo", venue: { location: { name: "Casa Delgado" } } });
+      const el = await mount({ mode: "demo", venue: { name: "Casa Delgado" } });
       await fill(el, "postalCode", "08001");
       expect((await native(el, "name")).value).toBe("Casa Delgado");
-      expect(await submit(el)).toMatchObject([{ demoLocationNameSource: "custom" }]);
+      expect(await submit(el)).toMatchObject([{ demoVenueNameSource: "custom" }]);
     });
   });
 
@@ -123,13 +121,11 @@ for (const locale of ["en-GB", "es-ES"] as const)
     expect((await native(el, "name")).value).toBe(VALENCIA_DEMO_TEXT.locationName);
     const automatic = (await submit(el))[0]!;
     expect(automatic).toMatchObject({
-      demoLocationNameSource: "automatic",
+      demoVenueNameSource: "automatic",
       venue: {
-        location: {
-          name: VALENCIA_DEMO_TEXT.locationName,
-          province: VALENCIA_DEMO_TEXT.province,
-          invoiceLocales: ["es-ES"],
-        },
+        name: VALENCIA_DEMO_TEXT.locationName,
+        province: VALENCIA_DEMO_TEXT.province,
+        invoiceLocales: ["es-ES"],
       },
     });
     cleanupWidgets();
@@ -140,12 +136,12 @@ for (const locale of ["en-GB", "es-ES"] as const)
     await fill(restored, "postalCode", "28013");
     expect((await native(restored, "name")).value).toBe(VALENCIA_DEMO_TEXT.locationName);
     const custom = (await submit(restored))[0]!;
-    expect(custom.demoLocationNameSource).toBe("custom");
+    expect(custom.demoVenueNameSource).toBe("custom");
     cleanupWidgets();
     const customRestored = await mount({ mode: "demo", ...custom });
     await fill(customRestored, "postalCode", "46001");
     expect((await native(customRestored, "name")).value).toBe(VALENCIA_DEMO_TEXT.locationName);
-    expect((await submit(customRestored))[0]!.demoLocationNameSource).toBe("custom");
+    expect((await submit(customRestored))[0]!.demoVenueNameSource).toBe("custom");
   });
 
 for (const locale of ["en-GB", "es-ES"] as const)
@@ -156,13 +152,11 @@ for (const locale of ["en-GB", "es-ES"] as const)
     expect((await native(el, "name")).value).toBe(GALICIA_DEMO_TEXT.locationName);
     const automatic = (await submit(el))[0]!;
     expect(automatic).toMatchObject({
-      demoLocationNameSource: "automatic",
+      demoVenueNameSource: "automatic",
       venue: {
-        location: {
-          name: GALICIA_DEMO_TEXT.locationName,
-          province: GALICIA_DEMO_TEXT.province,
-          invoiceLocales: ["es-ES"],
-        },
+        name: GALICIA_DEMO_TEXT.locationName,
+        province: GALICIA_DEMO_TEXT.province,
+        invoiceLocales: ["es-ES"],
       },
     });
     cleanupWidgets();
@@ -173,10 +167,10 @@ for (const locale of ["en-GB", "es-ES"] as const)
     await fill(restored, "postalCode", "28013");
     expect((await native(restored, "name")).value).toBe(GALICIA_DEMO_TEXT.locationName);
     const custom = (await submit(restored))[0]!;
-    expect(custom.demoLocationNameSource).toBe("custom");
+    expect(custom.demoVenueNameSource).toBe("custom");
     cleanupWidgets();
     const customRestored = await mount({ mode: "demo", ...custom });
     await fill(customRestored, "postalCode", "15001");
     expect((await native(customRestored, "name")).value).toBe(GALICIA_DEMO_TEXT.locationName);
-    expect((await submit(customRestored))[0]!.demoLocationNameSource).toBe("custom");
+    expect((await submit(customRestored))[0]!.demoVenueNameSource).toBe("custom");
   });

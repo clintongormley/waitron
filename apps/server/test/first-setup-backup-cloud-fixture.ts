@@ -73,11 +73,9 @@ export async function fixture(protocol: 1 | 2 = 2) {
       request: {
         ...ownerRequest,
         legalName: "Retained setup company",
-        location: {
-          ...ownerRequest.location,
-          operationDescription: "Restaurant",
-          name: "Retained venue",
-        },
+
+        operationDescription: "Restaurant",
+        name: "Retained venue",
       },
     },
     randomBytes(32).toString("base64url"),

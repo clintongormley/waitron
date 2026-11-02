@@ -1567,7 +1567,7 @@ declare module "@waitron/shared" {
     "restore.stream_source_unchecked": { reason: "clock" | "bucket" };
     /** The restored copy is a venue the operator has not confirmed: its legal name, tax id and
      * location name, which the operator must recognise before anything is staged. */
-    "restore.stream_venue_unconfirmed": { legalName: string; taxId: string; locationName: string };
+    "restore.stream_venue_unconfirmed": { legalName: string; taxId: string; venueName: string };
     /** SQLite's `integrity_check` found the restored copy damaged, or could not open it. Carries no
      * SQLite text, which can name paths. */
     "restore.stream_integrity_failed": Record<string, never>;

@@ -211,7 +211,7 @@ async function recoveryDocument(
     version: 1,
     scope: { taxpayerNif: request.taxId, softwareId: "W1", environment: "production" },
     taxpayerName: request.legalName,
-    venueName: request.location.name,
+    venueName: request.name,
     createdAt: new Date().toISOString(),
     nodeKey: { nodeId: staged.stage.nodeId, name: staged.stage.name },
   };
@@ -476,6 +476,32 @@ it.each(["legalName", "password", "country"])(
     expect((await f.host.store.read())?.status).toBe("abandoned");
   },
 );
+it.each(["name", "city", "addressLine1", "addressLine2"] as const)(
+  "bounds the flat claim %s by UTF-8 bytes before saving an assignment",
+  async (field) => {
+    const f = await fixture();
+    expect(f.claimed.status).toBe(200);
+    const abandoned = await f.post("/setup-api/first-setup/abandon", {}, f.headers());
+    expect(abandoned.status).toBe(200);
+    const before = await f.host.store.read();
+    const venue = { ...structuredClone(request), [field]: "é".repeat(129) };
+    const refused = await f.post("/setup-api/first-setup/claim", {
+      clientClaimNonce: randomBytes(32).toString("base64url"),
+      venue,
+    });
+    expect(refused.status).toBe(400);
+    expect((await refused.json()).error).toMatchObject({ code: "setup.request_invalid" });
+    expect(await f.host.store.read()).toEqual(before);
+    const acceptedVenue = { ...venue, [field]: "é".repeat(128) };
+    const accepted = await f.post("/setup-api/first-setup/claim", {
+      clientClaimNonce: randomBytes(32).toString("base64url"),
+      venue: acceptedVenue,
+    });
+    expect(accepted.status).toBe(200);
+    expect((await f.host.store.read())?.frozen.request[field]).toBe("é".repeat(128));
+  },
+);
+
 it("rejects a missing reconfirmation and an invalid answer before any outside-use state", async () => {
   const f = await fixture();
   expect(f.claimed.status).toBe(200);

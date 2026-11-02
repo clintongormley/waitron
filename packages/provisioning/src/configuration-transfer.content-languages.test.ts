@@ -136,7 +136,9 @@ describe("required languages before configuration replacement", () => {
           ...request,
           country: "GB",
           taxId: "123456789",
-          location: { ...request.location, fiscalTerritory: "GB-vat", timeZone: "Europe/London" },
+
+          fiscalTerritory: "GB-vat",
+          timeZone: "Europe/London",
           admin: {
             displayName: "Copy owner",
             email: "copy-owner@example.test",
@@ -175,12 +177,10 @@ describe("required languages before configuration replacement", () => {
           ...request,
           country: "GB",
           taxId: "123456789",
-          location: {
-            ...request.location,
-            fiscalTerritory: "GB-vat",
-            timeZone: "Europe/London",
-            province: "Barcelona",
-          },
+
+          fiscalTerritory: "GB-vat",
+          timeZone: "Europe/London",
+          province: "Barcelona",
           admin: {
             displayName: "Copy owner",
             email: "copy-owner@example.test",

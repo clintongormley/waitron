@@ -5,7 +5,7 @@ export { newBreakGlassKeyName } from "./server-key-name.js";
 export { generateKeyRing, runKeyring } from "./keyring-command.js";
 export type { GeneratedKeyRing } from "./keyring-command.js";
 export type { ProvisioningIo } from "./io.js";
-export { planVenue, describeVenueAction } from "./venue-plan.js";
+export { planVenue, describeVenueAction, VENUE_FIELDS } from "./venue-plan.js";
 export type { AdoptResult, VenueRequest, VenueAction } from "./venue-plan.js";
 export { applyVenue } from "./venue-apply.js";
 export { throwawayApplyInput } from "./throwaway-allocation.js";

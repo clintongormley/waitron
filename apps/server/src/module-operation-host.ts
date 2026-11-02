@@ -104,11 +104,8 @@ export function createFirstSetupModuleHost(options: {
     publishSelection(state: import("@waitron/provisioning").FirstSetupState) {
       return writeModuleConfig(
         options.stateDir,
-        venueFiscalSelection(
-          modules,
-          state.frozen.request.location.fiscalTerritory,
-          options.moduleConfig,
-        ).config,
+        venueFiscalSelection(modules, state.frozen.request.fiscalTerritory, options.moduleConfig)
+          .config,
       );
     },
     assertSelection,

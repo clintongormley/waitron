@@ -21,7 +21,7 @@ it.each(["light", "dark"] as const)(
       nodeId: "3262bf78-1d78-4b10-bae6-61fda564d5e8",
       nodeRecoveryKeyName: "2026-10-18 · K7QF",
       taxpayer: { legalName: "Olivo Restauración SL", taxId: "B12345674" },
-      locationName: "Olivo Centro",
+      venueName: "Olivo Centro",
     };
     try {
       const { el, host } = await mountWidget<SetupRecoveryCopy>(

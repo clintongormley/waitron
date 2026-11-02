@@ -144,7 +144,6 @@ export class SetupReviewScreen extends LitElement {
 
   override render(): TemplateResult {
     const venue = this.draft.venue;
-    const location = venue?.location;
     const certAttached = Boolean(this.draft.aeatCert?.pfxBase64);
     const accountName = [venue?.admin?.firstNames, venue?.admin?.lastNames]
       .filter(Boolean)
@@ -173,15 +172,15 @@ export class SetupReviewScreen extends LitElement {
           `,
         )}
         ${this.#group(
-          "location",
-          "review.group.location",
-          "review.help.location",
+          "venue",
+          "review.group.venue",
+          "review.help.venue",
           "venue",
           html`
-            ${this.#row("review.location", location?.name, "summary-location")}
-            ${this.#row("review.address", [location?.addressLine1, location?.addressLine2, location?.postalCode, location?.city, location?.province].filter(Boolean).join(", ") || "—", "summary-address")}
-            ${this.#row("review.invoice_locales", location?.invoiceLocales?.map((locale) => (Object.hasOwn(RECEIPT_LANGUAGES, locale) ? t(RECEIPT_LANGUAGES[locale]!.selectionLabel) : locale)).join(", "), "summary-invoiceLocales")}
-            ${this.#row("review.day_cutover", location?.dayCutover, "summary-dayCutover")}
+            ${this.#row("review.venue_name", venue?.name, "summary-name")}
+            ${this.#row("review.address", [venue?.addressLine1, venue?.addressLine2, venue?.postalCode, venue?.city, venue?.province].filter(Boolean).join(", ") || "—", "summary-address")}
+            ${this.#row("review.invoice_locales", venue?.invoiceLocales?.map((locale) => (Object.hasOwn(RECEIPT_LANGUAGES, locale) ? t(RECEIPT_LANGUAGES[locale]!.selectionLabel) : locale)).join(", "), "summary-invoiceLocales")}
+            ${this.#row("review.day_cutover", venue?.dayCutover, "summary-dayCutover")}
           `,
         )}
         ${this.#group(

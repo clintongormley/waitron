@@ -43,7 +43,7 @@ export const LIVE_WINDOW_MS = 10 * 60_000;
 export interface RestoredVenue {
   legalName: string;
   taxId: string;
-  locationName: string;
+  venueName: string;
 }
 
 /** A copy that names no tax id can never be confirmed, whatever the operator typed. */
@@ -218,7 +218,7 @@ async function readRestoredVenue(store: VenueDatabase, venueId: string): Promise
   return {
     legalName: tenant?.legalName ?? "",
     taxId: tenant?.taxId ?? "",
-    locationName: location?.name ?? "",
+    venueName: location?.name ?? "",
   };
 }
 

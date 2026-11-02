@@ -24,12 +24,10 @@ const context = {
     seriesCode: "A",
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
-    location: {
-      name: "Olivo",
-      city: "Madrid",
-      fiscalTerritory: "ES-common",
-      timeZone: "Europe/Madrid",
-    },
+    name: "Olivo",
+    city: "Madrid",
+    fiscalTerritory: "ES-common",
+    timeZone: "Europe/Madrid",
   },
 };
 const input = {

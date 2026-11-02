@@ -53,19 +53,17 @@ function venueRequest(taxId: string): VenueRequest {
     country: "ES",
     taxId,
     legalName: "Deli Test SL",
-    location: {
-      name: "Sala principal",
-      fiscalTerritory: "ES-common",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-      addressLine1: "Calle Mayor 1",
-      addressLine2: null,
-      postalCode: "28013",
-      city: "Madrid",
-      province: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "05:00",
-    },
+    name: "Sala principal",
+    fiscalTerritory: "ES-common",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
+    addressLine1: "Calle Mayor 1",
+    addressLine2: null,
+    postalCode: "28013",
+    city: "Madrid",
+    province: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {
@@ -82,11 +80,9 @@ function gbVenueRequest(taxId: string): VenueRequest {
   return {
     ...venueRequest(taxId),
     country: "GB",
-    location: {
-      ...venueRequest(taxId).location,
-      fiscalTerritory: "GB-vat",
-      timeZone: "Europe/London",
-    },
+
+    fiscalTerritory: "GB-vat",
+    timeZone: "Europe/London",
   };
 }
 
@@ -174,7 +170,7 @@ describe("provisionVenue", () => {
     async (environment) => {
       const db = ownerDb();
       const venue = venueRequest(nextNif());
-      venue.location.name = "Bar Pepe";
+      venue.name = "Bar Pepe";
 
       await provisionVenue(
         { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
@@ -472,8 +468,8 @@ describe("clearProvisionFixture", () => {
   it("clears a venue's holiday area geography before the venue", async () => {
     const db = ownerDb();
     const request = venueRequest(nextNif());
-    request.location.city = "Vielha e Mijaran";
-    request.location.province = "Lleida";
+    request.city = "Vielha e Mijaran";
+    request.province = "Lleida";
     const result = await applyHistoricalTestVenue(
       planVenue(request, enabledModules(ALL_MODULES, ES_CONFIG)),
       { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },

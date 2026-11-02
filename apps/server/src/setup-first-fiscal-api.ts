@@ -14,6 +14,7 @@ import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
 import {
   isCanonicalInstant,
+  VENUE_FIELDS,
   type StartAgainRecoveryShown,
   type StartAgainSummary,
   type VenueRequest,
@@ -418,35 +419,18 @@ export function mountSetupFirstFiscalApi(
         "taxId",
         "legalName",
         "taxpayerDomicile",
-        "location",
+        ...VENUE_FIELDS,
         "seriesCode",
         "fullSeriesCode",
         "rectificativeSeriesCode",
         "admin",
-      ]);
-      exact(raw.location, [
-        "name",
-        "fiscalTerritory",
-        "invoiceLocales",
-        "operationDescription",
-        "addressLine1",
-        "addressLine2",
-        "postalCode",
-        "city",
-        "province",
-        "timeZone",
-        "dayCutover",
       ]);
       const admin = exact(
         raw.admin,
         ["displayName", "email", "password", "pin"],
         ["firstNames", "lastNames"],
       );
-      for (const [key, value] of [
-        ...Object.entries(raw),
-        ...Object.entries(object(raw.location)),
-        ...Object.entries(admin),
-      ]) {
+      for (const [key, value] of [...Object.entries(raw), ...Object.entries(admin)]) {
         if (
           typeof value === "string" &&
           !["password", "pin"].includes(key) &&

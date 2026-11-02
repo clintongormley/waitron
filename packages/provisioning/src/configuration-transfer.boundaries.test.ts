@@ -289,7 +289,9 @@ it("imports fresh ids and actual bytes without rewriting ordinary text that rese
         ...request,
         country: "GB",
         taxId: "123456789",
-        location: { ...request.location, fiscalTerritory: "GB-vat", timeZone: "Europe/London" },
+
+        fiscalTerritory: "GB-vat",
+        timeZone: "Europe/London",
         admin: {
           displayName: "Owner",
           email: "owner@example.test",
@@ -387,7 +389,9 @@ it("direct import refuses bad zone metadata before replacing retained rows", asy
     ...request,
     country: "GB",
     taxId: "123456789",
-    location: { ...request.location, fiscalTerritory: "GB-vat", timeZone: "Europe/London" },
+
+    fiscalTerritory: "GB-vat",
+    timeZone: "Europe/London",
     admin: {
       displayName: "Owner",
       email: "owner@example.test",

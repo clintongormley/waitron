@@ -21,19 +21,17 @@ const venue: VenueRequest = {
   taxId: "B12345674",
   legalName: "Ready SL",
   taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
-  location: {
-    name: "Prepared",
-    fiscalTerritory: "ES-common",
-    invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurant",
-    addressLine1: "Calle 1",
-    addressLine2: null,
-    postalCode: "28001",
-    city: "Madrid",
-    province: "Madrid",
-    timeZone: "Europe/Madrid",
-    dayCutover: "06:00",
-  },
+  name: "Prepared",
+  fiscalTerritory: "ES-common",
+  invoiceLocales: ["es-ES"],
+  operationDescription: "Restaurant",
+  addressLine1: "Calle 1",
+  addressLine2: null,
+  postalCode: "28001",
+  city: "Madrid",
+  province: "Madrid",
+  timeZone: "Europe/Madrid",
+  dayCutover: "06:00",
   seriesCode: "F",
   fullSeriesCode: "FF",
   rectificativeSeriesCode: "R",
@@ -43,7 +41,7 @@ const venue: VenueRequest = {
 it("reports a sample the real Veri*Factu drain files as rejected as rejected, with AEAT's refusal", async () => {
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-verifactu-"));
   dirs.push(stateDir);
-  const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+  const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
   const modules = enabledModules(ALL_MODULES, selected.config);
   // The sale and its envío take the wall clock; a minute later the envío is due.
   const now = new Date(Date.now() + 60_000);
@@ -83,7 +81,7 @@ it("reports a sample the real Veri*Factu drain files as rejected as rejected, wi
       country: venue.country,
       taxId: venue.taxId,
       legalName: venue.legalName,
-      fiscalTerritory: venue.location.fiscalTerritory,
+      fiscalTerritory: venue.fiscalTerritory,
       submissionTarget: null,
       certificateFingerprint: null,
       certificateKind: null,
@@ -109,7 +107,7 @@ it("uses one supplied isolated issue reading for the sample invoice and actual g
   const { DatabaseSync } = await import("node:sqlite");
   const stateDir = await mkdtemp(join(tmpdir(), "readiness-zone-generation-"));
   dirs.push(stateDir);
-  const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+  const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
   const modules = enabledModules(ALL_MODULES, selected.config);
   const contribution = {
     ...selected.contribution!,

@@ -1715,9 +1715,9 @@ reason; `configuration-transfer.test.ts` now pins format 9, and older files are 
 
 ### A configuration bundle value that is not a setup field stays out of the venue's own keys
 
-The setup app sends the setup preview's `venue` back in the first-setup claim, whole except for its
-`location`, which it copies by `LocationDraft`'s fields (`CLAIM_LOCATION_FIELDS`,
-`apps/setup/src/setup-app.ts`). The claim refuses any venue or location key it does not list
+The setup app copies the setup preview's `venue`, moving only `CLAIM_VENUE_FIELDS` from its
+`location` into the flat claim (`VenueDraft`, `apps/setup/src/setup-app.ts`). The claim refuses any
+venue key it does not list
 (`exact(...)` in `apps/server/src/setup-first-fiscal-api.ts`). So a bundle value that is not a setup
 field lives outside `venue`'s own keys, as `privacyContact` does. `venue.location` already carries
 three such values, `id`, `fireControl` and `catalogueId` (`packages/provisioning/src/configuration-transfer.ts`),
@@ -1732,12 +1732,12 @@ the tests that set up a production box from an export
 
 Two guards, both weaker than the rule. The `claimFrom: "preview"` row in
 `apps/server/src/first-fiscal-setup.e2e.test.ts` sends the whole preview venue through a production
-claim, but cuts the location down by the test's own `request.location` keys, not by
-`LocationDraft`'s, so it would pass if the setup app copied `fireControl` again. Only
+claim, but cuts the location down by the test's own `request` keys, not by
+`VenueDraft`'s, so it would pass if the setup app copied `fireControl` again. Only
 `apps/setup/src/setup-app-first-fiscal.test.ts`'s "claims a staged preview's venue with only the
-location fields the claim accepts" catches that, against a stubbed server. Both cover one export
-shape. Nothing checks `CLAIM_LOCATION_FIELDS` against the claim's own `exact(raw.location, …)` list:
-the compile-time check ties it to `LocationDraft` alone, a hand copy of the server's shape.
+venue fields the claim accepts" catches that, against a stubbed server. Both cover one export
+shape. Nothing checks `CLAIM_VENUE_FIELDS` against the claim's own `exact(body.venue, …)` list:
+the compile-time check ties it to `VenueDraft` alone, a hand copy of the server's shape.
 
 ## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
 
@@ -5643,7 +5643,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 ### Configuration preview field guard
 
 - **A configuration bundle value that is not a setup field stays out of `venue`'s own keys; the
-  setup app copies `venue.location` by `LocationDraft`'s fields.** Cost: from #1752 to A980 S1a2 no
+  setup app copies `venue.location` by `VenueDraft`'s fields.** Cost: from #1752 to A980 S1a2 no
   production box could be set up from an export. Guard: the preview row in
   `apps/server/src/first-fiscal-setup.e2e.test.ts` and `apps/setup/src/setup-app-first-fiscal.test.ts`,
   weaker than the rule: the e2e row cuts the location by its own keys, so only the setup-app case

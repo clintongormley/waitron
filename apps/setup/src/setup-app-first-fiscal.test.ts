@@ -557,7 +557,7 @@ it("can choose a host without an offering after explicitly abandoning an unconsu
   owner.querySelector<HTMLElement>("[data-test=replace-attempt]")!.click();
   await screen(app, "admin");
   emit(app, "setup-patch", {
-    patch: { venue: { ...venue, location: { ...venue.location, fiscalTerritory: "GB-vat" } } },
+    patch: { venue: { ...venue, ...venue, fiscalTerritory: "GB-vat" } },
   });
   emit(app, "setup-goto", { screen: "venue" });
   await screen(app, "venue");
@@ -691,13 +691,29 @@ it("tests email as the current owner without sending a replacement administrator
     )
     .toBe(false);
 });
-it("claims a staged preview's venue with only the location fields the claim accepts", async () => {
-  const { admin, ...exported } = venue;
+it("claims a staged preview's venue with only the venue fields the claim accepts", async () => {
+  const {
+    admin,
+    country,
+    taxId,
+    legalName,
+    taxpayerDomicile,
+    seriesCode,
+    fullSeriesCode,
+    rectificativeSeriesCode,
+    ...venueFields
+  } = venue;
   const preview = {
     venue: {
-      ...exported,
+      country,
+      taxId,
+      legalName,
+      taxpayerDomicile,
+      seriesCode,
+      fullSeriesCode,
+      rectificativeSeriesCode,
       location: {
-        ...venue.location,
+        ...venueFields,
         id: "source-location",
         fireControl: "waiter",
         catalogueId: "catalogue",
@@ -723,8 +739,30 @@ it("claims a staged preview's venue with only the location fields the claim acce
   venueScreen.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=next]")!.click();
   await expect.poll(() => requests.filter((r) => r.path.endsWith("/claim"))).toHaveLength(1);
   const claim = requests.find((r) => r.path.endsWith("/claim"))!.body as {
-    venue: { location: Record<string, unknown> };
+    venue: Record<string, unknown>;
   };
-  expect(Object.keys(claim.venue.location).sort()).toEqual(Object.keys(venue.location).sort());
-  expect(claim.venue.location.dayCutover).toBe("05:00:00");
+  expect(Object.keys(claim.venue).sort()).toEqual(
+    [
+      "admin",
+      "addressLine1",
+      "addressLine2",
+      "city",
+      "country",
+      "dayCutover",
+      "fiscalTerritory",
+      "fullSeriesCode",
+      "invoiceLocales",
+      "legalName",
+      "name",
+      "operationDescription",
+      "postalCode",
+      "province",
+      "rectificativeSeriesCode",
+      "seriesCode",
+      "taxId",
+      "taxpayerDomicile",
+      "timeZone",
+    ].sort(),
+  );
+  expect(claim.venue.dayCutover).toBe("05:00:00");
 });

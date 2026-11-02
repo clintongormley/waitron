@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import { basename, dirname, join, resolve } from "node:path";
 import { AppError, isUuid } from "@waitron/shared";
 import type { DeploymentEnvironment } from "@waitron/db";
-import type { VenueRequest } from "./venue-plan.js";
+import { VENUE_FIELDS, type VenueRequest } from "./venue-plan.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.js";
 import { START_AGAIN_CONFIRMATIONS_DIR } from "./first-setup-start-again-confirmation.js";
@@ -245,7 +245,7 @@ function validateFrozen(value: unknown): asserts value is FirstSetupFrozen {
         "taxId",
         "legalName",
         "taxpayerDomicile",
-        "location",
+        ...VENUE_FIELDS,
         "seriesCode",
         "fullSeriesCode",
         "rectificativeSeriesCode",
@@ -255,7 +255,7 @@ function validateFrozen(value: unknown): asserts value is FirstSetupFrozen {
         "country",
         "taxId",
         "legalName",
-        "location",
+        ...VENUE_FIELDS,
         "seriesCode",
         "rectificativeSeriesCode",
         "admin",
@@ -275,9 +275,8 @@ function validateFrozen(value: unknown): asserts value is FirstSetupFrozen {
   delete admin.passwordHash;
   publicValue({ ...request, admin });
   if (
-    !record(request.location) ||
-    !Array.isArray(request.location.invoiceLocales) ||
-    !request.location.invoiceLocales.length ||
+    !Array.isArray(request.invoiceLocales) ||
+    !request.invoiceLocales.length ||
     [
       request.country,
       request.taxId,

@@ -68,7 +68,7 @@ export interface VenueResult {
 
 async function assertActionOrder(actions: readonly VenueAction[], db: Database): Promise<void> {
   let tenant = false;
-  let location = false;
+  let venue = false;
   let node = false;
   let administrator = false;
   for (const action of actions) {
@@ -76,12 +76,12 @@ async function assertActionOrder(actions: readonly VenueAction[], db: Database):
       case "ensure-tenant":
         tenant = true;
         break;
-      case "create-location":
-        if (!tenant) throw new Error("applyVenue: create-location before ensure-tenant");
-        location = true;
+      case "create-venue":
+        if (!tenant) throw new Error("applyVenue: create-venue before ensure-tenant");
+        venue = true;
         break;
       case "create-node":
-        if (!location) throw new Error("applyVenue: create-node before create-location");
+        if (!venue) throw new Error("applyVenue: create-node before create-venue");
         node = true;
         break;
       case "seed-module":
@@ -120,7 +120,7 @@ export async function applyVenue(
     throw new Error("applyVenue: plan is missing ensure-tenant");
   }
   for (const action of actions) {
-    if (action.kind === "create-location") {
+    if (action.kind === "create-venue") {
       action.timeZone = requireCountryTimeZone(ensure.country, action.timeZone);
     }
   }
@@ -243,7 +243,7 @@ export async function applyVenue(
         case "seed-device-profiles":
           await seedDeviceProfiles(tx, action.profiles);
           break;
-        case "create-location": {
+        case "create-venue": {
           const existing = await tx
             .select({
               id: locations.id,
@@ -331,7 +331,7 @@ export async function applyVenue(
         case "create-node":
           // Ordering guards throw a plain Error, not an AppError: a malformed plan is a programming
           // bug, not operator input.
-          if (locationId === "") throw new Error("applyVenue: create-node before create-location");
+          if (locationId === "") throw new Error("applyVenue: create-node before create-venue");
           if (reusingVenue) {
             const existing = await tx
               .select({

@@ -33,7 +33,7 @@ async function claimedAttempt(environment: Readonly<Record<string, string | unde
       environment: "preproduction",
       request: {
         ...request,
-        location: { ...request.location, operationDescription: "Restaurant" },
+        operationDescription: "Restaurant",
       },
     },
     randomBytes(32).toString("base64url"),

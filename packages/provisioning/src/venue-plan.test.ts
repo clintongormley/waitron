@@ -17,19 +17,17 @@ function request(overrides: Partial<VenueRequest> = {}): VenueRequest {
     country: "ES",
     taxId: "B12345678",
     legalName: "Deli SL",
-    location: {
-      name: "Mostrador",
-      fiscalTerritory: "ES-common",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "venta en establecimiento",
-      addressLine1: "Calle Mayor 1",
-      addressLine2: null,
-      postalCode: "28013",
-      city: "Madrid",
-      province: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00:00",
-    },
+    name: "Mostrador",
+    fiscalTerritory: "ES-common",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "venta en establecimiento",
+    addressLine1: "Calle Mayor 1",
+    addressLine2: null,
+    postalCode: "28013",
+    city: "Madrid",
+    province: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00:00",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {
@@ -43,6 +41,16 @@ function request(overrides: Partial<VenueRequest> = {}): VenueRequest {
 }
 
 describe("planVenue", () => {
+  it("plans a venue from a flat request", () => {
+    const flatRequest = request();
+    const actions = planVenue(flatRequest, MODULES);
+    expect(actions.find((action) => action.kind === "create-venue")).toMatchObject({
+      name: flatRequest.name,
+      fiscalTerritory: flatRequest.fiscalTerritory,
+      invoiceLocales: flatRequest.invoiceLocales,
+    });
+  });
+
   it("keeps the taxpayer's domicile separate from the venue location", () => {
     const actions = planVenue(
       { ...request(), taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid" },
@@ -51,7 +59,7 @@ describe("planVenue", () => {
     expect(actions.find((action) => action.kind === "ensure-tenant")).toMatchObject({
       taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
     });
-    expect(actions.find((action) => action.kind === "create-location")).toMatchObject({
+    expect(actions.find((action) => action.kind === "create-venue")).toMatchObject({
       addressLine1: "Calle Mayor 1",
     });
   });
@@ -62,7 +70,7 @@ describe("planVenue", () => {
       "ensure-tenant",
       "seed-admin",
       "seed-device-profiles",
-      "create-location",
+      "create-venue",
       "create-node",
       "create-series",
       "create-series",
@@ -129,11 +137,10 @@ describe("planVenue", () => {
 
   it("names the default kitchen station in the staff language: the file's word for es-ES, English for en-GB", () => {
     const stationName = (invoiceLocales: string[]) => {
-      const action = planVenue(
-        request({ location: { ...request().location, invoiceLocales } }),
-        MODULES,
-      ).find((a) => a.kind === "create-location");
-      return action?.kind === "create-location" && action.stationName;
+      const action = planVenue(request({ invoiceLocales }), MODULES).find(
+        (a) => a.kind === "create-venue",
+      );
+      return action?.kind === "create-venue" && action.stationName;
     };
     expect(stationName(["es-ES"])).toBe(STARTER_STATION_NAMES.Kitchen.es);
     expect(stationName(["en-GB"])).toBe("Kitchen");
@@ -147,13 +154,10 @@ describe("planVenue", () => {
     ],
     ["a venue given en-US receipts, which only the command line accepts", "Madrid", "en-US"],
   ])("names the station and profiles in Spanish for %s", (_title, province, receiptLocale) => {
-    const actions = planVenue(
-      request({ location: { ...request().location, province, invoiceLocales: [receiptLocale] } }),
-      MODULES,
-    );
-    const location = actions.find((a) => a.kind === "create-location");
+    const actions = planVenue(request({ province, invoiceLocales: [receiptLocale] }), MODULES);
+    const location = actions.find((a) => a.kind === "create-venue");
     const profiles = actions.find((a) => a.kind === "seed-device-profiles");
-    expect(location?.kind === "create-location" && location.stationName).toBe(
+    expect(location?.kind === "create-venue" && location.stationName).toBe(
       STARTER_STATION_NAMES.Kitchen.es,
     );
     expect(
@@ -166,10 +170,9 @@ describe("planVenue", () => {
   });
 
   it("resolves the starter profiles' names in English for an en venue", () => {
-    const action = planVenue(
-      request({ location: { ...request().location, invoiceLocales: ["en-GB"] } }),
-      MODULES,
-    ).find((a) => a.kind === "seed-device-profiles");
+    const action = planVenue(request({ invoiceLocales: ["en-GB"] }), MODULES).find(
+      (a) => a.kind === "seed-device-profiles",
+    );
     expect(action?.kind === "seed-device-profiles" && action.profiles.map((p) => p.name)).toEqual([
       "Counter",
       "Kitchen",
@@ -269,10 +272,9 @@ describe("planVenue", () => {
   });
 
   it("plans a short day cutover in the same stored form as its long form", () => {
-    const short = planVenue(
-      request({ location: { ...request().location, dayCutover: "06:00" } }),
-      MODULES,
-    ).find((action) => action.kind === "create-location");
+    const short = planVenue(request({ dayCutover: "06:00" }), MODULES).find(
+      (action) => action.kind === "create-venue",
+    );
     expect(short).toMatchObject({ dayCutover: "06:00:00" });
   });
 
@@ -309,10 +311,7 @@ describe("planVenue", () => {
 
   it("REFUSES an unimplemented territory (spec D4 input half) before emitting anything", () => {
     try {
-      planVenue(
-        request({ location: { ...request().location, fiscalTerritory: "ES-canary" } }),
-        MODULES,
-      );
+      planVenue(request({ fiscalTerritory: "ES-canary" }), MODULES);
       expect.unreachable("should have refused");
     } catch (error) {
       expect(isAppError(error) && error.code).toBe("fiscal.regime_not_implemented");
@@ -321,7 +320,7 @@ describe("planVenue", () => {
 
   it("refuses fewer than one invoice locale, echoing the count", () => {
     try {
-      planVenue(request({ location: { ...request().location, invoiceLocales: [] } }), MODULES);
+      planVenue(request({ invoiceLocales: [] }), MODULES);
       expect.unreachable("should have refused an empty locale list");
     } catch (error) {
       expect(isAppError(error)).toBe(true);
@@ -334,10 +333,7 @@ describe("planVenue", () => {
 
   it("refuses more than two invoice locales, echoing the count", () => {
     try {
-      planVenue(
-        request({ location: { ...request().location, invoiceLocales: ["a", "b", "c"] } }),
-        MODULES,
-      );
+      planVenue(request({ invoiceLocales: ["a", "b", "c"] }), MODULES);
       expect.unreachable("should have refused three locales");
     } catch (error) {
       expect(isAppError(error)).toBe(true);
@@ -376,7 +372,7 @@ describe("planVenue", () => {
       planVenue(
         request({
           country: "PT",
-          location: { ...request().location, fiscalTerritory: "FR-common" },
+          fiscalTerritory: "FR-common",
         }),
         MODULES,
       );
@@ -398,15 +394,12 @@ describe("planVenue", () => {
   });
 
   it("accepts a country in a different case than the territory prefix (ES matches es-common)", () => {
-    const actions = planVenue(
-      request({ country: "es", location: { ...request().location, fiscalTerritory: "ES-common" } }),
-      MODULES,
-    );
+    const actions = planVenue(request({ country: "es", fiscalTerritory: "ES-common" }), MODULES);
     expect(actions.map((a) => a.kind)).toEqual([
       "ensure-tenant",
       "seed-admin",
       "seed-device-profiles",
-      "create-location",
+      "create-venue",
       "create-node",
       "create-series",
       "create-series",
@@ -451,7 +444,7 @@ describe("describeVenueAction", () => {
       "ensure tenant ES/B12345678 (Deli SL)",
       "seed admin Owner",
       `seed device profiles ${STARTER_PROFILE_NAMES.Counter.es}, ${STARTER_PROFILE_NAMES.Kitchen.es}, ${STARTER_PROFILE_NAMES.Handheld.es}`,
-      "create location Mostrador in ES-common (es-ES)",
+      "create venue Mostrador in ES-common (es-ES)",
       "create node Mostrador filing=verifactu tax=vat",
       "create standard series A",
       "create full series FF",
@@ -509,20 +502,14 @@ describe("country zone planning", () => {
     ["Europe/London", "country"],
   ])("refuses zone %j before producing actions", (timeZone, reason) => {
     const input = request();
-    expect(() =>
-      planVenue(
-        { ...input, location: { ...input.location, timeZone: timeZone as string } },
-        MODULES,
-      ),
-    ).toThrow(expect.objectContaining({ code: "venue.time_zone_invalid", params: { reason } }));
+    expect(() => planVenue({ ...input, timeZone: timeZone as string }, MODULES)).toThrow(
+      expect.objectContaining({ code: "venue.time_zone_invalid", params: { reason } }),
+    );
   });
   it("stores the normalized country zone in its action", () => {
     const input = request();
-    const actions = planVenue(
-      { ...input, location: { ...input.location, timeZone: " Europe/Madrid " } },
-      MODULES,
-    );
-    expect(actions.find((action) => action.kind === "create-location")).toMatchObject({
+    const actions = planVenue({ ...input, timeZone: " Europe/Madrid " }, MODULES);
+    expect(actions.find((action) => action.kind === "create-venue")).toMatchObject({
       timeZone: "Europe/Madrid",
     });
   });

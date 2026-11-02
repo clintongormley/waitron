@@ -238,7 +238,7 @@ it("writes and reads back the configured hour through the real provisioning and 
   expect((await f.post("input", { module: MODULE, input })).status).toBe(200);
   const selected = enabledModules(
     f.host.modules,
-    venueFiscalSelection(f.host.modules, request.location.fiscalTerritory).config,
+    venueFiscalSelection(f.host.modules, request.fiscalTerritory).config,
   );
   await stampDeployment(venue.db, "preproduction");
   const result = await f.host.coordinator.run(() =>

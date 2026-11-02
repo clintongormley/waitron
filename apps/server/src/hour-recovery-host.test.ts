@@ -231,7 +231,7 @@ it("binds durable host admission to the selected source and refuses a different 
       nodeId: node.nodeId,
       nodeRecoveryKeyName: key.name,
       taxpayer: { legalName: "Selected business", taxId: scope.taxpayerNif },
-      locationName: "Selected venue",
+      venueName: "Selected venue",
       fiscalSelection: {
         country: "ES",
         fiscalTerritory: "ES-common",

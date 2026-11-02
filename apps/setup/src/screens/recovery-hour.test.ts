@@ -11,7 +11,7 @@ const preview: RecoveryBackupPreview = {
   nodeId: "node-1",
   nodeRecoveryKeyName: "Caja principal",
   taxpayer: { legalName: "Olivo SL", taxId: "B12345674" },
-  locationName: "Centro",
+  venueName: "Centro",
   fiscalSelection: {
     module: "fiscal-verifactu",
     country: "ES",

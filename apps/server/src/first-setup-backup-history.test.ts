@@ -370,7 +370,7 @@ it("carries a current selected setup independently of a missing preparation jour
       environment: "preproduction",
       request: {
         ...setupRequest,
-        location: { ...setupRequest.location, operationDescription: "Restaurant" },
+        operationDescription: "Restaurant",
       },
     },
     randomBytes(32).toString("base64url"),
@@ -435,7 +435,7 @@ async function selectedSetup(f: Awaited<ReturnType<typeof fixture>>) {
       environment: "preproduction",
       request: {
         ...setupRequest,
-        location: { ...setupRequest.location, operationDescription: "Restaurant" },
+        operationDescription: "Restaurant",
       },
     },
     randomBytes(32).toString("base64url"),
@@ -483,7 +483,7 @@ it("preserves a previous attempt's selected name when the current attempt is sti
       environment: "preproduction",
       request: {
         ...setupRequest,
-        location: { ...setupRequest.location, operationDescription: "Restaurant" },
+        operationDescription: "Restaurant",
       },
     },
     randomBytes(32).toString("base64url"),

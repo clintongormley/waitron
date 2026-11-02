@@ -23,7 +23,7 @@ import { oldBoxQuestion } from "./old-box-question.js";
 export interface RestoredVenue {
   legalName: string;
   taxId: string;
-  locationName: string;
+  venueName: string;
 }
 
 interface BucketForm {
@@ -299,7 +299,7 @@ export class SetupRestoreBucketScreen extends LitElement {
           : undefined;
     return html`<p data-test="venue">
         ${t("restore_bucket.venue_owner")} <strong>${venue.legalName}</strong>
-        ${format("restore_bucket.venue_details", { taxId: venue.taxId, location: venue.locationName })}
+        ${format("restore_bucket.venue_details", { taxId: venue.taxId, venue: venue.venueName })}
       </p>
       <label class="field">
         <input
@@ -453,7 +453,7 @@ export class SetupRestoreBucketScreen extends LitElement {
               : {
                   legalName: preview.taxpayer.legalName,
                   taxId: preview.taxpayer.taxId,
-                  locationName: preview.locationName,
+                  venueName: preview.venueName,
                 };
           this.venueConfirmed = false;
         }}

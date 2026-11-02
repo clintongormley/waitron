@@ -374,19 +374,17 @@ function venue(taxId: string): VenueRequest {
     taxId,
     legalName: "Prepared SL",
     taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
-    location: {
-      name: "Prepared",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
-      fiscalTerritory: "ES-common",
-      addressLine1: "Calle 1",
-      addressLine2: null,
-      postalCode: "28001",
-      city: "Madrid",
-      province: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00",
-    },
+    name: "Prepared",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant",
+    fiscalTerritory: "ES-common",
+    addressLine1: "Calle 1",
+    addressLine2: null,
+    postalCode: "28001",
+    city: "Madrid",
+    province: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00",
     seriesCode: "F",
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
@@ -5285,7 +5283,7 @@ describe("venue detail edits and configuration boundaries", () => {
       dayCutover: "04:30:00",
     });
     const targetRequest = venue("B33221177");
-    Object.assign(targetRequest.location, {
+    Object.assign(targetRequest, {
       name: "Created target",
       addressLine1: "Calle target 2",
       addressLine2: "Upper floor",
@@ -7680,7 +7678,7 @@ describe("dated business-day configuration transfer", () => {
     expect(exported.tables).not.toHaveProperty("location_day_cutover_changes");
     expect(exported.tables).not.toHaveProperty("location_business_day_settings");
     const request = venue("B33221177");
-    request.location.dayCutover = exported.venue.location.dayCutover;
+    request.dayCutover = exported.venue.location.dayCutover;
     await applyVenue(planVenue(request, ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,

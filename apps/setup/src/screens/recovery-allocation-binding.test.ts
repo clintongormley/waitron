@@ -22,7 +22,7 @@ it("passes the authenticated repair event to the module instead of making anothe
       nodeId: binding.targetNodeId,
       nodeRecoveryKeyName: "Amber Hill",
       taxpayer: { taxId: "B12345674", legalName: "Saved venue" },
-      locationName: "Saved location",
+      venueName: "Saved location",
       fiscalSelection: {
         module: "fiscal-verifactu",
         country: "ES",

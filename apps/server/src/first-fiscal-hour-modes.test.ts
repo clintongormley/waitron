@@ -78,7 +78,7 @@ async function fixture() {
             database: "owned-mode",
             moduleConfig: venueModuleConfig(
               parseModuleConfig({}, host.modules),
-              req.venue.location.fiscalTerritory,
+              req.venue.fiscalTerritory,
             ),
           },
           req,

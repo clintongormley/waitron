@@ -50,7 +50,7 @@ const VENUE_ARGS = [
   "Acme SL",
   "--taxpayer-domicile",
   "Calle Fiscal 8, 28013 Madrid",
-  "--location-name",
+  "--venue-name",
   "Centro",
   "--territory",
   "ES-common",
@@ -279,7 +279,7 @@ describe("runCli venue", () => {
       "ensure-tenant",
       "seed-admin",
       "seed-device-profiles",
-      "create-location",
+      "create-venue",
       "create-node",
       "create-series",
       "create-series",
@@ -311,7 +311,7 @@ describe("runCli venue", () => {
     expect(printed).toContain(`Plan for a venue in ${VENUE_DIR} (preproduction):`);
     expect(printed).toContain("ensure tenant ES/B12345678");
     expect(printed).toContain("seed admin Owner");
-    expect(printed).toContain("create location Centro in ES-common");
+    expect(printed).toContain("create venue Centro in ES-common");
     expect(printed).toContain(`node:     ${VENUE_RESULT.nodeId}`);
     expect(printed).toContain(
       "seeded:   fiscal-verifactu — SIF 55555555-5555-5555-5555-555555555555 (installation 1)",
@@ -440,7 +440,7 @@ describe("runCli venue", () => {
     expect(actions.find((action) => action.kind === "ensure-tenant")).toMatchObject({
       taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
     });
-    expect(actions.find((action) => action.kind === "create-location")).toMatchObject({
+    expect(actions.find((action) => action.kind === "create-venue")).toMatchObject({
       addressLine1: "Calle Mayor 1",
     });
   });
@@ -785,8 +785,8 @@ describe("runCli venue", () => {
     const code = await runCli([...args, "--yes"], h.deps);
     expect(code).toBe(0);
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
-    const location = actions.find((action) => action.kind === "create-location");
-    expect(location?.kind === "create-location" && location.invoiceLocales).toEqual(["es-ES"]);
+    const location = actions.find((action) => action.kind === "create-venue");
+    expect(location?.kind === "create-venue" && location.invoiceLocales).toEqual(["es-ES"]);
   });
 
   it("refuses a venue directory nothing supplied, rather than opening the working directory", async () => {
@@ -983,7 +983,7 @@ describe("runCli venue", () => {
       "tax id (NIF): ",
       "legal name: ",
       "taxpayer legal domicile: ",
-      "location name: ",
+      "venue name: ",
       "fiscal territory (e.g. ES-common): ",
       "invoice locale (e.g. es-ES): ",
       "another invoice locale (blank to finish): ",
@@ -1004,12 +1004,12 @@ describe("runCli venue", () => {
     expect(h.askedSecretly).toEqual(["admin PIN (not shown): ", "admin password (not shown): "]);
 
     const [actions] = h.applyVenue.mock.calls[0] as [VenueAction[]];
-    const location = actions.find((action) => action.kind === "create-location");
-    expect(location?.kind === "create-location" && location.invoiceLocales).toEqual([
+    const location = actions.find((action) => action.kind === "create-venue");
+    expect(location?.kind === "create-venue" && location.invoiceLocales).toEqual([
       "es-ES",
       "ca-ES",
     ]);
-    expect(location?.kind === "create-location" && location.addressLine2).toBeNull();
+    expect(location?.kind === "create-venue" && location.addressLine2).toBeNull();
   });
 });
 

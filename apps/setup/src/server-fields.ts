@@ -45,7 +45,7 @@ export const SERVER_FIELDS: Readonly<Record<string, ServerField | undefined>> = 
       return t("server_fields.series_code");
     },
   },
-  "location.operationDescription": {
+  operationDescription: {
     key: "operationDescription",
     get message() {
       return t("server_fields.operation_description");

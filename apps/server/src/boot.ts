@@ -1000,7 +1000,7 @@ async function bootServer(
     // Only once this process holds the venue folder: a second process must not delete the running
     // one's staged copy.
     await clearStagedRecoveries(join(config.stateDir, RESTORE_STAGING_DIR));
-    await reconcileFirstSetupBeforeMode(config, firstSetupHost.store, stampProbe.venue);
+    await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
     await assertDeploymentMatches(
       stampProbe.venue,
       config.environment,
@@ -1350,10 +1350,7 @@ async function bootServer(
           }),
         clearConfiguration: () => clearStagedConfigurationImport(config.stateDir),
         runFiscalTest: async ({ request, contribution, secret }) => {
-          const resolvedConfig = venueModuleConfig(
-            moduleConfig,
-            request.venue.location.fiscalTerritory,
-          );
+          const resolvedConfig = venueModuleConfig(moduleConfig, request.venue.fiscalTerritory);
           const modules = enabledModules(availableModules, resolvedConfig);
           const moduleVersions = await schemaVersionsByModule(store, modules);
           const input = fiscalReadinessInput({
@@ -1380,10 +1377,7 @@ async function bootServer(
           ).run(input);
         },
         assertFiscalReady: async ({ request, contribution, secret }) => {
-          const resolvedConfig = venueModuleConfig(
-            moduleConfig,
-            request.venue.location.fiscalTerritory,
-          );
+          const resolvedConfig = venueModuleConfig(moduleConfig, request.venue.fiscalTerritory);
           const modules = enabledModules(availableModules, resolvedConfig);
           const moduleVersions = await schemaVersionsByModule(store, modules);
           await createFiscalReadinessStore(
@@ -1403,10 +1397,7 @@ async function bootServer(
         // The fiscal slot comes from the REQUEST's territory: the box's `moduleConfig` base is
         // default-on, which with two fiscal-slot members would be ambiguous.
         provision: async (req, beforeTransaction) => {
-          const resolvedConfig = venueModuleConfig(
-            moduleConfig,
-            req.venue.location.fiscalTerritory,
-          );
+          const resolvedConfig = venueModuleConfig(moduleConfig, req.venue.fiscalTerritory);
           const modules = enabledModules(availableModules, resolvedConfig);
           const staged = req.configurationImport
             ? await readStagedConfigurationImport(config.stateDir, ring)

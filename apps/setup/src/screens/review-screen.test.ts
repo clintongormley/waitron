@@ -24,12 +24,10 @@ function fullDraft(): DeepPartial<ProvisionBody> {
       taxId: "B12345678",
       legalName: "Deli del Sol SL",
       taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
-      location: {
-        name: "Calle Mayor",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: ["es-ES"],
-        timeZone: "Europe/Madrid",
-      },
+      name: "Calle Mayor",
+      fiscalTerritory: "ES-common",
+      invoiceLocales: ["es-ES"],
+      timeZone: "Europe/Madrid",
       seriesCode: "FA",
       fullSeriesCode: "FF",
       rectificativeSeriesCode: "RF",
@@ -52,7 +50,7 @@ afterEach(cleanupWidgets);
 function everyRowDraft(mode: "demo" | "live"): DeepPartial<ProvisionBody> {
   const draft = fullDraft();
   draft.mode = mode;
-  Object.assign(draft.venue!.location!, {
+  Object.assign(draft.venue!, {
     operationDescription: "Venta en establecimiento",
     dayCutover: "04:00",
     addressLine1: "Calle Mayor 1",
@@ -176,13 +174,7 @@ describe("setup-review-screen receipt language labels", () => {
     async (locale) => {
       setLocale(locale);
       const draft = fullDraft();
-      draft.venue!.location!.invoiceLocales = [
-        "es-ES",
-        "ca-ES",
-        "gl-ES",
-        "eu-ES",
-        "unknown-language",
-      ];
+      draft.venue!.invoiceLocales = ["es-ES", "ca-ES", "gl-ES", "eu-ES", "unknown-language"];
       const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
       expect(text(el, "[data-test=summary-invoiceLocales]")).toBe(
         [
@@ -193,7 +185,7 @@ describe("setup-review-screen receipt language labels", () => {
           "unknown-language",
         ].join(", "),
       );
-      expect(draft.venue!.location!.invoiceLocales).toEqual([
+      expect(draft.venue!.invoiceLocales).toEqual([
         "es-ES",
         "ca-ES",
         "gl-ES",
@@ -207,10 +199,10 @@ describe("setup-review-screen receipt language labels", () => {
     "keeps an unknown receipt-language code that names an inherited property (%s)",
     async (code) => {
       const draft = fullDraft();
-      draft.venue!.location!.invoiceLocales = [code];
+      draft.venue!.invoiceLocales = [code];
       const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
       expect(text(el, "[data-test=summary-invoiceLocales]")).toBe(code);
-      expect(draft.venue!.location!.invoiceLocales).toEqual([code]);
+      expect(draft.venue!.invoiceLocales).toEqual([code]);
     },
   );
 
@@ -222,7 +214,7 @@ describe("setup-review-screen receipt language labels", () => {
     setLocale("es-ES");
     await el.updateComplete;
     expect(text(el, "[data-test=summary-invoiceLocales]")).toBe(t("venue.locale.es_es", "es-ES"));
-    expect(draft.venue!.location!.invoiceLocales).toEqual(["es-ES"]);
+    expect(draft.venue!.invoiceLocales).toEqual(["es-ES"]);
   });
 });
 
@@ -234,13 +226,13 @@ describe("setup-review-screen", () => {
     const groups = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-group]")];
     expect(groups.map((group) => group.getAttribute("data-group"))).toEqual([
       "business",
-      "location",
+      "venue",
       "invoicing",
       "account",
     ]);
     expect(groups.map((group) => group.querySelector("h2")?.textContent?.trim())).toEqual([
       "Business",
-      "Location",
+      "Venue",
       "Invoicing",
       "Your account",
     ]);
@@ -274,7 +266,7 @@ describe("setup-review-screen", () => {
 
   it("names receipt languages and hides a display name identical to the account name", async () => {
     const draft = fullDraft();
-    draft.venue!.location!.invoiceLocales = ["ca-ES", "es-ES"];
+    draft.venue!.invoiceLocales = ["ca-ES", "es-ES"];
     draft.venue!.admin!.displayName = "Alba Ramos";
     const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
     expect(text(el, "[data-test=summary-invoiceLocales]")).toContain("Català");
@@ -285,7 +277,7 @@ describe("setup-review-screen", () => {
   it("names every receipt language offered by the setup country packs", async () => {
     for (const pack of VENUE_SETUP_COUNTRY_PACKS) {
       const draft = fullDraft();
-      draft.venue!.location!.invoiceLocales = [...pack.invoiceLocales];
+      draft.venue!.invoiceLocales = [...pack.invoiceLocales];
       const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
       const shown = text(el, "[data-test=summary-invoiceLocales]")!;
       for (const locale of pack.invoiceLocales) expect(shown).not.toContain(locale);
@@ -345,7 +337,7 @@ describe("setup-review-screen", () => {
     expect(text(el, "[data-test=summary-taxId]")).toBe("B12345678");
     expect(text(el, "[data-test=summary-legalName]")).toBe("Deli del Sol SL");
     expect(text(el, "[data-test=summary-taxpayerDomicile]")).toBe("Calle Fiscal 8, 28013 Madrid");
-    expect(text(el, "[data-test=summary-location]")).toBe("Calle Mayor");
+    expect(text(el, "[data-test=summary-name]")).toBe("Calle Mayor");
     expect(text(el, "[data-test=summary-seriesCode]")).toBe("FA");
     expect(text(el, "[data-test=summary-fullSeriesCode]")).toBe("FF");
     expect(text(el, "[data-test=summary-rectificativeSeriesCode]")).toBe("RF");
@@ -384,7 +376,7 @@ describe("setup-review-screen", () => {
     const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft: {} });
     expect(text(el, "[data-test=mode-badge]")).toBe("—");
     expect(text(el, "[data-test=summary-country]")).toBe("—");
-    expect(text(el, "[data-test=summary-location]")).toBe("—");
+    expect(text(el, "[data-test=summary-name]")).toBe("—");
     expect(text(el, "[data-test=summary-admin-name]")).toBe("—");
     expect(q(el, "[data-test=summary-admin]")).toBeNull();
     expect(text(el, "[data-test=summary-admin-email]")).toBe("—");
@@ -429,10 +421,10 @@ describe("setup-review-screen", () => {
   });
 });
 
-it("shows the fixed demo identity's note and full location details for review", async () => {
+it("shows the fixed demo identity's note and full venue details for review", async () => {
   const draft = fullDraft();
   draft.mode = "demo";
-  Object.assign(draft.venue!.location!, {
+  Object.assign(draft.venue!, {
     operationDescription: "Venta en establecimiento",
     dayCutover: "04:00",
     addressLine1: "Calle Mayor 1",
@@ -510,7 +502,7 @@ describe("setup-review-screen in Spanish", () => {
 
 it("does not present the internal bootstrap as the venue sales description", async () => {
   const draft = everyRowDraft("live");
-  draft.venue!.location!.operationDescription = "Internal bootstrap";
+  draft.venue!.operationDescription = "Internal bootstrap";
   const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
   expect(q(el, "[data-test=summary-operationDescription]")).toBeNull();
   expect(el.shadowRoot!.textContent).not.toContain("Internal bootstrap");

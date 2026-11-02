@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { withTransaction, type Database } from "@waitron/db";
+import { readVenue, venueLocationId, withTransaction, type Database } from "@waitron/db";
 import { readIssueZone } from "@waitron/fiscal";
 import { enabledModules, type WaitronModule } from "@waitron/module";
 import { AppError, locationId, nodeId } from "@waitron/shared";
@@ -26,7 +26,7 @@ export async function recoverProvisionedVenue(
     { code: venue.fullSeriesCode ?? "FF", purpose: "full" },
     { code: venue.rectificativeSeriesCode, purpose: "rectificative" },
   ];
-  const selection = venueFiscalSelection(availableModules, venue.location.fiscalTerritory);
+  const selection = venueFiscalSelection(availableModules, venue.fiscalTerritory);
   const owners = enabledModules(availableModules, selection.config).filter(
     (module) =>
       module.fiscal?.id === selection.contribution?.id &&
@@ -34,14 +34,13 @@ export async function recoverProvisionedVenue(
   );
   if (owners.length > 1) return refuse();
   return withTransaction(ownerDb, async (tx) => {
-    const found = await tx.execute<{ locationId: string; nodeId: string }>(sql`
-      select l.id as "locationId", n.id as "nodeId"
-      from locations l join nodes n on n.location_id = l.id
-      where l.name = ${venue.location.name}
-        and l.fiscal_territory = ${venue.location.fiscalTerritory}
-        and n.name = ${venue.location.name}`);
+    const found = await tx.execute<{ nodeId: string }>(sql`
+      select n.id as "nodeId" from nodes n where n.name = ${venue.name}`);
     if (found.rows.length !== 1) return refuse();
-    const row = found.rows[0]!;
+    const savedVenue = await readVenue(tx);
+    if (savedVenue.name !== venue.name || savedVenue.fiscalTerritory !== venue.fiscalTerritory)
+      return refuse();
+    const row = { ...found.rows[0]!, locationId: await venueLocationId(tx) };
     await readIssueZone(tx, { nodeId: row.nodeId });
     if (initial !== undefined) {
       if (row.nodeId !== initial.nodeId) return refuse();

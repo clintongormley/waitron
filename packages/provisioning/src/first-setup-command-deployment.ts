@@ -89,7 +89,7 @@ export function createFirstSetupCommandDeployment(options: {
       throw new AppError("setup.request_invalid", { field: "taxId" });
     const modules = enabledModules(
       runtime.modules,
-      venueFiscalSelection(runtime.modules, state.frozen.request.location.fiscalTerritory).config,
+      venueFiscalSelection(runtime.modules, state.frozen.request.fiscalTerritory).config,
     );
     const versions: Record<string, number> = {};
     for (const module of modules)
@@ -103,10 +103,7 @@ export function createFirstSetupCommandDeployment(options: {
       firstSetupPublicationDigest(state, publication.settings) !== publication.digest
     )
       throw new AppError("setup.not_ready", {});
-    const selected = venueFiscalSelection(
-      runtime.modules,
-      state.frozen.request.location.fiscalTerritory,
-    );
+    const selected = venueFiscalSelection(runtime.modules, state.frozen.request.fiscalTerritory);
     if (selected.contribution === undefined) conflict();
     const modules = enabledModules(runtime.modules, selected.config);
     const versions: Record<string, number> = {};
@@ -149,10 +146,7 @@ export function createFirstSetupCommandDeployment(options: {
       const path = environment.WAITRON_SETUP_SETTINGS_FILE;
       if (!path && state.frozen.environment === "production")
         throw new AppError("setup.not_ready", {});
-      const selection = venueFiscalSelection(
-        runtime.modules,
-        state.frozen.request.location.fiscalTerritory,
-      );
+      const selection = venueFiscalSelection(runtime.modules, state.frozen.request.fiscalTerritory);
       if (selection.contribution === undefined) conflict();
       const settings = parseFirstSetupSettings(
         selection.contribution,
@@ -278,10 +272,7 @@ export function createFirstSetupCommandDeployment(options: {
       if ((await readTenantIdentities(db)).length !== 0) conflict();
       if (publication === undefined) throw new AppError("setup.not_ready", {});
       const imported = await configuration(state, publication.ring);
-      const config = venueFiscalSelection(
-        runtime.modules,
-        request.venue.location.fiscalTerritory,
-      ).config;
+      const config = venueFiscalSelection(runtime.modules, request.venue.fiscalTerritory).config;
       let remaining = request.initialOperations.inputs.length;
       if (remaining === 0) conflict();
       const modules = enabledModules(runtime.modules, config).map((module) => {

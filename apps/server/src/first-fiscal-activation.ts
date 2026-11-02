@@ -65,7 +65,7 @@ export function firstFiscalPayload(
   }
   const contribution = venueFiscalSelection(
     host.modules,
-    state.frozen.request.location.fiscalTerritory,
+    state.frozen.request.fiscalTerritory,
   ).contribution;
   if (contribution === undefined) conflict();
   const secret = contribution.provisioningSecret;

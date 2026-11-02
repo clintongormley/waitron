@@ -73,28 +73,28 @@ async function fixture(answer = "yes") {
     request.legalName,
     "--taxpayer-domicile",
     request.taxpayerDomicile,
-    "--location-name",
-    request.location.name,
+    "--venue-name",
+    request.name,
     "--territory",
-    request.location.fiscalTerritory,
+    request.fiscalTerritory,
     "--locale",
     "es-ES",
     "--operation-description",
-    request.location.operationDescription,
+    request.operationDescription,
     "--address-line1",
-    request.location.addressLine1,
+    request.addressLine1,
     "--address-line2",
     "Local 2",
     "--postal-code",
-    request.location.postalCode,
+    request.postalCode,
     "--city",
-    request.location.city,
+    request.city,
     "--province",
-    request.location.province,
+    request.province,
     "--time-zone",
-    request.location.timeZone,
+    request.timeZone,
     "--day-cutover",
-    request.location.dayCutover,
+    request.dayCutover,
     "--series-code",
     "A",
     "--full-series-code",
@@ -457,10 +457,10 @@ async function activationFixture() {
       return structuredClone(written);
     },
   });
-  function stateModules(request: { venue: { location: { fiscalTerritory: string } } }) {
+  function stateModules(request: { venue: { fiscalTerritory: string } }) {
     return enabledModules(
       f.runtime.modules,
-      venueFiscalSelection(f.runtime.modules, request.venue.location.fiscalTerritory).config,
+      venueFiscalSelection(f.runtime.modules, request.venue.fiscalTerritory).config,
     ).map((module) => module.name);
   }
   const args = [...f.args, "--recovery-pdf", join(f.root, "recovery.pdf")];
@@ -796,7 +796,7 @@ it("the command refuses a retained configuration import when its staged material
       request: {
         ...request,
         admin: { ...request.admin, firstNames: null, lastNames: null, locale: null },
-        location: { ...request.location, addressLine2: "Local 2" },
+        addressLine2: "Local 2",
       },
     },
     randomBytes(32).toString("base64url"),

@@ -318,11 +318,9 @@ async function modeDraft(mode: "demo" | "prepare" | "live" = "prepare") {
       taxId: "B12345674",
       seriesCode: "SALE",
       rectificativeSeriesCode: "CREDIT",
-      location: {
-        operationDescription: "Restaurant",
-        dayCutover: "04:00",
-        invoiceLocales: ["es-ES", "en-GB"],
-      },
+      operationDescription: "Restaurant",
+      dayCutover: "04:00",
+      invoiceLocales: ["es-ES", "en-GB"],
     },
   });
   goto(mounted.el, "mode");
@@ -345,11 +343,9 @@ function authoredDraft(mode: "demo" | "prepare" | "live"): DeepPartial<Provision
       taxId: "B12345674",
       seriesCode: "SALE",
       rectificativeSeriesCode: "CREDIT",
-      location: {
-        operationDescription: "Restaurant",
-        dayCutover: "04:00",
-        invoiceLocales: ["es-ES", "en-GB"],
-      },
+      operationDescription: "Restaurant",
+      dayCutover: "04:00",
+      invoiceLocales: ["es-ES", "en-GB"],
     },
   };
 }
@@ -374,7 +370,7 @@ describe("setup mode leaves the root draft", () => {
     await expect.poll(() => (el as unknown as State).screen).toBe("admin");
     expect((el as unknown as State).draft).toEqual({
       mode: to,
-      venue: { admin: initialAdmin, location: {} },
+      venue: { admin: initialAdmin },
     });
     expect(api.provision).not.toHaveBeenCalled();
   });
@@ -423,7 +419,7 @@ describe("setup mode leaves the root draft", () => {
     await expect.poll(() => (el as unknown as State).screen).toBe("live-source");
     expect((el as unknown as State).draft).toEqual({
       mode: "live",
-      venue: { admin: initialAdmin, location: {} },
+      venue: { admin: initialAdmin },
     });
   });
 
@@ -614,7 +610,7 @@ describe("setup root draft unsaved changes", () => {
 
   it("unchanged nested values stay clean but invoice language order remains significant", async () => {
     const { el } = await mount();
-    patchRoot(el, { venue: { location: { invoiceLocales: ["es-ES", "en-GB"] } } });
+    patchRoot(el, { venue: { invoiceLocales: ["es-ES", "en-GB"] } });
     expect(unload()).toBe(true);
     await el.updateComplete;
     submitRoot(el);
@@ -624,9 +620,9 @@ describe("setup root draft unsaved changes", () => {
       venue: { admin: { pin: "1234", password: "initial password", email: initialAdmin.email } },
     });
     expect(unload()).toBe(false);
-    patchRoot(el, { venue: { location: { invoiceLocales: ["en-GB", "es-ES"] } } });
+    patchRoot(el, { venue: { invoiceLocales: ["en-GB", "es-ES"] } });
     expect(unload()).toBe(true);
-    patchRoot(el, { venue: { location: { invoiceLocales: ["es-ES", "en-GB"] } } });
+    patchRoot(el, { venue: { invoiceLocales: ["es-ES", "en-GB"] } });
     expect(unload()).toBe(false);
   });
 
@@ -774,25 +770,25 @@ describe("setup root lifecycle and import", () => {
     await expect.poll(() => (el as unknown as State).screen).toBe("configuration-preview");
     expect(stage).toHaveBeenCalledExactlyOnceWith(artifact, "import proof");
     expect(unload()).toBe(true);
+    const importedVenue = { ...importedConfiguration.venue };
+    delete (importedVenue as Partial<typeof importedVenue>).location;
     expect((el as unknown as State).draft).toEqual({
       mode: "prepare",
       configurationImport: true,
       venue: {
-        ...importedConfiguration.venue,
+        ...importedVenue,
         admin: initialAdmin,
-        location: {
-          name: "Prepared",
-          invoiceLocales: ["es-ES"],
-          operationDescription: "Restaurant",
-          fiscalTerritory: "ES-common",
-          addressLine1: "Calle 1",
-          addressLine2: null,
-          postalCode: "28001",
-          city: "Madrid",
-          province: "Madrid",
-          timeZone: "Europe/Madrid",
-          dayCutover: "06:00",
-        },
+        name: "Prepared",
+        invoiceLocales: ["es-ES"],
+        operationDescription: "Restaurant",
+        fiscalTerritory: "ES-common",
+        addressLine1: "Calle 1",
+        addressLine2: null,
+        postalCode: "28001",
+        city: "Madrid",
+        province: "Madrid",
+        timeZone: "Europe/Madrid",
+        dayCutover: "06:00",
       },
     });
     goto(el, "review");
@@ -1182,7 +1178,7 @@ describe("setup taxpayer choice", () => {
       draft: {
         mode: "live",
         configurationImport: true,
-        venue: { ...venue, admin: initialAdmin, location: stagedLocation },
+        venue: { ...venue, admin: initialAdmin, ...stagedLocation },
       },
       configurationPreview: importedConfiguration,
       screen: "configuration-preview",

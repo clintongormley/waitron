@@ -133,7 +133,7 @@ describe("the venue screen's address search", () => {
     expect(value(el, "province")).toBe("28");
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
-    expect(patches[0]!.venue!.location).toMatchObject({
+    expect(patches[0]!.venue!).toMatchObject({
       addressLine1: "Calle Mayor 1",
       addressLine2: null,
       postalCode: "28013",
@@ -198,7 +198,7 @@ describe("the venue screen's address search", () => {
   it("re-seeds receipt languages that still follow the province, as choosing the province does", async () => {
     const el = await mount(
       { addressProvider: providerFor(MADRID) },
-      { venue: { country: "ES", location: { province: "Barcelona", invoiceLocales: ["ca-ES"] } } },
+      { venue: { country: "ES", province: "Barcelona", invoiceLocales: ["ca-ES"] } },
     );
     await choose(el, { ...MADRID, administrativeAreaCode: "15", postalCode: "15001" });
     const ticked = [

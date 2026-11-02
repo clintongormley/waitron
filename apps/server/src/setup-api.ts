@@ -434,15 +434,14 @@ function asStringArray(value: unknown, field: string): string[] {
  */
 function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): VenueRequest {
   const v = asObject(venueRaw, "venue");
-  const loc = asObject(v.location, "location");
   const admin = asObject(v.admin, "admin");
   const countryInput = asString(v.country, "country");
   const taxIdInput = asString(v.taxId, "taxId");
-  const fiscalTerritoryInput = asString(loc.fiscalTerritory, "location.fiscalTerritory");
-  const invoiceLocales = asStringArray(loc.invoiceLocales, "location.invoiceLocales");
-  const postalCodeInput = asString(loc.postalCode, "location.postalCode");
-  const provinceInput = asString(loc.province, "location.province");
-  const timeZoneInput = asString(loc.timeZone, "location.timeZone");
+  const fiscalTerritoryInput = asString(v.fiscalTerritory, "fiscalTerritory");
+  const invoiceLocales = asStringArray(v.invoiceLocales, "invoiceLocales");
+  const postalCodeInput = asString(v.postalCode, "postalCode");
+  const provinceInput = asString(v.province, "province");
+  const timeZoneInput = asString(v.timeZone, "timeZone");
 
   const country = getVenueSetupCountryPack(countryInput);
   if (country === undefined) invalidRequest("country");
@@ -450,11 +449,11 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
   const taxId = country.taxIdentifier?.validate(taxIdInput);
   if (taxId?.valid === false) invalidRequest("taxId");
   const postalCode = country.postalCode?.validate(postalCodeInput);
-  if (postalCode?.valid === false) invalidRequest("location.postalCode");
+  if (postalCode?.valid === false) invalidRequest("postalCode");
 
   const area = findAdministrativeArea(country, provinceInput);
   if (country.administrativeAreas.length > 0 && area === undefined) {
-    invalidRequest("location.province");
+    invalidRequest("province");
   }
   if (country.administrativeAreas.length > 0) {
     const postalArea =
@@ -462,17 +461,17 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
         ? findAdministrativeAreaByPostalCode(country, postalCode.normalized)
         : undefined;
     if (postalArea === undefined || postalArea.code !== area?.code) {
-      invalidRequest("location.province");
+      invalidRequest("province");
     }
   }
 
   const jurisdiction = resolveFiscalJurisdiction(country, area?.code);
   if (jurisdiction === undefined || !jurisdiction.supported || jurisdiction.modules === undefined) {
-    invalidRequest("location.fiscalTerritory");
+    invalidRequest("fiscalTerritory");
   }
-  if (fiscalTerritoryInput !== jurisdiction.id) invalidRequest("location.fiscalTerritory");
+  if (fiscalTerritoryInput !== jurisdiction.id) invalidRequest("fiscalTerritory");
   if (timeZoneInput !== (area?.timeZone ?? country.defaultTimeZone)) {
-    invalidRequest("location.timeZone");
+    invalidRequest("timeZone");
   }
   // One receipt language, among the pack's, and the region's own where it fixes one.
   const receipt = receiptLanguageRules(country, area?.code);
@@ -482,7 +481,7 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
     !receipt.choices.includes(receiptLanguage!) ||
     (receipt.fixed !== undefined && receiptLanguage !== receipt.fixed.locale)
   ) {
-    invalidRequest("location.invoiceLocales");
+    invalidRequest("invoiceLocales");
   }
 
   // The admin's fallback locale is derived from the province as STORED, the same value
@@ -497,19 +496,17 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
       v.taxpayerDomicile === undefined
         ? null
         : asNullableString(v.taxpayerDomicile, "taxpayerDomicile"),
-    location: {
-      name: asString(loc.name, "location.name"),
-      fiscalTerritory: jurisdiction.id,
-      invoiceLocales,
-      operationDescription: asString(loc.operationDescription, "location.operationDescription"),
-      addressLine1: asString(loc.addressLine1, "location.addressLine1"),
-      addressLine2: asNullableString(loc.addressLine2, "location.addressLine2"),
-      postalCode: postalCode?.valid === true ? postalCode.normalized : postalCodeInput,
-      city: asString(loc.city, "location.city"),
-      province,
-      timeZone: area?.timeZone ?? country.defaultTimeZone,
-      dayCutover: asString(loc.dayCutover, "location.dayCutover"),
-    },
+    name: asString(v.name, "name"),
+    fiscalTerritory: jurisdiction.id,
+    invoiceLocales,
+    operationDescription: asString(v.operationDescription, "operationDescription"),
+    addressLine1: asString(v.addressLine1, "addressLine1"),
+    addressLine2: asNullableString(v.addressLine2, "addressLine2"),
+    postalCode: postalCode?.valid === true ? postalCode.normalized : postalCodeInput,
+    city: asString(v.city, "city"),
+    province,
+    timeZone: area?.timeZone ?? country.defaultTimeZone,
+    dayCutover: asString(v.dayCutover, "dayCutover"),
     seriesCode: asString(v.seriesCode, "seriesCode"),
     fullSeriesCode: asString(v.fullSeriesCode, "fullSeriesCode"),
     rectificativeSeriesCode: asString(v.rectificativeSeriesCode, "rectificativeSeriesCode"),
@@ -517,7 +514,7 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
       displayName: asString(admin.displayName, "admin.displayName"),
       firstNames: asOptionalName(admin.firstNames, "admin.firstNames"),
       lastNames: asOptionalName(admin.lastNames, "admin.lastNames"),
-      // The DISPLAY language, not the fiscal `location.invoiceLocales`. Never null: the till after a
+      // The DISPLAY language, not the fiscal `invoiceLocales`. Never null: the till after a
       // PIN sign-in and account emails have no browser header to fall back to.
       locale: resolveLoginLocale(
         acceptLanguage,
@@ -568,33 +565,31 @@ function parseProvisionPayload(
   }
   if (body.newTaxpayer === true && body.configurationImport !== true) invalidRequest("newTaxpayer");
 
-  const nameSource = body.demoLocationNameSource;
+  const nameSource = body.demoVenueNameSource;
   if (
     nameSource !== undefined &&
     (mode !== "demo" || (nameSource !== "automatic" && nameSource !== "custom"))
   ) {
-    invalidRequest("demoLocationNameSource");
+    invalidRequest("demoVenueNameSource");
   }
   const parsedVenue = parseVenue(body.venue, acceptLanguage);
   const pack = getVenueSetupCountryPack(parsedVenue.country)!;
   const identity =
-    nameSource === "automatic"
-      ? resolveCountryDemoIdentity(pack, parsedVenue.location.province)
-      : undefined;
+    nameSource === "automatic" ? resolveCountryDemoIdentity(pack, parsedVenue.province) : undefined;
   const venue =
     identity === undefined
       ? parsedVenue
       : {
           ...parsedVenue,
-          location: { ...parsedVenue.location, name: identity.locationName },
+          name: identity.locationName,
         };
   if (mode !== "demo" && !venue.taxpayerDomicile?.trim()) {
     invalidRequest("taxpayerDomicile");
   }
   const environment: DeploymentEnvironment =
     mode === "live" && !devMode ? "production" : "preproduction";
-  const selection = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
-  if (selection.contribution === undefined) invalidRequest("location.fiscalTerritory");
+  const selection = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
+  if (selection.contribution === undefined) invalidRequest("fiscalTerritory");
   const contribution = selection.contribution;
   // The regime's own rules on the typed fields, run before `provision` mints the chain so a refusal
   // leaves nothing behind and the operator fixes the field in the wizard rather than at the till.
@@ -603,7 +598,7 @@ function parseProvisionPayload(
     seriesCode: venue.seriesCode,
     fullSeriesCode: venue.fullSeriesCode ?? "FF",
     rectificativeSeriesCode: venue.rectificativeSeriesCode,
-    operationDescription: venue.location.operationDescription,
+    operationDescription: venue.operationDescription,
   });
   const secret = contribution.provisioningSecret;
   const secretExpected = secret?.required(environment) ?? false;
@@ -879,7 +874,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       if (
         mode === "live" &&
         deps.firstFiscal !== undefined &&
-        deps.firstFiscal.offerings(request.venue.location.fiscalTerritory).length > 0
+        deps.firstFiscal.offerings(request.venue.fiscalTerritory).length > 0
       )
         throw new AppError("setup.owner_required", {});
       const { environment, venue } = request;

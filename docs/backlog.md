@@ -6533,6 +6533,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `_cfg` until S18. `saveHolidayArea` reads the venue row twice (for the address, then for its id)
   because `readVenue`'s `Venue` carries no id; S18 can drop the second read when `venueLocationId`
   goes.
+  S16 sends setup venue fields directly and names the venue in restore previews. Old
+  `first-setup.json` files are refused, including after a completed setup, so boxes set up through
+  first setup are reset. The configuration bundle stays nested until S17; the node and storage ids
+  remain for S18 and the schema slices.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](superpowers/plans/2026-11-01-a1301-remove-location.md),
   [working-time plan](superpowers/plans/2026-11-02-a1301-working-time-slices.md)

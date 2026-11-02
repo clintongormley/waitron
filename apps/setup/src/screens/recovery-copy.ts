@@ -310,8 +310,8 @@ export class SetupRecoveryCopy extends LitElement {
                 <dd>${preview.sourceId}</dd>
                 <dt>${t("restore.preview_business")}</dt>
                 <dd>${preview.taxpayer.legalName} (${preview.taxpayer.taxId})</dd>
-                <dt>${t("restore.preview_location")}</dt>
-                <dd>${preview.locationName}</dd>
+                <dt>${t("restore.preview_venue")}</dt>
+                <dd>${preview.venueName}</dd>
                 <dt>${t("restore.preview_date")}</dt>
                 <dd><time datetime=${preview.createdAt}>${preview.createdAt}</time></dd>
                 <dt>${t("restore.preview_node")}</dt>

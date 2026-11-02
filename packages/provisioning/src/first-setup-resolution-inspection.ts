@@ -87,8 +87,8 @@ async function inspectDatabase(
     connection.exec("begin");
     const target = executeTarget(connection);
     const tenants = await readTenantIdentities(target);
-    const locations = await readOperationalVenueIds(target);
-    const database = tenants.length === 0 && locations.length === 0 ? "no-venue-rows" : "occupied";
+    const venues = await readOperationalVenueIds(target);
+    const database = tenants.length === 0 && venues.length === 0 ? "no-venue-rows" : "occupied";
     return {
       database,
       emptyDatabase:

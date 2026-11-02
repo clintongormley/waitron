@@ -410,7 +410,7 @@ const BUCKET_NOTICE =
 
 type StreamDeps = Parameters<typeof restoreFromStream>[0];
 type RestoreStreamFake = (deps: StreamDeps) => Promise<void>;
-const VENUE: RestoredVenue = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" };
+const VENUE: RestoredVenue = { legalName: "Waitron SL", taxId: "89890001K", venueName: "Local" };
 
 async function kitFile(text = `Waitron recovery kit\n\n${encodeRecoveryKit(KIT)}\n`) {
   const dir = await mkdtemp(join(tmpdir(), "waitron-cli-kit-"));
@@ -493,9 +493,7 @@ describe("waitron-restore restore --from-bucket", () => {
         },
       });
       expect(answer).toBe(confirmed);
-      expect(out).toContain(
-        "the copy in the bucket is: Waitron SL, tax id 89890001K, location Local",
-      );
+      expect(out).toContain("the copy in the bucket is: Waitron SL, tax id 89890001K, venue Local");
     },
   );
 
@@ -507,7 +505,7 @@ describe("waitron-restore restore --from-bucket", () => {
       env: { WAITRON_ENV: "preproduction" },
       out: () => {},
       restoreStream: async (d) => {
-        answer = d.confirmVenue({ legalName: "", taxId: "", locationName: "" });
+        answer = d.confirmVenue({ legalName: "", taxId: "", venueName: "" });
       },
     });
     expect(answer).toBe(false);
@@ -528,7 +526,7 @@ describe("waitron-restore restore --from-bucket", () => {
       new AppError("restore.stream_venue_unconfirmed", {
         legalName: "",
         taxId: "",
-        locationName: "",
+        venueName: "",
       }),
     );
     expect(out.at(-1)).toBe(

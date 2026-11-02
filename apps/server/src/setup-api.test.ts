@@ -147,19 +147,17 @@ function demoBody(): Record<string, unknown> {
       taxId: "50000000R",
       legalName: "Waitron Dev SL",
       taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
-      location: {
-        name: "Main dining room",
-        fiscalTerritory: "ES-common",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Retail counter sales",
-        addressLine1: "Calle Mayor 1",
-        addressLine2: null,
-        postalCode: "28013",
-        city: "Madrid",
-        province: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "05:00",
-      },
+      name: "Main dining room",
+      fiscalTerritory: "ES-common",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Retail counter sales",
+      addressLine1: "Calle Mayor 1",
+      addressLine2: null,
+      postalCode: "28013",
+      city: "Madrid",
+      province: "Madrid",
+      timeZone: "Europe/Madrid",
+      dayCutover: "05:00",
       seriesCode: "A",
       fullSeriesCode: "FF",
       rectificativeSeriesCode: "R",
@@ -784,10 +782,9 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
 
     const body = demoBody();
     const venue = asRec(body.venue);
-    const location = asRec(venue.location);
     venue.taxId = " b 1234567 4 ";
-    location.postalCode = " 28013 ";
-    location.province = "madrid";
+    venue.postalCode = " 28013 ";
+    venue.province = "madrid";
     const res = await postProvision(app, body);
 
     expect(res.status).toBe(200);
@@ -795,12 +792,10 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(provisionRequests[0].venue).toMatchObject({
       country: "ES",
       taxId: "B12345674",
-      location: {
-        postalCode: "28013",
-        province: "Madrid",
-        fiscalTerritory: "ES-common",
-        timeZone: "Europe/Madrid",
-      },
+      postalCode: "28013",
+      province: "Madrid",
+      fiscalTerritory: "ES-common",
+      timeZone: "Europe/Madrid",
     });
   });
 
@@ -840,8 +835,8 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
   });
 
   it.each([
-    ["fiscal territory", "fiscalTerritory", "GB-vat", "location.fiscalTerritory"],
-    ["time zone", "timeZone", "Atlantic/Canary", "location.timeZone"],
+    ["fiscal territory", "fiscalTerritory", "GB-vat", "fiscalTerritory"],
+    ["time zone", "timeZone", "Atlantic/Canary", "timeZone"],
   ] as const)(
     "refuses a supplied %s that disagrees with the country pack",
     async (_label, key, value, field) => {
@@ -849,7 +844,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       const { deps, provision } = makeDeps();
       mountSetup(app, deps, noopLog);
       const body = demoBody();
-      asRec(asRec(body.venue).location)[key] = value;
+      asRec(body.venue)[key] = value;
 
       const res = await postProvision(app, body);
 
@@ -864,23 +859,19 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
 
   it.each<[string, string, (body: Record<string, unknown>) => void]>([
     ["a bad NIF checksum", "taxId", (body) => void (asRec(body.venue).taxId = "B12345678")],
-    [
-      "an invalid postcode",
-      "location.postalCode",
-      (body) => void (asRec(asRec(body.venue).location).postalCode = "53000"),
-    ],
+    ["an invalid postcode", "postalCode", (body) => void (asRec(body.venue).postalCode = "53000")],
     [
       "a postcode/province mismatch",
-      "location.province",
-      (body) => void (asRec(asRec(body.venue).location).province = "Barcelona"),
+      "province",
+      (body) => void (asRec(body.venue).province = "Barcelona"),
     ],
     [
       "an unsupported fiscal jurisdiction",
-      "location.fiscalTerritory",
+      "fiscalTerritory",
       (body) => {
-        const location = asRec(asRec(body.venue).location);
-        location.postalCode = "35001";
-        location.province = "Las Palmas";
+        const venue = asRec(body.venue);
+        venue.postalCode = "35001";
+        venue.province = "Las Palmas";
       },
     ],
   ])("refuses %s at the setup boundary", async (_label, field, mutate) => {
@@ -962,7 +953,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect((await postProvision(app, body)).status).toBe(200);
     expect(provisionRequests[0].venue).toMatchObject({
       taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
-      location: { addressLine1: "Calle Mayor 1" },
+      addressLine1: "Calle Mayor 1",
     });
   });
 
@@ -1172,23 +1163,11 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     ["a string venue", "venue", (b) => void (b.venue = "nope")],
     ["a null venue", "venue", (b) => void (b.venue = null)],
     ["an array venue", "venue", (b) => void (b.venue = [])],
-    ["a missing location", "location", (b) => void delete asRec(b.venue).location],
+    ["a missing venue name", "name", (b) => void delete asRec(b.venue).name],
     ["a missing admin", "admin", (b) => void delete asRec(b.venue).admin],
-    [
-      "non-array locales",
-      "location.invoiceLocales",
-      (b) => void (asRec(asRec(b.venue).location).invoiceLocales = "es-ES"),
-    ],
-    [
-      "empty locales",
-      "location.invoiceLocales",
-      (b) => void (asRec(asRec(b.venue).location).invoiceLocales = []),
-    ],
-    [
-      "a non-string locale",
-      "location.invoiceLocales",
-      (b) => void (asRec(asRec(b.venue).location).invoiceLocales = [42]),
-    ],
+    ["non-array locales", "invoiceLocales", (b) => void (asRec(b.venue).invoiceLocales = "es-ES")],
+    ["empty locales", "invoiceLocales", (b) => void (asRec(b.venue).invoiceLocales = [])],
+    ["a non-string locale", "invoiceLocales", (b) => void (asRec(b.venue).invoiceLocales = [42])],
     ["a missing admin.pin", "admin.pin", (b) => void delete asRec(asRec(b.venue).admin).pin],
     ["a missing admin.email", "admin.email", (b) => void delete asRec(asRec(b.venue).admin).email],
   ])(
@@ -1216,7 +1195,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     mountSetup(app, deps, noopLog);
 
     const body = demoBody();
-    asRec(asRec(body.venue).location).addressLine2 = "Piso 2";
+    asRec(body.venue).addressLine2 = "Piso 2";
     const res = await postProvision(app, body);
 
     expect(res.status).toBe(200);
@@ -1416,8 +1395,8 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
     ],
     [
       "an operation description carrying a character XML forbids",
-      "location.operationDescription",
-      (b) => void (asRec(asRec(b.venue).location).operationDescription = "Main\u0007bar"),
+      "operationDescription",
+      (b) => void (asRec(b.venue).operationDescription = "Main\u0007bar"),
     ],
     // Without this row `legalName` could be wired to any other string field and every test would
     // still pass.
@@ -2109,7 +2088,7 @@ describe("POST /setup-api/restore-bucket", () => {
         new AppError("restore.stream_venue_unconfirmed", {
           legalName: "L",
           taxId: "T",
-          locationName: "N",
+          venueName: "N",
         }),
         409,
       ],
@@ -2137,7 +2116,7 @@ describe("POST /setup-api/restore-bucket", () => {
   it("answers an unconfirmed venue with 409 and its names, and stages the retry that names its tax id", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-bucket-"));
     try {
-      const venue = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Main bar" };
+      const venue = { legalName: "Waitron SL", taxId: "89890001K", venueName: "Main bar" };
       const stageBucketRestore = vi
         .fn()
         .mockRejectedValueOnce(new AppError("restore.stream_venue_unconfirmed", venue))
@@ -3225,12 +3204,12 @@ describe("setup routes — remaining refusals and resumption paths", () => {
     const { deps, provision } = makeDeps();
     mountSetup(app, deps, noopLog);
     const body = demoBody();
-    asRec(asRec(body.venue).location).province = "Atlantis";
+    asRec(body.venue).province = "Atlantis";
 
     const res = await postProvision(app, body);
 
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual(invalid("location.province"));
+    expect(await res.json()).toEqual(invalid("province"));
     expect(provision).not.toHaveBeenCalled();
   });
 
@@ -3239,12 +3218,12 @@ describe("setup routes — remaining refusals and resumption paths", () => {
     const { deps, provision } = makeDeps();
     mountSetup(app, deps, noopLog);
     const body = demoBody();
-    asRec(asRec(body.venue).location).invoiceLocales = ["es-ES", "fr-FR"];
+    asRec(body.venue).invoiceLocales = ["es-ES", "fr-FR"];
 
     const res = await postProvision(app, body);
 
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual(invalid("location.invoiceLocales"));
+    expect(await res.json()).toEqual(invalid("invoiceLocales"));
     expect(provision).not.toHaveBeenCalled();
   });
 
@@ -3258,12 +3237,12 @@ describe("setup routes — remaining refusals and resumption paths", () => {
     const { deps, provision } = makeDeps();
     mountSetup(app, deps, noopLog);
     const body = demoBody();
-    Object.assign(asRec(asRec(body.venue).location), place, { invoiceLocales });
+    Object.assign(asRec(body.venue), place, { invoiceLocales });
 
     const res = await postProvision(app, body);
 
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual(invalid("location.invoiceLocales"));
+    expect(await res.json()).toEqual(invalid("invoiceLocales"));
     expect(provision).not.toHaveBeenCalled();
   });
 
@@ -3275,14 +3254,12 @@ describe("setup routes — remaining refusals and resumption paths", () => {
     const { deps, provisionRequests } = makeDeps();
     mountSetup(app, deps, noopLog);
     const body = demoBody();
-    Object.assign(asRec(asRec(body.venue).location), place, { invoiceLocales });
+    Object.assign(asRec(body.venue), place, { invoiceLocales });
 
     const res = await postProvision(app, body);
 
     expect(res.status).toBe(200);
-    expect(provisionRequests.map((req) => req.venue.location.invoiceLocales)).toEqual([
-      invoiceLocales,
-    ]);
+    expect(provisionRequests.map((req) => req.venue.invoiceLocales)).toEqual([invoiceLocales]);
   });
 
   it.each<[string, Record<string, unknown>]>([

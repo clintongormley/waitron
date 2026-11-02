@@ -19,7 +19,7 @@ const fields = {
   "tax-id": "B12345678",
   "legal-name": "Issuer SL",
   "taxpayer-domicile": "Calle Fiscal 8, 28013 Madrid",
-  "location-name": "Venue",
+  "venue-name": "Venue",
   territory: "ES-common",
   locale: "es-ES",
   "operation-description": "Restaurant",
@@ -97,7 +97,7 @@ function retained() {
 }
 
 it.each([
-  ["location-name", "Another venue"],
+  ["venue-name", "Another venue"],
   ["address-line1", "Calle Nueva 2"],
   ["address-line2", "Upper floor"],
   ["postal-code", "28014"],

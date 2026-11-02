@@ -76,7 +76,7 @@ async function expectSharedFieldsUnmarked(el: SetupRestoreBucketScreen): Promise
   }
 }
 
-const VENUE = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" };
+const VENUE = { legalName: "Waitron SL", taxId: "89890001K", venueName: "Local" };
 
 describe("SetupRestoreBucketScreen", () => {
   it("marks the kit and the confirmation required and sends nothing when blank", async () => {

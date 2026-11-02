@@ -155,9 +155,23 @@ it("reads the selected copy's node-key name after the live box has replaced its 
     nodeId: NODE,
     nodeRecoveryKeyName: oldName,
     taxpayer: { legalName: "Old venue", taxId: "89890001K" },
-    locationName: "Old location",
+    venueName: "Old location",
   });
   expect(await readdir(scratch)).toEqual(["selected.db"]);
+});
+
+it("refuses a copy with two venue rows as an unknown identity", async () => {
+  await suite.db.insert(locations).values({
+    id: "d0000000-0000-4000-8000-000000000003",
+    name: "Other venue",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Restaurant",
+  });
+  artifact = await packSelected();
+  await expect(previewRecoveryArchive(args())).rejects.toMatchObject({
+    code: "restore.identity_unknown",
+    params: { nodeId: NODE },
+  });
 });
 
 it("names the key a backup's node copy holds, not one its venue copy could hold", async () => {

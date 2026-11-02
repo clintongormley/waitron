@@ -85,20 +85,18 @@ function venue(country: string, overrides: Record<string, unknown> = {}) {
     taxId: "GB 123 456 789",
     legalName: "Readiness Ltd",
     taxpayerDomicile: "1 Fiscal Quay, SW1A 1AA London",
-    location: {
-      name: "Front of house",
-      fiscalTerritory: country.toUpperCase() === "ZZ" ? "ZZ-vat" : "GB-vat",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Restaurant",
-      addressLine1: "1 High Street",
-      addressLine2: null,
-      postalCode: "sw1a 1aa",
-      city: "London",
-      province: "Greater London",
-      timeZone: country.toUpperCase() === "ZZ" ? "Etc/UTC" : "Europe/London",
-      dayCutover: "05:00",
-      ...overrides,
-    },
+    name: "Front of house",
+    fiscalTerritory: country.toUpperCase() === "ZZ" ? "ZZ-vat" : "GB-vat",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Restaurant",
+    addressLine1: "1 High Street",
+    addressLine2: null,
+    postalCode: "sw1a 1aa",
+    city: "London",
+    province: "Greater London",
+    timeZone: country.toUpperCase() === "ZZ" ? "Etc/UTC" : "Europe/London",
+    dayCutover: "05:00",
+    ...overrides,
     seriesCode: "A",
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
@@ -131,12 +129,10 @@ describe("POST /setup-api/provision for country packs other than Spain", () => {
     expect(requests[0]!.venue).toMatchObject({
       country: "GB",
       taxId: "GB 123 456 789",
-      location: {
-        fiscalTerritory: "GB-vat",
-        postalCode: "sw1a 1aa",
-        province: "Greater London",
-        timeZone: "Europe/London",
-      },
+      fiscalTerritory: "GB-vat",
+      postalCode: "sw1a 1aa",
+      province: "Greater London",
+      timeZone: "Europe/London",
     });
   });
 
@@ -152,7 +148,7 @@ describe("POST /setup-api/provision for country packs other than Spain", () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
-      error: { code: "setup.request_invalid", params: { field: "location.timeZone" } },
+      error: { code: "setup.request_invalid", params: { field: "timeZone" } },
     });
     expect(requests).toEqual([]);
   });
@@ -204,13 +200,13 @@ describe("POST /setup-api/provision for country packs other than Spain", () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
-      error: { code: "setup.request_invalid", params: { field: "location.fiscalTerritory" } },
+      error: { code: "setup.request_invalid", params: { field: "fiscalTerritory" } },
     });
     expect(requests).toEqual([]);
   });
 });
 
-describe("Demo location-name ownership", () => {
+describe("Demo venue-name ownership", () => {
   function spanishVenue(name: string) {
     const request = venue("ES", {
       name,
@@ -234,12 +230,12 @@ describe("Demo location-name ownership", () => {
     mountSetup(app, setupDeps, () => {});
     const res = await post(app, {
       mode: "demo",
-      demoLocationNameSource: source,
+      demoVenueNameSource: source,
       venue: spanishVenue(name!),
     });
     expect(res.status).toBe(200);
-    expect(requests[0]!.venue.location).toMatchObject({ name: want, province: "Barcelona" });
-    expect(requests[0]).not.toHaveProperty("demoLocationNameSource");
+    expect(requests[0]!.venue).toMatchObject({ name: want, province: "Barcelona" });
+    expect(requests[0]).not.toHaveProperty("demoVenueNameSource");
   });
   it.each([null, 0, {}, [], true, "", "AUTOMATIC", "unknown"])(
     "refuses malformed ownership %j",
@@ -249,12 +245,12 @@ describe("Demo location-name ownership", () => {
       mountSetup(app, setupDeps, () => {});
       const res = await post(app, {
         mode: "demo",
-        demoLocationNameSource: source,
+        demoVenueNameSource: source,
         venue: spanishVenue("Custom"),
       });
       expect(res.status).toBe(400);
       expect(await res.json()).toMatchObject({
-        error: { code: "setup.request_invalid", params: { field: "demoLocationNameSource" } },
+        error: { code: "setup.request_invalid", params: { field: "demoVenueNameSource" } },
       });
       expect(requests).toHaveLength(0);
     },
@@ -265,12 +261,12 @@ describe("Demo location-name ownership", () => {
     mountSetup(app, setupDeps, () => {});
     const res = await post(app, {
       mode,
-      demoLocationNameSource: "automatic",
+      demoVenueNameSource: "automatic",
       venue: spanishVenue("Custom"),
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({
-      error: { code: "setup.request_invalid", params: { field: "demoLocationNameSource" } },
+      error: { code: "setup.request_invalid", params: { field: "demoVenueNameSource" } },
     });
     expect(requests).toHaveLength(0);
   });
@@ -305,7 +301,7 @@ describe("persisted Demo name ownership", () => {
       });
       const response = await post(app, {
         mode: "demo",
-        demoLocationNameSource: source,
+        demoVenueNameSource: source,
         venue: { ...body, taxId: "B00000000", legalName: "Waitron Demo S.L." },
       });
       expect(response.status).toBe(200);
@@ -325,7 +321,7 @@ it("refuses an unknown country before deriving an automatic demo name", async ()
   mountSetup(app, setupDeps, () => {});
   const response = await post(app, {
     mode: "demo",
-    demoLocationNameSource: "automatic",
+    demoVenueNameSource: "automatic",
     venue: venue("XX"),
   });
   expect(response.status).toBe(400);

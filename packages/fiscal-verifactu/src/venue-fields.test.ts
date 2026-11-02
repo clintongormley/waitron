@@ -64,13 +64,13 @@ describe("validateVenueFiscalFields", () => {
   it("refuses a control character in the operation description", () => {
     expect(() =>
       validateVenueFiscalFields({ ...GOOD, operationDescription: "Venta\u0001aqui" }),
-    ).toThrow(expect.objectContaining({ params: { field: "location.operationDescription" } }));
+    ).toThrow(expect.objectContaining({ params: { field: "operationDescription" } }));
   });
 
   it("refuses an operation description past AEAT's 500-character cap, at the boundary", () => {
     expect(() =>
       validateVenueFiscalFields({ ...GOOD, operationDescription: "x".repeat(501) }),
-    ).toThrow(expect.objectContaining({ params: { field: "location.operationDescription" } }));
+    ).toThrow(expect.objectContaining({ params: { field: "operationDescription" } }));
     expect(() =>
       validateVenueFiscalFields({ ...GOOD, operationDescription: "x".repeat(500) }),
     ).not.toThrow();

@@ -8,7 +8,7 @@ import { STARTER_PROFILE_NAMES, STARTER_STATION_NAMES } from "./starter-content.
 import "@waitron/fiscal"; // side-effect: registers fiscal.regime_not_implemented on ErrorParams
 import "./errors.js"; // side-effect: registers provisioning.invalid_locales on ErrorParams
 
-/** The node and location designated by a mirror bundle. */
+/** The node designated by a mirror bundle. */
 export interface AdoptResult {
   locationId: string;
   nodeId: string;
@@ -19,19 +19,17 @@ export interface VenueRequest {
   taxId: string;
   legalName: string;
   taxpayerDomicile?: string | null;
-  location: {
-    name: string;
-    fiscalTerritory: string;
-    invoiceLocales: string[];
-    operationDescription: string;
-    addressLine1: string;
-    addressLine2: string | null;
-    postalCode: string;
-    city: string;
-    province: string;
-    timeZone: string;
-    dayCutover: string; // "HH:MM" or "HH:MM:SS"
-  };
+  name: string;
+  fiscalTerritory: string;
+  invoiceLocales: string[];
+  operationDescription: string;
+  addressLine1: string;
+  addressLine2: string | null;
+  postalCode: string;
+  city: string;
+  province: string;
+  timeZone: string;
+  dayCutover: string; // "HH:MM" or "HH:MM:SS"
   seriesCode: string;
   fullSeriesCode?: string;
   rectificativeSeriesCode: string;
@@ -45,10 +43,24 @@ export interface VenueRequest {
     firstNames?: string | null;
     lastNames?: string | null;
     /** The person's own UI language. Null or absent leaves them on the venue default. Not
-     * `location.invoiceLocales`. */
+     * `invoiceLocales`. */
     locale?: string | null;
   };
 }
+
+export const VENUE_FIELDS = [
+  "name",
+  "fiscalTerritory",
+  "invoiceLocales",
+  "operationDescription",
+  "addressLine1",
+  "addressLine2",
+  "postalCode",
+  "city",
+  "province",
+  "timeZone",
+  "dayCutover",
+] as const satisfies readonly (keyof VenueRequest)[];
 
 export type VenueAction =
   | {
@@ -71,7 +83,7 @@ export type VenueAction =
       email: string;
     }
   | {
-      kind: "create-location";
+      kind: "create-venue";
       name: string;
       fiscalTerritory: string;
       invoiceLocales: string[];
@@ -121,8 +133,8 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   // alone: a tax id's inner content is not ours to alter.
   const country = request.country.trim().toUpperCase();
   const taxId = request.taxId.trim().toUpperCase();
-  const locales = request.location.invoiceLocales;
-  const dayCutover = normalizeDayCutover(request.location.dayCutover);
+  const locales = request.invoiceLocales;
+  const dayCutover = normalizeDayCutover(request.dayCutover);
   if (locales.length < 1 || locales.length > 2) {
     throw new AppError("provisioning.invalid_locales", { count: locales.length });
   }
@@ -138,18 +150,18 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
   if (repeated !== undefined) {
     throw new AppError("provisioning.duplicate_series_code", repeated);
   }
-  const fiscal = resolveFiscalModules(request.location.fiscalTerritory); // throws for unimplemented
+  const fiscal = resolveFiscalModules(request.fiscalTerritory); // throws for unimplemented
   // The territory must belong to the tenant's country: applyVenue writes tax_id into
   // `registro_sif.nif` (a Spanish-NIF field), so `country=PT` + `ES-common` would file under a
   // non-NIF identity, a mis-filing that a hash-chained record cannot take back. Checked after
   // resolveFiscalModules so an unimplemented territory fails first with the more specific code.
-  if (!request.location.fiscalTerritory.toUpperCase().startsWith(`${country}-`)) {
+  if (!request.fiscalTerritory.toUpperCase().startsWith(`${country}-`)) {
     throw new AppError("provisioning.territory_country_mismatch", {
       country,
-      fiscalTerritory: request.location.fiscalTerritory,
+      fiscalTerritory: request.fiscalTerritory,
     });
   }
-  const timeZone = requireCountryTimeZone(country, request.location.timeZone);
+  const timeZone = requireCountryTimeZone(country, request.timeZone);
   // `persons.locale` only refuses an empty string, so a code the apps have no catalogue for would
   // be stored. `setPersonLocale` refuses one too.
   const adminLocale =
@@ -157,7 +169,7 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
 
   const { staffLanguage } = resolveInstalledStarterLanguages({
     country,
-    area: request.location.province,
+    area: request.province,
     receiptLocale: locales[0],
   });
 
@@ -189,23 +201,23 @@ export function planVenue(request: VenueRequest, modules: readonly WaitronModule
       })),
     },
     {
-      kind: "create-location",
-      name: request.location.name,
-      fiscalTerritory: request.location.fiscalTerritory,
+      kind: "create-venue",
+      name: request.name,
+      fiscalTerritory: request.fiscalTerritory,
       invoiceLocales: locales,
-      operationDescription: request.location.operationDescription,
-      addressLine1: request.location.addressLine1,
-      addressLine2: request.location.addressLine2,
-      postalCode: request.location.postalCode,
-      city: request.location.city,
-      province: request.location.province,
+      operationDescription: request.operationDescription,
+      addressLine1: request.addressLine1,
+      addressLine2: request.addressLine2,
+      postalCode: request.postalCode,
+      city: request.city,
+      province: request.province,
       timeZone,
       dayCutover,
       stationName: starterName(STARTER_STATION_NAMES, DEFAULT_STATION_NAME, staffLanguage),
     },
     {
       kind: "create-node",
-      name: request.location.name,
+      name: request.name,
       filingModule: fiscal.filing,
       taxModule: fiscal.tax,
     },
@@ -236,8 +248,8 @@ export function describeVenueAction(action: VenueAction): string {
     }
     case "seed-device-profiles":
       return `seed device profiles ${action.profiles.map((p) => p.name).join(", ")}`;
-    case "create-location":
-      return `create location ${action.name} in ${action.fiscalTerritory} (${action.invoiceLocales.join(", ")})`;
+    case "create-venue":
+      return `create venue ${action.name} in ${action.fiscalTerritory} (${action.invoiceLocales.join(", ")})`;
     case "create-node":
       return `create node ${action.name} filing=${action.filingModule} tax=${action.taxModule}`;
     case "create-series":

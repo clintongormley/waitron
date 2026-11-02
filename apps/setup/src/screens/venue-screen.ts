@@ -100,7 +100,7 @@ const SEARCH_FILLS: Readonly<Partial<Record<TextField, AddressSearch>>> = {
 };
 
 interface VenueForm {
-  demoLocationNameSource: "automatic" | "custom";
+  demoVenueNameSource: "automatic" | "custom";
   values: Record<TextField, string>;
   invoiceLocales: string[];
   invoiceLocalesFollowAreaDefault: boolean;
@@ -144,7 +144,7 @@ type HintedField =
   | "addressLine2"
   | "postalCode"
   | "city";
-/** Demo starts the location name filled in, so there it takes a "?" rather than its hint. */
+/** Demo starts the venue name filled in, so there it takes a "?" rather than its hint. */
 type HelpedField = Exclude<TextField, HintedField> | "name";
 
 /** A short explanation shown in the empty field. */
@@ -322,7 +322,7 @@ export class SetupVenueScreen extends LitElement {
   // `refusal` is kept whole, not copied: its `message` is translated on each read.
   @state() private serverInvalid?: { readonly key: TextField; readonly refusal: ServerField };
 
-  #demoLocationNameSource: "automatic" | "custom" = "automatic";
+  #demoVenueNameSource: "automatic" | "custom" = "automatic";
   #seeded = false;
   #invoiceLocalesFollowAreaDefault = true;
   #errors = new Map<FieldKey, string>();
@@ -342,7 +342,7 @@ export class SetupVenueScreen extends LitElement {
 
   #current(): VenueForm {
     return {
-      demoLocationNameSource: this.#demoLocationNameSource,
+      demoVenueNameSource: this.#demoVenueNameSource,
       values: this.values,
       invoiceLocales: this.invoiceLocales,
       invoiceLocalesFollowAreaDefault: this.#invoiceLocalesFollowAreaDefault,
@@ -355,15 +355,15 @@ export class SetupVenueScreen extends LitElement {
 
   #comparable(
     form: VenueForm,
-  ): Record<TextField | "invoiceLocales" | "demoLocationNameSource", string | null> {
+  ): Record<TextField | "invoiceLocales" | "demoVenueNameSource", string | null> {
     const pack = getVenueSetupCountryPack(form.values.country);
     const area = pack && findAdministrativeArea(pack, form.values.province);
     const tax = pack?.taxIdentifier?.validate(form.values.taxId);
     const postal = pack?.postalCode?.validate(form.values.postalCode);
     const rules = pack && receiptLanguageRules(pack, area?.code);
-    const values: Record<TextField | "invoiceLocales" | "demoLocationNameSource", string | null> = {
+    const values: Record<TextField | "invoiceLocales" | "demoVenueNameSource", string | null> = {
       ...form.values,
-      demoLocationNameSource: this.#demo ? form.demoLocationNameSource : null,
+      demoVenueNameSource: this.#demo ? form.demoVenueNameSource : null,
       operationDescription: "",
       taxId: tax?.valid ? tax.normalized : form.values.taxId,
       postalCode: postal?.valid ? postal.normalized : form.values.postalCode,
@@ -389,11 +389,11 @@ export class SetupVenueScreen extends LitElement {
         const left = this.#comparable(a);
         const right = this.#comparable(b);
         return (
-          Object.keys(left) as (TextField | "invoiceLocales" | "demoLocationNameSource")[]
+          Object.keys(left) as (TextField | "invoiceLocales" | "demoVenueNameSource")[]
         ).every((key) => left[key] === right[key]);
       },
       restore: (form) => {
-        this.#demoLocationNameSource = form.demoLocationNameSource;
+        this.#demoVenueNameSource = form.demoVenueNameSource;
         this.values = form.values;
         this.invoiceLocales = form.invoiceLocales;
         this.#invoiceLocalesFollowAreaDefault = form.invoiceLocalesFollowAreaDefault;
@@ -443,38 +443,37 @@ export class SetupVenueScreen extends LitElement {
 
   #seedFromDraft(): void {
     const venue = this.draft.venue ?? {};
-    const loc = venue.location ?? {};
     this.values = {
       country: venue.country ?? this.values.country,
       taxId: venue.taxId ?? this.values.taxId,
       legalName: venue.legalName ?? this.values.legalName,
       taxpayerDomicile: venue.taxpayerDomicile ?? this.values.taxpayerDomicile,
-      name: loc.name ?? this.values.name,
-      operationDescription: loc.operationDescription ?? this.values.operationDescription,
-      addressLine1: loc.addressLine1 ?? this.values.addressLine1,
-      addressLine2: loc.addressLine2 ?? this.values.addressLine2,
-      postalCode: loc.postalCode ?? this.values.postalCode,
-      city: loc.city ?? this.values.city,
-      province: loc.province ?? this.values.province,
-      dayCutover: loc.dayCutover ?? this.values.dayCutover,
+      name: venue.name ?? this.values.name,
+      operationDescription: venue.operationDescription ?? this.values.operationDescription,
+      addressLine1: venue.addressLine1 ?? this.values.addressLine1,
+      addressLine2: venue.addressLine2 ?? this.values.addressLine2,
+      postalCode: venue.postalCode ?? this.values.postalCode,
+      city: venue.city ?? this.values.city,
+      province: venue.province ?? this.values.province,
+      dayCutover: venue.dayCutover ?? this.values.dayCutover,
       seriesCode: venue.seriesCode ?? this.values.seriesCode,
       fullSeriesCode: venue.fullSeriesCode ?? this.values.fullSeriesCode,
       rectificativeSeriesCode: venue.rectificativeSeriesCode ?? this.values.rectificativeSeriesCode,
     };
-    this.#demoLocationNameSource =
-      this.draft.demoLocationNameSource ?? (this.values.name === "" ? "automatic" : "custom");
+    this.#demoVenueNameSource =
+      this.draft.demoVenueNameSource ?? (this.values.name === "" ? "automatic" : "custom");
     const pack = this.#pack();
     const area = this.#area(pack);
     const defaults = defaultInvoiceLocales(pack, area);
-    this.invoiceLocales = loc.invoiceLocales ?? (defaults.length > 0 ? defaults : ["es-ES"]);
-    if (loc.invoiceLocales !== undefined) {
+    this.invoiceLocales = venue.invoiceLocales ?? (defaults.length > 0 ? defaults : ["es-ES"]);
+    if (venue.invoiceLocales !== undefined) {
       this.#invoiceLocalesFollowAreaDefault =
-        pack !== undefined && JSON.stringify(loc.invoiceLocales) === JSON.stringify(defaults);
+        pack !== undefined && JSON.stringify(venue.invoiceLocales) === JSON.stringify(defaults);
     }
   }
 
   #followDemoName(pack: CountryPack | undefined, area: AdministrativeArea | undefined): void {
-    if (!this.#demo || this.#demoLocationNameSource !== "automatic" || pack === undefined) return;
+    if (!this.#demo || this.#demoVenueNameSource !== "automatic" || pack === undefined) return;
     const identity = resolveCountryDemoIdentity(pack, area?.code);
     if (identity !== undefined) this.values = { ...this.values, name: identity.locationName };
   }
@@ -485,7 +484,7 @@ export class SetupVenueScreen extends LitElement {
     if (this.serverInvalid?.key === key) this.serverInvalid = undefined;
     const value = event.detail.value;
     this.#cancelAddressSearch(SEARCH_FILLS[key]);
-    if (key === "name") this.#demoLocationNameSource = "custom";
+    if (key === "name") this.#demoVenueNameSource = "custom";
     if (key === "postalCode") {
       const pack = this.#pack();
       const validation = pack?.postalCode?.validate(value);
@@ -724,25 +723,23 @@ export class SetupVenueScreen extends LitElement {
       postalValidation?.valid === true ? postalValidation.normalized : this.values.postalCode;
     const addressLine2 = this.values.addressLine2.trim() === "" ? null : this.values.addressLine2;
     const patch: DeepPartial<ProvisionBody> = {
-      ...(this.#demo ? { demoLocationNameSource: this.#demoLocationNameSource } : {}),
+      ...(this.#demo ? { demoVenueNameSource: this.#demoVenueNameSource } : {}),
       venue: {
         country: selectedPack.countryCode,
         taxId: normalizedTaxId,
         legalName: this.values.legalName,
         taxpayerDomicile: this.#demo ? null : this.values.taxpayerDomicile,
-        location: {
-          name: this.values.name,
-          fiscalTerritory: selectedJurisdiction.id,
-          invoiceLocales: this.#receiptLanguages(this.#receiptRules(pack, area)),
-          operationDescription: this.values.operationDescription,
-          addressLine1: this.values.addressLine1,
-          addressLine2,
-          postalCode: normalizedPostalCode,
-          city: this.values.city,
-          province: area?.name ?? this.values.province,
-          timeZone: area?.timeZone ?? selectedPack.defaultTimeZone,
-          dayCutover: this.values.dayCutover,
-        },
+        name: this.values.name,
+        fiscalTerritory: selectedJurisdiction.id,
+        invoiceLocales: this.#receiptLanguages(this.#receiptRules(pack, area)),
+        operationDescription: this.values.operationDescription,
+        addressLine1: this.values.addressLine1,
+        addressLine2,
+        postalCode: normalizedPostalCode,
+        city: this.values.city,
+        province: area?.name ?? this.values.province,
+        timeZone: area?.timeZone ?? selectedPack.defaultTimeZone,
+        dayCutover: this.values.dayCutover,
         seriesCode: this.values.seriesCode,
         fullSeriesCode: this.values.fullSeriesCode,
         rectificativeSeriesCode: this.values.rectificativeSeriesCode,
@@ -890,8 +887,8 @@ export class SetupVenueScreen extends LitElement {
         >${this.#help("country")}</wt-combobox
       >
       ${this.#demo ? nothing : html`${this.#field(pack?.taxIdentifier?.label ?? t("venue.label.tax_id"), "taxId")}${this.#field(t("venue.label.legal_name"), "legalName")}${this.#addressSearch("domicile", pack)}${this.#field(t("venue.label.taxpayer_domicile"), "taxpayerDomicile")}`}
-      ${this.#demo ? nothing : html`<h2>${t("venue.section.location")}</h2>`}
-      ${this.#field(t("venue.label.location_name"), "name")}
+      ${this.#demo ? nothing : html`<h2>${t("venue.section.venue")}</h2>`}
+      ${this.#field(t("venue.label.venue_name"), "name")}
       ${
         this.#demo
           ? nothing

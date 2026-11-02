@@ -11,7 +11,7 @@ const venue = {
   taxId: "B12345674",
   legalName: "Olivo",
   taxpayerDomicile: "Madrid",
-  location: { fiscalTerritory: "ES-common" },
+  fiscalTerritory: "ES-common",
   admin: {
     displayName: "Elena",
     email: "elena@example.test",

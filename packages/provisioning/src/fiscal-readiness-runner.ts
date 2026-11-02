@@ -116,14 +116,14 @@ export async function submitFiscalReadiness(args: {
             origin: jobOrigin("readiness_test"),
             nodeId: nodeId(venue.nodeId),
             seriesId: seriesId(venue.seriesIds[0]!),
-            locale: request.location.invoiceLocales[0]!,
-            invoiceLocales: request.location.invoiceLocales,
+            locale: request.invoiceLocales[0]!,
+            invoiceLocales: request.invoiceLocales,
             total: "1.00",
             lines: [
               {
                 lineNo: 1,
                 name: "Fiscal readiness test",
-                descriptions: { [request.location.invoiceLocales[0]!]: "Fiscal readiness test" },
+                descriptions: { [request.invoiceLocales[0]!]: "Fiscal readiness test" },
                 quantity: "1",
                 unitPrice: "1.00",
                 vatRate: "0.00",

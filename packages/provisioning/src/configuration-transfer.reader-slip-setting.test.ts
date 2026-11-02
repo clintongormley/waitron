@@ -22,7 +22,9 @@ it("keeps hardware readers and their slip settings outside configuration bundles
         ...request,
         country: "GB",
         taxId: "123456789",
-        location: { ...request.location, fiscalTerritory: "GB-vat", timeZone: "Europe/London" },
+
+        fiscalTerritory: "GB-vat",
+        timeZone: "Europe/London",
         admin: {
           displayName: "Owner",
           email: "owner@example.test",

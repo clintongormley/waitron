@@ -244,13 +244,15 @@ it.each([
       };
       if (claimFrom === "preview") {
         // The whole preview venue, as the setup app sends it; the location is cut to the request's keys.
-        const preview = stagedBody.venue;
-        expect(preview.location).toHaveProperty("fireControl");
+        const { location: previewLocation, ...preview } = stagedBody.venue;
+        expect(previewLocation).toHaveProperty("fireControl");
         expect(Object.keys(request)).toEqual(expect.arrayContaining(Object.keys(preview)));
         venue = {
           ...preview,
-          location: Object.fromEntries(
-            Object.keys(request.location).map((key) => [key, preview.location[key]]),
+          ...Object.fromEntries(
+            Object.keys(request)
+              .filter((key) => Object.hasOwn(previewLocation, key))
+              .map((key) => [key, previewLocation[key]]),
           ),
           admin: request.admin,
         };
@@ -365,7 +367,7 @@ it.each([
         version: 1,
         scope: { taxpayerNif: venue.taxId, softwareId: "W1", environment: "production" },
         taxpayerName: venue.legalName,
-        venueName: venue.location.name,
+        venueName: venue.name,
         createdAt: new Date().toISOString(),
         nodeKey: { nodeId: keyStage.body.stage.nodeId, name: keyStage.body.stage.name },
       };

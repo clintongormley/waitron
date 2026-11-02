@@ -159,7 +159,7 @@ function readManifest(
         stage: { nodeId: manifest.stage.nodeId, name: manifest.stage.name },
         identity: {
           taxpayerName: state.frozen.request.legalName,
-          venueName: state.frozen.request.location.name,
+          venueName: state.frozen.request.name,
         },
       }),
       manifest.statement,
@@ -257,7 +257,7 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
             stage: { nodeId: stage.nodeId, name: stage.name },
             identity: {
               taxpayerName: state.frozen.request.legalName,
-              venueName: state.frozen.request.location.name,
+              venueName: state.frozen.request.name,
             },
           },
         );

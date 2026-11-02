@@ -45,12 +45,10 @@ for (const theme of ["light", "dark"] as const)
                 seriesCode: "A",
                 fullSeriesCode: "FF",
                 rectificativeSeriesCode: "R",
-                location: {
-                  name: "Olivo Centro",
-                  city: "Las Palmas",
-                  fiscalTerritory: "ES-canary",
-                  timeZone: "Atlantic/Canary",
-                },
+                name: "Olivo Centro",
+                city: "Las Palmas",
+                fiscalTerritory: "ES-canary",
+                timeZone: "Atlantic/Canary",
               },
             },
             api: {

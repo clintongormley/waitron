@@ -108,8 +108,8 @@ export function createFirstSetupCommandDelivery(options: {
             key: staged.key,
             identity: {
               taxpayerName: state.frozen.request.legalName,
-              venueName: state.frozen.request.location.name,
-              timeZone: state.frozen.request.location.timeZone,
+              venueName: state.frozen.request.name,
+              timeZone: state.frozen.request.timeZone,
             },
             locale,
           },

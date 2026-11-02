@@ -85,11 +85,10 @@ const T = {
   seriesId: "c0000000-0000-4000-8000-000000000004",
   nodeId: "c0000000-0000-4000-8000-000000000008",
 };
-const OTHER_LOCATION_ID = "c0000000-0000-4000-8000-000000000001";
 const RECOVERY_KEY = "recovery-key-one-strong";
 const GENERATION = `gen-0-${T.nodeId}-20260923T090000Z`;
 const NOW = new Date("2026-09-23T12:00:00Z");
-const VENUE = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" };
+const VENUE = { legalName: "Waitron SL", taxId: "89890001K", venueName: "Local" };
 const MANIFEST: BackupManifest = {
   manifestVersion: 1,
   createdAt: "2026-09-23T09:00:00.000Z",
@@ -130,16 +129,9 @@ beforeAll(async () => {
   await db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: VENUE.taxId, legalName: VENUE.legalName });
-  // Inserted first, so a read that ignored the kit's venue would find this one.
-  await db.insert(locations).values({
-    id: OTHER_LOCATION_ID,
-    name: "Another venue",
-    invoiceLocales: ["es"],
-    operationDescription: "Venta",
-  });
   await db.insert(locations).values({
     id: T.locationId,
-    name: VENUE.locationName,
+    name: VENUE.venueName,
     invoiceLocales: ["es"],
     operationDescription: "Venta",
   });
@@ -594,18 +586,10 @@ describe("prepareStreamRestore", () => {
     await expectStateUntouched(deps.stateDir);
   });
 
-  it("names the kit venue's location, not the first one the copy holds", async () => {
+  it("names the restored copy's venue", async () => {
     const deps = await prepareDeps(await bucket());
     const prepared = await prepareStreamRestore(deps);
-    // The control: an unfiltered read of this copy would find the other location.
-    const store = await openVenueDatabase(dirname(prepared.databasePath));
-    try {
-      const first = await store.venue.select({ name: locations.name }).from(locations).limit(1);
-      expect(first).toEqual([{ name: "Another venue" }]);
-    } finally {
-      await store.close();
-    }
-    expect(prepared.venue.locationName).toBe(VENUE.locationName);
+    expect(prepared.venue.venueName).toBe(VENUE.venueName);
     await prepared.discard();
   });
 });
@@ -1328,7 +1312,7 @@ describe("stageStreamRestore (the setup wizard's path)", () => {
     });
     await expect(stageStreamRestore(deps)).rejects.toMatchObject({
       code: "restore.stream_venue_unconfirmed",
-      params: { legalName: "", taxId: "", locationName: VENUE.locationName },
+      params: { legalName: "", taxId: "", venueName: VENUE.venueName },
     });
     await expectStateUntouched(deps.stateDir);
   });

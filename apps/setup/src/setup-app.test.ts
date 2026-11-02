@@ -642,9 +642,9 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-configuration-preview]")).not.toBeNull();
     expect(readDraft(el)).toMatchObject({
       configurationImport: true,
-      venue: { taxId: "B12345678", location: { name: "Prepared" } },
+      venue: { taxId: "B12345678", name: "Prepared" },
     });
-    expect((readDraft(el).venue?.location as Record<string, unknown>).id).toBeUndefined();
+    expect((readDraft(el).venue as Record<string, unknown>).id).toBeUndefined();
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=screen-configuration-preview]")!
       .shadowRoot!.querySelector<HTMLElement>("wt-choice-row[data-test=same-tax-id]")!
       .click();
@@ -753,7 +753,7 @@ describe("setup-app", () => {
       expect(body.newTaxpayer).toBe(true);
       expect(body.configurationImport).toBe(true);
       expect(body.venue).toMatchObject({ ...typed, country: "ES" });
-      expect(body.venue.location).toMatchObject({ name: "Prepared", city: "Madrid" });
+      expect(body.venue).toMatchObject({ name: "Prepared", city: "Madrid" });
     });
 
     it("keeps the exported taxpayer for the same tax ID, without newTaxpayer", async () => {
@@ -1082,7 +1082,6 @@ describe("setup-app", () => {
 
   it("routes a live ES-common draft to cert on setup-advance from venue", async () => {
     const el = await mountSetupApp();
-    // The seeded draft already carries `venue.location.fiscalTerritory = "ES-common"`.
     goto(el, "venue");
     patch(el, { mode: "live" });
     advance(el);
@@ -1136,7 +1135,7 @@ describe("setup-app", () => {
     goto(el, "venue");
     patch(el, {
       mode: "live",
-      venue: { location: { fiscalTerritory: "ES-other" } },
+      venue: { fiscalTerritory: "ES-other" },
     } as unknown as DeepPartial<ProvisionBody>);
     advance(el);
     await flush(el);
@@ -1176,16 +1175,16 @@ describe("setup-app", () => {
   it("#onPatch deep-merges a screen's slice into the draft, preserving seeded siblings", async () => {
     const el = await mountSetupApp();
     expect(readDraft(el).venue?.country).toBe("ES");
-    expect(readDraft(el).venue?.location?.timeZone).toBe("Europe/Madrid");
+    expect(readDraft(el).venue?.timeZone).toBe("Europe/Madrid");
 
-    patch(el, { mode: "live", venue: { taxId: "B12345678", location: { city: "Madrid" } } });
+    patch(el, { mode: "live", venue: { taxId: "B12345678", city: "Madrid" } });
 
     const draft = readDraft(el);
     expect(draft.mode).toBe("live");
     expect(draft.venue?.taxId).toBe("B12345678");
-    expect(draft.venue?.location?.city).toBe("Madrid");
-    expect(draft.venue?.location?.timeZone).toBe("Europe/Madrid");
-    expect(draft.venue?.location?.fiscalTerritory).toBe("ES-common");
+    expect(draft.venue?.city).toBe("Madrid");
+    expect(draft.venue?.timeZone).toBe("Europe/Madrid");
+    expect(draft.venue?.fiscalTerritory).toBe("ES-common");
     expect(draft.venue?.country).toBe("ES");
   });
 
@@ -1201,8 +1200,8 @@ describe("setup-app", () => {
 
   it("#onPatch replaces an array wholesale rather than element-merging it", async () => {
     const el = await mountSetupApp();
-    patch(el, { venue: { location: { invoiceLocales: ["es-ES", "en-GB"] } } });
-    expect(readDraft(el).venue?.location?.invoiceLocales).toEqual(["es-ES", "en-GB"]);
+    patch(el, { venue: { invoiceLocales: ["es-ES", "en-GB"] } });
+    expect(readDraft(el).venue?.invoiceLocales).toEqual(["es-ES", "en-GB"]);
   });
 
   it("shows the saved first opening hours returned by provisioning", async () => {
@@ -2876,22 +2875,20 @@ describe("A2 mode boundaries", () => {
           seriesCode: "FS",
           rectificativeSeriesCode: "FR",
           admin: { displayName: "Ada" },
-          location: {
-            name: "Calle Mayor",
-            addressLine1: "Calle Mayor 1",
-            operationDescription: "Demo description",
-            invoiceLocales: ["es-ES"],
-            dayCutover: "04:00",
-          },
+          name: "Calle Mayor",
+          addressLine1: "Calle Mayor 1",
+          operationDescription: "Demo description",
+          invoiceLocales: ["es-ES"],
+          dayCutover: "04:00",
         },
       });
       patch(el, { mode });
       const draft = readDraft(el);
       expect(draft.venue?.taxId).toBeUndefined();
       expect(draft.venue?.legalName).toBeUndefined();
-      expect(draft.venue?.location?.operationDescription).toBeUndefined();
+      expect(draft.venue?.operationDescription).toBeUndefined();
       expect(draft.venue?.admin?.displayName).toBe("Ada");
-      expect(draft.venue?.location?.addressLine1).toBe("Calle Mayor 1");
+      expect(draft.venue?.addressLine1).toBe("Calle Mayor 1");
     },
   );
   it("passes fiscal defaults from the server to the shop form", async () => {
@@ -3508,7 +3505,7 @@ describe("restore, configuration and fiscal-test outcomes", () => {
 });
 
 describe("restore from my bucket", () => {
-  const VENUE = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" };
+  const VENUE = { legalName: "Waitron SL", taxId: "89890001K", venueName: "Local" };
 
   async function refusedWith(error: unknown): Promise<SetupRestoreBucketScreen> {
     const el = await mountSetupApp(
@@ -5166,15 +5163,13 @@ it.each([
 it("routes an internal description refusal to the venue action message", async () => {
   const provision = vi.fn().mockRejectedValue({
     code: "setup.request_invalid",
-    params: { field: "location.operationDescription" },
+    params: { field: "operationDescription" },
   });
   const el = await mountSetupApp(stubApi({ provision }));
   provisionRequest(el);
   await flush(el);
   const venue = await screenHost(el, "venue");
-  expect((venue as unknown as { invalidField?: string }).invalidField).toBe(
-    "location.operationDescription",
-  );
+  expect((venue as unknown as { invalidField?: string }).invalidField).toBe("operationDescription");
   expect(venue.shadowRoot!.querySelector("[data-test=operationDescription]")).toBeNull();
   const actions = venue.shadowRoot!.querySelector<
     HTMLElement & { updateComplete: Promise<unknown> }
@@ -5201,7 +5196,7 @@ describe("live email setup journey", () => {
   it("collects email after venue details outside the certificate territory", async () => {
     const el = await mountSetupApp();
     goto(el, "venue");
-    patch(el, { mode: "live", venue: { location: { fiscalTerritory: "ES-other" } } });
+    patch(el, { mode: "live", venue: { fiscalTerritory: "ES-other" } });
     advance(el);
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=screen-email]")).not.toBeNull();

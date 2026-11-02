@@ -13,9 +13,7 @@ it("tells the operator about a refused field in the wizard's language, read when
     "Usa solo letras, números y los caracteres / _ . y - (hasta 21 caracteres).",
   );
   expect(SERVER_FIELDS.legalName?.message).toMatch(/^Usa 120 caracteres como máximo/);
-  expect(SERVER_FIELDS["location.operationDescription"]?.message).toMatch(
-    /^Usa 500 caracteres como máximo/,
-  );
+  expect(SERVER_FIELDS["operationDescription"]?.message).toMatch(/^Usa 500 caracteres como máximo/);
 });
 
 it("explains a setup-only domicile refusal without changing the fiscal field map", async () => {

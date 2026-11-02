@@ -35,7 +35,7 @@ import { DEMO_DATA_SETS } from "../scripts/demo-seed/data-set.js";
 function venueWithLocales(invoiceLocales: string[], country = "ES"): VenueRequest {
   return {
     country,
-    location: { invoiceLocales },
+    invoiceLocales,
     admin: { locale: invoiceLocales[0] },
   } as unknown as VenueRequest;
 }
@@ -81,7 +81,7 @@ describe("demoSeedLocale", () => {
     (invoiceLocales, adminLocale, expected) => {
       const venue = {
         country: "ES",
-        location: { invoiceLocales },
+        invoiceLocales,
         admin: { locale: adminLocale },
       } as unknown as VenueRequest;
       expect(demoSeedLocale(venue)).toBe(expected);

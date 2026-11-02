@@ -51,19 +51,17 @@ function request(taxId = "B12345674", adminEmail = "owner@example.test"): VenueR
     country: "ES",
     taxId,
     legalName: "Deli SL",
-    location: {
-      name: "Mostrador",
-      fiscalTerritory: "ES-common",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "venta en establecimiento",
-      addressLine1: "Calle Mayor 1",
-      addressLine2: null,
-      postalCode: "28013",
-      city: "Madrid",
-      province: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00:00",
-    },
+    name: "Mostrador",
+    fiscalTerritory: "ES-common",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "venta en establecimiento",
+    addressLine1: "Calle Mayor 1",
+    addressLine2: null,
+    postalCode: "28013",
+    city: "Madrid",
+    province: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00:00",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {
@@ -267,7 +265,7 @@ describe("direct action country zone preflight", () => {
     });
     const actions = planVenue(request(), [module]);
     for (const action of actions)
-      if (action.kind === "create-location") action.timeZone = timeZone as string;
+      if (action.kind === "create-venue") action.timeZone = timeZone as string;
     const refusal = await applyDirectVenue(actions, {
       db: suite.db,
       modules: [module],
@@ -282,7 +280,7 @@ describe("direct action country zone preflight", () => {
     expect(refusal).toMatchObject({ code: "venue.time_zone_invalid", params: { reason } });
   });
 
-  it("checks every create-location action before the first seed", async () => {
+  it("checks every create-venue action before the first seed", async () => {
     let seeds = 0;
     const module = fakeModule("zone-probe", {
       provisioning: {
@@ -296,7 +294,7 @@ describe("direct action country zone preflight", () => {
       },
     });
     const actions = planVenue(request(), [module]);
-    const location = actions.find((action) => action.kind === "create-location")!;
+    const location = actions.find((action) => action.kind === "create-venue")!;
     actions.push({ ...location, timeZone: "Europe/London" });
     const refusal = await applyDirectVenue(actions, { db: suite.db, modules: [module] }).catch(
       (error: unknown) => error,
@@ -333,7 +331,7 @@ describe("direct action country zone preflight", () => {
 
   it("normalizes a direct action without mutating its caller", async () => {
     const actions = planVenue(request(), []);
-    const action = actions.find((action) => action.kind === "create-location")!;
+    const action = actions.find((action) => action.kind === "create-venue")!;
     action.timeZone = " Europe/Madrid ";
     await applyDirectVenue(actions, { db: suite.db, modules: [] });
     expect(await suite.db.select({ timeZone: locations.timeZone }).from(locations)).toEqual([

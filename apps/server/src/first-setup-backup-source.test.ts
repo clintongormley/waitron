@@ -385,7 +385,7 @@ it("authenticates the selected backup before revealing its private preview, reta
       nodeId: NODE,
       nodeRecoveryKeyName: key.name,
       taxpayer: { legalName: "Selected business", taxId: "89890001K" },
-      locationName: "Selected location",
+      venueName: "Selected location",
     });
     expect(await readFile(selected.copy.databasePath)).toEqual(before);
     expect(await readdir(dirname(selected.copy.databasePath))).toEqual(["node.db", "venue.db"]);

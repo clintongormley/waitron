@@ -37,7 +37,10 @@ interface Context {
     seriesCode: string;
     fullSeriesCode?: string;
     rectificativeSeriesCode: string;
-    location: { name: string; city: string; fiscalTerritory: string; timeZone: string };
+    name: string;
+    city: string;
+    fiscalTerritory: string;
+    timeZone: string;
   };
 }
 interface Selected {
@@ -379,7 +382,7 @@ export class FirstSetupHour extends LitElement {
             softwareId: WAITRON_ID_SISTEMA,
           },
           taxpayerName: context.venue.legalName,
-          venueName: context.venue.location.name,
+          venueName: context.venue.name,
           createdAt: new Date().toISOString(),
           nodeKey: staged.key,
         },
@@ -387,7 +390,7 @@ export class FirstSetupHour extends LitElement {
         async () => {
           await api.confirmRecoveryDocument!(this.#reference!);
         },
-        context.venue.location.timeZone,
+        context.venue.timeZone,
       );
       const binding = await delivery.ready();
       if (!current()) return;
@@ -452,7 +455,7 @@ export class FirstSetupHour extends LitElement {
     const venue = this.context.venue,
       clock = this.comparison?.clock;
     const format = (ms: number) =>
-      dateTimeFormat(en ? "en" : "es", venue.location.timeZone, {
+      dateTimeFormat(en ? "en" : "es", venue.timeZone, {
         dateStyle: "full",
         timeStyle: "long",
       }).format(ms);
@@ -467,11 +470,11 @@ export class FirstSetupHour extends LitElement {
         <dt>${t.country}</dt>
         <dd>${regionName(en ? "en" : "es", venue.country)}</dd>
         <dt>${t.place}</dt>
-        <dd>${venue.location.name} · ${venue.location.city}</dd>
+        <dd>${venue.name} · ${venue.city}</dd>
         <dt>${t.taxId}</dt>
         <dd>${venue.taxId}</dd>
         <dt>${t.zone}</dt>
-        <dd>${venue.location.timeZone}</dd>
+        <dd>${venue.timeZone}</dd>
         <dt>${t.now}</dt>
         <dd>${box ? format(box.lowerMs) : t.unavailable}</dd>
       </dl>

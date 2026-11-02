@@ -39,19 +39,17 @@ const provisionBody: ProvisionBody = {
     taxId: "B12345678",
     legalName: "Deli SL",
     taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
-    location: {
-      name: "Deli",
-      fiscalTerritory: "ES-common",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurante",
-      addressLine1: "Calle Mayor 1",
-      addressLine2: null,
-      postalCode: "28001",
-      city: "Madrid",
-      province: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "05:00",
-    },
+    name: "Deli",
+    fiscalTerritory: "ES-common",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurante",
+    addressLine1: "Calle Mayor 1",
+    addressLine2: null,
+    postalCode: "28001",
+    city: "Madrid",
+    province: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
     seriesCode: "A",
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "RA",
@@ -379,7 +377,7 @@ describe("SetupApi", () => {
   });
 
   it("rejects a refused bucket restore with the envelope's code, params and status", async () => {
-    const venue = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" };
+    const venue = { legalName: "Waitron SL", taxId: "89890001K", venueName: "Local" };
     const fetchImpl = vi
       .fn()
       .mockResolvedValue(

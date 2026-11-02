@@ -24,19 +24,17 @@ const venue: VenueRequest = {
   country: "GB",
   taxId: "123456789",
   legalName: "Readiness Ltd",
-  location: {
-    name: "Prepared",
-    fiscalTerritory: "GB-vat",
-    invoiceLocales: ["en-GB"],
-    operationDescription: "Restaurant",
-    addressLine1: "1 High Street",
-    addressLine2: null,
-    postalCode: "SW1A 1AA",
-    city: "London",
-    province: "London",
-    timeZone: "Europe/London",
-    dayCutover: "06:00",
-  },
+  name: "Prepared",
+  fiscalTerritory: "GB-vat",
+  invoiceLocales: ["en-GB"],
+  operationDescription: "Restaurant",
+  addressLine1: "1 High Street",
+  addressLine2: null,
+  postalCode: "SW1A 1AA",
+  city: "London",
+  province: "London",
+  timeZone: "Europe/London",
+  dayCutover: "06:00",
   seriesCode: "F",
   rectificativeSeriesCode: "R",
   admin: { displayName: "Admin", email: "admin@example.test", pinHash: "pin", passwordHash: "pw" },
@@ -76,7 +74,7 @@ describe("fiscal readiness submission runner", () => {
   it("records the sample in an isolated retained database before asking the fiscal slot to drain", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-"));
     dirs.push(stateDir);
-    const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+    const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
     const modules = enabledModules(ALL_MODULES, selected.config);
     const drain = vi.fn().mockResolvedValue({ ...emptyDrainResult(), recordsAccepted: 1 });
     const contribution = {
@@ -98,7 +96,7 @@ describe("fiscal readiness submission runner", () => {
           country: venue.country,
           taxId: venue.taxId,
           legalName: venue.legalName,
-          fiscalTerritory: venue.location.fiscalTerritory,
+          fiscalTerritory: venue.fiscalTerritory,
           submissionTarget: contribution.activationReadinessTarget?.(undefined) ?? null,
           certificateFingerprint: null,
           certificateKind: null,
@@ -118,7 +116,7 @@ describe("fiscal readiness submission runner", () => {
   it("surfaces a local setup failure instead of reporting an uncertain authority response", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-local-error-"));
     dirs.push(stateDir);
-    const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+    const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
     const modules = enabledModules(ALL_MODULES, selected.config);
     const contribution = {
       ...selected.contribution!,
@@ -142,7 +140,7 @@ describe("fiscal readiness submission runner", () => {
           country: venue.country,
           taxId: venue.taxId,
           legalName: venue.legalName,
-          fiscalTerritory: venue.location.fiscalTerritory,
+          fiscalTerritory: venue.fiscalTerritory,
           submissionTarget: null,
           certificateFingerprint: null,
           certificateKind: null,
@@ -162,7 +160,7 @@ describe("fiscal readiness submission runner", () => {
   it("records the sample sale as the readiness test's, with no device", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-origin-"));
     dirs.push(stateDir);
-    const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+    const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
     const modules = enabledModules(ALL_MODULES, selected.config);
     const contribution = {
       ...selected.contribution!,
@@ -175,7 +173,7 @@ describe("fiscal readiness submission runner", () => {
       country: venue.country,
       taxId: venue.taxId,
       legalName: venue.legalName,
-      fiscalTerritory: venue.location.fiscalTerritory,
+      fiscalTerritory: venue.fiscalTerritory,
       submissionTarget: null,
       certificateFingerprint: null,
       certificateKind: null,
@@ -213,7 +211,7 @@ describe("fiscal readiness submission runner", () => {
   it("leaves the retained sample database refusing to rewrite the sale it recorded", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-append-only-"));
     dirs.push(stateDir);
-    const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+    const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
     const modules = enabledModules(ALL_MODULES, selected.config);
     const contribution = {
       ...selected.contribution!,
@@ -226,7 +224,7 @@ describe("fiscal readiness submission runner", () => {
       country: venue.country,
       taxId: venue.taxId,
       legalName: venue.legalName,
-      fiscalTerritory: venue.location.fiscalTerritory,
+      fiscalTerritory: venue.fiscalTerritory,
       submissionTarget: null,
       certificateFingerprint: null,
       certificateKind: null,
@@ -265,7 +263,7 @@ describe("fiscal readiness submission runner", () => {
   });
 
   describe("with a stubbed drain", () => {
-    const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+    const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
     const modules = enabledModules(ALL_MODULES, selected.config);
     const readinessInput: FiscalReadinessInput = {
       requirement: "accepted-test-submission",
@@ -273,7 +271,7 @@ describe("fiscal readiness submission runner", () => {
       country: venue.country,
       taxId: venue.taxId,
       legalName: venue.legalName,
-      fiscalTerritory: venue.location.fiscalTerritory,
+      fiscalTerritory: venue.fiscalTerritory,
       submissionTarget: null,
       certificateFingerprint: null,
       certificateKind: null,
@@ -377,7 +375,7 @@ describe("fiscal readiness submission runner", () => {
   it("seals the regime's secret into the sample database and drains at the current time by default", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-secret-"));
     dirs.push(stateDir);
-    const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+    const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
     const modules = enabledModules(ALL_MODULES, selected.config);
     const seal = vi.fn().mockResolvedValue(undefined);
     const drain = vi.fn().mockResolvedValue({ ...emptyDrainResult(), recordsAccepted: 1 });
@@ -403,7 +401,7 @@ describe("fiscal readiness submission runner", () => {
           country: venue.country,
           taxId: venue.taxId,
           legalName: venue.legalName,
-          fiscalTerritory: venue.location.fiscalTerritory,
+          fiscalTerritory: venue.fiscalTerritory,
           submissionTarget: null,
           certificateFingerprint: null,
           certificateKind: null,
@@ -424,7 +422,7 @@ describe("fiscal readiness submission runner", () => {
   it("accepts a regime that files nothing without creating a sample database", async () => {
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-readiness-runner-none-"));
     dirs.push(stateDir);
-    const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+    const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
     const drain = vi.fn();
     await expect(
       submitFiscalReadiness({
@@ -446,7 +444,7 @@ describe("fiscal readiness submission runner", () => {
   });
 
   describe("fiscalReadinessInput", () => {
-    const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+    const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
     const base = {
       venue,
       moduleVersions: { core: 1 },

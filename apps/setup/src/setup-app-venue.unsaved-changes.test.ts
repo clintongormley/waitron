@@ -22,19 +22,17 @@ const initialVenue = {
   seriesCode: "FA",
   fullSeriesCode: "FF",
   rectificativeSeriesCode: "RF",
-  location: {
-    name: "Calle Mayor",
-    fiscalTerritory: "ES-common",
-    invoiceLocales: ["es-ES"],
-    operationDescription: "Delicatessen",
-    addressLine1: "Calle Mayor 1",
-    addressLine2: null,
-    postalCode: "28013",
-    city: "Madrid",
-    province: "Madrid",
-    timeZone: "Europe/Madrid",
-    dayCutover: "06:00",
-  },
+  name: "Calle Mayor",
+  fiscalTerritory: "ES-common",
+  invoiceLocales: ["es-ES"],
+  operationDescription: "Delicatessen",
+  addressLine1: "Calle Mayor 1",
+  addressLine2: null,
+  postalCode: "28013",
+  city: "Madrid",
+  province: "Madrid",
+  timeZone: "Europe/Madrid",
+  dayCutover: "06:00",
 };
 type State = { screen: Screen; draft: DeepPartial<ProvisionBody> };
 const warning = (el: SetupApp) =>
@@ -103,7 +101,7 @@ describe("setup venue unsaved changes", () => {
     await expect.poll(() => warning(el).open).toBe(true);
     await choose(el, "keep");
     expect(field(venue, "name").value).toBe("Authored demo name");
-    await edit(venue, "name", initialVenue.location.name);
+    await edit(venue, "name", initialVenue.name);
     expect(unload()).toBe(false);
   });
   it.each([
@@ -171,7 +169,7 @@ describe("setup venue unsaved changes", () => {
 
   it("loaded description defaults keep an untouched child clean", async () => {
     const draft = { mode: "prepare" as const, venue: structuredClone(initialVenue) };
-    delete (draft.venue.location as Partial<typeof initialVenue.location>).operationDescription;
+    delete (draft.venue as Partial<typeof initialVenue>).operationDescription;
     const { el, venue } = await mount(draft);
     expect(unload()).toBe(false);
     Object.assign(el, { venueDefaults: { verifactu: { operationDescription: "Loaded default" } } });
@@ -187,7 +185,7 @@ describe("setup venue unsaved changes", () => {
 
   it("loaded defaults leave another authored field protected", async () => {
     const draft = { mode: "prepare" as const, venue: structuredClone(initialVenue) };
-    delete (draft.venue.location as Partial<typeof initialVenue.location>).operationDescription;
+    delete (draft.venue as Partial<typeof initialVenue>).operationDescription;
     const { el, venue } = await mount(draft);
     await edit(venue, "city", "Authored city");
     Object.assign(el, { venueDefaults: { verifactu: { operationDescription: "Loaded default" } } });
@@ -237,7 +235,7 @@ describe("setup venue unsaved changes", () => {
     expect(unload()).toBe(false);
     await edit(venue, "name", "Edited venue");
     expect(unload()).toBe(true);
-    await edit(venue, "name", initialVenue.location.name);
+    await edit(venue, "name", initialVenue.name);
     expect(unload()).toBe(false);
     back(venue);
     await expect.poll(() => (el as unknown as State).screen).toBe("admin");
@@ -285,7 +283,7 @@ describe("setup venue unsaved changes", () => {
     expect(warning(el).open).toBe(false);
     expect((el as unknown as State).draft.venue).toEqual({
       ...initialVenue,
-      location: { ...initialVenue.location, name: "  New venue  " },
+      name: "  New venue  ",
     });
     expect(unload()).toBe(true);
     expect(api.provision).not.toHaveBeenCalled();
@@ -301,7 +299,7 @@ describe("setup venue unsaved changes", () => {
     await expect.poll(() => warning(el).open).toBe(false);
     await choose(el, "discard");
     expect((el as unknown as State).screen).toBe("review");
-    expect((el as unknown as State).draft.venue!.location!.city).toBe("New city");
+    expect((el as unknown as State).draft.venue!.city).toBe("New city");
   });
 
   it("a field change invalidates an unanswered Back", async () => {
@@ -321,7 +319,7 @@ describe("setup venue unsaved changes", () => {
     await edit(venue, "name", "Edited venue");
     (el as unknown as State).draft = {
       mode: "prepare",
-      venue: { ...initialVenue, location: { ...initialVenue.location, name: "Background venue" } },
+      venue: { ...initialVenue, name: "Background venue" },
     };
     await el.updateComplete;
     expect(field(venue, "name").value).toBe("Edited venue");
@@ -396,10 +394,10 @@ describe("setup venue unsaved changes", () => {
 describe("demo name ownership across wizard drafts", () => {
   const demoDraft = (): DeepPartial<ProvisionBody> => ({
     mode: "demo",
-    demoLocationNameSource: "automatic",
+    demoVenueNameSource: "automatic",
     venue: {
       ...structuredClone(initialVenue),
-      location: { ...structuredClone(initialVenue.location), name: "Casa Delgado" },
+      name: "Casa Delgado",
     },
   });
   async function nativeName(venue: SetupVenueScreen) {
@@ -431,7 +429,7 @@ describe("demo name ownership across wizard drafts", () => {
       );
       next(restored);
       await expect.poll(() => (el as unknown as State).screen).toBe("review");
-      expect((el as unknown as State).draft.demoLocationNameSource).toBe(
+      expect((el as unknown as State).draft.demoVenueNameSource).toBe(
         decision === "discard" ? "automatic" : "custom",
       );
       const review = el.shadowRoot!.querySelector("setup-review-screen")!;
@@ -469,7 +467,7 @@ describe("demo name ownership across wizard drafts", () => {
     expect((await nativeName(venue)).value).toBe("Can Delgado");
     next(venue);
     await expect.poll(() => (el as unknown as State).screen).toBe("review");
-    expect((el as unknown as State).draft.demoLocationNameSource).toBe("automatic");
+    expect((el as unknown as State).draft.demoVenueNameSource).toBe("automatic");
   });
   it("retains a same-text custom choice after reconnect", async () => {
     const { el, venue, host } = await mount(demoDraft());
@@ -484,7 +482,7 @@ describe("demo name ownership across wizard drafts", () => {
     expect((await nativeName(venue)).value).toBe("Casa Delgado");
     next(venue);
     await expect.poll(() => (el as unknown as State).screen).toBe("review");
-    expect((el as unknown as State).draft.demoLocationNameSource).toBe("custom");
+    expect((el as unknown as State).draft.demoVenueNameSource).toBe("custom");
   });
   it.each([false, true])(
     "keeps name ownership through Demo/Live/Demo (typed in Live: %s)",
@@ -500,11 +498,11 @@ describe("demo name ownership across wizard drafts", () => {
         );
       patchMode("live");
       await el.updateComplete;
-      expect((el as unknown as State).draft).not.toHaveProperty("demoLocationNameSource");
+      expect((el as unknown as State).draft).not.toHaveProperty("demoVenueNameSource");
       if (typed)
         venue.dispatchEvent(
           new CustomEvent("setup-patch", {
-            detail: { patch: { venue: { location: { name: "My live restaurant" } } } },
+            detail: { patch: { venue: { name: "My live restaurant" } } },
             bubbles: true,
             composed: true,
           }),
@@ -522,14 +520,14 @@ describe("demo name ownership across wizard drafts", () => {
       expect((await nativeName(returned)).value).toBe(typed ? "My live restaurant" : "Can Delgado");
       next(returned);
       await expect.poll(() => (el as unknown as State).screen).toBe("review");
-      expect((el as unknown as State).draft.demoLocationNameSource).toBe(
+      expect((el as unknown as State).draft.demoVenueNameSource).toBe(
         typed ? "custom" : "automatic",
       );
     },
   );
   it("removes the demo-only source from every non-demo wire body", () => {
     for (const mode of ["prepare", "live"] as const)
-      expect(assembleBody({ ...demoDraft(), mode })).not.toHaveProperty("demoLocationNameSource");
-    expect(assembleBody(demoDraft())).toHaveProperty("demoLocationNameSource", "automatic");
+      expect(assembleBody({ ...demoDraft(), mode })).not.toHaveProperty("demoVenueNameSource");
+    expect(assembleBody(demoDraft())).toHaveProperty("demoVenueNameSource", "automatic");
   });
 });

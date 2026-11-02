@@ -31,19 +31,17 @@ it("a readiness fingerprint refusal persists its incident and never drains", asy
     country: "ES",
     taxId: "50000000R",
     legalName: "Readiness Ltd",
-    location: {
-      name: "Main",
-      fiscalTerritory: "ES-common",
-      invoiceLocales: ["en"],
-      operationDescription: "Restaurant",
-      addressLine1: "1 Market Street",
-      addressLine2: null,
-      postalCode: "28013",
-      city: "Madrid",
-      province: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00",
-    },
+    name: "Main",
+    fiscalTerritory: "ES-common",
+    invoiceLocales: ["en"],
+    operationDescription: "Restaurant",
+    addressLine1: "1 Market Street",
+    addressLine2: null,
+    postalCode: "28013",
+    city: "Madrid",
+    province: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00",
     seriesCode: "A",
     rectificativeSeriesCode: "R",
     admin: {
@@ -53,7 +51,7 @@ it("a readiness fingerprint refusal persists its incident and never drains", asy
       passwordHash: "password",
     },
   };
-  const selected = venueFiscalSelection(ALL_MODULES, venue.location.fiscalTerritory);
+  const selected = venueFiscalSelection(ALL_MODULES, venue.fiscalTerritory);
   const modules = enabledModules(ALL_MODULES, selected.config);
   const drain = vi.fn(() => {
     throw new Error("a refused readiness sample must not drain");
@@ -65,7 +63,7 @@ it("a readiness fingerprint refusal persists its incident and never drains", asy
     country: venue.country,
     taxId: venue.taxId,
     legalName: venue.legalName,
-    fiscalTerritory: venue.location.fiscalTerritory,
+    fiscalTerritory: venue.fiscalTerritory,
     submissionTarget: null,
     certificateFingerprint: null,
     certificateKind: null,

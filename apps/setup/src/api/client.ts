@@ -57,7 +57,15 @@ export interface AdminDraft {
   password: string;
 }
 
-export interface LocationDraft {
+export interface VenueDraft {
+  country: string;
+  taxId: string;
+  legalName: string;
+  taxpayerDomicile: string | null;
+  seriesCode: string;
+  fullSeriesCode: string;
+  rectificativeSeriesCode: string;
+  admin: AdminDraft;
   name: string;
   fiscalTerritory: string;
   invoiceLocales: string[];
@@ -90,23 +98,13 @@ export type EmailTestResult =
   { accepted: true } | { accepted: false; code: "email.test_refused" | "email.test_timeout" };
 
 export interface ProvisionBody {
-  demoLocationNameSource?: "automatic" | "custom";
+  demoVenueNameSource?: "automatic" | "custom";
   mode: "demo" | "prepare" | "live";
   firstSetup?: { attemptId: string; revision: number };
   configurationImport?: boolean;
   /** Only with `configurationImport`: the venue takes a different tax ID from the export's. */
   newTaxpayer?: boolean;
-  venue: {
-    country: string;
-    taxId: string;
-    legalName: string;
-    taxpayerDomicile: string | null;
-    location: LocationDraft;
-    seriesCode: string;
-    fullSeriesCode: string;
-    rectificativeSeriesCode: string;
-    admin: AdminDraft;
-  };
+  venue: VenueDraft;
   /** Omitted, not `null`, when no certificate is expected: the server refuses any value it is sent. */
   aeatCert?: AeatCertDraft;
   email?: EmailSettingsDraft;
@@ -230,12 +228,31 @@ export interface RecoveryBackupPreview {
   nodeId: string;
   nodeRecoveryKeyName: string | null;
   taxpayer: { legalName: string; taxId: string };
-  locationName: string;
+  venueName: string;
 }
 
 export interface ConfigurationPreview {
-  venue: Omit<ProvisionBody["venue"], "admin"> & {
-    location: ProvisionBody["venue"]["location"] & { id: string };
+  venue: Pick<
+    VenueDraft,
+    | "country"
+    | "taxId"
+    | "legalName"
+    | "taxpayerDomicile"
+    | "seriesCode"
+    | "fullSeriesCode"
+    | "rectificativeSeriesCode"
+  > & {
+    location: Omit<
+      VenueDraft,
+      | "country"
+      | "taxId"
+      | "legalName"
+      | "taxpayerDomicile"
+      | "seriesCode"
+      | "fullSeriesCode"
+      | "rectificativeSeriesCode"
+      | "admin"
+    > & { id: string };
   };
   counts: Record<string, number>;
   reconnect: string[];
