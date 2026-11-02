@@ -5854,12 +5854,6 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   the rehearsal fails a sound migration. Nothing guards it.
   [Receipt](conventions-data.md#a-drizzle-table-rebuild-is-rehearsed-on-nodesqlite-never-the-sqlite3-cli).
 
-### Full-disk error code classification
-
-- **A full disk is not one error code; code 14 also names a missing folder.**
-  `fullDiskFailure` in `apps/server/src/boot-failure.ts` classifies 13 always, 14/4874/`ENOSPC` only
-  under 16 MiB free. Guard: its test suite, weaker than the rule: stubbed errors, no real `ENOSPC` case.
-
 ### The drawer rule's guard limits
 
 - **Printing never opens the drawer. Cash and hand-keyed card enqueue separate audited `drawer`

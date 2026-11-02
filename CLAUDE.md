@@ -95,7 +95,7 @@ More: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 `shared`, `fiscal`, `db` and `node-db`** (the owner's 90-everywhere decision of 2026-09-19). WHERE it bites
 differs, and neither `fiscal`'s nor `db`'s floor is package-wide. Guard:
 `scripts/mutation-break-thresholds.test.mjs`, weaker than its name — it reads the workflow as TEXT
-for the sharded packages' bars. Which package bites where:
+for the sharded packages' bars (db, ui and ui-core). Which package bites where:
 [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 Traps, each of which cost a round trip. The mechanism behind every one is in
@@ -112,7 +112,8 @@ hook, or how tests are scheduled:
   current head. Vitest `--shard` splits by FILE COUNT (`apps/server` excepted), so `N` must never
   exceed a package's test-file count. Guard: the "run no more shards than the package has test
   files" case in `scripts/ci-workflow.test.mjs`, weaker than its name — it counts files named
-  `*.test.ts`. [Receipt](docs/developers/ci-and-gates.md#root-receipts-moved-on-2026-11-02).
+  `*.test.ts` under the package, not what the package's Vitest config includes.
+  [Receipt](docs/developers/ci-and-gates.md#root-receipts-moved-on-2026-11-02).
 - **`apps/server`'s shards are packed by the committed duration table, not Vitest's hash split.**
   Refresh it with `scripts/test-durations.mjs` when a shard drifts past 4 minutes. Guard:
   `scripts/vitest-duration-sequencer.test.mjs`, weaker than its name: checks packing, not a Vitest run or freshness.
@@ -225,9 +226,10 @@ called weaker than its name, the topic file lists what it does not see.
 
 ### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26)
 
-- **A refusal explains what happened and what each choice does; offer any needed administrator or owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody else.** The only exceptions are a state only a bug can produce, identified at the site as a fault in Waitron (owner, 2026-10-25), the till's full-disk strip, «Tell a manager» (owner, 2026-10-28, A1127 Q4), and the two backup-room alerts (owner, 2026-10-28, A1167). Nothing guards it. Receipt: [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
+- **A refusal explains what happened and what each choice does; offer any needed administrator or owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody else.** The only exceptions are a state only a bug can produce, identified at the site as a fault in Waitron (owner, 2026-10-25), the till's full-disk strip, «Tell a manager» (owner, 2026-10-28, A1127 Q4), and the two backup-room alerts, which name no next step (owner, 2026-10-28, A1167). Nothing guards it. Receipt: [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
 - **New or changed forms use [design-system.md](docs/developers/design-system.md) → Forms.**
-  Request refusals alone never disable the action; field refusals appear under that field (owner,
+  Required fields are marked; invalid fields get inline errors and one localized bottom message on its
+  own line above buttons, never a top summary, with the action disabled until fixed. Request refusals alone never disable it; field refusals appear under that field (owner,
   2026-09-29). Saves stay quiet and disabled until the draft changes, using `draftScopeFor`,
   `saveActionState` and a save-handler early return (owner, 2026-10-07, A331;
   [receipt](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02)). Other actions stay quiet while awaiting a choice,
@@ -250,7 +252,7 @@ called weaker than its name, the topic file lists what it does not see.
 - **A screen change updates its guide in English and, where a twin exists, Spanish.**
   Every section heading carries a shared `{#id}`; dashboard/till links use each app's `help-guide.ts`.
   Guards: `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts`, weaker than their
-  names: not proof the guide was updated.
+  names: render/link/id checks and scoped text scans, not accuracy or proof the guide was updated.
   [Limits](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
 - **Before treating a numeric field as whole numbers, follow its checks and wire conversion and try
   a fraction.** Receipt: [conventions-ui.md](docs/developers/conventions-ui.md).
@@ -304,9 +306,11 @@ called weaker than its name, the topic file lists what it does not see.
   a late locale response overwriting an authenticated person's language or an explicit choice.
 - **Dashboard login offers methods without revealing account enrolment.** Never query account status
   or passkey enrolment to choose the public screen. A modal passkey prompt requires an explicit
-  action. Save the authenticated email and the successful method only with Remember selected, never
+  action: navigation, refresh, logout and session expiry never open one. Save the authenticated email and the successful method only with Remember selected, never
   in tab storage. [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
-- **A login refusal never reveals account existence** (owner, 2026-09-30). Only missing/malformed
+- **A login refusal never reveals account existence** (owner, 2026-09-30): unknown, suspended,
+  pending, wrong-secret and till-profile-inadmissible accounts answer `password.invalid` or `pin.invalid`
+  after the same hashing work, as one sentence with no field marked. Only missing/malformed
   input marks a field; the real cause is a log-only `reason`. Owner-approved exception: `passkey.not_registered`.
   Guards: identity login and route suites, weaker than the set looks: no new sign-in route is covered.
   [Detail](docs/developers/conventions-ui.md#a-logins-refusal-never-says-whether-the-account-exists).
@@ -333,7 +337,8 @@ called weaker than its name, the topic file lists what it does not see.
   `event.stopPropagation()` before re-emitting**, or, for a composed trigger such as `input`, the
   consumer observes the change twice. App screens and app-owned components may name their own
   events plainly.
-- **A retained hardware registration must remain re-addable after deactivation.**
+- **A retained hardware registration must remain re-addable after deactivation.** Enable brings
+  each back under its existing id; a deleted printer, card reader or device returns with a new id.
   [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
 - **A narrower roll in a wider receipt printer needs an explicit print area before native
   centring.** Guard: `apps/server/src/receipt-ticket.test.ts`.
@@ -349,15 +354,18 @@ called weaker than its name, the topic file lists what it does not see.
   Guards, weaker than their names: image-smoke (no Bluetooth on the runner) and
   `scripts/deploy-image-env.test.ts` (reads the profile as TEXT).
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
-  code; its log tail is the file's last lines, written through `redactSecrets` and the
-  personal-data mask, and HTML-escaped**, with stated exceptions (owner decision 2026-09-26; the
-  tail's span and the personal-data mask are A980 S10's defaults, open to the owner). No code's
+  code (after a Start again Move, an answer naming the set-aside folder takes their place); its log
+  tail is the file's last lines, whichever start or running server wrote them, written through
+  `redactSecrets` and the personal-data mask (except the frozen-process watchdog's own line, which
+  goes through neither), and HTML-escaped** (owner decision 2026-09-26; the
+  tail's span and the personal-data mask are A980 S10's defaults, open to the owner).
+  `redactSecrets` masks only a password in a URL, which is why no code's
   params and no logged message may carry a secret. Its one password form, for `setup.start_again_files_found`, takes
   the administrator password over HTTPS only (cost if not: a password sent in plain text on the
   venue's network); its Move choice is the owner's one exception to never suggesting a removal
   (A1098). Guard: the never-delete cases in
   `apps/server/src/recovery-surface.test.ts`, weaker than their name: they read the text tables,
-  not the page. [Exceptions](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
+  not the page. [Receipt](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
 
 ### Data, modules and migrations — [conventions-data.md](docs/developers/conventions-data.md#root-detail-moved-on-2026-10-26)
 
@@ -367,8 +375,8 @@ called weaker than its name, the topic file lists what it does not see.
   [Receipt](docs/developers/conventions-data.md#saved-zone-validity-uses-the-stored-spelling).
 - **Default optional request fields only when absent, and check enum types before comparing values.**
   Explicit null and coerced arrays passed modifier validation. A field whose null is itself a value
-  is deliberately outside the rule; examples:
-  [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02).
+  is deliberately outside the rule — an extras list's `maxPicks`, an extras item's `maxQuantity`,
+  the seat-a-table route's `guestCount` and the setup request's `taxpayerDomicile` among them.
 - **Error codes name the domain concept, never the throwing package; `server.*` names process facts.**
   Every throwing file imports its registry. Before a venue is live, rename/delete freely; afterwards
   either is a migration (owner, 2026-09-26). Move every tree copy together; once live, rewrite stored
@@ -377,7 +385,8 @@ called weaker than its name, the topic file lists what it does not see.
 - **A detail or log field holding a person's name, email or tax number uses a name on
   `PERSONAL_LOG_KEYS` or a path on `PERSONAL_LOG_PATHS` (`apps/server/src/log-personal-data.ts`),
   which the server's logger masks in every line it writes; the answer keeps it. Name it for whose
-  it is (`guestName`, `customerTaxId`), never a bare `name` or `taxId`.** Cost: staff names and
+  it is (`guestName`, `customerTaxId`), never a bare `name` or `taxId` (the listed bare `taxId` is
+  the venue's own): the list is flat across every code.** Cost: staff names and
   emails reached the sign-in-free recovery page. Guard: `scripts/personal-log-params.test.ts`, weaker than its name:
   reads text. [Limits](docs/developers/conventions-data.md#root-receipts-moved-on-2026-10-31).
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
@@ -386,7 +395,8 @@ called weaker than its name, the topic file lists what it does not see.
   identifiers, file names, seeds, starter content and tests. Exceptions: `packages/fiscal-verifactu`,
   AEAT wire names, translation files/guides and Spain-specific packages (`country-es`, `workforce-es`,
   reporting's modelo 303) for official Spain-only text/terms (owner, 2026-10-20, A913), and starter
-  content's other languages (owner, 2026-10-20, A918):
+  content's words in other languages, which go in the writing package's `src/starter-content.ts`,
+  which the guard skips by exact path (owner, 2026-10-20, A918).
   [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02). Country packs
   also provide English and own demo data; Spain receipts use the venue's receipt language, never English. Starter content is English
   in code and translated at setup; non-English screen tests read expected strings. Domain terms
@@ -437,7 +447,7 @@ called weaker than its name, the topic file lists what it does not see.
 - **The tables `scripts/write-path-tables.json` lists request code may read and never write, and
   the database does not refuse the write.** A write of one of them lives only in the files that
   JSON names. Guard: `scripts/write-path-tables.test.ts` is the whole of the enforcement, and
-  weaker than its name — it reads TEXT. Receipt:
+  weaker than its name — it reads TEXT and judges a FILE, not a call chain. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#the-tables-scriptswrite-path-tablesjson-lists-are-read-only-to-the-application-and-one-guard-is-the-whole-of-the-enforcement).
 - **Multi-table writes share ONE transaction: `withTransaction`.** Write-path functions take `tx: Transaction`, never open their own; handlers open one per request. Secret checks take `Database` and derive outside it,
   taking turns through `inTurn`. **Splitting one logical change across transactions is a commented
@@ -458,8 +468,10 @@ called weaker than its name, the topic file lists what it does not see.
 - **A refused statement normally backs out itself, not its transaction; full-disk and explicit
   ROLLBACK/FAIL variants are exceptions.** Catch full-disk refusals outside the whole `withTransaction`
   in tests. After `storage.disk_full` ends a transaction, later statements in its body must remain
-  refused inside the write queue. Guards: `packages/store/src/disk-full.test.ts` and
-  `write-queue.test.ts`, weaker than their names: page limits, not a real disk. No guard enforces
+  refused inside the write queue; an intervening outside transaction defeats that protection.
+  Guards: `packages/store/src/disk-full.test.ts` and
+  `write-queue.test.ts`, weaker than their names: page limits, not a real disk; at-commit cases are
+  stand-ins. No guard enforces
   the test catch rule. [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02).
 - **Identify result-code 1811 refusals by their words, never `isRefusal` alone.**
   Use `restrictRefused`/`triggerRaised` in `packages/db/src/constraint-target.ts`. Nothing guards it.
@@ -467,7 +479,6 @@ called weaker than its name, the topic file lists what it does not see.
   `fullDiskFailure` in `apps/server/src/boot-failure.ts` classifies 13 always, 14/4874/`ENOSPC` only
   under 16 MiB free. Guard: its test suite,
   weaker than the rule: stubbed errors, no real `ENOSPC` case.
-  [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02).
 - **Within the server, only the start (on a nearly full disk, before first-setup resolution), its
   emptying of a discarded recovery and the repair page's Start-again flow delete
   `<state>/spare-space` (`waitron.sh reset` deletes it too); a release writes
@@ -490,9 +501,10 @@ called weaker than its name, the topic file lists what it does not see.
   Guards: `packages/store/src/venue-lock.test.ts` and `apps/server/src/recovery-race.test.ts`, weaker
   than their names: prove the locks, not that every caller takes them.
 - **Anything that writes or deletes in `<state>/backup-staging` does it inside the staging turn**
-  (`apps/server/src/backup-staging-turn.ts`), **except the start's clean-up (`freeSpaceAtStart`)**.
+  (`apps/server/src/backup-staging-turn.ts`), **except the start's clean-up (`freeSpaceAtStart`),
+  which runs while no backup supervisor is running in this process**.
   Guard: `scripts/backup-staging-touchers.test.ts`, weaker than its name — it reads text and never
-  checks that a file takes the turn. Receipt:
+  checks that a file takes the turn; the turn is in-process only. Receipt:
   [conventions-data.md](docs/developers/conventions-data.md#backup-staging-is-touched-only-inside-the-staging-turn).
 - **A duty `bootServer` starts registers its stop on `undoOnFailure` before the next throwing step.**
   The landing listener, started last, is the exception. Guard: `apps/server/src/boot.failed-start.test.ts`,
@@ -506,7 +518,7 @@ called weaker than its name, the topic file lists what it does not see.
   `scripts/column-vocabulary.test.ts`, weaker than its name: reads imports and forbids only listed builders.
 - **Money columns hold whole cents; convert at the row with `decimalToCents`, `centsToDecimal`,
   or `rawCentsToDecimal` for raw SQL (`cast(x as text)`).** Above it use exact `Decimal`; sum JSON
-  amounts in JavaScript at money scale. Nothing guards this boundary.
+  amounts in JavaScript at money scale. Nothing guards this boundary or makes mistakes loud.
   Narrower guards: `packages/db/src/schema/columns.test.ts`, `packages/shared/src/conventions.test.ts`.
 - **Quantity columns hold whole thousandths and rates whole basis points, never money scale.**
   Use `packages/shared/src/scales.ts` converters for bounds; raw total readers bound exact-number
@@ -518,8 +530,9 @@ called weaker than its name, the topic file lists what it does not see.
   spelling**. Normalise at the writer, as `shiftInterval` and the `storedTime` helpers do. Nothing
   guards the one-spelling rule across the columns.
 - **Classify new tables `ledger`, `state` or `local` in their module; use `appendOnly()` for
-  uncorrectable tables and `migrationOptionsFor(...)` when migrating.** Marking an existing table
-  append-only must be disclosed in the PR.
+  uncorrectable tables and `migrationOptionsFor(...)` when migrating.** Classification alone is not
+  the trigger set; triggers cannot prevent `DROP TABLE`. Marking an existing table
+  append-only must be disclosed in the PR because first start can raise `append_only.triggers_restored`.
   [Receipt](docs/developers/conventions-data.md#root-receipts-moved-on-2026-11-02).
   Guards: `scripts/classification-complete.test.ts`, `scripts/append-only-triggers.test.ts`,
   `scripts/apply-migrations-callers.test.ts`; the last is weaker than its name: call shape, not sets.
@@ -538,8 +551,8 @@ called weaker than its name, the topic file lists what it does not see.
   them deletes. No guard makes a new `local` table say which.
 - **Store anything that works as a live login as a hash.** Guards: database-copy cases in
   `apps/server/src/me-api.test.ts`, `apps/server/src/till-api.test.ts` and the stored-hash case in
-  `packages/identity/src/management-session.test.ts`, weaker than the rule: limited credentials;
-  new login tables unguarded.
+  `packages/identity/src/management-session.test.ts`, weaker than the rule: limited credentials,
+  only the dashboard hash tried as a token; new login tables unguarded.
 - **Declare a migration-set dependency in `requires` for SQL references, trigger targets/body
   tables and top-level writes into that set.** Guard: `scripts/module-graph-honesty.test.ts`,
   weaker than its name: text scan recognising fixed SQL shapes.
@@ -610,21 +623,23 @@ passed while proving nothing.
   when the suite legitimately builds its own resource, and then guarded. Guard:
   `scripts/guarded-teardowns.test.ts`.
 - **An insert whose rows grow with an order must go through `insertInChunks` or `statementChunks`**;
-  the table round's `insertTabRound` does not yet. Cost: a 2,001-dish order passed locally and
+  the table round's `insertTabRound` does not yet, and no sweep has read every insert (see the backlog). Cost: a 2,001-dish order passed locally and
   failed CI. Guard: the bound-value case in `packages/store/src/index.test.ts`, weaker than the
   rule: it proves the store's connections, not that growing inserts are chunked.
   [Runtime limits and receipt](docs/developers/testing-guide.md#root-receipts-moved-on-2026-10-31).
 - **Synchronous `node:sqlite` tests need a real timer turn for the venue watchdog; `useVenueDb`
   yields after each test.** Guards: `packages/db/src/testing/venue-db.test.ts` and
-  `packages/store/src/venue-liveness.test.ts`, weaker than the rule: manually opened folders get no
-  helper turn.
+  `packages/store/src/venue-liveness.test.ts`, weaker than the rule: only the helper/default options
+  and store loaded before fake clocks; manually opened folders get no helper turn.
 - **No test suite under `packages/` or `apps/` starts a container; the rigs under `bench/` do.**
   **`TESTCONTAINERS_RYUK_DISABLED=true` is required locally**, and with it off an INTERRUPTED run
-  leaks containers. Never a blanket `docker volume prune`, and `docker volume inspect` before any
+  leaks containers; `pnpm reap` removes them by label and age — but not every rig stamps the label.
+  Never a blanket `docker volume prune`, and `docker volume inspect` before any
   manual `rm`.
 - **Install pinned Litestream and versitygw before stream loop/pause tests:**
   `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. Missing binaries
-  skip locally and fail CI. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: reads text.
+  skip locally and fail CI. Guard: `scripts/ci-workflow.test.mjs`, weaker than its name: text reads
+  accept commented or disabled setup.
 - **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
   needs `WAITRON_FULL_DISK_DIR`, otherwise skips locally and fails CI. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.
@@ -661,13 +676,13 @@ passed while proving nothing.
   `floor_today.out_of_date`. Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-floor-test-pins-the-till-apis-clock-away-from-the-day-change).
 - **An interrupted run also ORPHANS its vitest workers**, which spin at ~100% CPU until `kill -9`.
-  `pnpm reap` sweeps these.
+  `pnpm reap` sweeps these, scoped by ppid 1 AND the shapes vitest leaves in `ps`, never a bare `vitest` match.
 - **Concurrent coverage runs must not share a package's report directory, and an intentional second
   one belongs OUTSIDE the package.**
 - **A diagnostic pauses a browser test page only after its file has been silent for 60 seconds
   beyond its running cases' time limits and the project's hook time limit, and cancels a pause left
   waiting**: a `page.viewport` call hung (A1307). Guard: `scripts/vitest-file-progress.test.mjs`,
-  weaker than its name: fake pages, not Chromium. Receipt:
+  weaker than its name: this reporter only, fake pages, not Chromium. Receipt:
   [ci-and-gates.md](docs/developers/ci-and-gates.md#a-browser-file-silent-past-its-time-limits-gets-a-stack-sample).
 - **Locate the unfinished package before diagnosing a silent shard as database contention.** A
   Vitest test timer does not bound a browser whose event loop has stopped; use an outer deadline,
@@ -684,7 +699,7 @@ passed while proving nothing.
   group. Guard: `scripts/bookings-test-budget.test.ts` — which pins bookings alone.
 - **A test's timeout must exceed the SUM of its waits plus untimed work.** Guard:
   `scripts/spawn-timeout-budget.test.ts`, weaker than its name: text scan of `scripts/` only,
-  checks only the largest single wait.
+  checks only the largest single wait; packages/apps unguarded.
 - **A `spawnSync` timeout must clear the child's own worst case, retries included.**
   Cut the wait (`WAITRON_SH_HEALTH_DELAY`), not retries. Nothing guards this generally.
 - **Stop a finished command's leftover workers on `exit`, not on its output pipes' `close`;
@@ -752,7 +767,8 @@ passed while proving nothing.
   merge, and a config measuring nothing still exits 0 with the thresholds intact, so read the
   per-file table rather than the exit code.
 - **A package config names its own source tree in `coverage.include`.** Guard:
-  `scripts/coverage-thresholds.test.ts`, weaker than its name: looks for one exact string.
+  `scripts/coverage-thresholds.test.ts`, weaker than its name: looks for one exact string;
+  include paths are not package-anchored.
 - **Use `/* v8 ignore start */` … `/* v8 ignore stop */`, never `/* v8 ignore next */`.**
   Nothing guards it.
 - **A page asserted as a STRING, or reached only through its API, has nothing checking that it
@@ -788,7 +804,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   and profile `open-cash-drawer`. Taking cash separately requires `take-cash` through `assertTakesCash`.
   Manual open needs an active device/session plus `cash.drawer` or the PIN of someone holding it and uses that same
   drawer; dashboard calibration is the exception. Never manually resend drawer jobs.
-  Guards, weaker than the rule: new routes unguarded. [Detail](docs/developers/conventions-ui.md).
+  Guards, weaker than the rule: named drawer/cash/refund/calibration/resend suites only; new routes unguarded. [Detail](docs/developers/conventions-ui.md).
 
 - **One database per environment.** A pre-production database is never promoted. `WAITRON_ENV`
   governs this; unset means `preproduction`, `production` must be typed out, and `dev` is
@@ -802,11 +818,11 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **The bucket stream never waits on the bucket to sell or fails `/health`; its local checkpoint
   can hold the write lock and delay sales.** Fifteen minutes behind raises `backup.stream_behind`
   unless a stopped/refused/unusable-settings alert explains it. Guards: stream loop/pause e2e and
-  health bucket-copy cases, weaker than the rule: stream cases skip without binaries.
+  health bucket-copy cases, weaker than the rule: named cases only; stream cases skip without binaries.
 - **`registros_facturacion` is immutable: never work around its append-only update/delete triggers.**
   Triggers are the whole enforcement and cannot prevent `DROP TABLE`. Boot restores missing triggers
   on existing tables; boot and the trading watch refuse changed/missing triggers. `append-only-watch`
-  is weaker than its name: stored text only.
+  is weaker than its name: stored text only, only tables migrated at start.
 - **More than a minute behind the latest fiscal record, write no record and take/refund no new
   money unless a clock confirmation covers it.** After replay, call `refuseWhileClockBehind` before
   reader/refund/drawer work; pause both refund recovery loops. Recheck card-refund send/outcome in
@@ -818,14 +834,14 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   during a stop found at start-up once AEAT has not answered or cannot be asked, by a staff member
   signed in on it (owner, 2026-10-31); never a box device outside development. Guards:
   clock-behind-stop, payments clock-behind, fiscal chain/restart/confirmation, clock-confirm route
-  and `apps/server/src/clock-watch.start-up.test.ts` suites, weaker than the rule: new money routes
+  and `apps/server/src/clock-watch.start-up.test.ts` suites, weaker than the rule: only named routes/readings/requests; new money routes
   unguarded. **The box sets its clock only through the host service, from AEAT, a till's time (a
   staff member's during start-up, an administrator's at any time) or an administrator's own device —
   never from devices alone and never while it keeps time over the internet — and every step it
   verifies, or sees move the clock by over a second, is alerted and emailed.** Guards:
   `apps/server/src/clock-correction.test.ts`, `apps/server/src/clock-set.route.test.ts`,
   `apps/server/src/till-box-clock-api.test.ts`, `scripts/waitron-box-sh.test.mjs`, weaker than the
-  rule: the handler's suite runs stubs, not systemd.
+  rule: the handler's suite runs stubs, not systemd; the route suites cover the named routes only.
   [Detail](docs/developers/conventions-data.md#the-box-sets-its-own-clock).
 - **Never put our own metadata into a hash.** `entorno` must not enter `computeHuella`;
   differing only in it must leave hashes identical.
@@ -833,7 +849,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   Setup/restore/promotion use five symbols for the box's UTC minute, after another machine's clock
   agrees within 30 seconds (no confirmation); a minute whose name is already in a history the box
   reads is not taken (the box waits for the next free one if it starts within 150 seconds, and
-  otherwise refuses with when it can; owner, 2026-10-30, A1207), and no other name or record
+  otherwise refuses with when it can; the setup and restore pages count that down and check again by
+  themselves; owner, 2026-10-30, A1207), and no other name or record
   refuses or moves it (owner, 2026-10-29, A1207), except that an attempt whose own pick is ahead of
   the box's clock is refused until the clock reaches it. Start again keeps no record of the names
   it deletes (owner, 2026-10-29, A1206): a box and the machine confirming its clock, wrong by the

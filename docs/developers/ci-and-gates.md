@@ -4269,7 +4269,7 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   name — it reads the workflow as TEXT for the sharded packages' bars (db, ui and ui-core). Which
   package bites where: [ci-and-gates.md](ci-and-gates.md).
 
-### CI's test jobs measure coverage, never plain test
+### Root entry: CI's test jobs measure coverage, never plain test
 
 - **CI's test jobs measure coverage, never plain `test`**: `test:coverage`, or `test:shard` with
   the package's `-merge` job enforcing the bar. Verify that package’s coverage or merge job on the
