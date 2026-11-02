@@ -1,6 +1,5 @@
 import { and, asc, desc, eq, inArray, or, type SQL } from "drizzle-orm";
-import { kitchenStations, type Transaction } from "@waitron/db";
-import { readLocationClock } from "@waitron/reporting";
+import { kitchenStations, readVenueClock, type Transaction } from "@waitron/db";
 import { AppError, locationId, compareStationNames } from "@waitron/shared";
 import {
   departments,
@@ -29,26 +28,26 @@ import "./errors.js";
 
 export type { SeasonStaffingEdit, SpecialDayStaffingEdit };
 
-type Cfg = { locationId: string };
+type ScopeCfg = { locationId: string };
 
-const venueScope = (cfg: Cfg) => ({ locationId: locationId(cfg.locationId) });
+const venueScope = (cfg: ScopeCfg) => ({ locationId: locationId(cfg.locationId) });
 const WEEKDAYS = [0, 1, 2, 3, 4, 5, 6] as const;
 const storedTime = (value: string) => `${value}:00`;
 const wireTime = (value: string) => value.slice(0, 5);
 const seasonDayKey = (seasonId: string, weekday: number) => `season:${seasonId}:${weekday}`;
 const dateDayKey = (dateId: string) => `date:${dateId}`;
 
-/** The location's active departments, then its active stations, in the order each list shows them. */
-export async function listStaffingAreas(tx: Transaction, cfg: Cfg): Promise<StaffingArea[]> {
+/** The active departments, then the active stations, in the order each list shows them. */
+export async function listStaffingAreas(tx: Transaction): Promise<StaffingArea[]> {
   const departmentRows = await tx
     .select({ id: departments.id, name: departments.name })
     .from(departments)
-    .where(and(eq(departments.locationId, cfg.locationId), eq(departments.active, true)))
+    .where(eq(departments.active, true))
     .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
   const stationRows = await tx
     .select({ id: kitchenStations.id, name: kitchenStations.name })
     .from(kitchenStations)
-    .where(and(eq(kitchenStations.locationId, cfg.locationId), eq(kitchenStations.active, true)))
+    .where(eq(kitchenStations.active, true))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
   stationRows.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
   return [
@@ -136,8 +135,8 @@ async function readPaint(
   return paint;
 }
 
-async function currentCutover(tx: Transaction, cfg: Cfg): Promise<string> {
-  return (await readLocationClock(tx, cfg.locationId)).dayCutover;
+async function currentCutover(tx: Transaction): Promise<string> {
+  return (await readVenueClock(tx)).dayCutover;
 }
 
 function namedGuides(
@@ -187,24 +186,20 @@ function namedGuides(
   );
 }
 
-async function assertSeasonHere(tx: Transaction, cfg: Cfg, seasonId: string): Promise<void> {
-  const [row] = await tx
-    .select({ id: seasons.id })
-    .from(seasons)
-    .where(and(eq(seasons.id, seasonId), eq(seasons.locationId, cfg.locationId)));
+async function assertSeasonExists(tx: Transaction, seasonId: string): Promise<void> {
+  const [row] = await tx.select({ id: seasons.id }).from(seasons).where(eq(seasons.id, seasonId));
   if (row === undefined) throw new AppError("season.not_found", { seasonId });
 }
 
-/** The special day's dates in date order; refused unless the special day is at the location. */
-async function specialDayDatesHere(
+/** The special day's dates in date order; refused for an unknown special day. */
+async function readSpecialDayDates(
   tx: Transaction,
-  cfg: Cfg,
   specialDayId: string,
 ): Promise<{ dateId: string; date: string }[]> {
   const [row] = await tx
     .select({ id: specialDays.id })
     .from(specialDays)
-    .where(and(eq(specialDays.id, specialDayId), eq(specialDays.locationId, cfg.locationId)));
+    .where(eq(specialDays.id, specialDayId));
   if (row === undefined) throw new AppError("special_day.not_found", { specialDayId });
   return tx
     .select({ dateId: specialDayDates.id, date: specialDayDates.date })
@@ -213,14 +208,12 @@ async function specialDayDatesHere(
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
 }
 
-/** Refuses an area that is not an active department or station at the location, and a staff
- *  role that is not at the location. */
+/** Refuses an area that is not an active department or station, and an unknown staff role. */
 async function assertEditTargets(
   tx: Transaction,
-  cfg: Cfg,
   edits: readonly { area: AreaRef; blocks: readonly StaffingBlock[] | null }[],
 ): Promise<void> {
-  const active = new Set((await listStaffingAreas(tx, cfg)).map((a) => areaKey(a.area)));
+  const active = new Set((await listStaffingAreas(tx)).map((a) => areaKey(a.area)));
   const missingArea = edits.find((edit) => !active.has(areaKey(edit.area)));
   if (missingArea !== undefined)
     throw new AppError("staffing_area.not_found", { area: areaKey(missingArea.area) });
@@ -231,9 +224,9 @@ async function assertEditTargets(
   const found = await tx
     .select({ id: staffRoles.id })
     .from(staffRoles)
-    .where(and(eq(staffRoles.locationId, cfg.locationId), inArray(staffRoles.id, wanted)));
-  const here = new Set(found.map((row) => row.id));
-  const missingRole = wanted.find((id) => !here.has(id));
+    .where(inArray(staffRoles.id, wanted));
+  const known = new Set(found.map((row) => row.id));
+  const missingRole = wanted.find((id) => !known.has(id));
   if (missingRole !== undefined)
     throw new AppError("staff_role.not_found", { staffRoleId: missingRole });
 }
@@ -265,16 +258,17 @@ async function insertDay(
 
 export async function readSeasonStaffing(
   tx: Transaction,
-  cfg: Cfg,
+  cfg: ScopeCfg,
   seasonId: string,
 ): Promise<SeasonStaffing> {
-  const all = await readSeasons(tx, venueScope(cfg));
+  const scope = venueScope(cfg);
+  const all = await readSeasons(tx, scope);
   if (!all.some((season) => season.id === seasonId))
     throw new AppError("season.not_found", { seasonId });
-  const areas = await listStaffingAreas(tx, cfg);
-  const cutover = await currentCutover(tx, cfg);
+  const areas = await listStaffingAreas(tx);
+  const cutover = await currentCutover(tx);
   const paint = await readPaint(tx, areas, eq(staffingDays.seasonId, seasonId), cutover);
-  const forecast = await readPlannedServiceGuides(tx, venueScope(cfg), idsOf(areas, "station"), {
+  const forecast = await readPlannedServiceGuides(tx, scope, idsOf(areas, "station"), {
     kind: "season",
     seasonId,
     cutover,
@@ -303,12 +297,11 @@ export async function readSeasonStaffing(
 /** Per edit, replaces the area's row for the season's weekday; an empty block list leaves none. */
 export async function saveSeasonStaffing(
   tx: Transaction,
-  cfg: Cfg,
   seasonId: string,
   edits: readonly SeasonStaffingEdit[],
 ): Promise<void> {
-  await assertSeasonHere(tx, cfg, seasonId);
-  await assertEditTargets(tx, cfg, edits);
+  await assertSeasonExists(tx, seasonId);
+  await assertEditTargets(tx, edits);
   for (const edit of edits) {
     await tx
       .delete(staffingDays)
@@ -330,15 +323,16 @@ export async function saveSeasonStaffing(
 
 export async function readSpecialDayStaffing(
   tx: Transaction,
-  cfg: Cfg,
+  cfg: ScopeCfg,
   specialDayId: string,
 ): Promise<SpecialDayStaffing> {
-  const found = await readSpecialDayPlan(tx, venueScope(cfg), specialDayId);
+  const scope = venueScope(cfg);
+  const found = await readSpecialDayPlan(tx, scope, specialDayId);
   if (found === null) throw new AppError("special_day.not_found", { specialDayId });
   const { name: specialDayName, plan } = found;
   const dates = found.dates.map(({ dateId, storedDate }) => ({ dateId, date: storedDate }));
-  const areas = await listStaffingAreas(tx, cfg);
-  const clock = await readLocationClock(tx, cfg.locationId);
+  const areas = await listStaffingAreas(tx);
+  const clock = await readVenueClock(tx);
   const cutover = clock.dayCutover;
   const paint = await readPaint(
     tx,
@@ -349,7 +343,7 @@ export async function readSpecialDayStaffing(
     ),
     cutover,
   );
-  const forecast = await readPlannedServiceGuides(tx, venueScope(cfg), idsOf(areas, "station"), {
+  const forecast = await readPlannedServiceGuides(tx, scope, idsOf(areas, "station"), {
     kind: "dates",
     dates: dates.map(({ date }) => date),
     clock,
@@ -379,14 +373,13 @@ export async function readSpecialDayStaffing(
  *  empty row (nobody that day). */
 export async function saveSpecialDayStaffing(
   tx: Transaction,
-  cfg: Cfg,
   specialDayId: string,
   edits: readonly SpecialDayStaffingEdit[],
 ): Promise<void> {
-  const dateIds = new Set((await specialDayDatesHere(tx, cfg, specialDayId)).map((d) => d.dateId));
+  const dateIds = new Set((await readSpecialDayDates(tx, specialDayId)).map((d) => d.dateId));
   const foreign = edits.findIndex((edit) => !dateIds.has(edit.dateId));
   if (foreign !== -1) throw new AppError("staffing.invalid", { field: `edits.${foreign}.dateId` });
-  await assertEditTargets(tx, cfg, edits);
+  await assertEditTargets(tx, edits);
   for (const edit of edits) {
     await tx
       .delete(staffingDays)
@@ -401,7 +394,7 @@ export async function saveSpecialDayStaffing(
 }
 
 /** What a caller has already read for {@link resolveStaffing}: a `plan` covering every business
- *  day, the `listStaffingAreas` answer, and the location's current `cutover`. */
+ *  day, the `listStaffingAreas` answer, and the current `cutover`. */
 export interface ResolveStaffingGiven {
   plan?: DayPlan;
   areas?: readonly StaffingArea[];
@@ -412,7 +405,7 @@ export interface ResolveStaffingGiven {
  *  the area wins, else the season's weekday row, else no entry. */
 export async function resolveStaffing(
   tx: Transaction,
-  cfg: Cfg,
+  cfg: ScopeCfg,
   businessDays: readonly string[],
   given: ResolveStaffingGiven = {},
 ): Promise<Map<string, Map<string, StaffingBlock[]>>> {
@@ -422,8 +415,8 @@ export async function resolveStaffing(
   for (const day of businessDays)
     if (!plan.seasonIdOn.has(day) || !plan.special.has(day))
       throw new Error(`the day plan does not cover ${day}`);
-  const areas = given.areas ?? (await listStaffingAreas(tx, cfg));
-  const cutover = given.cutover ?? (await currentCutover(tx, cfg));
+  const areas = given.areas ?? (await listStaffingAreas(tx));
+  const cutover = given.cutover ?? (await currentCutover(tx));
   const seasonIds = [...new Set([...plan.seasonIdOn.values()].filter((id) => id !== null))];
   const dateIds = [...new Set([...plan.special.values()].flatMap((s) => (s ? [s.dateId] : [])))];
   const paint = await readPaint(

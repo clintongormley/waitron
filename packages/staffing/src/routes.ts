@@ -1,5 +1,5 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { withTransaction, type Transaction } from "@waitron/db";
+import { readVenueClock, withTransaction, type Transaction } from "@waitron/db";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import type { ModuleRouteContext, ModuleRoutes } from "@waitron/module";
 import {
@@ -11,7 +11,6 @@ import {
   requireString,
 } from "@waitron/server-kit";
 import type { Logger } from "@waitron/server-kit";
-import { readLocationClock } from "@waitron/reporting";
 import { AppError, normaliseUuid } from "@waitron/shared";
 import { parseCalendarMonth } from "@waitron/venue-service";
 import {
@@ -71,7 +70,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "special_day.not_found": 404,
 };
 const run = createErrorBoundary(STATUS, "staffing.failed");
-// An id in a request body that is not one of the venue's is a bad request, not a missing page.
+// An id in a request body that names no row is a bad request, not a missing page.
 const runReorder = createErrorBoundary(
   { ...STATUS, "staff_role.not_found": 400 },
   "staffing.failed",
@@ -162,8 +161,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     const gated = <T>(sessionId: string, fn: (tx: Transaction) => Promise<T>): Promise<T> =>
       gatedBy(MANAGE_STAFFING, sessionId, fn);
     const staffRoleIdParam = (raw: string) => normaliseUuid(raw, "StaffRoleId");
-    const cutoverOf = async (tx: Transaction) =>
-      (await readLocationClock(tx, ctx.cfg.locationId)).dayCutover;
+    const cutoverOf = async (tx: Transaction) => (await readVenueClock(tx)).dayCutover;
 
     const rotaBody = (body: unknown, patch: boolean) => {
       const fields = patch
@@ -241,7 +239,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
     app.get(`${ROOT}/areas`, (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        const areas = await gatedBy(VIEW_VENUE, sessionId, (tx) => listStaffingAreas(tx, ctx.cfg));
+        const areas = await gatedBy(VIEW_VENUE, sessionId, (tx) => listStaffingAreas(tx));
         return c.json({ areas });
       }),
     );
@@ -274,7 +272,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         const id = normaliseUuid(c.req.param("seasonId"), "SeasonId");
         const body = await readRawJsonBody<unknown>(c);
         await gated(sessionId, async (tx) =>
-          saveSeasonStaffing(tx, ctx.cfg, id, seasonEdits(body, await cutoverOf(tx))),
+          saveSeasonStaffing(tx, id, seasonEdits(body, await cutoverOf(tx))),
         );
         return c.body(null, 204);
       }),
@@ -296,7 +294,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         const id = normaliseUuid(c.req.param("specialDayId"), "SpecialDayId");
         const body = await readRawJsonBody<unknown>(c);
         await gated(sessionId, async (tx) =>
-          saveSpecialDayStaffing(tx, ctx.cfg, id, specialDayEdits(body, await cutoverOf(tx))),
+          saveSpecialDayStaffing(tx, id, specialDayEdits(body, await cutoverOf(tx))),
         );
         return c.body(null, 204);
       }),
@@ -306,7 +304,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const staffRoles = await gatedBy(VIEW_VENUE, sessionId, (tx) =>
-          listStaffRolesWithHolderNames(tx, ctx.cfg),
+          listStaffRolesWithHolderNames(tx),
         );
         return c.json({ staffRoles });
       }),
@@ -316,9 +314,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readRawJsonBody<unknown>(c);
-        const staffRole = await gated(sessionId, (tx) =>
-          createStaffRole(tx, ctx.cfg, staffRoleInput(body)),
-        );
+        const staffRole = await gated(sessionId, (tx) => createStaffRole(tx, staffRoleInput(body)));
         return c.json(staffRole, 201);
       }),
     );
@@ -328,9 +324,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       runReorder(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const body = await readRawJsonBody<unknown>(c);
-        await gated(sessionId, (tx) =>
-          reorderStaffRoles(tx, ctx.cfg, uuidList(body, "staffRoleIds")),
-        );
+        await gated(sessionId, (tx) => reorderStaffRoles(tx, uuidList(body, "staffRoleIds")));
         return c.body(null, 204);
       }),
     );
@@ -341,7 +335,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         const id = staffRoleIdParam(c.req.param("staffRoleId"));
         const body = await readRawJsonBody<unknown>(c);
         return c.json(
-          await gated(sessionId, (tx) => updateStaffRole(tx, ctx.cfg, id, staffRoleInput(body))),
+          await gated(sessionId, (tx) => updateStaffRole(tx, id, staffRoleInput(body))),
         );
       }),
     );
@@ -352,9 +346,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
         const id = staffRoleIdParam(c.req.param("staffRoleId"));
         const body = await readRawJsonBody<unknown>(c);
         return c.json(
-          await gated(sessionId, (tx) =>
-            setStaffRoleHolders(tx, ctx.cfg, id, uuidList(body, "personIds")),
-          ),
+          await gated(sessionId, (tx) => setStaffRoleHolders(tx, id, uuidList(body, "personIds"))),
         );
       }),
     );
@@ -364,7 +356,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = staffRoleIdParam(c.req.param("staffRoleId"));
-        return c.json(await gated(sessionId, (tx) => readStaffRoleDeleteImpact(tx, ctx.cfg, id)));
+        return c.json(await gated(sessionId, (tx) => readStaffRoleDeleteImpact(tx, id)));
       }),
     );
 
@@ -372,7 +364,7 @@ export const STAFFING_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = staffRoleIdParam(c.req.param("staffRoleId"));
-        return c.json(await gated(sessionId, (tx) => deleteStaffRole(tx, ctx.cfg, id)));
+        return c.json(await gated(sessionId, (tx) => deleteStaffRole(tx, id)));
       }),
     );
   },

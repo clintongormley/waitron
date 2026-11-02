@@ -64,10 +64,8 @@ async function insertBooking(
     date: string;
     time: string;
     status?: string;
-    locationId?: LocationId;
   },
 ): Promise<void> {
-  const location = fields.locationId ?? v.locationId;
   await withTransaction(db, async (tx) => {
     // `id` and `created_at` supplied for the reason `setupVenue` gives.
     await tx.execute(sql`
@@ -75,7 +73,7 @@ async function insertBooking(
         (id, created_at, location_id, table_id, booking_date, booking_time, party_size,
          contact_name, created_by, status)
       values
-        (${newId()}, ${nowIso()}, ${location}, ${fields.tableId}, ${fields.date}, ${fields.time},
+        (${newId()}, ${nowIso()}, ${v.locationId}, ${fields.tableId}, ${fields.date}, ${fields.time},
          2, 'Ana', ${randomUUID()}, ${fields.status ?? "booked"})`);
   });
 }
@@ -99,6 +97,16 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     const t = await makeTable(v, "7");
     await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
     const m = await annotate(v, MADRID_NOON, [t]);
+    expect(m.get(t)).toEqual({ reservedTime: "14:00" });
+  });
+
+  // A1301: deleted with cfg in S18
+  it("annotates the venue's booking whatever location the scope names", async () => {
+    const v = await setupVenue();
+    const t = await makeTable(v, "7b");
+    await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
+    const stray = { locationId: brandLocationId(randomUUID()) };
+    const m = await annotate(stray, MADRID_NOON, [t]);
     expect(m.get(t)).toEqual({ reservedTime: "14:00" });
   });
 
@@ -153,18 +161,6 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     expect(m.get(t)).toEqual({ reservedTime: "14:00" });
   });
 
-  it("reads a location with no row as unreserved rather than throwing", async () => {
-    // Pins two things: the missing row does not throw, and the read stays scoped to the location it
-    // was given — the booking below is eligible at the table's REAL location, so it must not
-    // surface. Which zone the missing row falls back to is not observable here.
-    const v = await setupVenue();
-    const t = await makeTable(v, "13b");
-    await insertBooking(v, { tableId: t, date: "2026-09-15", time: "14:00" });
-    const missing = { locationId: brandLocationId(randomUUID()) };
-    const m = await annotate(missing, MADRID_NOON, [t]);
-    expect(m).toEqual(new Map([[t, { reservedTime: null }]]));
-  });
-
   it("derives venue-local 'today' from locations.time_zone, not UTC (date boundary)", async () => {
     // now = 2026-09-01T23:00:00Z. In Pacific/Kiritimati (UTC+14) that is 2026-09-02 13:00 — a DIFFERENT
     // calendar day than the UTC 2026-09-01.
@@ -209,10 +205,8 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
     // Zones no other test uses, so the module cache is cold when the spy is installed.
     const tzA = "Asia/Tokyo";
     const tzB = "America/New_York";
-    const va = await setupVenue({ timeZone: tzA });
-    const vb = await setupVenue({ timeZone: tzB });
-    const ta = await makeTable(va, "tz-a");
-    const tb = await makeTable(vb, "tz-b");
+    const v = await setupVenue({ timeZone: tzA });
+    const t = await makeTable(v, "tz");
 
     // Return a genuine instance: a bare construct-through spy's object makes `formatToParts` throw
     // "incompatible receiver". It must be a `function` expression: with an arrow the count below
@@ -224,9 +218,10 @@ describe("BOOKINGS_FLOOR_ANNOTATIONS.annotate", () => {
       return new OriginalDTF(...args);
     } as unknown as typeof Intl.DateTimeFormat);
     try {
-      await annotate(va, MADRID_NOON, [ta]); // same zone, twice
-      await annotate(va, MADRID_NOON, [ta]);
-      await annotate(vb, MADRID_NOON, [tb]); // a different zone
+      await annotate(v, MADRID_NOON, [t]); // same zone, twice
+      await annotate(v, MADRID_NOON, [t]);
+      await db.execute(sql`update locations set time_zone = ${tzB}`);
+      await annotate(v, MADRID_NOON, [t]); // a different zone
 
       const builtFor = (tz: string): Intl.DateTimeFormat[] =>
         spy.mock.results

@@ -13,7 +13,6 @@ import {
   markNoShow,
   seatBooking,
   updateBooking,
-  type BookingConfig,
   type CreateBookingInput,
   type UpdateBookingPatch,
 } from "./bookings.js";
@@ -112,7 +111,7 @@ function screenPatch(v: Record<string, unknown>): UpdateBookingPatch {
 
 export const BOOKINGS_ROUTES: ModuleRoutes = {
   mount(app, ctx: ModuleRouteContext, log: Logger): void {
-    const { db, cfg, core } = ctx;
+    const { db, core } = ctx;
 
     // Every route's database work goes through here, so the permission check is in one place.
     const gated = <T>(
@@ -129,13 +128,13 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
 
     const mountBookingLifecycleVerb = (
       suffix: string,
-      verb: (tx: Transaction, cfg: BookingConfig, id: string) => Promise<void>,
+      verb: (tx: Transaction, id: string) => Promise<void>,
     ): void => {
       app.post(`/management-api/bookings/:id/${suffix}`, (c) =>
         run(c, log, async () => {
           const sessionId = requireManagementSession(c);
           const id = requireUuidParam(c.req.param("id"), "BookingId");
-          await gated(sessionId, (tx) => verb(tx, cfg, id));
+          await gated(sessionId, (tx) => verb(tx, id));
           return c.body(null, 204);
         }),
       );
@@ -146,7 +145,7 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const date = requirePeriod(c.req.query("date"), "date");
-        const rows = await gated(sessionId, (tx) => listBookings(tx, cfg, { date }));
+        const rows = await gated(sessionId, (tx) => listBookings(tx, { date }));
         return c.json(rows);
       }),
     );
@@ -159,7 +158,7 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
         const input = screenCreate(body);
         // `createdBy` is the authorized person, never a value from the request body.
         const created = await gated(sessionId, (tx, { authorizedBy }) =>
-          createBooking(tx, cfg, { ...input, createdBy: authorizedBy }),
+          createBooking(tx, { ...input, createdBy: authorizedBy }),
         );
         return c.json(created, 201);
       }),
@@ -172,7 +171,7 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
         const id = requireUuidParam(c.req.param("id"), "BookingId");
         const body = await readJsonBody<Record<string, unknown>>(c);
         const patch = screenPatch(body);
-        await gated(sessionId, (tx) => updateBooking(tx, cfg, id, patch));
+        await gated(sessionId, (tx) => updateBooking(tx, id, patch));
         return c.body(null, 204);
       }),
     );
@@ -189,7 +188,7 @@ export const BOOKINGS_ROUTES: ModuleRoutes = {
           req.tableId = requireBodyUuid(body.tableId, "tableId");
         }
         const seated = await gated(sessionId, (tx, { authorizedBy }) =>
-          seatBooking(tx, cfg, id, { ...req, seatedBy: authorizedBy }, core),
+          seatBooking(tx, id, { ...req, seatedBy: authorizedBy }, core),
         );
         return c.json(seated);
       }),

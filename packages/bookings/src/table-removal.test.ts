@@ -174,22 +174,10 @@ describe("BOOKINGS_TABLE_REMOVAL.release", () => {
 
     await inTx((tx) => BOOKINGS_TABLE_REMOVAL.release(tx, v, t, "Terrace 4"));
 
-    const released = await inTx((tx) => getBooking(tx, v, past));
+    const released = await inTx((tx) => getBooking(tx, past));
     expect(released).toMatchObject({ tableId: null, tableLabel: "Terrace 4" });
-    const untouched = await inTx((tx) => getBooking(tx, v, kept));
+    const untouched = await inTx((tx) => getBooking(tx, kept));
     expect(untouched).toMatchObject({ tableId: other, tableLabel: null });
-  });
-
-  it("lets go of a booking for the table whose location is another venue's", async () => {
-    const v = await setupVenue();
-    const elsewhere = await setupVenue();
-    const t = await makeTable(v, "Terrace 6");
-    const stray = await insertBooking(elsewhere, { tableId: t, date: "2026-09-01" });
-
-    await inTx((tx) => BOOKINGS_TABLE_REMOVAL.release(tx, v, t, "Terrace 6"));
-
-    const released = await inTx((tx) => getBooking(tx, elsewhere, stray));
-    expect(released).toMatchObject({ tableId: null, tableLabel: "Terrace 6" });
   });
 });
 
@@ -217,8 +205,6 @@ describe("BOOKINGS_TABLE_REMOVAL.deleteRefusals", () => {
       await insertBooking(v, { tableId: t, date: "2026-09-01", status });
     }
     await insertBooking(v, { tableId: other, date: "2026-09-01" });
-    const elsewhere = await setupVenue();
-    await insertBooking(elsewhere, { tableId: t, date: "2026-09-01" });
 
     const result = await inTx((tx) =>
       BOOKINGS_TABLE_REMOVAL.deleteRefusals!(tx, v, [t], AFTER_MADRID_MIDNIGHT),
@@ -242,9 +228,45 @@ describe("BOOKINGS_TABLE_REMOVAL.deleteRefusals", () => {
     expect(
       await inTx((tx) => BOOKINGS_TABLE_REMOVAL.deleteRefusals!(tx, v, [], AFTER_MADRID_MIDNIGHT)),
     ).toEqual([]);
-    expect(await inTx((tx) => getBooking(tx, v, past))).toMatchObject({
+    expect(await inTx((tx) => getBooking(tx, past))).toMatchObject({
       tableId: t,
       tableLabel: null,
+    });
+  });
+});
+
+// A1301: deleted with cfg in S18
+describe("BOOKINGS_TABLE_REMOVAL whatever location the scope names", () => {
+  it("refuses, names and releases the venue's bookings for a scope naming no location", async () => {
+    const v = await setupVenue();
+    const t = await makeTable(v, "Stray");
+    const booking = await insertBooking(v, { tableId: t, date: "2026-09-16", time: "21:00:00" });
+    const stray = { locationId: brandLocationId(randomUUID()) };
+
+    const refusals = await inTx((tx) =>
+      BOOKINGS_TABLE_REMOVAL.refuse(tx, stray, [t], AFTER_MADRID_MIDNIGHT),
+    );
+    expect(refusals.get(t)).toMatchObject({
+      code: "table.booked",
+      params: { tableId: t, date: "2026-09-16", time: "21:00" },
+    });
+
+    expect(
+      await inTx((tx) =>
+        BOOKINGS_TABLE_REMOVAL.deleteRefusals!(tx, stray, [t], AFTER_MADRID_MIDNIGHT),
+      ),
+    ).toEqual([
+      {
+        code: "table.booked",
+        params: { tableId: t, date: "2026-09-16", time: "21:00" },
+        targets: [{ id: booking, name: "Ana · 2026-09-16 21:00" }],
+      },
+    ]);
+
+    await inTx((tx) => BOOKINGS_TABLE_REMOVAL.release(tx, stray, t, "Stray"));
+    expect(await inTx((tx) => getBooking(tx, booking))).toMatchObject({
+      tableId: null,
+      tableLabel: "Stray",
     });
   });
 });

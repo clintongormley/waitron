@@ -18,16 +18,18 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { bookings } from "./schema/bookings.js";
 import { BOOKINGS_TEST_MIGRATIONS } from "./testing/migrations.js";
-import { cancelBooking, createBooking, type BookingConfig } from "./bookings.js";
+import { cancelBooking, createBooking } from "./bookings.js";
 import "./errors.js";
 
 const suite = useVenueDb({ migrations: BOOKINGS_TEST_MIGRATIONS, timeoutMs: 60_000 });
 const LOCALE = "es-ES";
 
-async function setupVenue(db: Database): Promise<{ cfg: BookingConfig; createdBy: string }> {
+async function setupVenue(
+  db: Database,
+): Promise<{ cfg: { locationId: LocationId }; createdBy: string }> {
   await seedTenant(db);
   const [loc] = await db
     .insert(locations)
@@ -44,7 +46,11 @@ async function setupVenue(db: Database): Promise<{ cfg: BookingConfig; createdBy
 
 /** An ACTIVE dining table for the venue (createTable's raw equivalent — the verb lives in
  * apps/server, which a module cannot import). */
-async function seedTable(db: Database, cfg: BookingConfig, label: string): Promise<string> {
+async function seedTable(
+  db: Database,
+  cfg: { locationId: LocationId },
+  label: string,
+): Promise<string> {
   const [zone] = await db
     .insert(floorZones)
     .values({ locationId: cfg.locationId, name: label })
@@ -64,7 +70,7 @@ describe("seatBooking compare-and-swap guard", () => {
     const { cfg, createdBy } = await setupVenue(suite.db);
     const tableId = await seedTable(suite.db, cfg, "CAS-2");
     const { id: bookingId } = await withTransaction(suite.db, (tx: Transaction) =>
-      createBooking(tx, cfg, {
+      createBooking(tx, {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 2,
@@ -73,7 +79,7 @@ describe("seatBooking compare-and-swap guard", () => {
         createdBy,
       }),
     );
-    await withTransaction(suite.db, (tx: Transaction) => cancelBooking(tx, cfg, bookingId));
+    await withTransaction(suite.db, (tx: Transaction) => cancelBooking(tx, bookingId));
 
     await withTransaction(suite.db, async (tx: Transaction) => {
       // seatBooking's terminal WHERE verbatim.

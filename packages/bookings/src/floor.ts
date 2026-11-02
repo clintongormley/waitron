@@ -23,12 +23,12 @@ function reservationGraceFloor(venueNow: string): string {
  * without one.
  */
 export const BOOKINGS_FLOOR_ANNOTATIONS: FloorAnnotator = {
-  async annotate(tx, cfg, now, tableIds) {
+  async annotate(tx, _cfg, now, tableIds) {
     const result = new Map<string, { reservedTime: string | null }>();
     for (const id of tableIds) result.set(id, { reservedTime: null });
     if (tableIds.length === 0) return result;
 
-    const { date: venueToday, time: venueNow } = await venueWallClockAt(tx, cfg.locationId, now);
+    const { date: venueToday, time: venueNow } = await venueWallClockAt(tx, now);
     const graceFloor = reservationGraceFloor(venueNow);
 
     const rows = await tx
@@ -36,7 +36,6 @@ export const BOOKINGS_FLOOR_ANNOTATIONS: FloorAnnotator = {
       .from(bookings)
       .where(
         and(
-          eq(bookings.locationId, cfg.locationId),
           inArray(bookings.tableId, tableIds),
           eq(bookings.status, "booked"),
           eq(bookings.bookingDate, venueToday),

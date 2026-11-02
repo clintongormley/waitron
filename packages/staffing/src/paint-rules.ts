@@ -48,7 +48,7 @@ function parseBlock(value: unknown, field: string, cutover: string): StaffingBlo
   return { staffRoleId, headcount, startsAt, endsAt };
 }
 
-/** A day's painted blocks from a request body; `cutover` is the location's `HH:MM` changeover. */
+/** A day's painted blocks from a request body; `cutover` is the venue's `HH:MM` changeover. */
 export function parseBlocks(value: unknown, field: string, cutover: string): StaffingBlock[] {
   if (!Array.isArray(value)) throw invalid(field);
   return value.map((item, index) => parseBlock(item, `${field}.${index}`, cutover));

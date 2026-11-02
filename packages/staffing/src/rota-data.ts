@@ -8,18 +8,12 @@ import type { RotaShift } from "./slots.js";
 export const mondayOf = (date: string): string =>
   addDays(date, -((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7));
 
-export async function readRotaRows(
-  tx: Transaction,
-  cfg: { locationId: string },
-  first: string,
-  last: string,
-) {
+export async function readRotaRows(tx: Transaction, first: string, last: string) {
   const versions = await tx
     .select()
     .from(rosterVersions)
     .where(
       and(
-        eq(rosterVersions.locationId, cfg.locationId),
         gte(rosterVersions.periodStart, first),
         lte(rosterVersions.periodStart, last),
         inArray(rosterVersions.status, ["draft", "published"]),
@@ -49,15 +43,12 @@ export async function readRotaRows(
     .from(shifts)
     .leftJoin(shiftAssignments, eq(shiftAssignments.shiftId, shifts.id))
     .where(
-      and(
-        eq(shifts.locationId, cfg.locationId),
-        or(
-          inArray(shifts.rosterVersionId, ids),
-          and(
-            isNull(shifts.rosterVersionId),
-            gte(localDate, first),
-            lte(localDate, addDays(last, 6)),
-          ),
+      or(
+        inArray(shifts.rosterVersionId, ids),
+        and(
+          isNull(shifts.rosterVersionId),
+          gte(localDate, first),
+          lte(localDate, addDays(last, 6)),
         ),
       ),
     )

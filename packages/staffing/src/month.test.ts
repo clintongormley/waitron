@@ -79,7 +79,7 @@ async function painted() {
     const grill: AreaRef = { kind: "station", id: v.stationId };
     const role = waiter!.id;
     // Friday's late block runs past midnight and still belongs to Friday's business day.
-    await saveSeasonStaffing(tx, v.cfg, v.seasonId, [
+    await saveSeasonStaffing(tx, v.seasonId, [
       {
         area: dept,
         weekday: 5,
@@ -88,7 +88,7 @@ async function painted() {
       { area: grill, weekday: 5, blocks: [block(role, { headcount: 4 })] },
       { area: dept, weekday: 6, blocks: [block(role, { headcount: 6 })] },
     ]);
-    await saveSpecialDayStaffing(tx, v.cfg, special!.id, [
+    await saveSpecialDayStaffing(tx, special!.id, [
       {
         area: dept,
         dateId: dates.find((d) => d.date === "2026-08-14")!.id,

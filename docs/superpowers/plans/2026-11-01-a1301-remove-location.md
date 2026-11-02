@@ -463,6 +463,17 @@ function no longer reads the scope. It fails before the change. It is marked
 - **Second-location cases the code slices did not reach.** F slices leave every case that seeds a
   second location and list it in their commit; the schema slice that drops that table's `location_id`
   deletes any still standing.
+- **Indexes that lead with `location_id`.** A read that drops its location condition can no longer
+  use such an index: S9a measured `listBookings` going from `SEARCH … bookings_location_date_idx` to
+  `SCAN bookings` (the repo runs no `ANALYZE`). So `bookingsOnDay` (`packages/bookings/src/bookings.ts`)
+  keeps `location_id = venueLocationId(tx)`, pinned by "plans the day list on the location and date
+  index, not a scan" in `bookings.test.ts`. The slice that drops `bookings.location_id` rebuilds the
+  index on `(booking_date)` and deletes the condition; every other slice checks its own reads'
+  plans against the indexes on the tables it reads.
+  S9b found the same for the staff-role name check: `staffRolesNamed`
+  (`packages/staffing/src/staff-roles.ts`) keeps the condition for `staff_roles_location_name_key`.
+  The staff-role, department, station and roster-version lists it also changed now scan, but their
+  old plans searched on `location_id` alone, which matches every row on a box with one venue.
 - **The live-query table names** (`location_day_cutover_changes`, `{ type: "locations" }`) and the
   unique-index column lists (`columns: ["location_id", "name"]`) named as leftovers below go with
   S23 and S24.
@@ -2784,6 +2795,12 @@ at)`, `readSeasonStaffing(tx, seasonId)` and the rest without `cfg`, except `rea
   lines `rota.ts:85,363` and `staffing-types.ts:113`. The two dashboard files print their S13
   lines.
 - [ ] **Step 7: commit** "Staffing reads the venue, not a location (A1301 S9b)".
+
+**Delivered 2026-11-02.** `bookingsOnDay` keeps `location_id = venueLocationId(tx)` (see "Indexes
+that lead with `location_id`"). `readStaffingMonth`, `readSeasonStaffing`, `readSpecialDayStaffing`
+and `resolveStaffing` keep `cfg` for the scope they hand venue-service, which S6 and S8 leave ignored
+and S18 removes. `addRotaShift`, `updateRotaShift` and `removeRotaShift` keep `cfg` for the workforce
+roster calls S13b changes.
 
 ### Open PRs touching S9's files
 

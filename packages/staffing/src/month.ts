@@ -19,7 +19,7 @@ export async function readStaffingMonth(
     month,
     at,
   );
-  const areas = await listStaffingAreas(tx, cfg);
+  const areas = await listStaffingAreas(tx);
   const resolved = await resolveStaffing(
     tx,
     cfg,
@@ -28,7 +28,7 @@ export async function readStaffingMonth(
   );
   const first = frame.days[0]!.date;
   const last = mondayOf(frame.days.at(-1)!.date);
-  const rota = await readRotaRows(tx, cfg, first, last);
+  const rota = await readRotaRows(tx, first, last);
   const placed = new Map(
     [...rota.byWeek].map(([week, rows]) => [
       week,

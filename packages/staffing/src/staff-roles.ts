@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, ne, sql, type SQL } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { venueLocationId, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import {
   AppError,
@@ -17,7 +17,6 @@ import {
 import type { CalendarColour, ListedStaffRole, StaffRole } from "./staffing-types.js";
 import "./errors.js";
 
-type Cfg = { locationId: string };
 export interface StaffRoleInput {
   name: string;
   colour: CalendarColour;
@@ -34,32 +33,48 @@ function staffRoleValues(input: StaffRoleInput): StaffRoleInput {
   return { name, colour: input.colour };
 }
 
-/** Names compare exactly after trimming, as the unique index does. */
-async function assertNameFree(tx: Transaction, cfg: Cfg, name: string, except: string | null) {
-  const [clash] = await tx
+/** Names the venue's row only so `staff_roles_location_name_key`, which leads with `location_id`,
+ *  plans the read; without it the name check scans every staff role. */
+export function staffRolesNamed(
+  tx: Transaction,
+  venueId: string,
+  name: string,
+  except: string | null,
+) {
+  return tx
     .select({ id: staffRoles.id })
     .from(staffRoles)
     .where(
       and(
-        eq(staffRoles.locationId, cfg.locationId),
+        eq(staffRoles.locationId, venueId),
         eq(staffRoles.name, name),
         except === null ? undefined : ne(staffRoles.id, except),
       ),
     );
+}
+
+/** Names compare exactly after trimming, as the unique index does. */
+async function assertNameFree(
+  tx: Transaction,
+  venueId: string,
+  name: string,
+  except: string | null,
+) {
+  const [clash] = await staffRolesNamed(tx, venueId, name, except);
   if (clash) throw new AppError("staff_role.name_taken", { name });
 }
 
-async function assertStaffRoleHere(tx: Transaction, cfg: Cfg, staffRoleId: string): Promise<void> {
+async function assertStaffRoleExists(tx: Transaction, staffRoleId: string): Promise<void> {
   const [row] = await tx
     .select({ id: staffRoles.id })
     .from(staffRoles)
-    .where(and(eq(staffRoles.id, staffRoleId), eq(staffRoles.locationId, cfg.locationId)));
+    .where(eq(staffRoles.id, staffRoleId));
   if (row === undefined) throw notFound(staffRoleId);
 }
 
 /** Only after the caller has checked or written the row in this transaction. */
-async function readStaffRole(tx: Transaction, cfg: Cfg, staffRoleId: string): Promise<StaffRole> {
-  return (await readStaffRoles(tx, cfg, staffRoleId))[0]!;
+async function readStaffRole(tx: Transaction, staffRoleId: string): Promise<StaffRole> {
+  return (await readStaffRoles(tx, staffRoleId))[0]!;
 }
 
 function staffRoleRows(tx: Transaction, scope: SQL | undefined) {
@@ -88,15 +103,8 @@ function byStaffRole<Row extends { staffRoleId: string }>(
 }
 
 /** Every query is narrowed to `only` when it is given, so a write's answer reads one staff role. */
-async function readStaffRoles(
-  tx: Transaction,
-  cfg: Cfg,
-  only: string | null,
-): Promise<StaffRole[]> {
-  const scope = and(
-    eq(staffRoles.locationId, cfg.locationId),
-    only === null ? undefined : eq(staffRoles.id, only),
-  );
+async function readStaffRoles(tx: Transaction, only: string | null): Promise<StaffRole[]> {
+  const scope = only === null ? undefined : eq(staffRoles.id, only);
   const rows = await staffRoleRows(tx, scope);
   const holders = byStaffRole(
     await tx
@@ -112,18 +120,14 @@ async function readStaffRoles(
   }));
 }
 
-/** The location's staff roles in position order, with who holds each. */
-export function listStaffRoles(tx: Transaction, cfg: Cfg): Promise<StaffRole[]> {
-  return readStaffRoles(tx, cfg, null);
+/** The staff roles in position order, with who holds each. */
+export function listStaffRoles(tx: Transaction): Promise<StaffRole[]> {
+  return readStaffRoles(tx, null);
 }
 
-/** The location's staff roles as `listStaffRoles` gives them, each with its holders' names. */
-export async function listStaffRolesWithHolderNames(
-  tx: Transaction,
-  cfg: Cfg,
-): Promise<ListedStaffRole[]> {
-  const scope = eq(staffRoles.locationId, cfg.locationId);
-  const rows = await staffRoleRows(tx, scope);
+/** The staff roles as `listStaffRoles` gives them, each with its holders' names. */
+export async function listStaffRolesWithHolderNames(tx: Transaction): Promise<ListedStaffRole[]> {
+  const rows = await staffRoleRows(tx, undefined);
   const holders = byStaffRole(
     await tx
       .select({
@@ -133,8 +137,6 @@ export async function listStaffRolesWithHolderNames(
       })
       .from(personStaffRoles)
       .innerJoin(persons, eq(persons.id, personStaffRoles.personId))
-      .innerJoin(staffRoles, eq(staffRoles.id, personStaffRoles.staffRoleId))
-      .where(scope)
       .orderBy(asc(personStaffRoles.personId)),
   );
   const compare = createLabelComparator();
@@ -148,46 +150,40 @@ export async function listStaffRolesWithHolderNames(
   });
 }
 
-/** Adds a staff role after the location's last one. */
-export async function createStaffRole(
-  tx: Transaction,
-  cfg: Cfg,
-  input: StaffRoleInput,
-): Promise<StaffRole> {
+/** Adds a staff role after the last one. */
+export async function createStaffRole(tx: Transaction, input: StaffRoleInput): Promise<StaffRole> {
   const values = staffRoleValues(input);
-  await assertNameFree(tx, cfg, values.name, null);
+  const venueId = await venueLocationId(tx);
+  await assertNameFree(tx, venueId, values.name, null);
   const [next] = await tx
     .select({ position: sql<number>`coalesce(max(${staffRoles.position}) + 1, 0)`.mapWith(Number) })
-    .from(staffRoles)
-    .where(eq(staffRoles.locationId, cfg.locationId));
+    .from(staffRoles);
   const [row] = await tx
     .insert(staffRoles)
-    .values({ locationId: cfg.locationId, ...values, position: next!.position })
+    .values({ locationId: venueId, ...values, position: next!.position })
     .returning({ id: staffRoles.id });
-  return readStaffRole(tx, cfg, row!.id);
+  return readStaffRole(tx, row!.id);
 }
 
 export async function updateStaffRole(
   tx: Transaction,
-  cfg: Cfg,
   staffRoleId: string,
   input: StaffRoleInput,
 ): Promise<StaffRole> {
   const values = staffRoleValues(input);
-  await assertStaffRoleHere(tx, cfg, staffRoleId);
-  await assertNameFree(tx, cfg, values.name, staffRoleId);
+  await assertStaffRoleExists(tx, staffRoleId);
+  await assertNameFree(tx, await venueLocationId(tx), values.name, staffRoleId);
   await tx.update(staffRoles).set(values).where(eq(staffRoles.id, staffRoleId));
-  return readStaffRole(tx, cfg, staffRoleId);
+  return readStaffRole(tx, staffRoleId);
 }
 
 /** Replaces who holds the role. Nothing references a `person_staff_roles` row, so delete-then-insert is safe. */
 export async function setStaffRoleHolders(
   tx: Transaction,
-  cfg: Cfg,
   staffRoleId: string,
   personIds: readonly string[],
 ): Promise<StaffRole> {
-  await assertStaffRoleHere(tx, cfg, staffRoleId);
+  await assertStaffRoleExists(tx, staffRoleId);
   const unique = [...new Set(personIds)];
   if (unique.length > 0) {
     const found = await tx
@@ -199,19 +195,17 @@ export async function setStaffRoleHolders(
   await tx.delete(personStaffRoles).where(eq(personStaffRoles.staffRoleId, staffRoleId));
   if (unique.length > 0)
     await tx.insert(personStaffRoles).values(unique.map((personId) => ({ personId, staffRoleId })));
-  return readStaffRole(tx, cfg, staffRoleId);
+  return readStaffRole(tx, staffRoleId);
 }
 
-/** Puts the location's roles in the order given; the list must name each of them exactly once. */
+/** Puts the roles in the order given; the list must name each of them exactly once. */
 export async function reorderStaffRoles(
   tx: Transaction,
-  cfg: Cfg,
   staffRoleIds: readonly string[],
 ): Promise<void> {
   const rows = await tx
     .select({ id: staffRoles.id, position: staffRoles.position })
-    .from(staffRoles)
-    .where(eq(staffRoles.locationId, cfg.locationId));
+    .from(staffRoles);
   const current = new Map(rows.map((row) => [row.id, row.position]));
   const unknown = staffRoleIds.find((id) => !current.has(id));
   if (unknown !== undefined) throw notFound(unknown);
@@ -224,15 +218,11 @@ export async function reorderStaffRoles(
 }
 
 /** What deleting the role would do; the delete question reads it and the delete recomputes it. */
-async function staffRoleDeleteRules(
-  tx: Transaction,
-  cfg: Cfg,
-  staffRoleId: string,
-): Promise<DeleteImpact> {
+async function staffRoleDeleteRules(tx: Transaction, staffRoleId: string): Promise<DeleteImpact> {
   const [target] = await tx
     .select({ id: staffRoles.id, name: staffRoles.name })
     .from(staffRoles)
-    .where(and(eq(staffRoles.id, staffRoleId), eq(staffRoles.locationId, cfg.locationId)));
+    .where(eq(staffRoles.id, staffRoleId));
   if (target === undefined) throw notFound(staffRoleId);
   const [shiftsUsing] = await tx
     .select({ n: tally })
@@ -270,19 +260,14 @@ async function staffRoleDeleteRules(
 
 export function readStaffRoleDeleteImpact(
   tx: Transaction,
-  cfg: Cfg,
   staffRoleId: string,
 ): Promise<DeleteImpact> {
-  return staffRoleDeleteRules(tx, cfg, staffRoleId);
+  return staffRoleDeleteRules(tx, staffRoleId);
 }
 
 /** Deletes the role with its holders and painted blocks; refused while a shift fills it. */
-export async function deleteStaffRole(
-  tx: Transaction,
-  cfg: Cfg,
-  staffRoleId: string,
-): Promise<DeleteImpact> {
-  const impact = await staffRoleDeleteRules(tx, cfg, staffRoleId);
+export async function deleteStaffRole(tx: Transaction, staffRoleId: string): Promise<DeleteImpact> {
+  const impact = await staffRoleDeleteRules(tx, staffRoleId);
   const first = impact.refusals[0];
   if (first !== undefined)
     throw new AppError(first.code as keyof ErrorParams, first.params as never);

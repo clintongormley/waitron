@@ -1,5 +1,4 @@
-import { eq } from "drizzle-orm";
-import { DEFAULT_TIME_ZONE, locations } from "@waitron/db";
+import { DEFAULT_TIME_ZONE, readVenue } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 
 /** Built once per zone, since every floor poll needs one. An invalid zone throws before the `set`,
@@ -23,7 +22,7 @@ function wallClockFormatter(timeZone: string): Intl.DateTimeFormat {
   return fmt;
 }
 
-/** `locations.time_zone` is free text, so a zone `Intl` rejects falls back to the column's default
+/** The stored time zone is free text, so a zone `Intl` rejects falls back to `DEFAULT_TIME_ZONE`
  *  rather than throwing. */
 function safeTimeZone(timeZone: string): string {
   try {
@@ -46,16 +45,9 @@ function venueWallClock(now: Date, timeZone: string): { date: string; time: stri
   };
 }
 
-/** The venue-local date and time at `now` for the location, read in the default zone when the
- *  location is missing. */
 export async function venueWallClockAt(
   tx: Transaction,
-  locationId: string,
   now: Date,
 ): Promise<{ date: string; time: string }> {
-  const [loc] = await tx
-    .select({ timeZone: locations.timeZone })
-    .from(locations)
-    .where(eq(locations.id, locationId));
-  return venueWallClock(now, safeTimeZone(loc?.timeZone ?? DEFAULT_TIME_ZONE));
+  return venueWallClock(now, safeTimeZone((await readVenue(tx)).timeZone));
 }
