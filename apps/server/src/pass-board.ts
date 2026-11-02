@@ -1,15 +1,20 @@
 import "./errors.js";
-import { and, eq, gte, inArray, or, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, isNull, or, type SQL } from "drizzle-orm";
 import { worstBand } from "@waitron/shared";
-import { ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { ResolvedKitchenScreen } from "@waitron/module";
 import type { TradingContext } from "./trading-context.js";
-import { requestedItem } from "./kitchen-phase.js";
+import { kitchenPhase, requestedItem } from "./kitchen-phase.js";
+import { passWaitingStations } from "./kitchen-release.js";
+import { VENUE_SERVICE } from "./modules.js";
+import { unchosenAtClosedStation } from "./station-move.js";
 import { orderWatchZones } from "./watch-zones.js";
+import { buildPassBoard, type PassBoard, type PassRow, type PassTarget } from "./pass-card.js";
 import {
   liveKitchenDish,
   readPassBoard,
+  readPassRows,
   type ExpoCourse,
   type ExpoGroup,
   type ExpoOrder,
@@ -114,6 +119,84 @@ export async function listPassMonitor(
   };
 }
 
+/** The pass's cards: every card one of whose live dishes the scope sees, each read whole. */
+export async function readScopedPassBoard(
+  tx: Transaction,
+  cfg: TradingContext,
+  scope: PassScope,
+  display?: { showNonPassStations: boolean },
+): Promise<PassBoard> {
+  const kept = await scopedItems(tx, cfg, scope);
+  const groupIds = [...new Set(kept.flatMap((item) => item.groupId ?? []))];
+  const billIds = [
+    ...new Set(kept.flatMap((item) => (item.groupId === null ? [item.orderId] : []))),
+  ];
+  const keys: SQL[] = [];
+  if (groupIds.length > 0) keys.push(inArray(workingOrderLines.groupId, groupIds));
+  if (billIds.length > 0)
+    keys.push(and(inArray(workingOrders.id, billIds), isNull(workingOrderLines.groupId))!);
+  const rows = keys.length === 0 ? [] : await readCardRows(tx, cfg, or(...keys)!);
+  return buildPassBoard(rows, scope, display);
+}
+
+/** One card's rows, for the release. */
+export async function readPassCardRows(
+  tx: Transaction,
+  cfg: TradingContext,
+  target: PassTarget,
+): Promise<PassRow[]> {
+  return readCardRows(
+    tx,
+    cfg,
+    target.kind === "group"
+      ? and(eq(workingOrderLines.groupId, target.groupId), eq(orderGroups.partyId, target.partyId))!
+      : and(eq(workingOrders.id, target.workingOrderId), isNull(workingOrderLines.groupId))!,
+  );
+}
+
+async function readCardRows(tx: Transaction, cfg: TradingContext, cards: SQL): Promise<PassRow[]> {
+  const read = await readPassRows(tx, cfg.locationId, and(liveKitchenDishAt(cfg), cards)!);
+  if (read.length === 0) return [];
+  const zones = await rowsWatchZones(tx, cfg, read);
+  const phase = (row: Pick<PassRow, "requestedAt" | "firedAt" | "item">) =>
+    kitchenPhase({ requestedAt: row.requestedAt, firedAt: row.firedAt, state: row.item.state });
+  const waits = await passWaitingStations(
+    tx,
+    read.filter((row) => phase(row) === "held").map((row) => row.stationId),
+  );
+  const states = await VENUE_SERVICE.stationStates(tx, cfg, new Date());
+  return read.map(
+    ({
+      stationChosenAt,
+      stationRetainedAtRelease,
+      makeAtStationId,
+      servedAt,
+      deliveryTableId,
+      ...row
+    }) => {
+      const state = states.get(row.stationId);
+      const rowPhase = phase(row);
+      return {
+        ...row,
+        zoneId: zones.get(row.orderId) ?? null,
+        stationWaitsNow: rowPhase === "held" && waits.has(row.stationId),
+        stationClosed:
+          rowPhase === "requested" &&
+          (!state || !state.active || !state.open) &&
+          unchosenAtClosedStation(
+            {
+              stationChosenAt,
+              stationRetainedAtRelease,
+              makeAtStationId,
+              stationId: row.stationId,
+            },
+            state,
+          ),
+      };
+    },
+  );
+}
+
 /** A live kitchen dish at this location. `scopedItems` and `firedPassDishes` both read it, so the
  *  dark-pass alert counts only dishes a pass board would list. */
 function liveKitchenDishAt(cfg: TradingContext): SQL | undefined {
@@ -125,12 +208,13 @@ async function scopedItems(
   tx: Transaction,
   cfg: TradingContext,
   scope: PassScope,
-): Promise<{ id: string; orderId: string }[]> {
+): Promise<{ id: string; orderId: string; groupId: string | null }[]> {
   if (scope.stationIds?.length === 0 || scope.zoneIds?.length === 0) return [];
   const candidates = await tx
     .select({
       id: ticketItems.id,
       orderId: workingOrders.id,
+      groupId: workingOrderLines.groupId,
       partyId: workingOrders.partyId,
       deliveryTableId: workingOrders.deliveryTableId,
       stationId: ticketItems.stationId,

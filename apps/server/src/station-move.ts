@@ -31,6 +31,24 @@ import "./errors.js";
 
 export type Rerouted = ReadonlyMap<string, { stationId: string; stationName: string }>;
 
+/** For an item at a closed station: nothing kept it there — not the closing's "leave", a hand
+ *  move, or the line's make-at. A station with no state (switched off) keeps nothing. */
+export function unchosenAtClosedStation(
+  row: {
+    stationChosenAt: string | null;
+    stationRetainedAtRelease: boolean;
+    makeAtStationId: string | null;
+    stationId: string;
+  },
+  state: { active: boolean; open: boolean } | undefined,
+): boolean {
+  return (
+    !state ||
+    (!row.stationRetainedAtRelease &&
+      (!state.active || (row.stationChosenAt === null && row.makeAtStationId !== row.stationId)))
+  );
+}
+
 /** Rerouting a paid bill changes the ticket, not the line's make-at choice. */
 export async function rerouteHeldAtRelease(
   tx: Transaction,
@@ -74,14 +92,7 @@ export async function rerouteHeldAtRelease(
     const state = states.get(row.stationId);
     return !state || !state.active || !state.open;
   });
-  const unchosen = closed.filter((row) => {
-    const state = states.get(row.stationId);
-    return (
-      !state ||
-      (!row.stationRetainedAtRelease &&
-        (!state.active || (row.stationChosenAt === null && row.makeAtStationId !== row.stationId)))
-    );
-  });
+  const unchosen = closed.filter((row) => unchosenAtClosedStation(row, states.get(row.stationId)));
   const dishes = unchosen.filter((row) => row.parentLineId === null && row.productId !== null);
   const stranded = unchosen.filter((row) => row.parentLineId !== null || row.productId === null);
   const alertStranded = async () => {

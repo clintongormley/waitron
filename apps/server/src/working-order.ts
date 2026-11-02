@@ -8483,6 +8483,8 @@ export type PassRowRead = Omit<PassRow, "zoneId" | "stationWaitsNow" | "stationC
   makeAtStationId: string | null;
   /** Read only to leave a served line out of the board's `worstBand`. */
   servedAt: string | null;
+  /** Read only to find the order's watched zone. */
+  deliveryTableId: string | null;
 };
 
 /** Every live kitchen item `scope` selects, with the facts the pass card and release read. */
@@ -8669,6 +8671,7 @@ export async function readPassRows(
       stationRetainedAtRelease: row.stationRetainedAtRelease,
       makeAtStationId: row.makeAtStationId,
       servedAt: row.servedAt,
+      deliveryTableId: row.deliveryTableId,
     };
   });
 }
