@@ -249,6 +249,40 @@ describe("A773 pass screen", () => {
       expect(cardKeys(el)).toEqual(["bill:a"]);
     });
 
+    it.each([
+      [[], "all_stations"],
+      [[chosen("pass")], "pass"],
+    ] as const)(
+      "%j draws group and course Ready only when the till runs the pass",
+      async (screens, mode) => {
+        const board = passBoard({
+          inProgress: [
+            passCard({
+              key: "group:g-1",
+              target: { kind: "group", partyId: "p-1", groupId: "g-1" },
+              party: { id: "p-1", revision: 7 },
+            }),
+            passCard(),
+          ],
+        });
+        const api = () =>
+          fakeApi({
+            getDeviceIdentity: vi.fn().mockResolvedValue(identity([...screens])),
+            getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(board)),
+            getExpoBoard: vi.fn().mockResolvedValue({ board }),
+          });
+        const ready = "[data-group-ready], [data-ready]";
+        const runs = await mount({ api: api() });
+        expect(boardOf(runs)!.mode).toBe(mode);
+        expect(boardOf(runs)!.shadowRoot!.querySelectorAll(ready).length).toBeGreaterThan(0);
+        runs.remove();
+        const el = await mount({ api: api(), runsPass: false });
+        expect(boardOf(el)!.mode).toBe(mode);
+        expect(cardKeys(el)).toEqual(["group:g-1", "bill:order-1"]);
+        expect(boardOf(el)!.shadowRoot!.querySelectorAll(ready)).toHaveLength(0);
+      },
+    );
+
     it("switches the read and clears the old board when the choice changes between refreshes", () =>
       withFakeTimers(async () => {
         const api = fakeApi({

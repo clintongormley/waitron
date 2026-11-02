@@ -97,6 +97,7 @@ describe("A773 pass board widget: dishes", () => {
       passItem({ id: "noted", note: "sin sal" }),
       passItem({ id: "empty", note: "" }),
       passItem({ id: "none", note: null }),
+      passItem({ id: "keyless" }),
     ]);
     expect(
       itemOf(el, "noted").querySelector('[data-item-customisation="noted"] [data-note]')!
@@ -104,6 +105,7 @@ describe("A773 pass board widget: dishes", () => {
     ).toContain("sin sal");
     expect(itemOf(el, "empty").querySelector(".item-customisation")).toBeNull();
     expect(itemOf(el, "none").querySelector(".item-customisation")).toBeNull();
+    expect(itemOf(el, "keyless").querySelector(".item-customisation")).toBeNull();
   });
 
   it("draws the dish's own allergen chips and no not-reviewed warning", async () => {

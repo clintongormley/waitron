@@ -306,6 +306,7 @@ describe("A773 pass view", () => {
     expect(onlyView("inProgress", group, "monitor").groupReady).toBe(false);
     expect(onlyView("inProgress", group, "pass", false).groupReady).toBe(false);
     expect(onlyView("inProgress", group, "all_stations").groupReady).toBe(true);
+    expect(onlyView("inProgress", group, "all_stations", false).groupReady).toBe(false);
     expect(onlyView("inProgress", group).courseReady).toEqual([]);
 
     const starters = { id: "course-starters", name: "Starters", displayOrder: 1 };
@@ -326,6 +327,7 @@ describe("A773 pass view", () => {
     expect(onlyView("inProgress", bill, "all_stations").courseReady).toEqual([
       { orderId: "order-1", courseId: "course-starters" },
     ]);
+    expect(onlyView("inProgress", bill, "all_stations", false).courseReady).toEqual([]);
 
     const desserts = { id: "course-desserts", name: "Desserts", displayOrder: 3 };
     const withDoneCourse = passCard({

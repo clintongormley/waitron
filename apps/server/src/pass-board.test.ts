@@ -17,7 +17,13 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { listPassMonitor, listPassScreen, passSees, type PassScope } from "./pass-board.js";
+import {
+  listPassMonitor,
+  listPassScreen,
+  passSees,
+  readScopedPassBoard,
+  type PassScope,
+} from "./pass-board.js";
 import {
   carveOffLines,
   createOpenOrder,
@@ -368,6 +374,46 @@ describe("a pass's sections", () => {
       ],
       groups: [],
     });
+  });
+});
+
+describe("the pass board", () => {
+  it("lists a card's dishes in no course first, then in course order, whatever order they were sent in", async () => {
+    const v = await setupPartyVenue(suite.db);
+    await inTx(v, async (tx) => {
+      const grill = (await createStation(tx, v.cfg, { name: "Grill" })).id;
+      for (const name of ["Burger", "Caña", "Flan"])
+        await routeProductTo(tx, v.cfg, v.productId(name), grill);
+      const starters = await createCourse(tx, v.cfg, { name: "Starters", displayOrder: 0 });
+      await setProductCourse(tx, v.cfg, v.productId("Caña"), starters.id);
+      const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 1 });
+      await setProductCourse(tx, v.cfg, v.productId("Burger"), mains.id);
+    });
+    const counterId = randomUUID();
+    await inTx(v, async (tx) => {
+      await createOpenOrder(
+        tx,
+        v.cfg,
+        counterId,
+        v.counter.toOfferLines(
+          ["Burger", "Caña", "Flan"].map((name) => ({
+            productId: v.productId(name),
+            quantity: "1",
+          })),
+        ),
+        null,
+        { zoneId: v.counter.zoneId },
+      );
+      const lines = await tx
+        .select(fireableLineColumns)
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, counterId));
+      await fireLines(tx, v.cfg, counterId, lines);
+    });
+    const board = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY));
+    const cards = [...board.held, ...board.toFire, ...board.inProgress, ...board.ready];
+    expect(cards.map((card) => card.target)).toEqual([{ kind: "bill", workingOrderId: counterId }]);
+    expect(cards[0]!.items.map((item) => item.name)).toEqual(["FLAN", "CANA", "BURG"]);
   });
 });
 
