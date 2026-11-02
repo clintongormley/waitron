@@ -225,11 +225,12 @@ called weaker than its name, the topic file lists what it does not see.
 
 ### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26)
 
-- **A refusal explains what happened and what each choice does; offer any needed administrator or owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody else.** The only exceptions are a state only a bug can produce, identified at the site as a fault in Waitron (owner, 2026-10-25), the till's full-disk strip (owner, 2026-10-28, A1127 Q4), and the two backup-room alerts (owner, 2026-10-28, A1167). Nothing guards it. Receipt: [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
+- **A refusal explains what happened and what each choice does; offer any needed administrator or owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody else.** The only exceptions are a state only a bug can produce, identified at the site as a fault in Waitron (owner, 2026-10-25), the till's full-disk strip, «Tell a manager» (owner, 2026-10-28, A1127 Q4), and the two backup-room alerts (owner, 2026-10-28, A1167). Nothing guards it. Receipt: [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
 - **New or changed forms use [design-system.md](docs/developers/design-system.md) → Forms.**
-  Request refusals alone never disable the action; field refusals
-  appear under that field (owner, 2026-09-29).
-  Saves stay quiet and disabled until the draft changes (owner, 2026-10-07, A331; [receipt](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02)). Other actions stay quiet while awaiting a choice,
+  Request refusals alone never disable the action; field refusals appear under that field (owner,
+  2026-09-29). Saves stay quiet and disabled until the draft changes, using `draftScopeFor`,
+  `saveActionState` and a save-handler early return (owner, 2026-10-07, A331;
+  [receipt](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02)). Other actions stay quiet while awaiting a choice,
   selection or load, or barred by row state; use their own colour when actionable or sending (owner,
   2026-10-08, A416/A427). Exceptions are in the Forms contract; nothing guards these across screens.
   A hint is the placeholder; short explanations are hints, not “?” buttons (owner, 2026-10-03; unguarded,
@@ -249,7 +250,8 @@ called weaker than its name, the topic file lists what it does not see.
 - **A screen change updates its guide in English and, where a twin exists, Spanish.**
   Every section heading carries a shared `{#id}`; dashboard/till links use each app's `help-guide.ts`.
   Guards: `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts`, weaker than their
-  names: not proof the guide was updated. [Limits](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
+  names: not proof the guide was updated.
+  [Limits](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
 - **Before treating a numeric field as whole numbers, follow its checks and wire conversion and try
   a fraction.** Receipt: [conventions-ui.md](docs/developers/conventions-ui.md).
 - **Normalising a field while typing preserves the native selection.** Guards: the EN/ES caret cases
@@ -285,8 +287,8 @@ called weaker than its name, the topic file lists what it does not see.
 - **A value the till takes from its start read either refreshes through `setupRevision` or is listed
   as fixed until reload**, with why, in [conventions-ui.md](docs/developers/conventions-ui.md).
   Nothing guards it.
-- **Every staff-notice code a source sends is worded by the till's `staffNoticeText`**; a
-  code it does not name is drawn as "The box needs attention". Guard:
+- **Every staff-notice code a source sends is worded by the till's `staffNoticeText`**; a code it
+  does not name is drawn as "The box needs attention". Guard:
   `scripts/staff-notice-codes.test.ts`, weaker than its name — it reads `code: "…"` literals as
   text, in source files it lists by hand. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A background API client does not make POST requests passive.** Only GETs are marked passive;
@@ -294,8 +296,7 @@ called weaker than its name, the topic file lists what it does not see.
 - **Dashboard subscription names travel with their server sources.** Guard: `scripts/live-subscriptions.test.ts` — it catches unknown names, NOT missing SQL dependencies or disabled-module combinations. [Detail](docs/developers/conventions-ui.md).
 - **A module adds a Calendar view through `calendarViews` on its `DashboardContribution`, never by
   venue-service importing it, and never names its address words in `apps/dashboard/src/navigation.ts`**.
-  Nothing guards the second half. See
-  [conventions-ui.md](docs/developers/conventions-ui.md).
+  Nothing guards the second half. See [conventions-ui.md](docs/developers/conventions-ui.md).
 - **The dashboard banner is persistent identity chrome** — top of the page, full width, the tenant's
   legal name (not a location). The account menu sits at the trailing edge only when a session exists.
   [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
@@ -303,10 +304,10 @@ called weaker than its name, the topic file lists what it does not see.
   a late locale response overwriting an authenticated person's language or an explicit choice.
 - **Dashboard login offers methods without revealing account enrolment.** Never query account status
   or passkey enrolment to choose the public screen. A modal passkey prompt requires an explicit
-  action. Save the authenticated email
-  and the successful method only with Remember selected, never in tab storage. [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
-- **A login refusal never reveals account existence** (owner, 2026-09-30). Only missing/malformed input marks
-  a field; the real cause is a log-only `reason`. Owner-approved exception: `passkey.not_registered`.
+  action. Save the authenticated email and the successful method only with Remember selected, never
+  in tab storage. [Detail](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-11-02).
+- **A login refusal never reveals account existence** (owner, 2026-09-30). Only missing/malformed
+  input marks a field; the real cause is a log-only `reason`. Owner-approved exception: `passkey.not_registered`.
   Guards: identity login and route suites, weaker than the set looks: no new sign-in route is covered.
   [Detail](docs/developers/conventions-ui.md#a-logins-refusal-never-says-whether-the-account-exists).
 - **A device's profile and the signed-in person must both allow a till action; profile zones bound
@@ -348,12 +349,10 @@ called weaker than its name, the topic file lists what it does not see.
   Guards, weaker than their names: image-smoke (no Bluetooth on the runner) and
   `scripts/deploy-image-env.test.ts` (reads the profile as TEXT).
 - **The unauthenticated recovery page's title and action are fixed strings chosen by the error
-  code; its log tail is the file's last lines,
-  written through `redactSecrets` and the personal-data mask, and HTML-escaped**, with stated
-  exceptions (owner decision 2026-09-26; the tail's span and the personal-data mask are A980
-  S10's defaults, open to the owner).
-  No code's params and no logged
-  message may carry a secret. Its one password form, for `setup.start_again_files_found`, takes
+  code; its log tail is the file's last lines, written through `redactSecrets` and the
+  personal-data mask, and HTML-escaped**, with stated exceptions (owner decision 2026-09-26; the
+  tail's span and the personal-data mask are A980 S10's defaults, open to the owner). No code's
+  params and no logged message may carry a secret. Its one password form, for `setup.start_again_files_found`, takes
   the administrator password over HTTPS only (cost if not: a password sent in plain text on the
   venue's network); its Move choice is the owner's one exception to never suggesting a removal
   (A1098). Guard: the never-delete cases in
