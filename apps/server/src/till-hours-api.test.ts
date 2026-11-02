@@ -45,10 +45,7 @@ beforeEach(async () => {
     await backend.clockOut(tx, { ...common, at: "2026-01-05T17:00:00Z" });
   });
 });
-function read(
-  query = `locationId=${venue.cfg.locationId}&kind=month&date=2026-01-05`,
-  cookie = venue.cookie,
-) {
+function read(query = `kind=month&date=2026-01-05`, cookie = venue.cookie) {
   return venue.app.request(`/api/attendance/hours?${query}`, { headers: { cookie } });
 }
 const snapshot = () => suite.db.all(sql`select * from time_entries order by id`);
@@ -61,7 +58,6 @@ it("clock-only staff read their own completed hours passively without recording 
   const value = (await response.json()) as PersonHours;
   expect(value).toMatchObject({
     personId: venue.personId,
-    locationId: venue.cfg.locationId,
     workedMinutes: 480,
     period: { start: "2026-01-01", end: "2026-02-01" },
     pending: { prompts: [], items: [], automaticEntryIds: [] },
@@ -74,7 +70,7 @@ it("clock-only staff read their own completed hours passively without recording 
   expect(
     (await suite.db.select().from(devices).where(eq(devices.id, venue.deviceId)))[0]!.lastSeenAt,
   ).toBe(old);
-  const defaultView = await read(`locationId=${venue.cfg.locationId}&kind=month`);
+  const defaultView = await read(`kind=month`);
   expect(defaultView.status).toBe(200);
   expect(await defaultView.json()).toMatchObject({
     businessDay: "2026-10-31",
@@ -179,7 +175,7 @@ it("scopes frozen snapshots and current entries to the session person", async ()
 it.each(["personId=foreign", "kind=pay-period", "date=2026-02-30", "kind=week&kind=month"])(
   "rejects widened or malformed scope %s",
   async (extra) => {
-    const response = await read(`locationId=${venue.cfg.locationId}&kind=month&${extra}`);
+    const response = await read(`kind=month&${extra}`);
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: { code: "management.request_invalid" } });
   },

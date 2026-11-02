@@ -279,7 +279,6 @@ describe("signed-in own till clock routes", () => {
   it("allows admitted staff with only clock-in and no service-zone access", async () => {
     expect(await state()).toEqual({
       personId: venue.personId,
-      locationId: venue.cfg.locationId,
       businessDay: "2026-01-05",
       state: "out",
       lastEntryId: null,

@@ -7,18 +7,16 @@ function query(raw: string, mode: "own" | "manager" = "own") {
   return request.parseHoursQuery(new URLSearchParams(raw), mode);
 }
 it.each(["week", "month"])("reads the exact own %s scope without inventing a date", (kind) => {
-  expect(query(`locationId=${id.toUpperCase()}&kind=${kind}`)).toEqual({
-    locationId: id,
-    selection: { kind },
-  });
-  expect(query(`locationId=${id}&kind=${kind}&date=2024-02-29`)).toEqual({
-    locationId: id,
+  expect(query(`kind=${kind}`)).toEqual({ selection: { kind } });
+  expect(query(`kind=${kind}&date=2024-02-29`)).toEqual({
     selection: { kind, date: "2024-02-29" },
   });
+  expect(() => query(`locationId=${id}&kind=${kind}`)).toThrow(
+    expect.objectContaining({ code: "management.request_invalid" }),
+  );
 });
 it("accepts only the manager pay-period view", () => {
-  expect(query(`locationId=${id}&kind=pay-period&date=2026-01-05`, "manager")).toEqual({
-    locationId: id,
+  expect(query(`kind=pay-period&date=2026-01-05`, "manager")).toEqual({
     selection: { kind: "pay-period", date: "2026-01-05" },
   });
 });
@@ -27,22 +25,22 @@ it.each([
   `locationId=${id}`,
   "locationId=&kind=week",
   "locationId=nope&kind=week",
-  `locationId=${id}&kind=`,
-  `locationId=${id}&kind=pay-period`,
-  `locationId=${id}&kind=weekly`,
-  `locationId=${id}&kind=week&date=`,
-  `locationId=${id}&kind=month&date=2026-02-30`,
-  `locationId=${id}&kind=week&date=2026-1-5`,
-  `locationId=${id}&kind=week&date=2026-01-05&date=2026-01-05`,
-  `locationId=${id}&kind=week&kind=month`,
+  `kind=`,
+  `kind=pay-period`,
+  `kind=weekly`,
+  `kind=week&date=`,
+  `kind=month&date=2026-02-30`,
+  `kind=week&date=2026-1-5`,
+  `kind=week&date=2026-01-05&date=2026-01-05`,
+  `kind=week&kind=month`,
   `locationId=${id}&locationId=${id}&kind=week`,
-  `locationId=${id}&kind=week&personId=${id}`,
-  `locationId=${id}&kind=week&extra=x`,
+  `kind=week&personId=${id}`,
+  `kind=week&extra=x`,
 ])("refuses a malformed or widened own hours query %#", (raw) => {
   expect(() => query(raw)).toThrow(expect.objectContaining({ code: "management.request_invalid" }));
 });
 it.each(["week", "month", ""])("manager refuses %s", (kind) => {
-  expect(() => query(`locationId=${id}&kind=${kind}`, "manager")).toThrow(
+  expect(() => query(`kind=${kind}`, "manager")).toThrow(
     expect.objectContaining({ code: "management.request_invalid" }),
   );
 });

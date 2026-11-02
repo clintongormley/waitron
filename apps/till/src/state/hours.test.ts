@@ -4,10 +4,9 @@ import type { ReadOptions } from "../api/client.js";
 import type { HoursController, HoursSnapshot } from "./hours.js";
 const modules = import.meta.glob<typeof import("./hours.js")>("./hours.ts");
 const selection: HoursSelection = { kind: "week", date: "2026-01-05" };
-function view(personId = "ana", locationId = "venue", selected = selection): PersonHours {
+function view(personId = "ana", selected = selection): PersonHours {
   return {
     personId,
-    locationId,
     selection: { ...selected },
     period: { start: "2026-01-05", end: "2026-01-12" },
     businessDay: "2026-01-06",
@@ -74,9 +73,9 @@ it("an old selection cannot replace a newer date or clear its reading state", as
   a.resolve(view());
   await old;
   expect(f.snapshot()).toEqual({ view: null, reading: true, readError: null });
-  b.resolve(view("ana", "other", selected));
+  b.resolve(view("ana", selected));
   await current;
-  expect(f.snapshot().view).toEqual(view("ana", "other", selected));
+  expect(f.snapshot().view).toEqual(view("ana", selected));
 });
 it("a late refresh cannot replace a newer response or its refusal", async () => {
   const f = await fixture();
@@ -127,11 +126,7 @@ it.each(["person", "same-person-session", "server-profile", "stop"] as const)(
 it.each(["person", "selection"] as const)("rejects a view for the wrong %s", async (kind) => {
   const f = await fixture();
   f.getHours.mockResolvedValueOnce(
-    view(
-      kind === "person" ? "bea" : "ana",
-      "venue",
-      kind === "selection" ? { kind: "month" } : selection,
-    ),
+    view(kind === "person" ? "bea" : "ana", kind === "selection" ? { kind: "month" } : selection),
   );
   await f.controller.start("ana", selection);
   expect(f.snapshot()).toEqual({

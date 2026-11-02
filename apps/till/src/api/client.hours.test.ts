@@ -4,7 +4,6 @@ import type { HoursSelection, PersonHours } from "@waitron/workforce/attendance-
 const selection: HoursSelection = { kind: "month", date: "2026-10-25" };
 const body: PersonHours = {
   personId: "ana",
-  locationId: "old/location",
   selection,
   period: { start: "2026-10-01", end: "2026-11-01" },
   businessDay: "2026-10-31",

@@ -185,7 +185,6 @@ describe("till own clock state", () => {
     );
     expect(await read()).toEqual({
       personId,
-      locationId,
       businessDay: "2026-01-05",
       state: "out",
       lastEntryId: null,
@@ -200,7 +199,6 @@ describe("till own clock state", () => {
       await withTransaction(suite.db, (tx) => backend[method](tx, event(at)));
       expect(await read()).toEqual({
         personId,
-        locationId,
         businessDay: "2026-01-05",
         state,
         lastEntryId: await lastId(),
@@ -221,7 +219,6 @@ describe("till own clock state", () => {
       ),
     ).toEqual({
       personId,
-      locationId,
       businessDay: "2026-01-04",
       state: "out",
       lastEntryId: null,

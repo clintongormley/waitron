@@ -126,7 +126,6 @@ export interface HoursClosure {
 }
 export interface PersonHours {
   personId: string;
-  locationId: string;
   selection: HoursSelection;
   period: Period;
   businessDay: string;
@@ -144,7 +143,6 @@ export interface PersonHours {
   closures: HoursClosure[];
 }
 export interface ManagerHours {
-  locationId: string;
   selection: HoursSelection;
   period: Period;
   businessDay: string;

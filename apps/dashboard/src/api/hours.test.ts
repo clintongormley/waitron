@@ -9,7 +9,6 @@ afterEach(() => {
 const selection: HoursSelection = { kind: "week", date: "2026-01-05" };
 const hours: PersonHours = {
   personId: "worker",
-  locationId: "place",
   selection,
   period: { start: "2026-01-05", end: "2026-01-12" },
   businessDay: "2026-01-06",

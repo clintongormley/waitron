@@ -16,7 +16,6 @@ import { attendanceItem } from "./attendance-fixtures.js";
 export function managerHours(): ManagerHours {
   const hours = hoursView({
     personId: "worker",
-    locationId: "shop",
     selection: { kind: "pay-period" },
     period: { start: "2026-01-01", end: "2026-02-01" },
   });
@@ -33,7 +32,6 @@ export function managerHours(): ManagerHours {
     }),
   ];
   return {
-    locationId: "shop",
     selection: { kind: "pay-period" },
     period: hours.period,
     businessDay: hours.businessDay,
@@ -45,7 +43,6 @@ export function managerHours(): ManagerHours {
         displayName: "Retained worker",
         hours: hoursView({
           personId: "retained",
-          locationId: "shop",
           selection: { kind: "pay-period" },
           period: hours.period,
           workedMinutes: 0,

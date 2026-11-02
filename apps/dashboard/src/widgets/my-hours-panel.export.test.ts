@@ -36,7 +36,7 @@ async function mount(available = true, theme?: "light" | "dark") {
           items: [],
           prompts: [],
         });
-      return Response.json(hoursView({ locationId: "venue", selection: { kind: "week" } }));
+      return Response.json(hoursView({ selection: { kind: "week" } }));
     },
   });
   const liveData = new LiveData();

@@ -74,7 +74,7 @@ beforeEach(async () => {
 });
 const own = "/management-api/me/attendance/";
 function path(kind = "month") {
-  return `hours?locationId=${venue.cfg.locationId}&kind=${kind}&date=2026-01-05`;
+  return `hours?kind=${kind}&date=2026-01-05`;
 }
 function ask(route: string, body?: unknown, cookie = staffCookie, passive = false) {
   return app.request(route, {
@@ -510,18 +510,4 @@ it("another worker's actual target, question and proposal confer no own authorit
   const value = (await (await ask(own + path())).json()) as PersonHours;
   expect(value.pending.items).toEqual([]);
   expect(value.record.entries.every((e) => e.entry.personId === venue.personId)).toBe(true);
-});
-
-// A1301: deleted with the parameter in S15
-it("answers the venue's hours, queue and day whatever workplace id the query names", async () => {
-  const locationId = crypto.randomUUID();
-  for (const route of [
-    `hours?locationId=${locationId}&kind=pay-period`,
-    `queue?locationId=${locationId}`,
-    `day?locationId=${locationId}&personId=${venue.personId}&date=2026-01-05`,
-  ]) {
-    const response = await ask("/management-api/attendance/" + route, undefined, ownerCookie);
-    expect(response.status, route).toBe(200);
-    expect(await response.json()).toMatchObject({ locationId: venue.cfg.locationId });
-  }
 });

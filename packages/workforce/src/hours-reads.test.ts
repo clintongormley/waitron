@@ -121,7 +121,6 @@ it("defaults the window to the venue business date while the local calendar is i
   const value = await read({ kind: "month" });
   expect(value).toMatchObject({
     personId: f.personId,
-    locationId: f.locationId,
     selection: { kind: "month" },
     businessDay: "2026-10-31",
     period: { start: "2026-10-01", end: "2026-11-01" },

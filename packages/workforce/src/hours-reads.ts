@@ -1,5 +1,5 @@
 import { asc } from "drizzle-orm";
-import { type Transaction, venueLocationId } from "@waitron/db";
+import { type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { AppError, businessDayAt, type BusinessDayClock } from "@waitron/shared";
 import type {
@@ -93,7 +93,6 @@ async function personInWindow(
   tx: Transaction,
   input: HoursInput & { personId: string },
   window: { period: Period; businessDay: string },
-  locationId: string,
 ): Promise<PersonHours> {
   const { personId } = input;
   if (typeof personId !== "string" || !personId) throw invalid();
@@ -158,7 +157,6 @@ async function personInWindow(
   });
   return {
     personId,
-    locationId,
     selection: { ...input.selection },
     period,
     businessDay,
@@ -176,11 +174,10 @@ export async function readPersonHours(
   tx: Transaction,
   input: HoursInput & { personId: string },
 ): Promise<PersonHours> {
-  return personInWindow(tx, input, await windowFor(tx, input), await venueLocationId(tx));
+  return personInWindow(tx, input, await windowFor(tx, input));
 }
 export async function readManagerHours(tx: Transaction, input: HoursInput): Promise<ManagerHours> {
   const window = await windowFor(tx, input);
-  const locationId = await venueLocationId(tx);
   const rows = await tx
     .select({ personId: persons.id, displayName: persons.displayName })
     .from(persons)
@@ -189,10 +186,9 @@ export async function readManagerHours(tx: Transaction, input: HoursInput): Prom
   for (const row of rows)
     people.push({
       ...row,
-      hours: await personInWindow(tx, { ...input, personId: row.personId }, window, locationId),
+      hours: await personInWindow(tx, { ...input, personId: row.personId }, window),
     });
   return {
-    locationId,
     selection: { ...input.selection },
     ...window,
     asOf: input.now.toISOString(),
