@@ -3,9 +3,9 @@ import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { withNodeTransaction, withTransaction } from "@waitron/db";
-import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { recordHandoverRestrictionTx } from "@waitron/node-db";
@@ -76,7 +76,6 @@ vi.mock("./pending-card-recovery.js", async (importOriginal) => {
 });
 
 const migrations = migrationOptionsFor(manifestSets(), null);
-const suite = useVenueDb({ migrations });
 
 const QUIET_MS = 5_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -85,30 +84,22 @@ const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 };
 
-let server: StartedServer | undefined;
-let scratch: string | undefined;
+interface Observed {
+  hashBefore: string;
+  hashAfter: string;
+  authority: number;
+  sweep: number;
+  spawn: number;
+}
 
-afterEach(async () => {
-  try {
-    if (server !== undefined) await server.close();
-  } finally {
-    server = undefined;
-    calls.authority = 0;
-    calls.sweep = 0;
-    calls.spawn = 0;
-    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
-    scratch = undefined;
-  }
-});
-
-function venueFile(): string {
+function venueFile(suite: VenueDb): string {
   return suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
 }
 
 /** venue.db together with its write-ahead log, where a write lands before a checkpoint. */
-async function venueHash(): Promise<string> {
+async function venueHash(suite: VenueDb): Promise<string> {
   const hash = createHash("sha256");
-  for (const path of [venueFile(), `${venueFile()}-wal`]) {
+  for (const path of [venueFile(suite), `${venueFile(suite)}-wal`]) {
     try {
       hash.update(await readFile(path));
     } catch (error) {
@@ -120,126 +111,155 @@ async function venueHash(): Promise<string> {
 }
 
 /**
- * Boots a folder that a full start would stream, sweep and ask AEAT's time for: it holds a bucket
- * copy's settings and a membership, and a fiscal record a day ahead of the clock, which puts the
- * box in a clock stop. `restricted` adds the handover restriction row. Returns venue.db's hash taken just
- * before the start.
+ * Registers, in the calling `describe`, one start of a folder that a full start would stream,
+ * sweep and ask AEAT's time for: it holds a bucket copy's settings and a membership, and a fiscal
+ * record a day ahead of the clock, which puts the box in a clock stop. `restricted` adds the
+ * handover restriction row. The start runs for `QUIET_MS`, then venue.db's hash and the stand-ins'
+ * counts are read for the describe's cases.
  */
-async function boot(options: { restricted: boolean }): Promise<string> {
-  beforeServerStarts();
-  const venue = await setupVenue(suite.db);
-  const nodeId = venue.cfg.nodeId;
-  const ring = loadKeyRing(KEY_ENV);
-  await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
-  await seedTermZeroMembership(
-    { db: suite.db, node: suite.node, ring },
-    nodeId,
-    "https://box.example",
-  );
-  const [sif] = suite.db.all<{ id: string }>(
-    sql`select id from registro_sif where node_id = ${nodeId}`,
-  );
-  const ids = {
-    locationId: venue.cfg.locationId,
-    nodeId,
-    seriesId: venue.seriesId,
-    saleId: randomUUID(),
-    sifId: sif!.id,
-  };
-  await insertFiscalSale(suite.db, ids);
-  await insertFiscalRegistro(suite.db, ids, {
-    entorno: "preproduction",
-    generatedAt: new Date(Date.now() + DAY_MS),
-  });
-  await withTransaction(suite.db, (tx) =>
-    putCredential(tx, ring, {
-      purpose: STREAM_PURPOSE,
-      value: {
-        venueId: "venue-1",
-        endpoint: "-",
-        region: "eu-south-2",
-        bucket: "venue-copies",
-        prefix: "-",
-        accessKeyId: "AKIAEXAMPLE",
-        secretAccessKey: "secret-example",
-      },
-    }),
-  );
-  if (options.restricted) {
-    await withNodeTransaction(suite.node, (tx) =>
-      recordHandoverRestrictionTx(tx, {
-        nodeId,
-        operationId: null,
-        kind: "superseded",
-        successorNodeId: "00000000-0000-4000-8000-0000000000aa",
-        membershipTerm: 1,
+function observeStart(options: { restricted: boolean }): () => Observed {
+  const suite = useVenueDb({ migrations, resetPerTest: false });
+  let server: StartedServer | undefined;
+  let scratch: string | undefined;
+  let observed: Observed | undefined;
+
+  beforeAll(async () => {
+    beforeServerStarts();
+    const venue = await setupVenue(suite.db);
+    const nodeId = venue.cfg.nodeId;
+    const ring = loadKeyRing(KEY_ENV);
+    await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring }, nodeId);
+    await seedTermZeroMembership(
+      { db: suite.db, node: suite.node, ring },
+      nodeId,
+      "https://box.example",
+    );
+    const [sif] = suite.db.all<{ id: string }>(
+      sql`select id from registro_sif where node_id = ${nodeId}`,
+    );
+    const ids = {
+      locationId: venue.cfg.locationId,
+      nodeId,
+      seriesId: venue.seriesId,
+      saleId: randomUUID(),
+      sifId: sif!.id,
+    };
+    await insertFiscalSale(suite.db, ids);
+    await insertFiscalRegistro(suite.db, ids, {
+      entorno: "preproduction",
+      generatedAt: new Date(Date.now() + DAY_MS),
+    });
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, ring, {
+        purpose: STREAM_PURPOSE,
+        value: {
+          venueId: "venue-1",
+          endpoint: "-",
+          region: "eu-south-2",
+          bucket: "venue-copies",
+          prefix: "-",
+          accessKeyId: "AKIAEXAMPLE",
+          secretAccessKey: "secret-example",
+        },
       }),
     );
-  }
-  scratch = await mkdtemp(join(tmpdir(), "waitron-boot-restricted-quiet-"));
-  const migrationsRoot = join(scratch, "migrations");
-  for (const [index, set] of manifestSets().entries()) {
-    await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
-      recursive: true,
+    if (options.restricted) {
+      await withNodeTransaction(suite.node, (tx) =>
+        recordHandoverRestrictionTx(tx, {
+          nodeId,
+          operationId: null,
+          kind: "superseded",
+          successorNodeId: "00000000-0000-4000-8000-0000000000aa",
+          membershipTerm: 1,
+        }),
+      );
+    }
+    scratch = await mkdtemp(join(tmpdir(), "waitron-boot-restricted-quiet-"));
+    const migrationsRoot = join(scratch, "migrations");
+    for (const [index, set] of manifestSets().entries()) {
+      await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
+        recursive: true,
+      });
+    }
+    await writeFile(
+      join(scratch, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    const env: Record<string, string> = {
+      ...KEY_ENV,
+      WAITRON_HTTP_LANDING_PORT: "0",
+      WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
+      WAITRON_STATE_DIR: scratch,
+      WAITRON_VENUE_DIR: dirname(venueFile(suite)),
+      WAITRON_NODE_ID: nodeId,
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+      WAITRON_CLOUD_ORIGIN: "https://cloud.example",
+      WAITRON_MAX_TICK_MS: "600000",
+      WAITRON_MIN_TICK_MS: "200",
+      WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
+    };
+    const litestream = new FakeLitestream();
+    const spawn: SpawnFn = (...args) => {
+      calls.spawn += 1;
+      return litestream.spawn(...args);
+    };
+    calls.authority = 0;
+    calls.sweep = 0;
+    calls.spawn = 0;
+    const hashBefore = await venueHash(suite);
+    server = await startServer(env, env, {
+      stream: { spawn, store: new SwitchableStore(() => new Date()) },
     });
-  }
-  await writeFile(
-    join(scratch, "modules.json"),
-    JSON.stringify({ modules: { "fiscal-none": false } }),
-  );
-  const env: Record<string, string> = {
-    ...KEY_ENV,
-    WAITRON_HTTP_LANDING_PORT: "0",
-    WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
-    WAITRON_STATE_DIR: scratch,
-    WAITRON_VENUE_DIR: dirname(venueFile()),
-    WAITRON_NODE_ID: nodeId,
-    WAITRON_MIGRATIONS_DIR: migrationsRoot,
-    WAITRON_ENV: "preproduction",
-    WAITRON_CLOUD_ORIGIN: "https://cloud.example",
-    WAITRON_MAX_TICK_MS: "600000",
-    WAITRON_MIN_TICK_MS: "200",
-    WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
-  };
-  const litestream = new FakeLitestream();
-  const spawn: SpawnFn = (...args) => {
-    calls.spawn += 1;
-    return litestream.spawn(...args);
-  };
-  const before = await venueHash();
-  server = await startServer(env, env, {
-    stream: { spawn, store: new SwitchableStore(() => new Date()) },
+    await vi.waitFor(async () => {
+      expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
+    });
+    await new Promise((resolve) => setTimeout(resolve, QUIET_MS));
+    observed = { hashBefore, hashAfter: await venueHash(suite), ...calls };
+  }, 60_000);
+
+  afterAll(async () => {
+    try {
+      if (server !== undefined) await server.close();
+    } finally {
+      if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+    }
   });
-  await vi.waitFor(async () => {
-    expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
-  });
-  return before;
+
+  return () => {
+    if (observed === undefined) throw new Error("the start was not observed");
+    return observed;
+  };
 }
 
-const quiet = () => new Promise((resolve) => setTimeout(resolve, QUIET_MS));
-
 describe("a restricted start touches nothing outside and nothing in venue.db", () => {
-  it("writes nothing to venue.db", async () => {
-    const before = await boot({ restricted: true });
-    await quiet();
-    expect(await venueHash()).toBe(before);
-  }, 60_000);
+  const observed = observeStart({ restricted: true });
 
-  it("asks AEAT's host for no clock reading", async () => {
-    await boot({ restricted: true });
-    await quiet();
-    expect(calls.authority).toBe(0);
-  }, 60_000);
+  it("writes nothing to venue.db", () => {
+    expect(observed().hashAfter).toBe(observed().hashBefore);
+  });
 
-  it("runs no card-provider sweep", async () => {
-    await boot({ restricted: true });
-    await quiet();
-    expect(calls.sweep).toBe(0);
-  }, 60_000);
+  it("asks AEAT's host for no clock reading", () => {
+    expect(observed().authority).toBe(0);
+  });
 
-  it("starts no Litestream child", async () => {
-    await boot({ restricted: true });
-    await quiet();
-    expect(calls.spawn).toBe(0);
-  }, 60_000);
+  it("runs no card-provider sweep", () => {
+    expect(observed().sweep).toBe(0);
+  });
+
+  it("starts no Litestream child", () => {
+    expect(observed().spawn).toBe(0);
+  });
+});
+
+describe("control: the same folder without the restriction row", () => {
+  const observed = observeStart({ restricted: false });
+
+  it("writes to venue.db, asks AEAT's time, sweeps card providers and starts Litestream", () => {
+    const { hashBefore, hashAfter, authority, sweep, spawn } = observed();
+    expect(hashAfter).not.toBe(hashBefore);
+    expect(authority).toBeGreaterThan(0);
+    expect(sweep).toBeGreaterThan(0);
+    expect(spawn).toBeGreaterThan(0);
+  });
 });
