@@ -30,6 +30,7 @@ import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import { currentBinding, peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0xe).toString("base64"),
@@ -143,6 +144,52 @@ describe("signing and verifying handover envelopes between boxes", () => {
     await writeNodeMembership(db, chart(self, selfKey, [self], [endorsement], [peer]));
     const keyOf = await peerKeyOf({ db, node: suite.node, ring: RING, nodeId: self });
     expect(keyOf(peer)).toBeUndefined();
+  });
+
+  it("a removed pinned primary still vouches for a box in good standing, by the package's rule", async () => {
+    const { db, self, peer } = await boxes();
+    const main = generateNodeKeyPair();
+    await pinMainBoxKey(suite.node, self, { nodeId: "main-box", publicKey: main.publicKey });
+    const selfKey = await readNodeIdentityKey(suite.node, RING, self);
+    const peerPublic = publicKeyOf(await readNodeIdentityKey(suite.node, RING, peer));
+    const endorsement = endorseKey(peer, peerPublic, "main-box", main.privateKey);
+    await writeNodeMembership(db, chart(self, selfKey, [self, peer], [endorsement], ["main-box"]));
+    const keyOf = await peerKeyOf({ db, node: suite.node, ring: RING, nodeId: self });
+    expect(keyOf(peer)).toBe(peerPublic);
+  });
+
+  it("when two trusted boxes vouch different keys, the package's first trusted endorsement wins", async () => {
+    const { db, self, peer } = await boxes();
+    const main = generateNodeKeyPair();
+    await pinMainBoxKey(suite.node, self, { nodeId: "main-box", publicKey: main.publicKey });
+    const selfKey = await readNodeIdentityKey(suite.node, RING, self);
+    const k1 = generateNodeKeyPair().publicKey;
+    const k2 = generateNodeKeyPair().publicKey;
+    await writeNodeMembership(
+      db,
+      chart(
+        self,
+        selfKey,
+        [self, peer],
+        [endorseKey(peer, k1, "main-box", main.privateKey), endorseKey(peer, k2, self, selfKey)],
+        ["main-box"],
+      ),
+    );
+    const keyOf = await peerKeyOf({ db, node: suite.node, ring: RING, nodeId: self });
+    expect(keyOf(peer)).toBe(k1);
+  });
+
+  it("a pinned primary the held chart has removed has no key in a handover", async () => {
+    const { db, self, peer } = await boxes();
+    const main = generateNodeKeyPair();
+    await pinMainBoxKey(suite.node, self, { nodeId: "main-box", publicKey: main.publicKey });
+    const selfKey = await readNodeIdentityKey(suite.node, RING, self);
+    const before = await peerKeyOf({ db, node: suite.node, ring: RING, nodeId: self });
+    expect(before("main-box")).toBe(main.publicKey);
+    await writeNodeMembership(db, chart(self, selfKey, [self, peer], [], ["main-box"]));
+    const after = await peerKeyOf({ db, node: suite.node, ring: RING, nodeId: self });
+    expect(after("main-box")).toBeUndefined();
+    expect(after(self)).toBe(publicKeyOf(selfKey));
   });
 
   it("the binding names the taxpayer and environment, and the held chart's term and digest", async () => {

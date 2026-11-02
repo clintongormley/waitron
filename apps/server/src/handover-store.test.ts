@@ -100,6 +100,21 @@ describe("the server's handover store", () => {
     expect(JSON.parse(recorded[0]!.envelope!)).toEqual(envelope);
   });
 
+  it("an event and its state change commit together or not at all", async () => {
+    await beginHandover(deps(), BINDING, "destination");
+    suite.node.run(
+      sql`create trigger zz_refuse before update on node_handover_operations
+          begin select raise(abort, 'zz refused'); end`,
+    );
+    try {
+      await expect(advanceHandover(deps(), OP, "copy_accepted", {})).rejects.toThrow("zz refused");
+    } finally {
+      suite.node.run(sql`drop trigger zz_refuse`);
+    }
+    expect((await readHandoverOperation(suite.node, NODE, OP))?.state).toBe("prepared");
+    expect(events()).toEqual([]);
+  });
+
   it("records a waiting reason beside the state, and the next step clears it", async () => {
     await beginHandover(deps(), BINDING, "destination");
     await waitHandover(deps(), OP, "handover.step_out_of_order");

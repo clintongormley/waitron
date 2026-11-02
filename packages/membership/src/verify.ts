@@ -139,6 +139,21 @@ export function verifyMembershipDocument(
 }
 
 /**
+ * The key that speaks for a node under the receiver's own held chart: `trustSet`'s, or one the
+ * chart's endorsements vouch for by `resolveSignerKey`'s rule. Endorsements are read only from a held
+ * chart that verifies against `trustSet`, which also caps how many there are.
+ */
+export function endorsedKeyOf(
+  held: SignedMembershipDocument | null,
+  trustSet: TrustSet,
+): (nodeId: string) => string | undefined {
+  if (held === null || !verifyMembershipDocument(held, trustSet, held).valid) {
+    return (nodeId) => (Object.hasOwn(trustSet, nodeId) ? trustSet[nodeId] : undefined);
+  }
+  return (nodeId) => resolveSignerKey(nodeId, held.endorsements, trustSet, held) ?? undefined;
+}
+
+/**
  * Whether a key `trustSet` vouches for signed this document, whatever else is wrong with its shape:
  * `verifyMembershipDocument` answers `malformed` before it looks at the signer, which cannot tell a
  * malformed chart this box signed from one a stranger did. A document too broken to name a signer

@@ -17,9 +17,8 @@ import {
 } from "@waitron/handover";
 import {
   canonicalize,
+  endorsedKeyOf,
   fencedOutNodeIds,
-  verifyEndorsement,
-  verifyMembershipDocument,
   type CanonicalValue,
 } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
@@ -37,9 +36,8 @@ export async function signAsThisBox<B extends CanonicalValue>(
 }
 
 /**
- * The keys this box stores itself, and those the held chart's endorsements vouch for when a stored
- * key signed that chart. An endorsement counts only when an already-trusted key signed it and
- * neither its node nor its endorser is removed in the chart; never the keys venue.db's `nodes` names.
+ * The key this box stores for a node, or one the held chart's endorsements vouch for by the
+ * membership package's rule (`endorsedKeyOf`); never the keys venue.db's `nodes` names.
  */
 export async function peerKeyOf(deps: {
   db: Database;
@@ -47,24 +45,11 @@ export async function peerKeyOf(deps: {
   ring: KeyRing;
   nodeId: string;
 }): Promise<(nodeId: string) => string | undefined> {
-  const trust = await readStoredTrustSet(deps);
-  const keys = new Map(Object.entries(trust));
   const held = await readNodeMembership(deps.db);
-  if (held !== null && verifyMembershipDocument(held, trust, held).valid) {
-    const removed = fencedOutNodeIds(held);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const e of held.endorsements) {
-        if (keys.has(e.nodeId) || removed.has(e.nodeId) || removed.has(e.endorsedBy)) continue;
-        const endorserKey = keys.get(e.endorsedBy);
-        if (endorserKey === undefined || !verifyEndorsement(e, endorserKey)) continue;
-        keys.set(e.nodeId, e.publicKey);
-        changed = true;
-      }
-    }
-  }
-  return (nodeId) => keys.get(nodeId);
+  const keyOf = endorsedKeyOf(held, await readStoredTrustSet(deps));
+  const removed = fencedOutNodeIds(held);
+  // A box the held chart has removed never speaks in a handover, a pinned primary included.
+  return (nodeId) => (removed.has(nodeId) ? undefined : keyOf(nodeId));
 }
 
 /** The binding for a new operation: the taxpayer, the environment stamp and the held chart. */

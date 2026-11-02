@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { generateNodeKeyPair } from "./crypto.js";
 import { sampleBody, signDoc } from "./document-fixtures.js";
 import { endorseKey } from "./endorsement.js";
-import { signDocumentBody, verifyMembershipDocument } from "./verify.js";
+import { endorsedKeyOf, signDocumentBody, verifyMembershipDocument } from "./verify.js";
 import type { SignedMembershipDocument, TrustSet } from "./types.js";
 
 describe("verifyMembershipDocument", () => {
@@ -276,5 +276,71 @@ describe("verifyMembershipDocument with the receiver's held chart", () => {
     expect(
       verifyMembershipDocument(signDoc(sampleBody(2), "A", a.privateKey), { A: a.publicKey }, held),
     ).toEqual({ valid: false, reason: "signer_removed" });
+  });
+});
+
+describe("endorsedKeyOf", () => {
+  function chartWith(
+    signer: string,
+    privateKey: string,
+    endorsements: SignedMembershipDocument["endorsements"],
+  ): SignedMembershipDocument {
+    const body = {
+      term: 2,
+      nodes: [
+        { nodeId: "A", contactUrl: "https://a", standing: "serving-primary" as const },
+        { nodeId: "B", contactUrl: "https://b", standing: "serving-secondary" as const },
+      ],
+    };
+    return {
+      body,
+      signerNodeId: signer,
+      signature: signDocumentBody(body, privateKey),
+      endorsements,
+    };
+  }
+
+  it("answers a trusted key, and a key the held chart's trusted endorsement vouches for", () => {
+    const a = generateNodeKeyPair();
+    const b = generateNodeKeyPair();
+    const held = chartWith("A", a.privateKey, [endorseKey("B", b.publicKey, "A", a.privateKey)]);
+    const keyOf = endorsedKeyOf(held, { A: a.publicKey });
+    expect(keyOf("A")).toBe(a.publicKey);
+    expect(keyOf("B")).toBe(b.publicKey);
+    expect(keyOf("C")).toBeUndefined();
+  });
+
+  it("reads no endorsement from a held chart the trusted keys did not sign", () => {
+    const a = generateNodeKeyPair();
+    const b = generateNodeKeyPair();
+    const stranger = generateNodeKeyPair();
+    const held = chartWith("S", stranger.privateKey, [
+      endorseKey("B", b.publicKey, "A", a.privateKey),
+    ]);
+    const keyOf = endorsedKeyOf(held, { A: a.publicKey });
+    expect(keyOf("A")).toBe(a.publicKey);
+    expect(keyOf("B")).toBeUndefined();
+  });
+
+  it("reads no endorsement from a held chart carrying more endorsements than a chart may", () => {
+    const a = generateNodeKeyPair();
+    const b = generateNodeKeyPair();
+    const one = endorseKey("B", b.publicKey, "A", a.privateKey);
+    const keyOf = endorsedKeyOf(
+      chartWith(
+        "A",
+        a.privateKey,
+        Array.from({ length: 9 }, () => one),
+      ),
+      { A: a.publicKey },
+    );
+    expect(keyOf("B")).toBeUndefined();
+  });
+
+  it("with no held chart answers the trusted keys alone, never an inherited property", () => {
+    const a = generateNodeKeyPair();
+    const keyOf = endorsedKeyOf(null, { A: a.publicKey });
+    expect(keyOf("A")).toBe(a.publicKey);
+    expect(keyOf("toString")).toBeUndefined();
   });
 });

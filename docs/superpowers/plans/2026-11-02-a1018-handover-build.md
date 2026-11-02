@@ -1020,7 +1020,7 @@ Tests `apps/server/src/handover-store.test.ts`, `handover-signing.test.ts`.
 the same `to` twice is a no-op that returns); `waitHandover(deps, operationId, reason: ErrorCode)`;
 `signAsThisBox(deps: { node: NodeDatabase; ring: KeyRing; nodeId: string }, kind, body)` (uses
 `readNodeIdentityKey`, `apps/server/src/node-identity.ts:25-43`);
-`peerKeyOf(deps: { db: Database; node: NodeDatabase; nodeId: string }): Promise<(nodeId: string) => string | undefined>`
+`peerKeyOf(deps: { db: Database; node: NodeDatabase; ring: KeyRing; nodeId: string }): Promise<(nodeId: string) => string | undefined>`
 — a key this box trusts (`readStoredTrustSet`, `apps/server/src/membership-trust.ts:35-43`) or one
 the held chart's verified endorsements vouch for (`packages/membership/src/endorsement.ts`);
 `currentBinding(deps, scenario, sourceNodeId, destinationNodeId, operationId): Promise<HandoverBinding>`
