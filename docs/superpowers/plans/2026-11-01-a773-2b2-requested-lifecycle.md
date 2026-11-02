@@ -308,10 +308,14 @@ D1–D20 are the slice plan's and bind unchanged. These are B2's, dated 2026-11-
 - **D31 An arriving Requested dish arrives as initiated.** `groupArrivingDishes` classifies with
   `serviceRequested` (D21), so a Requested dish goes to `released` and joins the arrival's fired
   group; it is never put in a held group, never re-requested and never printed. The `firing` date
-  stays today's `ticketFiredAt ?? sentAt`: a Requested line's `sent_at` is stamped with its request
-  time (`stampSent(…, firedAt)`, `working-order.ts:2344`), so the group is dated by the request
-  without a new term (measured: a Flan sent at a waiting station had `requestedAt` and `sentAt` both
-  `…16.634Z`; review 1, I4). `groupArrived` dates a fired group by its **earliest** line
+  is `ticketFiredAt ?? ticketRequestedAt ?? sentAt`. A Requested line's `sent_at` is usually its
+  request time (`stampSent(…, firedAt)`; measured: a Flan sent at a waiting station had
+  `requestedAt` and `sentAt` both `…16.634Z`; review 1, I4), but the copy added when a Requested
+  dish's quantity is raised keeps its parent's `sent_at` while its item is requested at the edit
+  (Task 2.5 review, Minor 1). Without the request-time term that copy, moved alone, arrived in a
+  group dated by its parent's send, while with no station waiting the same copy is released at the
+  edit and its group dated then. Receipt: `kitchen-request.bill-move.test.ts` "dates the arrival of
+  a raised waiting copy…" failed (10:00 instead of 10:05) on `ticketFiredAt ?? sentAt` and passes. `groupArrived` dates a fired group by its **earliest** line
   (`order-groups.ts:2576-2579`), so a Requested dish arriving beside an earlier released one joins
   a group dated by the released one. `moveLinesToGroup` keeps refusing a line whose
   group is not held (`group.not_held`, `order-groups.ts:1084-1088`), so a Requested dish (always in
@@ -375,7 +379,11 @@ D1–D20 are the slice plan's and bind unchanged. These are B2's, dated 2026-11-
   unserved not-made-here item and the till shows only its state
   (`apps/till/src/widgets/department-transfers.ts:523`). Showing "waiting for the pass" there
   needs a phase field, which goes with B3.3's station and current-order fields and B4's screens.
-  B2.5a pins that a Requested item is listed.
+  B2.5a pins that a Requested item is listed. That case cannot tell Requested from held, because
+  `outstandingWork` lists held work too (Task 2.5 review, Minor 4), so a second case in
+  `kitchen-request.move.test.ts` lists a held dish beside a Requested one. Controls: a fire-time
+  filter on `outstandingWork` turns both cases red; a filter on initiated work turns only the
+  second red.
 
 - **D38 `applyLineEdits`' late read of the next fire's kind stays B3's.** B1's Task 2 review found
   no case that reaches it and none shown impossible. `request_kind` has no reader until B3's pass
@@ -434,8 +442,12 @@ D1–D20 are the slice plan's and bind unchanged. These are B2's, dated 2026-11-
   a waiting station (B1 Task 4's rule for edit-added extras), released at one that does not wait,
   never held. The same change reaches units added beside an adjusted Requested line (the "joins"
   path), which now arrive Requested in the line's fired group instead of held. A held or recalled
-  item still answers "hold". With no station waiting nothing changes: a released dish is raised
-  through the "raise" path, which never reads `kitchenStateOf`. Receipts:
+  item still answers "hold". With no station waiting nothing changes: nothing then writes
+  `requested_at` without `fired_at`, so every item that reaches `kitchenStateOf` (held and
+  never-sent lines on the "free" path, adjusted lines on "joins", whole portions on the copies path;
+  a released dish is raised through "raise" and never reaches it) has both stamps null and still
+  answers "hold" (Task 2.3 review, Minor 2: 0 differences in 90 calls across 169 server test files
+  with waiting forced off). Receipts:
   `kitchen-request.edit.test.ts` "raises a waiting burger by a waiting copy…" and "…by a released
   copy once Grill has stopped waiting" failed before the change (the copy had both stamps null)
   and pass after; "with no station waiting, raises a fired burger by a released burger and a
@@ -982,7 +994,13 @@ wrong). Depends on B2.3a (case 2 needs `requestedAt` in the context).
 - [ ] **Mutation controls:** `finish` leaving out of `dishes` every dish none of whose context
   components has `firedAt` set (a filter before the compare, the tempting "only released work"
   reading) → case 1 red (the confirmation then lists more dishes than `dishes` and is refused); the
-  context builder dropping `requestedAt` (B2.3a's field) → case 2 red.
+  context builder dropping `requestedAt` (B2.3a's field) → case 2 red. *(Task 2.5 review, Minor 3:
+  the first control also drops the held Salad, so it does not single out the Requested dish. The
+  sharper control, `finish` skipping only a dish whose components are all requested and not fired,
+  also turns case 1 red: `Tests 1 failed | 28 passed`, run by the reviewer. Case 1 now also compares
+  each cancel's adjustment row with the twin's, `stage` apart, and asserts `stage: "unsent"` for the
+  Burger; a control that writes a refund value of 0 for an all-requested dish turns it red on
+  `refundValue`.)*
 - [ ] **Commit.** `git commit -s -m "Pin finishing a table whose dishes wait for the pass"`.
 
 ## Task B2.5a: station moves and closing (pins, about 35 calls)

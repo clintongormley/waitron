@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -132,6 +132,125 @@ async function placeFireNow(tx: Transaction, venue: Venue) {
   });
 }
 
+/** A counter order of `names`, every station waiting for the pass, placed by a till of one
+ *  department and sent by department transfer to another; `beforeTransfer` runs between the
+ *  placement and the transfer. Answers the order's kitchen items, by id, and the receiving desk's
+ *  view of the transfer. */
+async function transferredCounterOrder(
+  names: string[],
+  beforeTransfer: (items: (typeof ticketItems.$inferSelect)[]) => Promise<void> = async () => {},
+) {
+  const v = await setupPartyVenue(db);
+  const [person] = await db
+    .insert(persons)
+    .values({ displayName: "Transfer operator", pinHash: hashPin("5555"), role: "staff" })
+    .returning();
+  const app = new Hono();
+  mountTillApi(
+    app,
+    {
+      admission: testTradingAdmission(),
+      db,
+      liveEvents: new LiveEvents(),
+      cfg: v.cfg,
+      backend: v.backend,
+      clock: v.clock,
+      secureCookies: false,
+      venueLocale: v.cfg.locale,
+    },
+    () => {},
+  );
+  const f = await withTransaction(db, async (tx) => {
+    const a = await createDepartment(tx, v.cfg, { name: randomUUID(), orderStart: "table" });
+    const b = await createDepartment(tx, v.cfg, { name: randomUUID(), orderStart: "table" });
+    await tx.insert(departmentReceipts).values(
+      [a, b].map((department) => ({
+        departmentId: department.id,
+        receipt: { operationDescription: "Restaurante" },
+      })),
+    );
+    const az = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: a.id });
+    const bz = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: b.id });
+    const profiles: string[] = [];
+    for (const [departmentId, zoneId] of [
+      [a.id, az.id],
+      [b.id, bz.id],
+    ] as const) {
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({ name: randomUUID(), formFactor: "till", capabilities: [...CAPABILITY_FLAGS] })
+        .returning();
+      await setProfileServiceScope(tx, v.cfg, profile!.id, {
+        departmentId,
+        allowedZoneIds: [zoneId],
+        startingZoneId: zoneId,
+      });
+      profiles.push(profile!.id);
+    }
+    await setDepartmentTransferSettings(tx, v.cfg, a.id, {
+      receivingProfileId: null,
+      destinationDepartmentIds: [b.id],
+    });
+    await setDepartmentTransferSettings(tx, v.cfg, b.id, {
+      receivingProfileId: profiles[1]!,
+      destinationDepartmentIds: [],
+    });
+    const stations = await tx.select({ id: kitchenStations.id }).from(kitchenStations);
+    await setStationsWaitForPass(
+      tx,
+      true,
+      stations.map((station) => station.id),
+    );
+    return { a: a.id, b: b.id, az: az.id, source: profiles[0]!, desk: profiles[1]! };
+  });
+  async function login(profileId: string) {
+    const device = await enrolDeviceForTest(db, v.cfg, { name: randomUUID(), profileId });
+    const response = await app.request("/api/session", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
+      },
+      body: JSON.stringify({ personId: person!.id, pin: "5555" }),
+    });
+    expect(response.status).toBe(200);
+    return {
+      cookie: response.headers.get("set-cookie")!.split(";")[0]!,
+      deviceId: device.deviceId,
+    };
+  }
+  const source = await login(f.source);
+  const desk = await login(f.desk);
+  const tab = await counterOrder(v, ...names);
+  await withTransaction(db, (tx) => retargetOrderServiceContext(tx, v.cfg, tab, f.az));
+  await placeOrder(
+    { admission: testTradingAdmission(), db, backend: v.backend, clock: v.clock },
+    requestCfg(v.cfg, source),
+    tab,
+    person!.id,
+  );
+  const items = await db
+    .select()
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderId, tab))
+    .orderBy(asc(ticketItems.id));
+  await beforeTransfer(items);
+  const path = `/api/working-orders/${tab}/department-transfers`;
+  const sent = await app.request(path, {
+    method: "POST",
+    headers: { cookie: source.cookie, "content-type": "application/json" },
+    body: JSON.stringify(await observedClosingBody(db, path, { destinationDepartmentId: f.b })),
+  });
+  expect(sent.status).toBe(200);
+  const { id } = (await sent.json()) as { id: string };
+
+  const detail = await app.request(`/api/department-transfers/${id}`, {
+    headers: { cookie: desk.cookie },
+  });
+
+  return { items, detail };
+}
+
 describe("A773 requested lifecycle: station move", () => {
   it("keeps a Requested dish Requested, printing nothing, when moved to a waiting station and then to one that does not wait", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
@@ -240,109 +359,11 @@ describe("A773 requested lifecycle: station move", () => {
   });
 
   it("lists a Requested dish as outstanding work on a department transfer", async () => {
-    const v = await setupPartyVenue(db);
-    const [person] = await db
-      .insert(persons)
-      .values({ displayName: "Transfer operator", pinHash: hashPin("5555"), role: "staff" })
-      .returning();
-    const app = new Hono();
-    mountTillApi(
-      app,
-      {
-        admission: testTradingAdmission(),
-        db,
-        liveEvents: new LiveEvents(),
-        cfg: v.cfg,
-        backend: v.backend,
-        clock: v.clock,
-        secureCookies: false,
-        venueLocale: v.cfg.locale,
-      },
-      () => {},
-    );
-    const f = await withTransaction(db, async (tx) => {
-      const a = await createDepartment(tx, v.cfg, { name: randomUUID(), orderStart: "table" });
-      const b = await createDepartment(tx, v.cfg, { name: randomUUID(), orderStart: "table" });
-      await tx.insert(departmentReceipts).values(
-        [a, b].map((department) => ({
-          departmentId: department.id,
-          receipt: { operationDescription: "Restaurante" },
-        })),
-      );
-      const az = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: a.id });
-      const bz = await createServiceZone(tx, v.cfg, { name: randomUUID(), departmentId: b.id });
-      const profiles: string[] = [];
-      for (const [departmentId, zoneId] of [
-        [a.id, az.id],
-        [b.id, bz.id],
-      ] as const) {
-        const [profile] = await tx
-          .insert(deviceProfiles)
-          .values({ name: randomUUID(), formFactor: "till", capabilities: [...CAPABILITY_FLAGS] })
-          .returning();
-        await setProfileServiceScope(tx, v.cfg, profile!.id, {
-          departmentId,
-          allowedZoneIds: [zoneId],
-          startingZoneId: zoneId,
-        });
-        profiles.push(profile!.id);
-      }
-      await setDepartmentTransferSettings(tx, v.cfg, a.id, {
-        receivingProfileId: null,
-        destinationDepartmentIds: [b.id],
-      });
-      await setDepartmentTransferSettings(tx, v.cfg, b.id, {
-        receivingProfileId: profiles[1]!,
-        destinationDepartmentIds: [],
-      });
-      const stations = await tx.select({ id: kitchenStations.id }).from(kitchenStations);
-      await setStationsWaitForPass(
-        tx,
-        true,
-        stations.map((station) => station.id),
-      );
-      return { a: a.id, b: b.id, az: az.id, source: profiles[0]!, desk: profiles[1]! };
-    });
-    async function login(profileId: string) {
-      const device = await enrolDeviceForTest(db, v.cfg, { name: randomUUID(), profileId });
-      const response = await app.request("/api/session", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          cookie: `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
-        },
-        body: JSON.stringify({ personId: person!.id, pin: "5555" }),
-      });
-      expect(response.status).toBe(200);
-      return {
-        cookie: response.headers.get("set-cookie")!.split(";")[0]!,
-        deviceId: device.deviceId,
-      };
-    }
-    const source = await login(f.source);
-    const desk = await login(f.desk);
-    const tab = await counterOrder(v, "Burger");
-    await withTransaction(db, (tx) => retargetOrderServiceContext(tx, v.cfg, tab, f.az));
-    await placeOrder(
-      { admission: testTradingAdmission(), db, backend: v.backend, clock: v.clock },
-      requestCfg(v.cfg, source),
-      tab,
-      person!.id,
-    );
-    const [item] = await db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tab));
-    expect(item).toMatchObject({ firedAt: null, passControlled: true, state: "queued" });
-    expect(item!.requestedAt).not.toBeNull();
-    const path = `/api/working-orders/${tab}/department-transfers`;
-    const sent = await app.request(path, {
-      method: "POST",
-      headers: { cookie: source.cookie, "content-type": "application/json" },
-      body: JSON.stringify(await observedClosingBody(db, path, { destinationDepartmentId: f.b })),
-    });
-    expect(sent.status).toBe(200);
-    const { id } = (await sent.json()) as { id: string };
-
-    const detail = await app.request(`/api/department-transfers/${id}`, {
-      headers: { cookie: desk.cookie },
+    let item: typeof ticketItems.$inferSelect | undefined;
+    const { detail } = await transferredCounterOrder(["Burger"], async ([placed]) => {
+      item = placed;
+      expect(item).toMatchObject({ firedAt: null, passControlled: true, state: "queued" });
+      expect(item!.requestedAt).not.toBeNull();
     });
 
     expect(detail.status).toBe(200);
@@ -356,6 +377,32 @@ describe("A773 requested lifecycle: station move", () => {
         firedAt: null,
       }),
     ]);
+  });
+
+  it("lists a held dish beside a Requested one as outstanding work on a department transfer", async () => {
+    let requested: typeof ticketItems.$inferSelect | undefined;
+    let held: typeof ticketItems.$inferSelect | undefined;
+    const { detail } = await transferredCounterOrder(
+      ["Burger", "Burger"],
+      async ([first, second]) => {
+        requested = first;
+        expect(requested).toMatchObject({ firedAt: null, passControlled: true });
+        expect(requested!.requestedAt).not.toBeNull();
+        // Both stamps cleared make the second Burger held (D39).
+        [held] = await db
+          .update(ticketItems)
+          .set({ requestedAt: null, passControlled: false })
+          .where(eq(ticketItems.id, second!.id))
+          .returning();
+      },
+    );
+
+    expect(detail.status).toBe(200);
+    const body = (await detail.json()) as { outstandingWork: { id: string; firedAt: unknown }[] };
+    expect(body.outstandingWork.map((work) => work.id).sort()).toEqual(
+      [requested!.id, held!.id].sort(),
+    );
+    expect(body.outstandingWork.every((work) => work.firedAt === null)).toBe(true);
   });
 
   it("refuses to move a Requested dish into a held group, writing nothing", async () => {

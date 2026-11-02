@@ -651,6 +651,29 @@ describe("A773 requested lifecycle", () => {
     );
     expect(cancels).toHaveLength(4);
     for (const row of cancels) expect(row).toMatchObject({ reduction: 0, refundHandoff: true });
+    // Matched by line position; ids and times differ between the two parties.
+    const byPosition = (rows: typeof cancels, lines: Fixture["lines"]) =>
+      lines.map((line) => {
+        const row = rows.find((candidate) => candidate.lineId === line.id)!;
+        const { id, workingOrderId, lineId, createdAt, stage, ...kept } = row;
+        void [id, workingOrderId, lineId, createdAt];
+        return { stage, kept };
+      });
+    const twinCancels = byPosition(
+      (await snapshot(twin.p)).adjustments.filter(
+        (row) => row.workingOrderId === twin.p.billId && row.action === "cancel",
+      ),
+      twin.p.lines,
+    );
+    const ownCancels = byPosition(cancels, p.lines);
+    expect(ownCancels.map((row) => row.kept)).toEqual(twinCancels.map((row) => row.kept));
+    expect(ownCancels.map((row) => row.stage)).toEqual([
+      twinCancels[0]!.stage,
+      "unsent",
+      twinCancels[2]!.stage,
+      twinCancels[3]!.stage,
+    ]);
+    expect(twinCancels[1]!.stage).toBe("fired");
 
     expect(result.byDish[1]).toEqual([]);
     expect(control.byDish[1]).toHaveLength(1);
