@@ -28,6 +28,12 @@ function limit(ms) {
   return typeof ms === "number" ? ms : undefined;
 }
 
+// Vitest reruns a case's body for each retry and repeat inside one case-start/case-end pair.
+function tries({ retry, repeats } = {}) {
+  const retries = typeof retry === "object" ? retry?.count : retry;
+  return ((limit(retries) ?? 0) + 1) * ((limit(repeats) ?? 0) + 1);
+}
+
 function send(cdp, method, params) {
   return Promise.resolve().then(() => cdp.send(method, params));
 }
@@ -64,6 +70,7 @@ export default class FileProgressReporter {
     this.modules = new Map();
     this.sampled = new Set();
     this.progress = new Map();
+    this.cases = new Map();
     this.unbounded = new Set();
     this.unshown = new Set();
     this.pages = new Map();
@@ -96,12 +103,19 @@ export default class FileProgressReporter {
   }
 
   onTestCaseReady(testCase) {
-    this.progressed(testCase.module, { caseTimeout: limit(testCase.options?.timeout) });
+    this.progressed(testCase.module);
+    const key = label(testCase.module);
+    if (!this.cases.has(key)) this.cases.set(key, new Map());
+    this.cases.get(key).set(testCase.id, {
+      timeout: limit(testCase.options?.timeout),
+      tries: tries(testCase.options),
+    });
     this.trace(testCase.module, "case-start", { name: testCase.fullName });
   }
 
   onTestCaseResult(testCase) {
-    this.progressed(testCase.module, { caseTimeout: undefined });
+    this.progressed(testCase.module);
+    this.cases.get(label(testCase.module))?.delete(testCase.id);
     this.trace(testCase.module, "case-end", {
       name: testCase.fullName,
       state: testCase.result().state,
@@ -122,9 +136,8 @@ export default class FileProgressReporter {
     this.trace(testModule, phase, { hook: name, name: entity.fullName });
   }
 
-  progressed(testModule, step = {}) {
-    const key = label(testModule);
-    this.progress.set(key, { ...this.progress.get(key), ...step, at: this.now() });
+  progressed(testModule) {
+    this.progress.set(label(testModule), this.now());
   }
 
   trace(testModule, phase, details = {}) {
@@ -139,6 +152,7 @@ export default class FileProgressReporter {
     const startedAt = this.running.get(key);
     this.running.delete(key);
     this.progress.delete(key);
+    this.cases.delete(key);
     if (startedAt === undefined) {
       this.write(`${PREFIX} end ${key} ${testModule.state()}`);
       return;
@@ -216,7 +230,7 @@ export default class FileProgressReporter {
   sampleStalledFiles() {
     const at = this.now();
     for (const [key, startedAt] of this.running) {
-      const silent = at - this.progress.get(key).at;
+      const silent = at - this.progress.get(key);
       if (silent < this.stackAfterMs || this.sampled.has(key)) continue;
       const head = `${key} has run ${seconds(at - startedAt)};`;
       const bound = this.silenceAllowed(key);
@@ -232,15 +246,21 @@ export default class FileProgressReporter {
     }
   }
 
-  // A healthy page reports a case or hook within these, because Vitest's own timer fails a stuck
-  // case; onTestFinished callbacks run under hookTimeout before the case reports. Undefined when a
-  // timeout of 0 leaves the step unbounded.
+  // The longest running case's timeout once per try, plus one hookTimeout. Not counted: a timeout
+  // argument given to a hook or an onTestFinished/onTestFailed callback (the reporter is never
+  // handed one), a second such callback (they run one after another with no event between), and
+  // a retry's delay; only the 60-second margin covers those. Undefined when a timeout of 0 leaves
+  // a step unbounded.
   silenceAllowed(key) {
     const config = this.modules.get(key).project.config ?? {};
-    const { caseTimeout } = this.progress.get(key);
-    const timeouts = [caseTimeout ?? limit(config.testTimeout), limit(config.hookTimeout)];
-    if (timeouts.includes(0)) return undefined;
-    return timeouts.reduce((sum, ms) => sum + (ms ?? 0), this.stackAfterMs);
+    const testTimeout = limit(config.testTimeout);
+    const running = [...(this.cases.get(key)?.values() ?? [])];
+    const cases = running.length > 0 ? running : [{ timeout: undefined, tries: 1 }];
+    const caseTimeouts = cases.map((testCase) => testCase.timeout ?? testTimeout);
+    const hookTimeout = limit(config.hookTimeout);
+    if (caseTimeouts.includes(0) || hookTimeout === 0) return undefined;
+    const longest = Math.max(...cases.map(({ tries }, i) => (caseTimeouts[i] ?? 0) * tries));
+    return this.stackAfterMs + longest + (hookTimeout ?? 0);
   }
 
   noteUnbounded(key, head) {

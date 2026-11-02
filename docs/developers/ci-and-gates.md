@@ -806,11 +806,15 @@ session) to each test page as files start, and leaves it attached for the rest o
 the run. It records, for every file, when the file last reported anything: its start,
 its collection, a case starting or ending, or a hook starting or ending. Every 5
 seconds it looks for files that have been silent for longer than 60 seconds plus the
-running case's own `timeout` (or,
-with none, the project's `testTimeout`) plus the project's `hookTimeout`, because a
-case's `onTestFinished` callbacks run under `hookTimeout` before the case reports its
-result. A timeout missing from the configuration adds nothing to that sum. A timeout of exactly 0
-means Vitest bounds nothing, so such a file is never paused; it gets one `stack:` line
+longest running case's own `timeout` (or,
+with none, the project's `testTimeout`) once for each try its `retry` and `repeats` allow,
+plus the project's `hookTimeout` once, for a case's `onTestFinished` callback. A timeout
+missing from the configuration adds nothing to that sum. The sum does not count a timeout
+argument given to a hook or to an `onTestFinished` or `onTestFailed` callback (Vitest 4.1.12
+hands the reporter's `onHookStart` only the hook's name and entity, and the callbacks report
+nothing), a second such callback (they run one after another with no event between them), or a
+retry's delay; only the 60-second margin covers those. A timeout of exactly 0 for a running
+case or the project means Vitest bounds nothing, so such a file is never paused; it gets one `stack:` line
 saying `a time limit of 0 bounds nothing, so its page is not paused`. How long a file
 has run overall is not the trigger: a healthy file can run for minutes.
 For each such file, it pauses every page with a frame whose address contains the file's path
@@ -883,8 +887,9 @@ per page, the printed frames, each no-pause and refused-pause line, the 3- and
 2-second bounds, that every pause is resumed, that a file no page shows yet is
 sampled at a later check and named once, that a project with no browser prints
 nothing, that a file reporting cases and hooks is never paused, the silence bound
-from each timeout (including a timeout of 0), and the disable-and-enable after an
-unanswered pause. No real browser runs in them.
+from each timeout (including a timeout of 0), that concurrent cases each keep their own
+timeout until their own result, that retries and repeats multiply a case's timeout, and
+the disable-and-enable after an unanswered pause. No real browser runs in them.
 
 Why the trigger is silence (A1307): on main CI run `41372526118`, `test-dashboard (2)`,
 the case "A461 visual Menus Structure 390 'en-GB' 'dark'" in

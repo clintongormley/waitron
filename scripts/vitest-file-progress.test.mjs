@@ -826,10 +826,11 @@ describe("stack samples from a browser page that a file has kept busy", () => {
       const h = stackHarness();
       h.reporter.onInit({ projects: [project] });
       h.reporter.onTestModuleQueued(browserModule(hangPath, project));
-      const caseOf = (name, timeout) => ({
+      const caseOf = (name, timeout, options = {}) => ({
+        id: `case-${name}`,
         module: browserModule(hangPath, project),
         fullName: name,
-        options: { timeout },
+        options: { timeout, ...options },
         result: () => ({ state: "passed" }),
       });
       const pauses = () => page.cdp.sent.filter((method) => method === "Debugger.pause");
@@ -921,6 +922,86 @@ describe("stack samples from a browser page that a file has kept busy", () => {
       tick(1000);
       reporter.onTestCaseResult(slow);
       tick(119_999);
+      await settle();
+      expect(pauses()).toEqual([]);
+      tick(1);
+      await settle();
+      expect(pauses()).toHaveLength(1);
+    });
+
+    it("keeps a longer concurrent case's timeout after a shorter one beside it reports", async () => {
+      const { reporter, tick, caseOf, pauses, page } = configuredHangFile({
+        testTimeout: 30_000,
+        hookTimeout: 30_000,
+      });
+      page.cdp.pauseWith = [];
+      await settle();
+      const short = caseOf("short", 1000);
+      reporter.onTestCaseReady(caseOf("long", 90_000));
+      reporter.onTestCaseReady(short);
+      tick(1000);
+      reporter.onTestCaseResult(short);
+      tick(179_999);
+      await settle();
+      expect(pauses()).toEqual([]);
+      tick(1);
+      await settle();
+      expect(pauses()).toHaveLength(1);
+    });
+
+    it("takes the longest timeout among concurrent cases, whichever started last", async () => {
+      const { reporter, tick, caseOf, pauses, page } = configuredHangFile({
+        testTimeout: 30_000,
+        hookTimeout: 30_000,
+      });
+      page.cdp.pauseWith = [];
+      await settle();
+      reporter.onTestCaseReady(caseOf("long", 90_000));
+      reporter.onTestCaseReady(caseOf("short", 1000));
+      tick(179_999);
+      await settle();
+      expect(pauses()).toEqual([]);
+      tick(1);
+      await settle();
+      expect(pauses()).toHaveLength(1);
+    });
+
+    it("never pauses while a concurrent case with a 0 timeout is still running", async () => {
+      const { reporter, tick, caseOf, pauses, page, stackLines } = configuredHangFile({
+        testTimeout: 30_000,
+        hookTimeout: 30_000,
+      });
+      page.cdp.pauseWith = [];
+      await settle();
+      const short = caseOf("short", 1000);
+      reporter.onTestCaseReady(caseOf("unbounded", 0));
+      reporter.onTestCaseReady(short);
+      reporter.onTestCaseResult(short);
+      reporter.onTestCaseReady(caseOf("bounded", 30_000));
+      for (let check = 0; check < 100; check += 1) {
+        tick(5000);
+        await settle();
+      }
+      expect(pauses()).toEqual([]);
+      expect(stackLines()).toEqual([
+        "[file-progress] stack: src/hang.test.ts [browser] has run 60.0s; a time limit of 0 bounds nothing, so its page is not paused",
+      ]);
+    });
+
+    it.each([
+      ["retry: 2", { retry: 2 }, 3],
+      ["retry: { count: 2 }", { retry: { count: 2, delay: 0 } }, 3],
+      ["repeats: 2", { repeats: 2 }, 3],
+      ["retry: 1 and repeats: 1", { retry: 1, repeats: 1 }, 4],
+    ])("allows a case with %s its timeout once per try", async (_, options, tries) => {
+      const { reporter, tick, caseOf, pauses, page } = configuredHangFile({
+        testTimeout: 30_000,
+        hookTimeout: 30_000,
+      });
+      page.cdp.pauseWith = [];
+      await settle();
+      reporter.onTestCaseReady(caseOf("retried", 30_000, options));
+      tick(60_000 + tries * 30_000 + 30_000 - 1);
       await settle();
       expect(pauses()).toEqual([]);
       tick(1);
