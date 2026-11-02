@@ -113,6 +113,7 @@ function run(mode, env = {}, scriptPath = script) {
     runnerTemp,
     githubPath: read("github-path"),
     npmArgs: read("npm.args"),
+    gnutimeoutCalls: read("gnutimeout.calls"),
   };
 }
 
@@ -167,6 +168,25 @@ describe("ci-setup-pnpm.sh", () => {
     expect(failureLines(result.stderr)).toHaveLength(3);
     expect(result.githubPath).toBe("");
     expect(result.elapsedMs).toBeLessThan(15_000);
+  });
+
+  it("prefers gnutimeout, Ubuntu 26.04's name for GNU's timeout, when it is on PATH", () => {
+    // Failing case: the script runs gtimeout or timeout first, so gnutimeout.calls stays empty.
+    const realTimeout = ["gnutimeout", "gtimeout", "timeout"]
+      .map((name) => spawnSync("sh", ["-c", `command -v ${name}`], { encoding: "utf8" }))
+      .find((probe) => probe.status === 0)
+      ?.stdout.trim();
+    expect(realTimeout, "no timeout command to wrap").toBeTruthy();
+    const gnuBin = temporaryDirectory("ci-setup-pnpm-gnutimeout-");
+    writeFileSync(
+      join(gnuBin, "gnutimeout"),
+      `#!/usr/bin/env bash\necho called >> "$STUB_STATE/gnutimeout.calls"\nexec "${realTimeout}" "$@"\n`,
+    );
+    chmodSync(join(gnuBin, "gnutimeout"), 0o755);
+    const result = run("ok", { PATH: `${gnuBin}:${STUB_BIN}:${process.env.PATH}` });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout, result.stderr).toContain(`pnpm ${VERSION} installed on attempt 1 of 3`);
+    expect(result.gnutimeoutCalls).toBe("called\ncalled\n");
   });
 
   it("succeeds on a later attempt after a failed one", () => {

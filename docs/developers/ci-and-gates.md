@@ -2201,6 +2201,19 @@ sleeps 300 s, with a 1 s limit and a 1 s kill grace: it prints three
 off the npm call, that case failed (2026-10-15). A second case uses a stub that ignores the polite
 stop (`trap '' TERM`); with only `-k` taken off, it failed and the plain hang case still passed.
 
+The script prefers GNU's timeout: `gnutimeout` (Ubuntu 26.04's name for it, package
+`gnu-coreutils`), then `gtimeout` (macOS Homebrew), then `timeout`. On GitHub's `ubuntu-26.04`
+image `/usr/bin/timeout` is uutils coreutils 0.10.0, whose forced kill reaches only the command it
+started, so a child of npm that ignores the polite stop outlives the attempt and holds its output
+open. Measured on a GitHub ubuntu-26.04 runner, 2026-11-02, PR #2400's diagnostic workflow, with
+`timeout -k 1 1 bash -c "trap '' TERM; sleep 304; exit 0"` under `strace`: it sent SIGTERM to the
+group but SIGKILL only to the `bash`, and the `sleep` exited 0 afterwards; GNU timeout on 24.04
+sent SIGKILL to the group, and `gnutimeout -k 1 1` on 26.04 killed its group and left no `sleep`
+behind. The cause in the source: uucore 0.10.0, `src/uucore/src/lib/features/process/unix.rs:111-113`
+— `send_signal_group` first tries to ignore the signal itself, which fails for SIGKILL, so the
+group kill is never sent. The "prefers gnutimeout" case in `scripts/ci-setup-pnpm.test.mjs` checks
+the lookup order only, through a wrapper around whichever timeout the machine has.
+
 The cache moved. The action exported `PNPM_HOME=~/setup-pnpm/node_modules/.bin`, and pnpm 9.15.0
 puts its store under `$PNPM_HOME/store/v3` when that is set (`PNPM_HOME=/tmp/fakehome pnpm store
 path` printed `/tmp/fakehome/store/v3`, run 2026-10-15 on macOS). The script exports no `PNPM_HOME`,
