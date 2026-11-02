@@ -12,6 +12,7 @@ import { AppError } from "@waitron/shared";
 import { admitRecordRemedy, REMEDY_KINDS, type RemedyKind } from "./record-remedy.js";
 import { applyCorrectedRecordFacts } from "./record-remedy-http.js";
 import { applyAbsentOriginalCancellation } from "./record-remedy-absent.js";
+import { applyCorrectiveInvoiceRequest } from "./record-remedy-corrective-http.js";
 
 // Legal enablement belongs to server policy; a client request cannot grant it.
 const ENABLED_REMEDIES: ReadonlySet<RemedyKind> = new Set();
@@ -66,6 +67,15 @@ export function mountRecordRemedies(
         if (kind === "absent-original-cancellation")
           return applyAbsentOriginalCancellation(
             tx,
+            ctx.recordGeneration,
+            token,
+            enabledRemedies,
+            body,
+          );
+        if (kind === "corrective-invoice")
+          return applyCorrectiveInvoiceRequest(
+            tx,
+            ctx,
             ctx.recordGeneration,
             token,
             enabledRemedies,

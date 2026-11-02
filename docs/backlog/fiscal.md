@@ -491,9 +491,9 @@ The public `POST /management-api/fiscal-records/remedy` route refuses every reme
 Client-supplied enablement and operator fields cannot grant authority. No production action is
 enabled. The HTTP adapter covers synthetic corrections to stored invoice facts for rejected records
 and records accepted with errors. The separately gated synthetic absent-original operation is
-described below. The corrective HTTP adapter, resolution of existing held cancellations, brake
-release and staff cancellation/refund qualification remain Task 8 work. The live second-correction
-prerequisite is recorded in the dated entry below.
+described below. The separately gated corrective HTTP adapter is also described below. Resolution
+of existing held cancellations, brake release and staff cancellation/refund qualification remain
+Task 8 work. The live second-correction prerequisite is recorded in the dated entry below.
 
 **2 November 2026, Task 8 synthetic corrective-invoice transaction.** The internal operation
 uses the existing core correction writer, which now accepts a management session and still checks
@@ -507,8 +507,23 @@ Retries compare the complete decision and return the saved sale, record and even
 number or payment. A failed resolution rolls the accounting and number allocation back.
 
 `record-remedy-corrective.test.ts` exercises this internal transaction with real accounting and
-fiscal writers. The public HTTP route continues to refuse corrective-invoice requests; its adapter
-and actual staff refund integration remain unfinished. No new production remedy is enabled.
+fiscal writers. No new production remedy is enabled.
+
+**2 November 2026, Task 8 synthetic corrective HTTP boundary.** With a test policy explicitly
+allowing `corrective-invoice`, the management route passes validated signed line facts to that
+transaction. The host supplies the node, deployment environment and clock; the action uses
+`operator_script` origin and the authenticated administrator. Client claims for those values are
+refused. The wire input accepts the series, total, operation description, whole-invoice flag and
+lines with number, name, language descriptions, quantity, unit price, VAT rate and base, plus
+optional gross amount, product id and original-line id. Other line metadata is refused rather
+than discarded. Core retains its accounting, whole-invoice, line-reference and series checks.
+
+`record-remedy-corrective-http.test.ts` exercises the real route and writers, including distinct
+production/preproduction stamps, fractional quantities, whole-invoice credits, parallel retries,
+changed decisions, live write authority and clock refusals. These synthetic operations leave the
+earlier sale, fiscal records and payment/refund rows unchanged. The route's default policy remains
+empty. Existing held-record resolution, manual brake release and actual staff cancellation/refund
+integration remain unfinished; this HTTP milestone does not complete Task 8.
 
 **2 November 2026, Task 8 synthetic absent-original cancellation.** An administrator explicitly
 selects the operation for a current rejected alta with matching case evidence. Unknown outcomes,
