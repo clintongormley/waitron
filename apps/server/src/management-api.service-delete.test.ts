@@ -17,6 +17,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   persons,
   startManagementSession,
@@ -374,10 +375,7 @@ it.each([
             .set({ active: false })
             .where(eq(departments.id, department.id));
     } else if (code.endsWith("order_in_progress")) {
-      const [order] = await tx
-        .insert(workingOrders)
-        .values({ source: "operator_script", locationId: v.cfg.locationId, orderNumber: 99 })
-        .returning();
+      const order = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 99 });
       await tx.insert(orderServiceContexts).values({
         workingOrderId: order!.id,
         locationId: v.cfg.locationId,
@@ -386,10 +384,7 @@ it.each([
         serviceMode: "prepay",
       });
     } else if (code.endsWith("transfer_pending")) {
-      const [order] = await tx
-        .insert(workingOrders)
-        .values({ source: "operator_script", locationId: v.cfg.locationId, orderNumber: 99 })
-        .returning();
+      const order = await seedWorkingOrder(tx, { source: "operator_script", orderNumber: 99 });
       const [source] = await tx
         .select()
         .from(zoneServicePolicies)
@@ -425,9 +420,8 @@ it.each([
           createdBy: v.operator.personId,
         });
       if (code === "table.delivery_in_progress")
-        await tx.insert(workingOrders).values({
+        await seedWorkingOrder(tx, {
           source: "operator_script",
-          locationId: v.cfg.locationId,
           orderNumber: 99,
           deliveryTableId: table!.id,
           label: "Garden delivery",

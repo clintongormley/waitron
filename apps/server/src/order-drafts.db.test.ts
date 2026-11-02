@@ -30,11 +30,12 @@ import {
   withTransaction,
   workingOrderLines,
   workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   assignProductUnit,
@@ -119,13 +120,14 @@ interface Venue {
 async function setupVenue(): Promise<Venue> {
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  const [location] = await db
-    .insert(locations)
-    .values({ name: "Sala", invoiceLocales: [LOCALE], operationDescription: "Restaurante" })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
+  await seedVenue(db, {
+    name: "Sala",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Restaurante",
+  });
+  const locationId = await venueLocationId(db);
   await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  const nodeId = await seedNode(db);
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),

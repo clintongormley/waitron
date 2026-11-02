@@ -2,13 +2,14 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { hashPin, deactivatePerson, persons } from "@waitron/identity";
-import { invoiceSeries, nodes, printJobs, sales, tenants, withTransaction } from "@waitron/db";
+import { invoiceSeries, printJobs, sales, tenants, withTransaction } from "@waitron/db";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";
 import { and, eq } from "drizzle-orm";
-import { nodeId, seriesId as brandSeriesId } from "@waitron/shared";
+import { seriesId as brandSeriesId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import { seatedWith, send } from "./testing/bill-venue.js";
 import { mountOrdersApi } from "./orders-api.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
@@ -351,11 +352,8 @@ describe("Orders routes", () => {
     "reprints a saved invoice with its trading context's printer, write location and practice marking (%s)",
     async (practiceMode) => {
       const billId = await placedIssuedBill(venue, "Paella");
-      const ownNode = nodeId(randomUUID());
+      const ownNode = await seedNode(venue.db);
       const ownLocation = venue.cfg.locationId;
-      await venue.db
-        .insert(nodes)
-        .values({ id: ownNode, locationId: ownLocation, name: "Own box" });
       const printer = { id: venue.printerId };
       const app = new Hono();
       mountOrdersApi(

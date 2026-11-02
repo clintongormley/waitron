@@ -2,9 +2,10 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locations, tenants } from "@waitron/db";
+import { tenants, venueLocationId } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { authenticateAgent } from "@waitron/printing";
 import { AppError } from "@waitron/shared";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
@@ -37,15 +38,12 @@ async function seedTenantWithLocation(): Promise<Tenant> {
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
-  const [loc] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Barra",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  return { locationId: loc!.id };
+  await seedVenue(suite.db, {
+    name: "Barra",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
+  });
+  return { locationId: await venueLocationId(suite.db) };
 }
 
 let tenantA: Tenant;

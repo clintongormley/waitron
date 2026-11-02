@@ -9,7 +9,6 @@ import {
 import {
   CORE_MIGRATIONS,
   captureError,
-  locations,
   readMembershipTrustSet,
   setNodePublicKey,
   withNodeTransaction,
@@ -17,10 +16,10 @@ import {
   type NodeDatabase,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { generateNodeKeyPair, signBytes, verifyBytes } from "@waitron/membership";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
-import { AppError, locationId as brandLocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { isAppError, type NodeId } from "@waitron/shared";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 
@@ -55,23 +54,17 @@ describe("node identity establishment", () => {
   let node: NodeDatabase;
   let nodeId: NodeId;
   let otherNodeId: NodeId;
-  let locationId: ReturnType<typeof brandLocationId>;
 
   beforeAll(async () => {
     db = suite.db;
     node = suite.node;
-    await seedTenant(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Barra",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    locationId = brandLocationId(loc!.id);
-    nodeId = await seedNode(db, locationId);
-    otherNodeId = await seedNode(db, locationId);
+    await seedVenue(db, {
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    nodeId = await seedNode(db);
+    otherNodeId = await seedNode(db);
   }, 60_000);
 
   it("establishNodeIdentity stamps a public key that becomes the sole trust anchor", async () => {
@@ -139,7 +132,7 @@ describe("node identity establishment", () => {
   });
 
   it("stamps nothing in venue.db when node.db refuses to seal the key", async () => {
-    const unsealedNodeId = await seedNode(db, locationId);
+    const unsealedNodeId = await seedNode(db);
     await node.execute(
       sql.raw(`create trigger refuse_signing_key before insert on node_signing_key
         begin select raise(abort, 'refused by test'); end`),

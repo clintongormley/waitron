@@ -11,6 +11,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { afterEach, describe, expect, it } from "vitest";
 import { mergeCheckedBills, splitBill, transferItems } from "./bill-actions.js";
@@ -132,15 +133,11 @@ async function fixture() {
       operatorId: venue.operatorId,
       guestCount: 2,
     });
-    const [other] = await tx
-      .insert(workingOrders)
-      .values({
-        source: "dashboard",
-        orderNumber: 2,
-        partyId: seated.partyId,
-        locationId: venue.cfg.locationId,
-      })
-      .returning();
+    const other = await seedWorkingOrder(tx, {
+      source: "dashboard",
+      orderNumber: 2,
+      partyId: seated.partyId,
+    });
     await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, other!.id, venue.zoneId);
     await VENUE_SERVICE.writePartyAllergy(
       tx,
@@ -518,17 +515,13 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
         operatorId: venue.operatorId,
         guestCount: 2,
       });
-      const [other] = await tx
-        .insert(workingOrders)
-        .values({
-          source: "dashboard",
-          status: "open",
-          nodeId: venue.cfg.nodeId,
-          orderNumber: 2,
-          partyId: seated.partyId,
-          locationId: venue.cfg.locationId,
-        })
-        .returning();
+      const other = await seedWorkingOrder(tx, {
+        source: "dashboard",
+        status: "open",
+        nodeId: venue.cfg.nodeId,
+        orderNumber: 2,
+        partyId: seated.partyId,
+      });
       await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, other!.id, venue.zoneId);
       await VENUE_SERVICE.writePartyAllergy(
         tx,

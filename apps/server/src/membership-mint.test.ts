@@ -4,14 +4,13 @@ import { eq } from "drizzle-orm";
 import {
   captureError,
   CORE_MIGRATIONS,
-  locations,
   nodes,
   readMembershipTrustSet,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   endorseKey,
   generateNodeKeyPair,
@@ -20,7 +19,7 @@ import {
   type MembershipDocumentBody,
   type SignedMembershipDocument,
 } from "@waitron/membership";
-import { isAppError, locationId as brandLocationId } from "@waitron/shared";
+import { isAppError } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintNextMembershipDocument } from "./membership-mint.js";
@@ -42,16 +41,12 @@ describe("mintNextMembershipDocument", () => {
 
   beforeAll(async () => {
     db = suite.db;
-    await seedTenant(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Barra",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    nodeId = await seedNode(db, brandLocationId(loc!.id));
+    await seedVenue(db, {
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    nodeId = await seedNode(db);
     await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
   }, 60_000);
 

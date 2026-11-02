@@ -9,7 +9,7 @@ import {
   floorTodayJoinTables,
   floorTodayJoins,
   kitchenStations,
-  locations,
+  venueLocationId,
   parties,
   printJobs,
   ticketItems,
@@ -20,7 +20,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToVenue,
   createCatalogue,
@@ -134,14 +134,13 @@ async function setupVenue(): Promise<Seeded> {
       hardwareUnit: "kg",
     },
   ]);
-  const locationId = randomUUID();
-  await db.insert(locations).values({
-    id: locationId,
+  await seedVenue(db, {
     name: "Barra",
     invoiceLocales: [LOCALE],
     operationDescription: "Venta en establecimiento",
   });
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
     nodeId: brandNodeId(nodeId),

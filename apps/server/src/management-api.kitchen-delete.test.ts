@@ -12,6 +12,7 @@ import {
 } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedDevice } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setDeviceKitchenScreens, setProfileKitchenScreens } from "@waitron/venue-service";
 import { createCourse, createStation } from "./kitchen.js";
@@ -257,16 +258,10 @@ it("station bound to an off KDS refuses deletion with distinct device count", as
       station: { stationIds: null, zoneIds: null },
     }),
   );
-  const [device] = await suite.db
-    .insert(devices)
-    .values({
-      locationId: v.cfg.locationId,
-      deviceProfileId: profile!.id,
-      label: "Off display",
-      active: false,
-      tokenHash: randomUUID(),
-    })
-    .returning();
+  const device = {
+    id: (await seedDevice(suite.db, { profileId: profile!.id, label: "Off display" })).deviceId,
+  };
+  await suite.db.update(devices).set({ active: false }).where(eq(devices.id, device.id));
   await inTx(v, (tx) =>
     setDeviceKitchenScreens(tx, v.cfg, {
       deviceId: device!.id,

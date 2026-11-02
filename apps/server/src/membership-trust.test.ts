@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   endorseKey,
@@ -58,12 +58,12 @@ describe("the held document's check against the keys this box stores", () => {
 
   async function box(): Promise<{ db: Database; nodeId: string }> {
     const db = suite.db;
-    await seedTenant(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({ name: "Barra", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
-      .returning({ id: locations.id });
-    const nodeId = await seedNode(db, brandLocationId(loc!.id));
+    await seedVenue(db, {
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta",
+    });
+    const nodeId = await seedNode(db);
     await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
     return { db, nodeId };
   }
