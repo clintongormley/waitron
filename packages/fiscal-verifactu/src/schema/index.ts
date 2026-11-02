@@ -7,6 +7,7 @@ export { clockChecks } from "./clock-checks.js";
 export { clockConfirmations } from "./clock-confirmations.js";
 export { clockStopRestarts } from "./clock-stop-restarts.js";
 export { fiscalConflictEvidence } from "./conflict-evidence.js";
+export { fiscalLookupConflicts } from "./lookup-conflicts.js";
 export { fiscalCertificateInstalls } from "./certificate-installs.js";
 export { fiscalCertificateReminders } from "./certificate-reminders.js";
 export { envioFlujo } from "./envio-flujo.js";

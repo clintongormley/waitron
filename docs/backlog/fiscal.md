@@ -442,6 +442,24 @@ Foreign or different-date invoice evidence, the Task 7 conflict path, optional d
 and recovery qualification remain unfinished. The whole item still needs its reviews and CI before
 owner review; this checkpoint is not a partial pull request.
 
+### W41s-10a lookup-conflict candidate checkpoint, 2 November 2026
+
+For a locally held invoice number, the scoped runtime lookup compares the invoice date, fingerprint
+and software identity after every page arrives. A confirmed mismatch retains a separate append-only
+lookup observation and feeds Task 7's existing administrator stop. It preserves the original records,
+delivery results and acknowledgements, including when the box has made no submission attempt or the
+record already has an unrelated filing case. Missing fingerprint or software fields remain unknown;
+a failed later page commits no partial conflict. Matching contents with another reference remain an
+agreement. Retired-identity observations retain their evidence without stopping the current identity.
+
+`reconcile.conflicts.test.ts` checks those boundaries and refused evidence writes; the new
+`backup-lookup-conflicts.test.ts` checks preserved evidence and dangling links in real backup files.
+The generated migration adds only `fiscal_lookup_conflicts`. Its table-name entries join the existing
+append-only and ownership lists; predecessor fixtures omit its triggers until its migration exists.
+This is still an unpublished milestone. Foreign invoices whose numbers have no local row, current
+months without stored records, optional device-held evidence, recovery qualification and the whole
+item's reviews and CI remain unfinished.
+
 ### Task 8 staff refund and held-cancellation qualification, 2 November 2026
 
 `apps/server/src/fiscal-remedy.staff-refund.test.ts` uses a real provisioned venue and the

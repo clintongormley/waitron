@@ -10,11 +10,14 @@ import type {
   Cabecera,
   ConsultaFiltro,
   EstadoRegistroConsulta,
+  RegistroConsultado,
   VerifactuClient,
 } from "@waitron/verifactu";
 import { deleteAck, writeAck } from "./acks.js";
 import { openAcceptedWithErrorsCase } from "./filing-cases.js";
 import { toAeatDate } from "./registro-row.js";
+import { retainLookupConflict } from "./reconcile-conflicts.js";
+import type { LookupConflictEvidence } from "./conflict-types.js";
 
 export interface ReconcileDeps {
   db: Database;
@@ -48,6 +51,10 @@ type PeriodRow = {
   sale_id: string;
   /** For an alta, the id of its sale's anulación, if one exists; otherwise null. */
   anulacion_id: string | null;
+  anulacion_huella: string | null;
+  huella: string;
+  tipo_registro: string;
+  sistema_informatico: string;
   estado: string;
   intentos: number;
   csv: string | null;
@@ -156,7 +163,14 @@ export async function reconcile(
 
   // One database holds one taxpayer, but a rename leaves rows carrying different names; the
   // cabecera takes the first row's, in no stated order.
-  const authority = await fetchAuthority(client, cabeceraFor(rows[0]!), normalizedPeriod, rows);
+  const { authority, conflicts, unknown } = await fetchAuthority(
+    client,
+    cabeceraFor(rows[0]!),
+    normalizedPeriod,
+    rows,
+    // A broad audit cannot impose a particular node's issuance stop.
+    deps.scope !== undefined,
+  );
 
   // T2
   const detectedAt = deps.clock.now().instant;
@@ -172,6 +186,18 @@ export async function reconcile(
         latest === undefined ||
         (Object.keys(row) as (keyof PeriodRow)[]).some((key) => latest[key] !== row[key])
       ) {
+        (result.deferred ??= []).push(row.id);
+        continue;
+      }
+      const conflict = conflicts.get(row.id);
+      if (conflict !== undefined) {
+        await retainLookupConflict(tx, row.id, conflict, detectedAt);
+        if (await raiseOnce(tx, row, "error", "fiscal.huella_divergente", detectedAt))
+          result.incidentsRaised += 1;
+        (result.conflicts ??= []).push(mismatchOf(row, conflict.state));
+        continue;
+      }
+      if (unknown.has(row.id)) {
         (result.deferred ??= []).push(row.id);
         continue;
       }
@@ -272,6 +298,12 @@ async function rowsForPeriod(
         where a.sale_id = r.sale_id and a.tipo_registro = 'anulacion'
         limit 1
       ) end as anulacion_id,
+      case when r.tipo_registro = 'alta' then (
+        select a.huella from registros_facturacion a
+        where a.sale_id = r.sale_id and a.tipo_registro = 'anulacion'
+        limit 1
+      ) end as anulacion_huella,
+      r.huella, r.tipo_registro, r.sistema_informatico,
       e.estado, e.intentos, e.csv, e.reconciled_resubmit_at,
       r.id_emisor_factura, r.nombre_razon_emisor, r.num_serie_factura,
       r.fecha_expedicion_factura
@@ -316,18 +348,33 @@ async function fetchAuthority(
   cabecera: Cabecera,
   period: { year: string; month: string },
   rows: readonly PeriodRow[],
-): Promise<Map<string, Reported>> {
+  compareContents: boolean,
+): Promise<{
+  authority: Map<string, Reported>;
+  conflicts: Map<string, LookupConflictEvidence>;
+  unknown: Set<string>;
+}> {
   const expected = new Map(rows.map((row) => [row.id, row]));
   const authority = new Map<string, Reported>();
   const visited = new Set<string>();
+  const records = new Map<string, RegistroConsultado[]>();
   let clave: ConsultaFiltro["ClavePaginacion"];
   do {
     const resp = await client.consultar(cabecera, {
       Ejercicio: period.year,
       Periodo: period.month,
       ClavePaginacion: clave,
+      ...(compareContents
+        ? { DatosAdicionalesRespuesta: { MostrarSistemaInformatico: "S" as const } }
+        : {}),
     });
     for (const r of resp.registros) {
+      if (compareContents) {
+        const key = JSON.stringify([r.IDFactura.IDEmisorFactura, r.IDFactura.NumSerieFactura]);
+        const group = records.get(key) ?? [];
+        group.push(r);
+        records.set(key, group);
+      }
       const ref = (r.DatosRegistroFacturacion as { RefExterna?: string }).RefExterna;
       if (ref !== undefined) {
         const row = expected.get(ref);
@@ -364,7 +411,72 @@ async function fetchAuthority(
       clave = undefined;
     }
   } while (clave !== undefined);
-  return authority;
+  const conflicts = new Map<string, LookupConflictEvidence>();
+  const unknown = new Set<string>();
+  if (compareContents) {
+    for (const row of rows) {
+      const key = JSON.stringify([row.id_emisor_factura, row.num_serie_factura]);
+      for (const record of records.get(key) ?? []) {
+        // A still-live invoice reports its alta, not an unfiled cancellation of that invoice.
+        if (row.tipo_registro === "anulacion" && record.EstadoRegistro !== "Anulado") continue;
+        const data = record.DatosRegistroFacturacion;
+        const system = lookupSystem(data.SistemaInformatico);
+        const local = JSON.parse(row.sistema_informatico) as Record<string, unknown>;
+        const fingerprint =
+          record.EstadoRegistro === "Anulado" && row.anulacion_huella !== null
+            ? row.anulacion_huella
+            : row.huella;
+        const different =
+          record.IDFactura.FechaExpedicionFactura !== row.fecha_expedicion_factura ||
+          (typeof data.Huella === "string" &&
+            data.Huella.length > 0 &&
+            data.Huella !== fingerprint) ||
+          (system !== null &&
+            ((system.taxId !== null && system.taxId !== local.NIF) ||
+              (system.softwareId !== null && system.softwareId !== local.IdSistemaInformatico) ||
+              (system.installation !== null && system.installation !== local.NumeroInstalacion)));
+        if (different) {
+          conflicts.set(row.id, {
+            source: "consulta",
+            invoice: record.IDFactura,
+            reference: typeof data.RefExterna === "string" ? data.RefExterna : null,
+            state: record.EstadoRegistro,
+            fingerprint: typeof data.Huella === "string" ? data.Huella : null,
+            system,
+          });
+        } else if (
+          typeof data.Huella !== "string" ||
+          data.Huella.length === 0 ||
+          system === null ||
+          Object.values(system).some((value) => value === null)
+        ) {
+          unknown.add(row.id);
+        } else {
+          authority.set(row.id, {
+            estado: record.EstadoRegistro,
+            codigo: record.CodigoErrorRegistro ?? null,
+            mensaje: record.DescripcionErrorRegistro ?? null,
+          });
+        }
+      }
+    }
+  }
+  return { authority, conflicts, unknown };
+}
+
+function lookupSystem(value: unknown): LookupConflictEvidence["system"] {
+  if (typeof value !== "object" || value === null) return null;
+  return {
+    taxId: "NIF" in value && typeof value.NIF === "string" ? value.NIF : null,
+    softwareId:
+      "IdSistemaInformatico" in value && typeof value.IdSistemaInformatico === "string"
+        ? value.IdSistemaInformatico
+        : null,
+    installation:
+      "NumeroInstalacion" in value && typeof value.NumeroInstalacion === "string"
+        ? value.NumeroInstalacion
+        : null,
+  };
 }
 
 function mismatchOf(row: PeriodRow, reported: EstadoRegistroConsulta | null): ReconcileMismatch {
@@ -455,7 +567,8 @@ async function raise(
   code:
     | "fiscal.reconcile_no_trace"
     | "fiscal.reconcile_drift_errores"
-    | "fiscal.reconcile_drift_anulada",
+    | "fiscal.reconcile_drift_anulada"
+    | "fiscal.huella_divergente",
   detectedAt: Date,
 ): Promise<void> {
   await recordIncident(tx, {
@@ -488,7 +601,7 @@ async function raiseOnce(
   tx: Transaction,
   row: PeriodRow,
   severity: IncidentSeverity,
-  code: "fiscal.reconcile_no_trace" | "fiscal.reconcile_drift_anulada",
+  code: "fiscal.reconcile_no_trace" | "fiscal.reconcile_drift_anulada" | "fiscal.huella_divergente",
   detectedAt: Date,
 ): Promise<boolean> {
   return recordIncidentOnce(tx, {

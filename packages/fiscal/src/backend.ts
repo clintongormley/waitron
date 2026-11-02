@@ -172,6 +172,8 @@ export interface ReconcileResult {
   /** Records still being filed or whose local snapshot changed during the lookup, omitted when
    * none were deferred. They were not classified or corrected from the older observation. */
   deferred?: string[];
+  /** Confirmed conflicting invoice contents retained for the administrator procedure. */
+  conflicts?: ReconcileMismatch[];
 }
 
 /** A clock reading, and the time of the latest record the regime holds, when the reading is more

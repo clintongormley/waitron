@@ -10,6 +10,7 @@ import {
 import { filingCases } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { registroSif } from "./schema/sif.js";
+import { fiscalLookupConflicts } from "./schema/lookup-conflicts.js";
 
 export type {
   ConflictComparison,
@@ -43,6 +44,7 @@ export async function readActiveConflicts(
       caseCause: filingCases.cause,
       openedAt: filingCases.openedAt,
       observation: fiscalConflictEvidence,
+      lookup: fiscalLookupConflicts,
     })
     .from(registrosFacturacion)
     .innerJoin(
@@ -60,12 +62,14 @@ export async function readActiveConflicts(
         eq(fiscalConflictEvidence.caseId, filingCases.id),
       ),
     )
+    .leftJoin(fiscalLookupConflicts, eq(fiscalLookupConflicts.registroId, registrosFacturacion.id))
     .where(
       and(
         eq(registroSif.nodeId, nodeId),
         isNull(registroSif.revocadoEn),
         or(
           isNotNull(fiscalConflictEvidence.id),
+          isNotNull(fiscalLookupConflicts.id),
           inArray(filingCases.cause, ["fiscal.huella_divergente", "fiscal.duplicado_anulado"]),
         ),
       ),
@@ -75,7 +79,8 @@ export async function readActiveConflicts(
   const active: ActiveConflict[] = [];
   for (const row of rows) {
     if (found.has(row.registroId)) continue;
-    const cause = row.observation?.cause ?? row.caseCause;
+    const cause =
+      row.observation?.cause ?? (row.lookup === null ? row.caseCause : "fiscal.huella_divergente");
     if (cause !== "fiscal.huella_divergente" && cause !== "fiscal.duplicado_anulado") continue;
     found.add(row.registroId);
     active.push({
@@ -84,10 +89,14 @@ export async function readActiveConflicts(
       sifId: row.sifId,
       installationIdentity: row.installationIdentity,
       invoiceIdentity: row.invoiceIdentity,
-      observedAt: (row.observation?.recordedAt ?? row.openedAt).toISOString(),
-      evidence: row.observation?.evidence ?? null,
+      observedAt: (
+        row.observation?.recordedAt ??
+        row.lookup?.recordedAt ??
+        row.openedAt
+      ).toISOString(),
+      evidence: row.observation?.evidence ?? row.lookup?.evidence ?? null,
       cause,
-      evidenceId: row.observation?.id ?? null,
+      evidenceId: row.observation?.id ?? row.lookup?.id ?? null,
     });
   }
   return active;

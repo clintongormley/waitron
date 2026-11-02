@@ -35,6 +35,7 @@ const suite = useVenueDb({
                     "clock_checks",
                     "clock_confirmations",
                     "fiscal_conflict_evidence",
+                    "fiscal_lookup_conflicts",
                   ].includes(table),
               ),
             }

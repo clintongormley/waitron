@@ -313,6 +313,21 @@ export function parseConflictResult(value: unknown): ConflictResult | null {
   return structuredClone(value) as unknown as ConflictResult;
 }
 function validEvidence(value: unknown): boolean {
+  if (exact(value, ["source", "invoice", "reference", "state", "fingerprint", "system"])) {
+    return (
+      value.source === "consulta" &&
+      exact(value.invoice, ["IDEmisorFactura", "NumSerieFactura", "FechaExpedicionFactura"]) &&
+      Object.values(value.invoice).every(text) &&
+      (value.reference === null || typeof value.reference === "string") &&
+      (value.state === "Correcto" ||
+        value.state === "AceptadoConErrores" ||
+        value.state === "Anulado") &&
+      (value.fingerprint === null || typeof value.fingerprint === "string") &&
+      (value.system === null ||
+        (exact(value.system, ["taxId", "softwareId", "installation"]) &&
+          Object.values(value.system).every((v) => v === null || typeof v === "string")))
+    );
+  }
   if (
     !exact(value, ["line", "csv", "comparison"]) ||
     !record(value.line) ||
