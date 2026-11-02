@@ -9,6 +9,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { eq } from "drizzle-orm";
+import { readOperationalVenueIds } from "@waitron/provisioning";
 import {
   moduleOperationFor,
   snapshotModuleOperations,
@@ -64,6 +65,8 @@ export async function establishReservedStandbyIdentity(
   await withPreparedModuleOperations(modules, operations, standby.nodeId, "establish", (prepared) =>
     withTransaction(deps.ownerDb, async (tx) => {
       if (await standbyNodeExists(tx, standby.nodeId)) return;
+      if ((await readOperationalVenueIds(tx)).length === 0)
+        throw new AppError("mirror.venue_not_copied", {});
 
       const owner = modules.find(
         (module) => module.provisioning?.standby?.series === "on-activation",

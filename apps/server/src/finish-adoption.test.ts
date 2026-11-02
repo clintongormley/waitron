@@ -152,6 +152,30 @@ describe("runFinishAdoption — default steps on a migrated venue", () => {
     timeoutMs: 60_000,
   });
 
+  it("logs the named no-venue refusal and keeps the pending record", async () => {
+    await seedTenant(suite.db);
+    const dir = await tempDir();
+    await writePendingAdoption(dir, PENDING);
+    const logged: unknown[] = [];
+    await runFinishAdoption({
+      ownerDb: suite.db,
+      stateDir: dir,
+      modules: [],
+      log: ((level: string, event: string, fields: unknown) =>
+        logged.push({ level, event, fields })) as never,
+    });
+    expect(logged).toEqual([
+      {
+        level: "error",
+        event: "adoption.establish_failed",
+        fields: { code: "mirror.venue_not_copied" },
+      },
+    ]);
+    expect(await readPendingAdoption(dir)).toEqual(PENDING);
+    expect((await suite.db.execute(sql`select 1 from nodes`)).rows).toEqual([]);
+    expect((await suite.db.execute(sql`select 1 from persons`)).rows).toEqual([]);
+  });
+
   it("establishes the standby's node and the mirror viewer, then clears the record", async () => {
     await seedTenant(suite.db);
     const [location] = await suite.db
