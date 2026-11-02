@@ -1,5 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { allergenName } from "../i18n/allergen-names.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { kitchenScreenNoticeText } from "../kitchen-screen-notice.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -10,6 +11,7 @@ import type {
   DeviceIdentity,
   DevicePassBoard,
   PassBoard,
+  PassCardItem,
   ResolvedKitchenScreen,
   TillApi,
 } from "../api/client.js";
@@ -1303,4 +1305,362 @@ describe("A773 pass screen: a till's All stations", () => {
     ).toEqual([t("expo.empty")]);
     expect(inBoard(el).querySelector("[data-card]")).toBeNull();
   });
+});
+
+describe("A773 pass screen: a till's All stations, its extras and portions", () => {
+  const mountAll = async (board: PassBoard) => {
+    const api = fakeApi({ getExpoBoard: vi.fn().mockResolvedValue({ board }) });
+    const el = await mount({ api });
+    expect(boardOf(el)!.mode).toBe("all_stations");
+    return el;
+  };
+  const inBoard = (el: TillPassScreen) => boardOf(el)!.shadowRoot!;
+  const itemOf = (el: TillPassScreen, id: string) =>
+    inBoard(el).querySelector<HTMLElement>(`[data-item="${id}"]`)!;
+  const names = (el: TillPassScreen) =>
+    [...inBoard(el).querySelectorAll(".item-name")].map((name) => name.textContent);
+  const portion = (id: string, overrides: Partial<PassCardItem> = {}): PassCardItem =>
+    passItem({
+      id,
+      name: "Burger",
+      qty: "1.000",
+      unitName: null,
+      unitPrecision: 0,
+      soldInEach: true,
+      state: "preparing",
+      phase: "preparing",
+      ...overrides,
+    });
+  const onCard = (items: PassCardItem[]) => passBoard({ inProgress: [passCard({ items })] });
+
+  it("names extras made at another station, with the extra's nutrition, never as a '+' extra, and none on a dish without", async () => {
+    const el = await mountAll(
+      onCard([
+        passItem({
+          id: "with",
+          crossRefs: [
+            {
+              kind: "with",
+              name: "CHIPS",
+              perDish: 2,
+              stationName: "Fryer",
+              addAllergens: { gluten: { kinds: ["wheat"] } },
+              suitableFor: [],
+            },
+          ],
+        }),
+        passItem({ id: "for", crossRefs: [{ kind: "for", name: "BURG", stationName: "Grill" }] }),
+        passItem({ id: "none", crossRefs: [{ kind: "for", name: "AGUA", stationName: null }] }),
+        passItem({ id: "plain" }),
+      ]),
+    );
+    const withRef = itemOf(el, "with").querySelector("[data-crossref]")!.textContent!;
+    expect(withRef).toContain("with CHIPS x2 from Fryer");
+    expect(withRef).toContain(allergenName("gluten", currentLocale()));
+    expect(itemOf(el, "for").querySelector("[data-crossref]")!.textContent).toContain(
+      "for BURG at Grill",
+    );
+    expect(itemOf(el, "none").querySelector("[data-crossref]")!.textContent).toContain(
+      "for AGUA, no preparation",
+    );
+    expect(itemOf(el, "plain").querySelector(".crossref, [data-crossref]")).toBeNull();
+    expect(inBoard(el).textContent).not.toContain("+ CHIPS");
+  });
+
+  it("words extras made at another station in Spanish", async () => {
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const el = await mountAll(
+        onCard([
+          passItem({
+            id: "with",
+            crossRefs: [{ kind: "with", name: "CHIPS", perDish: 2, stationName: "Fryer" }],
+          }),
+          passItem({ id: "none", crossRefs: [{ kind: "for", name: "AGUA", stationName: null }] }),
+        ]),
+      );
+      expect(itemOf(el, "with").querySelector("[data-crossref]")!.textContent).toContain(
+        "con CHIPS x2 de Fryer",
+      );
+      expect(itemOf(el, "none").querySelector("[data-crossref]")!.textContent).toContain(
+        "para AGUA, sin preparación",
+      );
+    } finally {
+      setLocale(previous);
+    }
+  });
+
+  it("draws identical portions as one row with their count", async () => {
+    const el = await mountAll(
+      onCard([portion("p1"), portion("f1", { name: "Fish" }), portion("p2")]),
+    );
+    expect(names(el)).toEqual(["2× Burger", "1× Fish"]);
+    expect(inBoard(el).querySelectorAll("[data-item]")).toHaveLength(2);
+  });
+
+  it.each<[string, Partial<PassCardItem>]>([
+    ["another state", { state: "ready", phase: "ready" }],
+    ["another station", { stationName: "Parrilla" }],
+    ["another extra", { modifiers: [{ descriptions: { "en-GB": "Cheese" } }] }],
+    ["another note", { note: "no salt" }],
+    ["a measure", { qty: "200.000", unitName: { "en-GB": "ml" }, soldInEach: false }],
+  ])("draws a portion with %s apart", async (_, overrides) => {
+    const el = await mountAll(onCard([portion("p1"), portion("p2", overrides)]));
+    expect(inBoard(el).querySelectorAll("[data-item]")).toHaveLength(2);
+  });
+
+  it("draws a portion whose extra has another count apart, each row with its own count", async () => {
+    const cheese = (perDish: number) => [{ descriptions: { "en-GB": "Cheese" }, perDish }];
+    const el = await mountAll(
+      onCard([
+        portion("p1", { modifiers: cheese(1) }),
+        portion("p2", { modifiers: cheese(2) }),
+        portion("p3", { modifiers: cheese(1) }),
+      ]),
+    );
+    expect(names(el)).toEqual(["2× Burger", "1× Burger"]);
+    expect(
+      [...inBoard(el).querySelectorAll<HTMLElement>("[data-item] .modifier")].map((modifier) =>
+        modifier.textContent!.trim(),
+      ),
+    ).toEqual(["+ Cheese", "+ Cheese x2"]);
+  });
+
+  it("draws portions sent a millisecond apart as one row", async () => {
+    const el = await mountAll(
+      onCard([
+        portion("p1"),
+        portion("p2", { queuedAt: new Date(Date.parse(minutesAgo(1)) + 1).toISOString() }),
+      ]),
+    );
+    expect(names(el)).toEqual(["2× Burger"]);
+  });
+
+  it("draws a forgotten portion apart from a fresh one, and marks only the forgotten", async () => {
+    const el = await mountAll(onCard([portion("p1"), portion("p2", { queuedAt: minutesAgo(20) })]));
+    expect(names(el)).toEqual(["1× Burger", "1× Burger"]);
+    expect(inBoard(el).querySelectorAll("[data-forgotten]")).toHaveLength(1);
+    expect(itemOf(el, "p2").querySelector("[data-forgotten]")).not.toBeNull();
+  });
+
+  it("draws identical portions on a group card as one row", async () => {
+    const el = await mountAll(
+      passBoard({
+        inProgress: [
+          passCard({
+            key: "group:g-3",
+            target: { kind: "group", partyId: "party-1", groupId: "g-3" },
+            party: { id: "party-1", revision: 3 },
+            group: { displayNumber: 3, position: 3 },
+            items: [portion("p1"), portion("p2")],
+          }),
+        ],
+      }),
+    );
+    expect(names(el)).toEqual(["2× Burger"]);
+  });
+
+  it("exposes no Fire-control property", async () => {
+    const el = await mount({});
+    expect("fireControl" in el).toBe(false);
+  });
+});
+
+describe("A773 pass screen: a pass monitor", () => {
+  /** A To fire group card, an In progress group card and an In progress bill card, all of a pass. */
+  const busyBoard = (minutes = 1) =>
+    passBoard({
+      toFire: [
+        passCard({
+          key: "group:g-2",
+          target: { kind: "group", partyId: "p-1", groupId: "g-2" },
+          kind: "next_course",
+          items: [passItem({ id: "f-a", phase: "requested", firedAt: null })],
+          releaseTicketItemIds: ["f-a"],
+          releaseContext: "ctx-1",
+        }),
+      ],
+      inProgress: [
+        passCard({
+          key: "group:g-1",
+          target: { kind: "group", partyId: "p-1", groupId: "g-1" },
+          party: { id: "p-1", revision: 7 },
+          items: [passItem({ id: "g-a", queuedAt: minutesAgo(minutes) })],
+        }),
+        passCard(),
+      ],
+    });
+  const lostSlots = {
+    stations: [
+      { id: "st-1", name: "Parrilla", available: true },
+      { id: "st-2", name: "Freidora", available: false },
+    ],
+    zones: [
+      { id: "z-1", name: "Terraza", available: false },
+      { id: "z-2", name: "Sala", available: true },
+    ],
+  };
+  const mountDisplay = (api = fakeApi(), initialBoard?: DevicePassBoard, props = {}) =>
+    mount({
+      api,
+      deviceMode: true,
+      monitor: true,
+      deviceName: "Pared del pase",
+      initialBoard,
+      ...props,
+    });
+  const tillApi = (read: DevicePassBoard, screen: Partial<ResolvedKitchenScreen> = {}) =>
+    fakeApi({
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue(identity([{ ...chosen("pass_monitor"), ...screen }])),
+      getDevicePassMonitorBoard: vi.fn().mockResolvedValue(read),
+    });
+  const lines = (el: TillPassScreen) =>
+    [...el.shadowRoot!.querySelectorAll("[data-unavailable]")].map((line) =>
+      line.textContent!.trim(),
+    );
+
+  /** Every element in `root` and in each shadow root below it. */
+  function deepQueryAll(root: ShadowRoot | Element, selector: string): Element[] {
+    const found = [...root.querySelectorAll(selector)];
+    for (const node of root.querySelectorAll("*"))
+      if (node.shadowRoot) found.push(...deepQueryAll(node.shadowRoot, selector));
+    return found;
+  }
+  /** Every button but the board's own Columns and column headings (D72) and a till's Back. */
+  const SCREEN_CONTROLS = "[data-columns-open], [data-column-toggle], [data-back]";
+  const actionButtons = (el: TillPassScreen) =>
+    deepQueryAll(el.shadowRoot!, "button, wt-button, [role='button']").filter((node) => {
+      const host = (node.getRootNode() as ShadowRoot).host;
+      return !node.matches(SCREEN_CONTROLS) && !host?.matches(SCREEN_CONTROLS);
+    });
+
+  it("on a kitchen display, reads the monitor's board under the device's name and nothing else", async () => {
+    const api = fakeApi({ getDevicePassMonitorBoard: vi.fn().mockResolvedValue(deviceBoard()) });
+    const el = await mountDisplay(api);
+    expect(api.getDevicePassMonitorBoard).toHaveBeenCalledOnce();
+    expect(boardOf(el)!.mode).toBe("monitor");
+    expect(cardKeys(el)).toEqual(["bill:a"]);
+    expect(el.shadowRoot!.querySelector("h1")!.textContent!.trim()).toBe("Pared del pase");
+    expect(api.getExpoBoard).not.toHaveBeenCalled();
+    expect(api.getDevicePassBoard).not.toHaveBeenCalled();
+    expect(api.getDeviceIdentity).not.toHaveBeenCalled();
+  });
+
+  it("on a kitchen display, draws the board it was handed without reading it again", async () => {
+    const api = fakeApi();
+    const el = await mountDisplay(api, deviceBoard(boardB));
+    expect(api.getDevicePassMonitorBoard).not.toHaveBeenCalled();
+    expect(cardKeys(el)).toEqual(["bill:b"]);
+  });
+
+  it.each([
+    ["on a kitchen display", () => mountDisplay(fakeApi(), deviceBoard(busyBoard()))],
+    ["at a till whose device chose it", () => mount({ api: tillApi(deviceBoard(busyBoard())) })],
+  ])(
+    "%s, draws no button but Columns, its column headings and a till's Back, though it runs the pass",
+    async (_, mountOne) => {
+      const el = await mountOne();
+      expect(boardOf(el)!.mode).toBe("monitor");
+      expect(boardOf(el)!.runsPass).toBe(true);
+      expect(cardKeys(el)).toEqual(["group:g-2", "group:g-1", "bill:order-1"]);
+      expect(boardOf(el)!.shadowRoot!.querySelector("[data-columns-open]")).not.toBeNull();
+      expect(actionButtons(el)).toEqual([]);
+    },
+  );
+
+  it("at a till whose device chose it, reads only the monitor's board and keeps its Back", async () => {
+    const api = tillApi(deviceBoard(busyBoard()));
+    const el = await mount({ api });
+    expect(api.getDevicePassMonitorBoard).toHaveBeenCalledOnce();
+    expect(api.getExpoBoard).not.toHaveBeenCalled();
+    expect(api.getDevicePassBoard).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("[data-back]")).not.toBeNull();
+  });
+
+  it("on a kitchen display, draws no button but Columns and its headings with a stale read and an overdue card", () =>
+    withFakeTimers(async () => {
+      const api = fakeApi({
+        getDevicePassMonitorBoard: vi.fn().mockRejectedValue(new Error("offline")),
+      });
+      const el = await mountDisplay(api, deviceBoard(busyBoard(12)));
+      await vi.advanceTimersByTimeAsync(15_000);
+      await flush(el);
+      expect(api.getDevicePassMonitorBoard).toHaveBeenCalledOnce();
+      expect(el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
+      expect(boardOf(el)!.shadowRoot!.querySelector("[data-overdue-count]")).not.toBeNull();
+      expect(actionButtons(el)).toEqual([]);
+    }));
+
+  it("on a kitchen display, refreshes every fifteen seconds and keeps its board under a stale line when a read fails", () =>
+    withFakeTimers(async () => {
+      const api = fakeApi({
+        getDevicePassMonitorBoard: vi
+          .fn()
+          .mockResolvedValueOnce(deviceBoard(boardB))
+          .mockRejectedValueOnce(new Error("offline")),
+      });
+      const el = await mountDisplay(api, deviceBoard(passBoard()));
+      expect(cardKeys(el)).toEqual([]);
+      expect(el.shadowRoot!.querySelector("[data-stale]")).toBeNull();
+      await vi.advanceTimersByTimeAsync(15_000);
+      await flush(el);
+      expect(api.getDevicePassMonitorBoard).toHaveBeenCalledOnce();
+      expect(cardKeys(el)).toEqual(["bill:b"]);
+      await vi.advanceTimersByTimeAsync(15_000);
+      await flush(el);
+      expect(api.getDevicePassMonitorBoard).toHaveBeenCalledTimes(2);
+      expect(el.shadowRoot!.querySelector("[data-stale] till-stale-since")).not.toBeNull();
+      expect(cardKeys(el)).toEqual(["bill:b"]);
+    }));
+
+  it.each([
+    ["on a kitchen display", () => mountDisplay(fakeApi(), deviceBoard(boardA, lostSlots))],
+    [
+      "at a till whose device chose it",
+      () => mount({ api: tillApi(deviceBoard(boardA, lostSlots), lostSlots) }),
+    ],
+  ])("%s, shows each station and zone a narrowing took, and its board", async (_, mountOne) => {
+    const el = await mountOne();
+    expect(lines(el)).toEqual([
+      t("station.unavailable").replace("{name}", "Freidora"),
+      t("zone.unavailable").replace("{name}", "Terraza"),
+    ]);
+    expect(cardKeys(el)).toEqual(["bill:a"]);
+  });
+
+  it("at a till whose device chose it, shows only its lines and no board when a narrowing left it no station", async () => {
+    const slots = { stations: [{ id: "st-2", name: "Freidora", available: false }] };
+    const el = await mount({ api: tillApi(deviceBoard(passBoard(), slots), slots) });
+    expect(lines(el)).toEqual([t("station.unavailable").replace("{name}", "Freidora")]);
+    expect(boardOf(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-card], [data-empty], .stale")).toBeNull();
+  });
+
+  it.each([
+    ["en-GB", "This screen is no longer available: Pass monitor"],
+    ["es-ES", "Esta pantalla ya no está disponible: Monitor de pase"],
+  ])(
+    "at a till whose device chose it, shows only its line when a narrowing took the monitor itself, reading no board (%s)",
+    (locale, line) =>
+      withFakeTimers(async () => {
+        const previous = currentLocale();
+        setLocale(locale);
+        try {
+          const api = tillApi(deviceBoard(), { available: false });
+          const el = await mount({ api });
+          expect(lines(el)).toEqual([line]);
+          expect(boardOf(el)).toBeNull();
+          expect(el.shadowRoot!.querySelector("[data-empty]")).toBeNull();
+          await vi.advanceTimersByTimeAsync(15_000);
+          expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+          expect(api.getDevicePassMonitorBoard).not.toHaveBeenCalled();
+          expect(api.getExpoBoard).not.toHaveBeenCalled();
+        } finally {
+          setLocale(previous);
+        }
+      }),
+  );
 });

@@ -15,7 +15,13 @@ import type {
   PassCard,
   TillApi,
 } from "../api/client.js";
-import { PASS_NOW, passBoard, passCard, passItem } from "../../test/pass-board-fixtures.js";
+import {
+  PASS_NOW,
+  minutesAgo,
+  passBoard,
+  passCard,
+  passItem,
+} from "../../test/pass-board-fixtures.js";
 import type { TillPassScreen } from "./till-pass-screen.js";
 import "./till-pass-screen.js";
 
@@ -68,7 +74,9 @@ type FakeApi = TillApi &
     | "bumpGroupReady"
     | "bumpDeviceCourseReady"
     | "bumpCourseReady"
-    | "reprintOrder",
+    | "reprintOrder"
+    | "getExpoBoard"
+    | "releaseDevicePass",
     Fn
   >;
 
@@ -580,4 +588,222 @@ describe("A773 pass screen: levers on a till's All stations", () => {
       expect(alert!.textContent).not.toContain(code);
     },
   );
+});
+
+describe("A773 pass screen: a party's group cards on a till's All stations", () => {
+  const groupNamed = (n: string) => t("table.group_n").replace("{n}", n);
+  const allApi = (board: PassBoard, overrides: Record<string, unknown> = {}) =>
+    fakeApi({
+      getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity(), kitchenScreens: [] }),
+      getExpoBoard: vi.fn().mockResolvedValue({ board }),
+      ...overrides,
+    });
+  const mountAll = async (api: FakeApi) => {
+    const el = await mountTill(api);
+    expect(boardOf(el)!.mode).toBe("all_stations");
+    return el;
+  };
+  const cardOf = (el: TillPassScreen, key: string) =>
+    inBoard<HTMLElement>(el, `[data-card="${key}"]`)!;
+  /** Table T7's party: a held group, a group cooking, a group plated, and a moved dish on its bill. */
+  const partyBoard = () =>
+    passBoard({
+      held: [
+        groupCard({
+          key: "group:g-4",
+          target: { kind: "group", partyId: "p-1", groupId: "g-4" },
+          kind: "held",
+          requestedAt: null,
+          group: { displayNumber: 4, position: 4 },
+          items: [passItem({ id: "steak", phase: "held", firedAt: null, orderId: "order-7" })],
+        }),
+      ],
+      inProgress: [
+        groupCard({
+          key: "group:g-2",
+          target: { kind: "group", partyId: "p-1", groupId: "g-2" },
+          group: { displayNumber: 2, position: 2 },
+          items: [passItem({ id: "croq", state: "preparing", phase: "preparing" })],
+        }),
+      ],
+      ready: [
+        groupCard({
+          key: "group:g-3",
+          target: { kind: "group", partyId: "p-1", groupId: "g-3" },
+          group: { displayNumber: 3, position: 3 },
+          readyAt: minutesAgo(1),
+          allReady: true,
+          items: [
+            passItem({ id: "salad", state: "ready", phase: "ready", readyAt: minutesAgo(1) }),
+          ],
+        }),
+        passCard({
+          key: "bill:order-7",
+          target: { kind: "bill", workingOrderId: "order-7" },
+          orders: [{ orderId: "order-7", orderNumber: 7, tableLabel: "T7", kitchenNote: null }],
+          readyAt: minutesAgo(1),
+          allReady: true,
+          items: [
+            passItem({
+              id: "moved",
+              orderId: "order-7",
+              course: null,
+              state: "ready",
+              phase: "ready",
+              readyAt: minutesAgo(1),
+            }),
+          ],
+        }),
+      ],
+    });
+  const staleNotice = (label: string) =>
+    `${t("station.table_changed_named").replace("{table}", label)} ${t("station.table_changed")}`;
+
+  it("heads a group card with its kept number and the numbering party's label, never its firing position", async () => {
+    const card = groupCard({
+      group: { displayNumber: 5, position: 1, numberPartyLabel: "Terrace 7" },
+    });
+    const el = await mountAll(allApi(passBoard({ inProgress: [card] })));
+    expect(text(cardOf(el, "group:g-1").querySelector(".group-name"))).toBe(
+      groupNamed("5 · Terrace 7"),
+    );
+  });
+
+  it("draws a held group's card dashed and untimed, its dishes held, and offers Ready only on a group cooking", async () => {
+    const el = await mountAll(allApi(partyBoard()));
+    const held = cardOf(el, "group:g-4");
+    expect(held.classList).toContain("held");
+    expect(held.querySelector(".age")).toBeNull();
+    expect(held.querySelector('[data-item="steak"]')!.classList).toContain("held");
+    expect(held.querySelector(".lever")).toBeNull();
+
+    const ready = cardOf(el, "group:g-2").querySelector<HTMLElement>('[data-group-ready="g-2"]')!;
+    expect(text(ready)).toBe(t("expo.group_ready"));
+    expect(ready.getAttribute("aria-label")).toBe(`${t("expo.group_ready")} ${groupNamed("2")}`);
+
+    for (const [key, item] of [
+      ["group:g-3", "salad"],
+      ["bill:order-7", "moved"],
+    ] as const) {
+      expect(cardOf(el, key).querySelector(`[data-item="${item}"]`)).not.toBeNull();
+      expect(cardOf(el, key).querySelector(".lever")).toBeNull();
+    }
+    expect(boardOf(el)!.shadowRoot!.querySelectorAll("[data-group-ready]")).toHaveLength(1);
+  });
+
+  it("ages a group card by its dishes, marking a forgotten one", async () => {
+    const card = groupCard({ items: [passItem({ id: "late", queuedAt: minutesAgo(20) })] });
+    const el = await mountTill(
+      fakeApi({
+        getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity(), kitchenScreens: [] }),
+        getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard({ inProgress: [card] }) }),
+      }),
+    );
+    expect(cardOf(el, "group:g-1").classList).toContain("age-forgotten");
+    expect(
+      cardOf(el, "group:g-1").querySelector('[data-item="late"] [data-forgotten]'),
+    ).not.toBeNull();
+  });
+
+  it("sends each group Ready press under a fresh submission id and the card's revision, reading All stations after each", async () => {
+    const api = allApi(partyBoard());
+    const el = await mountAll(api);
+    await press(el, '[data-group-ready="g-2"]');
+    await press(el, '[data-group-ready="g-2"]');
+    const ask = { submissionId: expect.stringMatching(UUID), expectedPartyRevision: 7 };
+    expect(api.bumpGroupReady.mock.calls).toEqual([
+      ["p-1", "g-2", ask],
+      ["p-1", "g-2", ask],
+    ]);
+    expect(api.bumpGroupReady.mock.calls[0]![2].submissionId).not.toBe(
+      api.bumpGroupReady.mock.calls[1]![2].submissionId,
+    );
+    expect(api.getExpoBoard).toHaveBeenCalledTimes(3);
+    expect(api.bumpDeviceGroupReady).not.toHaveBeenCalled();
+    expect(api.bumpCourseReady).not.toHaveBeenCalled();
+    expect(api.releaseDevicePass).not.toHaveBeenCalled();
+  });
+
+  it("on party.out_of_date reads All stations again, names the table that changed, and never sends again on its own", async () => {
+    const api = allApi(partyBoard(), {
+      bumpGroupReady: vi.fn().mockRejectedValue(refused("party.out_of_date")),
+    });
+    const el = await mountAll(api);
+    expect(tableChanged(el)).toBeNull();
+    await press(el, '[data-group-ready="g-2"]');
+    await flush(el);
+    expect(api.bumpGroupReady).toHaveBeenCalledOnce();
+    expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
+    expect(text(tableChanged(el))).toBe(staleNotice("T7"));
+    expect(tableChanged(el)!.getAttribute("role")).toBe("status");
+    expect(leverError(el)).toBeNull();
+  });
+
+  it("names a group card with no table by its order number", async () => {
+    const untabled = groupCard({
+      orders: [{ orderId: "order-9", orderNumber: 9, kitchenNote: null }],
+    });
+    const api = allApi(passBoard({ inProgress: [untabled] }), {
+      bumpGroupReady: vi.fn().mockRejectedValue(refused("party.out_of_date")),
+    });
+    const el = await mountAll(api);
+    await press(el, '[data-group-ready="g-1"]');
+    expect(text(tableChanged(el))).toBe(staleNotice("#9"));
+  });
+
+  it("clears the table-changed line with the next group Ready press, before its answer, and another refusal does not raise it", async () => {
+    let refuse!: (error: unknown) => void;
+    const api = allApi(partyBoard(), {
+      bumpGroupReady: vi
+        .fn()
+        .mockRejectedValueOnce(refused("party.out_of_date"))
+        .mockReturnValueOnce(
+          new Promise((_resolve, reject) => {
+            refuse = reject;
+          }),
+        ),
+    });
+    const el = await mountAll(api);
+    await press(el, '[data-group-ready="g-2"]');
+    expect(tableChanged(el)).not.toBeNull();
+    await press(el, '[data-group-ready="g-2"]');
+    expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
+    expect(tableChanged(el)).toBeNull();
+    refuse(refused("group.not_found", 404));
+    await flush(el);
+    expect(tableChanged(el)).toBeNull();
+    expect(api.getExpoBoard).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps the table-changed line through a failed read and clears it at the next good one, a course Ready press clearing nothing", async () => {
+    const api = allApi(passBoard({ inProgress: [groupCard(), passCard()] }), {
+      bumpGroupReady: vi.fn().mockRejectedValue(refused("party.out_of_date")),
+    });
+    const el = await mountAll(api);
+    await press(el, '[data-group-ready="g-1"]');
+    expect(tableChanged(el)).not.toBeNull();
+    api.getExpoBoard.mockRejectedValueOnce(new TypeError("offline"));
+    await press(el, '[data-ready="course-mains"]');
+    expect(tableChanged(el)).not.toBeNull();
+    await press(el, '[data-ready="course-mains"]');
+    expect(api.bumpCourseReady).toHaveBeenCalledTimes(2);
+    expect(tableChanged(el)).toBeNull();
+  });
+});
+
+describe("A773 pass screen: a group card's Ready refused on a kitchen display", () => {
+  it("shows kitchen_screen.zone_not_allowed as the card's label and its words, asking for no switch", async () => {
+    const api = fakeApi({
+      bumpDeviceGroupReady: vi
+        .fn()
+        .mockRejectedValue(refused("kitchen_screen.zone_not_allowed", 403)),
+    });
+    const el = await mountDisplay(api);
+    const changed = vi.fn();
+    el.addEventListener("kitchen-screen-changed", changed);
+    await press(el, '[data-group-ready="g-1"]');
+    expect(changed).not.toHaveBeenCalled();
+    expect(leverError(el)!.getAttribute("role")).toBe("alert");
+    expect(text(leverError(el))).toBe(`#7 T7: ${codeMessage("kitchen_screen.zone_not_allowed")}`);
+  });
 });
