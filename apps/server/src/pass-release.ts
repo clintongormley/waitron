@@ -9,7 +9,10 @@ import { deviceBindingColumns, deviceProfileJoin, toDeviceBinding } from "./devi
 import { requestedItem } from "./kitchen-phase.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readPassCardRows } from "./pass-board.js";
-import { passCardRelease, type PassTarget } from "./pass-card.js";
+import { passCardRelease, type PassRow, type PassTarget } from "./pass-card.js";
+import { enqueueKitchenTickets, type FiredItem } from "./kitchen-print.js";
+import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
+import { heldPaperStations } from "./order-groups.js";
 import type { TradingContext } from "./trading-context.js";
 import { assertSubjectZones } from "./zone-access.js";
 import type { OrderAttendance } from "./working-order.js";
@@ -63,11 +66,8 @@ export async function releasePassItems(
       : { orderId: ask.target.workingOrderId },
   ]);
 
-  const offered = passCardRelease(
-    ask.target,
-    await readPassCardRows(tx, cfg, ask.target),
-    passScopeOf(screen),
-  );
+  const cardRows = await readPassCardRows(tx, cfg, ask.target);
+  const offered = passCardRelease(ask.target, cardRows, passScopeOf(screen));
   const asked = [...ask.ticketItemIds].sort();
   if (
     offered.context === null ||
@@ -84,6 +84,7 @@ export async function releasePassItems(
     .where(and(inArray(ticketItems.id, offered.ticketItemIds), requestedItem()))
     .returning({ orderId: ticketItems.workingOrderId });
   if (released.length !== offered.ticketItemIds.length) throw stale();
+  await printRelease(tx, cfg, ask.target, cardRows, offered.ticketItemIds);
   await captureKitchenActivity(
     tx,
     attendance,
@@ -92,6 +93,36 @@ export async function releasePassItems(
     ask.submissionId,
   );
   return { releasedTicketItemIds: offered.ticketItemIds };
+}
+
+/** D50, D52: one ticket per bill at each output, FIRE where the group's HOLD paper printed, then
+ *  the allergy notice, read after the stamp so a released dish's slip carries no HOLD label. */
+async function printRelease(
+  tx: Transaction,
+  cfg: TradingContext,
+  target: PassTarget,
+  cardRows: readonly PassRow[],
+  releasedIds: readonly string[],
+): Promise<void> {
+  const ids = new Set(releasedIds);
+  const heldPaper =
+    target.kind === "group"
+      ? ((await heldPaperStations(tx, [target.groupId])).get(target.groupId) ?? new Set<string>())
+      : new Set<string>();
+  const byOrder = new Map<string, FiredItem[]>();
+  for (const row of cardRows) {
+    if (!ids.has(row.item.id)) continue;
+    const items = byOrder.get(row.orderId) ?? [];
+    items.push({
+      workingOrderLineId: row.lineId,
+      stationId: row.stationId,
+      quantity: row.remaining,
+    });
+    byOrder.set(row.orderId, items);
+  }
+  for (const [orderId, items] of byOrder)
+    await enqueueKitchenTickets(tx, cfg, orderId, items, { fire: { heldPaper } });
+  await notifyKitchenAllergyDestination(tx, cfg, releasedIds);
 }
 
 const invalid = (field: string) => new AppError("management.request_invalid", { field });
