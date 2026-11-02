@@ -6561,6 +6561,15 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `_cfg` until S18. `saveHolidayArea` reads the venue row twice (for the address, then for its id)
   because `readVenue`'s `Venue` carries no id; S18 can drop the second read when `venueLocationId`
   goes.
+  F2 landed (#2410): every package's tests other than `packages/db`'s seed the venue, nodes,
+  devices and working orders through F1's helpers; local helpers that seeded more were renamed for
+  what they seed (`seedVenueWithSeries`, `seedVenueWithNode`, `seedVenueWithStaff`). The lines left
+  (fixed ids the helpers cannot take, and second-location cases) are listed in its commit messages
+  and PR body with their owning slice. Reporting's `seedVenueWithSeries` and `seedOpenOrder` and
+  workforce's `seedLocation` still write a raw second location when a cross-location case calls
+  them again; the code slices that delete those cases remove that branch. fiscal-verifactu's own
+  helpers and the tests outside F2's list (`certificate-install`, `seed-single-venue`,
+  `void-issue-clock`) are S3's.
   S16 sends setup venue fields directly and names the venue in restore previews. Old
   `first-setup.json` files are refused, including after a completed setup, so boxes set up through
   first setup are reset. The configuration bundle stays nested until S17; the node and storage ids
