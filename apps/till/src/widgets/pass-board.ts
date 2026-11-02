@@ -224,7 +224,7 @@ export class TillPassBoard extends LitElement {
   /** `undefined` checks the live `prefers-reduced-motion` query on every render. */
   @property({ attribute: false }) reducedMotion?: boolean;
   /** Reprint is a till's; the screen decides, and a monitor never draws it. */
-  @property({ type: Boolean }) reprint = false;
+  @property({ type: Boolean }) showReprint = false;
 
   override render() {
     const views = passCardViews(this.board, this.mode, this.runsPass, this.now);
@@ -327,6 +327,7 @@ export class TillPassBoard extends LitElement {
     return html`<button
       class="fire"
       data-pass-fire=${key}
+      aria-label=${`${t("pass.fire")} ${view.card.orders.map((order) => `#${order.orderNumber}`).join(" · ")}`}
       ?disabled=${!view.fire.enabled || this.sending.has(key)}
       @click=${() => this.#emit("pass-fire", { key })}
     >
@@ -361,16 +362,19 @@ export class TillPassBoard extends LitElement {
     </button>`;
   }
 
+  /** Its accessible name is the slotted text: a one-bill card's heading gives the bill, and a card
+   * across bills names each bill's button. */
   #reprints(view: CardView): TemplateResult[] | typeof nothing {
-    if (!this.reprint || this.mode === "monitor" || view.column === "held") return nothing;
-    return view.card.orders.map(
-      ({ orderId }) =>
+    if (!this.showReprint || this.mode === "monitor" || view.column === "held") return nothing;
+    const { orders } = view.card;
+    return orders.map(
+      ({ orderId, orderNumber }) =>
         html`<wt-button
           class="reprint"
           data-reprint=${orderId}
           variant="secondary"
           @click=${() => this.#emit("pass-reprint", { orderId })}
-          >${t("expo.reprint")}</wt-button
+          >${t("expo.reprint")}${orders.length === 1 ? "" : ` #${orderNumber}`}</wt-button
         >`,
     );
   }

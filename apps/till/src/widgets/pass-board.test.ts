@@ -121,6 +121,21 @@ const heldCard = passCard({
   items: [passItem({ id: "held-1", orderId: "order-6", phase: "held", firedAt: null })],
 });
 
+const twoBillCard = passCard({
+  key: "group:p3:g3",
+  target: { kind: "group", partyId: "p3", groupId: "g3" },
+  party: { id: "p3", revision: 2 },
+  group: { displayNumber: 4, position: 1 },
+  orders: [
+    { orderId: "order-21", orderNumber: 21, tableLabel: "T11", kitchenNote: null },
+    { orderId: "order-22", orderNumber: 22, tableLabel: "T11", kitchenNote: null },
+  ],
+  items: [
+    passItem({ id: "two-1", orderId: "order-21" }),
+    passItem({ id: "two-2", orderId: "order-22" }),
+  ],
+});
+
 const readyCard = passCard({
   key: "bill:order-7",
   target: { kind: "bill", workingOrderId: "order-7" },
@@ -241,10 +256,10 @@ describe("A773 pass board widget", () => {
       inProgress: [groupInProgress, billInProgress],
     });
     const levers = "[data-pass-fire], [data-group-ready], [data-ready], [data-reprint]";
-    const pass = await mountBoard({ board, reprint: true });
+    const pass = await mountBoard({ board, showReprint: true });
     expect(root(pass).querySelectorAll(levers).length).toBeGreaterThan(0);
     cleanupWidgets();
-    const monitor = await mountBoard({ board, mode: "monitor", reprint: true });
+    const monitor = await mountBoard({ board, mode: "monitor", showReprint: true });
     expect(root(monitor).querySelectorAll(levers)).toHaveLength(0);
   });
 
@@ -269,13 +284,122 @@ describe("A773 pass board widget", () => {
   });
 
   it("draws a held card dashed, untimed and without buttons, its dishes held", async () => {
-    const el = await mountBoard({ board: passBoard({ held: [heldCard] }), reprint: true });
+    const el = await mountBoard({ board: passBoard({ held: [heldCard] }), showReprint: true });
     const card = cardOf(el, heldCard.key);
     expect(getComputedStyle(card).borderTopStyle).toBe("dashed");
     expect(card.querySelector(".age")).toBeNull();
     expect(card.querySelectorAll("button, wt-button")).toHaveLength(0);
     expect(itemOf(el, "held-1").classList.contains("held")).toBe(true);
     expect(getComputedStyle(itemOf(el, "held-1")).borderTopStyle).toBe("dashed");
+  });
+
+  it("draws the owner's column order and leaves the columns they hid out", async () => {
+    const el = await mountBoard({
+      board: passBoard({
+        held: [heldCard],
+        toFire: [toFireCard],
+        inProgress: [billInProgress],
+        ready: [readyCard],
+      }),
+      columns: {
+        order: ["ready", "toFire", "held", "inProgress", "overview"],
+        hidden: ["held", "overview"],
+        collapsed: [],
+      },
+    });
+    const columns = [...root(el).querySelectorAll<HTMLElement>("[data-column]")];
+    expect(columns.map((column) => column.dataset.column)).toEqual([
+      "ready",
+      "toFire",
+      "inProgress",
+    ]);
+    expect(cardOf(el, heldCard.key)).toBeNull();
+  });
+
+  it("names each bill on a two-bill card's Reprint, and each emits its own bill", async () => {
+    const el = await mountBoard({
+      board: passBoard({ inProgress: [twoBillCard, billInProgress] }),
+      showReprint: true,
+    });
+    const reprints = [
+      ...cardOf(el, twoBillCard.key).querySelectorAll<HTMLElement>("[data-reprint]"),
+    ];
+    expect(reprints.map((button) => button.textContent!.trim())).toEqual([
+      `${t("expo.reprint")} #21`,
+      `${t("expo.reprint")} #22`,
+    ]);
+    const one = cardOf(el, billInProgress.key).querySelector<HTMLElement>("[data-reprint]")!;
+    expect(one.textContent!.trim()).toBe(t("expo.reprint"));
+    expect(one.hasAttribute("aria-label")).toBe(false);
+
+    const captured: CustomEvent[] = [];
+    el.addEventListener("pass-reprint", (event) => captured.push(event as CustomEvent));
+    for (const reprint of reprints) await userEvent.click(reprint);
+    expect(captured.map((event) => event.detail)).toEqual([
+      { orderId: "order-21" },
+      { orderId: "order-22" },
+    ]);
+    expect(captured.every((event) => event.bubbles && event.composed)).toBe(true);
+  });
+
+  it("draws no Reprint when the screen does not ask for it", async () => {
+    const el = await mountBoard({ board: passBoard({ inProgress: [billInProgress] }) });
+    expect(el.showReprint).toBe(false);
+    expect(root(el).querySelector("[data-reprint]")).toBeNull();
+    expect(root(el).querySelector("[data-ready]")).not.toBeNull();
+  });
+
+  it("dispatches Fire and both Readys composed and bubbling", async () => {
+    const el = await mountBoard({
+      board: passBoard({ toFire: [toFireCard], inProgress: [groupInProgress, billInProgress] }),
+    });
+    const captured: CustomEvent[] = [];
+    for (const name of ["pass-fire", "pass-group-ready", "pass-course-ready"])
+      el.addEventListener(name, (event) => captured.push(event as CustomEvent));
+    await userEvent.click(fireOf(el, toFireCard.key)!);
+    await userEvent.click(root(el).querySelector<HTMLElement>('[data-group-ready="g2"]')!);
+    await userEvent.click(root(el).querySelector<HTMLElement>('[data-ready="course-mains"]')!);
+    expect(captured.map((event) => [event.type, event.bubbles, event.composed])).toEqual([
+      ["pass-fire", true, true],
+      ["pass-group-ready", true, true],
+      ["pass-course-ready", true, true],
+    ]);
+  });
+
+  it("gives each Fire a name that says which bills it fires", async () => {
+    const twoBillToFire = passCard({
+      ...twoBillCard,
+      key: "group:p3:g3-fire",
+      kind: "new_order",
+      items: [
+        passItem({ id: "fire-21", orderId: "order-21", phase: "requested", firedAt: null }),
+        passItem({ id: "fire-22", orderId: "order-22", phase: "requested", firedAt: null }),
+      ],
+      releaseTicketItemIds: ["fire-21", "fire-22"],
+      releaseContext: "ctx-21",
+    });
+    const el = await mountBoard({ board: passBoard({ toFire: [toFireCard, twoBillToFire] }) });
+    expect(fireOf(el, toFireCard.key)!.getAttribute("aria-label")).toBe(`${t("pass.fire")} #12`);
+    expect(fireOf(el, twoBillToFire.key)!.getAttribute("aria-label")).toBe(
+      `${t("pass.fire")} #21 · #22`,
+    );
+  });
+
+  it("dates a Ready card by when it was ready, in whole minutes passed", async () => {
+    const halfPast = passCard({ ...readyCard, key: "bill:order-8", readyAt: minutesAgo(3.5) });
+    const el = await mountBoard({ board: passBoard({ ready: [halfPast] }) });
+    expect(cardOf(el, halfPast.key).querySelector(".age")!.textContent!.trim()).toBe(
+      t("table.row_ready_ago").replace("{n}", "3"),
+    );
+  });
+
+  it("draws a dimmed dish in a dotted box and its own dish in a solid one", async () => {
+    const card = passCard({
+      items: [passItem({ id: "dim-1", informational: true }), passItem({ id: "own-1" })],
+    });
+    const el = await mountBoard({ board: passBoard({ inProgress: [card] }) });
+    expect(getComputedStyle(itemOf(el, "dim-1")).borderTopStyle).toBe("dotted");
+    expect(getComputedStyle(itemOf(el, "own-1")).borderTopStyle).toBe("solid");
   });
 
   describe("in Spanish", () => {
