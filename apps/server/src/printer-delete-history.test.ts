@@ -9,21 +9,20 @@ import {
   invoiceSeries,
   kitchenPrintJobs,
   kitchenStations,
-  locations,
   openVenueDatabase,
   printers,
   printJobs,
   receiptReprints,
   withTransaction,
-  workingOrders,
   type Database,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
-import { jobOrigin, locationId as brandLocationId, nodeId, seriesId } from "@waitron/shared";
+import { jobOrigin, nodeId, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import { restoreDatabase } from "./restore.js";
@@ -86,13 +85,13 @@ async function newSale(): Promise<string> {
 /** "Old kitchen" with a printed receipt, its reprint audit, a kitchen ticket, a drawer calibration
  * and one job still waiting; deleted, then replaced by "New kitchen" on the same address. */
 async function seedDeletedAndReplaced() {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
-  const node = await seedNode(suite.db, brandLocationId(locationId));
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Sale on premises",
+  });
+  const locationId = await venueLocationId(suite.db);
+  const node = await seedNode(suite.db);
   await suite.db.insert(invoiceSeries).values({ nodeId: node, code: "F", purpose: "standard" });
   const [old] = await suite.db
     .insert(printers)
@@ -120,10 +119,7 @@ async function seedDeletedAndReplaced() {
     .insert(kitchenStations)
     .values({ locationId, name: "Grill" })
     .returning({ id: kitchenStations.id });
-  const [order] = await suite.db
-    .insert(workingOrders)
-    .values({ source: "dashboard", locationId, orderNumber: 1 })
-    .returning({ id: workingOrders.id });
+  const order = await seedWorkingOrder(suite.db, { source: "dashboard", orderNumber: 1 });
   await suite.db.insert(kitchenPrintJobs).values({
     printJobId: ticket,
     workingOrderId: order!.id,

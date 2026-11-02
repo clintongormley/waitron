@@ -6,16 +6,20 @@ import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   devices,
-  locations,
   nowIso,
   tenants,
   withTransaction,
-  workingOrders,
   type Database,
+  venueLocationId,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice as seedDeviceRow,
+  seedNode,
+  seedVenue,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { getCredential, loadKeyRing, tryGetCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
@@ -85,23 +89,20 @@ interface Venue {
   staffCookie: string;
 }
 
-async function seedVenue(): Promise<Venue> {
+async function seedVenueWithStaff(): Promise<Venue> {
   // Through the table definitions: `$defaultFn` generators and the locale list's write mapping are
   // never reached by a raw insert.
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });
-  const [loc] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Barra",
-      timeZone: "Europe/Madrid",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const locationId = loc!.id;
-  const writingNodeId = await seedNode(suite.db, brandLocationId(locationId));
+  await seedVenue(suite.db, {
+    name: "Barra",
+    timeZone: "Europe/Madrid",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
+  });
+  const locationId = await venueLocationId(suite.db);
+  const writingNodeId = await seedNode(suite.db);
   const { managerSid, staffSid } = await withTransaction(suite.db, async (tx) => {
     const [mgr] = await tx
       .insert(persons)
@@ -125,21 +126,16 @@ async function seedVenue(): Promise<Venue> {
   };
 }
 
-async function seedDevice(venue: Venue): Promise<string> {
+async function seedDevice(): Promise<string> {
   const [profile] = await suite.db
     .insert(deviceProfiles)
     .values({ name: nextName("Perfil caja"), formFactor: "till" })
     .returning({ id: deviceProfiles.id });
-  const [dev] = await suite.db
-    .insert(devices)
-    .values({
-      locationId: venue.locationId,
-      deviceProfileId: profile!.id,
-      label: nextName("Registro"),
-      tokenHash: "x",
-    })
-    .returning({ id: devices.id });
-  return dev!.id;
+  const { deviceId } = await seedDeviceRow(suite.db, {
+    label: nextName("Registro"),
+    profileId: profile!.id,
+  });
+  return deviceId;
 }
 
 /** Puts `readerId` on the list of the device's profile, so the device may choose it. */
@@ -292,7 +288,7 @@ async function sealedStripe(): Promise<Record<string, string> | null> {
 
 describe("connect", () => {
   it("seals the credential, returns the merchant name and NO secret, and evicts the pool", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const before = evicted.length;
     const res = await connectStripe(app, venue);
@@ -311,7 +307,7 @@ describe("connect", () => {
   });
 
   it("rejects a bad key with payment.provider_credential_rejected and seals nothing", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const res = await send(app, "POST", "/management-api/payments/providers/stripe/connect", {
       cookie: venue.managerCookie,
@@ -325,7 +321,7 @@ describe("connect", () => {
   });
 
   it("refuses a wrong-environment key with payment.credential_environment_mismatch (environment is passed)", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     // A live key on a preproduction host: the seat's prefix guard fires only because the route passed
     // `environment` through.
@@ -341,7 +337,7 @@ describe("connect", () => {
   });
 
   it("refuses a staff session with authorization.not_permitted", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const res = await send(app, "POST", "/management-api/payments/providers/stripe/connect", {
       cookie: venue.staffCookie,
@@ -357,7 +353,7 @@ describe("connect", () => {
 
 describe("providers list", () => {
   it("reports not_connected before and connected after, with the seat's fields", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const before = await send(app, "GET", "/management-api/payments/providers", {
       cookie: venue.managerCookie,
@@ -385,9 +381,9 @@ describe("providers list", () => {
 
 describe("device and profile readers", () => {
   it("keeps the demo reader out of ordinary reader management", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
-    const device = await seedDevice(venue);
+    const device = await seedDevice();
     await suite.db.insert(cardReaders).values({
       id: DEMO_READER_ID,
       provider: "simulator",
@@ -420,7 +416,7 @@ describe("device and profile readers", () => {
     });
   });
   it("sets, reads back and clears a device's chosen reader", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     await connectStripe(app, venue);
     const readerId = (
@@ -428,7 +424,7 @@ describe("device and profile readers", () => {
         id: string;
       }
     ).id;
-    const device = await seedDevice(venue);
+    const device = await seedDevice();
     await listOnProfile(device, readerId);
 
     const empty = await send(app, "GET", `/management-api/payments/devices/${device}/reader`, {
@@ -474,10 +470,10 @@ describe("device and profile readers", () => {
   }
 
   it("PUT a device's reader null puts it on Use default", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const [counter, terrace] = await seedReaders("Barra", "Terraza");
-    const device = await seedDevice(venue);
+    const device = await seedDevice();
     const [row] = await suite.db
       .select({ profileId: devices.deviceProfileId })
       .from(devices)
@@ -506,11 +502,11 @@ describe("device and profile readers", () => {
   });
 
   it("a reader another device holds is device.equipment_held, and nothing moves", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const [reader] = await seedReaders("Barra");
-    const first = await seedDevice(venue);
-    const second = await seedDevice(venue);
+    const first = await seedDevice();
+    const second = await seedDevice();
     await listOnProfile(first, reader!);
     await listOnProfile(second, reader!);
     const opts = { cookie: venue.managerCookie };
@@ -539,10 +535,10 @@ describe("device and profile readers", () => {
   });
 
   it("a deleted device's reader choice is device.not_found, for a reader and for the default, and nothing moves", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const [reader] = await seedReaders("Barra");
-    const device = await seedDevice(venue);
+    const device = await seedDevice();
     await listOnProfile(device, reader!);
     await withTransaction(suite.db, (tx) => deleteDevice(tx, cfgOf(venue), device));
     const choices = () => suite.db.select().from(deviceCardReaders);
@@ -562,10 +558,10 @@ describe("device and profile readers", () => {
   });
 
   it("reading a deleted or unknown device's reader choice is device.not_found, as the PUT answers", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const [reader] = await seedReaders("Barra");
-    const device = await seedDevice(venue);
+    const device = await seedDevice();
     await listOnProfile(device, reader!);
     const opts = { cookie: venue.managerCookie };
     const path = (id: string) => `/management-api/payments/devices/${id}/reader`;
@@ -584,7 +580,7 @@ describe("device and profile readers", () => {
   });
 
   it("profile readers: stores the list and default, and refuses a default not in the list", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const [counter, terrace] = await seedReaders("Barra", "Terraza");
     const [profile] = await suite.db
@@ -622,7 +618,7 @@ describe("device and profile readers", () => {
   });
 
   it("profile readers: refuses an unknown profile and an unknown reader", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const [profile] = await suite.db
       .insert(deviceProfiles)
@@ -657,7 +653,7 @@ describe("reader holders", () => {
   const path = "/management-api/payments/reader-holders";
 
   it("names each held reader's device, and the devices with a payment in progress on a reader", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const [held, busy, idle] = (
       await suite.db
@@ -671,8 +667,8 @@ describe("reader holders", () => {
         )
         .returning({ id: cardReaders.id })
     ).map((row) => row.id);
-    const holder = await seedDevice(venue);
-    const payer = await seedDevice(venue);
+    const holder = await seedDevice();
+    const payer = await seedDevice();
     const [holderRow] = await suite.db
       .select({ label: devices.label })
       .from(devices)
@@ -681,10 +677,7 @@ describe("reader holders", () => {
     let orderNumber = 0;
     const order = async () => {
       orderNumber += 1;
-      const [row] = await suite.db
-        .insert(workingOrders)
-        .values({ source: "dashboard", locationId: venue.locationId, orderNumber })
-        .returning({ id: workingOrders.id });
+      const row = await seedWorkingOrder(suite.db, { source: "dashboard", orderNumber });
       return row!.id;
     };
     const payment = async (state: "attempting" | "captured", readerId: string) => ({
@@ -718,7 +711,7 @@ describe("reader holders", () => {
   });
 
   it("is refused without the payments permission", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     expect((await send(app, "GET", path, { cookie: venue.staffCookie })).status).toBe(403);
     expect((await send(app, "GET", path)).status).toBe(401);
@@ -727,7 +720,7 @@ describe("reader holders", () => {
 
 describe("readers — lifecycle and screens", () => {
   it("lists configured device names from choices and profile defaults, with choices taking precedence", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const first = randomUUID();
     const second = randomUUID();
@@ -746,36 +739,16 @@ describe("readers — lifecycle and screens", () => {
       { deviceProfileId: profile!.id, readerId: second, position: 1 },
       { deviceProfileId: profile!.id, readerId: unused, position: 2 },
     ]);
-    const rows = await suite.db
-      .insert(devices)
-      .values([
-        {
-          locationId: venue.locationId,
-          deviceProfileId: profile!.id,
-          label: "Terrace till",
-          tokenHash: "a",
-        },
-        {
-          locationId: venue.locationId,
-          deviceProfileId: profile!.id,
-          label: "Bar till",
-          tokenHash: "b",
-        },
-        {
-          locationId: venue.locationId,
-          deviceProfileId: profile!.id,
-          label: "Own choice",
-          tokenHash: "c",
-        },
-        {
-          locationId: venue.locationId,
-          deviceProfileId: profile!.id,
-          label: "Disabled till",
-          tokenHash: "d",
-          active: false,
-        },
-      ])
-      .returning({ id: devices.id, label: devices.label });
+    const rows: { id: string; label: string }[] = [];
+    for (const label of ["Terrace till", "Bar till", "Own choice", "Disabled till"])
+      rows.push({
+        id: (await seedDeviceRow(suite.db, { label, profileId: profile!.id })).deviceId,
+        label,
+      });
+    await suite.db
+      .update(devices)
+      .set({ active: false })
+      .where(eq(devices.id, rows.find((row) => row.label === "Disabled till")!.id));
     await suite.db.insert(deviceCardReaders).values({
       deviceId: rows.find((row) => row.label === "Own choice")!.id,
       readerId: second,
@@ -804,13 +777,13 @@ describe("readers — lifecycle and screens", () => {
   });
 
   it("does not repeat a device whose explicit reader is also its profile default", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const readerId = randomUUID();
     await suite.db
       .insert(cardReaders)
       .values({ id: readerId, provider: "stripe", providerRef: nextRef(), name: "One reader" });
-    const deviceId = await seedDevice(venue);
+    const deviceId = await seedDevice();
     await suite.db.update(devices).set({ label: "Counter" }).where(eq(devices.id, deviceId));
     await listOnProfile(deviceId, readerId);
     await suite.db.update(deviceProfileCardReaders).set({ isDefault: true });
@@ -834,7 +807,7 @@ describe("readers — lifecycle and screens", () => {
   });
 
   it("refuses the reader-name list without a manager's permission", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     for (const [cookie, status, code] of [
       [undefined, 401, "management_session.required"],
@@ -847,7 +820,7 @@ describe("readers — lifecycle and screens", () => {
   });
 
   it("refuses adding a reader for a provider that is not connected", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const res = await addReader(app, venue, nextRef(), "Barra");
     expect(res.status).toBe(409);
@@ -857,7 +830,7 @@ describe("readers — lifecycle and screens", () => {
   });
 
   it("reports a reader's live status through the seat, and its device count in the list", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     await connectStripe(app, venue);
     const readerId = (
@@ -881,7 +854,7 @@ describe("readers — lifecycle and screens", () => {
     });
 
     // Point a device at the reader, then the list's deviceCount reflects it.
-    const device = await seedDevice(venue);
+    const device = await seedDevice();
     await listOnProfile(device, readerId);
     await send(app, "PUT", `/management-api/payments/devices/${device}/reader`, {
       cookie: venue.managerCookie,
@@ -896,9 +869,9 @@ describe("readers — lifecycle and screens", () => {
 
 describe("device's chosen reader — screens", () => {
   it("400s management.request_invalid when the body omits readerId", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
-    const device = await seedDevice(venue);
+    const device = await seedDevice();
     const res = await send(app, "PUT", `/management-api/payments/devices/${device}/reader`, {
       cookie: venue.managerCookie,
       body: {},
@@ -934,7 +907,7 @@ describe("an injected fetch is threaded to the seat", () => {
   }
 
   it("connects, adds, reads status and disables with fetch supplied", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountAppWithFetch(venue);
     expect((await connectStripe(app, venue)).status).toBe(200);
     const readerId = (
@@ -961,7 +934,7 @@ describe("an injected fetch is threaded to the seat", () => {
 
 describe("disconnect", () => {
   it("refuses payment.provider_in_use while an active reader remains, then disconnects once disabled", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     await connectStripe(app, venue);
     const readerId = (
@@ -999,7 +972,7 @@ describe("disconnect", () => {
 describe("add reader — races with a concurrent disconnect", () => {
   it("does NOT leave an active reader whose provider was disconnected mid-add", async () => {
     // Pause the add inside its provider round-trip (outside any transaction), disconnect, resume.
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     let entered!: () => void;
     let release!: () => void;
     const started = new Promise<void>((r) => {
@@ -1073,7 +1046,7 @@ describe("add reader — races with a concurrent disconnect", () => {
 describe("unpair reader — retryable after a failed vendor unpair", () => {
   it("re-attempts the vendor removal on a retry and 204s (unpairing is idempotent)", async () => {
     // Vendor failure leaves the row active; a retry must call the vendor again and disable it.
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     let removes = 0;
     const seat: CardProviderContribution = {
       ...stripeSeat,
@@ -1160,7 +1133,7 @@ describe("unpair reader — a failed provider call answers as Delete does", () =
   }
 
   it("answers reader.provider_disconnected when the seat finds no credential during the call", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { app } = mountLogged(venue, [
       failingSeat(new AppError("credentials.missing", { purpose: "payments.stripe" })),
     ]);
@@ -1178,7 +1151,7 @@ describe("unpair reader — a failed provider call answers as Delete does", () =
   });
 
   it("answers reader.unpair_failed for a provider fault, leaving the reader as it was", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { app, lines } = mountLogged(venue, [failingSeat(new Error("outage"))]);
     const id = await pairedStripeReader(app, venue);
 
@@ -1200,7 +1173,7 @@ describe("unpair reader — a failed provider call answers as Delete does", () =
   });
 
   it("passes a provider's own refusal through unwrapped", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { app } = mountLogged(venue, [
       failingSeat(new AppError("payment.provider_credential_rejected", { providerId: "stripe" })),
     ]);
@@ -1236,7 +1209,7 @@ describe("unpair reader — a failed provider call answers as Delete does", () =
       route: "unpair" | "delete",
       onDelete: () => Promise<Response>,
     ): Promise<{ status: number; body: unknown; reasons: unknown[] }> {
-      const venue = await seedVenue();
+      const venue = await seedVenueWithStaff();
       const { app, lines } = mountLogged(venue, [SUMUP_CARD_PROVIDER], sumupFetch(onDelete));
       const connected = await send(app, "POST", `${base}/providers/sumup/connect`, {
         cookie: venue.managerCookie,
@@ -1324,7 +1297,7 @@ describe("reader adoption and local management", () => {
   const adoption = { providerId: "stripe", providerRef: vendor.providerRef, name: "Counter" };
 
   it("defaults automatic slips off and retains the saved setting through rename, enable and adoption", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
     await connectStripe(app, venue);
     const opts = { cookie: venue.managerCookie };
@@ -1390,7 +1363,7 @@ describe("reader adoption and local management", () => {
   });
 
   it("a new registration starts with automatic slips off after deleting an own-slip reader", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
     await connectStripe(app, venue);
     const opts = { cookie: venue.managerCookie };
@@ -1422,7 +1395,7 @@ describe("reader adoption and local management", () => {
   it.each([null, [], "true", 1, {}].map((value) => ({ value })))(
     "refuses invalid automatic-slip value $value without changing the reader",
     async ({ value }) => {
-      const venue = await seedVenue();
+      const venue = await seedVenueWithStaff();
       const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
       await connectStripe(app, venue);
       const opts = { cookie: venue.managerCookie };
@@ -1446,7 +1419,7 @@ describe("reader adoption and local management", () => {
   );
 
   it("labels available, added and disabled and reuses the disabled id and the device's chosen reader", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const removed: string[] = [];
     const app = mountApp(venue, [
       discoverySeat(
@@ -1465,7 +1438,7 @@ describe("reader adoption and local management", () => {
     expect(first.status).toBe(201);
     const { id } = (await first.json()) as { id: string };
     expect(await available()).toEqual([{ ...vendor, status: "added" }]);
-    const device = await seedDevice(venue);
+    const device = await seedDevice();
     await listOnProfile(device, id);
     expect(
       (
@@ -1573,7 +1546,7 @@ describe("reader adoption and local management", () => {
   }
 
   it("adopting a new reader joins every live profile that takes reader payments, never as default", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const p = await seededProfiles();
     const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
     await connectStripe(app, venue);
@@ -1587,7 +1560,7 @@ describe("reader adoption and local management", () => {
   });
 
   it("a reader added through the add route joins every live profile that takes reader payments, never as default", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const p = await seededProfiles();
     const app = mountApp(venue);
     await connectStripe(app, venue);
@@ -1598,7 +1571,7 @@ describe("reader adoption and local management", () => {
   });
 
   it("re-adopting a disabled reader joins no list a manager took it off", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const p = await seededProfiles();
     const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
     await connectStripe(app, venue);
@@ -1616,7 +1589,7 @@ describe("reader adoption and local management", () => {
   });
 
   it("adopting a deleted reader's provider id creates a new reader and leaves the deleted row as it was", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
     await connectStripe(app, venue);
     const opts = { cookie: venue.managerCookie };
@@ -1664,7 +1637,7 @@ describe("reader adoption and local management", () => {
   });
 
   it("refuses an unlisted reference without inserting or removing anything", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const removed: string[] = [];
     const app = mountApp(venue, [
       discoverySeat(
@@ -1688,7 +1661,7 @@ describe("reader adoption and local management", () => {
   });
 
   it("renames, disables and enables locally, while unpair alone calls the vendor", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const removed: string[] = [];
     const app = mountApp(venue, [
       discoverySeat(
@@ -1731,7 +1704,7 @@ describe("reader adoption and local management", () => {
   });
 
   it("refuses local enable after unpair until the provider lists the reader for adoption again", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     let paired = true;
     let listings = 0;
     const app = mountApp(venue, [
@@ -1793,7 +1766,7 @@ describe("reader adoption and local management", () => {
   it("does not enable across a committed unpair the request never saw", async () => {
     // The enable is issued while the unpair's write transaction is still open, so it is serialised
     // behind it and must read the committed `unpaired_at`. This pins the outcome, not an overlap.
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
     await connectStripe(app, venue);
     const { id } = (await (await addReader(app, venue, vendor.providerRef)).json()) as {
@@ -1838,7 +1811,7 @@ describe("reader adoption and local management", () => {
   it.each(["adopt", "rename"] as const)(
     "refuses an empty %s name at the server boundary",
     async (action) => {
-      const venue = await seedVenue();
+      const venue = await seedVenueWithStaff();
       const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
       await connectStripe(app, venue);
       const { id } = (await (await addReader(app, venue, nextRef())).json()) as { id: string };
@@ -1859,7 +1832,7 @@ describe("reader adoption and local management", () => {
   );
 
   it("rejects unpair when the provider does not support it", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     await connectStripe(app, venue);
     const { id } = (await (await addReader(app, venue, nextRef())).json()) as { id: string };
@@ -1873,7 +1846,7 @@ describe("reader adoption and local management", () => {
   });
 
   it("rechecks the credential after the vendor list round-trip without vendor rollback", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     let removes = 0;
     const seat = discoverySeat(
       async () => {
@@ -1905,7 +1878,7 @@ describe("reader adoption and local management", () => {
   });
 
   it("gates every new route before reaching the provider", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     let listed = 0;
     let removed = 0;
     const app = mountApp(venue, [
@@ -1938,7 +1911,7 @@ describe("reader adoption and local management", () => {
   });
 
   it("refuses enabling a disabled reader after disconnecting its provider", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue, [discoverySeat(async () => [vendor])]);
     await connectStripe(app, venue);
     const opts = { cookie: venue.managerCookie };
@@ -1963,7 +1936,7 @@ describe("reader adoption and local management", () => {
   it.each(["available-readers", "adopt"])(
     "refuses disconnected %s before the vendor call",
     async (action) => {
-      const venue = await seedVenue();
+      const venue = await seedVenueWithStaff();
       let listed = 0;
       const app = mountApp(venue, [
         discoverySeat(async () => {
@@ -1988,7 +1961,7 @@ describe("reader adoption and local management", () => {
 
 describe("screens and unknown ids", () => {
   it("refuses a connect form value that is not a string, naming the field, and seals nothing", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const res = await send(app, "POST", "/management-api/payments/providers/stripe/connect", {
       cookie: venue.managerCookie,
@@ -2010,7 +1983,7 @@ describe("screens and unknown ids", () => {
   ] as const)(
     "404s %s on an unknown reader%s with reader.not_found",
     async (method, suffix, body) => {
-      const venue = await seedVenue();
+      const venue = await seedVenueWithStaff();
       const app = mountApp(venue);
       await connectStripe(app, venue);
       const id = randomUUID();
@@ -2024,7 +1997,7 @@ describe("screens and unknown ids", () => {
   );
 
   it("answers a reader id the provider does not know with 400 reader.reference_unknown, writing no reader", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const seat: CardProviderContribution = {
       ...stripeSeat,
       readers: {
@@ -2051,7 +2024,7 @@ describe("screens and unknown ids", () => {
   });
 
   it("hands the seat a pairing code without a reference when only a code is given", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const calls: unknown[] = [];
     const seat: CardProviderContribution = {
       ...stripeSeat,
@@ -2074,7 +2047,7 @@ describe("screens and unknown ids", () => {
   });
 
   it("still refuses a mid-add disconnect when the best-effort vendor unpair itself fails", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     let entered!: () => void;
     let release!: () => void;
     const started = new Promise<void>((r) => {
@@ -2124,11 +2097,11 @@ describe("screens and unknown ids", () => {
   });
 
   it("refuses a chosen reader for an unknown device, or naming an unknown or disabled reader", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     await connectStripe(app, venue);
     const readerId = ((await (await addReader(app, venue, nextRef())).json()) as { id: string }).id;
-    const device = await seedDevice(venue);
+    const device = await seedDevice();
     await listOnProfile(device, readerId);
     const put = (deviceId: string, body: unknown) =>
       send(app, "PUT", `/management-api/payments/devices/${deviceId}/reader`, {
@@ -2214,8 +2187,8 @@ describe("reader delete", () => {
   }
 
   /** A device that lists, chooses and holds the reader: one row in each link table. */
-  async function linkReader(venue: Venue, readerId: string): Promise<string> {
-    const device = await seedDevice(venue);
+  async function linkReader(readerId: string): Promise<string> {
+    const device = await seedDevice();
     await listOnProfile(device, readerId);
     await suite.db.insert(deviceCardReaders).values({ deviceId: device, readerId });
     await suite.db.insert(cardReaderHolders).values({ readerId, deviceId: device });
@@ -2224,18 +2197,15 @@ describe("reader delete", () => {
 
   let orderNumber = 0;
   /** An `attempting` payment on the reader, through the table rather than a pay route. */
-  async function startPayment(venue: Venue, readerId: string): Promise<string> {
+  async function startPayment(readerId: string): Promise<string> {
     orderNumber += 1;
-    const [order] = await suite.db
-      .insert(workingOrders)
-      .values({ source: "dashboard", locationId: venue.locationId, orderNumber })
-      .returning({ id: workingOrders.id });
+    const order = await seedWorkingOrder(suite.db, { source: "dashboard", orderNumber });
     const [payment] = await suite.db
       .insert(payments)
       .values({
         workingOrderId: order!.id,
         source: "device",
-        deviceId: await seedDevice(venue),
+        deviceId: await seedDevice(),
         readerId,
         provider: "stripe",
         paymentRef: randomUUID(),
@@ -2279,11 +2249,11 @@ describe("reader delete", () => {
   }
 
   it("refuses a caller without payments.manage, a malformed id, an unknown id and the demo reader, changing nothing", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { seat, removed } = unpairingSeat();
     const app = mountApp(venue, [seat]);
     const { id } = await pairedReader(app, venue);
-    await linkReader(venue, id);
+    await linkReader(id);
     const row = await readerRow(id);
     const links = await linksOf(id);
     const unknown = randomUUID();
@@ -2327,7 +2297,7 @@ describe("reader delete", () => {
   });
 
   it("switches a paired reader off before the provider is called, unpairs it there, then deletes it and its links", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     // Shows the order only: a read from inside a transaction's body sees its uncommitted rows, so
     // the outage case below is the one that shows the switch-off is committed first.
     const seen: { active: boolean; deletedAt: string | null }[] = [];
@@ -2337,7 +2307,7 @@ describe("reader delete", () => {
     });
     const app = mountApp(venue, [seat]);
     const { id, ref } = await pairedReader(app, venue);
-    await linkReader(venue, id);
+    await linkReader(id);
 
     const impact = await impactOf(app, venue, id);
     expect(impact.status).toBe(200);
@@ -2362,13 +2332,13 @@ describe("reader delete", () => {
   });
 
   it("answers reader.unpair_failed when the provider call fails, the switch-off before it committed and the reader not deleted", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { seat, removed } = unpairingSeat(async () => {
       throw new Error("outage");
     });
     const app = mountApp(venue, [seat]);
     const { id } = await pairedReader(app, venue);
-    await linkReader(venue, id);
+    await linkReader(id);
     const before = await readerRow(id);
     const links = await linksOf(id);
 
@@ -2388,7 +2358,7 @@ describe("reader delete", () => {
   });
 
   it("passes a provider's own refusal through unwrapped", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { seat } = unpairingSeat(async () => {
       throw new AppError("payment.provider_credential_rejected", { providerId: "stripe" });
     });
@@ -2405,11 +2375,11 @@ describe("reader delete", () => {
   });
 
   it("deletes a still-paired reader in Waitron only once its provider is disconnected, and only when the delete accepts the notice", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { seat, removed } = unpairingSeat();
     const app = mountApp(venue, [seat]);
     const { id } = await disconnectedReader(app, venue);
-    await linkReader(venue, id);
+    await linkReader(id);
     const row = await readerRow(id);
     const links = await linksOf(id);
 
@@ -2438,7 +2408,7 @@ describe("reader delete", () => {
   });
 
   it("unpairs at the provider as normal when it was connected again after the notice was shown", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { seat, removed } = unpairingSeat();
     const app = mountApp(venue, [seat]);
     const { id, ref } = await disconnectedReader(app, venue);
@@ -2455,7 +2425,7 @@ describe("reader delete", () => {
   });
 
   it("answers reader.unpair_failed when a connected provider's call fails, even with the notice accepted", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { seat, removed } = unpairingSeat(async () => {
       throw new Error("sumup DELETE reader: HTTP 401");
     });
@@ -2478,7 +2448,7 @@ describe("reader delete", () => {
   });
 
   it("refuses a malformed acceptance flag, changing nothing", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { seat, removed } = unpairingSeat();
     const app = mountApp(venue, [seat]);
     const { id } = await disconnectedReader(app, venue);
@@ -2497,7 +2467,7 @@ describe("reader delete", () => {
   });
 
   it("checks and deletes in one transaction when no provider is called, so a connect during the delete cannot answer reader.unpair_failed", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { seat, removed } = unpairingSeat();
     // Runs `afterLock` once, after the next write lock the app's requests release.
     let afterLock: (() => Promise<void>) | undefined;
@@ -2532,7 +2502,7 @@ describe("reader delete", () => {
   });
 
   it("answers reader.provider_disconnected when the provider is disconnected after the reader was switched off, then deletes in Waitron only once accepted", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     let first = true;
     const { seat, removed } = unpairingSeat(async () => {
       if (!first) return;
@@ -2551,7 +2521,7 @@ describe("reader delete", () => {
     });
     const app = mountApp(venue, [seat]);
     const { id } = await pairedReader(app, venue);
-    await linkReader(venue, id);
+    await linkReader(id);
     const links = await linksOf(id);
 
     const res = await deleteOf(app, venue, id);
@@ -2573,7 +2543,7 @@ describe("reader delete", () => {
   });
 
   it("deletes a reader already unpaired through Unpair without the provider, even once disconnected", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { seat, removed } = unpairingSeat();
     const app = mountApp(venue, [seat]);
     const { id, ref } = await pairedReader(app, venue);
@@ -2589,7 +2559,7 @@ describe("reader delete", () => {
   });
 
   it("deletes a reader whose provider cannot unpair without marking it unpaired", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const app = mountApp(venue);
     const { id } = await pairedReader(app, venue);
 
@@ -2602,11 +2572,11 @@ describe("reader delete", () => {
   });
 
   it("refuses reader.payment_in_progress before calling the provider", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { seat, removed } = unpairingSeat();
     const app = mountApp(venue, [seat]);
     const { id } = await pairedReader(app, venue);
-    await startPayment(venue, id);
+    await startPayment(id);
     const row = await readerRow(id);
 
     const res = await deleteOf(app, venue, id);
@@ -2620,14 +2590,14 @@ describe("reader delete", () => {
   });
 
   it("refuses a payment that starts during the provider call, leaving the reader unpaired and not deleted; a retry deletes without unpairing again", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     let paymentId = "";
     const { seat, removed } = unpairingSeat(async () => {
-      paymentId = await startPayment(venue, id);
+      paymentId = await startPayment(id);
     });
     const app = mountApp(venue, [seat]);
     const { id } = await pairedReader(app, venue);
-    await linkReader(venue, id);
+    await linkReader(id);
     const links = await linksOf(id);
 
     const refused = await deleteOf(app, venue, id);
@@ -2648,11 +2618,11 @@ describe("reader delete", () => {
   });
 
   it("answers the same impact from the read and the delete of an already-unpaired reader", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { seat } = unpairingSeat();
     const app = mountApp(venue, [seat]);
     const { id } = await pairedReader(app, venue);
-    await linkReader(venue, id);
+    await linkReader(id);
     const opts = { cookie: venue.managerCookie };
     expect((await send(app, "POST", `${base}/readers/${id}/unpair`, opts)).status).toBe(204);
 
@@ -2665,7 +2635,7 @@ describe("reader delete", () => {
   });
 
   it("deletes once when two deletes race", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const { seat, removed } = unpairingSeat();
     const app = mountApp(venue, [seat]);
     const { id, ref } = await pairedReader(app, venue);
@@ -2685,7 +2655,7 @@ describe("reader delete", () => {
   });
 
   it("refuses Enable, Unpair, a second Delete and adopting its provider id while a delete is unpairing the reader; a failed unpair leaves it switched off", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     const refused: { request: string; status: number; body: unknown }[] = [];
     let activeDuringCall: boolean | undefined;
     const { seat, removed } = unpairingSeat(async () => {
@@ -2752,7 +2722,7 @@ describe("reader delete", () => {
   });
 
   it("refuses a Delete while an Unpair of the reader is at its provider, calling the provider once", async () => {
-    const venue = await seedVenue();
+    const venue = await seedVenueWithStaff();
     let during: { status: number; body: unknown } | undefined;
     const { seat, removed } = unpairingSeat(async () => {
       if (removed.length > 1) return;
@@ -2787,7 +2757,7 @@ describe("reader delete", () => {
     ["a Delete", deleteOf],
   ] as const) {
     it(`refuses adopting a provider id whose listing was taken before ${action} dropped it there, changing nothing`, async () => {
-      const venue = await seedVenue();
+      const venue = await seedVenueWithStaff();
       const { seat, removed } = unpairingSeat();
       let dropped: { status: number; row: typeof cardReaders.$inferSelect } | undefined;
       const listing: CardProviderContribution = {
@@ -2864,7 +2834,7 @@ describe("reader delete", () => {
     }
 
     it("answers reader.not_found to rename, disable, enable, unpair and status, calling no provider and changing nothing", async () => {
-      const venue = await seedVenue();
+      const venue = await seedVenueWithStaff();
       const spies = spySeat();
       const app = mountApp(venue, [spies.seat]);
       const { id, row } = await deletedReader(app, venue, spies);
@@ -2895,7 +2865,7 @@ describe("reader delete", () => {
     });
 
     it("cannot be chosen for a device or put back on a profile's list, which stay as the delete left them", async () => {
-      const venue = await seedVenue();
+      const venue = await seedVenueWithStaff();
       const spies = spySeat();
       const app = mountApp(venue, [spies.seat]);
       const opts = { cookie: venue.managerCookie };
@@ -2903,7 +2873,7 @@ describe("reader delete", () => {
       const added = await addReader(app, venue, nextRef(), "Terraza");
       expect(added.status).toBe(201);
       const { id: doomed } = (await added.json()) as { id: string };
-      const device = await seedDevice(venue);
+      const device = await seedDevice();
       const [{ profileId }] = (await suite.db
         .select({ profileId: devices.deviceProfileId })
         .from(devices)
@@ -2944,7 +2914,7 @@ describe("reader delete", () => {
     });
 
     it("is left out of the reader list, while a disabled reader stays in it switched off", async () => {
-      const venue = await seedVenue();
+      const venue = await seedVenueWithStaff();
       const spies = spySeat();
       const app = mountApp(venue, [spies.seat]);
       const opts = { cookie: venue.managerCookie };
@@ -2967,7 +2937,7 @@ describe("reader delete", () => {
     });
 
     it("is offered by discovery as new, and adopting it makes a new record beside the deleted one", async () => {
-      const venue = await seedVenue();
+      const venue = await seedVenueWithStaff();
       let listed: string[] = [];
       const spies = spySeat(() => listed);
       const app = mountApp(venue, [spies.seat]);
@@ -2995,7 +2965,7 @@ describe("reader delete", () => {
     });
 
     it("never shadows a live reader with the same provider id in discovery, whichever row was written first", async () => {
-      const venue = await seedVenue();
+      const venue = await seedVenueWithStaff();
       const [deletedFirst, liveFirst] = [nextRef(), nextRef()];
       const spies = spySeat(() => [deletedFirst, liveFirst]);
       const app = mountApp(venue, [spies.seat]);
@@ -3029,7 +2999,7 @@ describe("reader delete", () => {
     });
 
     it("deleted in Waitron only while disconnected, is offered by discovery as new once connected again", async () => {
-      const venue = await seedVenue();
+      const venue = await seedVenueWithStaff();
       let listed: string[] = [];
       const spies = spySeat(() => listed);
       const app = mountApp(venue, [spies.seat]);
@@ -3054,7 +3024,7 @@ describe("reader delete", () => {
     });
 
     it("lets a new pairing take its provider id, as a new record", async () => {
-      const venue = await seedVenue();
+      const venue = await seedVenueWithStaff();
       const spies = spySeat();
       const app = mountApp(venue, [spies.seat]);
       const { id, ref, row } = await deletedReader(app, venue, spies);

@@ -1,11 +1,10 @@
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { isAppError, locationId as brandLocationId } from "@waitron/shared";
+import { isAppError } from "@waitron/shared";
 import {
   captureError,
   CORE_MIGRATIONS,
   deployment,
-  locations,
   nodes,
   stampDeployment,
   readMembershipTrustSet,
@@ -19,7 +18,7 @@ import {
 import { NODE_MIGRATIONS, readNodeMode, setNodeMode, setSingletonRole } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   endorseKey,
@@ -185,16 +184,12 @@ describe("promoteLocalSecondaryToPrimary", () => {
   }> {
     const db = suite.db;
     await stampDeployment(db, "preproduction");
-    await seedTenant(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Barra",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    const nodeId = await seedNode(db, brandLocationId(loc!.id));
+    await seedVenue(db, {
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    const nodeId = await seedNode(db);
     await setSingletonRole({ venue: db, node: suite.node }, nodeId, "secondary");
     await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
     const holders = createDeploymentHolders("primary", "secondary");
@@ -538,15 +533,11 @@ describe("promoteMirrorToPrimary", () => {
   }> {
     const db = suite.db;
     await stampDeployment(db, "preproduction");
-    await seedTenant(db);
-    await db
-      .insert(locations)
-      .values({
-        name: "Barra",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
+    await seedVenue(db, {
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
     const t = await db.execute<{ tax_id: string }>(sql`select tax_id from tenants where id = 1`);
     const nif = t.rows[0]!.tax_id;
 

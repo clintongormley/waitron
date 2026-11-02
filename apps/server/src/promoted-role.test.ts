@@ -1,15 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { locationId as brandLocationId } from "@waitron/shared";
-import {
-  CORE_MIGRATIONS,
-  locations,
-  stampDeployment,
-  writeNodeMembership,
-  type Database,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, stampDeployment, writeNodeMembership, type Database } from "@waitron/db";
 import { NODE_MIGRATIONS, readNodeMode, setNodeMode, setSingletonRole } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   CREDENTIALS_MIGRATIONS,
   loadKeyRing,
@@ -42,16 +35,12 @@ describe("finishPromotedRole", () => {
   async function mirrorBox(): Promise<{ nodeId: string; privateKey: string }> {
     const db = suite.db;
     await stampDeployment(db, "preproduction");
-    await seedTenant(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Barra",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    const nodeId = await seedNode(db, brandLocationId(loc!.id));
+    await seedVenue(db, {
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    const nodeId = await seedNode(db);
     await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
     await setNodeMode({ venue: db, node: suite.node }, nodeId, "mirror");
     const privateKey = await readNodeSigningKey(suite.node, RING, nodeId);

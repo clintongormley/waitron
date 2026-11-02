@@ -5,19 +5,19 @@ import {
   CORE_MIGRATIONS,
   invoiceDeliveries,
   invoiceSeries,
-  locations,
   pagePrinters,
   printAgents,
   tenants,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { TrustedClock } from "@waitron/fiscal";
 import type { OfficePrinterReport } from "@waitron/print-agent";
-import { jobOrigin, locationId as brandLocation, seriesId } from "@waitron/shared";
+import { jobOrigin, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import {
@@ -72,14 +72,16 @@ const urfReport: OfficePrinterReport = {
 async function venue() {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
-    .returning();
-  const nodeId = await seedNode(suite.db, brandLocation(location!.id));
-  const agentOne = await agent(location!.id, "Back office agent");
-  const agentTwo = await agent(location!.id, "Re-paired agent");
-  return { locationId: location!.id, nodeId, agentOne, agentTwo };
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Sale on premises",
+  });
+  const venueId = await venueLocationId(suite.db);
+  const nodeId = await seedNode(suite.db);
+  const agentOne = await agent(venueId, "Back office agent");
+  const agentTwo = await agent(venueId, "Re-paired agent");
+  return { locationId: venueId, nodeId, agentOne, agentTwo };
 }
 
 async function agent(locationId: string, name: string): Promise<string> {

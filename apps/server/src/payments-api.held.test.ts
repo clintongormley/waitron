@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder as seedOrderRow } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createPinThrottle,
@@ -113,15 +114,11 @@ async function aHeldPayment(
   orderNumber += 1;
   const paymentRef = `pr_${randomUUID()}`;
   return withTransaction(suite.db, async (tx) => {
-    const [order] = await tx
-      .insert(workingOrders)
-      .values({
-        source: "device",
-        deviceId: v.seeded.deviceId,
-        locationId: v.seeded.locationId,
-        orderNumber,
-      })
-      .returning({ id: workingOrders.id });
+    const order = await seedOrderRow(tx, {
+      source: "device",
+      deviceId: v.seeded.deviceId,
+      orderNumber,
+    });
     await insertCapturedPayment(tx, {
       origin: deviceOrigin(v.seeded.deviceId),
       workingOrderId: order!.id,

@@ -13,12 +13,13 @@ import {
   printAgents,
   tenants,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { hashPin, hashSecret, persons, startManagementSession } from "@waitron/identity";
 import { createClient } from "@waitron/print-agent";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { recordSale } from "@waitron/core";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import type { ReceiptQrText, TrustedClock } from "@waitron/fiscal";
@@ -74,12 +75,13 @@ type Venue = Awaited<ReturnType<typeof venue>>;
 async function venue(opts: { render?: Render } = {}) {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
-  const nodeId = await seedNode(suite.db, brandLocation(locationId));
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Sale on premises",
+  });
+  const locationId = await venueLocationId(suite.db);
+  const nodeId = await seedNode(suite.db);
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId, code: "F", purpose: "full" })

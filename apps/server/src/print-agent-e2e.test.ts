@@ -10,9 +10,15 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, locations, printJobs, printers, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  printJobs,
+  printers,
+  withTransaction,
+  venueLocationId,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
@@ -64,18 +70,12 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
-    // Through the table definition: `locations.id` is a `$defaultFn` generator a raw insert never
-    // reaches.
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Bar",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    locationId = loc!.id;
+    await seedVenue(db, {
+      name: "Bar",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
+    locationId = await venueLocationId(db);
     // Knock and accept must share this one cfg: every join-request statement filters by node.
     cfg = {
       nodeId: brandNodeId(randomUUID()),

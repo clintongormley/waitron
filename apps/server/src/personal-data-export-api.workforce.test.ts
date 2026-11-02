@@ -9,17 +9,16 @@ import {
   billPayments,
   drawerOpens,
   invoiceSeries,
-  locations,
   nodes,
   sales,
   saleVoids,
   tenderRefunds,
   tenders,
   withTransaction,
-  workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   hashSessionToken,
@@ -199,17 +198,13 @@ let locationId: string, martaId: string, colleagueId: string, managerId: string,
 let adminCookie: string;
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Venue",
-      invoiceLocales: ["es"],
-      operationDescription: "Sale on premises",
-      timeZone: "Europe/Madrid",
-    })
-    .returning({ id: locations.id });
-  locationId = location!.id;
+  await seedVenue(suite.db, {
+    name: "Venue",
+    invoiceLocales: ["es"],
+    operationDescription: "Sale on premises",
+    timeZone: "Europe/Madrid",
+  });
+  locationId = await venueLocationId(suite.db);
   await suite.db.insert(nodes).values({ id: NODE_ID, locationId, name: "Box" });
   const [marta, colleague, manager, admin] = await suite.db
     .insert(persons)
@@ -570,7 +565,7 @@ type Sale = { code: string; number: number; total: number };
  * sale of its own. Marta's refunds are authorised by the colleague and the colleague's by the manager.
  */
 async function seedActions(colleague: string): Promise<void> {
-  const { deviceId } = await seedDevice(suite.db, { locationId });
+  const { deviceId } = await seedDevice(suite.db);
   const series: Record<string, string> = {};
   for (const code of ["TA", "TB"]) {
     const [row] = await suite.db
@@ -651,10 +646,11 @@ async function seedActions(colleague: string): Promise<void> {
       saleId: drawerSale.saleId,
       openedAt: new Date(a.drawerOpenedAt),
     });
-    const [order] = await suite.db
-      .insert(workingOrders)
-      .values({ source: "dashboard", locationId, nodeId: NODE_ID, orderNumber: a.billSale.number })
-      .returning({ id: workingOrders.id });
+    const order = await seedWorkingOrder(suite.db, {
+      source: "dashboard",
+      nodeId: NODE_ID,
+      orderNumber: a.billSale.number,
+    });
     const [payment] = await suite.db
       .insert(billPayments)
       .values({

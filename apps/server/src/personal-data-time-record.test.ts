@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import {
   personalDataParts,
@@ -14,7 +14,7 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import { WORKFORCE_MIGRATIONS, WorkforceBackend } from "@waitron/workforce";
 import { WORKFORCE_ES_MIGRATIONS } from "@waitron/workforce-es";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -34,18 +34,14 @@ const logger = vi.fn();
 let locationId: string, martaId: string, colleagueId: string, cookie: string;
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Venue",
-      invoiceLocales: ["es"],
-      operationDescription: "Sale on premises",
-      timeZone: "Europe/Madrid",
-    })
-    .returning();
-  locationId = location!.id;
-  const nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  await seedVenue(suite.db, {
+    name: "Venue",
+    invoiceLocales: ["es"],
+    operationDescription: "Sale on premises",
+    timeZone: "Europe/Madrid",
+  });
+  locationId = await venueLocationId(suite.db);
+  const nodeId = await seedNode(suite.db);
   const [marta, colleague] = await suite.db
     .insert(persons)
     .values([

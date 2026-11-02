@@ -17,11 +17,12 @@ import {
   printers,
   stationPrinters,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   IDENTITY_MIGRATIONS,
   hashPin,
@@ -105,15 +106,12 @@ async function seedPrintRouteFixture(db: Database) {
   await seedTenant(db);
   // Through the table definitions: `locations.id` and `persons.id` are `$defaultFn` generators a
   // raw insert never reaches.
-  const [loc] = await db
-    .insert(locations)
-    .values({
-      name: "Main bar",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  locationId = loc!.id;
+  await seedVenue(db, {
+    name: "Main bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
+  });
+  locationId = await venueLocationId(db);
   // Knock and accept must share this one cfg: every join-request statement filters by node.
   cfg = {
     nodeId: brandNodeId(randomUUID()),

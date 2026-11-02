@@ -4,14 +4,14 @@ import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
-  locations,
   printJobs,
   printers,
   stationPrinters,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED } from "@waitron/printing";
 import { printersInTrouble } from "./print-job-trouble.js";
 
@@ -26,11 +26,8 @@ function minsAgo(mins: number): string {
 }
 
 async function seedLocation(name = "Counter"): Promise<string> {
-  const [row] = await suite.db
-    .insert(locations)
-    .values({ name, invoiceLocales: ["es-ES"], operationDescription: "Retail" })
-    .returning({ id: locations.id });
-  return row!.id;
+  await seedVenue(suite.db, { name, invoiceLocales: ["es-ES"], operationDescription: "Retail" });
+  return venueLocationId(suite.db);
 }
 
 async function seedPrinter(t: {

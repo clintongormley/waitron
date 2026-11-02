@@ -4,15 +4,15 @@ import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
-  locations,
   pagePrinters,
   stationPrinters,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -60,14 +60,15 @@ let managerCookie: string;
 let staffCookie: string;
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [loc] = await suite.db
-    .insert(locations)
-    .values({ name: "Barra", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
-    .returning({ id: locations.id });
+  await seedVenue(suite.db, {
+    name: "Barra",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta",
+  });
+  const venueId = await venueLocationId(suite.db);
   cfg = {
     nodeId: brandNodeId(randomUUID()),
-    locationId: brandLocationId(loc!.id),
+    locationId: brandLocationId(venueId),
     locale: "es-ES",
     invoiceLocales: ["es-ES"],
     tipsEnabled: false,
