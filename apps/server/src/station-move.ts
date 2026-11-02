@@ -409,10 +409,17 @@ export async function moveDishesToStation(
         };
       const holdPaper = await holdPaperFor(
         tx,
-        moving.flatMap((row) => (row.groupId === null ? [] : [row.groupId])),
+        moving.flatMap((row) =>
+          row.groupId === null || row.firedAt !== null ? [] : [row.groupId],
+        ),
       );
       const paperOf = (row: (typeof moving)[number]) =>
         row.groupId === null ? undefined : holdPaper(row.groupId, row);
+      // A fired group's Requested dish is corrected at any station recorded for its group, so it
+      // joins the destination's HOLD paper whether or not the station it leaves had any.
+      const arrivesOnPaper = (row: (typeof moving)[number]) =>
+        paperOf(row) !== undefined ||
+        (row.groupId !== null && row.firedAt === null && row.requestedAt !== null);
       const byStation = new Map<string, typeof moving>();
       for (const row of moving)
         byStation.set(row.stationId!, [...(byStation.get(row.stationId!) ?? []), row]);
@@ -475,7 +482,7 @@ export async function moveDishesToStation(
       const paperAtDestination = await destinationHoldPaper(
         tx,
         request.stationId,
-        moving.flatMap((row) => (paperOf(row) === undefined ? [] : [row.groupId!])),
+        moving.flatMap((row) => (arrivesOnPaper(row) ? [row.groupId!] : [])),
         moving.map((row) => row.id),
       );
       for (const [oldStationId, lines] of byStation) {
@@ -491,7 +498,7 @@ export async function moveDishesToStation(
         if (fired.length > 0) await enqueueKitchenTickets(tx, cfg, orderId, fired, { from });
         for (const [groupId, recorded] of paperAtDestination) {
           const held: FiredItem[] = lines
-            .filter((row) => row.groupId === groupId && paperOf(row) !== undefined)
+            .filter((row) => row.groupId === groupId && arrivesOnPaper(row))
             .map((row) => ({
               workingOrderLineId: row.id,
               stationId: request.stationId,

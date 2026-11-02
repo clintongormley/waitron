@@ -227,13 +227,26 @@ describe("A773 requested lifecycle: cancel", () => {
       });
       const moved = (await jobs()).slice(beforeMove);
       expect(moved.map((job) => job.printerId)).toEqual([venue.printerId]);
+      const { bill, group } = await inTx(venue, async (tx) => {
+        const [bill] = await tx
+          .select()
+          .from(workingOrders)
+          .where(eq(workingOrders.id, order.billId));
+        const [group] = await tx
+          .select()
+          .from(orderGroups)
+          .where(eq(orderGroups.id, order.parent.groupId!));
+        return { bill: bill!, group: group! };
+      });
+      const words = kitchenTicketWords("es");
+      const groupLine = `${words.group} ${group.displayNumber}`;
       const slip = printedLines(moved[0]!.payload);
-      const header = slip.slice(1, slip.indexOf("GRUPO 1"));
+      const header = slip.slice(1, slip.indexOf(groupLine));
       expect(header.length).toBeGreaterThan(0);
       expect(slip).toEqual([
-        "*** EN ESPERA CANCELADO ***",
+        `*** ${words.holdCancelled} ***`,
         ...header,
-        "GRUPO 1",
+        groupLine,
         "3.000 x PIZZA",
         "  + Olives x2",
         "",
@@ -253,7 +266,7 @@ describe("A773 requested lifecycle: cancel", () => {
           lineName: "PIZZA",
           movedTo: null,
           note: null,
-          orderLabel: "#6",
+          orderLabel: `#${bill.orderNumber}`,
           quantity: "3.000",
           reroutedTo: "No HOLD paper here",
           soldInEach: true,

@@ -41,6 +41,7 @@ import { cancelItem } from "./line-cancel.js";
 import { cancelLine, cancelReasonId, GIVE_AWAY_REASON } from "./testing/cancel-line.js";
 import {
   moveDishesToStation,
+  recallLines,
   updateHeldOrder,
   updateOrderLine,
 } from "./testing/order-writer-fixture.js";
@@ -337,12 +338,14 @@ describe("A773 hold paper: recall and cancel", () => {
       const [group] = await inTx(venue, (tx) =>
         tx.select().from(orderGroups).where(eq(orderGroups.id, order.lines[0]!.groupId!)),
       );
-      const header = lines.slice(1, lines.indexOf(`GRUPO ${group!.displayNumber}`));
+      const words = kitchenTicketWords("es");
+      const groupLine = `${words.group} ${group!.displayNumber}`;
+      const header = lines.slice(1, lines.indexOf(groupLine));
       expect(header.length).toBeGreaterThan(0);
       expect(lines).toEqual([
-        "*** EN ESPERA CANCELADO ***",
+        `*** ${words.holdCancelled} ***`,
         ...header,
-        `GRUPO ${group!.displayNumber}`,
+        groupLine,
         "2.000 x PIZZA",
         "  + Olives x2",
         "",
@@ -581,6 +584,149 @@ describe("A773 hold paper: extras off and moves", () => {
     expect(fired[0]).toContain("1.000 x BURG");
     expect(added("pass")).toEqual(fired);
     for (const name of ["grill", "kitchen", "bar"]) expect(added(name)).toEqual([]);
+  });
+
+  /** Two burger lines at Grill in one group whose HOLD ticket printed at Grill: still held, or
+   *  fired with Grill and Fryer waiting, so both burgers are Requested. */
+  async function twoBurgers(tx: Transaction, venue: Venue, state: "held" | "fired") {
+    const lines = [burger(venue, false), burger(venue, false)];
+    if (state === "fired") await firedFromHold(tx, venue, false, lines);
+    else {
+      await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.grill]);
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines, release: "hold" }],
+      });
+    }
+    return tx
+      .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, venue.party.tabId))
+      .orderBy(workingOrderLines.lineNo);
+  }
+
+  async function printedBy(tx: Transaction, venue: Venue, step: () => Promise<unknown>) {
+    const before = await slips(tx, venue);
+    await step();
+    const after = await slips(tx, venue);
+    return (name: string) => after[name]!.slice(before[name]!.length);
+  }
+
+  const holdSlip = (station: string, from: string) => [
+    "*** HOLD ***",
+    station,
+    "Split extras",
+    "1",
+    "13:05",
+    `From ${from}`,
+    "GROUP 1",
+    "1.000 x BURG",
+    "",
+  ];
+  const cancelledAt = (station: string) => [
+    cancelledBurger[0]!,
+    station,
+    ...cancelledBurger.slice(2),
+  ];
+  const sorted = (found: string[][]) => [...found].sort((a, b) => a.join().localeCompare(b.join()));
+
+  it.each(["held", "fired"] as const)(
+    "a %s group's burger moved Grill to Fryer and back is cancelled on Grill's HOLD paper, then listed there again, and its cancel cancels it once",
+    async (state) => {
+      const venue = await fresh();
+      await withTransaction(db, async (tx) => {
+        const [, second] = await twoBurgers(tx, venue, state);
+        vi.setSystemTime(new Date(LATER));
+
+        const away = await printedBy(tx, venue, () =>
+          moveTo(tx, venue, second!.id, venue.stations.fryer),
+        );
+        expect(away("grill")).toEqual([cancelledBurger]);
+        expect(away("pass")).toEqual([cancelledBurger]);
+        for (const name of ["fryer", "kitchen", "bar"]) expect(away(name)).toEqual([]);
+
+        const back = await printedBy(tx, venue, () =>
+          moveTo(tx, venue, second!.id, venue.stations.grill),
+        );
+        expect(back("grill")).toEqual([holdSlip("Grill", "Fryer")]);
+        expect(back("pass")).toEqual([holdSlip("Grill", "Fryer")]);
+        for (const name of ["fryer", "kitchen", "bar"]) expect(back(name)).toEqual([]);
+
+        const cancelled = await printedBy(tx, venue, () =>
+          cancelLine(tx, venue.cfg, venue.party.tabId, second!.lineNo),
+        );
+        expect(cancelled("grill")).toEqual([cancelledBurger]);
+        expect(cancelled("pass")).toEqual([cancelledBurger]);
+        for (const name of ["fryer", "kitchen", "bar"]) expect(cancelled(name)).toEqual([]);
+      });
+    },
+  );
+
+  it.each(["held", "fired"] as const)(
+    "a %s group's burgers moved together from Grill (on HOLD paper) and Fryer (not) to Kitchen, which prints held work, are both on Kitchen's HOLD ticket",
+    async (state) => {
+      const venue = await fresh();
+      await withTransaction(db, async (tx) => {
+        const [first, second] = await twoBurgers(tx, venue, state);
+        vi.setSystemTime(new Date(LATER));
+        await moveTo(tx, venue, second!.id, venue.stations.fryer);
+        await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.kitchen]);
+
+        const moved = await printedBy(tx, venue, () =>
+          moveDishesToStation(
+            tx,
+            venue.cfg,
+            venue.party.tabId,
+            {
+              submissionId: randomUUID(),
+              lineIds: [first!.id, second!.id],
+              stationId: venue.stations.kitchen,
+            },
+            mover(venue),
+          ),
+        );
+        const kitchen = [holdSlip("Kitchen", "Grill"), holdSlip("Kitchen", "Fryer")];
+        expect(moved("grill")).toEqual([cancelledBurger]);
+        expect(moved("pass")).toEqual([cancelledBurger]);
+        expect(sorted(moved("kitchen"))).toEqual(sorted(kitchen));
+        for (const name of ["fryer", "bar"]) expect(moved(name)).toEqual([]);
+
+        const cancelled = await printedBy(tx, venue, () =>
+          cancelLine(tx, venue.cfg, venue.party.tabId, second!.lineNo),
+        );
+        expect(cancelled("kitchen")).toEqual([cancelledAt("Kitchen")]);
+        for (const name of ["grill", "fryer", "bar", "pass"]) expect(cancelled(name)).toEqual([]);
+      });
+    },
+  );
+
+  it("a fired group's Requested burger moved to Kitchen with a burger recalled from it is the only one on Kitchen's HOLD ticket", async () => {
+    const venue = await fresh();
+    await withTransaction(db, async (tx) => {
+      const [recalled, requested] = await twoBurgers(tx, venue, "fired");
+      vi.setSystemTime(new Date(LATER));
+      await recallLines(tx, venue.cfg, venue.party.tabId, [recalled!.lineNo]);
+      expect(await itemOf(tx, recalled!.id)).toMatchObject({ requestedAt: null, firedAt: null });
+      await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.kitchen]);
+
+      const moved = await printedBy(tx, venue, () =>
+        moveDishesToStation(
+          tx,
+          venue.cfg,
+          venue.party.tabId,
+          {
+            submissionId: randomUUID(),
+            lineIds: [recalled!.id, requested!.id],
+            stationId: venue.stations.kitchen,
+          },
+          mover(venue),
+        ),
+      );
+      expect(moved("grill")).toEqual([cancelledBurger]);
+      expect(moved("pass")).toEqual([cancelledBurger]);
+      expect(moved("kitchen")).toEqual([holdSlip("Kitchen", "Grill")]);
+      for (const name of ["fryer", "bar"]) expect(moved(name)).toEqual([]);
+    });
   });
 });
 
