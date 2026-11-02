@@ -65,7 +65,8 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { moveGuests } from "./testing/table-action-fixture.js";
-import { offerProducts } from "./testing/zone-offers.js";
+import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 
 /*
  * Route-to-zone map. Every till route, with where the zone it acts in is read from and the case that
@@ -232,8 +233,9 @@ import { offerProducts } from "./testing/zone-offers.js";
  * ("a kitchen display" below; for the move route, "refuses a dish at a station the screen does not
  * work, and moves nothing" in `apps/server/src/device-api.station-move.test.ts`);
  * `/api/device/stations`, which needs a station screen and lists every active station;
- * `/api/device/pass-screen` and
- * `/api/device/pass-monitor`, scoped by the device's pass screen or pass monitor; `/api/expo/queue`
+ * `/api/device/pass-screen`, `/api/device/pass-board`,
+ * `/api/device/pass-monitor` and `/api/device/pass-monitor-board`, scoped by the device's pass
+ * screen or pass monitor ("A773 pass board" below); `/api/expo/queue`
  * and `/api/orders/:id/stations/:sid/advance`, which check the session only;
  * `/api/ticket-items/:id/advance`, which checks the session and that the dish is still at the
  * station the request names;
@@ -1467,6 +1469,60 @@ describe("a kitchen display's pass levers", () => {
       });
     });
   }
+});
+
+describe("A773 pass board", () => {
+  it("lists no card for a Requested burger outside the pass screen's zones", async () => {
+    const grill = await inTx(v, (tx) =>
+      createStation(tx, v.cfg, { name: `Grill ${randomUUID().slice(0, 4)}` }),
+    );
+    const deliTablesBurger = await inTx(v, async (tx) => {
+      await routeProductTo(tx, v.cfg, v.productId("Burger"), grill.id);
+      await setStationsWaitForPass(tx, true, [grill.id]);
+      return (
+        await offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" })
+      ).offerFor(v.productId("Burger"));
+    });
+    const fire = async (tableId: string, menuItemId: string) => {
+      const seated = await seat(v, tableId);
+      const placed = await inTx(v, (tx) =>
+        placeGroups(tx, v.cfg, seated.partyId, {
+          groups: [{ lines: [{ menuItemId, quantity: "1" }], release: "fire" }],
+          operatorId: OPERATOR,
+        }),
+      );
+      return placed.groups[0]!.id;
+    };
+    const deliTable = await inTx(v, (tx) =>
+      createTable(tx, v.cfg, { label: `D${randomUUID().slice(0, 4)}`, zoneId: f.deliTables }),
+    );
+    const deliGroup = await fire(deliTable.id, deliTablesBurger);
+    const restGroup = await fire(await v.table(`R${randomUUID().slice(0, 4)}`), v.item("Burger"));
+    const [kds] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: `Pass ${randomUUID()}`, formFactor: "kds", capabilities: [] })
+      .returning({ id: deviceProfiles.id });
+    const device = await enrolDeviceForTest(suite.db, v.cfg, {
+      name: `Pass ${randomUUID()}`,
+      profileId: kds!.id,
+      kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.restTables, f.bar] },
+    });
+    const answer = await app.request("/api/device/pass-board", {
+      headers: { cookie: `${DEVICE_COOKIE}=${device.deviceId}.${device.token}` },
+    });
+    expect(answer.status).toBe(200);
+    const { board } = (await answer.json()) as {
+      board: Record<
+        "held" | "toFire" | "inProgress" | "ready",
+        { target: { kind: string; groupId?: string } }[]
+      >;
+    };
+    const groups = [...board.held, ...board.toFire, ...board.inProgress, ...board.ready].map(
+      (card) => card.target.groupId,
+    );
+    expect(groups).not.toContain(deliGroup);
+    expect(board.toFire.map((card) => card.target.groupId)).toContain(restGroup);
+  });
 });
 
 describe("a Restaurant profile on another department's zone", () => {

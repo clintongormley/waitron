@@ -85,7 +85,8 @@ import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
-import { listPassMonitor, listPassScreen, passScopeOf } from "./pass-board.js";
+import { listPassMonitor, listPassScreen, passScopeOf, readScopedPassBoard } from "./pass-board.js";
+import type { PassBoard } from "./pass-card.js";
 import { mountDeviceLevers, requireKitchenDisplay } from "./device-levers.js";
 import { STATUS as TILL_STATUS, stationMoveRequest } from "./till-api.js";
 import { moveDishesToStation } from "./station-move.js";
@@ -550,6 +551,32 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
+  app.get("/api/device/pass-board", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      return c.json(
+        await withTransaction(deps.db, async (tx) => {
+          const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass");
+          const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen));
+          return { board, stations: screen.stations, zones: screen.zones };
+        }),
+      );
+    }),
+  );
+
+  app.get("/api/device/pass-monitor-board", (c) =>
+    run(c, log, async () => {
+      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
+      return c.json(
+        await withTransaction(deps.db, async (tx) => {
+          const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass_monitor");
+          const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen));
+          return { board: withoutRelease(board), stations: screen.stations, zones: screen.zones };
+        }),
+      );
+    }),
+  );
+
   // ── The device's station screen (DEVICE-GUARDED) ──────────────────────────────────────────────────
   app.get("/api/device/station-screen", (c) =>
     run(c, log, async () => {
@@ -1001,6 +1028,19 @@ async function stationScreenOf(
   device: DeviceBinding,
 ): Promise<ResolvedKitchenScreen> {
   return (await kitchenScreenOf(tx, c, cfg, device, "station")).screen;
+}
+
+/** The monitor has no cooking write path, so its cards name nothing to release. */
+function withoutRelease(board: PassBoard): PassBoard {
+  const strip = (cards: PassBoard["toFire"]) =>
+    cards.map((card) => ({ ...card, releaseTicketItemIds: [], releaseContext: null }));
+  return {
+    ...board,
+    held: strip(board.held),
+    toFire: strip(board.toFire),
+    inProgress: strip(board.inProgress),
+    ready: strip(board.ready),
+  };
 }
 
 /**

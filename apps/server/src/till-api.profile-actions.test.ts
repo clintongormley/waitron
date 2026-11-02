@@ -138,7 +138,8 @@ import {
  * device cookie it carries, if any (`orders-reprint.test.ts`).
  *
  * Not action-gated, so a signed-in person (or, for a display's reads, the device) is enough: every
- * read, including a display's `GET /api/device/stations` and the till's
+ * read, including a display's `GET /api/device/stations`, `GET /api/device/pass-board` and
+ * `GET /api/device/pass-monitor-board`, and the till's
  * `GET /api/invoice-delivery-options`, the POST previews (`/payments/preview`,
  * `/adjustments/preview`) and the dead-end checks (`/api/dead-ends/*`); the session, locale, schedule, profile-switch and device-equipment
  * routes (choosing equipment is not printing, paying or opening the drawer). Left ungated by
