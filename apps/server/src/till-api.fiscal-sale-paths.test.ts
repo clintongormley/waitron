@@ -2216,9 +2216,6 @@ describe("handheld sales and device capability gates", () => {
     return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
   }
 
-  /** Log in on `deviceCookie`'s device and return just the `name=value` session cookie pair, to
-   * combine with that device cookie in one `Cookie` header. Without one it presents a throwaway
-   * `till` device. */
   async function loginOperator(
     app: Hono,
     cfg: TradingContext,

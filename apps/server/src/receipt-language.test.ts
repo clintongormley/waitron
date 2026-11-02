@@ -117,7 +117,6 @@ const MADRID = { postalCode: "28013", city: "Madrid", province: "Madrid" };
 interface Venue {
   app: Hono;
   cfg: DeviceRequestConfig;
-  /** The operator's session on a device allowed every capability, with no device cookie. */
   session: string;
   /** The session plus an enrolled till device, as a sale is sent. */
   till: string;
