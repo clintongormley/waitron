@@ -10,6 +10,5 @@
   "reporters": ["clear-text", "progress", "html"],
   "htmlReporter": { "fileName": "reports/mutation/index.html" },
   "coverageAnalysis": "perTest",
-  "ignoreStatic": true,
   "thresholds": { "high": 95, "low": 90, "break": 90 }
 }

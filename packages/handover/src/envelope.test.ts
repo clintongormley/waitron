@@ -92,9 +92,13 @@ describe("verifyEnvelope", () => {
   });
 
   it("the signer id is signed: the same body re-labelled with another node id is refused", () => {
+    // Both ids resolve to m2's key, so only the signed bytes can tell them apart.
+    const sameKey = (nodeId: string) =>
+      nodeId === "node-m2" || nodeId === "node-m2-alias" ? m2.publicKey : undefined;
     const envelope = signEnvelope("acceptance", body, m2);
-    const raw = json({ ...envelope, signerNodeId: m1.nodeId });
-    expect(verifyEnvelope(raw, "acceptance", publicKeyOf)).toEqual({
+    expect(verifyEnvelope(json(envelope), "acceptance", sameKey).valid).toBe(true);
+    const raw = json({ ...envelope, signerNodeId: "node-m2-alias" });
+    expect(verifyEnvelope(raw, "acceptance", sameKey)).toEqual({
       valid: false,
       reason: "bad_signature",
     });

@@ -85,7 +85,6 @@ export function parseBinding(raw: unknown): HandoverBinding {
   };
 }
 
-/** The same operation id with a different fingerprint is a different request. */
 export function bindingFingerprint(binding: HandoverBinding): string {
   return sha256Hex(canonicalize(binding as unknown as CanonicalValue));
 }

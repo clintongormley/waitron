@@ -78,7 +78,7 @@ export function nextState(
   return to;
 }
 
-/** A box holds at most one open operation. */
+/** Open until one of the four closing states. */
 export function isOpen(state: HandoverState): boolean {
   return !CLOSED.includes(state);
 }

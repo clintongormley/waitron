@@ -9,9 +9,7 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**/*.ts"],
       reporter: ["text", "html", "json-summary"],
-      // The re-export barrel, on which v8 reports phantom uncovered branches; its surface is
-      // asserted by index.test.ts.
-      exclude: [...coverageConfigDefaults.exclude, "src/index.ts"],
+      exclude: coverageConfigDefaults.exclude,
       thresholds: { statements: 98, lines: 98, functions: 98, branches: 95 },
     },
   },

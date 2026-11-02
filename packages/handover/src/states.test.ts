@@ -66,6 +66,16 @@ function refusal(step: Step): { code: string; params: unknown } {
   throw new Error(`nextState allowed ${key(step)}`);
 }
 
+/** What `nextState` itself answers, not what the table above lists. */
+function accepts(step: Step): boolean {
+  try {
+    nextState(...step);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function outOfOrder(from: HandoverState | null, to: HandoverState) {
   return { code: "handover.step_out_of_order", params: { from, to } };
 }
@@ -133,7 +143,7 @@ describe("nextState", () => {
   });
 
   it("only a controlled destination at `prepared` or a controlled source at `source_stepped_down` can become `replaced`", () => {
-    const reaching = everyStep().filter((step) => step[3] === "replaced" && isAllowed(step));
+    const reaching = everyStep().filter((step) => step[3] === "replaced" && accepts(step));
     expect(reaching.map(key).sort()).toEqual(
       [
         "destination|controlled|prepared|replaced",
@@ -143,16 +153,14 @@ describe("nextState", () => {
   });
 
   it("only a controlled operation at `prepared` can become `abandoned`", () => {
-    const reaching = everyStep().filter((step) => step[3] === "abandoned" && isAllowed(step));
+    const reaching = everyStep().filter((step) => step[3] === "abandoned" && accepts(step));
     expect(reaching.map(key).sort()).toEqual(
       ["destination|controlled|prepared|abandoned", "source|controlled|prepared|abandoned"].sort(),
     );
   });
 
   it("`return_abandoned` is reachable only by a destination at `return_pending`", () => {
-    const reaching = everyStep().filter(
-      (step) => step[3] === "return_abandoned" && isAllowed(step),
-    );
+    const reaching = everyStep().filter((step) => step[3] === "return_abandoned" && accepts(step));
     expect(reaching.map(key).sort()).toEqual(
       [
         "destination|controlled|return_pending|return_abandoned",
@@ -164,7 +172,9 @@ describe("nextState", () => {
   it("no state goes back: no allowed step returns to a state already passed", () => {
     for (const role of ROLES) {
       for (const scenario of SCENARIOS) {
-        const steps = ALLOWED.filter((step) => step[0] === role && step[1] === scenario);
+        const steps = everyStep().filter(
+          (step) => step[0] === role && step[1] === scenario && accepts(step),
+        );
         const reachable = (start: HandoverState): Set<HandoverState> => {
           const seen = new Set<HandoverState>();
           const queue = [start];
@@ -196,7 +206,7 @@ describe("isOpen", () => {
   });
 
   it("a closed state has no step out of it", () => {
-    for (const step of ALLOWED) {
+    for (const step of everyStep().filter(accepts)) {
       if (step[2] !== null) expect(isOpen(step[2]), key(step)).toBe(true);
     }
   });
