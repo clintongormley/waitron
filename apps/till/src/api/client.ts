@@ -3576,6 +3576,12 @@ export class TillApi {
     );
   }
 
+  /** The till's All stations board → `GET /api/expo/board`: every station and zone, nothing to
+   *  release; needs a signed-in person. */
+  getExpoBoard(options: ReadOptions = {}): Promise<{ board: PassBoard }> {
+    return this.#request<{ board: PassBoard }>("/api/expo/board", "GET", undefined, options.signal);
+  }
+
   /** The pass's Fire → `POST /api/device/pass-screen/release`. A stale card rejects
    *  `ticket.pass_context_changed`. */
   releaseDevicePass(ask: PassReleaseAsk): Promise<PassReleaseResult> {

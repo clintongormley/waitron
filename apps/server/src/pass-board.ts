@@ -158,6 +158,19 @@ async function aStationInViewWaits(tx: Transaction, scope: PassScope): Promise<b
   return found !== undefined;
 }
 
+/** A reader with no cooking write path (a monitor, a till's All stations) is named nothing to release. */
+export function withoutRelease(board: PassBoard): PassBoard {
+  const strip = (cards: PassBoard["toFire"]) =>
+    cards.map((card) => ({ ...card, releaseTicketItemIds: [], releaseContext: null }));
+  return {
+    ...board,
+    held: strip(board.held),
+    toFire: strip(board.toFire),
+    inProgress: strip(board.inProgress),
+    ready: strip(board.ready),
+  };
+}
+
 /** One card's rows, for the release. */
 export async function readPassCardRows(
   tx: Transaction,

@@ -88,8 +88,13 @@ import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
-import { listPassMonitor, listPassScreen, passScopeOf, readScopedPassBoard } from "./pass-board.js";
-import type { PassBoard } from "./pass-card.js";
+import {
+  listPassMonitor,
+  listPassScreen,
+  passScopeOf,
+  readScopedPassBoard,
+  withoutRelease,
+} from "./pass-board.js";
 import { mountDeviceLevers, requireKitchenDisplay } from "./device-levers.js";
 import { STATUS as TILL_STATUS, stationMoveRequest } from "./till-api.js";
 import { moveDishesToStation } from "./station-move.js";
@@ -1061,19 +1066,6 @@ async function stationScreenOf(
   device: DeviceBinding,
 ): Promise<ResolvedKitchenScreen> {
   return (await kitchenScreenOf(tx, c, cfg, device, "station")).screen;
-}
-
-/** The monitor has no cooking write path, so its cards name nothing to release. */
-function withoutRelease(board: PassBoard): PassBoard {
-  const strip = (cards: PassBoard["toFire"]) =>
-    cards.map((card) => ({ ...card, releaseTicketItemIds: [], releaseContext: null }));
-  return {
-    ...board,
-    held: strip(board.held),
-    toFire: strip(board.toFire),
-    inProgress: strip(board.inProgress),
-    ready: strip(board.ready),
-  };
 }
 
 /**

@@ -133,6 +133,7 @@ import {
   paysAfterSending,
   unsentDishLines,
 } from "./working-order.js";
+import { readScopedPassBoard, withoutRelease } from "./pass-board.js";
 import type { LineExtras, OrderLinePatch, TicketState, OrderAttendance } from "./working-order.js";
 import { listStationsToday } from "./kitchen.js";
 import {
@@ -2320,6 +2321,16 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         return listExpoQueue(tx);
       });
       return c.json(queue);
+    }),
+  );
+
+  app.get("/api/expo/board", (c) =>
+    run(c, log, async () => {
+      await requireSession(deps, c);
+      const board = await withTransaction(deps.db, (tx) =>
+        readScopedPassBoard(tx, deps.cfg, { stationIds: null, zoneIds: null }),
+      );
+      return c.json({ board: withoutRelease(board) });
     }),
   );
 

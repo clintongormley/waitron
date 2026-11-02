@@ -238,7 +238,8 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * `/api/device/stations`, which needs a station screen and lists every active station;
  * `/api/device/pass-screen`, `/api/device/pass-board`,
  * `/api/device/pass-monitor` and `/api/device/pass-monitor-board`, scoped by the device's pass
- * screen or pass monitor ("A773 pass board" below); `/api/expo/queue`
+ * screen or pass monitor ("A773 pass board" below); `/api/expo/queue`, the till's All stations
+ * board `/api/expo/board` ("A773 pass board: all stations" in `till-api.expo-board.test.ts`)
  * and `/api/orders/:id/stations/:sid/advance`, which check the session only;
  * `/api/ticket-items/:id/advance`, which checks the session and that the dish is still at the
  * station the request names;

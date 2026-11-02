@@ -1941,6 +1941,19 @@ describe("TillApi", () => {
     ]);
   });
 
+  describe("A773 pass board: all stations", () => {
+    it("getExpoBoard GETs every station's board with the caller's signal", async () => {
+      const board = { held: [], toFire: [], inProgress: [], ready: [], overview: [] };
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ board }));
+      const signal = new AbortController().signal;
+      expect(await new TillApi("", fetchStub).getExpoBoard({ signal })).toEqual({ board });
+      expect(fetchStub).toHaveBeenCalledWith(
+        "/api/expo/board",
+        expect.objectContaining({ method: "GET", credentials: "include", signal }),
+      );
+    });
+  });
+
   it("A773 pass Fire posts the ask as its body and returns the released ids", async () => {
     const ask = {
       submissionId: "sub-1",
