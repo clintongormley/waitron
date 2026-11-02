@@ -472,3 +472,112 @@ describe("A773 pass screen: levers", () => {
     );
   });
 });
+
+describe("A773 pass screen: levers on a till's All stations", () => {
+  const heldCard = passCard({
+    key: "held:h-1",
+    kind: "held",
+    items: [passItem({ id: "h-a", phase: "held", firedAt: null })],
+  });
+  const allApi = (board: PassBoard, overrides: Record<string, unknown> = {}) =>
+    fakeApi({
+      getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity(), kitchenScreens: [] }),
+      getExpoBoard: vi.fn().mockResolvedValue({ board }),
+      ...overrides,
+    });
+  const allBoard = () =>
+    passBoard({ held: [heldCard], toFire: [fireCard()], inProgress: [groupCard(), passCard()] });
+
+  it("draws a released course's Ready and no Fire on a held or To fire card, though it runs the pass", async () => {
+    const api = allApi(allBoard());
+    const el = await mountTill(api);
+    expect(boardOf(el)!.mode).toBe("all_stations");
+    expect(inBoard(el, '[data-card="held:h-1"]')).not.toBeNull();
+    expect(inBoard(el, '[data-card="group:g-2"]')).not.toBeNull();
+    expect(boardOf(el)!.shadowRoot!.querySelectorAll("[data-pass-fire]")).toHaveLength(0);
+    expect(text(inBoard(el, '[data-ready="course-mains"]'))).toBe(t("expo.ready"));
+  });
+
+  it("sends nothing, and reads nothing more, for a Fire event", async () => {
+    const api = allApi(allBoard());
+    const el = await mountTill(api);
+    boardOf(el)!.dispatchEvent(
+      new CustomEvent("pass-fire", {
+        detail: { key: "group:g-2" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await flush(el);
+    expect(api.releaseDevicePass).not.toHaveBeenCalled();
+    expect(api.getExpoBoard).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a course whose dishes are all ready, and a dish with no course, on the card with no Ready", async () => {
+    const card = passCard({
+      items: [
+        passItem({
+          id: "starter",
+          phase: "ready",
+          state: "ready",
+          course: { id: "course-starters", name: "Starters", displayOrder: 1 },
+        }),
+        passItem({ id: "bread", name: "Bread", course: null }),
+        passItem({ id: "main" }),
+      ],
+    });
+    const el = await mountTill(allApi(passBoard({ inProgress: [card] })));
+    for (const id of ["starter", "bread", "main"])
+      expect(inBoard(el, `[data-item="${id}"]`)).not.toBeNull();
+    expect(
+      [...boardOf(el)!.shadowRoot!.querySelectorAll("[data-ready]")].map((lever) =>
+        lever.getAttribute("data-ready"),
+      ),
+    ).toEqual(["course-mains"]);
+  });
+
+  it("Course Ready sends the order and course through the till's route, then reads All stations again", async () => {
+    const api = allApi(allBoard());
+    const el = await mountTill(api);
+    await press(el, '[data-ready="course-mains"]');
+    expect(api.bumpCourseReady).toHaveBeenCalledExactlyOnceWith("order-1", "course-mains");
+    expect(api.bumpDeviceCourseReady).not.toHaveBeenCalled();
+    expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
+  });
+
+  it("a refused Course Ready shows its words and still reads All stations again", async () => {
+    const api = allApi(allBoard(), {
+      bumpCourseReady: vi.fn().mockRejectedValue(refused("course.not_found", 404)),
+    });
+    const el = await mountTill(api);
+    await press(el, '[data-ready="course-mains"]');
+    expect(api.getExpoBoard).toHaveBeenCalledTimes(2);
+    expect(text(leverError(el))).toBe(`#1 T1: ${codeMessage("course.not_found")}`);
+  });
+
+  it("draws Reprint on each card's bill, and a press reprints that bill and reads nothing", async () => {
+    const api = allApi(allBoard());
+    const el = await mountTill(api);
+    expect(text(inBoard(el, '[data-reprint="order-1"]'))).toBe(t("expo.reprint"));
+    expect(inBoard(el, '[data-reprint="order-7"]')).not.toBeNull();
+    await press(el, '[data-reprint="order-1"]');
+    expect(api.reprintOrder).toHaveBeenCalledExactlyOnceWith("order-1");
+    expect(api.getExpoBoard).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ["a coded refusal", { code: "session.required", status: 401 }, "session.required"],
+    ["a refusal with no code", new Error("network down"), "server.internal"],
+  ] as const)(
+    "announces %s of a Reprint as an alert in words, never the code",
+    async (_, rejection, code) => {
+      const api = allApi(allBoard(), { reprintOrder: vi.fn().mockRejectedValue(rejection) });
+      const el = await mountTill(api);
+      await press(el, '[data-reprint="order-1"]');
+      const alert = el.shadowRoot!.querySelector('[role="alert"]');
+      expect(alert!.hasAttribute("data-reprint-error")).toBe(true);
+      expect(text(alert)).toBe(codeMessage(code));
+      expect(alert!.textContent).not.toContain(code);
+    },
+  );
+});

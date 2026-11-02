@@ -13,7 +13,13 @@ import type {
   ResolvedKitchenScreen,
   TillApi,
 } from "../api/client.js";
-import { PASS_NOW, passBoard, passCard, passItem } from "../../test/pass-board-fixtures.js";
+import {
+  PASS_NOW,
+  minutesAgo,
+  passBoard,
+  passCard,
+  passItem,
+} from "../../test/pass-board-fixtures.js";
 import { TillPassScreen } from "./till-pass-screen.js";
 import type { TillStationScreen } from "./till-station-screen.js";
 import "./till-station-screen.js";
@@ -1122,5 +1128,145 @@ describe("A773 pass screen", () => {
       const el = await mount({ api });
       expect(el.shadowRoot!.querySelector("[data-empty]")).toBeNull();
     });
+  });
+});
+
+describe("A773 pass screen: a till's All stations", () => {
+  const mountAll = (board: PassBoard, props: Partial<TillPassScreen> = {}) => {
+    const api = fakeApi({ getExpoBoard: vi.fn().mockResolvedValue({ board }) });
+    return mount({ api, ...props }).then((el) => ({ api, el }));
+  };
+  const inBoard = (el: TillPassScreen) => boardOf(el)!.shadowRoot!;
+  const cardOf = (el: TillPassScreen, key: string) =>
+    inBoard(el).querySelector<HTMLElement>(`[data-card="${key}"]`)!;
+  const itemOf = (el: TillPassScreen, id: string) =>
+    inBoard(el).querySelector<HTMLElement>(`[data-item="${id}"]`)!;
+  /** A card whose one dish was sent `minutes` ago, though the server still calls it fresh. */
+  const aged = (key: string, minutes: number) =>
+    passCard({
+      key,
+      items: [passItem({ id: `${key}-item`, queuedAt: minutesAgo(minutes), band: "fresh" })],
+    });
+
+  it("draws each dish's diet badges, contains chip and not-reviewed note, and no diet row on a plain dish", async () => {
+    const card = passCard({
+      items: [
+        passItem({ id: "vegan", asServedDiet: { vegan: "yes", vegetarian: "yes", contains: [] } }),
+        passItem({
+          id: "meat",
+          asServedDiet: { vegan: "no", vegetarian: "no", contains: ["meat"] },
+        }),
+        passItem({
+          id: "unknown",
+          asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
+        }),
+        passItem({ id: "plain" }),
+      ],
+    });
+    const { api, el } = await mountAll(passBoard({ inProgress: [card] }));
+    expect(api.getExpoBoard).toHaveBeenCalledOnce();
+    expect(itemOf(el, "vegan").querySelector("[data-diet='vegan']")).not.toBeNull();
+    expect(itemOf(el, "vegan").querySelector("[data-diet='vegetarian']")).not.toBeNull();
+    expect(itemOf(el, "vegan").textContent).not.toMatch(/review|revisi/i);
+    expect(itemOf(el, "meat").querySelector("[data-diet-contains='meat']")).not.toBeNull();
+    expect(itemOf(el, "meat").querySelector("[data-diet='vegan']")).toBeNull();
+    expect(itemOf(el, "unknown").querySelector("[data-diet-pending]")).not.toBeNull();
+    expect(itemOf(el, "unknown").querySelector("[data-diet='vegan']")).toBeNull();
+    expect(itemOf(el, "plain").querySelector(".line-diet")).toBeNull();
+  });
+
+  it("draws a dish's option answers in the kitchen's wording, never the staff's or the customer's", async () => {
+    const card = passCard({
+      items: [
+        passItem({
+          optionSnapshots: [
+            {
+              listName: { es: "Punto personal" },
+              listCustomerName: { "es-ES": "¿Cómo lo quiere?" },
+              listKitchenName: "PTO",
+              labelName: { es: "Poco personal" },
+              labelCustomerName: { "es-ES": "Poco hecho" },
+              labelKitchenName: "PH",
+            },
+          ],
+        }),
+      ],
+    });
+    const { el } = await mountAll(passBoard({ inProgress: [card] }));
+    expect(inBoard(el).querySelector(".modifier-answer")!.textContent).toBe("PTO: PH");
+  });
+
+  it("colours each card by its dishes' age on the screen's clock, not the server's band, and marks only a forgotten dish", async () => {
+    const { el } = await mountAll(
+      passBoard({ inProgress: [aged("fresh", 1), aged("overdue", 12), aged("forgotten", 16)] }),
+    );
+    expect(cardOf(el, "fresh").classList).toContain("age-fresh");
+    expect(cardOf(el, "overdue").classList).toContain("age-overdue");
+    expect(cardOf(el, "forgotten").classList).toContain("age-forgotten");
+    const flag = itemOf(el, "forgotten-item").querySelector("[data-forgotten]");
+    expect(flag!.textContent).toContain(t("expo.item_forgotten"));
+    expect(itemOf(el, "overdue-item").querySelector("[data-forgotten]")).toBeNull();
+    expect(itemOf(el, "fresh-item").querySelector("[data-forgotten]")).toBeNull();
+  });
+
+  it("counts the cards at overdue or worse, in English and Spanish, and shows no count when none is", async () => {
+    const late = passBoard({ inProgress: [aged("a", 16), aged("b", 12), aged("c", 1)] });
+    const count = (el: TillPassScreen) =>
+      inBoard(el).querySelector("[data-overdue-count]")?.textContent?.trim();
+    const { el } = await mountAll(late);
+    expect(count(el)).toBe(`2 ${t("station.overdue_count")}`);
+
+    cleanupWidgets();
+    const previous = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el: spanish } = await mountAll(late);
+      expect(count(spanish)).toBe("2 con retraso");
+    } finally {
+      setLocale(previous);
+    }
+
+    cleanupWidgets();
+    const { el: calm } = await mountAll(passBoard({ inProgress: [aged("c", 1)] }));
+    expect(inBoard(calm).querySelector("[data-overdue-count]")).toBeNull();
+  });
+
+  it("flashes a forgotten card at the fast pulse token unless reduced motion is asked for, and never an overdue one", async () => {
+    const board = passBoard({ inProgress: [aged("forgotten", 16), aged("overdue", 12)] });
+    const { el } = await mountAll(board);
+    const forgotten = cardOf(el, "forgotten");
+    expect(forgotten.classList).toContain("flash");
+    expect(getComputedStyle(forgotten).animationName).toBe("age-forgotten-flash");
+    expect(getComputedStyle(forgotten).animationDuration).toBe("1s");
+    el.style.setProperty("--wt-duration-pulse-fast", "3000ms");
+    expect(getComputedStyle(forgotten).animationDuration).toBe("3s");
+    expect(cardOf(el, "overdue").classList).not.toContain("flash");
+
+    cleanupWidgets();
+    const { el: still } = await mountAll(board, { reducedMotion: true });
+    expect(cardOf(still, "forgotten").classList).toContain("age-forgotten");
+    expect(cardOf(still, "forgotten").classList).not.toContain("flash");
+    expect(cardOf(still, "overdue").classList).not.toContain("flash");
+  });
+
+  it("moves a card's colour on when its clock moves, without reading the board again", async () => {
+    const { api, el } = await mountAll(passBoard({ inProgress: [aged("card", 1)] }));
+    expect(cardOf(el, "card").classList).toContain("age-fresh");
+    el.now = PASS_NOW + 15 * 60_000;
+    await flush(el);
+    expect(cardOf(el, "card").classList).toContain("age-forgotten");
+    expect(api.getExpoBoard).toHaveBeenCalledOnce();
+  });
+
+  it("says the pass is empty, drawing no card, when its first read fails", async () => {
+    const api = fakeApi({ getExpoBoard: vi.fn().mockRejectedValue({ code: "server.internal" }) });
+    const el = await mount({ api });
+    expect(api.getExpoBoard).toHaveBeenCalledOnce();
+    expect(
+      [...el.shadowRoot!.querySelectorAll("till-pass-board > [data-empty]")].map((node) =>
+        node.textContent!.trim(),
+      ),
+    ).toEqual([t("expo.empty")]);
+    expect(inBoard(el).querySelector("[data-card]")).toBeNull();
   });
 });
