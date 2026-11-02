@@ -86,9 +86,7 @@ export async function seedAttendanceExport(db: Database) {
     nodeId,
     closure,
     document: async (audience: "standard" | "representatives", locale: "en" | "es" = "en") => {
-      const format = await run((tx) =>
-        prepareTimeRecordExport(tx, { locationId, period, audience, locale }),
-      );
+      const format = await run((tx) => prepareTimeRecordExport(tx, { period, audience, locale }));
       return format();
     },
   };

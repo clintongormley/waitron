@@ -1,5 +1,5 @@
-import { eq, inArray } from "drizzle-orm";
-import { locations, type Transaction } from "@waitron/db";
+import { inArray } from "drizzle-orm";
+import { readVenue, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import type {
   RecordExportDocument,
@@ -27,7 +27,7 @@ const ACCESS_HOLDER_LABELS: Record<TitularAcceso, string> = {
   inspeccion_trabajo: "Labour inspectorate",
 };
 const LABELS: Record<string, readonly [string, string]> = {
-  locationName: ["Workplace", "Centro de trabajo"],
+  venueName: ["Workplace", "Centro de trabajo"],
   periodStart: ["From", "Desde"],
   periodEnd: ["Before (excluded)", "Antes de (excluido)"],
   audience: ["Version", "Versión"],
@@ -144,7 +144,6 @@ export async function prepareTimeRecordExport(
   input: RecordExportInput,
 ): Promise<() => Promise<RecordExportDocument>> {
   const selected: RecordExportInput = {
-    locationId: input.locationId,
     personId: input.personId,
     period: { start: input.period.start, end: input.period.end },
     audience: input.audience,
@@ -175,12 +174,8 @@ export async function prepareTimeRecordExport(
           .from(persons)
           .where(inArray(persons.id, [...ids]));
   const people = new Map(names.map((p) => [p.id, p.name]));
-  const [location] = await tx
-    .select({ name: locations.name })
-    .from(locations)
-    .where(eq(locations.id, selected.locationId));
-  const locationName = location?.name ?? selected.locationId;
-  return async () => formatTimeRecordExport(record, selected, people, locationName);
+  const { name: venueName } = await readVenue(tx);
+  return async () => formatTimeRecordExport(record, selected, people, venueName);
 }
 export const WORKFORCE_ES_RECORD_EXPORT = { prepare: prepareTimeRecordExport };
 
@@ -188,7 +183,7 @@ export function formatTimeRecordExport(
   record: TimeRecord,
   input: RecordExportInput,
   people: ReadonlyMap<string, string>,
-  locationName: string,
+  venueName: string,
 ): RecordExportDocument {
   const language = input.locale === "es" ? 1 : 0;
   const name = (id: string) =>
@@ -328,9 +323,9 @@ export function formatTimeRecordExport(
   const sections = [
     section(
       "metadata",
-      ["locationName", "periodStart", "periodEnd", "audience", "retainUntil", "accessHolder"],
+      ["venueName", "periodStart", "periodEnd", "audience", "retainUntil", "accessHolder"],
       exported.titularesAcceso.map((accessHolder) => ({
-        locationName,
+        venueName,
         periodStart: input.period.start,
         periodEnd: input.period.end,
         audience: input.audience,
