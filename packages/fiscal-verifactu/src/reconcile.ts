@@ -41,6 +41,7 @@ type PeriodRow = {
   /** For an alta, the id of its sale's anulación, if one exists; otherwise null. */
   anulacion_id: string | null;
   estado: string;
+  intentos: number;
   csv: string | null;
   reconciled_resubmit_at: string | null;
   id_emisor_factura: string;
@@ -56,8 +57,6 @@ type Reported = {
   mensaje: string | null;
 };
 
-/** `envios.estado` values we read as "still awaiting acknowledgement". */
-const PENDIENTE = new Set(["pendiente", "enviando"]);
 /** `envios.estado` values we read as "we believe AEAT accepted this". A `rechazado`/`detenido`
  * record is in neither set: a sweep does not re-classify what we already know was refused or halted. */
 const ACEPTADO = new Set(["aceptado", "aceptado_con_errores"]);
@@ -94,7 +93,7 @@ const CORRECTION: Partial<Record<EstadoRegistroConsulta, "aceptado" | "aceptado_
 };
 
 /**
- * Audits one calendar period against what AEAT reports for it, classifying every disagreement into
+ * Audits stable local snapshots for one calendar period against AEAT, classifying disagreements into
  * `lostAck`/`noTrace`/`drift`. The returned lists are the audit finding and always include a
  * mismatch this sweep also corrects. Where AEAT's state maps to a local estado (`CORRECTION`), the
  * sweep also corrects ours and writes the ack the lost response would have, in the same
@@ -106,8 +105,9 @@ const CORRECTION: Partial<Record<EstadoRegistroConsulta, "aceptado" | "aceptado_
  * Diff on `EstadoRegistro`, not presence (design §4.3), because the response is paged and a
  * record may not be on a page yet:
  *
- *   - a `pendiente`/`enviando` record ABSENT from AEAT is in flight, so it is NEVER `noTrace`;
- *   - a `pendiente`/`enviando` record PRESENT at AEAT is `lostAck`;
+ *   - a `pendiente` record ABSENT from AEAT is in flight, so it is NEVER `noTrace`;
+ *   - a `pendiente` record PRESENT at AEAT is `lostAck`;
+ *   - an `enviando` record belongs to the drainer and is deferred;
  *   - an accepted record ABSENT from AEAT is `noTrace`;
  *   - an accepted record whose AEAT state disagrees with ours is `drift` (see `isDrift`).
  *
@@ -151,14 +151,24 @@ export async function reconcile(
   // T2
   const detectedAt = deps.clock.now().instant;
   await withTransaction(deps.db, async (tx) => {
-    // A correction can commit while consulta is in flight; its predecessor must stay untouched.
-    const currentIds = new Set((await rowsForPeriod(tx, normalizedPeriod)).map((row) => row.id));
+    const current = new Map(
+      (await rowsForPeriod(tx, normalizedPeriod)).map((row) => [row.id, row]),
+    );
     for (const row of rows) {
-      if (!currentIds.has(row.id)) continue;
+      const latest = current.get(row.id);
+      // A lookup cannot replace a filing result or retry committed while the network was pending.
+      if (
+        row.estado === "enviando" ||
+        latest === undefined ||
+        (Object.keys(row) as (keyof PeriodRow)[]).some((key) => latest[key] !== row[key])
+      ) {
+        (result.deferred ??= []).push(row.id);
+        continue;
+      }
       const found = authority.get(row.id) ?? reportedThroughAnulacion(row, authority);
       const reported = found?.estado ?? null;
 
-      if (PENDIENTE.has(row.estado)) {
+      if (row.estado === "pendiente") {
         if (found !== null) {
           result.lostAck.push(mismatchOf(row, found.estado));
           await correct(tx, row, found, detectedAt, { lostAck: true, result });
@@ -243,7 +253,7 @@ async function rowsForPeriod(
         where a.sale_id = r.sale_id and a.tipo_registro = 'anulacion'
         limit 1
       ) end as anulacion_id,
-      e.estado, e.csv, e.reconciled_resubmit_at,
+      e.estado, e.intentos, e.csv, e.reconciled_resubmit_at,
       r.id_emisor_factura, r.nombre_razon_emisor, r.num_serie_factura,
       r.fecha_expedicion_factura
     from envios e

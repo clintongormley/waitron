@@ -169,6 +169,9 @@ export interface ReconcileResult {
   /** `acknowledged` locally, but the regime's own report for it disagrees. */
   drift: ReconcileMismatch[];
   incidentsRaised: number;
+  /** Records still being filed or whose local snapshot changed during the lookup, omitted when
+   * none were deferred. They were not classified or corrected from the older observation. */
+  deferred?: string[];
 }
 
 /** A clock reading, and the time of the latest record the regime holds, when the reading is more
