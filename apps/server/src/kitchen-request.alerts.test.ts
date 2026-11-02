@@ -243,7 +243,7 @@ describe("A773 requested lifecycle: alerts and slips", () => {
     });
   });
 
-  it("prints no HOLD CHANGED for a requested burger in a fired group whose HOLD ticket printed", async () => {
+  it("prints the HOLD CHANGED pair where the HOLD ticket printed, for a note on a requested burger in a fired group", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
@@ -269,7 +269,16 @@ describe("A773 requested lifecycle: alerts and slips", () => {
       vi.setSystemTime(new Date(LATER));
       await editLine(tx, venue, burger!.lineId, { note: "No salt" });
       const after = await allSlips(tx, venue);
-      for (const name of Object.keys(venue.printers))
+      const head = ["*** HOLD CHANGED ***", "Grill", "Split extras", "1", "13:05", "GROUP 1"];
+      const pair = [
+        [...head, "-1.000 x BURG", ""].join("\n"),
+        [...head, "+1.000 x BURG", "  * No salt", ""].join("\n"),
+      ];
+      expect(newSince(before, after, "grill")).toEqual(pair);
+      expect(newSince(before, after, "pass")).toEqual(pair);
+      for (const name of Object.keys(venue.printers).filter(
+        (name) => name !== "grill" && name !== "pass",
+      ))
         expect(newSince(before, after, name)).toEqual([]);
     });
   });

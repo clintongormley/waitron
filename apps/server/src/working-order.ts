@@ -6775,7 +6775,7 @@ export function addedPortions(lineId: string, quantity: Decimal, requested: Deci
 }
 
 /**
- * The HOLD corrections an edit makes to held lines of groups whose HOLD ticket was queued: a
+ * The HOLD corrections an edit makes to unfired lines on HOLD paper ({@link holdPaperFor}): a
  * removed line is `cancelled`; a line whose quantity alone changes loses (`taken`) or gains
  * (`given`) the difference; any other change takes the line away as it read, at its old quantity,
  * and gives it back as it now reads, at its new one. `taken` and `cancelled` print before the line
@@ -6800,19 +6800,14 @@ async function planHeldCorrections(
     );
   const heldChanges = changes.filter(({ parent }) => held(parent));
   const heldRemoved = removed.filter(held);
-  const printed = await printedHeldGroups(tx, [
+  const holdPaper = await holdPaperFor(tx, [
     ...heldChanges.map(({ parent }) => parent.groupId!),
     ...heldRemoved.map((parent) => parent.groupId!),
   ]);
   const change = (parent: EditableParent, part: EditableLine, quantity: number): HeldChange[] => {
-    const group = printed.get(parent.groupId!);
-    if (
-      group === undefined ||
-      quantity <= 0 ||
-      part.ticket === null ||
-      part.ticket.firedAt !== null
-    )
-      return [];
+    if (quantity <= 0 || part.ticket === null) return [];
+    const group = holdPaper(parent.groupId!, part.ticket);
+    if (group === undefined) return [];
     return [
       {
         workingOrderId: orderId,

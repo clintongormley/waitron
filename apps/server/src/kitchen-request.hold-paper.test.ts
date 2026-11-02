@@ -26,6 +26,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import {
   billWith,
   inTx,
+  placeGrouped,
   provisionAdjustmentVenue,
   type AdjustmentVenue,
 } from "./testing/adjustment-venue.js";
@@ -35,7 +36,11 @@ import { fireGroup } from "./order-groups.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem } from "./line-cancel.js";
 import { cancelLine } from "./testing/cancel-line.js";
-import { moveDishesToStation } from "./testing/order-writer-fixture.js";
+import {
+  moveDishesToStation,
+  updateHeldOrder,
+  updateOrderLine,
+} from "./testing/order-writer-fixture.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
@@ -48,9 +53,9 @@ const LATER = "2026-03-14T12:05:00.000Z";
 
 type Venue = Awaited<ReturnType<typeof setupSplitExtrasVenue>>;
 
-const burger = (venue: Venue, chips: boolean) => ({
+const burger = (venue: Venue, chips: boolean, quantity = "1") => ({
   menuItemId: venue.tables.offerFor(venue.products.burger),
-  quantity: "1",
+  quantity,
   ...(chips
     ? {
         extras: [
@@ -94,25 +99,30 @@ const noticesAt = (tx: Transaction, stationId: string) =>
     .from(kitchenNotices)
     .where(eq(kitchenNotices.stationId, stationId));
 
-/** A held group of one burger whose HOLD ticket printed at Grill, fired with Grill waiting. */
-async function firedFromHold(tx: Transaction, venue: Venue, chips: boolean) {
+/** A held group of burgers whose HOLD ticket printed at Grill, fired with Grill waiting. */
+async function firedFromHold(
+  tx: Transaction,
+  venue: Venue,
+  chips: boolean,
+  lines = [burger(venue, chips)],
+  shape?: "grouped",
+) {
   await setStationPrinting(tx, { printHeldWork: true }, [venue.stations.grill]);
-  const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
-    operatorId: OPERATOR,
-    groups: [{ lines: [burger(venue, chips)], release: "hold" }],
-  });
+  const groupId =
+    shape === "grouped"
+      ? await placeGrouped(tx, venue.cfg, venue.party, lines, "hold", OPERATOR)
+      : (
+          await placeGroups(tx, venue.cfg, venue.party.partyId, {
+            operatorId: OPERATOR,
+            groups: [{ lines, release: "hold" }],
+          })
+        ).groups[0]!.id;
   const hold = await slips(tx, venue);
   expect(hold.grill!.map((slip) => slip[0])).toEqual(["*** HOLD ***"]);
   expect(hold.pass!.map((slip) => slip[0])).toEqual(["*** HOLD ***"]);
   expect(hold.fryer).toEqual([]);
   await setStationsWaitForPass(tx, true, [venue.stations.grill, venue.stations.fryer]);
-  await fireGroup(
-    tx,
-    venue.cfg,
-    venue.party.partyId,
-    placed.groups[0]!.id,
-    await partyArgs(tx, venue),
-  );
+  await fireGroup(tx, venue.cfg, venue.party.partyId, groupId, await partyArgs(tx, venue));
   const items = await tx
     .select({ stationId: ticketItems.stationId, requestedAt: ticketItems.requestedAt })
     .from(ticketItems)
@@ -567,6 +577,114 @@ describe("A773 hold paper: extras off and moves", () => {
     expect(fired[0]).toContain("1.000 x BURG");
     expect(added("pass")).toEqual(fired);
     for (const name of ["grill", "kitchen", "bar"]) expect(added(name)).toEqual([]);
+  });
+});
+
+describe("A773 hold paper: edits", () => {
+  const suite = useVenueDb({
+    migrations: migrationOptionsFor(manifestSets(), null),
+    timeoutMs: 60_000,
+  });
+  let db: Database;
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function fresh(): Promise<Venue> {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    db = suite.db;
+    useSplitExtrasDb(db);
+    return setupSplitExtrasVenue();
+  }
+
+  const revisionOf = async (tx: Transaction, venue: Venue) => {
+    const [order] = await tx
+      .select({ revision: workingOrders.revision })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, venue.party.tabId));
+    return order!.revision;
+  };
+
+  it("cutting a line of two Requested burgers to one takes one off the HOLD paper where it printed", async () => {
+    const venue = await fresh();
+    await withTransaction(db, async (tx) => {
+      const line = await firedFromHold(tx, venue, false, [burger(venue, false, "2")], "grouped");
+      expect(line.quantity).toBe(2000);
+      const before = await slips(tx, venue);
+      vi.setSystemTime(new Date(LATER));
+
+      await updateOrderLine(
+        tx,
+        venue.cfg,
+        venue.party.tabId,
+        line.lineNo,
+        { quantity: "1" },
+        await revisionOf(tx, venue),
+        OPERATOR,
+      );
+
+      const after = await slips(tx, venue);
+      const added = (name: string) => after[name]!.slice(before[name]!.length);
+      const cut = [
+        "*** HOLD CHANGED ***",
+        "Grill",
+        "Split extras",
+        "1",
+        "13:05",
+        "GROUP 1",
+        "-1.000 x BURG",
+        "",
+      ];
+      expect(added("grill")).toEqual([cut]);
+      expect(added("pass")).toEqual([cut]);
+      for (const name of ["fryer", "kitchen", "bar"]) expect(added(name)).toEqual([]);
+    });
+  });
+
+  it("removing a Requested burger's line in an edit cancels it on the HOLD paper where it printed", async () => {
+    const venue = await fresh();
+    const { kept, removedId, revision, expected } = await withTransaction(db, async (tx) => {
+      await firedFromHold(tx, venue, false, [burger(venue, false), burger(venue, false)]);
+      const lines = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, venue.party.tabId))
+        .orderBy(workingOrderLines.lineNo);
+      expect(lines).toHaveLength(2);
+      return {
+        kept: lines[0]!.id,
+        removedId: lines[1]!.id,
+        revision: await revisionOf(tx, venue),
+        expected: await slips(tx, venue),
+      };
+    });
+    vi.setSystemTime(new Date(LATER));
+
+    await updateHeldOrder({ admission: testTradingAdmission(), db }, venue.cfg, venue.party.tabId, {
+      revision,
+      operatorId: OPERATOR,
+      lines: [
+        {
+          workingOrderLineId: kept,
+          menuItemId: venue.tables.offerFor(venue.products.burger),
+          quantity: "1",
+        },
+      ],
+    });
+
+    await withTransaction(db, async (tx) => {
+      const after = await slips(tx, venue);
+      const added = (name: string) => after[name]!.slice(expected[name]!.length);
+      expect(added("grill")).toEqual([cancelledBurger]);
+      expect(added("pass")).toEqual([cancelledBurger]);
+      for (const name of ["fryer", "kitchen", "bar"]) expect(added(name)).toEqual([]);
+      expect(
+        await tx
+          .select({ id: workingOrderLines.id })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.id, removedId)),
+      ).toEqual([]);
+    });
   });
 });
 
