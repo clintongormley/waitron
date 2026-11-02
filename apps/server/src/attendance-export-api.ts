@@ -35,7 +35,6 @@ const run = createErrorBoundary(
     "management_session.expired": 401,
     "person.suspended": 403,
     "authorization.not_permitted": 403,
-    "attendance.not_permitted": 403,
   },
   "workforce.failed",
 );

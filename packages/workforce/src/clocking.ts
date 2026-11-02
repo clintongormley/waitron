@@ -315,17 +315,17 @@ export class WorkforceBackend {
       select id from roster_versions where period_start=${source.periodStart}
         and period_end=${source.periodEnd} and status='draft' limit 1`);
     if (drafts.length > 0) throw new AppError("roster.draft_exists", {});
-    const venue = await venueLocationId(tx);
+    const venueId = await venueLocationId(tx);
     const versionId = newId();
     await tx.execute(sql`insert into roster_versions (id, location_id, period_start, period_end, created_at)
-      values (${versionId}, ${venue}, ${source.periodStart}, ${source.periodEnd}, ${nowIso()})`);
+      values (${versionId}, ${venueId}, ${source.periodStart}, ${source.periodEnd}, ${nowIso()})`);
     const originalShifts = await this.shiftsForVersion(tx, source.id);
     const shiftIds = new Map<string, string>();
     for (const shift of originalShifts) {
       const copyId = newId();
       await tx.execute(sql`insert into shifts (id, person_id, location_id, starts_at, starts_offset_minutes,
         ends_at, ends_offset_minutes, roster_version_id, created_at)
-        select ${copyId}, person_id, ${venue}, starts_at, starts_offset_minutes,
+        select ${copyId}, person_id, ${venueId}, starts_at, starts_offset_minutes,
           ends_at, ends_offset_minutes, ${versionId}, created_at from shifts where id=${shift.id}`);
       shiftIds.set(shift.id, copyId);
     }

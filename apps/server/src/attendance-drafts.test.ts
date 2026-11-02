@@ -226,7 +226,7 @@ describe("accepted draft attendance capture", () => {
       [`${first.id}:${first.revision + 1}:submit`, "2026-01-05T12:00:00.000Z"],
     ]);
   });
-  it("discard records the current operator and keeps the draft's original location", async () => {
+  it("discard records the current operator", async () => {
     const first = await save();
     vi.setSystemTime(new Date("2026-01-05T14:00:00Z"));
     await run((tx) =>

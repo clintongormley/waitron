@@ -23,7 +23,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { attendanceDayWork, attendanceOperationFacts } from "@waitron/workforce";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
-import {} from "./attendance-facts.js";
 import { submitDraft } from "./order-drafts.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";

@@ -5,7 +5,6 @@ import {
   takeOverDraftForTest as takeOverDraft,
 } from "./testing/draft-command-fixture.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {} from "drizzle-orm";
 import { orderDraftEvents, orderDraftLines, orderDrafts, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
@@ -186,7 +185,7 @@ describe("natural draft-event attendance snapshots", () => {
     expect(events).toHaveLength(2);
     await assertSnapshots(events, "2026-01-05T15:00:00.000Z", other);
   });
-  it("an absorbed draft retains the mover, original source location and supplied command instant", async () => {
+  it("an absorbed draft retains the mover and supplied command instant", async () => {
     const from = await save();
     const target = await seat(v, await v.table("Target"));
     const into = await save(OPERATOR, target.partyId);

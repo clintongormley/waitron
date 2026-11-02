@@ -101,13 +101,13 @@ export const recordAttendanceFact: AttendanceRecorder = async (tx, fact) => {
   }
   const at = new Date(Math.floor(instant.getTime() / 1000) * 1000);
   const clock = await readVenueClock(tx);
-  const venue = await venueLocationId(tx);
+  const venueId = await venueLocationId(tx);
   const businessDay = businessDayAt(clock, at);
   await tx.insert(attendanceOperationFacts).values({
     source: fact.source,
     key: fact.key,
     personId: fact.personId,
-    locationId: venue,
+    locationId: venueId,
     kind: fact.kind,
     at: at.toISOString(),
     offsetMinutes: offsetMinutes(at.getTime(), clock.timeZone),

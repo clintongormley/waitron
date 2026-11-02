@@ -166,9 +166,9 @@ const rowSources: readonly RowSource[] = [
   },
 ];
 
-function scanScope(venue: string) {
+function scanScope(venueId: string) {
   return and(
-    eq(attendanceSourceState.locationId, venue),
+    eq(attendanceSourceState.locationId, venueId),
     eq(attendanceSourceState.recordKind, "scan"),
   );
 }
@@ -195,11 +195,11 @@ export async function beginAttendanceDiscovery(
   if (!scope.generation)
     throw new AppError("attendance.invalid", { reason: "empty discovery generation" });
   const clock = await readVenueClock(tx);
-  const venue = await venueLocationId(tx);
-  await tx.delete(attendanceSourceState).where(scanScope(venue));
+  const venueId = await venueLocationId(tx);
+  await tx.delete(attendanceSourceState).where(scanScope(venueId));
   for (const endpoint of await endpoints(tx)) {
     await tx.insert(attendanceSourceState).values({
-      locationId: venue,
+      locationId: venueId,
       ...endpoint,
       recordKind: "scan",
       generation: scope.generation,
@@ -232,7 +232,7 @@ async function dirtyDay(tx: Transaction, businessDay: string): Promise<void> {
 
 async function remember(
   tx: Transaction,
-  venue: string,
+  venueId: string,
   scan: Scan,
   row: SourceRow,
   now: Date,
@@ -267,7 +267,7 @@ async function remember(
     days,
   ]);
   const predicate = and(
-    eq(attendanceSourceState.locationId, venue),
+    eq(attendanceSourceState.locationId, venueId),
     eq(attendanceSourceState.source, scan.source),
     eq(attendanceSourceState.recordKind, "watch"),
     eq(attendanceSourceState.key, row.key),
@@ -289,7 +289,7 @@ async function remember(
   await tx
     .insert(attendanceSourceState)
     .values({
-      locationId: venue,
+      locationId: venueId,
       source: scan.source,
       key: row.key,
       recordKind: "watch",
@@ -393,11 +393,11 @@ export async function discoverAttendanceDays(
     scope.batchSize > 100
   )
     throw new AppError("attendance.invalid", { reason: "invalid discovery batch" });
-  const venue = await venueLocationId(tx);
-  let scans = await tx.select().from(attendanceSourceState).where(scanScope(venue));
+  const venueId = await venueLocationId(tx);
+  let scans = await tx.select().from(attendanceSourceState).where(scanScope(venueId));
   if (scans.length === 0) {
     await beginAttendanceDiscovery(tx, { generation: randomUUID() });
-    scans = await tx.select().from(attendanceSourceState).where(scanScope(venue));
+    scans = await tx.select().from(attendanceSourceState).where(scanScope(venueId));
   }
   const generation = scans[0]!.generation!;
   const clock = await readVenueClock(tx);
@@ -422,7 +422,7 @@ export async function discoverAttendanceDays(
       const [created] = await tx
         .insert(attendanceSourceState)
         .values({
-          locationId: venue,
+          locationId: venueId,
           ...endpoint,
           recordKind: "scan",
           generation,
@@ -443,7 +443,7 @@ export async function discoverAttendanceDays(
   if (scan) {
     const page = await sourcePage(tx, scan, scope.batchSize);
     for (const row of page)
-      await remember(tx, venue, scan, row, new Date(scope.now.getTime() - 30_000));
+      await remember(tx, venueId, scan, row, new Date(scope.now.getTime() - 30_000));
     const cursor = page.length === scope.batchSize ? page.at(-1)!.position : scan.endpoint!;
     const completed = cursor === scan.endpoint;
     const fingerprint =
@@ -459,7 +459,7 @@ export async function discoverAttendanceDays(
   if (scan) return { more: scans.some((s) => !s.completed) };
   const due = () =>
     and(
-      eq(attendanceSourceState.locationId, venue),
+      eq(attendanceSourceState.locationId, venueId),
       eq(attendanceSourceState.recordKind, "watch"),
       sql`${attendanceSourceState.nextDueAt} <= ${scope.now.toISOString()}`,
     );
@@ -475,7 +475,7 @@ export async function discoverAttendanceDays(
       continue;
     }
     const row = await watchedRow(tx, watch);
-    if (row) await remember(tx, venue, watch, row, scope.now);
+    if (row) await remember(tx, venueId, watch, row, scope.now);
     else {
       for (const day of watch.previousDays) await dirtyDay(tx, day);
       await tx
