@@ -59,6 +59,40 @@ describe("required languages before configuration replacement", () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   });
 
+  it("runs the destination check while the previous table rows are still present", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      await tx.execute(sql`create table zz_language_import (id text primary key)`);
+      await tx.execute(sql`insert into zz_language_import values ('retained')`);
+    });
+    try {
+      const bundle = configurationBundle();
+      bundle.modules = { "synthetic-language-import": 1 };
+      bundle.tables = { zz_language_import: [{ id: "replacement" }] };
+      let seen: unknown;
+      const module = {
+        ...catalogue,
+        name: "synthetic-language-import",
+        configurationTransfer: {
+          kind: "tables" as const,
+          tables: [{ name: "zz_language_import" }],
+          beforeImport: async (tx: Parameters<typeof importConfigurationTables>[0]) => {
+            seen = (await tx.execute(sql`select id from zz_language_import`)).rows;
+          },
+        },
+      };
+      await withTransaction(suite.db, (tx) =>
+        importConfigurationTables(tx, bundle, { locationId: "absent" }, [module], bundle.modules),
+      );
+      expect(seen).toEqual([{ id: "retained" }]);
+      const rows = (await suite.db.execute<{ id: string }>(sql`select id from zz_language_import`))
+        .rows;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.id).not.toBe("retained");
+    } finally {
+      await withTransaction(suite.db, (tx) => tx.execute(sql`drop table zz_language_import`));
+    }
+  });
+
   it("keeps the earlier staged artifact when a replacement omits Catalan", async () => {
     const root = await mkdtemp(join(tmpdir(), "a989-stage-"));
     roots.push(root);
@@ -132,6 +166,61 @@ describe("required languages before configuration replacement", () => {
       { id: 1, default_language: "en", languages: '["en","es","ca"]' },
     ]);
   });
+
+  it("checks the destination province even when the source requires fewer languages", async () => {
+    const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
+    const target = await applyVenue(
+      planVenue(
+        {
+          ...request,
+          country: "GB",
+          taxId: "123456789",
+          location: {
+            ...request.location,
+            fiscalTerritory: "GB-vat",
+            timeZone: "Europe/London",
+            province: "Barcelona",
+          },
+          admin: {
+            displayName: "Copy owner",
+            email: "copy-owner@example.test",
+            pinHash: "synthetic-pin-hash",
+            passwordHash: "synthetic-password-hash",
+          },
+        },
+        modules,
+      ),
+      { db: suite.db, modules },
+    );
+    await withTransaction(suite.db, (tx) => tx.execute(sql`update tenants set country = 'ES'`));
+    const before = (await suite.db.execute(sql`select * from content_languages`)).rows;
+    const bundle = bundleFor("ES", "Madrid", '["en","es"]');
+    validateConfigurationBundle(bundle, [catalogue], bundle.modules);
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        importConfigurationTables(tx, bundle, target, [catalogue], bundle.modules),
+      ),
+    ).rejects.toMatchObject({ code: "content.language_required", params: { language: "ca" } });
+    expect((await suite.db.execute(sql`select * from content_languages`)).rows).toEqual(before);
+    expect((await suite.db.execute(sql`select province from locations`)).rows).toEqual([
+      { province: "Barcelona" },
+    ]);
+    bundle.tables.content_languages![0]!.languages = '["en","es","ca"]';
+    await withTransaction(suite.db, (tx) =>
+      importConfigurationTables(tx, bundle, target, [catalogue], bundle.modules),
+    );
+    expect((await suite.db.execute(sql`select languages from content_languages`)).rows).toEqual([
+      { languages: '["en","es","ca"]' },
+    ]);
+  });
+});
+
+it("refuses a language singleton with another id before staging accepts it", () => {
+  const bundle = bundleFor("ES", "Barcelona", '["en","es","ca"]');
+  bundle.tables.content_languages![0]!.id = 2;
+  expect(() => validateConfigurationBundle(bundle, [catalogue], bundle.modules)).toThrowError(
+    expect.objectContaining({ code: "content.languages_invalid", params: {} }),
+  );
 });
 
 it.each([

@@ -1623,6 +1623,11 @@ export type ModuleConfigurationTransfer =
           readonly area: string | null;
         },
       ) => void;
+      /** Validate against the destination's current rows before any transferred table is replaced. */
+      readonly beforeImport?: (
+        tx: Transaction,
+        tables: Readonly<Record<string, readonly Record<string, unknown>[]>>,
+      ) => Promise<void>;
       /** Runs in the import's transaction after every module's rows are inserted, each module's in
        * module order, to set what the module derives from those rows, or to remove imported rows
        * the module does not keep, rather than letting a bundle carry them. */

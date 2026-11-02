@@ -1,6 +1,7 @@
 import { VAT_CLASSES, type VatClass } from "./vat-rates.js";
 import { AppError, type ContentLanguages } from "@waitron/shared";
 import { resolveInstalledContentLanguageRules } from "@waitron/country-packs";
+import { readTenant, readVenue, type Transaction } from "@waitron/db";
 import { checkedContentLanguages } from "./content-languages.js";
 import { colorOrNull } from "./color-inheritance.js";
 import { HOME_DEVICES, homeDisplayProblem } from "./device-home.js";
@@ -90,6 +91,7 @@ function checkContentLanguages(
   }
   if (rows.length !== 1) throw new AppError("content.languages_invalid", {});
   const row = rows[0]!;
+  if (row.id !== 1) throw new AppError("content.languages_invalid", {});
   let config: ContentLanguages;
   try {
     const languages: unknown =
@@ -220,5 +222,13 @@ export const CATALOGUE_CONFIGURATION_TRANSFER = {
     { name: "menu_details" },
   ],
   validate: validateCatalogueConfiguration,
+  async beforeImport(tx: Transaction, tables: Readonly<Record<string, Rows>>): Promise<void> {
+    const country = (await readTenant(tx))?.country;
+    if (country === undefined) throw new AppError("setup.request_invalid", { field: "venue" });
+    checkContentLanguages(tables.content_languages, {
+      country,
+      area: (await readVenue(tx)).province,
+    });
+  },
   afterImport: storeProductNameKeys,
 } as const;

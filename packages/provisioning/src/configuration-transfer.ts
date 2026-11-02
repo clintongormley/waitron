@@ -649,6 +649,10 @@ export async function importConfigurationTables(
   targetVersions: Readonly<Record<string, number>>,
 ): Promise<void> {
   validateConfigurationBundle(bundle, modules, targetVersions);
+  for (const module of modules) {
+    const contribution = module.configurationTransfer;
+    if (contribution?.kind === "tables") await contribution.beforeImport?.(tx, bundle.tables);
+  }
   const incoming = checkedRows(bundle, modules);
   const incomingStations =
     incoming.find(([declaration]) => declaration.name === "kitchen_stations")?.[1] ?? [];

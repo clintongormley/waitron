@@ -1,6 +1,14 @@
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { contentLanguageChoices } from "@waitron/shared";
-import { validateCatalogueConfiguration } from "./configuration-transfer.js";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
+import { sql } from "drizzle-orm";
+import { CATALOGUE_MIGRATIONS } from "./migrations.js";
+import {
+  CATALOGUE_CONFIGURATION_TRANSFER,
+  validateCatalogueConfiguration,
+} from "./configuration-transfer.js";
 
 const geography = { country: "ES", area: "Barcelona" };
 const setting = (languages: unknown, default_language: unknown = "en") => ({
@@ -37,6 +45,41 @@ it("refuses multiple saved-language rows before import", () => {
   expect(() =>
     validateCatalogueConfiguration({ content_languages: [row, row] }, geography),
   ).toThrowError(invalid);
+});
+
+it("refuses another singleton id with a domain error", () => {
+  const input = setting('["en","ca","es"]');
+  input.content_languages[0]!.id = 2;
+  expect(() => validateCatalogueConfiguration(input, geography)).toThrowError(invalid);
+});
+
+describe("destination language requirements", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, CATALOGUE_MIGRATIONS] });
+  it("refuses a destination with no taxpayer before importing its language setting", async () => {
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        CATALOGUE_CONFIGURATION_TRANSFER.beforeImport(tx, setting('["en","es","ca"]')),
+      ),
+    ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "venue" } });
+  });
+  it("reads the destination country and province before accepting its language setting", async () => {
+    await seedVenue(suite.db, { province: "Barcelona" });
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        CATALOGUE_CONFIGURATION_TRANSFER.beforeImport(tx, setting('["en","es"]')),
+      ),
+    ).rejects.toMatchObject({ code: "content.language_required", params: { language: "ca" } });
+    await withTransaction(suite.db, (tx) =>
+      CATALOGUE_CONFIGURATION_TRANSFER.beforeImport(tx, setting('["en","es","ca"]')),
+    );
+    await withTransaction(suite.db, (tx) => tx.execute(sql`update tenants set country = 'GB'`));
+    await withTransaction(suite.db, (tx) =>
+      CATALOGUE_CONFIGURATION_TRANSFER.beforeImport(tx, setting('["en"]')),
+    );
+    expect(
+      (await suite.db.execute(sql`select count(*) as count from content_languages`)).rows,
+    ).toEqual([{ count: 0 }]);
+  });
 });
 
 it.each([
