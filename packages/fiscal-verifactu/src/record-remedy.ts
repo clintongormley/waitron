@@ -13,6 +13,7 @@ import { envios } from "./schema/envios.js";
 import { filingCaseEvents, filingCases } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { verifyChain } from "./verify.js";
+import type { CorrectedRecordFacts } from "./record-remedy-facts.js";
 
 export const REMEDY_KINDS = [
   "record-correction",
@@ -52,8 +53,7 @@ export async function applyRecordCorrection(
     environment: Entorno;
     enabledRemedies: ReadonlySet<RemedyKind>;
     request: RecordCorrectionRequest;
-    descriptionDecision?: {
-      description: string;
+    correctionDecision?: CorrectedRecordFacts & {
       priorOutcome: "rejected" | "accepted-with-errors";
     };
     now: Date;
@@ -86,14 +86,14 @@ export async function applyRecordCorrection(
   const action = canonicalJson(
     JSON.parse(
       JSON.stringify(
-        input.descriptionDecision === undefined
+        input.correctionDecision === undefined
           ? request
           : {
               caseId: request.caseId,
               registroId: request.registroId,
               actionKey: request.actionKey,
               reason: request.reason,
-              facts: input.descriptionDecision,
+              facts: input.correctionDecision,
             },
       ),
     ) as unknown,
@@ -132,8 +132,8 @@ export async function applyRecordCorrection(
     (filingCase.cause !== "fiscal.registro_rechazado" &&
       filingCase.cause !== "fiscal.aceptado_con_errores") ||
     (delivery?.estado !== "rechazado" && delivery?.estado !== "aceptado_con_errores") ||
-    (input.descriptionDecision !== undefined &&
-      (input.descriptionDecision.priorOutcome === "rejected"
+    (input.correctionDecision !== undefined &&
+      (input.correctionDecision.priorOutcome === "rejected"
         ? delivery?.estado !== "rechazado" || filingCase.cause !== "fiscal.registro_rechazado"
         : delivery?.estado !== "aceptado_con_errores" ||
           filingCase.cause !== "fiscal.aceptado_con_errores")) ||

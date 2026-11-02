@@ -489,9 +489,22 @@ version cases and report a malformed predecessor without rewriting it.
 
 The public `POST /management-api/fiscal-records/remedy` route refuses every remedy kind.
 Client-supplied enablement and operator fields cannot grant authority. No production action is
-enabled. The HTTP adapter below covers synthetic description corrections for rejected records and
-records accepted with errors; other corrected facts, held-record release, staff cancellation/refund
-qualification and the live second-correction probe remain Task 8 work.
+enabled. The HTTP adapter covers synthetic corrections to stored invoice facts for rejected records
+and records accepted with errors. Corrective-invoice and absent-original-cancellation workflows,
+held-record release, staff cancellation/refund qualification and the live second-correction probe
+remain Task 8 work.
+
+**2 November 2026, Task 8 corrected-fact requests.** The synthetic HTTP adapter accepts partial
+corrections to the stored description, issuer name, invoice type, recipients, tax breakdown, total
+and tax amounts, corrective/substitution references and correction amounts. Omitted fields keep
+the selected version's facts; explicit null removes optional recipients or correction fields from
+the new version. The invoice's issuer tax number, number and issue date remain unchanged. Reference
+calendar dates survive a change in generation offset. Amounts must be exact decimal strings;
+nested unknown fields and malformed choices are refused before the record builder, which still
+validates the complete record. The saved decision includes all supplied facts and the prior outcome,
+so changing a fact on retry refuses while object key order does not matter. Tests compare original
+records, deliveries and sale rows. These are synthetic record corrections, not new accounting or
+refund operations; all production remedies remain disabled.
 
 **2 November 2026, Task 8 explicit accepted-with-errors description decisions.** With a synthetic
 server policy, `priorOutcome: "accepted-with-errors"` requires both an accepted-with-errors delivery

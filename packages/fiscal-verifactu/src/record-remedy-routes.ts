@@ -10,7 +10,7 @@ import {
 } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { admitRecordRemedy, REMEDY_KINDS, type RemedyKind } from "./record-remedy.js";
-import { applyDescriptionCorrection } from "./record-remedy-http.js";
+import { applyCorrectedRecordFacts } from "./record-remedy-http.js";
 
 // Legal enablement belongs to server policy; a client request cannot grant it.
 const ENABLED_REMEDIES: ReadonlySet<RemedyKind> = new Set();
@@ -60,7 +60,7 @@ export function mountRecordRemedies(
         await admitRecordRemedy(tx, token, kind, enabledRemedies);
         if (kind !== "record-correction" || ctx.recordGeneration === undefined)
           throw new AppError("fiscal.remedy_disabled", { kind });
-        return applyDescriptionCorrection(tx, ctx.recordGeneration, token, enabledRemedies, body);
+        return applyCorrectedRecordFacts(tx, ctx.recordGeneration, token, enabledRemedies, body);
       });
       return c.json(result, 200);
     }),

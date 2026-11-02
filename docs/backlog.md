@@ -398,12 +398,13 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   optional library fields it cannot retain, including a caller-supplied submission reference.
   The synthetic administrator operation appends one correction and a case-resolution event in one
   transaction, and retries return that saved result. The public remedy route refuses all disputed
-  actions, including client-claimed enablement. A synthetic HTTP adapter now corrects a rejected
-  record's description using server-owned generation facts and live primary/trading admission;
-  retries retain the saved result after the clock advances. Explicit accepted-with-errors description
-  decisions now require the matching stored case and delivery and retain S/N markers. Other corrected
-  facts, held-record release, accounting/refund qualification and the live second-correction
-  probe remain unfinished.
+  actions, including client-claimed enablement. The synthetic HTTP adapter accepts partial corrections
+  to stored descriptions, issuer names, invoice types, recipients, tax breakdowns, amounts and
+  invoice references. Invoice identity and generation facts remain server-owned; retries compare
+  the complete decision and return the saved result after clock or delivery changes. Explicit
+  accepted-with-errors decisions require the matching stored case and delivery and retain S/N
+  markers. Corrective-invoice and absent-original-cancellation workflows, held-record release,
+  accounting/refund qualification and the live second-correction probe remain unfinished.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

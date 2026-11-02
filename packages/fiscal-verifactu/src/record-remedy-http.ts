@@ -6,6 +6,7 @@ import type { ModuleRouteContext } from "@waitron/module";
 import { AppError, readSaleOrigin, saleId } from "@waitron/shared";
 import type { AltaInput } from "@waitron/verifactu";
 import { applyRecordCorrection, type RemedyKind } from "./record-remedy.js";
+import { readCorrectedRecordFacts } from "./record-remedy-facts.js";
 import { currentSif } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import { producerFields, SOFTWARE_IDENTITY, softwareVersion } from "./software-identity.js";
@@ -25,7 +26,7 @@ function only(value: Record<string, unknown>, keys: readonly string[]) {
   if (Object.keys(value).some((key) => !keys.includes(key))) invalid();
 }
 
-export async function applyDescriptionCorrection(
+export async function applyCorrectedRecordFacts(
   tx: Transaction,
   generation: NonNullable<ModuleRouteContext["recordGeneration"]>,
   token: string,
@@ -36,9 +37,7 @@ export async function applyDescriptionCorrection(
   only(body, ["kind", "caseId", "registroId", "actionKey", "reason", "facts", "priorOutcome"]);
   const priorOutcome = body.priorOutcome === undefined ? "rejected" : body.priorOutcome;
   if (priorOutcome !== "rejected" && priorOutcome !== "accepted-with-errors") invalid();
-  const facts = object(body.facts);
-  only(facts, ["description"]);
-  const description = text(facts.description);
+  const facts = readCorrectedRecordFacts(body.facts);
   const caseId = text(body.caseId);
   const registroId = text(body.registroId);
   const actionKey = text(body.actionKey);
@@ -72,27 +71,58 @@ export async function applyDescriptionCorrection(
     NumSerieFactura: string;
     FechaExpedicionFactura: string;
   }) => ({ ...value, FechaExpedicionFactura: day(value.FechaExpedicionFactura) });
+  const references = (values: NonNullable<typeof facts.correctedInvoices>) =>
+    values.map((value) => {
+      const [y, m, d] = value.FechaExpedicionFactura.split("-");
+      return { ...value, FechaExpedicionFactura: day(`${d}-${m}-${y}`) };
+    });
+  const correctionType =
+    facts.correctionType === undefined
+      ? original.TipoRectificativa
+      : (facts.correctionType ?? undefined);
+  const correctedInvoices =
+    facts.correctedInvoices === undefined
+      ? original.FacturasRectificadas?.IDFacturaRectificada.map(identity)
+      : facts.correctedInvoices === null
+        ? undefined
+        : references(facts.correctedInvoices);
+  const substitutedInvoices =
+    facts.substitutedInvoices === undefined
+      ? original.FacturasSustituidas?.IDFacturaSustituida.map(identity)
+      : facts.substitutedInvoices === null
+        ? undefined
+        : references(facts.substitutedInvoices);
+  const correctionAmounts =
+    facts.correctionAmounts === undefined
+      ? original.ImporteRectificacion
+      : (facts.correctionAmounts ?? undefined);
+  const recipients =
+    facts.recipients === undefined
+      ? original.Destinatarios
+      : facts.recipients === null
+        ? undefined
+        : { IDDestinatario: facts.recipients };
   const input: Omit<AltaInput, "Encadenamiento"> = {
     ...identity(original.IDFactura),
-    NombreRazonEmisor: original.NombreRazonEmisor,
-    TipoFactura: original.TipoFactura,
-    ...(original.TipoRectificativa !== undefined && {
-      TipoRectificativa: original.TipoRectificativa,
+    NombreRazonEmisor: facts.issuerName ?? original.NombreRazonEmisor,
+    TipoFactura: facts.invoiceType ?? original.TipoFactura,
+    ...(correctionType !== undefined && {
+      TipoRectificativa: correctionType,
     }),
-    ...(original.FacturasRectificadas !== undefined && {
-      FacturasRectificadas: original.FacturasRectificadas.IDFacturaRectificada.map(identity),
+    ...(correctedInvoices !== undefined && {
+      FacturasRectificadas: correctedInvoices,
     }),
-    ...(original.FacturasSustituidas !== undefined && {
-      FacturasSustituidas: original.FacturasSustituidas.IDFacturaSustituida.map(identity),
+    ...(substitutedInvoices !== undefined && {
+      FacturasSustituidas: substitutedInvoices,
     }),
-    ...(original.ImporteRectificacion !== undefined && {
-      ImporteRectificacion: original.ImporteRectificacion,
+    ...(correctionAmounts !== undefined && {
+      ImporteRectificacion: correctionAmounts,
     }),
-    ...(original.Destinatarios !== undefined && { Destinatarios: original.Destinatarios }),
-    DescripcionOperacion: description,
-    Desglose: original.Desglose,
-    CuotaTotal: original.CuotaTotal,
-    ImporteTotal: original.ImporteTotal,
+    ...(recipients !== undefined && { Destinatarios: recipients }),
+    DescripcionOperacion: facts.description ?? original.DescripcionOperacion,
+    Desglose: facts.breakdown ?? original.Desglose,
+    CuotaTotal: facts.taxTotal ?? original.CuotaTotal,
+    ImporteTotal: facts.total ?? original.ImporteTotal,
     Subsanacion: "S",
     RechazoPrevio: priorOutcome === "rejected" ? "X" : "N",
     SistemaInformatico: {
@@ -114,7 +144,7 @@ export async function applyDescriptionCorrection(
     environment: generation.environment,
     enabledRemedies,
     now: reading.instant,
-    descriptionDecision: { description, priorOutcome },
+    correctionDecision: { ...facts, priorOutcome },
     request: {
       caseId,
       registroId,
