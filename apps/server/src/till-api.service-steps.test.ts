@@ -12,7 +12,7 @@ import { locationId, nodeId } from "@waitron/shared";
 import { serviceStepCompletions } from "@waitron/venue-service";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
 import type { TradingContext } from "./trading-context.js";
-import { SESSION_COOKIE } from "./till-session.js";
+import { sessionCookieForTest } from "./testing/session-device.js";
 import { createZone } from "./testing/service-zone.js";
 import { createTable } from "./testing/live-table.js";
 import { departmentOf, setSteps } from "./testing/service-steps.js";
@@ -21,6 +21,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 let cfg: TradingContext;
 let personId: string;
 let token: string;
+let requestCookie: string;
 let partyId: string;
 let stepId: string;
 /** When the till showed the step as due: a seated step with no minutes is due at the seating. */
@@ -50,6 +51,7 @@ beforeEach(async () => {
   await suite.db
     .insert(sessions)
     .values({ deviceId, personId, tokenHash: hashSessionToken(token) });
+  requestCookie = await sessionCookieForTest(suite.db, token);
   const zone = await createZone(suite.db, cfg, { name: "Tables" });
   const table = await createTable(suite.db, cfg, { label: "Table 1", zoneId: zone.id });
   [stepId] = (await setSteps(
@@ -102,7 +104,7 @@ function done(
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(cookie ? { cookie: `${SESSION_COOKIE}=${token}` } : {}),
+      ...(cookie ? { cookie: requestCookie } : {}),
     },
     body: JSON.stringify(body),
   });

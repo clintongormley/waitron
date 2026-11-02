@@ -181,7 +181,7 @@ export interface DeviceProof {
  * not verify — so `requireDevice`'s `device.unauthorized` confirms neither a device's existence
  * nor its revocation state. The id selects the row because scrypt is per-row-salted; the token
  * validates it. Only a cookie read that verifies writes (the `last_seen_at` sighting), and only
- * when a sighting is due.
+ * when a sighting is due and the read is not passive.
  *
  * The authenticating reads and the token check run outside `withTransaction`, which is the venue's
  * write lock, so scrypt never holds up a sale; a read issued while another caller's write is open
@@ -192,6 +192,7 @@ export interface DeviceProof {
 async function readDeviceProof(
   deps: { db: Database; devMode?: boolean },
   c: Context,
+  options: { passive?: boolean } = {},
 ): Promise<DeviceProof | null> {
   // The dev header WINS over the cookie and does not fall back to it: an override naming a bad
   // device is a clean miss, not a silent switch to the cookie's identity.
@@ -243,7 +244,7 @@ async function readDeviceProof(
 
   // The check on the row read spares a request the write lock.
   const seenAt = nowIso();
-  if (sightingDue(row.lastSeenAt, seenAt)) {
+  if (options.passive !== true && sightingDue(row.lastSeenAt, seenAt)) {
     const checkedHash = row.tokenHash;
     // A revocation, a new token or a new binding committed while this request waited for the
     // lock wins.
@@ -323,8 +324,9 @@ export async function requireDevice(
 export async function requireDeviceProof(
   deps: { db: Database; devMode?: boolean },
   c: Context,
+  options: { passive?: boolean } = {},
 ): Promise<DeviceProof> {
-  const proof = await readDeviceProof(deps, c);
+  const proof = await readDeviceProof(deps, c, options);
   if (proof === null) throw new AppError("device.unauthorized", {});
   return proof;
 }

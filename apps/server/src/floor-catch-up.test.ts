@@ -31,7 +31,6 @@ import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { holdersOf, memberTables } from "./parties.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import {
   counterOrder,
   inTx,
@@ -51,7 +50,7 @@ import {
   withFloorRevision,
   zoneRevisionOf,
 } from "./testing/floor-today-venue.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 import { handOverOrder } from "./working-order.js";
 import "./errors.js";
 
@@ -100,7 +99,7 @@ beforeAll(async () => {
       .returning({ id: persons.id });
     return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
   });
-  cookie = `${SESSION_COOKIE}=${session.token}`;
+  cookie = await sessionCookieForTest(v.db, session.token);
 });
 
 /** A request; a change to today's floor carries the room's revision unless the body names one. */

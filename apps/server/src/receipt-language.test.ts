@@ -82,8 +82,12 @@ import {
 import { REASONS } from "./testing/adjustment-venue.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { completeBillPayment } from "./bill-payments.js";
-import { BASIC_ACTIONS, seedSessionDevice, deviceRequestCfg } from "./testing/session-device.js";
-import { SESSION_COOKIE } from "./till-session.js";
+import {
+  BASIC_ACTIONS,
+  seedSessionDevice,
+  deviceRequestCfg,
+  sessionCookieForTest,
+} from "./testing/session-device.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -256,7 +260,7 @@ async function venueWith(
   return {
     app,
     cfg,
-    session: `${SESSION_COOKIE}=${session.token}`,
+    session: await sessionCookieForTest(db, session.token),
     till: `${tillSession}; ${deviceCookie}`,
     menuItemId,
     backend,

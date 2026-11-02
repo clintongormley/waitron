@@ -94,7 +94,10 @@ async function login(profileId: string) {
     body: JSON.stringify({ personId, pin: "5555" }),
   });
   expect(response.status).toBe(200);
-  return { cookie: response.headers.get("set-cookie")!.split(";")[0]!, deviceId: d.deviceId };
+  return {
+    cookie: `${response.headers.get("set-cookie")!.split(";")[0]!}; ${DEVICE_COOKIE}=${d.deviceId}.${d.token}`,
+    deviceId: d.deviceId,
+  };
 }
 
 async function ready() {

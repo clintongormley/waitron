@@ -24,7 +24,6 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import type { TradingContext } from "./trading-context.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -32,7 +31,7 @@ import "./errors.js";
 import { cancelBody } from "./testing/cancel-line.js";
 import { createTable } from "./testing/live-table.js";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 
 // The HTTP wiring of the table/tab routes: session guard, isUuid screens and STATUS mapping. The verbs
 // are pinned in `tabs.filing.test.ts`, `move-merge.filing.test.ts` and packages/db's schema suites.
@@ -193,8 +192,11 @@ let supervisorCookie: string;
 beforeAll(async () => {
   app = new Hono();
   mountTillApi(app, deps(suite.db), collect([]));
-  cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
-  supervisorCookie = `${SESSION_COOKIE}=${await openSession(suite.db, { personId: sara.id, pin: "6666" })}`;
+  cookie = await sessionCookieForTest(suite.db, await openSession(suite.db));
+  supervisorCookie = await sessionCookieForTest(
+    suite.db,
+    await openSession(suite.db, { personId: sara.id, pin: "6666" }),
+  );
 });
 
 async function request(path: string, init: RequestInit = {}): Promise<Response> {
@@ -791,7 +793,7 @@ it.each(["PUT", "DELETE"])(
   async (method) => {
     await suite.db.update(persons).set({ role: "manager" }).where(eq(persons.id, ana.id));
     try {
-      const managerCookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+      const managerCookie = await sessionCookieForTest(suite.db, await openSession(suite.db));
       const { id } = await withTransaction(suite.db, (tx) =>
         createTable(tx, cfg, { label: `Retired ${randomUUID()}`, zoneId: seededZoneId }),
       );

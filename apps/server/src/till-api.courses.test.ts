@@ -36,10 +36,9 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { DEVICE_COOKIE } from "./device-session.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 
 // The HTTP shape of the coursing, fire, station-queue and expo routes: the session guard, the id
 // screens and the STATUS mapping. The verbs' logic is pinned in `working-order.test.ts`.
@@ -205,7 +204,7 @@ async function enrolTillDeviceCookie(db: Database): Promise<string> {
 beforeAll(async () => {
   app = new Hono();
   mountTillApi(app, deps(suite.db), collect([]));
-  cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
+  cookie = await sessionCookieForTest(suite.db, await openSession(suite.db));
   tillDeviceCookie = await enrolTillDeviceCookie(suite.db);
 });
 

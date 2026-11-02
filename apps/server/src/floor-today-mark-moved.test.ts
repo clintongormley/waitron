@@ -20,7 +20,6 @@ import { defaultLayout } from "./testing/floor-sets.js";
 import { resetZone } from "./floor-today-store.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import {
   inTx,
   revisionOf,
@@ -35,7 +34,7 @@ import {
   withFloorRevision,
   zoneRevisionOf,
 } from "./testing/floor-today-venue.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 import { observedClosingBody } from "./testing/party-close-fixture.js";
 import "./errors.js";
 
@@ -80,7 +79,7 @@ beforeAll(async () => {
       .returning({ id: persons.id });
     return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
   });
-  cookie = `${SESSION_COOKIE}=${session.token}`;
+  cookie = await sessionCookieForTest(v.db, session.token);
   await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
 });
 

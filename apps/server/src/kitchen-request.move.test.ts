@@ -215,7 +215,7 @@ async function transferredCounterOrder(
     });
     expect(response.status).toBe(200);
     return {
-      cookie: response.headers.get("set-cookie")!.split(";")[0]!,
+      cookie: `${response.headers.get("set-cookie")!.split(";")[0]!}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`,
       deviceId: device.deviceId,
     };
   }

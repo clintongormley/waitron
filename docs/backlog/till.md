@@ -1021,10 +1021,22 @@ real payments, refunds and queued printer/drawer jobs with matching-device contr
 profile-denied sale and drawer cases retain their refusal codes. A Disable injected when the bill
 payment body is read still reaches the existing `session.required` check without writing a payment.
 
-Finish invoice-delivery actions, including the original receipt retry, and audit the current
-routes whose profile check happens inside the write transaction. Give each a refusing request and
-a valid device control. The dashboard reprint and invoice-delivery suites still pass without a
-device cookie. Complete the route remap, branch review and current-head CI before publication.
+**Further implementation checkpoint, 2026-11-02:** original receipt retries, print and email
+invoice requests, switching to a receipt and retrying email require the matching device cookie.
+The new loopback HTTP cases in `till-api.deliveries.test.ts` first returned `200` without it,
+then returned `401 device.unauthorized`, preserving delivery and print rows; matching-device
+requests still queued their intended work. The mounted route audit includes paths created in loops.
+`till-device-proof.test.ts` names each shared action-session route explicitly and checks its missing
+proof refusal and admission with matching proof. Those admission checks reach the next route check;
+the existing route suites check successful business operations.
+
+Device proof checked after session resolution is passive: session resolution owns whether the
+request records activity. The existing passive-read cases in `line-cancel-api.test.ts`,
+`till-attendance-api.test.ts`, `till-hours-api.test.ts` and `department-transfer-api.test.ts`
+failed when this extra proof check refreshed the sighting and passed with passive proof. Seeded
+request fixtures keep their devices, profiles and sessions while adding verifiable device cookies.
+Complete the remaining credential fixtures, whole-branch review and current-head CI before
+publication. Keep the dashboard reprint and invoice-delivery routes available without a device cookie.
 
 Still separate: a maintained route-to-profile-action table with a guard that walks the routes,
 and printer identity (the design's sub-project C). Handheld actions follow the profile, not the

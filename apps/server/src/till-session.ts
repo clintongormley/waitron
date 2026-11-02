@@ -11,7 +11,7 @@ import {
   deviceBindingColumns,
   assertProfileAction,
   deviceProfileJoin,
-  requireDevice,
+  requireDeviceProof,
   recordSighting,
   sightingDue,
   toDeviceBinding,
@@ -150,8 +150,9 @@ export async function assertRequestDevice(
   c: Context,
   session: { deviceId: string },
 ): Promise<void> {
-  const proven = await requireDevice(deps, c);
-  if (proven.deviceId !== session.deviceId) throw new AppError("device.unauthorized", {});
+  // Session resolution owns the activity stamp, including whether this request is passive.
+  const proven = await requireDeviceProof(deps, c, { passive: true });
+  if (proven.device.deviceId !== session.deviceId) throw new AppError("device.unauthorized", {});
 }
 
 /** Inside a write's own transaction: `sessionId` is still `personId`'s open session on `deviceId`

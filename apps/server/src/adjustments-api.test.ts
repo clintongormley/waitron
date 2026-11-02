@@ -660,7 +660,8 @@ describe("approval through the route (plan D6)", () => {
         const session = await inTx(venue, (tx) =>
           loginWithPin(tx, { deviceId, personId: venue.staffId, pin: PINS.staff }),
         );
-        return `${SESSION_COOKIE}=${session.token}`;
+        const device = deviceId === till.deviceId ? till : handheld;
+        return `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
       };
       const adjustAs = async (cookie: string, pin: string) =>
         send(app, cookie, "POST", `/api/working-orders/${billId}/adjustments`, {

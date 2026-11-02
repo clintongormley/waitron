@@ -31,7 +31,7 @@ import { VENUE_SERVICE } from "../modules.js";
 import { submitGroups } from "../order-groups.js";
 import { attachPrinterToStation } from "../station-printers.js";
 import { mountTillApi } from "../till-api.js";
-import { SESSION_COOKIE } from "../till-session.js";
+import { sessionCookieForTest } from "./session-device.js";
 import { saveDraftForTest } from "./draft-command-fixture.js";
 import { OPERATOR, counterOrder, inTx, revisionOf, seat, setupPartyVenue } from "./party-venue.js";
 
@@ -112,7 +112,7 @@ export async function kitchenFixture(db: Database) {
     tickets,
     app,
     token,
-    cookie: `${SESSION_COOKIE}=${token}`,
+    cookie: await sessionCookieForTest(db, token),
   };
 }
 export type KitchenFixture = Awaited<ReturnType<typeof kitchenFixture>>;

@@ -36,7 +36,7 @@ import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/s
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import { SESSION_COOKIE } from "./till-session.js";
+import { sessionCookieForTest } from "./testing/session-device.js";
 import type { TradingContext } from "./trading-context.js";
 import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -116,7 +116,7 @@ async function cookie(): Promise<string> {
   const session = await withTransaction(suite.db, (tx) =>
     loginWithPin(tx, { deviceId, personId: ana.id, pin: "5555" }),
   );
-  return `${SESSION_COOKIE}=${session.token}`;
+  return sessionCookieForTest(suite.db, session.token);
 }
 
 async function table(): Promise<string> {
@@ -201,7 +201,7 @@ describe("POST /api/tables/:id/seat", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        cookie: `${SESSION_COOKIE}=${session.token}`,
+        cookie: await sessionCookieForTest(suite.db, session.token),
       },
       body: JSON.stringify({ guestCount: 2 }),
     });

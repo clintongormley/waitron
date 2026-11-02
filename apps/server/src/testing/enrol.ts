@@ -1,10 +1,24 @@
 import { floorZones, kitchenStations, withTransaction, type Database } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { devices } from "@waitron/db";
+import { hashSecret } from "@waitron/identity";
+import { DEVICE_COOKIE } from "../device-session.js";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { createJoinRequest, acceptDeviceJoinRequest } from "../join-requests.js";
 import type { TradingContext } from "../trading-context.js";
 import { VENUE_SERVICE } from "../modules.js";
+
+/** Gives an existing fixture device a real token and returns its request cookie. */
+export async function deviceCookieForTest(db: Database, deviceId: string): Promise<string> {
+  const token = randomUUID();
+  await db
+    .update(devices)
+    .set({ tokenHash: hashSecret(token) })
+    .where(eq(devices.id, deviceId));
+  return `${DEVICE_COOKIE}=${deviceId}.${token}`;
+}
 
 /**
  * Enrol a device — knock, then accept — in one call. Deliberately NOT a production verb: it bypasses

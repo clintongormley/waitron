@@ -50,6 +50,7 @@ beforeAll(async () => {
       cfg: venue.cfg,
       secureCookies: false,
       venueLocale: venue.cfg.locale,
+      workforceEnabled: true,
       cardProvider: new SimulatorPaymentProvider(suite.db),
     },
     () => {},
@@ -69,7 +70,7 @@ beforeAll(async () => {
   deviceCookie = `${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
   otherDeviceCookie = `${DEVICE_COOKIE}=${other.deviceId}.${other.token}`;
   await withTransaction(suite.db, async (tx) => {
-    const printer = await createPrinter(tx, venue.cfg, {
+    const printer = await createPrinter(tx, {
       name: "Device proof printer",
       transport: "network_tcp",
       host: "127.0.0.1",
@@ -416,4 +417,146 @@ describe("till document and drawer device proof over HTTP", () => {
       if (kind !== "receipt") expect(after.prints).toHaveLength(before.prints.length + 1);
     }
   });
+});
+
+const actionRoutes = [
+  ["GET", "/api/clock/state", 403],
+  ["POST", "/api/clock/in", 403],
+  ["POST", "/api/clock/out", 403],
+  ["POST", "/api/clock/break-start", 403],
+  ["POST", "/api/clock/break-end", 403],
+  ["GET", "/api/attendance/hours", 403],
+  ["GET", "/api/attendance/inbox", 403],
+  ["GET", "/api/attendance/day", 403],
+  ["GET", "/api/attendance/commands/:commandId", 403],
+  ["GET", "/api/attendance/items/:itemId/approvers", 403],
+  ["POST", "/api/attendance/commands", 403],
+  ["POST", "/api/parties/:id/drafts/:did/discard", 401],
+  ["POST", "/api/working-orders/:id/adjustments", 401],
+  ["GET", "/api/parties/:id/lines/:lineId/cancellation", 401],
+  ["POST", "/api/parties/:id/lines/:lineId/cancel-item", 401],
+  ["POST", "/api/parties/:id/unpaid-departure", 401],
+  ["GET", "/api/working-orders/:id/kitchen-note", 401],
+  ["PUT", "/api/working-orders/:id/kitchen-note", 401],
+  ["GET", "/api/parties/:id/kitchen-note", 401],
+  ["PUT", "/api/parties/:id/kitchen-note", 401],
+  ["GET", "/api/parties/:id/allergy", 401],
+  ["PUT", "/api/parties/:id/allergy", 401],
+  ["POST", "/api/parties/:id/allergy/send-preview", 401],
+  ["GET", "/api/department-transfers/destinations", 401],
+  ["GET", "/api/department-transfers/incoming", 401],
+  ["GET", "/api/working-orders/:id/department-transfers", 401],
+  ["GET", "/api/department-transfers/sent", 401],
+  ["GET", "/api/department-transfers/:id", 401],
+  ["POST", "/api/working-orders/:id/department-transfers", 401],
+  ["POST", "/api/department-transfers/:id/withdraw", 401],
+  ["POST", "/api/department-transfers/:id/accept", 401],
+  ["POST", "/api/department-transfers/:id/decline", 401],
+  ["POST", "/api/tables/:id/today/move", 401],
+  ["POST", "/api/tables/:id/today/rotate", 401],
+  ["POST", "/api/tables/:id/today/take-off", 401],
+  ["POST", "/api/tables/:id/today/put-back", 401],
+  ["POST", "/api/tables/:id/today/place", 401],
+  ["POST", "/api/tables/:id/today/seats", 401],
+  ["POST", "/api/tables/:id/today/back", 401],
+  ["POST", "/api/tables/:id/today/mark-moved", 401],
+  ["POST", "/api/tables/:id/today/leave-here", 401],
+  ["POST", "/api/tables/:id/today/name", 401],
+  ["POST", "/api/tables/:id/today/merge", 401],
+  ["POST", "/api/tables/:id/today/split-off", 401],
+  ["POST", "/api/tables/:id/today/reset", 401],
+  ["POST", "/api/zones/:id/today/reset", 401],
+  ["POST", "/api/zones/:id/today/update-layout", 401],
+  ["POST", "/api/working-orders", 401],
+  ["PUT", "/api/working-orders/:id", 401],
+  ["PUT", "/api/working-orders/:id/label", 401],
+  ["PUT", "/api/working-orders/:id/invoice-choice", 401],
+  ["PUT", "/api/working-orders/:id/receipt-language", 401],
+  ["DELETE", "/api/working-orders/:id", 401],
+  ["POST", "/api/working-orders/:id/place", 401],
+  ["POST", "/api/working-orders/:id/prep", 401],
+  ["POST", "/api/kitchen-notices/:id/acknowledge", 401],
+  ["POST", "/api/ticket-items/:id/advance", 401],
+  ["POST", "/api/orders/:id/stations/:sid/advance", 401],
+  ["POST", "/api/orders/:id/courses/:courseId/ready", 401],
+  ["POST", "/api/orders/:id/collect", 401],
+  ["POST", "/api/orders/:id/reprint", 401],
+  ["POST", "/api/working-orders/:id/cancel", 401],
+  ["POST", "/api/tables/:id/seat", 401],
+  ["POST", "/api/parties/:id/finish", 401],
+  ["POST", "/api/parties/:id/bill-request", 401],
+  ["POST", "/api/parties/:id/service-steps/:stepId/done", 401],
+  ["PUT", "/api/parties/:id/name", 401],
+  ["PUT", "/api/parties/:id/guests", 401],
+  ["POST", "/api/parties/:id/move", 401],
+  ["POST", "/api/parties/:id/join", 401],
+  ["POST", "/api/parties/:id/split-table", 401],
+  ["POST", "/api/parties/:id/bills", 401],
+  ["POST", "/api/parties/:id/groups", 401],
+  ["POST", "/api/parties/:id/groups/:gid/fire", 401],
+  ["POST", "/api/parties/:id/served", 401],
+  ["POST", "/api/parties/:id/unserved", 401],
+  ["POST", "/api/parties/:id/groups/:gid/served", 401],
+  ["POST", "/api/parties/:id/groups/:gid/snooze", 401],
+  ["POST", "/api/parties/:id/groups/:gid/unsnooze", 401],
+  ["PUT", "/api/parties/:id/groups/order", 401],
+  ["POST", "/api/parties/:id/groups/fire-line", 401],
+  ["POST", "/api/parties/:id/groups/split-line", 401],
+  ["POST", "/api/parties/:id/groups/move", 401],
+  ["POST", "/api/parties/:id/lines/:lineId/recall", 401],
+  ["PUT", "/api/parties/:id/drafts", 401],
+  ["POST", "/api/parties/:id/drafts/:did/split", 401],
+  ["POST", "/api/parties/:id/drafts/:did/take-over", 401],
+  ["POST", "/api/parties/:id/drafts/:did/submit", 401],
+  ["PUT", "/api/working-orders/:id/make-at", 401],
+  ["POST", "/api/working-orders/:id/lines/move-station", 401],
+  ["PUT", "/api/working-orders/:id/lines/:lineNo", 401],
+  ["PATCH", "/api/working-orders/:id/lines/:lineNo/course", 401],
+  ["POST", "/api/working-orders/:id/lines/send", 401],
+  ["POST", "/api/working-orders/:id/lines/recall", 401],
+  ["POST", "/api/bills/:id/split", 401],
+  ["POST", "/api/bills/:id/move-dishes", 401],
+  ["PUT", "/api/bills/:id/name", 401],
+  ["POST", "/api/bills/:id/merge", 401],
+  ["POST", "/api/bills/:id/transfer", 401],
+  ["POST", "/api/bills/:id/move/allergy-preview", 401],
+  ["POST", "/api/bills/:id/move", 401],
+] as const;
+
+describe("action route request device proof over HTTP", () => {
+  it.each(actionRoutes)(
+    "refuses %s %s without request device proof",
+    async (method, template, status) => {
+      const path = template.replace(/:[A-Za-z]+/g, randomUUID());
+      const answer = await fetch(`${origin}${path}`, {
+        method,
+        headers: { "content-type": "application/json", cookie: sessionCookie },
+        ...(method === "GET" ? {} : { body: JSON.stringify({ reason: "Guest request" }) }),
+      });
+      const body = (await answer.json()) as { error?: { code: string } };
+      expect({ status: answer.status, code: body.error?.code }).toEqual({
+        status,
+        code: "device.unauthorized",
+      });
+    },
+  );
+
+  it.each(actionRoutes)(
+    "admits %s %s to its next check with matching device proof",
+    async (method, template) => {
+      const path = template.replace(/:[A-Za-z]+/g, randomUUID());
+      const answer = await fetch(`${origin}${path}`, {
+        method,
+        headers: {
+          "content-type": "application/json",
+          cookie: `${sessionCookie}; ${deviceCookie}`,
+        },
+        ...(method === "GET" ? {} : { body: JSON.stringify({ reason: "Guest request" }) }),
+      });
+      const text = await answer.text();
+      const body = text === "" ? null : (JSON.parse(text) as { error?: { code: string } } | null);
+      expect(body?.error?.code).not.toBe("device.unauthorized");
+      expect(answer.status).toBeLessThan(500);
+    },
+  );
 });

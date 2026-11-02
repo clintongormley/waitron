@@ -1,3 +1,4 @@
+import { sessionCookieForTest } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -28,7 +29,6 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import { mountTillApi } from "./till-api.js";
 
 let v: PartyVenue;
@@ -141,6 +141,7 @@ describe("A669 consideration through a server process restart", () => {
         .update(sessions)
         .set({ tokenHash: hashSessionToken(token) })
         .where(eq(sessions.id, v.operator.sessionId));
+      const requestCookie = await sessionCookieForTest(v.db, token);
       const command = {
         submissionId: randomUUID(),
         expectedPartyRevision: await revisionOf(v, party.partyId),
@@ -198,7 +199,7 @@ describe("A669 consideration through a server process restart", () => {
         const request = async <T>(path: string, body?: unknown): Promise<T> => {
           const response = await fetch(`http://127.0.0.1:${port}${path}`, {
             method: body === undefined ? "GET" : "POST",
-            headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+            headers: { "content-type": "application/json", cookie: requestCookie },
             ...(body === undefined ? {} : { body: JSON.stringify(body) }),
             signal: AbortSignal.timeout(10_000),
           });
@@ -326,6 +327,7 @@ describe("A669 submit HTTP assignments", () => {
           .update(sessions)
           .set({ tokenHash: hashSessionToken(token) })
           .where(eq(sessions.id, v.operator.sessionId));
+        const requestCookie = await sessionCookieForTest(v.db, token);
         const body = {
           submissionId: randomUUID(),
           expectedPartyRevision: await revisionOf(v, party.partyId),
@@ -373,7 +375,7 @@ describe("A669 submit HTTP assignments", () => {
             `/api/parties/${party.partyId}/${draft === null ? "groups" : `drafts/${draft.id}/submit`}`,
             {
               method: "POST",
-              headers: { "content-type": "application/json", cookie: `${SESSION_COOKIE}=${token}` },
+              headers: { "content-type": "application/json", cookie: requestCookie },
               body: JSON.stringify(body),
             },
           );

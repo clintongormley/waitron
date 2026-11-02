@@ -22,7 +22,6 @@ import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import {
   activeTablesOf,
   billRow,
@@ -38,7 +37,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { giveKeptSize, plannedZone, todayRow } from "./testing/floor-today-venue.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -81,7 +80,7 @@ beforeAll(async () => {
       .returning({ id: persons.id });
     return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
   });
-  cookie = `${SESSION_COOKIE}=${session.token}`;
+  cookie = await sessionCookieForTest(v.db, session.token);
 });
 
 const NOW = new Date("2026-10-10T12:00:00Z");

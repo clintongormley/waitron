@@ -25,7 +25,6 @@ import { finishTable, holderOf } from "./testing/party-close-fixture.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { mountTillApi } from "./till-api.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import { handOverOrder, type ExpoOrder } from "./working-order.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
@@ -53,7 +52,7 @@ import {
   withRevision,
   withZoneRevision,
 } from "./testing/floor-today-venue.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -117,7 +116,7 @@ beforeAll(async () => {
       .returning({ id: persons.id });
     return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
   });
-  cookie = `${SESSION_COOKIE}=${session.token}`;
+  cookie = await sessionCookieForTest(v.db, session.token);
 });
 
 /**

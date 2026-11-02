@@ -8,6 +8,16 @@ import { deviceOrigin } from "@waitron/shared";
 import type { DeviceOrigin } from "@waitron/shared";
 import type { TradingContext } from "../trading-context.js";
 import { SESSION_COOKIE } from "../till-session.js";
+import { deviceCookieForTest } from "./enrol.js";
+
+/** Adds device proof to a fixture's existing shift session, replacing its device token. */
+export async function sessionCookieForTest(db: Database, token: string): Promise<string> {
+  const [session] = await db
+    .select({ deviceId: sessions.deviceId })
+    .from(sessions)
+    .where(eq(sessions.tokenHash, hashSessionToken(token)));
+  return `${SESSION_COOKIE}=${token}; ${await deviceCookieForTest(db, session!.deviceId)}`;
+}
 
 /** Taking orders, a card keyed on a separate terminal, preparing and handing over: what a profile
  * did without listing anything until profiles named these actions. A fixture whose subject is

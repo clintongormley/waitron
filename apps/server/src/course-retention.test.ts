@@ -34,10 +34,9 @@ import { createTable } from "./testing/live-table.js";
 import { mountTillApi } from "./till-api.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 
 import { deleteCourse } from "./course-delete.js";
 import { republishMenus } from "./testing/publish-menu.js";
@@ -154,7 +153,7 @@ async function setup() {
     const token = await withTransaction(db, (tx) =>
       loginWithPin(tx, { deviceId, personId: person!.id, pin }),
     );
-    return `${SESSION_COOKIE}=${token.token}`;
+    return sessionCookieForTest(db, token.token);
   }
   const cookie = await session(ana, "5555");
   const samCookie = await session(sam, "6666");

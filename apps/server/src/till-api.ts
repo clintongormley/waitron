@@ -2436,6 +2436,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       await assertDeviceCapability(deps, c, "print-receipt", "receipt_retry", session.device);
+      await assertRequestDevice(deps, c, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const result = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ orderId: id }]);
@@ -2521,6 +2522,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       await assertDeviceCapability(deps, c, "print-receipt", "invoice_delivery", session.device);
+      await assertRequestDevice(deps, c, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const body = await readJsonBody<{
         medium?: unknown;
@@ -2568,6 +2570,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         "invoice_delivery_to_receipt",
         session.device,
       );
+      await assertRequestDevice(deps, c, session);
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const deliveryId = c.req.param("deliveryId");
@@ -2598,6 +2601,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         "invoice_delivery_retry",
         session.device,
       );
+      await assertRequestDevice(deps, c, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
       const deliveryId = c.req.param("deliveryId");
       const body = await readJsonBody<{ requestKey?: unknown }>(c);

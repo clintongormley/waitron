@@ -33,10 +33,9 @@ import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { FRESH, afterFailure } from "./recovery-state.js";
 import { recoveryApp } from "./recovery-surface.js";
 import { mountTillApi } from "./till-api.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import { inTx, setupPartyVenue } from "./testing/party-venue.js";
 import { plannedZone, withRevision } from "./testing/floor-today-venue.js";
-import { seedSessionDevice } from "./testing/session-device.js";
+import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 
 const MARTA_EMAIL = "marta.soler@example.test";
 const MARTA_NAME = "Marta Soler";
@@ -673,7 +672,7 @@ describe("the recovery page, the log file and stdout carry no person's details",
         .returning({ id: persons.id });
       return loginWithPin(tx, { deviceId, personId: person!.id, pin: "5555" });
     });
-    const cookie = `${SESSION_COOKIE}=${session.token}`;
+    const cookie = await sessionCookieForTest(v.db, session.token);
     const first = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
     const second = await plannedZone(v, [{ key: "a", place: { x: 0, y: 0 } }]);
     const name = async (tableId: string) =>
