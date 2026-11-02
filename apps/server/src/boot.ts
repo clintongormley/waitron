@@ -1601,8 +1601,10 @@ async function bootServer(
   // key, whose role write was lost. Before the peer reconciliation, which stays demote-only.
   await finishPromotedRole({ venue: db, node: store.node, ring, nodeId: config.node.nodeId, log });
   // Before every worker, the first start, the stream host and the backup supervisor: a box that
-  // has handed over or been superseded must not sell, file or write beside its successor.
+  // has handed over or been superseded starts nothing that sells, files or writes beside its
+  // successor.
   if ((await readHandoverRestriction(store.node, config.node.nodeId)) !== null) {
+    health.takesNoSales = true;
     return startRestricted({
       app,
       nodeId: config.node.nodeId,

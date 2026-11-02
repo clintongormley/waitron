@@ -45,6 +45,8 @@ export interface HealthState {
    * update on someone else's outage (`deploy/waitron.sh` waits for a healthy container). */
   readStream: () => StreamView;
   readTradingAdmission?: () => TradingAdmissionView;
+  /** Set on a box started restricted after a handover: it runs no duty and takes no sales. */
+  takesNoSales?: boolean;
 }
 
 export function createHealthState(startedAt: Date): HealthState {
@@ -145,7 +147,7 @@ export function healthSnapshot(
   now: Date,
 ): { ok: boolean; body: Record<string, unknown> } {
   const admission = state.readTradingAdmission?.();
-  if (admission !== undefined && admission.state !== "ready")
+  if (state.takesNoSales === true || (admission !== undefined && admission.state !== "ready"))
     return { ok: true, body: { ok: true, tradingAvailable: false } };
   const duties: Record<string, unknown> = {};
   let ok = state.lastPassAt !== null;

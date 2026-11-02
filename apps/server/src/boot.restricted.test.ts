@@ -14,7 +14,6 @@ import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
-import { freePorts } from "./testing/free-ports.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -23,7 +22,7 @@ vi.mock("@hono/node-server", async () => {
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
-// Stands in for AEAT: every fiscal pass the box starts reaches the drain, which counts it.
+// Counts the fiscal drain passes the box starts.
 const drain = vi.hoisted(() => ({ calls: 0 }));
 
 vi.mock("@waitron/module", async (importOriginal) => {
@@ -88,7 +87,6 @@ async function boot(options: { restricted: boolean }): Promise<{ port: number; v
       }),
     );
   }
-  const [port] = await freePorts(1);
   scratch = await mkdtemp(join(tmpdir(), "waitron-boot-restricted-"));
   const migrationsRoot = join(scratch, "migrations");
   for (const [index, set] of manifestSets().entries()) {
@@ -104,7 +102,6 @@ async function boot(options: { restricted: boolean }): Promise<{ port: number; v
   const env: Record<string, string> = {
     ...KEY_ENV,
     WAITRON_HTTP_LANDING_PORT: "0",
-    WAITRON_HTTP_PORT: String(port),
     WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
     WAITRON_STATE_DIR: scratch,
     WAITRON_VENUE_DIR: dirname(database),
@@ -117,11 +114,8 @@ async function boot(options: { restricted: boolean }): Promise<{ port: number; v
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
   };
   server = await startServer(env, env);
-  // A restricted box runs no duty, so its `/health` answers 503, as the pending-adoption start does.
   await vi.waitFor(async () => {
-    expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(
-      options.restricted ? 503 : 200,
-    );
+    expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
   });
   return { port: httpPort(), venue };
 }
@@ -136,6 +130,13 @@ describe("a box holding a handover restriction starts restricted", () => {
       term: 0,
       acceptingSales: false,
     });
+  }, 60_000);
+
+  it("answers /health healthy, saying it takes no sales", async () => {
+    const { port } = await boot({ restricted: true });
+    const response = await fetch(`http://127.0.0.1:${port}/health`);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ok: true, tradingAvailable: false });
   }, 60_000);
 
   it("refuses a till sign-in", async () => {
