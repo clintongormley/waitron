@@ -114,6 +114,20 @@ export function passCardKey(row: PassRow): string {
 
 const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
+const phaseOf = (row: PassRow): KitchenPhase =>
+  kitchenPhase({ requestedAt: row.requestedAt, firedAt: row.firedAt, state: row.item.state });
+
+/** A live Requested dish this pass sees and that is pass work: what puts a card in To fire. */
+function isCandidate(row: PassRow, scope: PassScope): boolean {
+  return (
+    !row.recalled &&
+    row.remaining > 0 &&
+    row.passControlled &&
+    passSees(scope, row) &&
+    phaseOf(row) === "requested"
+  );
+}
+
 /**
  * This pass's candidates of one card, the visible Requested items its Fire releases, and the
  * digest of their facts (D47). Nothing while a dish candidate sits at a closed station that
@@ -125,17 +139,7 @@ export function passCardRelease(
   scope: PassScope,
 ): { ticketItemIds: string[]; context: string | null } {
   const candidates = cardRows
-    .filter(
-      (row) =>
-        !row.recalled &&
-        row.remaining > 0 &&
-        passSees(scope, row) &&
-        kitchenPhase({
-          requestedAt: row.requestedAt,
-          firedAt: row.firedAt,
-          state: row.item.state,
-        }) === "requested",
-    )
+    .filter((row) => isCandidate(row, scope))
     .sort((a, b) => byText(a.item.id, b.item.id));
   if (candidates.length === 0 || candidates.some((row) => row.stationClosed && !row.extra)) {
     return { ticketItemIds: [], context: null };
@@ -164,11 +168,7 @@ export function passCardRelease(
 type Column = "held" | "toFire" | "inProgress" | "ready";
 
 function cardItem(row: PassRow, scope: PassScope): PassCardItem {
-  const phase = kitchenPhase({
-    requestedAt: row.requestedAt,
-    firedAt: row.firedAt,
-    state: row.item.state,
-  });
+  const phase = phaseOf(row);
   const visible = passSees(scope, row);
   const passWork = phase === "held" ? row.stationWaitsNow : row.passControlled;
   return {
@@ -218,9 +218,7 @@ function placeCard(key: string, cardRows: PassRow[], scope: PassScope): Placed |
       : { kind: "group", partyId: group.partyId, groupId: group.id };
   const allHeld = items.every((item) => item.phase === "held");
   const allReady = items.every((item) => item.phase === "ready");
-  const column: Column = items.some(
-    (item) => item.visible && !item.informational && item.phase === "requested",
-  )
+  const column: Column = cardRows.some((row) => isCandidate(row, scope))
     ? "toFire"
     : allHeld
       ? "held"

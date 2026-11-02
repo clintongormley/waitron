@@ -287,6 +287,7 @@ describe("A773 pass board: cards", () => {
         .map((card) => card.key)
         .sort(),
     ).toEqual(["bill:bill-b1", "bill:bill-b2"]);
+    for (const card of cards(ungrouped)) expect(card.party).toBeUndefined();
   });
 
   it("8. shows a dish in no zone only to a pass on every zone", () => {
@@ -305,6 +306,7 @@ describe("A773 pass board: cards", () => {
     const shown = buildPassBoard(rows, HOT);
     expect(shown.inProgress).toHaveLength(1);
     expect(shown.inProgress[0]!.allReady).toBe(false);
+    expect(shown.inProgress[0]!.readyAt).toBeNull();
 
     const hidden = buildPassBoard(rows, HOT, { showNonPassStations: false });
     expect(hidden.inProgress).toHaveLength(1);
@@ -327,6 +329,38 @@ describe("A773 pass board: cards", () => {
       EVERY,
     );
     expect(toFire.toFire.map((card) => card.key)).toEqual([`group:${b}`, `group:${a}`]);
+
+    const twoParts = buildPassBoard(
+      [
+        row({ id: "a1", group: { ...groupG, id: a }, requestedAt: at("12:03") }),
+        row({ id: "a2", group: { ...groupG, id: a }, requestedAt: at("12:01"), lineNo: 2 }),
+        row({ id: "b", group: { ...groupG, id: b }, requestedAt: at("12:02") }),
+      ],
+      EVERY,
+    );
+    expect(twoParts.toFire.map((card) => [card.key, card.requestedAt])).toEqual([
+      [`group:${a}`, at("12:01")],
+      [`group:${b}`, at("12:02")],
+    ]);
+
+    const inProgress = buildPassBoard(
+      [
+        released({
+          id: "a",
+          group: { ...groupG, id: a },
+          state: "preparing",
+          requestedAt: at("12:05"),
+        }),
+        released({
+          id: "b",
+          group: { ...groupG, id: b },
+          state: "preparing",
+          requestedAt: at("12:01"),
+        }),
+      ],
+      EVERY,
+    );
+    expect(inProgress.inProgress.map((card) => card.key)).toEqual([`group:${b}`, `group:${a}`]);
 
     const ready = buildPassBoard(
       [
@@ -462,6 +496,25 @@ describe("A773 pass board: cards", () => {
     );
     expect(counter.toFire[0]!.party).toBeUndefined();
   });
+
+  it("16. orders a card's items by bill opening, then course with none first, then line", () => {
+    const starters = { id: "course-starters", name: "Starters", displayOrder: 1 };
+    const board = buildPassBoard(
+      [
+        row({ id: "b2-none", orderId: bill2, lineNo: 1 }),
+        row({ id: "b1-mains", lineNo: 1, course: mains }),
+        row({ id: "b1-starters", lineNo: 2, course: starters }),
+        row({ id: "b1-none", lineNo: 3 }),
+      ],
+      EVERY,
+    );
+    expect(board.toFire[0]!.items.map((item) => item.id)).toEqual([
+      "b1-none",
+      "b1-starters",
+      "b1-mains",
+      "b2-none",
+    ]);
+  });
 });
 
 function caseSixRows(): PassRow[] {
@@ -511,6 +564,14 @@ describe("A773 pass board: release set", () => {
       digest,
     );
     expect(contextOf(changed(base, "grill-1", { passControlled: false }), EVERY)).not.toBe(digest);
+    expect(contextOf(changed(base, "grill-1", { orderId: bill2 }), EVERY)).not.toBe(digest);
+    expect(contextOf(changed(base, "grill-1", { lineId: "line-other" }), EVERY)).not.toBe(digest);
+    const otherGroup = { group: { ...groupG, id: "group-other" } };
+    expect(contextOf(changed(base, "grill-1", otherGroup), EVERY)).not.toBe(digest);
+    const billTarget: PassTarget = { kind: "bill", workingOrderId: bill1 };
+    expect(passCardRelease(billTarget, base, EVERY).context).not.toBe(digest);
+    const served = changed(base, "grill-1", { remaining: 0 });
+    expect(passCardRelease(targetG, served, EVERY).ticketItemIds).toEqual(["grill-2"]);
     const recalled = changed(base, "grill-1", { recalled: true });
     expect(passCardRelease(targetG, recalled, EVERY).ticketItemIds).toEqual(["grill-2"]);
     expect(contextOf(recalled, EVERY)).not.toBe(digest);
@@ -559,6 +620,7 @@ describe("A773 pass board: release set", () => {
     expect(coldContext).toEqual(expect.stringMatching(DIGEST));
     expect(contextOf(changed(base, "cold-1", { firedAt: at("12:06") }), HOT)).toBe(hot);
     expect(contextOf(changed(base, "grill-1", { firedAt: at("12:06") }), COLD)).toBe(coldContext);
+    expect(buildPassBoard(base, HOT).toFire[0]!.releaseTicketItemIds).toEqual(["grill-1"]);
   });
 
   it("7. blocks the whole card while a dish candidate's station is closed (D51)", () => {
@@ -584,5 +646,16 @@ describe("A773 pass board: release set", () => {
     expect(withExtra.ticketItemIds).toEqual(["burger", "chips"]);
     expect(withExtra.context).toEqual(expect.stringMatching(DIGEST));
     expect(withExtra.context).toBe(contextOf(chips(false), EVERY));
+  });
+
+  it("8. takes exactly the dishes that put the card in To fire", () => {
+    const notPassWork = [row({ id: "grill-1", passControlled: false })];
+    expect(passCardRelease(targetG, notPassWork, EVERY)).toEqual({
+      ticketItemIds: [],
+      context: null,
+    });
+    const board = buildPassBoard(notPassWork, EVERY);
+    expect(board.toFire).toEqual([]);
+    expect(board.inProgress.map((card) => card.releaseTicketItemIds)).toEqual([[]]);
   });
 });
