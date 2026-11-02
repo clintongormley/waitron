@@ -6186,6 +6186,12 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   stall of a file silent for 60 seconds past its time limits, read the reporter's `[file-progress] stack:` lines before changing test or product behaviour.
   [Detail](backlog/ci.md#a1305-the-dashboard-page-blocked-during-a-click-and-what-blocked-it-is-unknown).
 
+- **A1307 follow-up: the file-progress reporter's tests set up a page with two near-copies of one helper.**
+  `scripts/vitest-file-progress.test.mjs` gained a second page-and-module setup beside the
+  existing one in #2395, and two of its new cases sit apart from the cases they extend. Fold the
+  new setup into the existing helper and move the two cases beside their neighbours; no assertion
+  changes. Raised by #2395's convention review and left out of that PR.
+
 - **A1027 residual: the till shard's blocked operation is unknown.**
   [Detail](backlog/ci.md#the-till-shards-blocked-operation-is-unknown-a1027).
 
