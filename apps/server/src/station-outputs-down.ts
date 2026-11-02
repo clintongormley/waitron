@@ -199,8 +199,8 @@ export async function stationScreensDark(
 }
 
 /** Active kitchen displays running a pass screen or pass monitor, unseen for `SCREEN_DARK_MS`,
- *  whose own board would list a dish fired within `WAITING_WINDOW_MS`. A held dish has no
- *  firing time, so it never counts. */
+ *  whose own board would list a dish fired, or requested and waiting for the pass, within
+ *  `WAITING_WINDOW_MS`. A held dish has neither time, so it never counts. */
 export async function passScreensDark(
   tx: Transaction,
   cfg: TradingContext,

@@ -2604,7 +2604,7 @@ async function releaseHeld(
   noRouteScope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] },
   fire?: { heldPaper: ReadonlySet<string> },
   routing = routingOnce(tx, cfg, new Date()),
-): Promise<number> {
+): Promise<void> {
   const firedNow = routing.at.toISOString();
   const pending = await tx
     .select({ id: ticketItems.id })
@@ -2641,7 +2641,6 @@ async function releaseHeld(
     routing,
     rerouted,
   );
-  return firedItems.length + requested.length + noRoute.lines.length;
 }
 
 // Only the items released by this write may print, so a retry cannot print them again.
@@ -6298,7 +6297,7 @@ async function applyLineEdits(
       ...voided,
       ...removedExtras,
       ...dropped.flatMap(({ parent, kept, removed }) => [
-        ...(parent.ticket === null ? [] : [correctionFor(parent, removed)]),
+        ...(parent.ticket?.firedAt == null ? [] : [correctionFor(parent, removed)]),
         ...kept
           .filter(({ child }) => child.ticket?.firedAt != null)
           .map(({ child, perDish }) =>

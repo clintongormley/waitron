@@ -644,7 +644,7 @@ describe("passScreensDark", () => {
     const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
     await suite.db
       .update(ticketItems)
-      .set({ firedAt: null })
+      .set({ firedAt: null, requestedAt: null })
       .where(eq(ticketItems.workingOrderId, orderId));
     await passDevice(f, "pass");
     expect(await read(f)).toEqual([]);
