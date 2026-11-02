@@ -1,0 +1,337 @@
+import { page, userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
+import { PASS_COLUMNS } from "../state/kitchen-columns.js";
+import type { PassBoard } from "../api/client.js";
+import {
+  PASS_NOW,
+  minutesAgo,
+  passBoard,
+  passCard,
+  passItem,
+} from "../../test/pass-board-fixtures.js";
+import type { TillPassBoard } from "./pass-board.js";
+import "./pass-board.js";
+
+beforeEach(async () => {
+  await page.viewport(1280, 900);
+});
+afterEach(resetPage);
+afterEach(cleanupWidgets);
+
+async function mountBoard(props: Partial<TillPassBoard> & { board: PassBoard }) {
+  const { el } = await mountWidget<TillPassBoard>("till-pass-board", {
+    mode: "pass",
+    runsPass: true,
+    columns: PASS_COLUMNS,
+    now: PASS_NOW,
+    sending: new Set<string>(),
+    reducedMotion: false,
+    ...props,
+  });
+  return el;
+}
+
+const root = (el: TillPassBoard) => el.shadowRoot!;
+const cardOf = (el: TillPassBoard, key: string) =>
+  root(el).querySelector<HTMLElement>(`[data-card="${key}"]`)!;
+const itemOf = (el: TillPassBoard, id: string) =>
+  root(el).querySelector<HTMLElement>(`[data-item="${id}"]`)!;
+const fireOf = (el: TillPassBoard, key: string) =>
+  cardOf(el, key).querySelector<HTMLButtonElement>("[data-pass-fire]");
+
+function eventsOf(el: TillPassBoard, name: string): unknown[] {
+  const seen: unknown[] = [];
+  el.addEventListener(name, (event) => seen.push((event as CustomEvent).detail));
+  return seen;
+}
+
+const toFireCard = passCard({
+  key: "group:p1:g1",
+  target: { kind: "group", partyId: "p1", groupId: "g1" },
+  kind: "new_order",
+  requestedAt: minutesAgo(7),
+  orders: [{ orderId: "order-1", orderNumber: 12, tableLabel: "T4", kitchenNote: null }],
+  group: { displayNumber: 2, position: 1 },
+  items: [passItem({ id: "req-1", phase: "requested", firedAt: null, requestedAt: minutesAgo(7) })],
+  releaseTicketItemIds: ["req-1"],
+  releaseContext: "ctx-1",
+});
+
+const blockedCard = passCard({
+  key: "bill:order-2",
+  target: { kind: "bill", workingOrderId: "order-2" },
+  kind: "next_course",
+  orders: [{ orderId: "order-2", orderNumber: 13, tableLabel: "T5", kitchenNote: null }],
+  items: [
+    passItem({
+      id: "blocked-1",
+      orderId: "order-2",
+      phase: "requested",
+      stationName: "Fryer",
+      stationClosed: true,
+    }),
+  ],
+  releaseTicketItemIds: [],
+  releaseContext: "ctx-2",
+});
+
+const extraCard = passCard({
+  key: "bill:order-3",
+  target: { kind: "bill", workingOrderId: "order-3" },
+  kind: "added",
+  orders: [{ orderId: "order-3", orderNumber: 14, tableLabel: "T6", kitchenNote: null }],
+  items: [
+    passItem({
+      id: "extra-1",
+      orderId: "order-3",
+      phase: "requested",
+      stationName: "Bar",
+      stationClosed: true,
+      extra: true,
+    }),
+  ],
+  releaseTicketItemIds: ["extra-1"],
+  releaseContext: "ctx-3",
+});
+
+const groupInProgress = passCard({
+  key: "group:p2:g2",
+  target: { kind: "group", partyId: "p2", groupId: "g2" },
+  party: { id: "p2", revision: 4 },
+  group: { displayNumber: 3, position: 1 },
+  orders: [{ orderId: "order-4", orderNumber: 15, tableLabel: "T7", kitchenNote: null }],
+  items: [passItem({ id: "g-1", orderId: "order-4" })],
+});
+
+const billInProgress = passCard({
+  key: "bill:order-5",
+  target: { kind: "bill", workingOrderId: "order-5" },
+  orders: [{ orderId: "order-5", orderNumber: 16, tableLabel: "T8", kitchenNote: null }],
+  items: [passItem({ id: "b-1", orderId: "order-5" })],
+});
+
+const heldCard = passCard({
+  key: "bill:order-6",
+  target: { kind: "bill", workingOrderId: "order-6" },
+  kind: "held",
+  requestedAt: null,
+  orders: [{ orderId: "order-6", orderNumber: 17, tableLabel: "T9", kitchenNote: null }],
+  items: [passItem({ id: "held-1", orderId: "order-6", phase: "held", firedAt: null })],
+});
+
+const readyCard = passCard({
+  key: "bill:order-7",
+  target: { kind: "bill", workingOrderId: "order-7" },
+  readyAt: minutesAgo(3),
+  allReady: true,
+  orders: [{ orderId: "order-7", orderNumber: 18, tableLabel: "T10", kitchenNote: null }],
+  items: [passItem({ id: "ready-1", orderId: "order-7", phase: "ready", state: "ready" })],
+});
+
+describe("A773 pass board widget", () => {
+  it("draws one column per shown key in the chosen order, headed by its word and card count", async () => {
+    expect(window.innerWidth).toBe(1280);
+    const el = await mountBoard({
+      board: passBoard({
+        held: [heldCard],
+        toFire: [toFireCard],
+        inProgress: [groupInProgress, billInProgress],
+        ready: [readyCard],
+      }),
+    });
+    const columns = [...root(el).querySelectorAll<HTMLElement>("[data-column]")];
+    expect(columns.map((column) => column.dataset.column)).toEqual([
+      "held",
+      "toFire",
+      "inProgress",
+      "ready",
+    ]);
+    const words = {
+      held: "pass.column.held",
+      toFire: "pass.column.to_fire",
+      inProgress: "pass.column.in_progress",
+      ready: "pass.column.ready",
+    } as const;
+    const counts = { held: 1, toFire: 1, inProgress: 2, ready: 1 };
+    for (const column of columns) {
+      const key = column.dataset.column as keyof typeof words;
+      expect(column.querySelector(".column-heading")!.textContent).toContain(t(words[key]));
+      expect(column.querySelector("[data-column-count]")!.textContent!.trim()).toBe(
+        String(counts[key]),
+      );
+      expect(column.querySelectorAll("[data-card]")).toHaveLength(counts[key]);
+    }
+    expect(root(el).querySelector('[data-column="overview"]')).toBeNull();
+  });
+
+  it("draws a To fire card's kind, table, group, minutes and captions, and Fire emits its key once", async () => {
+    const el = await mountBoard({ board: passBoard({ toFire: [toFireCard] }) });
+    const card = cardOf(el, toFireCard.key);
+    const text = card.textContent!.replace(/\s+/g, " ");
+    expect(text).toContain(t("pass.kind.new_order"));
+    expect(text).toContain("T4");
+    expect(text).toContain(t("table.group_n").replace("{n}", "2"));
+    expect(text).toContain(`7 ${t("station.min")}`);
+    expect(itemOf(el, "req-1").textContent).toContain(t("pass.waiting_for_pass"));
+    expect(itemOf(el, "req-1").textContent).toContain("Grill");
+
+    const fire = fireOf(el, toFireCard.key)!;
+    expect(fire.tagName).toBe("BUTTON");
+    expect(fire.disabled).toBe(false);
+    expect(fire.textContent!.trim()).toBe(t("pass.fire"));
+    expect(fire.classList.contains("lever")).toBe(false);
+    expect(fire.hasAttribute("data-fire")).toBe(false);
+    expect(fire.hasAttribute("data-group-fire")).toBe(false);
+
+    const fired = eventsOf(el, "pass-fire");
+    await userEvent.click(fire);
+    expect(fired).toEqual([{ key: toFireCard.key }]);
+  });
+
+  it("turns Fire off beside a blocked dish's closed sentence, and leaves it on for an extra", async () => {
+    const el = await mountBoard({ board: passBoard({ toFire: [blockedCard, extraCard] }) });
+    expect(fireOf(el, blockedCard.key)!.disabled).toBe(true);
+    expect(itemOf(el, "blocked-1").textContent).toContain(
+      t("pass.station_closed_dish").replaceAll("{station}", "Fryer"),
+    );
+    expect(fireOf(el, extraCard.key)!.disabled).toBe(false);
+    expect(itemOf(el, "extra-1").textContent).toContain(
+      t("pass.station_closed_extra").replaceAll("{station}", "Bar"),
+    );
+  });
+
+  it("turns a card's Fire off while its Fire is out", async () => {
+    const el = await mountBoard({
+      board: passBoard({ toFire: [toFireCard, extraCard] }),
+      sending: new Set([toFireCard.key]),
+    });
+    expect(fireOf(el, toFireCard.key)!.disabled).toBe(true);
+    expect(fireOf(el, extraCard.key)!.disabled).toBe(false);
+  });
+
+  it("marks a dimmed dish and still says why in words", async () => {
+    const card = passCard({
+      items: [
+        passItem({ id: "dim-1", informational: true, stationName: "Bar" }),
+        passItem({
+          id: "dim-2",
+          informational: true,
+          phase: "requested",
+          stationName: "Oven",
+        }),
+        passItem({ id: "own-1" }),
+      ],
+    });
+    const el = await mountBoard({ board: passBoard({ inProgress: [card] }) });
+    const dim = itemOf(el, "dim-1");
+    expect(dim.hasAttribute("data-dimmed")).toBe(true);
+    expect(dim.textContent).toContain(t("station.state.queued"));
+    expect(dim.textContent).toContain(t("pass.already_at").replace("{station}", "Bar"));
+    const other = itemOf(el, "dim-2");
+    expect(other.hasAttribute("data-dimmed")).toBe(true);
+    expect(other.textContent).toContain(t("pass.other_pass").replace("{station}", "Oven"));
+    expect(itemOf(el, "own-1").hasAttribute("data-dimmed")).toBe(false);
+  });
+
+  it("draws no Fire, Ready or Reprint on a monitor", async () => {
+    const board = passBoard({
+      toFire: [toFireCard],
+      inProgress: [groupInProgress, billInProgress],
+    });
+    const levers = "[data-pass-fire], [data-group-ready], [data-ready], [data-reprint]";
+    const pass = await mountBoard({ board, reprint: true });
+    expect(root(pass).querySelectorAll(levers).length).toBeGreaterThan(0);
+    cleanupWidgets();
+    const monitor = await mountBoard({ board, mode: "monitor", reprint: true });
+    expect(root(monitor).querySelectorAll(levers)).toHaveLength(0);
+  });
+
+  it("emits a group's Ready and a bill's course Ready from In progress cards", async () => {
+    const el = await mountBoard({
+      board: passBoard({ inProgress: [groupInProgress, billInProgress] }),
+    });
+    const groupReady = eventsOf(el, "pass-group-ready");
+    const courseReady = eventsOf(el, "pass-course-ready");
+    const group = cardOf(el, groupInProgress.key).querySelector<HTMLElement>(
+      '[data-group-ready="g2"]',
+    )!;
+    expect(group.textContent!.trim()).toBe(t("expo.group_ready"));
+    await userEvent.click(group);
+    expect(groupReady).toEqual([{ key: groupInProgress.key }]);
+    await userEvent.click(
+      cardOf(el, billInProgress.key).querySelector<HTMLElement>('[data-ready="course-mains"]')!,
+    );
+    expect(courseReady).toEqual([
+      { key: billInProgress.key, orderId: "order-5", courseId: "course-mains" },
+    ]);
+  });
+
+  it("draws a held card dashed, untimed and without buttons, its dishes held", async () => {
+    const el = await mountBoard({ board: passBoard({ held: [heldCard] }), reprint: true });
+    const card = cardOf(el, heldCard.key);
+    expect(getComputedStyle(card).borderTopStyle).toBe("dashed");
+    expect(card.querySelector(".age")).toBeNull();
+    expect(card.querySelectorAll("button, wt-button")).toHaveLength(0);
+    expect(itemOf(el, "held-1").classList.contains("held")).toBe(true);
+    expect(getComputedStyle(itemOf(el, "held-1")).borderTopStyle).toBe("dashed");
+  });
+
+  describe("in Spanish", () => {
+    let previous: string;
+    beforeEach(() => {
+      previous = currentLocale();
+      setLocale("es-ES");
+    });
+    afterEach(() => setLocale(previous));
+
+    it("reads the column headings and kind words from the Spanish catalogue", async () => {
+      const el = await mountBoard({
+        board: passBoard({ held: [heldCard], toFire: [toFireCard], inProgress: [billInProgress] }),
+      });
+      const heading = (key: string) =>
+        root(el).querySelector(`[data-column="${key}"] .column-heading`)!.textContent;
+      expect(heading("held")).toContain(t("pass.column.held", "es-ES"));
+      expect(heading("toFire")).toContain(t("pass.column.to_fire", "es-ES"));
+      expect(heading("inProgress")).toContain(t("pass.column.in_progress", "es-ES"));
+      expect(cardOf(el, toFireCard.key).textContent).toContain(t("pass.kind.new_order", "es-ES"));
+      expect(cardOf(el, billInProgress.key).textContent).toContain(
+        t("pass.kind.new_order", "es-ES"),
+      );
+      expect(t("pass.column.to_fire", "es-ES")).not.toBe(t("pass.column.to_fire", "en"));
+    });
+  });
+
+  it("colours a card by its dishes' age on the board's clock, flashes forgotten, and counts overdue cards", async () => {
+    const aged = (key: string, minutes: number, overrides = {}) =>
+      passCard({
+        key,
+        items: [
+          passItem({
+            id: `${key}-item`,
+            queuedAt: minutesAgo(minutes),
+            band: "fresh",
+            ...overrides,
+          }),
+        ],
+      });
+    const warm = aged("warm", 7);
+    const forgotten = aged("forgotten", 20);
+    const dimmedLate = aged("dimmed-late", 12, { informational: true });
+    const board = passBoard({ inProgress: [warm, forgotten, dimmedLate] });
+    const el = await mountBoard({ board });
+    expect(cardOf(el, "warm").classList.contains("age-warm")).toBe(true);
+    expect(cardOf(el, "forgotten").classList.contains("age-forgotten")).toBe(true);
+    expect(cardOf(el, "forgotten").classList.contains("flash")).toBe(true);
+    expect(cardOf(el, "dimmed-late").classList.contains("age-overdue")).toBe(true);
+    expect(root(el).querySelector("[data-overdue-count]")!.textContent!.trim()).toBe(
+      `2 ${t("station.overdue_count")}`,
+    );
+
+    cleanupWidgets();
+    const still = await mountBoard({ board, reducedMotion: true });
+    expect(cardOf(still, "forgotten").classList.contains("age-forgotten")).toBe(true);
+    expect(cardOf(still, "forgotten").classList.contains("flash")).toBe(false);
+  });
+});
