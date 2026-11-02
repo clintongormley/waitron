@@ -3596,10 +3596,10 @@ export function quantityOfLine(
 }
 
 /**
- * Move ONE not-yet-fired line of an OPEN tab into another kitchen course, or clear its course to null.
- * A deleted course is not a valid new target. A line that has already FIRED is refused
- * `ticket.already_fired`: once the kitchen has been told to cook it, it is corrected by a recall,
- * never re-coursed underneath the pass.
+ * Move ONE held line of an OPEN tab into another kitchen course, or clear its course to null.
+ * A deleted course is not a valid new target. A line the waiter has fired, released or still
+ * waiting for the pass, is refused `ticket.already_fired`: once the kitchen or the pass has been
+ * told about it, it is corrected by a recall, never re-coursed underneath the pass.
  */
 export async function setLineCourse(
   tx: Transaction,
@@ -3631,10 +3631,10 @@ export async function setLineCourse(
   }
   await refuseRecalledWrite(tx, eq(workingOrderLines.id, line.id));
   const [item] = await tx
-    .select({ firedAt: ticketItems.firedAt })
+    .select({ id: ticketItems.id })
     .from(ticketItems)
-    .where(and(onDishesOrTheirExtras(tx, [line.id]), isNotNull(ticketItems.firedAt)));
-  if (item !== undefined && item.firedAt != null) {
+    .where(and(onDishesOrTheirExtras(tx, [line.id]), initiatedItem()));
+  if (item !== undefined) {
     throw new AppError("ticket.already_fired", { workingOrderId: tabId });
   }
   await tx.update(workingOrderLines).set({ courseId }).where(eq(workingOrderLines.id, line.id));

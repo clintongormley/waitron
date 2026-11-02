@@ -436,6 +436,21 @@ D1–D20 are the slice plan's and bind unchanged. These are B2's, dated 2026-11-
   to a comped waiting one as waiting too…" pins the "joins" path. Control: `kitchenStateOf` back
   to "hold" for every item turns all three of those red.
 
+- **D43 A dish waiting for the pass cannot change course** (2026-11-02, driver's answer to the
+  Task 2.5 review's Important 1). `setLineCourse` refused only a dish with a fire time, so a
+  Requested dish could be moved into another course while it waited at the pass. It now refuses
+  any dish whose item, or an extra's item, is initiated (`initiatedItem()`), with the same
+  `ticket.already_fired` a released dish gets: the pass already has the dish, and its own doc says
+  such a dish is corrected by a recall, never re-coursed underneath the pass. A held dish still
+  changes course. A made-here dish was already refused (its item has a fire time from the send),
+  so D36's Requested extras of one change nothing here; no till widget dispatches the
+  `set-line-course` event its listener handles (`grep -rn line-course apps/till/src`). With no
+  station waiting nothing changes, because every initiated item then has a fire time. Receipts:
+  `kitchen-request.bill-move.test.ts` "refuses to change the course of a Requested dish…" failed
+  before the change (the call resolved) and passes after; "still lets a held dish change course"
+  and the ten suites that call `setLineCourse` (903 tests) pass. Control: the check back on
+  `fired_at` alone turns the Requested case red.
+
 ## Departures from the outline and the master plan
 
 | Outline or master says | This plan | Why |
