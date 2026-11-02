@@ -6581,6 +6581,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   them again; the code slices that delete those cases remove that branch. fiscal-verifactu's own
   helpers and the tests outside F2's list (`certificate-install`, `seed-single-venue`,
   `void-issue-clock`) are S3's.
+  F4 landed (#2412): `apps/server`'s tests whose names start `g`–`r` seed their one venue, nodes,
+  devices and working orders through F1's helpers; `payments-api`'s and `printer-delete.db`'s local
+  `seedVenue` became `seedVenueWithStaff` and `seedVenueWithPrinters`. Left as they were, listed in
+  its PR body: rows written under fixed ids that a backup, archive, `trading.env` or assertion names
+  (most `recovery*` and `restore*` suites, `hour-promotion`, `hour-recovery`, `rebuild-first-start`,
+  `node-config.location`, `promote-endpoint-e2e`), devices planted under a join request's id, cases
+  needing no taxpayer row (`reset-request`), and second-location cases whose code slice deletes them.
   S16 sends setup venue fields directly and names the venue in restore previews. Old
   `first-setup.json` files are refused, including after a completed setup, so boxes set up through
   first setup are reset. The configuration bundle stays nested until S17; the node and storage ids
