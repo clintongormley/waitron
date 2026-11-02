@@ -1337,10 +1337,7 @@ async function bootServer(
           }),
         stageConfiguration: (artifact, passphrase) =>
           stageConfigurationImport(config.stateDir, ring, artifact, passphrase, async (bundle) => {
-            const resolvedConfig = venueModuleConfig(
-              moduleConfig,
-              bundle.venue.location.fiscalTerritory,
-            );
+            const resolvedConfig = venueModuleConfig(moduleConfig, bundle.venue.fiscalTerritory);
             const modules = enabledModules(availableModules, resolvedConfig);
             validateConfigurationBundle(
               bundle,
@@ -1434,14 +1431,8 @@ async function bootServer(
               ...(staged === null
                 ? {}
                 : {
-                    beforeCommit: async (tx, result) => {
-                      await importConfigurationTables(
-                        tx,
-                        staged.bundle,
-                        { locationId: result.locationId },
-                        modules,
-                        versions!,
-                      );
+                    beforeCommit: async (tx) => {
+                      await importConfigurationTables(tx, staged.bundle, modules, versions!);
                     },
                   }),
             },
@@ -2283,7 +2274,6 @@ async function bootServer(
       {
         db,
         cfg: {
-          locationId: tradingContext.locationId,
           nodeId: tradingContext.nodeId,
         },
         modules: setsToMigrate,

@@ -9,12 +9,17 @@ import {
   isStationColour,
   PRIVACY_CONTACT_FIELDS,
 } from "@waitron/shared";
-import type { Database, Transaction } from "@waitron/db";
+import {
+  readVenue,
+  readVenueClock,
+  venueLocationId,
+  type Database,
+  type Transaction,
+} from "@waitron/db";
 import type { ConfigurationTransferTable, WaitronModule } from "@waitron/module";
 import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import "./errors.js";
-import { readLocationClock } from "@waitron/reporting";
 import { assertImportedStationTimings } from "./kitchen-timing.js";
 import {
   privacyContactChecked,
@@ -24,22 +29,6 @@ import {
 
 const ENTRY = "configuration.json";
 
-/**
- * A location's `invoice_locales` as read by RAW SQL, which bypasses the column's read mapping and
- * so hands back the JSON text the column stores. Anything but a list of strings is refused.
- */
-function parseLocaleList(value: string): string[] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    throw new AppError("setup.request_invalid", { field: "venue" });
-  }
-  if (!Array.isArray(parsed) || parsed.some((locale) => typeof locale !== "string")) {
-    throw new AppError("setup.request_invalid", { field: "venue" });
-  }
-  return parsed as string[];
-}
 const MAX_ROWS_PER_TABLE = 100_000;
 
 export interface PreparedVenue {
@@ -47,22 +36,17 @@ export interface PreparedVenue {
   taxId: string;
   legalName: string;
   taxpayerDomicile: string | null;
-  location: {
-    id: string;
-    name: string;
-    invoiceLocales: string[];
-    operationDescription: string;
-    fiscalTerritory: string;
-    addressLine1: string | null;
-    addressLine2: string | null;
-    postalCode: string | null;
-    city: string | null;
-    province: string | null;
-    timeZone: string;
-    dayCutover: string;
-    fireControl: string;
-    catalogueId: string | null;
-  };
+  name: string;
+  invoiceLocales: string[];
+  operationDescription: string;
+  fiscalTerritory: string;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  postalCode: string | null;
+  city: string | null;
+  province: string | null;
+  timeZone: string;
+  dayCutover: string;
   seriesCode: string;
   fullSeriesCode: string;
   rectificativeSeriesCode: string;
@@ -71,7 +55,6 @@ export interface PreparedVenue {
 export async function buildConfigurationBundle(
   db: Database | Transaction,
   source: {
-    locationId: string;
     nodeId: string;
     sourceOperatorId?: string;
   },
@@ -79,40 +62,30 @@ export async function buildConfigurationBundle(
   now: Date,
   moduleVersions: Record<string, number>,
 ): Promise<ConfigurationBundle> {
-  const venue = await db.execute<
-    Omit<PreparedVenue["location"], "invoiceLocales"> & {
-      invoiceLocales: string;
-      country: string;
-      taxId: string;
-      legalName: string;
-      taxpayerDomicile: string | null;
-      privacyNoticeUrl: string | null;
-      privacyEmail: string | null;
-      seriesCode: string | null;
-      fullSeriesCode: string | null;
-      rectificativeSeriesCode: string | null;
-    }
-  >(sql`
+  const taxpayer = await db.execute<{
+    country: string;
+    taxId: string;
+    legalName: string;
+    taxpayerDomicile: string | null;
+    privacyNoticeUrl: string | null;
+    privacyEmail: string | null;
+    seriesCode: string | null;
+    fullSeriesCode: string | null;
+    rectificativeSeriesCode: string | null;
+  }>(sql`
     select
       t.country, t.tax_id as "taxId", t.legal_name as "legalName",
       t.taxpayer_domicile as "taxpayerDomicile",
       t.privacy_notice_url as "privacyNoticeUrl", t.privacy_email as "privacyEmail",
-      l.id, l.name, l.invoice_locales as "invoiceLocales",
-      l.operation_description as "operationDescription", l.fiscal_territory as "fiscalTerritory",
-      l.address_line1 as "addressLine1", l.address_line2 as "addressLine2",
-      l.postal_code as "postalCode", l.city, l.province, l.time_zone as "timeZone",
-      l.day_cutover as "dayCutover",
-      l.fire_control as "fireControl", l.catalogue_id as "catalogueId",
       max(s.code) filter (where s.purpose = 'standard') as "seriesCode",
       max(s.code) filter (where s.purpose = 'full') as "fullSeriesCode",
       max(s.code) filter (where s.purpose = 'rectificative') as "rectificativeSeriesCode"
     from tenants t
-    join locations l on l.id = ${source.locationId}
     join nodes n on n.id = ${source.nodeId}
     join invoice_series s on s.node_id = n.id and s.retired_at is null
-    group by t.id, l.id
+    group by t.id
   `);
-  const row = venue.rows[0];
+  const row = taxpayer.rows[0];
   if (
     row === undefined ||
     row.seriesCode === null ||
@@ -131,21 +104,19 @@ export async function buildConfigurationBundle(
     seriesCode,
     fullSeriesCode,
     rectificativeSeriesCode,
-    invoiceLocales,
-    ...rest
   } = row;
-  const clock = await readLocationClock(db, source.locationId);
+  const { defaultCatalogueId, ...fields } = await readVenue(db);
+  // The column's JSON read mapping checks no element types.
+  if (fields.invoiceLocales.some((locale: unknown) => typeof locale !== "string")) {
+    throw new AppError("setup.request_invalid", { field: "venue" });
+  }
+  const clock = await readVenueClock(db);
   const businessDay = businessDayAt(clock, now);
   if (clock.cutoverChanges.some((change) => change.effectiveBusinessDay > businessDay))
     throw new AppError("setup.request_invalid", { field: "businessDayStart" });
-  const location = {
-    ...rest,
-    dayCutover: `${cutoverForBusinessDay(clock, businessDay)}:00`,
-    invoiceLocales: parseLocaleList(invoiceLocales),
-  };
   const transferred = await exportConfigurationTables(db, modules);
   return {
-    version: 9,
+    version: 10,
     createdAt: now.toISOString(),
     sourceOperatorId: source.sourceOperatorId ?? "",
     venue: {
@@ -153,36 +124,35 @@ export async function buildConfigurationBundle(
       taxId,
       legalName,
       taxpayerDomicile,
-      location,
+      ...fields,
+      dayCutover: `${cutoverForBusinessDay(clock, businessDay)}:00`,
       seriesCode,
       fullSeriesCode,
       rectificativeSeriesCode,
     },
+    defaultCatalogueId,
     privacyContact: { privacyNoticeUrl, privacyEmail },
     modules: moduleVersions,
     ...transferred,
   };
 }
 
-export async function applyPreparedLocation(
+export async function applyPreparedVenue(
   tx: Transaction,
-  target: { locationId: string },
-  location: PreparedVenue["location"],
+  venue: { defaultCatalogueId: string | null },
 ): Promise<void> {
-  // The receipt languages and operation description stay as the provision request wrote them.
   await tx.execute(sql`
-    update locations set
-      fire_control = ${location.fireControl},
-      catalogue_id = ${location.catalogueId}
-    where id = ${target.locationId}
+    update locations set catalogue_id = ${venue.defaultCatalogueId}
+    where id = ${await venueLocationId(tx)}
   `);
 }
 
 export interface ConfigurationBundle {
-  version: 9;
+  version: 10;
   createdAt: string;
   sourceOperatorId: string;
   venue: PreparedVenue;
+  defaultCatalogueId: string | null;
   privacyContact: PrivacyContact;
   modules: Record<string, number>;
   tables: Record<string, Array<Record<string, unknown>>>;
@@ -491,18 +461,11 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   if (!isRecord(value)) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  if (typeof value.version === "number" && value.version > 9) {
+  if (typeof value.version === "number" && value.version > 10) {
     throw new AppError("setup.request_invalid", { field: "version" });
   }
-  if (value.version !== 9) throw new AppError("setup.configuration_outdated", {});
+  if (value.version !== 10) throw new AppError("setup.configuration_outdated", {});
   const venue = value.venue;
-  const location = isRecord(venue) ? venue.location : undefined;
-  if (
-    isRecord(location) &&
-    ["receiptPrintMode", "drawerOpenPolicy"].some((field) => Object.hasOwn(location, field))
-  ) {
-    throw new AppError("setup.configuration_outdated", {});
-  }
   const modules = value.modules;
   const tables = value.tables;
   if (
@@ -510,7 +473,7 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     Number.isNaN(Date.parse(value.createdAt)) ||
     typeof value.sourceOperatorId !== "string" ||
     !isRecord(venue) ||
-    !isRecord(location) ||
+    (value.defaultCatalogueId !== null && typeof value.defaultCatalogueId !== "string") ||
     !isRecord(modules) ||
     Object.values(modules).some((version) => !Number.isInteger(version) || Number(version) < 0) ||
     !isRecord(tables) ||
@@ -526,24 +489,18 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
     "seriesCode",
     "fullSeriesCode",
     "rectificativeSeriesCode",
-  ];
-  const locationStrings = [
-    "id",
     "name",
     "operationDescription",
     "fiscalTerritory",
     "dayCutover",
-    "fireControl",
   ];
   if (
     venueStrings.some((field) => typeof venue[field] !== "string") ||
-    (venue.taxpayerDomicile !== null && typeof venue.taxpayerDomicile !== "string") ||
-    locationStrings.some((field) => typeof location[field] !== "string") ||
-    !Array.isArray(location.invoiceLocales) ||
-    location.invoiceLocales.length === 0 ||
-    location.invoiceLocales.some((locale) => typeof locale !== "string") ||
-    ["addressLine1", "addressLine2", "postalCode", "city", "province", "catalogueId"].some(
-      (field) => location[field] !== null && typeof location[field] !== "string",
+    !Array.isArray(venue.invoiceLocales) ||
+    venue.invoiceLocales.length === 0 ||
+    venue.invoiceLocales.some((locale) => typeof locale !== "string") ||
+    ["taxpayerDomicile", "addressLine1", "addressLine2", "postalCode", "city", "province"].some(
+      (field) => venue[field] !== null && typeof venue[field] !== "string",
     )
   ) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
@@ -557,7 +514,7 @@ function parseConfigurationBundle(value: unknown): ConfigurationBundle {
   ) {
     throw new AppError("setup.request_invalid", { field: "artifact" });
   }
-  requireCountryTimeZone(venue.country as string, location.timeZone);
+  requireCountryTimeZone(venue.country as string, venue.timeZone);
   return value as unknown as ConfigurationBundle;
 }
 
@@ -612,7 +569,7 @@ export function validateConfigurationBundle(
   modules: readonly WaitronModule[],
   targetVersions: Readonly<Record<string, number>>,
 ): void {
-  const timeZone = requireCountryTimeZone(bundle.venue.country, bundle.venue.location.timeZone);
+  const timeZone = requireCountryTimeZone(bundle.venue.country, bundle.venue.timeZone);
   const expectedModules = new Set(modules.map((module) => module.name));
   if (Object.keys(bundle.modules).some((name) => !expectedModules.has(name))) {
     throw new AppError("setup.request_invalid", { field: "modules" });
@@ -630,9 +587,9 @@ export function validateConfigurationBundle(
   const exported = {
     createdAt: new Date(bundle.createdAt),
     timeZone,
-    dayCutover: bundle.venue.location.dayCutover.slice(0, 5),
+    dayCutover: bundle.venue.dayCutover.slice(0, 5),
     country: bundle.venue.country,
-    area: bundle.venue.location.province,
+    area: bundle.venue.province,
   };
   for (const module of modules) {
     const contribution = module.configurationTransfer;
@@ -644,7 +601,6 @@ export function validateConfigurationBundle(
 export async function importConfigurationTables(
   tx: Transaction,
   bundle: ConfigurationBundle,
-  target: { locationId: string },
   modules: readonly WaitronModule[],
   targetVersions: Readonly<Record<string, number>>,
 ): Promise<void> {
@@ -678,6 +634,9 @@ export async function importConfigurationTables(
   const blobColumns = new Map<string, Set<string>>();
   // A name or other text may equal a bundle id, so only these columns are rewritten to new ids.
   const idColumns = new Map<string, Set<string>>();
+  // Interim: every foreign key into `locations` is filled with the importing venue's one row,
+  // whatever the bundle says.
+  const venueColumns = new Map<string, string[]>();
   for (const [declaration] of checked) {
     // The table-valued `pragma_table_info(?)` binds its argument, unlike the `pragma table_info`
     // statement. An unknown table yields no rows, which the empty check below refuses.
@@ -697,12 +656,16 @@ export async function importConfigurationTables(
           .map((row) => row.column_name),
       ),
     );
-    const keys = await tx.execute<{ from: string }>(sql`
-      select "from" from pragma_foreign_key_list(${declaration.name})
+    const keys = await tx.execute<{ from: string; table: string }>(sql`
+      select "from", "table" from pragma_foreign_key_list(${declaration.name})
     `);
     idColumns.set(
       declaration.name,
       new Set(["id", ...keys.rows.map((row) => row.from), ...(declaration.references ?? [])]),
+    );
+    venueColumns.set(
+      declaration.name,
+      keys.rows.filter((row) => row.table === "locations").map((row) => row.from),
     );
   }
   for (const [declaration, rows] of checked) {
@@ -714,13 +677,11 @@ export async function importConfigurationTables(
     }
   }
 
-  // A fresh venue points its location at the initial catalogue created by catalogue provisioning.
-  // The imported catalogue set replaces that seed, so release the foreign key before deletion; the
-  // remapped source default is restored by applyPreparedLocation after the rows are inserted.
-  await tx.execute(sql`
-    update locations set catalogue_id = null
-    where id = ${target.locationId}
-  `);
+  // A fresh venue's default menu is the initial catalogue created by catalogue provisioning. The
+  // imported catalogue set replaces that seed, so release the foreign key before deletion; the
+  // remapped source default is restored by applyPreparedVenue after the rows are inserted.
+  const venueId = await venueLocationId(tx);
+  await applyPreparedVenue(tx, { defaultCatalogueId: null });
 
   // Moves the key checks to COMMIT, for this transaction only; the caller's commit still checks the
   // final state.
@@ -742,7 +703,7 @@ export async function importConfigurationTables(
   const sourceOperatorIds = new Set(
     bundle.sourceOperatorId === "" ? [] : [bundle.sourceOperatorId],
   );
-  const idMap = new Map<string, string>([[bundle.venue.location.id, target.locationId]]);
+  const idMap = new Map<string, string>();
   for (const [, rows] of checked) {
     for (const row of rows) {
       if (typeof row.id === "string") idMap.set(row.id, randomUUID());
@@ -760,8 +721,8 @@ export async function importConfigurationTables(
           row[field] = idMap.get(value)!;
         else if (blobs.has(field)) row[field] = decodeBytes(value);
       }
-      for (const column of declaration.locationColumns ?? []) {
-        if (column in row) row[column] = target.locationId;
+      for (const column of venueColumns.get(declaration.name)!) {
+        if (column in row) row[column] = venueId;
       }
       if (declaration.name === "persons") {
         row.pin_hash = `disabled-import:${randomUUID()}`;
@@ -795,12 +756,11 @@ export async function importConfigurationTables(
       `);
     }
   }
-  await applyPreparedLocation(tx, target, {
-    ...bundle.venue.location,
-    catalogueId:
-      bundle.venue.location.catalogueId === null
+  await applyPreparedVenue(tx, {
+    defaultCatalogueId:
+      bundle.defaultCatalogueId === null
         ? null
-        : (idMap.get(bundle.venue.location.catalogueId) ?? bundle.venue.location.catalogueId),
+        : (idMap.get(bundle.defaultCatalogueId) ?? bundle.defaultCatalogueId),
   });
   const { privacyNoticeUrl, privacyEmail } = bundle.privacyContact;
   await savePrivacyContact(tx, {

@@ -305,14 +305,8 @@ export function createFirstSetupCommandDeployment(options: {
         ...(imported === undefined
           ? {}
           : {
-              beforeCommit: (tx, result) =>
-                importConfigurationTables(
-                  tx,
-                  imported.bundle,
-                  { locationId: result.locationId },
-                  modules,
-                  imported.versions,
-                ),
+              beforeCommit: (tx) =>
+                importConfigurationTables(tx, imported.bundle, modules, imported.versions),
             }),
       });
     },

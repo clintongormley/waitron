@@ -16,7 +16,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 
 it("keeps hardware readers and their slip settings outside configuration bundles while payment policy round-trips", async () => {
   const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
-  const target = await applyVenue(
+  await applyVenue(
     planVenue(
       {
         ...request,
@@ -59,13 +59,13 @@ it("keeps hardware readers and their slip settings outside configuration bundles
     sql`update payment_policy set offline_mode = 'cash_only', offline_amount_cap = 123`,
   );
   await withTransaction(suite.db, (tx) =>
-    importConfigurationTables(tx, bundle, target, [payments], versions),
+    importConfigurationTables(tx, bundle, [payments], versions),
   );
   expect((await suite.db.execute(sql`select * from payment_policy`)).rows).toEqual(policy.rows);
   expect((await suite.db.execute(sql`select * from card_readers`)).rows).toEqual(readers);
   await suite.db.execute(sql`delete from card_readers`);
   await withTransaction(suite.db, (tx) =>
-    importConfigurationTables(tx, bundle, target, [payments], versions),
+    importConfigurationTables(tx, bundle, [payments], versions),
   );
   expect((await suite.db.execute(sql`select * from card_readers`)).rows).toEqual([]);
 });

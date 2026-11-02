@@ -66,25 +66,23 @@ export const CORE_CONFIGURATION_TRANSFER = {
     {
       name: "kitchen_stations",
       leaveBehindWhenFalse: "active",
-      locationColumns: ["location_id"],
       // Left out until PR C exposes the setting: a bundle carrying it is refused.
       omit: ["waits_for_pass"],
     },
-    { name: "kitchen_courses", locationColumns: ["location_id"], leaveBehindWhenFalse: "active" },
+    { name: "kitchen_courses", leaveBehindWhenFalse: "active" },
     { name: "categories" },
     // The catalogue module's `afterImport` sets `name_key` from the name.
     { name: "products", omit: ["name_key"] },
-    { name: "location_catalogues", locationColumns: ["location_id"] },
+    { name: "location_catalogues" },
     { name: "ingredients" },
     { name: "recipe_lines" },
     { name: "device_profiles", leaveBehindWhenSet: "retired_at" },
-    { name: "floor_zones", locationColumns: ["location_id"], leaveBehindWhenFalse: "active" },
+    { name: "floor_zones", leaveBehindWhenFalse: "active" },
     {
       name: "dining_tables",
-      locationColumns: ["location_id"],
       omit: ["needs_clearing_since", "short_name_key"],
     },
-    { name: "floor_plan_sets", locationColumns: ["location_id"] },
+    { name: "floor_plan_sets" },
     { name: "floor_plans" },
     { name: "floor_plan_tables" },
     { name: "floor_plan_placements" },
@@ -92,7 +90,6 @@ export const CORE_CONFIGURATION_TRANSFER = {
     { name: "floor_plan_table_sizes" },
     {
       name: "print_agents",
-      locationColumns: ["location_id"],
       // `node_id` names a node of the exporting venue; the importing venue makes its own. The setup
       // page's address and port are the exporting machine's; the agent reports its own with each pull.
       omit: ["token_hash", "last_seen_at", "host", "node_id", "setup_url", "setup_port"],
@@ -100,12 +97,11 @@ export const CORE_CONFIGURATION_TRANSFER = {
     },
     {
       name: "printers",
-      locationColumns: ["location_id"],
       omit: ["poll_token_hash"],
       reconnect: true,
       leaveBehindWhenSet: "deleted_at",
     },
-    { name: "page_printers", locationColumns: ["location_id"], reconnect: true },
+    { name: "page_printers", reconnect: true },
     { name: "device_profile_printers" },
     { name: "station_printers" },
     { name: "custom_themes" },

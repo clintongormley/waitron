@@ -125,7 +125,7 @@ it("refuses a replacement key with the same version and a changed encrypted arti
 it("refuses an excluded bundle zone before staging and preserves the earlier artifact", async () => {
   const { root, artifact } = await staged();
   const replacement = configurationBundle();
-  replacement.venue.location.timeZone = "Europe/Madrid";
+  replacement.venue.timeZone = "Europe/Madrid";
   const encoded = encodeConfigurationBundle(replacement, passphrase);
   await expect(
     stageConfigurationImport(root, ring, encoded, passphrase, async () => {}),

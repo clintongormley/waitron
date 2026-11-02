@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { loadKeyRing } from "@waitron/credentials";
 import { withTransaction } from "@waitron/db";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules } from "@waitron/module";
@@ -29,8 +30,8 @@ const tables = transfer.tables;
 function bundleFor(country: string, province: string | null, languages: unknown) {
   const bundle = configurationBundle();
   bundle.venue.country = country;
-  bundle.venue.location.province = province;
-  bundle.venue.location.timeZone = country === "ES" ? "Europe/Madrid" : "Europe/London";
+  bundle.venue.province = province;
+  bundle.venue.timeZone = country === "ES" ? "Europe/Madrid" : "Europe/London";
   bundle.modules = { catalogue: 1 };
   bundle.tables = Object.fromEntries(tables.map(({ name }) => [name, []]));
   bundle.tables.content_languages = [{ id: 1, default_language: "en", languages }];
@@ -60,6 +61,7 @@ describe("required languages before configuration replacement", () => {
   });
 
   it("runs the destination check while the previous table rows are still present", async () => {
+    await seedVenue(suite.db);
     await withTransaction(suite.db, async (tx) => {
       await tx.execute(sql`create table zz_language_import (id text primary key)`);
       await tx.execute(sql`insert into zz_language_import values ('retained')`);
@@ -81,7 +83,7 @@ describe("required languages before configuration replacement", () => {
         },
       };
       await withTransaction(suite.db, (tx) =>
-        importConfigurationTables(tx, bundle, { locationId: "absent" }, [module], bundle.modules),
+        importConfigurationTables(tx, bundle, [module], bundle.modules),
       );
       expect(seen).toEqual([{ id: "retained" }]);
       const rows = (await suite.db.execute<{ id: string }>(sql`select id from zz_language_import`))
@@ -130,7 +132,7 @@ describe("required languages before configuration replacement", () => {
 
   it("refuses direct import before replacing catalogue rows, then imports a valid setting", async () => {
     const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
-    const target = await applyVenue(
+    await applyVenue(
       planVenue(
         {
           ...request,
@@ -156,13 +158,13 @@ describe("required languages before configuration replacement", () => {
     const invalid = bundleFor("ES", "Barcelona", '["en","es"]');
     await expect(
       withTransaction(suite.db, (tx) =>
-        importConfigurationTables(tx, invalid, target, [catalogue], invalid.modules),
+        importConfigurationTables(tx, invalid, [catalogue], invalid.modules),
       ),
     ).rejects.toMatchObject({ code: "content.language_required", params: { language: "ca" } });
     expect((await read()).rows).toEqual(before);
     const valid = bundleFor("ES", "Barcelona", '["en","es","ca"]');
     await withTransaction(suite.db, (tx) =>
-      importConfigurationTables(tx, valid, target, [catalogue], valid.modules),
+      importConfigurationTables(tx, valid, [catalogue], valid.modules),
     );
     expect((await read()).rows).toEqual([
       { id: 1, default_language: "en", languages: '["en","es","ca"]' },
@@ -171,7 +173,7 @@ describe("required languages before configuration replacement", () => {
 
   it("checks the destination province even when the source requires fewer languages", async () => {
     const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
-    const target = await applyVenue(
+    await applyVenue(
       planVenue(
         {
           ...request,
@@ -198,7 +200,7 @@ describe("required languages before configuration replacement", () => {
     validateConfigurationBundle(bundle, [catalogue], bundle.modules);
     await expect(
       withTransaction(suite.db, (tx) =>
-        importConfigurationTables(tx, bundle, target, [catalogue], bundle.modules),
+        importConfigurationTables(tx, bundle, [catalogue], bundle.modules),
       ),
     ).rejects.toMatchObject({ code: "content.language_required", params: { language: "ca" } });
     expect((await suite.db.execute(sql`select * from content_languages`)).rows).toEqual(before);
@@ -207,7 +209,7 @@ describe("required languages before configuration replacement", () => {
     ]);
     bundle.tables.content_languages![0]!.languages = '["en","es","ca"]';
     await withTransaction(suite.db, (tx) =>
-      importConfigurationTables(tx, bundle, target, [catalogue], bundle.modules),
+      importConfigurationTables(tx, bundle, [catalogue], bundle.modules),
     );
     expect((await suite.db.execute(sql`select languages from content_languages`)).rows).toEqual([
       { languages: '["en","es","ca"]' },
