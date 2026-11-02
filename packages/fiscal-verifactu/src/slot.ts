@@ -14,6 +14,7 @@ import { installCertificate } from "./certificate-install.js";
 import { makeCertificateDiagnosisChild } from "./certificate-diagnosis-child.js";
 import { diagnoseCertificate } from "./certificate-diagnosis.js";
 import { drain as runDrain, resetInFlightClaims } from "./drain.js";
+import { createRuntimeReconciliation } from "./reconcile-runtime.js";
 import { readOutbox } from "./outbox.js";
 import { currentSif } from "./registro-sif.js";
 import { parseAeatCert, sealAeatSecret, validateSetupAeatCert } from "./provisioning-secret.js";
@@ -97,6 +98,7 @@ export const FISCAL_SLOT: FiscalContribution = {
     }
   },
   resetInFlight: ({ db }, now) => resetInFlightClaims(db, now),
+  createReconciliation: createRuntimeReconciliation,
   // The provision-time secret: a Veri*Factu venue's AEAT signing certificate. Required only for a
   // PRODUCTION provision: a preproduction box records its chain locally and never submits.
   // `validate` writes nothing and runs BEFORE `provisionVenue` mints the unrepairable SIF/chain.

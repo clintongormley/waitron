@@ -428,6 +428,20 @@ Filing investigation, outside evidence and fencing for the other tasks, and the 
 old-backup/new-hardware operational exercise remain queued. The latest Task 8 qualification is
 below; earlier dated implementation checkpoints retain their historical scope.
 
+### W41s-10a runtime candidate checkpoint, 2 November 2026
+
+The unpublished candidate starts a module-owned reconciliation sweep separately from submission.
+`slot.reconciliation.test.ts` exercises the real SOAP client with a fake authority and checks lost
+acknowledgements, failed-lookups' retry times, taxpayer/node/environment scope and transport cleanup.
+`boot.fiscal-reconciliation.test.ts` holds a lookup while HTTP and submission continue; normal close
+and a later failed-start step both wait for it. Demo, Prepare, preproduction without submission
+opt-in and a secondary node do not call the lookup pass. No authority response certifies freshness
+or reserves an identity.
+
+Foreign or different-date invoice evidence, the Task 7 conflict path, optional device-held evidence
+and recovery qualification remain unfinished. The whole item still needs its reviews and CI before
+owner review; this checkpoint is not a partial pull request.
+
 ### Task 8 staff refund and held-cancellation qualification, 2 November 2026
 
 `apps/server/src/fiscal-remedy.staff-refund.test.ts` uses a real provisioned venue and the

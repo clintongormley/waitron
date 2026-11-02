@@ -310,6 +310,7 @@ import {
 import { runCertificateReminderLoop } from "./certificate-reminder-worker.js";
 import { createCertificateReminderSender } from "./certificate-reminder-email.js";
 import { resetBeforeFirstDrain } from "./restart-reset.js";
+import { startFiscalReconciliation } from "./fiscal-reconciliation.js";
 import { releaseStalePaymentAttempts } from "./till-sale.js";
 import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { refundProvidersOf } from "./bill-refunds.js";
@@ -3507,6 +3508,28 @@ async function bootServer(
     log,
   });
 
+  const reconciliationPass = enabledFiscal.createReconciliation?.({
+    db,
+    ring,
+    nodeId: tradingContext.nodeId,
+    clock: tillClock,
+    environment: config.environment,
+    skipRetryMs: config.skipRetryMs,
+    log,
+  });
+  const fiscalReconciliation =
+    reconciliationPass === undefined
+      ? undefined
+      : startFiscalReconciliation({
+          pass: reconciliationPass,
+          enabled: () => holders.singletonRole.current === "primary" && fiscalDrainEnabled(config),
+          now,
+          maxWaitMs: Math.min(config.maxTickMs, 60_000),
+          retryMs: config.skipRetryMs,
+          log,
+        });
+  undoOnFailure.push(async () => fiscalReconciliation?.stop());
+
   const loop = runLoop({
     // Drain and reconcile run ONLY on the node holding `singleton_role = 'primary'`, read per pass so
     // a promotion starts them on the next tick; any other node gets an empty pass that still advances
@@ -3738,7 +3761,9 @@ async function bootServer(
     health,
     log,
     {
-      stopWork: () => stopBackgroundDuties(duties),
+      stopWork: async () => {
+        await closeAll([() => fiscalReconciliation?.stop(), () => stopBackgroundDuties(duties)]);
+      },
       settleRequests: settleManagementRequests,
       closePools: () => store.close(),
     },
