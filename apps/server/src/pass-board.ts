@@ -1,10 +1,11 @@
 import "./errors.js";
-import { and, eq, gte, inArray, isNull, or, type SQL } from "drizzle-orm";
+import { and, eq, gte, inArray, or, type SQL } from "drizzle-orm";
 import { worstBand } from "@waitron/shared";
 import { ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { ResolvedKitchenScreen } from "@waitron/module";
 import type { TradingContext } from "./trading-context.js";
+import { requestedItem } from "./kitchen-phase.js";
 import { orderWatchZones } from "./watch-zones.js";
 import {
   liveKitchenDish,
@@ -182,7 +183,7 @@ export async function firedPassDishes(
         liveKitchenDishAt(cfg),
         or(
           gte(ticketItems.firedAt, firedSince),
-          and(isNull(ticketItems.firedAt), gte(ticketItems.requestedAt, firedSince)),
+          and(requestedItem(), gte(ticketItems.requestedAt, firedSince)),
         ),
       ),
     );

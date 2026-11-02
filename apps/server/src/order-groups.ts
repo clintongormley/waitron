@@ -58,7 +58,7 @@ import {
   printerMappings,
 } from "./kitchen-print.js";
 import type { FiredItem, HoldCorrection, TicketState } from "./kitchen-print.js";
-import { initiatedItem } from "./kitchen-phase.js";
+import { initiatedAt, initiatedItem } from "./kitchen-phase.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { trimQuantityForDisplay } from "./receipt-lines.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
@@ -1949,8 +1949,8 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
         (line) =>
           line.parentLineId !== null &&
           line.ticketItemId !== null &&
-          line.ticketFiredAt === null &&
-          line.ticketRequestedAt === null,
+          initiatedAt({ requestedAt: line.ticketRequestedAt, firedAt: line.ticketFiredAt }) ===
+            null,
       )
       .map((line) => line.parentLineId),
   );

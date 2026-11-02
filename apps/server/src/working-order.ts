@@ -4743,7 +4743,8 @@ async function carveLines(
       line.groupState !== "held" &&
       [line, ...childLineNos.map((lineNo) => byLineNo.get(lineNo)!)].some(
         (row) =>
-          row.ticketItemId !== null && row.ticketFiredAt === null && row.ticketRequestedAt === null,
+          row.ticketItemId !== null &&
+          initiatedAt({ requestedAt: row.ticketRequestedAt, firedAt: row.ticketFiredAt }) === null,
       )
     ) {
       throw new AppError("tab.split_held_line", { tabId: fromTabId, lineNo: t.lineNo });
