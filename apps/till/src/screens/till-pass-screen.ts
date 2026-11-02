@@ -3,6 +3,7 @@ import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "
 import { customElement, property, state } from "lit/decorators.js";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import { t } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import {
   kitchenScreenNoticeText,
   lostSlotLine,
@@ -24,7 +25,13 @@ import {
   setColumnVisible,
   toggleColumnCollapsed,
 } from "../state/kitchen-columns.js";
-import type { DevicePassBoard, PassBoard, TillApi } from "../api/client.js";
+import type {
+  DevicePassBoard,
+  PassBoard,
+  PassCard,
+  PassReleaseAsk,
+  TillApi,
+} from "../api/client.js";
 
 type BoardId = "all" | "pass" | "monitor";
 
@@ -53,6 +60,12 @@ function lostLines(screen: Pick<DevicePassBoard, "stations" | "zones">): string[
       .filter((slot) => !slot.available)
       .map((slot) => lostSlotLine("zone", slot.name)),
   ];
+}
+
+function cardLabel(card: PassCard): string {
+  const numbers = card.orders.map((order) => `#${order.orderNumber}`).join(" · ");
+  const table = card.orders[0]?.tableLabel;
+  return table ? `${numbers} ${table}` : numbers;
 }
 
 const REFRESH_MS = 15_000;
@@ -107,6 +120,24 @@ export class TillPassScreen extends LitElement {
         margin: 0;
       }
 
+      .error {
+        margin: 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-danger);
+        color: var(--wt-color-on-danger);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .table-changed {
+        margin: 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
+        border-radius: var(--wt-radius-md);
+        background: var(--wt-color-warning);
+        color: var(--wt-color-on-warning);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
       .title {
         margin: 0;
         font-size: var(--wt-font-size-xl);
@@ -150,6 +181,14 @@ export class TillPassScreen extends LitElement {
   readonly #refreshReads = new Set<AbortController>();
   #request = 0;
   #appliedRequest = 0;
+  /** Card keys with a Fire out. */
+  @state() private sending: ReadonlySet<string> = new Set();
+  /** A Fire out or unanswered, by card key; an unanswered one is resent unchanged (B3 D48). */
+  readonly #asks = new Map<string, PassReleaseAsk>();
+  @state() private leverError?: { code: string; card: string };
+  /** The refresh sentence, shown by the good read after a refused Fire and cleared by the next. */
+  @state() private tableChanged = false;
+  #tableChangedNext = false;
   /** Each board's layout, read from storage once and never again on a refresh. */
   readonly #columns = new Map<string, ColumnState>();
 
@@ -256,6 +295,8 @@ export class TillPassScreen extends LitElement {
       this.#adoptBoard(result);
       this.stale = false;
       this.#lastGoodAt = new Date();
+      this.tableChanged = this.#tableChangedNext;
+      this.#tableChangedNext = false;
     } catch (error) {
       if (
         probe &&
@@ -273,6 +314,82 @@ export class TillPassScreen extends LitElement {
     this.board = read.board;
     this.lostLines = lostLines(read);
     this.nothingLeft = nothingLeft(read);
+    for (const [key, ask] of this.#asks) {
+      if (this.sending.has(key)) continue;
+      const card = read.board.toFire.find((offered) => offered.key === key);
+      if (card?.releaseContext !== ask.expectedContext) this.#asks.delete(key);
+    }
+  }
+
+  async #fire(boardId: BoardId, key: string): Promise<void> {
+    if (boardId !== "pass" || !this.runsPass || this.sending.has(key)) return;
+    const card = this.board.toFire.find((offered) => offered.key === key);
+    let ask = this.#asks.get(key);
+    if (ask === undefined) {
+      if (card?.releaseContext == null || card.releaseTicketItemIds.length === 0) return;
+      ask = {
+        submissionId: crypto.randomUUID(),
+        target: card.target,
+        ticketItemIds: card.releaseTicketItemIds,
+        expectedContext: card.releaseContext,
+      };
+      this.#asks.set(key, ask);
+    }
+    this.tableChanged = false;
+    this.#tableChangedNext = false;
+    this.leverError = undefined;
+    this.sending = new Set([...this.sending, key]);
+    let reload = true;
+    try {
+      await this.api.releaseDevicePass(ask);
+      this.#asks.delete(key);
+    } catch (error) {
+      const { code, status } = (error ?? {}) as { code?: string; status?: unknown };
+      if (typeof status !== "number") {
+        reload = false;
+        if (this.#isCurrent(boardId)) this.stale = true;
+      } else {
+        this.#asks.delete(key);
+        if (this.#switched(error)) reload = false;
+        else if (this.#isCurrent(boardId)) {
+          if (code === "ticket.pass_context_changed" || code === "party.not_open")
+            this.#tableChangedNext = true;
+          else
+            this.leverError = {
+              code: code ?? "server.internal",
+              card: card === undefined ? "" : cardLabel(card),
+            };
+        }
+      }
+    } finally {
+      const sending = new Set(this.sending);
+      sending.delete(key);
+      this.sending = sending;
+    }
+    if (reload && this.#isCurrent(boardId)) await this.#reload();
+  }
+
+  /**
+   * On a kitchen display, a press refused because the device no longer has this screen asks the app
+   * to re-read the device's choice now. A release names a lost pass screen `device.unauthorized`, a
+   * lever `kitchen_screen.not_allowed`.
+   */
+  #switched(error: unknown): boolean {
+    const code = (error as { code?: string } | null)?.code;
+    if (
+      !this.#onDevice() ||
+      !this.isConnected ||
+      (code !== "device.unauthorized" && code !== "kitchen_screen.not_allowed")
+    )
+      return false;
+    this.dispatchEvent(
+      new CustomEvent("kitchen-screen-changed", {
+        detail: { from: this.monitor ? "pass_monitor" : "pass" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    return true;
   }
 
   #boardId(): BoardId | null {
@@ -393,7 +510,12 @@ export class TillPassScreen extends LitElement {
       .runsPass=${this.runsPass}
       .columns=${this.#columnsFor(boardId)}
       .now=${this.#clockNow()}
+      .sending=${this.sending}
       .reducedMotion=${this.reducedMotion}
+      @pass-fire=${(event: Event) => {
+        event.stopPropagation();
+        void this.#fire(boardId, (event as CustomEvent<{ key: string }>).detail.key);
+      }}
       @toggle-column=${(event: Event) => {
         event.stopPropagation();
         const { key } = (event as CustomEvent<{ key: ColumnKey }>).detail;
@@ -407,7 +529,21 @@ export class TillPassScreen extends LitElement {
       >${this.#lead("lead")}${this.#unavailable("status")}
       <p class="stale" role="status" slot="status" ?data-stale=${this.stale}>
         ${this.stale ? html`<till-stale-since .since=${this.#lastGoodAt}></till-stale-since>` : nothing}
-      </p></till-pass-board
+      </p>
+      ${
+        this.leverError
+          ? html`<p class="error" role="alert" slot="status" data-lever-error>
+              ${this.leverError.card}: ${codeMessage(this.leverError.code)}
+            </p>`
+          : nothing
+      }
+      ${
+        this.tableChanged
+          ? html`<p class="table-changed" role="status" slot="status" data-table-changed>
+              ${t("station.table_changed")}
+            </p>`
+          : nothing
+      }</till-pass-board
     >`;
   }
 
