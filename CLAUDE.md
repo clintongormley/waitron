@@ -88,14 +88,15 @@ and which keep the full gate: [ci-and-gates.md](docs/developers/ci-and-gates.md)
 where the rest of a gap could be closed solely by tests that assert nothing useful, and a gap is
 never closed by hiding code a test could reach — adding an exclude or an ignore comment over it, or
 moving it under `src/testing/`. Guard: `scripts/coverage-thresholds.test.ts`, weaker than its name —
-it reads each config's `thresholds` literal as TEXT.
+it reads each config's `thresholds` literal as TEXT and never reads an exclude or an ignore comment.
 More: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 **A mutation floor of 90 breaks the run in every mutation-tested package — `ui`, `ui-core`,
 `shared`, `fiscal`, `db` and `node-db`** (the owner's 90-everywhere decision of 2026-09-19). WHERE it bites
 differs, and neither `fiscal`'s nor `db`'s floor is package-wide. Guard:
 `scripts/mutation-break-thresholds.test.mjs`, weaker than its name — it reads the workflow as TEXT
-for the sharded packages' bars. Which package bites where: [ci-and-gates.md](docs/developers/ci-and-gates.md).
+for the sharded packages' bars. Which package bites where:
+[ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 Traps, each of which cost a round trip. The mechanism behind every one is in
 [ci-and-gates.md](docs/developers/ci-and-gates.md#root-detail-moved-on-2026-10-26) — read it before changing anything about CI, the
@@ -916,9 +917,9 @@ before treating an implementation as a rule violation.
   content. [Limits](docs/developers/workflow-guide.md#mock-ups-and-screenshots-are-never-committed).
 
 **Docs.** `docs/backlog.md` answers "what should I work on?" — read it before starting anything
-unprompted, and **update it in the same change that makes it stale**. A change that finishes an entry DELETES it
-rather than marking it done, and each point it leaves open becomes its own short entry in the same area; an entry's long detail goes
-in its area's file under `docs/backlog/`. A decision a comment or doc cites moves to its area's
+unprompted, and **update it in the same change that makes it stale**. A change that finishes an
+entry DELETES it rather than marking it done, and each point it leaves open becomes its own short
+entry in the same area; an entry's long detail goes in its area's file under `docs/backlog/`. A decision a comment or doc cites moves to its area's
 `## Decisions and deliberate limits` instead of being deleted, and entries there are never deleted
 for being finished. How: `docs/backlog.md` → _How to keep this file honest_.
 Specs live in `docs/superpowers/specs/`, plans in `docs/superpowers/plans/`,
