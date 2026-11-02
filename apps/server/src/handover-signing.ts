@@ -19,6 +19,7 @@ import {
   canonicalize,
   endorsedKeyOf,
   fencedOutNodeIds,
+  isMembershipDocument,
   type CanonicalValue,
 } from "@waitron/membership";
 import { AppError } from "@waitron/shared";
@@ -47,7 +48,7 @@ export async function peerKeyOf(deps: {
 }): Promise<(nodeId: string) => string | undefined> {
   const held = await readNodeMembership(deps.db);
   const keyOf = endorsedKeyOf(held, await readStoredTrustSet(deps));
-  const removed = fencedOutNodeIds(held);
+  const removed = held !== null && isMembershipDocument(held) ? fencedOutNodeIds(held) : new Set();
   // A box the held chart has removed never speaks in a handover, a pinned primary included.
   return (nodeId) => (removed.has(nodeId) ? undefined : keyOf(nodeId));
 }

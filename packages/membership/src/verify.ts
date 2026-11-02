@@ -147,10 +147,16 @@ export function endorsedKeyOf(
   held: SignedMembershipDocument | null,
   trustSet: TrustSet,
 ): (nodeId: string) => string | undefined {
-  if (held === null || !verifyMembershipDocument(held, trustSet, held).valid) {
-    return (nodeId) => (Object.hasOwn(trustSet, nodeId) ? trustSet[nodeId] : undefined);
+  const keys = new Map(Object.entries(trustSet));
+  if (held !== null && verifyMembershipDocument(held, trustSet, held).valid) {
+    // Only an endorsed id can gain a key, so resolving each of them once answers every lookup.
+    for (const { nodeId } of held.endorsements) {
+      if (keys.has(nodeId)) continue;
+      const key = resolveSignerKey(nodeId, held.endorsements, trustSet, held);
+      if (key !== null) keys.set(nodeId, key);
+    }
   }
-  return (nodeId) => resolveSignerKey(nodeId, held.endorsements, trustSet, held) ?? undefined;
+  return (nodeId) => keys.get(nodeId);
 }
 
 /**

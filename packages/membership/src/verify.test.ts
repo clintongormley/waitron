@@ -310,6 +310,28 @@ describe("endorsedKeyOf", () => {
     expect(keyOf("C")).toBeUndefined();
   });
 
+  it("resolves the held chart's endorsements once, when the lookup is built", () => {
+    const a = generateNodeKeyPair();
+    const b = generateNodeKeyPair();
+    const endorsements = [endorseKey("B", b.publicKey, "A", a.privateKey)];
+    const keyOf = endorsedKeyOf(chartWith("A", a.privateKey, endorsements), { A: a.publicKey });
+    endorsements.length = 0;
+    expect(keyOf("B")).toBe(b.publicKey);
+  });
+
+  it("keeps a trusted key over an endorsement of the same id, and skips an unvouched endorsement", () => {
+    const a = generateNodeKeyPair();
+    const other = generateNodeKeyPair();
+    const stranger = generateNodeKeyPair();
+    const held = chartWith("A", a.privateKey, [
+      endorseKey("A", other.publicKey, "A", a.privateKey),
+      endorseKey("C", other.publicKey, "S", stranger.privateKey),
+    ]);
+    const keyOf = endorsedKeyOf(held, { A: a.publicKey });
+    expect(keyOf("A")).toBe(a.publicKey);
+    expect(keyOf("C")).toBeUndefined();
+  });
+
   it("reads no endorsement from a held chart the trusted keys did not sign", () => {
     const a = generateNodeKeyPair();
     const b = generateNodeKeyPair();

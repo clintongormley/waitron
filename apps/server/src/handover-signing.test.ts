@@ -192,6 +192,21 @@ describe("signing and verifying handover envelopes between boxes", () => {
     expect(after(self)).toBe(publicKeyOf(selfKey));
   });
 
+  it("a malformed stored chart vouches for nothing and still answers the stored keys", async () => {
+    const { db, self, peer } = await boxes();
+    const selfKey = await readNodeIdentityKey(suite.node, RING, self);
+    const malformed = {
+      body: { term: 3, nodes: "not a list" },
+      signerNodeId: self,
+      signature: "x",
+      endorsements: [],
+    } as unknown as SignedMembershipDocument;
+    await writeNodeMembership(db, malformed);
+    const keyOf = await peerKeyOf({ db, node: suite.node, ring: RING, nodeId: self });
+    expect(keyOf(self)).toBe(publicKeyOf(selfKey));
+    expect(keyOf(peer)).toBeUndefined();
+  });
+
   it("the binding names the taxpayer and environment, and the held chart's term and digest", async () => {
     const { db, self, peer } = await boxes();
     await stampDeployment(db, "preproduction");
