@@ -1,10 +1,9 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { isAppError, locationId as brandLocationId } from "@waitron/shared";
+import { isAppError } from "@waitron/shared";
 import {
   captureError,
   CORE_MIGRATIONS,
-  locations,
   nodes,
   stampDeployment,
   readMembershipTrustSet,
@@ -14,7 +13,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
   endorseKey,
@@ -64,18 +63,12 @@ async function fencedNode(): Promise<{
   deps: (log: RetireDeps["log"]) => RetireDeps;
 }> {
   await stampDeployment(db, "preproduction");
-  await seedTenant(db);
-  // Through the table definition: `locations.id` is a `$defaultFn` generator a raw insert never
-  // reaches.
-  const [loc] = await db
-    .insert(locations)
-    .values({
-      name: "Barra",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const nodeId = await seedNode(db, brandLocationId(loc!.id));
+  await seedVenue(db, {
+    name: "Barra",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
+  });
+  const nodeId = await seedNode(db);
   await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, nodeId);
   ownKeys.set(nodeId, await readNodeIdentityKey(suite.node, RING, nodeId));
   await pinMainBoxKey(suite.node, nodeId, { nodeId: CARRIER_ID, publicKey: CARRIER_KEY.publicKey });

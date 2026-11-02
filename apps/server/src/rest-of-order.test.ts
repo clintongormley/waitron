@@ -3,20 +3,17 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   kitchenStations,
-  locations,
   nowIso,
   ticketItems,
   withTransaction,
+  venueLocationId,
   workingOrderLines,
-  workingOrders,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { readRestOfOrder, restOfOrderQuery } from "./rest-of-order.js";
-import { dashboardOrderAt } from "./testing/session-device.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -30,15 +27,9 @@ beforeAll(() => {
 
 describe("rest of the order read", () => {
   it("returns other-station kitchen records in station and line order, excluding hidden and served work", async () => {
-    await seedTenant(db);
-    const locationId = randomUUID();
-    await db.insert(locations).values({
-      id: locationId,
-      name: "Venue",
-      invoiceLocales: ["en"],
-      operationDescription: "Service",
-    });
-    const nodeId = await seedNode(db, brandLocationId(locationId));
+    await seedVenue(db, { name: "Venue", invoiceLocales: ["en"], operationDescription: "Service" });
+    const locationId = await venueLocationId(db);
+    const nodeId = await seedNode(db);
     const stations = await db
       .insert(kitchenStations)
       .values([
@@ -49,10 +40,22 @@ describe("rest of the order read", () => {
     const station = (name: string) => stations.find((s) => s.name === name)!.id;
     const orderId = randomUUID();
     const otherOrderId = randomUUID();
-    await db.insert(workingOrders).values([
-      { id: orderId, ...dashboardOrderAt(locationId), nodeId, orderNumber: 1, status: "open" },
-      { id: otherOrderId, ...dashboardOrderAt(locationId), nodeId, orderNumber: 2, status: "open" },
-    ]);
+    await seedWorkingOrder(db, {
+      id: orderId,
+      source: "dashboard",
+      deviceId: null,
+      nodeId,
+      orderNumber: 1,
+      status: "open",
+    });
+    await seedWorkingOrder(db, {
+      id: otherOrderId,
+      source: "dashboard",
+      deviceId: null,
+      nodeId,
+      orderNumber: 2,
+      status: "open",
+    });
     const cases = [
       {
         order: orderId,
