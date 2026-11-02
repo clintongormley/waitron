@@ -2514,6 +2514,14 @@ is what the build does until answered, and none is reachable before PR C):
 4. Another station's dish waiting for the pass, in a cook's "rest of the order": keep the
    "(on hold)" mark (default) or print no mark?
 
+**A fifth owner question, to answer before PR C makes waiting reachable** (B2, #2392, decision
+D41 in B2's plan): a dish that waits for the pass, was never given to the kitchen, but has been
+served in full no longer blocks recording the table as an unpaid departure (`ordersWithUnfiredDish`);
+without that, nothing would ever let such a table leave unpaid. A dish served in part still
+blocks. Default: keep D41. The till's `unpaid_departure.unfired_dishes` message
+(`apps/till/src/i18n/codes.ts`) still says "not sent, on hold, or recalled" and needs wording for
+"waiting for the pass and not fully served", in English and Spanish, with B3's copy sheet.
+
 The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
 [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md) govern the landed
 Sent/New order and bill ownership behavior. Physical dragging and partial-serving trials remain
