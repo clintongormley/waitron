@@ -404,7 +404,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   the complete decision and return the saved result after clock or delivery changes. Explicit
   accepted-with-errors decisions require the matching stored case and delivery and retain S/N
   markers. Corrective-invoice and absent-original-cancellation workflows, held-record release,
-  accounting/refund qualification and the live second-correction probe remain unfinished.
+  accounting/refund qualification remain unfinished. The 2 November AEAT TEST run accepted
+  an original and two successive S/N description corrections as `Correcto`; consultation matched
+  the second correction's fingerprint. This one-identity probe does not enable production remedies.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

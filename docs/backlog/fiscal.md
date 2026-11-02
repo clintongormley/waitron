@@ -494,6 +494,28 @@ and records accepted with errors. Corrective-invoice and absent-original-cancell
 held-record release, staff cancellation/refund qualification and the live second-correction probe
 remain Task 8 work.
 
+**2 November 2026, Task 8 live second-correction prerequisite.** Verifactu
+[#150](https://github.com/waitron-io/verifactu/pull/150) adds the manual `double-correction`
+probe. Its single authorised [AEAT TEST run](https://github.com/waitron-io/verifactu/actions/runs/41370629637)
+submitted an original alta and two description corrections under invoice
+`CI/20261102/41370629637-DOUBLE`, dated `02-11-2026`, on one synthetic installation.
+All three batch and line replies were `Correcto`, without an error code. Each correction kept
+that identity, used `Subsanacion=S` and `RechazoPrevio=N`, and linked to the preceding version.
+The final consultation returned one `Correcto` record with the second correction's description,
+fingerprint and link to the first correction.
+
+The [dated evidence](../superpowers/specs/2026-11-02-aeat-double-correction-evidence.json)
+retains the records, parsed replies and request/reply SOAP after identity masking. You can use
+this as the Task 8 storage design's live prerequisite for two successive corrections. It does
+not settle which invoice errors legally permit that remedy or enable production policy.
+Rejected originals, changed money or tax, actual staff refunds and held-record resolution remain
+outside this run; the remaining Task 8 workflows still need implementation and qualification.
+
+| Source, checked 2 November 2026 | Exact words | Observation |
+| --- | --- | --- |
+| [AEAT TEST run 41370629637](https://github.com/waitron-io/verifactu/actions/runs/41370629637), three submission replies | `EstadoEnvio: "Correcto"`, `EstadoRegistro: "Correcto"` | The original and both S/N description corrections received those states. |
+| Same run, final consultation | `ResultadoConsulta: "ConDatos"`, `EstadoRegistro: "Correcto"` | One record carried fingerprint `BB7FFF9845DDB687E31FA5404A273EE186F9D3FAF6FC8EC7B8A04E00ECF2F3F1` and description `Double correction probe: secondCorrection`. |
+
 **2 November 2026, Task 8 corrected-fact requests.** The synthetic HTTP adapter accepts partial
 corrections to the stored description, issuer name, invoice type, recipients, tax breakdown, total
 and tax amounts, corrective/substitution references and correction amounts. Omitted fields keep
