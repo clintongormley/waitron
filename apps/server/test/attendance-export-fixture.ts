@@ -1,7 +1,7 @@
 import type { RecordExportDocument } from "@waitron/shared";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
-import { locations, withTransaction, type Database } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { jobOrigin } from "@waitron/shared";
+import { venueLocationId, withTransaction, type Database } from "@waitron/db";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { persons } from "@waitron/identity";
 import { WorkforceBackend, closePayPeriod } from "@waitron/workforce";
 import { prepareTimeRecordExport } from "@waitron/workforce-es";
@@ -11,16 +11,13 @@ export const longToken = "LONGTOKEN".repeat(100);
 
 export async function seedAttendanceExport(db: Database) {
   await seedTenant(db);
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Charcutería",
-      invoiceLocales: ["es"],
-      operationDescription: "Sale on premises",
-    })
-    .returning();
-  const locationId = location!.id;
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  await seedVenue(db, {
+    name: "Charcutería",
+    invoiceLocales: ["es"],
+    operationDescription: "Sale on premises",
+  });
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
   const [worker, manager] = await db
     .insert(persons)
     .values([
