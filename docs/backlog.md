@@ -4877,6 +4877,12 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 
+- **The till's Fix my hours dialog fails on a saved time zone that is not a valid name (found by
+  #2413's review; I believe it predates that branch, `git blame` names e5fdfb484f).** `#openAttendanceDay`
+  (`apps/till/src/till-app.ts`) formats today's date in the venue's stored zone, so a value such as
+  `Invalid/Zone` throws an unhandled error and the dialog never gets its default date. It needs a
+  refusal written for staff, as its own change.
+
 - **A851. Staffing reads the venue's first business-day start, not the one in force (found by A788's
   design).**
   [Detail](backlog/workforce.md#a851-staffing-reads-the-venues-first-business-day-start-not-the-one-in-force-found-by-a788s-design).
@@ -6545,7 +6551,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   takes only the period, and the shared location-picker widget is gone; `getLocations` stays for
   S12d. S15-2 landed (#2408): the working-time export and its availability route take no location
   (a `locationId` is refused as an unknown key), and the dashboard's export dialog, My hours and the
-  corrections screen send none. S15-3 (S15c–S15k) and S12d remain; both can start. S18 waits for S2–S17, and the schema
+  corrections screen send none. S15-3 landed (#2413), so S15 has landed: the attendance and hours
+  reads, the day and queue reads and the correction commands take no location (a `locationId` is
+  refused as an unknown key), the inbox carries the venue's `timeZone` instead of a place list, the
+  lookups list no places, and the dashboard's and the till's hours screens, day dialogs and question
+  cards have no Location field (a card is headed by its work day). S12d remains and can start. S18 waits for S2–S17, and the schema
   slices S20–S28 get a plan of their own, which first settles what the venue id sent to Cloud and
   naming the backup folder becomes. S4 landed (#2388): standby establishment
   refuses with `mirror.venue_not_copied` before a node write when no venue row exists, including
