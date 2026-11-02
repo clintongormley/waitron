@@ -88,7 +88,7 @@ aviso de la campana explica por qué se pararon.
 ## Recupera una identidad de facturación en conflicto {#invoice-conflict}
 
 Si este equipo deja de emitir facturas porque su identidad entra en conflicto con una respuesta
-de envío, mantén desconectado cualquier equipo antiguo o copiado. Una identidad nueva no impide
+de envío o una consulta a Hacienda, mantén desconectado cualquier equipo antiguo o copiado. Una identidad nueva no impide
 que otra máquina siga vendiendo.
 
 Abre `/manage/recovery/fiscal-conflict` en este equipo mediante HTTPS. Necesitas su clave de
@@ -99,7 +99,8 @@ el equipo antiguo o copiado y que nadie más lo está recuperando, y elige **Com
 Si no hay un minuto disponible, espera la cuenta atrás. La página vuelve a comprobarlo cada cinco
 segundos. Cuando termine la espera, compara los relojes otra vez. Comprueba la identidad elegida y
 pulsa **Cambiar identidad**. La cuenta atrás nunca la cambia por ti. Se conservan tus pedidos,
-pagos e historial; el registro rechazado sigue rechazado y su incidencia sigue abierta.
+pagos e historial. Los resultados de envío y las incidencias existentes no cambian. Una factura
+encontrada al consultar Hacienda puede no estar en el historial de este equipo.
 
 Si se pierde la respuesta, la página consulta el resultado del mismo intento. Un resultado sin
 confirmar no significa que la identidad haya cambiado. Usa **Consultar conflicto** para volver a

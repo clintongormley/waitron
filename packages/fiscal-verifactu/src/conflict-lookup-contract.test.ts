@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { parseConflictResult } from "./conflict-recovery-contract.js";
+import { parseConflictRequest, parseConflictResult } from "./conflict-recovery-contract.js";
 
 const evidence = {
   source: "consulta",
@@ -58,4 +58,36 @@ it.each([
 it("retains explicit missing lookup fields as unknown facts", () => {
   const input = status({ ...evidence, fingerprint: null, reference: null, system: null });
   expect(parseConflictResult(input)).toEqual(input);
+});
+
+it("accepts a lookup-only conflict reference without made-up record or case ids", () => {
+  const rest = Object.fromEntries(
+    Object.entries(status(evidence).active[0]!).filter(
+      ([key]) => key !== "registroId" && key !== "caseId",
+    ),
+  );
+  const active = { ...rest, lookupId: "outside-observation" };
+  const input = { kind: "status", active: [active], event: { kind: "none" } };
+  expect(parseConflictResult(input)).toEqual(input);
+  const request = {
+    recoveryKey: "current-key",
+    eventId: "event",
+    oldMachineOffline: true,
+    noParallelRecovery: true,
+    command: { kind: "prepare", proposal: { action: "clock-challenge" } },
+    conflict: { lookupId: "outside-observation", sifId: "sif" },
+  };
+  expect(parseConflictRequest(request)).toEqual(request);
+  expect(
+    parseConflictRequest({
+      ...request,
+      conflict: { ...request.conflict, registroId: "record", caseId: "case" },
+    }),
+  ).toBeNull();
+  expect(
+    parseConflictResult({
+      ...input,
+      active: [{ ...active, registroId: "record", caseId: "case" }],
+    }),
+  ).toBeNull();
 });

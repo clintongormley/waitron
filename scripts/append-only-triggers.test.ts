@@ -48,6 +48,7 @@ const EXPECTED = [
   "fiscal_conflict_evidence",
   "fiscal_lookup_conflicts",
   "fiscal_reservations",
+  "fiscal_series_conflicts",
   "invoice_pdf_downloads",
   "membership_clearances",
   "membership_removals",

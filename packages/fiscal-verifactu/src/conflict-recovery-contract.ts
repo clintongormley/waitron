@@ -1,6 +1,6 @@
 import type { FiscalAllocation, RecoveryApproval } from "./allocation-types.js";
 import type { ActivationResult } from "./allocation-types.js";
-import type { ActiveConflict, ConflictRef } from "./conflict-types.js";
+import type { ActiveConflict, RecoveryConflictRef as ConflictRef } from "./conflict-types.js";
 import type { HourClockDecision } from "./hour-clock.js";
 import type { SetupBrowserClockSample } from "./hour-clock.js";
 import { parseAllocationOperator } from "./allocation-operator.js";
@@ -128,8 +128,9 @@ export function parseConflictInput(value: unknown): ConflictAllocationInput | nu
 }
 function validRef(value: unknown): value is ConflictRef {
   return (
-    exact(value, ["registroId", "caseId", "sifId"]) &&
-    [value.registroId, value.caseId, value.sifId].every(text)
+    (exact(value, ["registroId", "caseId", "sifId"]) &&
+      [value.registroId, value.caseId, value.sifId].every(text)) ||
+    (exact(value, ["lookupId", "sifId"]) && [value.lookupId, value.sifId].every(text))
   );
 }
 function proposal(value: unknown): value is ConflictProposal {
@@ -286,8 +287,9 @@ export function parseConflictResult(value: unknown): ConflictResult | null {
     !value.active.every(
       (row: unknown) =>
         exact(row, [
-          "registroId",
-          "caseId",
+          ...(record(row) && Object.hasOwn(row, "lookupId")
+            ? ["lookupId"]
+            : ["registroId", "caseId"]),
           "sifId",
           "installationIdentity",
           "invoiceIdentity",
@@ -297,8 +299,7 @@ export function parseConflictResult(value: unknown): ConflictResult | null {
           "evidenceId",
         ]) &&
         [
-          row.registroId,
-          row.caseId,
+          ...(Object.hasOwn(row, "lookupId") ? [row.lookupId] : [row.registroId, row.caseId]),
           row.sifId,
           row.installationIdentity,
           row.invoiceIdentity,

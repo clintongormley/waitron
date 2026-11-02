@@ -1,5 +1,5 @@
 import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { invoiceSeries, type Transaction } from "@waitron/db";
 import { IssuanceRefusedError } from "@waitron/fiscal";
 import "./errors.js";
 import {
@@ -11,6 +11,7 @@ import { filingCases } from "./schema/filing-cases.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import { registroSif } from "./schema/sif.js";
 import { fiscalLookupConflicts } from "./schema/lookup-conflicts.js";
+import { fiscalSeriesConflicts } from "./schema/series-conflicts.js";
 
 export type {
   ConflictComparison,
@@ -99,6 +100,36 @@ export async function readActiveConflicts(
       evidenceId: row.observation?.id ?? row.lookup?.id ?? null,
     });
   }
+  const external = await tx
+    .select({ lookup: fiscalSeriesConflicts, installationIdentity: registroSif.numeroInstalacion })
+    .from(fiscalSeriesConflicts)
+    .innerJoin(registroSif, eq(registroSif.id, fiscalSeriesConflicts.sifId))
+    .innerJoin(
+      invoiceSeries,
+      and(
+        eq(invoiceSeries.id, fiscalSeriesConflicts.seriesId),
+        eq(invoiceSeries.nodeId, registroSif.nodeId),
+      ),
+    )
+    .where(
+      and(
+        eq(registroSif.nodeId, nodeId),
+        isNull(registroSif.revocadoEn),
+        isNull(invoiceSeries.retiredAt),
+      ),
+    )
+    .orderBy(asc(fiscalSeriesConflicts.recordedAt), asc(fiscalSeriesConflicts.id));
+  for (const { lookup, installationIdentity } of external)
+    active.push({
+      lookupId: lookup.id,
+      sifId: lookup.sifId,
+      installationIdentity,
+      invoiceIdentity: lookup.invoiceIdentity,
+      observedAt: lookup.recordedAt.toISOString(),
+      evidence: lookup.evidence,
+      cause: "fiscal.huella_divergente",
+      evidenceId: lookup.id,
+    });
   return active;
 }
 

@@ -251,3 +251,23 @@ it("still closes the transport if the observation log throws", async () => {
   expect(close).toHaveBeenCalledTimes(1);
   expect(await states()).toEqual([{ estado: "aceptado" }]);
 });
+
+it("observes the current venue month without local invoices, then waits a day before repeating it", async () => {
+  const { authority, deps } = await fixture();
+  const log = vi.fn();
+  const close = vi.fn(async () => {});
+  vi.mocked(mtlsFetch).mockReturnValue({ fetch: authority.fetch, close });
+  const run = FISCAL_SLOT.createReconciliation!({ ...deps, log });
+  const at = new Date("2026-07-31T23:30:00Z"); // The fixture's +01:00 offset is already August.
+  await run(at);
+  expect(log).toHaveBeenCalledWith(
+    "info",
+    "fiscal.reconciliation_observed",
+    expect.objectContaining({ year: "2026", month: "08", outcome: "observed", checked: 0 }),
+  );
+  const closed = close.mock.calls.length;
+  await run(new Date(at.getTime() + 86_400_000 - 1));
+  expect(close).toHaveBeenCalledTimes(closed);
+  await run(new Date(at.getTime() + 86_400_000));
+  expect(log.mock.calls.filter(([, , params]) => params?.month === "08")).toHaveLength(2);
+});

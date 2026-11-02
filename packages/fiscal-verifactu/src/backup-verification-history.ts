@@ -436,6 +436,8 @@ const LINKS = [
   ["fiscal_conflict_evidence", "case_id", "filing_cases", "id"],
   ["fiscal_lookup_conflicts", "registro_id", "registros_facturacion", "id"],
   ["fiscal_lookup_conflicts", "case_id", "filing_cases", "id"],
+  ["fiscal_series_conflicts", "sif_id", "registro_sif", "id"],
+  ["fiscal_series_conflicts", "series_id", "invoice_series", "id"],
   ["envios", "registro_id", "registros_facturacion", "id"],
   ["acks", "registro_id", "registros_facturacion", "id"],
   ["fiscal_certificate_reminders", "install_id", "fiscal_certificate_installs", "id"],

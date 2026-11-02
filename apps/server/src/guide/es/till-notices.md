@@ -125,5 +125,5 @@ Elige **Abrir recuperación** junto al rechazo para abrir la recuperación de es
 pestaña. Conserva la ventana de pago. Si indica que la tarjeta ya se ha cobrado, no vuelvas a
 cobrar. Usa la clave de recuperación actual de este equipo y sigue
 [Recuperar una identidad de facturación](box-status.md#invoice-conflict).
-Puedes cerrar la ventana de pago sin iniciar una recuperación. El cambio de identidad no anula
-el rechazo original; su incidencia de envío sigue abierta.
+Puedes cerrar la ventana de pago sin iniciar una recuperación. El cambio de identidad conserva
+los resultados de envío y las incidencias existentes.

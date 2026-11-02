@@ -33,6 +33,7 @@ export const createRuntimeReconciliation: NonNullable<
           clock: deps.clock,
           scope: { nodeId: deps.nodeId, taxpayerId, environment: deps.environment },
           retryMs: deps.skipRetryMs,
+          includeCurrentPeriod: true,
           resolveClient: () => {
             const resolver = aeatClientResolver(
               {

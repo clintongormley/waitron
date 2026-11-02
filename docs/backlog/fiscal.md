@@ -460,6 +460,32 @@ This is still an unpublished milestone. Foreign invoices whose numbers have no l
 months without stored records, optional device-held evidence, recovery qualification and the whole
 item's reviews and CI remain unfinished.
 
+### W41s-10a absent-invoice candidate checkpoint, 2 November 2026
+
+The next unpublished milestone extends the preceding lookup checkpoint to invoices absent from the
+box. The runtime caller includes the current venue month, using the clock's offset, even when that
+month has no stored invoice. The library's stored-period audit remains available separately.
+`slot.reconciliation.test.ts` checks the empty month and daily deadline through the real SOAP client
+and fake authority.
+
+An externally held invoice in an active series is retained in the append-only
+`fiscal_series_conflicts` table. It references the actual identity and series, without inventing a
+local invoice, filing case or submission attempt. The lookup checks the identity and series again
+inside its write transaction and excludes an invoice recorded while the lookup was pending.
+`reconcile.unheld.test.ts` checks these boundaries, different-date reuse across months, complete
+pagination, taxpayer scope and refused evidence writes. A number already represented by this
+lookup's local conflict is not given a second conflict entry.
+
+The administrator procedure accepts an observation reference as well as a record/case reference.
+`conflict-recovery.test.ts` checks activation and replay with both the observation-only reference
+and existing pending or accepted filing results; the results and records stay unchanged.
+The route and real Chromium screen checks carry the exact observation reference. The generated
+migration adds the separate table, its two foreign keys and its unique index. Backup checks use
+real files to reject dangling identity and series links and changed evidence.
+
+Optional device-held evidence, the sale-under-unknown exercise, necessary rebase, both whole-item
+reviews and current-head CI remain before owner review. This checkpoint is not a partial PR.
+
 ### Task 8 staff refund and held-cancellation qualification, 2 November 2026
 
 `apps/server/src/fiscal-remedy.staff-refund.test.ts` uses a real provisioned venue and the

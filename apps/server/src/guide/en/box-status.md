@@ -83,8 +83,8 @@ says why they stopped.
 
 ## Recover an invoice identity conflict {#invoice-conflict}
 
-If this box stops issuing invoices because its identity conflicts with a filing response, keep
-any old or copied box offline. A new identity does not stop another machine from selling.
+If this box stops issuing invoices because its identity conflicts with a filing response or an
+AEAT lookup, keep any old or copied box offline. A new identity does not stop another machine from selling.
 
 Open `/manage/recovery/fiscal-conflict` on this box over HTTPS. You need its current recovery key;
 signing in to the dashboard does not replace that key. Enter the key and choose **Check conflict**
@@ -94,7 +94,8 @@ nobody else is recovering it, then choose **Compare clocks**.
 If a minute is unavailable, wait for the countdown. The page checks again every five seconds.
 When the wait ends, compare the clocks again. Check the selected identity, then choose **Switch
 identity** yourself. The countdown never switches it for you. Your existing orders, payments and
-history are kept; the rejected record stays rejected and its case stays open.
+history are kept. Existing filing results and cases stay unchanged. An invoice found by a lookup
+may be missing from this box's history.
 
 If the answer is lost, the page checks the same attempt's result. An unconfirmed result is not a
 successful switch. Use **Check conflict** to check again with the current key. Choose **Start a new

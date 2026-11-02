@@ -17,17 +17,18 @@ import { deleteAck, writeAck } from "./acks.js";
 import { openAcceptedWithErrorsCase } from "./filing-cases.js";
 import { toAeatDate } from "./registro-row.js";
 import { retainLookupConflict } from "./reconcile-conflicts.js";
+import {
+  liveLookupHeader,
+  lookupSystem,
+  readLiveReconciliationSeries,
+  retainUnheldSeriesConflicts,
+} from "./reconcile-series.js";
 import type { LookupConflictEvidence } from "./conflict-types.js";
 
 export interface ReconcileDeps {
   db: Database;
   /** Runtime sweeps name the identity they may observe and correct. */
   scope?: ReconcileScope;
-  /**
-   * A function, not a resolved client: the real resolver decrypts a certificate, and `reconcile`
-   * calls it only once it knows the period holds at least one row, so a period with nothing to
-   * reconcile never has a certificate decrypted.
-   */
   resolveClient: () => Promise<VerifactuClient>;
   clock: TrustedClock;
 }
@@ -156,25 +157,35 @@ export async function reconcile(
     rowsForPeriod(tx, normalizedPeriod, deps.scope),
   );
   result.checked = rows.length;
-  // Nothing to reconcile: no consulta, and no certificate resolved.
-  if (rows.length === 0) return result;
-
+  const liveSeries =
+    deps.scope === undefined
+      ? []
+      : await withTransaction(deps.db, (tx) => readLiveReconciliationSeries(tx, deps.scope!));
+  if (rows.length === 0 && liveSeries.length === 0) return result;
+  const cabecera =
+    rows.length > 0
+      ? cabeceraFor(rows[0]!)
+      : await withTransaction(deps.db, (tx) => liveLookupHeader(tx, deps.scope!));
   const client = await deps.resolveClient();
-
-  // One database holds one taxpayer, but a rename leaves rows carrying different names; the
-  // cabecera takes the first row's, in no stated order.
-  const { authority, conflicts, unknown } = await fetchAuthority(
+  const { authority, conflicts, unknown, observed } = await fetchAuthority(
     client,
-    cabeceraFor(rows[0]!),
+    cabecera,
     normalizedPeriod,
     rows,
-    // A broad audit cannot impose a particular node's issuance stop.
     deps.scope !== undefined,
   );
 
   // T2
   const detectedAt = deps.clock.now().instant;
   await withTransaction(deps.db, async (tx) => {
+    if (deps.scope !== undefined)
+      await retainUnheldSeriesConflicts(
+        tx,
+        deps.scope,
+        observed,
+        new Set(rows.filter((row) => conflicts.has(row.id)).map((row) => row.num_serie_factura)),
+        detectedAt,
+      );
     const current = new Map(
       (await rowsForPeriod(tx, normalizedPeriod, deps.scope)).map((row) => [row.id, row]),
     );
@@ -353,10 +364,12 @@ async function fetchAuthority(
   authority: Map<string, Reported>;
   conflicts: Map<string, LookupConflictEvidence>;
   unknown: Set<string>;
+  observed: RegistroConsultado[];
 }> {
   const expected = new Map(rows.map((row) => [row.id, row]));
   const authority = new Map<string, Reported>();
   const visited = new Set<string>();
+  const observed: RegistroConsultado[] = [];
   const records = new Map<string, RegistroConsultado[]>();
   let clave: ConsultaFiltro["ClavePaginacion"];
   do {
@@ -370,6 +383,14 @@ async function fetchAuthority(
     });
     for (const r of resp.registros) {
       if (compareContents) {
+        const date = r.IDFactura.FechaExpedicionFactura;
+        if (
+          !/^\d{2}-\d{2}-\d{4}$/.test(date) ||
+          date.slice(6) !== period.year ||
+          date.slice(3, 5) !== period.month
+        )
+          throw new Error("consulta returned an invoice outside the requested period");
+        observed.push(r);
         const key = JSON.stringify([r.IDFactura.IDEmisorFactura, r.IDFactura.NumSerieFactura]);
         const group = records.get(key) ?? [];
         group.push(r);
@@ -461,22 +482,7 @@ async function fetchAuthority(
       }
     }
   }
-  return { authority, conflicts, unknown };
-}
-
-function lookupSystem(value: unknown): LookupConflictEvidence["system"] {
-  if (typeof value !== "object" || value === null) return null;
-  return {
-    taxId: "NIF" in value && typeof value.NIF === "string" ? value.NIF : null,
-    softwareId:
-      "IdSistemaInformatico" in value && typeof value.IdSistemaInformatico === "string"
-        ? value.IdSistemaInformatico
-        : null,
-    installation:
-      "NumeroInstalacion" in value && typeof value.NumeroInstalacion === "string"
-        ? value.NumeroInstalacion
-        : null,
-  };
+  return { authority, conflicts, unknown, observed };
 }
 
 function mismatchOf(row: PeriodRow, reported: EstadoRegistroConsulta | null): ReconcileMismatch {

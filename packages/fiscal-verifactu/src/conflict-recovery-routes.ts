@@ -3,7 +3,8 @@ import type { Hono } from "hono";
 import type { LiveModuleOperationScope, ModuleRouteContext } from "@waitron/module";
 import { createErrorBoundary, readJsonBody, type Logger } from "@waitron/server-kit";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
-import { readActiveConflicts, type ConflictRef } from "./conflict-evidence.js";
+import { readActiveConflicts } from "./conflict-evidence.js";
+import type { RecoveryConflictRef as ConflictRef } from "./conflict-types.js";
 import {
   conflictSourceId,
   readCommittedConflictSwitch,
@@ -36,7 +37,7 @@ function publicPreparation(value: unknown): ConflictPreparationResult {
   return parseConflictPreparation(projected) ?? refuse("event_mismatch");
 }
 function sameRef(a: ConflictRef, b: ConflictRef) {
-  return a.registroId === b.registroId && a.caseId === b.caseId && a.sifId === b.sifId;
+  return conflictSourceId(a) === conflictSourceId(b);
 }
 async function execute(
   scope: LiveModuleOperationScope,

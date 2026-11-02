@@ -389,9 +389,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   node, venue taxpayer and environment. Lookups keep their own daily/retry times for each stored
   month; incomplete responses and live or changed filing claims remain unknown. A complete lookup
   can retain a fingerprint, software-identity or different-date conflict for a locally held invoice
-  number and use the existing administrator stop without changing its filing result. Invoices whose
-  numbers are absent locally, optional device evidence and whole-item qualification remain unfinished;
-  this is not a partial publication candidate.
+  number and use the existing administrator stop without changing its filing result. It also queries
+  the current venue month without local invoices and retains an externally held number in an active
+  series without inventing a local record or filing case. Lookup-only recovery preserves the existing
+  filing results. Optional device evidence, the sale-under-unknown exercise and whole-item qualification
+  remain unfinished; this is not a partial publication candidate.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

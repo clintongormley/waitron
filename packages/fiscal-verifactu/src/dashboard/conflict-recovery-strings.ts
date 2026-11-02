@@ -15,9 +15,9 @@ export const CONFLICT_RECOVERY_STRINGS = {
       "This box cannot write invoices in its current role. Choose Stop, then open recovery on the main box your tills use.",
     "conflict_recovery.no_conflict": "This box has no active invoice identity conflict.",
     "conflict_recovery.explanation":
-      "New invoices are stopped because this box's invoice identity conflicts with a filing response. A copied box, an old box still issuing invoices or another invoicing product may be using the same identity.",
+      "New invoices are stopped because this box's invoice identity conflicts with a filing response or an AEAT lookup. A copied box, an old box still issuing invoices or another invoicing product may be using the same identity.",
     "conflict_recovery.preserved":
-      "Switching keeps your orders, payments and history. The rejected record stays rejected and its case stays open. Switching does not repair missing history or stop another box.",
+      "Switching keeps your orders, payments and history. Existing filing results and cases stay unchanged. Switching does not repair missing history or stop another box.",
     "conflict_recovery.offline": "I have taken the old or copied box offline *",
     "conflict_recovery.parallel": "Nobody else is recovering this identity *",
     "conflict_recovery.confirm": "Confirm both isolation answers before continuing.",
@@ -61,9 +61,9 @@ export const CONFLICT_RECOVERY_STRINGS = {
     "conflict_recovery.no_conflict":
       "Esta caja no tiene ningún conflicto activo de identidad de facturación.",
     "conflict_recovery.explanation":
-      "No se pueden emitir facturas nuevas porque la identidad de facturación de esta caja entra en conflicto con una respuesta de envío. Una copia, una caja antigua que sigue facturando u otro programa de facturación podrían estar usando la misma identidad.",
+      "No se pueden emitir facturas nuevas porque la identidad de facturación de esta caja entra en conflicto con una respuesta de envío o una consulta a Hacienda. Una copia, una caja antigua que sigue facturando u otro programa de facturación podrían estar usando la misma identidad.",
     "conflict_recovery.preserved":
-      "El cambio conserva tus pedidos, pagos e historial. El registro rechazado sigue rechazado y su incidencia sigue abierta. El cambio no repara el historial que falta ni detiene otra caja.",
+      "El cambio conserva tus pedidos, pagos e historial. Los resultados de envío y las incidencias existentes no cambian. El cambio no repara el historial que falta ni detiene otra caja.",
     "conflict_recovery.offline": "He desconectado la caja antigua o copiada *",
     "conflict_recovery.parallel": "Nadie más está recuperando esta identidad *",
     "conflict_recovery.confirm":

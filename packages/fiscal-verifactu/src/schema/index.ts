@@ -18,3 +18,5 @@ export { registroSif } from "./sif.js";
 
 export { fiscalAllocations } from "./allocations.js";
 export { fiscalReservations } from "./reservations.js";
+
+export { fiscalSeriesConflicts } from "./series-conflicts.js";

@@ -38,11 +38,19 @@ export interface ConflictRef {
   sifId: string;
 }
 
-export interface ActiveConflict extends ConflictRef {
+export interface LookupConflictRef {
+  lookupId: string;
+  sifId: string;
+  registroId?: never;
+  caseId?: never;
+}
+export type RecoveryConflictRef = ConflictRef | LookupConflictRef;
+
+export type ActiveConflict = RecoveryConflictRef & {
   installationIdentity: string;
   invoiceIdentity: string;
   observedAt: string;
   evidence: ActiveConflictEvidence | null;
   cause: ConflictCause;
   evidenceId: string | null;
-}
+};

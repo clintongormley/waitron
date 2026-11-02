@@ -17,7 +17,8 @@ import {
   type ConflictRecoveryString,
 } from "./conflict-recovery-strings.js";
 import { ConflictRecoveryClient } from "./conflict-recovery-client.js";
-import type { ActiveConflict, ConflictRef } from "../conflict-types.js";
+import { conflictReference, conflictSourceId } from "../conflict-reference.js";
+import type { ActiveConflict, RecoveryConflictRef as ConflictRef } from "../conflict-types.js";
 import {
   parseConflictRequest,
   type ConflictCommand,
@@ -266,7 +267,7 @@ export class ConflictRecovery extends LitElement {
     this.uncertain = false;
     const first = result.active[0];
     if (this.#conflict === undefined && first !== undefined) {
-      this.#conflict = { registroId: first.registroId, caseId: first.caseId, sifId: first.sifId };
+      this.#conflict = conflictReference(first);
       this.remember();
     }
   }
@@ -316,13 +317,7 @@ export class ConflictRecovery extends LitElement {
         input.approval.eventId !== this.#eventId ||
         input.allocation.allocationId !== `hour/${this.#eventId}` ||
         input.allocation.installationIdentity !== selected.value.identity ||
-        input.approval.sourceId !==
-          JSON.stringify([
-            "conflict",
-            this.#conflict!.sifId,
-            this.#conflict!.registroId,
-            this.#conflict!.caseId,
-          ]) ||
+        input.approval.sourceId !== conflictSourceId(this.#conflict!) ||
         typeof operator === "string" ||
         operator.eventId !== this.#eventId ||
         operator.nodeId !== input.approval.targetNodeId ||

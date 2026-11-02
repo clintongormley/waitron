@@ -959,7 +959,7 @@ it("admits empty migrated fiscal tables when the captured predecessor has none",
   edit("before", (db) => {
     const tables = db
       .prepare(
-        "select name from sqlite_schema where type='table' and name in ('registro_sif','fiscal_allocations','fiscal_reservations','filing_cases','filing_case_events','fiscal_conflict_evidence','fiscal_lookup_conflicts','envios','envio_flujo','acks','fiscal_certificate_installs','fiscal_certificate_reminders')",
+        "select name from sqlite_schema where type='table' and name in ('registro_sif','fiscal_allocations','fiscal_reservations','filing_cases','filing_case_events','fiscal_conflict_evidence','fiscal_lookup_conflicts','fiscal_series_conflicts','envios','envio_flujo','acks','fiscal_certificate_installs','fiscal_certificate_reminders')",
       )
       .all() as { name: string }[];
     for (const table of tables) db.exec(`drop table "${table.name.replaceAll('"', '""')}"`);

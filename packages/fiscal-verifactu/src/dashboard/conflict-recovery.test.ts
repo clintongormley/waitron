@@ -10,7 +10,7 @@ import {
 } from "@waitron/dashboard-kit";
 import { VERIFACTU_DASHBOARD } from "./index.js";
 import type { ConflictRecovery } from "./conflict-recovery.js";
-import type { ConflictRequest } from "../conflict-recovery-contract.js";
+import { parseConflictResult, type ConflictRequest } from "../conflict-recovery-contract.js";
 
 const hosts: HTMLElement[] = [];
 let previousLocale: string;
@@ -740,3 +740,66 @@ it("refuses a committed result for another event without clearing the current ke
   ).toBe("current-key");
   expect(calls).toHaveLength(1);
 });
+
+it.each(["en", "es"] as const)(
+  "%s recovers a lookup-only conflict using its observation id through the existing screen",
+  async (locale) => {
+    const rest = Object.fromEntries(
+      Object.entries(active).filter(([key]) => key !== "registroId" && key !== "caseId"),
+    );
+    const observed = { ...rest, lookupId: "lookup-1" };
+    const { screen, calls } = await mount(async (body) => {
+      if (body.command.kind === "status")
+        return { kind: "status", active: [observed], event: { kind: "none" } };
+      if (body.command.kind === "activate")
+        return { kind: "committed", result: { ...committed, activationEventId: body.eventId } };
+      const answer = parseConflictResult(prepared(body))!;
+      if (
+        answer.kind === "prepared" &&
+        "status" in answer.value &&
+        answer.value.status === "selected"
+      )
+        return {
+          ...answer,
+          value: {
+            ...answer.value,
+            input: {
+              ...answer.value.input,
+              approval: {
+                ...answer.value.input.approval,
+                sourceId: '["lookup-conflict","sif-1","lookup-1"]',
+              },
+            },
+          },
+        };
+      return answer;
+    });
+    screen.locale = locale;
+    await screen.updateComplete;
+    await inspect(screen);
+    expect(screen.shadowRoot!.textContent).toContain(
+      locale === "en"
+        ? "filing response or an AEAT lookup"
+        : "respuesta de envío o una consulta a Hacienda",
+    );
+    expect(screen.shadowRoot!.textContent).toContain(
+      locale === "en"
+        ? "Existing filing results and cases stay unchanged"
+        : "Los resultados de envío y las incidencias existentes no cambian",
+    );
+    await confirm(screen, "oldMachineOffline");
+    await confirm(screen, "noParallelRecovery");
+    await click(screen, "compare");
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector("[data-identity]")?.textContent).toContain("0CNQR"),
+    );
+    await click(screen, "switch");
+    await vi.waitFor(() =>
+      expect(screen.shadowRoot!.querySelector("[data-complete]")?.textContent).toContain("A-0CNQR"),
+    );
+    expect(calls.find((body) => body.command.kind === "activate")?.conflict).toEqual({
+      lookupId: "lookup-1",
+      sifId: "sif-1",
+    });
+  },
+);
