@@ -384,7 +384,6 @@ describe("dashboard attendance corrections", () => {
       ...event,
       action: "propose",
       personId: "worker",
-      locationId: "shop",
       expectedRevision: "revision-1",
       commandId: expect.any(String),
     });
@@ -649,7 +648,6 @@ it("names the recorded event kind and can propose one missing clock-out without 
   expect(m.commands[0]).toEqual({
     action: "propose",
     personId: "worker",
-    locationId: "shop",
     expectedRevision: "revision-1",
     commandId: expect.any(String),
     changes: [
@@ -886,7 +884,6 @@ it("proposes an explicit missing break pair as one command", async () => {
   expect(m.commands[0]).toEqual({
     action: "propose",
     personId: "worker",
-    locationId: "shop",
     expectedRevision: "revision-1",
     commandId: expect.any(String),
     changes: [

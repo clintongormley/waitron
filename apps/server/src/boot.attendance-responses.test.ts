@@ -185,7 +185,6 @@ for (const enabled of [true, false]) {
               expectedRevision: inbox.revision,
               action: "request",
               questionId: null,
-              locationId: venue.cfg.locationId,
               changes: [
                 { target: { entryId: targetId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 60 },
               ],

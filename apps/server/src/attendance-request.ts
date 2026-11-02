@@ -99,7 +99,6 @@ export function parseAttendanceCommand(
         "expectedRevision",
         "action",
         action === "request" ? "questionId" : "personId",
-        "locationId",
         "changes",
         "reason",
       ],
@@ -107,7 +106,6 @@ export function parseAttendanceCommand(
     );
     const common = {
       ...base,
-      locationId: uuid(body.locationId, "locationId"),
       changes: changes(body.changes),
       reason: reason(body.reason),
     };

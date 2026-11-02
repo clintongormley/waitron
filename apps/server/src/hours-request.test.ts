@@ -58,7 +58,6 @@ it.each([
     ...base,
     action: "request",
     questionId: null,
-    locationId: id,
     changes: [change],
     reason: "Forgot",
   },
@@ -68,7 +67,7 @@ it.each([
 it.each([
   { ...base, action: "approve", itemId: id },
   { ...base, action: "decline", itemId: id },
-  { ...base, action: "propose", personId: id, locationId: id, changes: [change], reason: "Check" },
+  { ...base, action: "propose", personId: id, changes: [change], reason: "Check" },
   { ...base, action: "confirm", questionId: id, override: { personId: id, pin: "1234" } },
   { ...base, action: "confirm", questionId: id, personId: id },
   { ...base, action: "accept", itemId: id, authorizedByPersonId: id },

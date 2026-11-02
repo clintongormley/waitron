@@ -13,14 +13,12 @@ export type AttendanceCommandPayload =
   | {
       action: "request";
       questionId: string | null;
-      locationId: string;
       changes: AttendanceChange[];
       reason: string;
     }
   | {
       action: "propose";
       personId: string;
-      locationId: string;
       changes: AttendanceChange[];
       reason: string;
     }

@@ -96,7 +96,6 @@ async function command() {
     expectedRevision: await revision(),
     action: "request",
     questionId: null,
-    locationId: venue.cfg.locationId,
     changes: [{ target: { entryId: target }, at: "2026-01-05T18:00:00Z", offsetMinutes: 60 }],
     reason: "Stayed later",
   };

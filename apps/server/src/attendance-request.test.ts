@@ -14,7 +14,6 @@ const workerRequest = {
   ...base,
   action: "request",
   questionId: null,
-  locationId,
   changes: [change],
   reason: "Forgot",
 };
@@ -45,7 +44,7 @@ it.each(
 });
 it.each(
   single([
-    { ...base, action: "propose", personId, locationId, changes: [change], reason: "Please check" },
+    { ...base, action: "propose", personId, changes: [change], reason: "Please check" },
     { ...base, action: "approve", itemId },
     { ...base, action: "decline", itemId },
   ]),
@@ -57,7 +56,6 @@ it("normalizes UUID spellings and trims the reason without changing the chosen i
     parse({
       ...workerRequest,
       commandId: commandId.toUpperCase(),
-      locationId: locationId.toUpperCase(),
       questionId: questionId.toUpperCase(),
       changes: [
         {
@@ -84,6 +82,7 @@ it.each(
     "origin",
     "recordedAt",
     "personId",
+    "locationId",
     "override",
     "unexpected",
   ]),
@@ -121,10 +120,6 @@ it.each(single([undefined, null, [], 12, "", "not-a-uuid"]))(
 it.each(single([undefined, null, [], 12, ""]))(
   "requires an opaque revision %#",
   (expectedRevision) => invalid({ ...workerRequest, expectedRevision }),
-);
-it.each(single([undefined, null, [], 12, "", "not-a-uuid"]))(
-  "requires a location UUID %#",
-  (location) => invalid({ ...workerRequest, locationId: location }),
 );
 it.each(single([undefined, [], "", "not-a-uuid"]))(
   "requires explicit null or UUID question %#",
@@ -310,7 +305,6 @@ it.each(single([null, [], "", "not-a-uuid"]))(
         ...base,
         action: "propose",
         personId: person,
-        locationId,
         changes: [change],
         reason: "Check time",
       },
@@ -324,7 +318,6 @@ it("does not allow an extra field to replace a required field", () => {
   invalid({
     ...base,
     action: "request",
-    locationId,
     changes: [change],
     reason: "Forgot",
     actorPersonId: personId,
@@ -351,7 +344,6 @@ it("worker mode refuses a well-formed manager proposal", () =>
     ...base,
     action: "propose",
     personId,
-    locationId,
     changes: [change],
     reason: "Check time",
   }));

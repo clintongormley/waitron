@@ -2822,7 +2822,6 @@ export class TillApp extends LitElement {
   @state() private attendanceEditor: {
     kind: "request" | "disagree";
     changes: AttendanceChange[];
-    locationId: string;
     questionId: string | null;
     itemId: string | null;
     timeZone: string;
@@ -4877,7 +4876,6 @@ export class TillApp extends LitElement {
     this.attendanceEditor = {
       kind: disagree ? "disagree" : "request",
       changes,
-      locationId: prompt.locationId,
       questionId: prompt.questionId,
       itemId: prompt.itemId,
       timeZone: prompt.timeZone,
@@ -4913,7 +4911,6 @@ export class TillApp extends LitElement {
     this.attendanceEditor = {
       kind: "request",
       changes,
-      locationId: day.locationId,
       questionId: null,
       itemId: null,
       timeZone: day.timeZone,
@@ -4933,7 +4930,6 @@ export class TillApp extends LitElement {
         : {
             action: "request",
             questionId: editor.questionId,
-            locationId: editor.locationId,
             changes: event.detail.changes,
             reason: event.detail.reason,
           };

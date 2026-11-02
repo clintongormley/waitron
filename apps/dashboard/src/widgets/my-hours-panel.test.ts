@@ -145,7 +145,6 @@ it("reads the current own day before fixing and sends a reasoned request without
     expectedRevision: "day-current",
     action: "request",
     questionId: null,
-    locationId: "venue",
     changes: [
       { target: { entryId: "automatic-out" }, at: "2026-01-05T18:00:00.000Z", offsetMinutes: 60 },
     ],

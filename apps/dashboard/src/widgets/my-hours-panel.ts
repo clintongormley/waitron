@@ -413,7 +413,6 @@ export class MyHoursPanel extends LitElement {
             ...shared,
             action: "request",
             questionId: this.#editorQuestion,
-            locationId: this.day.locationId,
             ...event.detail,
           },
     );

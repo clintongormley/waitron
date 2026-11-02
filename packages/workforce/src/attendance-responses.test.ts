@@ -175,7 +175,6 @@ const bundle = (requests: TimeEntryRecord[]) => ({
   input: {
     action: "request",
     questionId: null,
-    locationId: "venue",
     changes: requests.map((r) => ({
       target: { missingKind: r.extension!.missingEntryKind },
       at: r.eventAt,

@@ -95,7 +95,6 @@ async function proposal() {
     expectedRevision: (await inbox()).revision,
     action: "propose",
     personId: venue.personId,
-    locationId: venue.cfg.locationId,
     changes: [{ target: { entryId: targetId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 60 }],
     reason: "Check the finish",
   };

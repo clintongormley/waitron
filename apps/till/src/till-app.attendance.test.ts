@@ -322,7 +322,6 @@ describe("till correction editors and manager PIN", () => {
         expectedRevision: "revision",
         action: "request",
         questionId: "question",
-        locationId: "venue",
         changes: [
           {
             target: { entryId: "automatic-out" },
@@ -373,7 +372,6 @@ describe("till correction editors and manager PIN", () => {
       expectedRevision: "revision",
       action: "request",
       questionId: "question",
-      locationId: "venue",
       changes: [
         { target: { missingKind: "in" }, at: "2026-10-13T20:00:00.000Z", offsetMinutes: 120 },
         { target: { missingKind: "out" }, at: "2026-10-13T23:30:00.000Z", offsetMinutes: 120 },
@@ -679,7 +677,6 @@ it("a recorded day's retime keeps its target and recovers a lost reply through t
     expectedRevision: "day-revision",
     action: "request",
     questionId: null,
-    locationId: "venue",
     reason: "Finished the delivery",
     changes: [
       { target: { entryId: "automatic-out" }, at: "2026-10-14T00:10:00.000Z", offsetMinutes: 120 },

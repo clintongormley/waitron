@@ -106,7 +106,6 @@ async function command() {
     expectedRevision: await revision(),
     action: "request",
     questionId: null,
-    locationId: venue.cfg.locationId,
     changes: [{ target: { entryId: targetId }, at: "2026-01-05T18:00:00Z", offsetMinutes: 60 }],
     reason: "Stayed later",
   };
@@ -192,7 +191,6 @@ it("offers the configured workplace for a first correction before any clock hist
       expectedRevision: inbox.revision,
       action: "request",
       questionId: null,
-      locationId: venue.cfg.locationId,
       changes: [
         { target: { missingKind: "in" }, at: "2026-01-04T09:00:00Z", offsetMinutes: 60 },
         { target: { missingKind: "out" }, at: "2026-01-04T17:00:00Z", offsetMinutes: 60 },

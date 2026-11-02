@@ -78,14 +78,12 @@ async function normalize(
             command.questionId === null
               ? null
               : (await canonicalQuestion(tx, command.questionId)).id,
-          locationId: command.locationId,
           changes,
           reason,
         }
       : {
           action: "propose",
           personId: command.personId,
-          locationId: command.locationId,
           changes,
           reason,
         };

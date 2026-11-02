@@ -121,7 +121,6 @@ function request(end: string, at = "2026-01-05T18:00:00Z") {
   return send({
     action: "request",
     questionId: null,
-    locationId,
     changes: [{ target: { entryId: end }, at, offsetMinutes: 0 }],
     reason: "Left later",
   });
@@ -229,7 +228,6 @@ it("keeps a worker request as history while a manager proposal is a prompt with 
     {
       action: "propose",
       personId,
-      locationId,
       changes: [{ target: { entryId: end }, at: "2026-01-05T16:00:00Z", offsetMinutes: 60 }],
       reason: "Check departure",
     },
@@ -294,7 +292,6 @@ it("manager queue spans old dates and people and lists only outstanding or dispu
     {
       action: "propose",
       personId: other,
-      locationId,
       changes: [{ target: { entryId: second.end }, at: "2026-01-06T18:00:00Z", offsetMinutes: 0 }],
       reason: "Later end",
     },
@@ -324,7 +321,6 @@ it("selected days keep relevant pending missing pairs and omit unrelated days", 
   const value = await send({
     action: "request",
     questionId: null,
-    locationId,
     changes: [
       { target: { missingKind: "in" }, at: "2026-01-05T09:00:00Z", offsetMinutes: 0 },
       { target: { missingKind: "out" }, at: "2026-01-05T17:00:00Z", offsetMinutes: 0 },
@@ -349,7 +345,6 @@ it("a raw-library decline reopens a stored-resolved question with only its unans
   const requested = await send({
     action: "request",
     questionId,
-    locationId,
     changes: [
       { target: { missingKind: "in" }, at: "2026-01-05T09:00:00Z", offsetMinutes: 0 },
       { target: { missingKind: "out" }, at: "2026-01-05T17:00:00Z", offsetMinutes: 0 },
@@ -378,7 +373,6 @@ it("an overtaken proposal stays visible in day history but is absent from prompt
     {
       action: "propose",
       personId,
-      locationId,
       changes: [{ target: { entryId: end }, at: "2026-01-05T16:00:00Z", offsetMinutes: 0 }],
       reason: "Earlier end",
     },
@@ -400,7 +394,6 @@ it("keeps a blocked proposal available to disagree while checking competing late
     {
       action: "propose",
       personId,
-      locationId,
       changes: [{ target: { entryId: end }, at: "2026-01-05T19:00:00Z", offsetMinutes: 0 }],
       reason: "Check end",
     },
@@ -432,7 +425,6 @@ it("both split shifts remain visible after a delayed missing-shift approval", as
   const pair = await send({
     action: "request",
     questionId: null,
-    locationId,
     changes: [
       { target: { missingKind: "in" }, at: "2026-01-05T09:00:00Z", offsetMinutes: 0 },
       { target: { missingKind: "out" }, at: "2026-01-05T13:00:00Z", offsetMinutes: 0 },
@@ -443,7 +435,6 @@ it("both split shifts remain visible after a delayed missing-shift approval", as
   const evening = await send({
     action: "request",
     questionId: null,
-    locationId,
     changes: [
       { target: { missingKind: "in" }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 },
       { target: { missingKind: "out" }, at: "2026-01-05T22:00:00Z", offsetMinutes: 0 },
@@ -476,7 +467,6 @@ it("an approved missing out permits the next clock-in without closing a later ac
   const value = await send({
     action: "request",
     questionId: null,
-    locationId,
     changes: [{ target: { missingKind: "out" }, at: "2026-01-05T17:00:00Z", offsetMinutes: 0 }],
     reason: "Forgot to finish",
   });
@@ -528,7 +518,6 @@ it("keeps recorded history scoped to the inbox subject even in a shared location
     {
       action: "request",
       questionId: null,
-      locationId,
       changes: [{ target: { entryId: foreign.end }, at: "2026-01-05T18:00:00Z", offsetMinutes: 0 }],
       reason: "Other worker's end",
     },
@@ -601,7 +590,6 @@ it("approves an older missing out behind a newer actual in without closing the c
   const historical = await send({
     action: "request",
     questionId: null,
-    locationId,
     changes: [
       { target: { missingKind: "in" }, at: "2026-01-05T09:00:00Z", offsetMinutes: 0 },
       { target: { missingKind: "out" }, at: "2026-01-05T17:00:00Z", offsetMinutes: 0 },

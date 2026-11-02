@@ -527,7 +527,6 @@ export class AttendanceCorrectionsScreen extends LitElement {
       commandId: crypto.randomUUID(),
       expectedRevision: this.#editorRevision,
       personId: this.view.personId,
-      locationId: this.view.locationId,
       ...event.detail,
     });
   }

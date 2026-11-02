@@ -52,7 +52,6 @@ function receipt(patch: Record<string, string | null> = {}) {
     input: JSON.stringify({
       action: "request",
       questionId,
-      locationId,
       changes: [
         { target: { missingKind: "in" }, at: "2026-01-05T09:00:00.000Z", offsetMinutes: 0 },
         { target: { missingKind: "out" }, at: "2026-01-05T17:00:00.000Z", offsetMinutes: 0 },

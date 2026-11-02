@@ -164,7 +164,6 @@ for (const enabled of [true, false]) {
               expectedRevision: inbox.revision,
               action: "request",
               questionId: null,
-              locationId: venue.cfg.locationId,
               changes: [
                 { target: { missingKind: "in" }, at: "2026-01-05T09:00:00Z", offsetMinutes: 60 },
                 { target: { missingKind: "out" }, at: "2026-01-05T17:00:00Z", offsetMinutes: 60 },
