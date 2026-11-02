@@ -72,6 +72,7 @@ import { finishPromotedRole } from "./promoted-role.js";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
+import { backgroundDuties, stopBackgroundDuties } from "./background-duties.js";
 import { closeAll } from "./close-all.js";
 import { runDue } from "@waitron/scheduler";
 import type { TickResult } from "@waitron/scheduler";
@@ -3442,49 +3443,46 @@ async function bootServer(
     cloudController.abort();
     await suggestionLoop;
   });
+  const duties = backgroundDuties({
+    controller,
+    pendingCardController,
+    cloudController,
+    invoiceEmailController,
+    attendanceController,
+    certificateReminderController,
+    tenderRefundController,
+    pendingCardLoop,
+    tenderRefundLoop,
+    attendanceLoop,
+    attendanceEmailLoop,
+    certificateReminderLoop,
+    certificateDiagnosis,
+    invoiceEmailLoop,
+    cloudWorker,
+    cloudSnapshots,
+    suggestionLoop,
+    unsubscribeFromChanges,
+    stopSealingNodeCommits,
+    sealedState,
+    menuActivation,
+    appendOnlyWatch,
+    freeSpaceWatch,
+    boxEmails,
+    liveEvents,
+    tunnelController,
+    loop,
+    tunnelWorker,
+    backupSupervisor,
+    demoPrinterLoop,
+    clockWatch,
+    streamHost,
+  });
   return makeStartedServer(
     server,
     health,
     log,
     {
-      stopWork: async () => {
-        controller.abort();
-        pendingCardController.abort();
-        cloudController.abort();
-        invoiceEmailController.abort();
-        attendanceController.abort();
-        certificateReminderController?.abort();
-        tenderRefundController.abort();
-        await closeAll([
-          () => pendingCardLoop,
-          () => tenderRefundLoop,
-          () => attendanceLoop,
-          () => attendanceEmailLoop,
-          () => certificateReminderLoop,
-          () => certificateDiagnosis?.stop(),
-          () => invoiceEmailLoop,
-          () => cloudWorker,
-          () => cloudSnapshots,
-          () => suggestionLoop,
-          unsubscribeFromChanges,
-          stopSealingNodeCommits,
-          // A refresh still running would otherwise run against the closed store and log a failure.
-          () => sealedState.settled(),
-          () => menuActivation.stop(),
-          () => appendOnlyWatch.stop(),
-          () => freeSpaceWatch.stop(),
-          () => boxEmails.stop(),
-          () => liveEvents.close(),
-          () => tunnelController.abort(),
-          () => loop,
-          () => tunnelWorker?.catch(() => {}),
-          () => backupSupervisor.stop(),
-          () => demoPrinterLoop?.stop(),
-          () => clockWatch.stop(),
-          // Litestream writes venue.db, so its stop is awaited before the store closes.
-          () => streamHost.stop(),
-        ]);
-      },
+      stopWork: () => stopBackgroundDuties(duties),
       settleRequests: settleManagementRequests,
       closePools: () => store.close(),
     },
