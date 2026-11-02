@@ -37,7 +37,6 @@
     "@waitron/migrations": "workspace:*",
     "@waitron/module": "workspace:*",
     "@waitron/node-db": "workspace:*",
-    "@waitron/reporting": "workspace:*",
     "@waitron/shared": "workspace:*",
     "drizzle-orm": "^0.45.4"
   },

@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { withTransaction, type Transaction } from "@waitron/db";
+import { readVenue, venueLocationId, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -17,6 +17,7 @@ import { applyVenue } from "./venue-apply.js";
 import { planVenue } from "./venue-plan.js";
 import { venueFiscalSelection } from "./venue-fiscal.js";
 import {
+  buildConfigurationBundle,
   decodeConfigurationBundle,
   encodeConfigurationBundle,
   exportConfigurationTables,
@@ -48,7 +49,7 @@ async function scratch(run: (tx: Transaction) => Promise<void>) {
 it.each([
   { value: null, field: "artifact" },
   { value: [], field: "artifact" },
-  { value: { version: 10 }, field: "version" },
+  { value: { version: 11 }, field: "version" },
   { value: { ...configurationBundle(), createdAt: "bad-date" }, field: "artifact" },
   { value: { ...configurationBundle(), modules: { module: -1 } }, field: "artifact" },
   { value: { ...configurationBundle(), reconnect: [3] }, field: "artifact" },
@@ -62,10 +63,7 @@ it.each([
   {
     value: {
       ...configurationBundle(),
-      venue: {
-        ...configurationBundle().venue,
-        location: { ...configurationBundle().venue.location, invoiceLocales: [] },
-      },
+      venue: { ...configurationBundle().venue, invoiceLocales: [] },
     },
     field: "artifact",
   },
@@ -99,26 +97,18 @@ it.each([
   );
 });
 
-it.each([
-  {},
-  { version: 2 },
-  { ...configurationBundle(), version: 8 },
-  {
-    ...configurationBundle(),
-    venue: {
-      ...configurationBundle().venue,
-      location: { ...configurationBundle().venue.location, drawerOpenPolicy: "always" },
-    },
+it.each([{}, { version: 2 }, { ...configurationBundle(), version: 8 }])(
+  "refuses an obsolete configuration format: %j",
+  (value) => {
+    const artifact = encryptArtifact(
+      packArchive([{ name: "configuration.json", bytes: Buffer.from(JSON.stringify(value)) }]),
+      passphrase,
+    );
+    expect(() => decodeConfigurationBundle(artifact, passphrase)).toThrow(
+      expect.objectContaining({ code: "setup.configuration_outdated" }),
+    );
   },
-])("refuses an obsolete configuration format: %j", (value) => {
-  const artifact = encryptArtifact(
-    packArchive([{ name: "configuration.json", bytes: Buffer.from(JSON.stringify(value)) }]),
-    passphrase,
-  );
-  expect(() => decodeConfigurationBundle(artifact, passphrase)).toThrow(
-    expect.objectContaining({ code: "setup.configuration_outdated" }),
-  );
-});
+);
 
 it.each([
   [{ name: "other.json", bytes: Buffer.from("{}") }],
@@ -269,13 +259,9 @@ it("checks an import's module version before replacing its existing rows", async
     bundle.modules = { "synthetic-transfer": 99 };
     bundle.tables = { zz_parents: [{ id: "replacement" }] };
     await expect(
-      importConfigurationTables(
-        tx,
-        bundle,
-        { locationId: "absent" },
-        [moduleWith([{ name: "zz_parents" }])],
-        { "synthetic-transfer": 1 },
-      ),
+      importConfigurationTables(tx, bundle, [moduleWith([{ name: "zz_parents" }])], {
+        "synthetic-transfer": 1,
+      }),
     ).rejects.toMatchObject(invalid("module:synthetic-transfer"));
     expect((await tx.execute(sql`select id from zz_parents`)).rows).toEqual([{ id: "retained" }]);
   });
@@ -305,7 +291,7 @@ it("imports fresh ids and actual bytes without rewriting ordinary text that rese
   );
   await scratch(async (tx) => {
     await tx.execute(
-      sql`create table zz_parents (id text primary key, location_id text, name text, bytes blob, enabled integer)`,
+      sql`create table zz_parents (id text primary key, location_id text references locations(id), name text, bytes blob, enabled integer)`,
     );
     await tx.execute(
       sql`create table zz_children (id text primary key, parent_id text references zz_parents(id), note text)`,
@@ -326,9 +312,9 @@ it("imports fresh ids and actual bytes without rewriting ordinary text that rese
     bundle.modules = { "synthetic-transfer": 1 };
     const module = moduleWith([
       { name: "zz_children" },
-      { name: "zz_parents", before: ["zz_children"], locationColumns: ["location_id"] },
+      { name: "zz_parents", before: ["zz_children"] },
     ]);
-    await importConfigurationTables(tx, bundle, target, [module], bundle.modules);
+    await importConfigurationTables(tx, bundle, [module], bundle.modules);
     const parent = (
       await tx.execute<Record<string, unknown>>(
         sql`select id, location_id, name, hex(bytes) as bytes, typeof(bytes) as storage, enabled from zz_parents`,
@@ -362,7 +348,7 @@ it.each([
 ])("refuses bundle zone %j before module callbacks", (timeZone, reason) => {
   let callbacks = 0;
   const bundle = configurationBundle();
-  bundle.venue.location.timeZone = timeZone as string;
+  bundle.venue.timeZone = timeZone as string;
   bundle.modules = { "synthetic-transfer": 1 };
   const module = {
     ...moduleWith([]),
@@ -399,7 +385,7 @@ it("direct import refuses bad zone metadata before replacing retained rows", asy
       passwordHash: "synthetic-password",
     },
   };
-  const target = await applyVenue(planVenue(input, []), { db: suite.db, modules: [] });
+  await applyVenue(planVenue(input, []), { db: suite.db, modules: [] });
   const beforeLocations = (await suite.db.execute(sql`select * from locations`)).rows;
   await withTransaction(suite.db, async (tx) => {
     await tx.execute(sql`create table zz_parents (id text primary key)`);
@@ -407,17 +393,11 @@ it("direct import refuses bad zone metadata before replacing retained rows", asy
   });
   try {
     const bundle = configurationBundle();
-    bundle.venue.location.timeZone = "Europe/Madrid";
+    bundle.venue.timeZone = "Europe/Madrid";
     bundle.modules = { "synthetic-transfer": 1 };
     bundle.tables = { zz_parents: [{ id: "replacement" }] };
     const refusal = await withTransaction(suite.db, (tx) =>
-      importConfigurationTables(
-        tx,
-        bundle,
-        target,
-        [moduleWith([{ name: "zz_parents" }])],
-        bundle.modules,
-      ),
+      importConfigurationTables(tx, bundle, [moduleWith([{ name: "zz_parents" }])], bundle.modules),
     ).catch((error: unknown) => error);
     expect((await suite.db.execute(sql`select * from zz_parents`)).rows).toEqual([
       { id: "retained" },
@@ -445,7 +425,7 @@ it.each([
   ["Europe/Madrid", "country"],
 ])("decoding refuses artifact zone %j before caller validation", (timeZone, reason) => {
   const bundle = configurationBundle();
-  bundle.venue.location.timeZone = timeZone as string;
+  bundle.venue.timeZone = timeZone as string;
   expect(() =>
     decodeConfigurationBundle(encodeConfigurationBundle(bundle, passphrase), passphrase),
   ).toThrow(expect.objectContaining({ code: "venue.time_zone_invalid", params: { reason } }));
@@ -455,7 +435,7 @@ it.each([" Europe/London ", "GB"])(
   "passes normalized zone %j to transfer checks while retaining the artifact metadata",
   (timeZone) => {
     const bundle = configurationBundle();
-    bundle.venue.location.timeZone = timeZone;
+    bundle.venue.timeZone = timeZone;
     bundle.modules = { "synthetic-transfer": 1 };
     let checkedZone: string | undefined;
     const module: WaitronModule = {
@@ -470,6 +450,122 @@ it.each([" Europe/London ", "GB"])(
     };
     validateConfigurationBundle(bundle, [module], bundle.modules);
     expect(checkedZone).toBe("Europe/London");
-    expect(bundle.venue.location.timeZone).toBe(timeZone);
+    expect(bundle.venue.timeZone).toBe(timeZone);
   },
 );
+
+function formatNineBundle(): Record<string, unknown> {
+  const { venue, defaultCatalogueId, ...rest } = configurationBundle();
+  const { country, taxId, legalName, taxpayerDomicile, ...fields } = venue;
+  const { seriesCode, fullSeriesCode, rectificativeSeriesCode, ...location } = fields;
+  return {
+    ...rest,
+    version: 9,
+    venue: {
+      country,
+      taxId,
+      legalName,
+      taxpayerDomicile,
+      seriesCode,
+      fullSeriesCode,
+      rectificativeSeriesCode,
+      location: {
+        ...location,
+        id: "source-location",
+        fireControl: "waiter",
+        catalogueId: defaultCatalogueId,
+      },
+    },
+  };
+}
+
+it("refuses a format 9 export as outdated", () => {
+  const artifact = encryptArtifact(
+    packArchive([
+      { name: "configuration.json", bytes: Buffer.from(JSON.stringify(formatNineBundle())) },
+    ]),
+    passphrase,
+  );
+  expect(() => decodeConfigurationBundle(artifact, passphrase)).toThrow(
+    expect.objectContaining({ code: "setup.configuration_outdated" }),
+  );
+});
+
+const gbVenue = {
+  ...request,
+  country: "GB",
+  taxId: "123456789",
+  fiscalTerritory: "GB-vat",
+  timeZone: "Europe/London",
+  admin: {
+    displayName: "Owner",
+    email: "owner@example.test",
+    pinHash: "synthetic-pin",
+    passwordHash: "synthetic-password",
+  },
+};
+
+it("exports the venue's own fields and the default menu outside them", async () => {
+  const modules = enabledModules(ALL_MODULES, venueFiscalSelection(ALL_MODULES, "GB-vat").config);
+  const target = await applyVenue(planVenue(gbVenue, modules), { db: suite.db, modules });
+  const { defaultCatalogueId } = await readVenue(suite.db);
+  expect(defaultCatalogueId).toEqual(expect.any(String));
+  const bundle = await buildConfigurationBundle(
+    suite.db,
+    target,
+    [],
+    new Date("2026-10-16T11:40:00Z"),
+    {},
+  );
+  expect(Object.keys(bundle.venue).sort()).toEqual(
+    [
+      "name",
+      "fiscalTerritory",
+      "invoiceLocales",
+      "operationDescription",
+      "addressLine1",
+      "addressLine2",
+      "postalCode",
+      "city",
+      "province",
+      "timeZone",
+      "dayCutover",
+      "country",
+      "taxId",
+      "legalName",
+      "taxpayerDomicile",
+      "seriesCode",
+      "fullSeriesCode",
+      "rectificativeSeriesCode",
+    ].sort(),
+  );
+  expect(bundle.defaultCatalogueId).toBe(defaultCatalogueId);
+});
+
+it("puts every row under the importing venue whatever location id it names", async () => {
+  await applyVenue(planVenue(gbVenue, []), { db: suite.db, modules: [] });
+  const bundle = configurationBundle();
+  bundle.modules = { "synthetic-transfer": 1 };
+  bundle.tables = {
+    departments: [
+      {
+        id: "source-department",
+        location_id: "not-a-location-here",
+        name: "Bar",
+        trading_name: "Bar",
+        created_at: "2026-10-16T11:40:00.000Z",
+      },
+    ],
+  };
+  await withTransaction(suite.db, async (tx) => {
+    await importConfigurationTables(
+      tx,
+      bundle,
+      [moduleWith([{ name: "departments" }])],
+      bundle.modules,
+    );
+    expect((await tx.execute(sql`select location_id from departments`)).rows).toEqual([
+      { location_id: await venueLocationId(tx) },
+    ]);
+  });
+});

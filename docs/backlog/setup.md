@@ -166,8 +166,8 @@ its province's; for Spain the province decides. (Aside: a Canary venue cannot be
 pack marks the Canary tax territory unsupported.)
 A261 step 7's approved plan separately permits a named-zone override before dated history;
 its editor validates named zones and refuses numeric offsets. Importing configuration into an
-existing venue retains its saved zone (`applyPreparedLocation`,
-`apps/server/src/configuration-transfer.ts`); importing venue details is a creation concern,
+existing venue retains its saved zone (`applyPreparedVenue`,
+`packages/provisioning/src/configuration-transfer.ts`); importing venue details is a creation concern,
 not an edit through that applicator.
 
 ## Remaining "?" buttons that should be hints (A237, owner 2026-10-03)

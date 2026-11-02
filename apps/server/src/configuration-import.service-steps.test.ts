@@ -69,7 +69,7 @@ it("a configuration import over a venue whose closed party has a completed step 
   await applyVenue(planVenue(request, ALL_MODULES), {
     db: target.db,
     modules: ALL_MODULES,
-    beforeCommit: async (tx, installed) => {
+    beforeCommit: async (tx) => {
       const [step] = await tx.select({ id: serviceSteps.id }).from(serviceSteps).limit(1);
       expect(step).toBeDefined();
       const [party] = await tx
@@ -88,7 +88,7 @@ it("a configuration import over a venue whose closed party has a completed step 
         doneAt: "2026-10-22T20:33:00.000Z",
         doneBy: "waiter-1",
       });
-      await importConfigurationTables(tx, bundle, installed, ALL_MODULES, versions);
+      await importConfigurationTables(tx, bundle, ALL_MODULES, versions);
     },
   });
   await withTransaction(target.db, async (tx) => {

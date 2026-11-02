@@ -99,7 +99,7 @@ describe.each(["one row", "every row"])("with %s missing", (missing) => {
     const before = await exportConfigurationTables(target.db, ALL_MODULES);
     await expect(
       withTransaction(target.db, (tx) =>
-        importConfigurationTables(tx, f.bundle, f.installed, ALL_MODULES, f.versions),
+        importConfigurationTables(tx, f.bundle, ALL_MODULES, f.versions),
       ),
     ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: table } });
     expect(await exportConfigurationTables(target.db, ALL_MODULES)).toEqual(before);
@@ -109,7 +109,7 @@ describe.each(["one row", "every row"])("with %s missing", (missing) => {
 it("imports complete policies and resolves inherited values for the remapped zone", async () => {
   const f = await fixture();
   await withTransaction(target.db, (tx) =>
-    importConfigurationTables(tx, f.bundle, f.installed, ALL_MODULES, f.versions),
+    importConfigurationTables(tx, f.bundle, ALL_MODULES, f.versions),
   );
   const [zone] = await target.db.select().from(floorZones).where(eq(floorZones.name, "Garden"));
   expect(zone!.id).not.toBe(f.zone.id);

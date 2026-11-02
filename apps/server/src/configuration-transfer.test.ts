@@ -156,7 +156,7 @@ import { schemaVersionsByModule } from "./backup-manifest.js";
 import { systemClock } from "./till-backend.js";
 import {
   buildConfigurationBundle,
-  applyPreparedLocation,
+  applyPreparedVenue,
   exportConfigurationTables,
   decodeConfigurationBundle,
   encodeConfigurationBundle,
@@ -248,8 +248,7 @@ it("transfers two photo identities sharing replacement bytes with framing, names
   const target = await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   expect(transferred).toEqual(originalBundle);
   const rows = await targetSuite.db.select().from(mediaImages);
@@ -347,13 +346,7 @@ it("refuses corrupt photo override configuration before writing any target rows"
     );
     await expect(
       withTransaction(targetSuite.db, (tx) =>
-        importConfigurationTables(
-          tx,
-          corrupt,
-          { locationId: crypto.randomUUID() },
-          ALL_MODULES,
-          versions,
-        ),
+        importConfigurationTables(tx, corrupt, ALL_MODULES, versions),
       ),
     ).rejects.toMatchObject({ code: "image.invalid_metadata" });
     expect(
@@ -398,7 +391,7 @@ function venue(taxId: string): VenueRequest {
 }
 
 const bundle: ConfigurationBundle = {
-  version: 9,
+  version: 10,
   createdAt: "2026-09-09T00:00:00.000Z",
   sourceOperatorId: "source-admin",
   venue: {
@@ -406,26 +399,22 @@ const bundle: ConfigurationBundle = {
     taxId: "B12345678",
     legalName: "Prepared SL",
     taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
-    location: {
-      id: "location",
-      name: "Prepared",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurant",
-      fiscalTerritory: "ES-common",
-      addressLine1: "Calle 1",
-      addressLine2: null,
-      postalCode: "28001",
-      city: "Madrid",
-      province: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00:00",
-      fireControl: "waiter",
-      catalogueId: null,
-    },
+    name: "Prepared",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant",
+    fiscalTerritory: "ES-common",
+    addressLine1: "Calle 1",
+    addressLine2: null,
+    postalCode: "28001",
+    city: "Madrid",
+    province: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00:00",
     seriesCode: "F",
     fullSeriesCode: "FF",
     rectificativeSeriesCode: "R",
   },
+  defaultCatalogueId: null,
   privacyContact: { privacyNoticeUrl: null, privacyEmail: null },
   modules: { core: 1 },
   tables: { products: [{ id: "p1", name: "Coffee" }] },
@@ -492,7 +481,7 @@ describe("configuration transfer archive", () => {
     (leftover) => {
       const older = {
         ...bundle,
-        venue: { ...bundle.venue, location: { ...bundle.venue.location, bumpMode: leftover } },
+        venue: { ...bundle.venue, bumpMode: leftover },
       };
       expect(
         decodeConfigurationBundle(
@@ -535,7 +524,7 @@ describe("configuration transfer database path", () => {
       applyVenue(planVenue(targetRequest, ALL_MODULES), {
         db: suite.db,
         modules: ALL_MODULES,
-        beforeCommit: async (tx, result) => {
+        beforeCommit: async (tx) => {
           await importConfigurationTables(
             tx,
             {
@@ -544,7 +533,6 @@ describe("configuration transfer database path", () => {
                 products: [{ ...bundle.tables.products![0], injected_column: "refuse me" }],
               },
             },
-            { locationId: result.locationId },
             coreOnly,
             { core: 1 },
           );
@@ -597,14 +585,7 @@ describe("configuration transfer database path", () => {
     const target = await applyVenue(planVenue(venue("B87654323"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(
-          tx,
-          transferred,
-          { locationId: result.locationId },
-          ALL_MODULES,
-          versions,
-        ),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
     const [imported] = await targetSuite.db.select().from(pagePrinters);
     expect(imported).toMatchObject({
@@ -672,8 +653,7 @@ describe("configuration transfer database path", () => {
     await applyVenue(planVenue(venue("B24681357"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
     const [imported] = await targetSuite.db
       .select({ id: pagePrinters.id })
@@ -890,7 +870,7 @@ describe("configuration transfer database path", () => {
     expect(transferred.venue.fullSeriesCode).toBe("FF");
     expect(transferred.venue.taxpayerDomicile).toBe("Calle Fiscal 8, 28001 Madrid");
     expect(transferred.venue).not.toHaveProperty("tillName");
-    expect(transferred.venue.location).not.toHaveProperty("orderFlow");
+    expect(transferred.venue).not.toHaveProperty("orderFlow");
     for (const person of transferred.tables.persons ?? []) {
       expect(person).not.toHaveProperty("pin_hash");
       expect(person).not.toHaveProperty("password_hash");
@@ -905,20 +885,14 @@ describe("configuration transfer database path", () => {
     const target = await applyVenue(planVenue(venue("B87654323"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: async (tx, result) => {
-        await importConfigurationTables(
-          tx,
-          transferred,
-          { locationId: result.locationId },
-          ALL_MODULES,
-          versions,
-        );
+      beforeCommit: async (tx) => {
+        await importConfigurationTables(tx, transferred, ALL_MODULES, versions);
       },
     });
-    const locationColumns = await targetSuite.db.execute<{ name: string }>(sql`
+    const venueTableColumns = await targetSuite.db.execute<{ name: string }>(sql`
       select name from pragma_table_info('locations')
     `);
-    expect(locationColumns.rows.map((column) => column.name)).not.toContain("order_flow");
+    expect(venueTableColumns.rows.map((column) => column.name)).not.toContain("order_flow");
     await withTransaction(targetSuite.db, async (tx) => {
       const [metadata] = transferred.tables.media_images!;
       const bytes = await readImageBytes(tx, metadata!.filename as string);
@@ -1097,8 +1071,7 @@ describe("configuration transfer database path", () => {
     await applyVenue(planVenue(venue("B99887766"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
     expect((await targetSuite.db.execute(sql`select * from catalogue_settings`)).rows).toEqual([
       { id: 1, default_product_vat_class: "zero", default_color: "#abcced" },
@@ -1127,8 +1100,7 @@ describe("configuration transfer database path", () => {
     await applyVenue(planVenue(venue("B99887766"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
     expect(
       (await targetSuite.db.execute(sql`select default_color from catalogue_settings`)).rows,
@@ -1167,8 +1139,7 @@ describe("configuration transfer database path", () => {
     await applyVenue(planVenue(venue("B99887766"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
     const imported = await targetSuite.db.execute<{ category: string; product: string }>(sql`
       select d.color as category, p.color as product
@@ -1241,8 +1212,8 @@ describe("configuration transfer database path", () => {
       applyVenue(planVenue(target, ALL_MODULES), {
         db: targetSuite.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, result) =>
-          importConfigurationTables(tx, bundles.products, result, ALL_MODULES, versions),
+        beforeCommit: (tx) =>
+          importConfigurationTables(tx, bundles.products, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject({ code: "setup.request_invalid", params: { field: "products.color" } });
     const persisted = await targetSuite.db.execute<{ count: number }>(sql`
@@ -1301,8 +1272,7 @@ describe("configuration transfer database path", () => {
     await applyVenue(planVenue(venue("B44556602"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
     expect((await homeDisplayOf(targetSuite.db)).rows).toEqual([expected]);
   });
@@ -1329,8 +1299,7 @@ describe("configuration transfer database path", () => {
       applyVenue(planVenue(target, ALL_MODULES), {
         db: targetSuite.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, result) =>
-          importConfigurationTables(tx, malformed, result, ALL_MODULES, versions),
+        beforeCommit: (tx) => importConfigurationTables(tx, malformed, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
     const persisted = await targetSuite.db.execute<{ count: number }>(sql`
@@ -1458,8 +1427,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
   await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   await withTransaction(targetSuite.db, async (tx) => {
     const optionLists = await listOptionLists(tx);
@@ -1556,8 +1524,7 @@ it("transfers sections and their members, remapping ids, with a section's image"
   await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   await withTransaction(targetSuite.db, async (tx) => {
     const [importedDrinks] = await tx
@@ -1645,8 +1612,7 @@ it("an include's folder photo travels with the configuration", async () => {
   await applyVenue(planVenue(venue("B11776655"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   await withTransaction(targetSuite.db, async (tx) => {
     const included = await tx
@@ -1698,8 +1664,7 @@ it("refuses a bundle whose photo still carries alt text and labels, as it refuse
     applyVenue(planVenue(venue("B77665544"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, stale, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, stale, ALL_MODULES, versions),
     }),
   ).rejects.toMatchObject({
     code: "setup.request_invalid",
@@ -1713,8 +1678,7 @@ it("refuses a bundle whose photo still carries alt text and labels, as it refuse
     applyVenue(planVenue(venue("B77665544"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, invented, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, invented, ALL_MODULES, versions),
     }),
   ).rejects.toMatchObject({
     code: "setup.request_invalid",
@@ -1789,8 +1753,7 @@ it.each([3, 2])(
     await applyVenue(planVenue(venue("B44332211"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
     await withTransaction(targetSuite.db, async (tx) => {
       const [menu] = await tx
@@ -1839,8 +1802,7 @@ it("transfers the adjustment reasons with their limits and order", async () => {
   await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await withTransaction(targetSuite.db, (tx) => listAdjustmentReasons(tx));
   // The import gives each row a new id, so ids are left out of the comparison.
@@ -1887,8 +1849,7 @@ it("imports a starter venue's reasons, which keep a Void reason asking for a not
   await applyVenue(planVenue(venue("B19283747"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await withTransaction(targetSuite.db, (tx) => listAdjustmentReasons(tx));
   expect(imported.filter((reason) => reason.kind === "void" && reason.noteRequired)).toHaveLength(
@@ -1914,8 +1875,7 @@ it("refuses a bundle whose only Void reason asking for a note cannot cancel", as
     applyVenue(planVenue(target, ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     }),
   ).rejects.toMatchObject({
     code: "setup.request_invalid",
@@ -1980,8 +1940,7 @@ it("transfers staff roles, who holds them and a painted season week under new id
   const target = await applyVenue(planVenue(venue("B42086431"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const roles = await targetSuite.db.execute(sql`
     select r.location_id, r.name, r.colour, r.position, p.display_name as holder
@@ -2092,8 +2051,7 @@ it("transfers a station's painted season day and a special day's painted date un
   const target = await applyVenue(planVenue(venue("B53197428"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const days = await targetSuite.db.execute(sql`
     select d.id as day_id, d.department_id, d.station_id, d.season_id, d.special_day_date_id,
@@ -2184,8 +2142,7 @@ it("transfers the venue's limit on a bill's comps and who approves past it", asy
   await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   expect(await withTransaction(targetSuite.db, readAdjustmentSettings)).toEqual(settings);
 });
@@ -2221,8 +2178,7 @@ it("transfers a department's receipt logo with its image and pictures, and the i
   const target = await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const printed = async (db: typeof suite.db, location: string) =>
     withTransaction(db, async (tx) => {
@@ -2275,8 +2231,7 @@ it("transfers a station's rest of the order switch", async () => {
   await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
     .select({ showsRestOfOrder: kitchenStations.showsRestOfOrder })
@@ -2308,8 +2263,7 @@ it("transfers each station's MOVED slips choice, print, don't print, or never se
   await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
     .select({ name: kitchenStations.name, printMovedSlips: kitchenStations.printMovedSlips })
@@ -2349,8 +2303,7 @@ it("transfers a station's colour", async () => {
   await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
     .select({ colour: kitchenStations.colour })
@@ -2397,8 +2350,7 @@ it("transfers each station's ticket grouping and held printing", async () => {
   await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
     .select({
@@ -2434,8 +2386,7 @@ it("refuses an imported ticket grouping outside the two values before writing an
     applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     }),
   ).rejects.toMatchObject({
     code: "setup.request_invalid",
@@ -2483,8 +2434,7 @@ it("transfers each station's bump mode", async () => {
   await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
     .select({ name: kitchenStations.name, bumpMode: kitchenStations.bumpMode })
@@ -2525,8 +2475,7 @@ it("transfers each station's ready warning time", async () => {
   await applyVenue(planVenue(venue("B97531960"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
     .select({
@@ -2563,7 +2512,7 @@ it.each(["ticket", "line"] as const)(
       new Date("2026-10-23T12:00:00Z"),
       versions,
     );
-    expect(transferred.venue.location).not.toHaveProperty("bumpMode");
+    expect(transferred.venue).not.toHaveProperty("bumpMode");
     const target = await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
@@ -2571,7 +2520,7 @@ it.each(["ticket", "line"] as const)(
         await tx.execute(
           sql`update locations set bump_mode = ${targetMode} where id = ${result.locationId}`,
         );
-        await importConfigurationTables(tx, transferred, result, ALL_MODULES, versions);
+        await importConfigurationTables(tx, transferred, ALL_MODULES, versions);
       },
     });
     expect(
@@ -2603,8 +2552,7 @@ it("refuses an imported bump mode outside the two values before writing anything
     applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     }),
   ).rejects.toMatchObject({
     code: "setup.request_invalid",
@@ -2652,8 +2600,7 @@ it("transfers each station's changes after sending", async () => {
   await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
     .select({
@@ -2688,8 +2635,7 @@ it("refuses an imported changes after sending outside the three values before wr
     applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     }),
   ).rejects.toMatchObject({
     code: "setup.request_invalid",
@@ -2740,8 +2686,7 @@ it("A725 allocates omitted imported colours after reserving explicit colours lat
   await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
     .select({
@@ -2792,8 +2737,7 @@ it.each([null, [], {}, 1, false, "invalid-colour"])(
       applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
         db: targetSuite.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, result) =>
-          importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+        beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject({
       code: "setup.request_invalid",
@@ -2892,8 +2836,7 @@ describe("custom themes in a configuration copy", () => {
     return applyVenue(planVenue(venue(taxId), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
   }
 
@@ -3144,8 +3087,7 @@ it("transfers a printer on two stations in configuration export", async () => {
   await applyVenue(planVenue(venue("B97531866"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
     .select({ station: kitchenStations.name, printer: printers.name })
@@ -3202,8 +3144,7 @@ it("transfers a printer's pick-up set and refuses a drawer role in the uploaded 
   await applyVenue(planVenue(venue("B27182810"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
     .select({ name: printers.name, pickupRoles: printers.pickupRoles })
@@ -3253,8 +3194,7 @@ it("transfers a device profile's receipt and payment-slip printer lists, in orde
   await applyVenue(planVenue(venue("B97531867"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await withTransaction(targetSuite.db, async (tx) => {
     const [profile] = await tx
@@ -3345,8 +3285,7 @@ it("carries a department's Needs clearing switch to the importing venue", async 
   await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const [imported] = await withTransaction(targetSuite.db, (tx) =>
     tx
@@ -3392,8 +3331,7 @@ describe("a department's late-send manager setting in a configuration transfer",
     await applyVenue(planVenue(venue("B97531866"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
     const [imported] = await withTransaction(targetSuite.db, (tx) =>
       tx
@@ -3476,8 +3414,7 @@ it("carries a department's reminder minutes to the importing venue", async () =>
   await applyVenue(planVenue(venue("B86420975"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const [imported] = await withTransaction(targetSuite.db, (tx) =>
     tx
@@ -3521,14 +3458,8 @@ it("leaves out a print agent's node, so the importing venue does not show it as 
   const target = await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: async (tx, result) => {
-      await importConfigurationTables(
-        tx,
-        transferred,
-        { locationId: result.locationId },
-        ALL_MODULES,
-        versions,
-      );
+    beforeCommit: async (tx) => {
+      await importConfigurationTables(tx, transferred, ALL_MODULES, versions);
     },
   });
 
@@ -3591,14 +3522,8 @@ it("leaves out a print agent's setup page address and port, so the import links 
   await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: async (tx, result) => {
-      await importConfigurationTables(
-        tx,
-        transferred,
-        { locationId: result.locationId },
-        ALL_MODULES,
-        versions,
-      );
+    beforeCommit: async (tx) => {
+      await importConfigurationTables(tx, transferred, ALL_MODULES, versions);
     },
   });
 
@@ -3667,8 +3592,7 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
   await applyVenue(planVenue(venue("B88776655"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   await withTransaction(targetSuite.db, async (tx) => {
     const [menu] = await tx.select().from(catalogues).where(eq(catalogues.name, "Missing slots"));
@@ -3727,8 +3651,7 @@ it("gives each imported product the folded key of its own name, whatever the bun
   await applyVenue(planVenue(venue("B75318642"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await targetSuite.db
     .select({ name: products.name, nameKey: products.nameKey, catalogueId: products.catalogueId })
@@ -3771,7 +3694,6 @@ it("gives each imported product the folded key of its own name, whatever the bun
             products: transferred.tables.products!.map((row) => ({ ...row, name_key: "wrong" })),
           },
         },
-        { locationId: "unused" },
         ALL_MODULES,
         versions,
       ),
@@ -3859,8 +3781,7 @@ it("carries each table's short name, and the import sets the live table's key fr
   const target = await applyVenue(planVenue(venue("B14142135"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   expect(await importedShortNames(target)).toEqual([{ shortName: "Rt1", shortNameKey: "rt1" }]);
   const plan = await targetSuite.db
@@ -3883,7 +3804,6 @@ it("carries each table's short name, and the import sets the live table's key fr
             })),
           },
         },
-        { locationId: "unused" },
         ALL_MODULES,
         versions,
       ),
@@ -3905,7 +3825,7 @@ it("imports a file with no short names, at this version, with none", async () =>
   const target = await applyVenue(planVenue(venue("B22360679"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
+    beforeCommit: (tx) =>
       importConfigurationTables(
         tx,
         {
@@ -3916,7 +3836,6 @@ it("imports a file with no short names, at this version, with none", async () =>
             floor_plan_tables: withoutShortNames(transferred.tables.floor_plan_tables!),
           },
         },
-        result,
         ALL_MODULES,
         versions,
       ),
@@ -3981,8 +3900,7 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
   await applyVenue(planVenue(venue("B86420975"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
 
   const [menu] = await targetSuite.db
@@ -4091,8 +4009,7 @@ it("refuses a bundle holding duplicate names whole, at staging and at import", a
     applyVenue(planVenue(target, ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, withProduct, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, withProduct, ALL_MODULES, versions),
     }),
   ).rejects.toMatchObject({ code: "product.name_taken" });
   const persisted = await targetSuite.db.execute<{ count: number }>(sql`
@@ -4170,8 +4087,7 @@ it("refuses an Inactive product in a menu list and a menu price for an Inactive 
     applyVenue(planVenue(target, ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, inactive(ids.gin), result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, inactive(ids.gin), ALL_MODULES, versions),
     }),
   ).rejects.toMatchObject({
     code: "setup.request_invalid",
@@ -4251,8 +4167,7 @@ it("counts an exported product with no Active flag as Active, as the column stor
     applyVenue(planVenue(target, ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, withProduct, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, withProduct, ALL_MODULES, versions),
     }),
   ).rejects.toMatchObject({ code: "product.name_taken" });
   const persisted = await targetSuite.db.execute<{ count: number }>(sql`
@@ -4371,8 +4286,7 @@ it("leaves behind a retired profile that no row uses, and the bundle still impor
   await applyVenue(planVenue(venue("B86420975"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const names = await targetSuite.db.select({ name: deviceProfiles.name }).from(deviceProfiles);
   expect(names.map((row) => row.name)).not.toContain("Old till");
@@ -4427,8 +4341,7 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
   await applyVenue(planVenue(venue("B97531246"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   await withTransaction(targetSuite.db, async (tx) => {
     const profiles = await tx
@@ -4505,8 +4418,7 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
   await applyVenue(planVenue(venue("B13570246"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await withTransaction(targetSuite.db, async (tx) => {
     const [location] = await tx
@@ -4607,8 +4519,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
   await applyVenue(planVenue(venue("B46802357"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await withTransaction(targetSuite.db, async (tx) => {
     const [station] = await tx
@@ -4741,8 +4652,7 @@ it("transfers a profile's admitted roles and person exceptions, leaving a retire
   await applyVenue(planVenue(venue("B46813579"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await withTransaction(targetSuite.db, async (tx) => ({
     roles: await tx
@@ -5037,8 +4947,7 @@ it("carries each station's own late flags to the importing venue", async () => {
   await applyVenue(planVenue(venue("B97531866"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   expect(
     await targetSuite.db
@@ -5081,8 +4990,7 @@ it.each([
     applyVenue(planVenue(target, ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     }),
   ).rejects.toMatchObject({
     code: "station.thresholds_invalid",
@@ -5127,8 +5035,7 @@ it("refuses an imported ready warning of 0 before writing anything", async () =>
     applyVenue(planVenue(target, ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     }),
   ).rejects.toMatchObject({
     code: "station.thresholds_invalid",
@@ -5172,8 +5079,7 @@ it("imports a station row with no ready warning as 3", async () => {
   await applyVenue(planVenue(venue("B97531962"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   expect(
     await targetSuite.db
@@ -5223,8 +5129,7 @@ it("refuses an imported minute that is not a whole number", async () => {
     applyVenue(planVenue(target, ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     }),
   ).rejects.toMatchObject({
     code: "station.thresholds_invalid",
@@ -5278,7 +5183,7 @@ describe("venue detail edits and configuration boundaries", () => {
       new Date("2026-10-06T12:00:00Z"),
       versions,
     );
-    expect(exported.venue.location).toMatchObject({
+    expect(exported.venue).toMatchObject({
       ...saved.model.details,
       dayCutover: "04:30:00",
     });
@@ -5295,8 +5200,7 @@ describe("venue detail edits and configuration boundaries", () => {
     await applyVenue(planVenue(targetRequest, ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, created) =>
-        importConfigurationTables(tx, exported, created, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, exported, ALL_MODULES, versions),
     });
     const model = await withTransaction(targetSuite.db, (tx) => readVenueDetails(tx));
     expect(model.details).toEqual({
@@ -5346,7 +5250,7 @@ describe("venue detail edits and configuration boundaries", () => {
         versions,
       );
       const foreignDetails = {
-        ...exported.venue.location,
+        ...exported.venue,
         name: "Foreign source name",
         addressLine1: "Foreign street",
         addressLine2: "Foreign line two",
@@ -5358,7 +5262,12 @@ describe("venue detail edits and configuration boundaries", () => {
       };
       const beforeSales = suite.db.all(sql`select * from sales`);
       const beforeSeries = suite.db.all(sql`select * from invoice_series`);
-      await withTransaction(suite.db, (tx) => applyPreparedLocation(tx, target, foreignDetails));
+      await withTransaction(suite.db, (tx) =>
+        applyPreparedVenue(tx, {
+          ...foreignDetails,
+          defaultCatalogueId: exported.defaultCatalogueId,
+        }),
+      );
       const after = await withTransaction(suite.db, (tx) => readVenueDetails(tx));
       expect(after.details).toEqual(initial.details);
       expect(after.issuer).toEqual(initial.issuer);
@@ -5376,7 +5285,7 @@ it.each(["department_sale_policies", "zone_sale_policies"])(
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const target = await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
+    await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
     });
@@ -5406,13 +5315,7 @@ it.each(["department_sale_policies", "zone_sale_policies"])(
     };
     await expect(
       withTransaction(targetSuite.db, (tx) =>
-        importConfigurationTables(
-          tx,
-          bad,
-          { locationId: target.locationId },
-          ALL_MODULES,
-          versions,
-        ),
+        importConfigurationTables(tx, bad, ALL_MODULES, versions),
       ),
     ).rejects.toMatchObject({
       code: "setup.request_invalid",
@@ -5466,13 +5369,13 @@ it("A725 transfers station and department choices", async () => {
     new Date("2026-10-06T10:00:00Z"),
     versions,
   );
-  expect(exported.version).toBe(9);
+  expect(exported.version).toBe(10);
   expect(exported.tables).not.toHaveProperty("table_service_statuses");
   expect(exported.tables.kitchen_stations!.length).toBeGreaterThan(0);
   for (const station of exported.tables.kitchen_stations!)
     expect(station).not.toHaveProperty("display_order");
-  expect(exported.venue.location).not.toHaveProperty("receiptPrintMode");
-  expect(exported.venue.location).not.toHaveProperty("drawerOpenPolicy");
+  expect(exported.venue).not.toHaveProperty("receiptPrintMode");
+  expect(exported.venue).not.toHaveProperty("drawerOpenPolicy");
   const decoded = decodeConfigurationBundle(
     encodeConfigurationBundle(exported, "a strong passphrase"),
     "a strong passphrase",
@@ -5480,14 +5383,7 @@ it("A725 transfers station and department choices", async () => {
   const target = await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: async (tx, result) =>
-      importConfigurationTables(
-        tx,
-        decoded,
-        { locationId: result.locationId },
-        ALL_MODULES,
-        versions,
-      ),
+    beforeCommit: async (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
   expect(target.locationId).not.toBe(source.locationId);
   const modes = await targetSuite.db.execute(sql`
@@ -5545,14 +5441,7 @@ it("transfers a department's customer and staff period menus to its zone under n
   await applyVenue(planVenue(venue("B24681358"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: async (tx, result) =>
-      importConfigurationTables(
-        tx,
-        decoded,
-        { locationId: result.locationId },
-        ALL_MODULES,
-        versions,
-      ),
+    beforeCommit: async (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
   const zone = await targetSuite.db.execute<{
     zone_id: string;
@@ -5701,14 +5590,7 @@ it("exports and imports all seven cell classes into another venue, remapping eve
   const target = await applyVenue(planVenue(venue("B24681360"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: async (tx, result) =>
-      importConfigurationTables(
-        tx,
-        decoded,
-        { locationId: result.locationId },
-        ALL_MODULES,
-        versions,
-      ),
+    beforeCommit: async (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
   const idOf = async (table: string, name: string) => {
     const result = await targetSuite.db.execute<{ id: string }>(
@@ -5834,14 +5716,7 @@ it("carries a cell's period choices with their cell, including a period whose me
   const target = await applyVenue(planVenue(venue("B24681362"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: async (tx, result) =>
-      importConfigurationTables(
-        tx,
-        decoded,
-        { locationId: result.locationId },
-        ALL_MODULES,
-        versions,
-      ),
+    beforeCommit: async (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
   const choices = await targetSuite.db.execute<Record<string, unknown>>(sql`
     select x.cell_id, x.period_id, x.department_id, x.station_id,
@@ -6035,8 +5910,7 @@ describe("special days in a configuration transfer", () => {
     const target = await applyVenue(planVenue(venue("B44001133"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
 
     const expected = await specialDaysByName(suite.db, source);
@@ -6110,8 +5984,7 @@ describe("special days in a configuration transfer", () => {
     const target = await applyVenue(planVenue(venue("B44002222"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
     const imported = await named(targetSuite.db, target);
     const importedPass = { kind: "station" as const, id: imported.stations.get("Pass")! };
@@ -6154,8 +6027,7 @@ describe("special days in a configuration transfer", () => {
       applyVenue(planVenue(target, ALL_MODULES), {
         db: targetSuite.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, result) =>
-          importConfigurationTables(tx, edited, result, ALL_MODULES, versions),
+        beforeCommit: (tx) => importConfigurationTables(tx, edited, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
     const persisted = await targetSuite.db.execute<{ tenants: number }>(sql`
@@ -6178,8 +6050,7 @@ describe("special days in a configuration transfer", () => {
       applyVenue(planVenue(target, ALL_MODULES), {
         db: targetSuite.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, result) =>
-          importConfigurationTables(tx, edited, result, ALL_MODULES, versions),
+        beforeCommit: (tx) => importConfigurationTables(tx, edited, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
     const persisted = await targetSuite.db.execute<{ tenants: number }>(
@@ -6302,8 +6173,7 @@ describe("public holidays in a configuration transfer", () => {
     const target = await applyVenue(planVenue(venue("B45001133"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
 
     const expected = await holidaysByCity(suite.db);
@@ -6423,8 +6293,7 @@ describe("public holidays in a configuration transfer", () => {
       applyVenue(planVenue(target, ALL_MODULES), {
         db: targetSuite.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, result) =>
-          importConfigurationTables(tx, edited, result, ALL_MODULES, versions),
+        beforeCommit: (tx) => importConfigurationTables(tx, edited, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
     const persisted = await targetSuite.db.execute<Record<string, number>>(sql`
@@ -6456,8 +6325,7 @@ describe("public holidays in a configuration transfer", () => {
       applyVenue(planVenue(target, ALL_MODULES), {
         db: targetSuite.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, result) =>
-          importConfigurationTables(tx, edited, result, ALL_MODULES, versions),
+        beforeCommit: (tx) => importConfigurationTables(tx, edited, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
     const persisted = await targetSuite.db.execute<{ tenants: number }>(
@@ -6550,14 +6418,7 @@ it("round-trips departmental transfer directions and desks with remapped ids, le
   await applyVenue(planVenue(venue("B36472852"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: async (tx, result) =>
-      importConfigurationTables(
-        tx,
-        decoded,
-        { locationId: result.locationId },
-        ALL_MODULES,
-        versions,
-      ),
+    beforeCommit: async (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
   const direction = await targetSuite.db.execute<{
     source: string;
@@ -6674,8 +6535,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
   const target = await applyVenue(planVenue(venue("B24681368"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, decoded, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
   const seasonsHolding = await targetSuite.db.execute(sql`
     select count(distinct t.season_id) as seasons
@@ -6790,8 +6650,7 @@ it("transfers order start policies under new department and zone ids", async () 
   const target = await applyVenue(planVenue(venue("B13572479"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, decoded, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
   });
   expect(target.locationId).not.toBe(source.locationId);
   const imported = await targetSuite.db.execute<{
@@ -6890,8 +6749,7 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
   const target = await applyVenue(planVenue(venue("B13572477"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, exported, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, exported, ALL_MODULES, versions),
   });
   const imported = await withTransaction(targetSuite.db, async (tx) => {
     const rows = await tx
@@ -7054,8 +6912,7 @@ describe("a deleted printer in a configuration transfer", () => {
     const target = await applyVenue(planVenue(venue("B30303032"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
     });
     const imported = await targetSuite.db
       .select({
@@ -7175,8 +7032,7 @@ describe("a deleted printer in a configuration transfer", () => {
       applyVenue(planVenue(target, ALL_MODULES), {
         db: targetSuite.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, result) =>
-          importConfigurationTables(tx, forged, result, ALL_MODULES, versions),
+        beforeCommit: (tx) => importConfigurationTables(tx, forged, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
     expect(await counts()).toEqual(before);
@@ -7293,8 +7149,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
       applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
         db: targetSuite.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, result) =>
-          importConfigurationTables(tx, forged, result, ALL_MODULES, versions),
+        beforeCommit: (tx) => importConfigurationTables(tx, forged, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(refusal);
     const rows = await targetSuite.db.execute(sql`select count(*) as count from tenants`);
@@ -7303,8 +7158,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
   const target = await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const imported = await withTransaction(targetSuite.db, async (tx) => ({
     courses: await tx.select().from(kitchenCourses),
@@ -7451,8 +7305,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
   const target = await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const rows = await targetSuite.db.execute<{
     department: string;
@@ -7540,8 +7393,7 @@ it("carries Long table's parts, naming the imported tables", async () => {
   await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const rows = await targetSuite.db.execute<{
     id: string;
@@ -7609,8 +7461,7 @@ it("carries a kept size, naming the imported table", async () => {
   await applyVenue(planVenue(venue("B98765431"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
   const rows = await targetSuite.db.execute<{
     plan_table_id: string;
@@ -7674,16 +7525,15 @@ describe("dated business-day configuration transfer", () => {
       new Date("2026-11-10T08:00:00Z"),
       versions,
     );
-    expect(exported.venue.location.dayCutover).toBe("07:00:00");
+    expect(exported.venue.dayCutover).toBe("07:00:00");
     expect(exported.tables).not.toHaveProperty("location_day_cutover_changes");
     expect(exported.tables).not.toHaveProperty("location_business_day_settings");
     const request = venue("B33221177");
-    request.dayCutover = exported.venue.location.dayCutover;
+    request.dayCutover = exported.venue.dayCutover;
     await applyVenue(planVenue(request, ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, created) =>
-        importConfigurationTables(tx, exported, created, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, exported, ALL_MODULES, versions),
     });
     const model = await withTransaction(targetSuite.db, (tx) =>
       readVenueDetails(tx, new Date("2026-11-10T08:00:00Z")),
@@ -7722,7 +7572,7 @@ describe("dated business-day configuration transfer", () => {
     ]);
   });
 
-  it("keeps dated target history when prepared location metadata is applied", async () => {
+  it("keeps dated target history when the prepared venue is applied", async () => {
     const target = await applyVenue(planVenue(venue("B77112233"), ALL_MODULES), {
       db: suite.db,
       modules: ALL_MODULES,
@@ -7740,11 +7590,7 @@ describe("dated business-day configuration transfer", () => {
       readVenueDetails(tx, new Date("2026-11-05T12:00:00Z")),
     );
     await withTransaction(suite.db, (tx) =>
-      applyPreparedLocation(tx, target, {
-        ...bundle.venue.location,
-        dayCutover: "07:00:00",
-        timeZone: "UTC",
-      }),
+      applyPreparedVenue(tx, { defaultCatalogueId: bundle.defaultCatalogueId }),
     );
     expect(
       await withTransaction(suite.db, (tx) =>
@@ -7894,8 +7740,7 @@ describe("seasons in a configuration transfer", () => {
     const target = await applyVenue(planVenue(venue("B35792469"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, decoded, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
     });
 
     expect(exported).toEqual([
@@ -8038,8 +7883,7 @@ describe("special days in a configuration transfer", () => {
     const target = await applyVenue(planVenue(venue("B35792475"), ALL_MODULES), {
       db: targetSuite.db,
       modules: ALL_MODULES,
-      beforeCommit: (tx, result) =>
-        importConfigurationTables(tx, decoded, result, ALL_MODULES, versions),
+      beforeCommit: (tx) => importConfigurationTables(tx, decoded, ALL_MODULES, versions),
     });
 
     const exported = await fiestaRows(suite.db, source.locationId);
@@ -8136,8 +7980,7 @@ describe("special days in a configuration transfer", () => {
       applyVenue(planVenue(venue("B35792477"), ALL_MODULES), {
         db: targetSuite.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, result) =>
-          importConfigurationTables(tx, bundle, result, ALL_MODULES, versions),
+        beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(error);
     expect(
@@ -8157,8 +8000,7 @@ describe("special days in a configuration transfer", () => {
       applyVenue(planVenue(venue("B35792479"), ALL_MODULES), {
         db: targetSuite.db,
         modules: ALL_MODULES,
-        beforeCommit: (tx, result) =>
-          importConfigurationTables(tx, bundle, result, ALL_MODULES, versions),
+        beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
       }),
     ).rejects.toMatchObject(error);
     expect(
@@ -8234,8 +8076,7 @@ it("round-trips explicit unit staff identity, empty and disabled translations an
   await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
-    beforeCommit: (tx, result) =>
-      importConfigurationTables(tx, bundle, result, ALL_MODULES, versions),
+    beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
   });
   expect(bundle).toEqual(before);
   const imported = await targetSuite.db.select().from(units).orderBy(units.seedKey);

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { tenants, withTransaction, type Database } from "@waitron/db";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin } from "@waitron/identity";
 import { appliedSchemaVersion, manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -75,15 +76,13 @@ it("exports the stored privacy contact at the top level, never inside the venue"
       }),
     );
   });
-  expect(bundle.version).toBe(9);
+  expect(bundle.version).toBe(10);
   expect(bundle.privacyContact).toEqual({
     privacyNoticeUrl: "https://example.com/privacy",
     privacyEmail: "privacy@example.com",
   });
-  for (const holder of [bundle.venue, bundle.venue.location]) {
-    expect(holder).not.toHaveProperty("privacyNoticeUrl");
-    expect(holder).not.toHaveProperty("privacyEmail");
-  }
+  expect(bundle.venue).not.toHaveProperty("privacyNoticeUrl");
+  expect(bundle.venue).not.toHaveProperty("privacyEmail");
 });
 
 it("exports an unset privacy contact as two nulls", async () => {
@@ -164,23 +163,23 @@ async function taxpayerRows(db: Database) {
 it.each(["123456789", "987654321"])(
   "an import writes the bundle's privacy contact onto the taxpayer row (target tax ID %s)",
   async (taxId) => {
-    const target = await targetVenue(taxId);
+    await targetVenue(taxId);
     const [before] = await taxpayerRows(suite.db);
     await withTransaction(suite.db, (tx) =>
-      importConfigurationTables(tx, configurationBundle(), target, [], {}),
+      importConfigurationTables(tx, configurationBundle(), [], {}),
     );
     expect(await taxpayerRows(suite.db)).toEqual([{ ...before, ...stored }]);
   },
 );
 
 it("an import stores the privacy contact trimmed and composed", async () => {
-  const target = await targetVenue();
+  await targetVenue();
   const [before] = await taxpayerRows(suite.db);
   const bundle = withContact({
     privacyNoticeUrl: "  https://example.com/privacy  ",
     privacyEmail: `jose${String.fromCodePoint(0x301)}@example.com`,
   });
-  await withTransaction(suite.db, (tx) => importConfigurationTables(tx, bundle, target, [], {}));
+  await withTransaction(suite.db, (tx) => importConfigurationTables(tx, bundle, [], {}));
   expect(await taxpayerRows(suite.db)).toEqual([
     {
       ...before,
@@ -191,7 +190,7 @@ it("an import stores the privacy contact trimmed and composed", async () => {
 });
 
 it("an import with an unset privacy contact clears a stored privacy contact", async () => {
-  const target = await targetVenue();
+  await targetVenue();
   await withTransaction(suite.db, (tx) => savePrivacyContact(tx, stored));
   const [before] = await taxpayerRows(suite.db);
   expect(before).toMatchObject(stored);
@@ -199,7 +198,6 @@ it("an import with an unset privacy contact clears a stored privacy contact", as
     importConfigurationTables(
       tx,
       withContact({ privacyNoticeUrl: null, privacyEmail: null }),
-      target,
       [],
       {},
     ),
@@ -210,7 +208,7 @@ it("an import with an unset privacy contact clears a stored privacy contact", as
 });
 
 it("an import writes the privacy contact before the modules' afterImport hooks, and a failing hook rolls it back", async () => {
-  const target = await targetVenue();
+  await targetVenue();
   const [before] = await taxpayerRows(suite.db);
   let seen: PrivacyContact | null | undefined;
   const module: WaitronModule = {
@@ -228,7 +226,7 @@ it("an import writes the privacy contact before the modules' afterImport hooks, 
   const bundle = { ...configurationBundle(), modules: { "synthetic-transfer": 1 } };
   await expect(
     withTransaction(suite.db, (tx) =>
-      importConfigurationTables(tx, bundle, target, [module], { "synthetic-transfer": 1 }),
+      importConfigurationTables(tx, bundle, [module], { "synthetic-transfer": 1 }),
     ),
   ).rejects.toThrow("synthetic afterImport failure");
   expect(seen).toEqual(stored);
@@ -236,8 +234,12 @@ it("an import writes the privacy contact before the modules' afterImport hooks, 
 });
 
 it("an import with no taxpayer row finishes and creates none", async () => {
+  await withTransaction(suite.db, async (tx) => {
+    await seedVenue(tx);
+    await tx.delete(tenants);
+  });
   await withTransaction(suite.db, (tx) =>
-    importConfigurationTables(tx, configurationBundle(), { locationId: "absent" }, [], {}),
+    importConfigurationTables(tx, configurationBundle(), [], {}),
   );
   expect((await suite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([{ n: 0 }]);
 });

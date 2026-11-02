@@ -4,6 +4,6 @@ export const WORKFORCE_CONFIGURATION_TRANSFER = {
     { name: "employments" },
     { name: "availability" },
     { name: "pay_period_settings" },
-    { name: "shift_templates", locationColumns: ["location_id"] },
+    { name: "shift_templates" },
   ],
 } as const;

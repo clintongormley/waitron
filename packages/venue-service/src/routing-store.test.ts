@@ -721,10 +721,9 @@ describe("stored preparation rules", () => {
       });
     }));
 
-  it("exports routing cells with their location column", () => {
+  it("exports routing cells", () => {
     expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables).toContainEqual({
       name: "routing_cells",
-      locationColumns: ["location_id"],
     });
   });
 

@@ -65,8 +65,8 @@ it("exports the current business-day cutover without retaining an obsolete setti
       values (${target.locationId}, '2026-10-16', '04:30:00')`),
   );
   const bundle = await buildConfigurationBundle(suite.db, target, [], now, {});
-  expect(bundle.venue.location.dayCutover).toBe("04:30:00");
-  expect(bundle.venue.location.invoiceLocales).toEqual(["es-ES"]);
+  expect(bundle.venue.dayCutover).toBe("04:30:00");
+  expect(bundle.venue.invoiceLocales).toEqual(["es-ES"]);
   expect(bundle.sourceOperatorId).toBe("");
 });
 
@@ -137,7 +137,7 @@ it.each(["missing-table", "unknown-column"])(
       ]);
       await expect(
         withTransaction(suite.db, (tx) =>
-          importConfigurationTables(tx, bundle, { locationId: "absent" }, [module], bundle.modules),
+          importConfigurationTables(tx, bundle, [module], bundle.modules),
         ),
       ).rejects.toMatchObject(
         invalid(change === "missing-table" ? "table:zz_missing" : "table:zz_transfer_rows"),
@@ -152,7 +152,7 @@ it.each(["missing-table", "unknown-column"])(
 );
 
 it("imports staff without their source login credentials and preserves the target owner", async () => {
-  const target = await seed();
+  await seed();
   const ownerBefore = (await suite.db.execute(sql`select * from persons where role = 'admin'`))
     .rows;
   await withTransaction(suite.db, (tx) =>
@@ -188,13 +188,7 @@ it("imports staff without their source login credentials and preserves the targe
     ],
   };
   await withTransaction(suite.db, (tx) =>
-    importConfigurationTables(
-      tx,
-      bundle,
-      target,
-      [transfer([{ name: "persons" }])],
-      bundle.modules,
-    ),
+    importConfigurationTables(tx, bundle, [transfer([{ name: "persons" }])], bundle.modules),
   );
   expect((await suite.db.execute(sql`select * from persons where role = 'admin'`)).rows).toEqual(
     ownerBefore,
@@ -222,7 +216,7 @@ it("imports staff without their source login credentials and preserves the targe
 });
 
 it("omits the source operator's dependent rows while preserving another person's settings", async () => {
-  const target = await seed();
+  await seed();
   await withTransaction(suite.db, (tx) =>
     tx.execute(sql`create table zz_transfer_rows (id text primary key, person_id text, name text)`),
   );
@@ -239,7 +233,6 @@ it("omits the source operator's dependent rows while preserving another person's
       importConfigurationTables(
         tx,
         bundle,
-        target,
         [transfer([{ name: "zz_transfer_rows" }])],
         bundle.modules,
       ),
@@ -295,12 +288,12 @@ it("imports printers disabled with fresh agent credentials and no page-printer a
     ],
   };
   const module = transfer([
-    { name: "print_agents", locationColumns: ["location_id"] },
-    { name: "printers", locationColumns: ["location_id"] },
-    { name: "page_printers", locationColumns: ["location_id"] },
+    { name: "print_agents" },
+    { name: "printers" },
+    { name: "page_printers" },
   ]);
   await withTransaction(suite.db, (tx) =>
-    importConfigurationTables(tx, bundle, target, [module], bundle.modules),
+    importConfigurationTables(tx, bundle, [module], bundle.modules),
   );
   expect(
     (await suite.db.execute(sql`select id, location_id, token_hash, active from print_agents`))

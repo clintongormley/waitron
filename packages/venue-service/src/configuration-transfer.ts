@@ -176,7 +176,7 @@ function validateSpecialDays(tables: Tables): Map<unknown, ImportedSpecialDate> 
     repeats.set(row.id, flag === 1);
   }
   const dates = new Map<unknown, ImportedSpecialDate>();
-  // Every special-day date lands at the importing venue, whatever location the bundle names.
+  // Every special-day date lands at the importing venue.
   const placed: { date: LocalDate; repeats: boolean; holidayName: string | null }[] = [];
   for (const row of tables.special_day_dates ?? []) {
     if (!repeats.has(row.special_day_id)) refuse("special_day_dates.special_day_id");
@@ -697,11 +697,11 @@ function validateVenueServiceConfiguration(
 export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
-    { name: "departments", locationColumns: ["location_id"], leaveBehindWhenFalse: "active" },
+    { name: "departments", leaveBehindWhenFalse: "active" },
     { name: "service_steps" },
     { name: "department_receipts" },
     { name: "department_sale_policies" },
-    { name: "zone_service_policies", locationColumns: ["location_id"] },
+    { name: "zone_service_policies" },
     { name: "zone_sale_policies" },
     { name: "device_profile_service_access" },
     { name: "device_profile_zones" },
@@ -710,19 +710,19 @@ export const VENUE_SERVICE_CONFIGURATION_TRANSFER = {
     { name: "device_profile_kitchen_screen_zones" },
     { name: "department_transfer_desks" },
     { name: "department_transfer_destinations" },
-    { name: "routing_cells", locationColumns: ["location_id"] },
+    { name: "routing_cells" },
     { name: "department_floor_plan_sets" },
     { name: "menu_periods" },
     { name: "menu_period_staff_menus" },
     { name: "routing_cell_periods" },
-    { name: "special_days", locationColumns: ["location_id"] },
-    { name: "special_day_dates", locationColumns: ["location_id"] },
-    { name: "seasons", locationColumns: ["location_id"] },
+    { name: "special_days" },
+    { name: "special_day_dates" },
+    { name: "seasons" },
     { name: "department_days" },
     { name: "department_day_ranges" },
     { name: "zone_days" },
     { name: "zone_day_ranges" },
-    { name: "holiday_geographies", locationColumns: ["location_id"] },
+    { name: "holiday_geographies" },
   ],
   validate: validateVenueServiceConfiguration,
 } as const;

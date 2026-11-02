@@ -692,34 +692,9 @@ it("tests email as the current owner without sending a replacement administrator
     .toBe(false);
 });
 it("claims a staged preview's venue with only the venue fields the claim accepts", async () => {
-  const {
-    admin,
-    country,
-    taxId,
-    legalName,
-    taxpayerDomicile,
-    seriesCode,
-    fullSeriesCode,
-    rectificativeSeriesCode,
-    ...venueFields
-  } = venue;
+  const { admin, ...exported } = venue;
   const preview = {
-    venue: {
-      country,
-      taxId,
-      legalName,
-      taxpayerDomicile,
-      seriesCode,
-      fullSeriesCode,
-      rectificativeSeriesCode,
-      location: {
-        ...venueFields,
-        id: "source-location",
-        fireControl: "waiter",
-        catalogueId: "catalogue",
-        dayCutover: "05:00:00",
-      },
-    },
+    venue: { ...exported, dayCutover: "05:00:00", somethingNew: "not a setup field" },
     counts: { products: 4 },
     reconnect: [],
   };

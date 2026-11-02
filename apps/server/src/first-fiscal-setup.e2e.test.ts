@@ -243,19 +243,9 @@ it.each([
         ...(newTaxpayer ? { taxId: "B12345674", legalName: "New Olivo SL" } : {}),
       };
       if (claimFrom === "preview") {
-        // The whole preview venue, as the setup app sends it; the location is cut to the request's keys.
-        const { location: previewLocation, ...preview } = stagedBody.venue;
-        expect(previewLocation).toHaveProperty("fireControl");
+        const preview = stagedBody.venue;
         expect(Object.keys(request)).toEqual(expect.arrayContaining(Object.keys(preview)));
-        venue = {
-          ...preview,
-          ...Object.fromEntries(
-            Object.keys(request)
-              .filter((key) => Object.hasOwn(previewLocation, key))
-              .map((key) => [key, previewLocation[key]]),
-          ),
-          admin: request.admin,
-        };
+        venue = { ...preview, admin: request.admin };
       }
       if (launch === "direct" && !newTaxpayer && change === "none") {
         for (const [candidate, newTaxpayer, field] of [

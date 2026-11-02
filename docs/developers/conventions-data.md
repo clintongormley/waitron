@@ -789,9 +789,9 @@ request (`departments.<i>.…`, `zones.<i>.…`); an unknown or inactive departm
 
 A configuration transfer carries the five season tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER` in
 `packages/venue-service/src/configuration-transfer.ts`). `importConfigurationTables`
-(`apps/server/src/configuration-transfer.ts`) deletes every row of a transferred table before
-inserting the bundle's, so the target's four provisioned seasons give way to the exported ones:
-the case "arrives as exactly the exported seasons, and the imported venue sells and closes by
+(`packages/provisioning/src/configuration-transfer.ts`) deletes every row of a transferred table
+before inserting the bundle's, so the target's four provisioned seasons give way to the exported
+ones: the case "arrives as exactly the exported seasons, and the imported venue sells and closes by
 them" in `apps/server/src/configuration-transfer.test.ts` renames and moves one season before
 export, finds the target holding the exported four, and asks `resolveDepartmentService` and
 `closedZoneIdsAt` about one Saturday in each of two seasons.
@@ -852,8 +852,7 @@ malformed id is refused as `shared.invalid_id`.
 transaction with `readBusinessDayScheduleRevision`, the reader the delete's own check uses; the
 delete dialog sends it back as `expectedClockRevision`.
 
-A configuration transfer carries both tables under the importing venue's location
-(`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
+A configuration transfer carries both tables (`VENUE_SERVICE_CONFIGURATION_TRANSFER`). The import refuses, as `setup.request_invalid` naming
 the field, a bundle the writer could not have stored: two special-day dates on one date; a
 special-day day row with a season or a weekday; paint off the quarter-hour or overlapping; paint at a time the clocks skip, a repeating date checked at its
 next occurrence from the venue's date of the bundle's `createdAt`; and a zone's Closed paint outside its department's hours on that date
@@ -1324,13 +1323,13 @@ in the sweep below are retired. The booking writer remains; the account below re
   unreadable clock but provides no repair path. The request cases are in
   `apps/server/src/business-day-start.test.ts`; historical reports and frozen close/fiscal rows
   are compared in `apps/server/src/business-day-history.test.ts`.
-- **Writers that skip the helpers.** The configuration import
-  (`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`) copies the time values
-  in a bundle's rows as written, without the normalising helpers. Several `created_at` columns that
-  are ordered travel in a bundle this way. A bundle a Waitron venue exported carries that venue's
-  spellings, so it takes a hand-edited bundle to store another. The opening periods are the
-  exception: venue-service's transfer `validate` refuses a period whose `opens_at` or `closes_at`
-  is not spelled `HH:MM:00` (`STORED_TIME` in `packages/venue-service/src/configuration-transfer.ts`)
+- **Writers that skip the helpers.** The configuration import (`importConfigurationTables`,
+  `packages/provisioning/src/configuration-transfer.ts`) copies the time values in a bundle's rows
+  as written, without the normalising helpers. Several `created_at` columns that are ordered travel
+  in a bundle this way. A bundle a Waitron venue exported carries that venue's spellings, so it
+  takes a hand-edited bundle to store another. The opening periods are the exception:
+  venue-service's transfer `validate` refuses a period whose `opens_at` or `closes_at` is not
+  spelled `HH:MM:00` (`STORED_TIME` in `packages/venue-service/src/configuration-transfer.ts`)
   before the import writes anything.
 
 Nothing guards the one-spelling rule across these columns. A new text time column, or a new writer
@@ -1710,20 +1709,22 @@ PR 5 (format 7, 2026-10-23, when it dropped `kitchen_timing_defaults` and `kitch
 and the station's own minutes joined the copy), A756 PR 8 (format 8, 2026-10-24, when it
 dropped `service_settings`) and A980 S1a2 (format 9, 2026-10-26, when the copy gained the venue's
 privacy contact as the required top-level `privacyContact` key) moved the format for the same
-reason; `configuration-transfer.test.ts` now pins format 9, and older files are refused as
-`setup.configuration_outdated`.
+reason. A1301 S17 (format 10) made the venue's setup fields `venue`'s own keys, moved
+the default menu to the top-level `defaultCatalogueId` and dropped the location's `id` and
+`fireControl`; a format-9 export is refused as outdated. `configuration-transfer.test.ts` now pins
+format 10, and older files are refused as `setup.configuration_outdated`.
 
 ### A configuration bundle value that is not a setup field stays out of the venue's own keys
 
-The setup app copies the setup preview's `venue`, moving only `CLAIM_VENUE_FIELDS` from its
-`location` into the flat claim (`VenueDraft`, `apps/setup/src/setup-app.ts`). The claim refuses any
-venue key it does not list
-(`exact(...)` in `apps/server/src/setup-first-fiscal-api.ts`). So a bundle value that is not a setup
-field lives outside `venue`'s own keys, as `privacyContact` does. `venue.location` already carries
-three such values, `id`, `fireControl` and `catalogueId` (`packages/provisioning/src/configuration-transfer.ts`),
-and they are safe only because the setup app filters the location. Cost: from #1752 to A980 S1a2
-every Live setup from an export on a production box was refused at the claim, because the setup app,
-which dropped only `id`, copied the other two into it (probes 2 to 4 of the
+The setup app copies into the claim only the preview's `country`, the taxpayer fields (`TAXPAYER_FIELDS`) and `CLAIM_VENUE_FIELDS`
+(`apps/setup/src/setup-app.ts`). The claim refuses any venue key it does not list
+(`exact(body.venue, …)` in `apps/server/src/setup-first-fiscal-api.ts`). So a bundle value that is
+not a setup field lives outside `venue`'s own keys, as `privacyContact` does; the default menu
+travels as the top-level `defaultCatalogueId`
+(`packages/provisioning/src/configuration-transfer.ts`). Cost: from #1752 to A980 S1a2 every Live
+setup from an export on a production box was refused at the claim, because the setup app, which
+dropped only the location's `id`, copied its `fireControl` and `catalogueId` into it (probes 2 to 4
+of the
 [S1a2 plan](../superpowers/plans/2026-10-26-a980-s1a2-export-privacy-contact.md#what-was-run-while-writing-this-plan));
 the tests that set up a production box from an export
 (`apps/server/src/first-fiscal-setup.e2e.test.ts`'s owned Live setup rows, and
@@ -1731,26 +1732,27 @@ the tests that set up a production box from an export
 `apps/server/test/owned-hour-setup.ts`) sent the claim a hand-written venue, never the preview's.
 
 Two guards, both weaker than the rule. The `claimFrom: "preview"` row in
-`apps/server/src/first-fiscal-setup.e2e.test.ts` sends the whole preview venue through a production
-claim, but cuts the location down by the test's own `request` keys, not by
-`VenueDraft`'s, so it would pass if the setup app copied `fireControl` again. Only
+`apps/server/src/first-fiscal-setup.e2e.test.ts` sends the preview's venue whole through a
+production claim, so it fails if the bundle's `venue` gains a key that is not a setup field.
 `apps/setup/src/setup-app-first-fiscal.test.ts`'s "claims a staged preview's venue with only the
-venue fields the claim accepts" catches that, against a stubbed server. Both cover one export
-shape. Nothing checks `CLAIM_VENUE_FIELDS` against the claim's own `exact(body.venue, …)` list:
-the compile-time check ties it to `VenueDraft` alone, a hand copy of the server's shape.
+venue fields the claim accepts", against a stubbed server, fails if the setup app copies the
+test's own extra key (`somethingNew`) into the claim, as it does when the preview is copied whole.
+Both cover one export shape. Nothing checks `CLAIM_VENUE_FIELDS` against the claim's own
+`exact(body.venue, …)` list: the compile-time check ties it to `VenueDraft` alone, a hand copy of
+the server's shape.
 
-## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry, a location column or left out of the export
+## A column of a transferred table that holds another row's id is a foreign key, a declared `references` entry or left out of the export
 
 A configuration import gives every row whose `id` is text a new one, and rewrites a value to the new
 id only in a table's `id` column, its foreign-key columns, and the columns its module lists as
-`references` (`importConfigurationTables`, `apps/server/src/configuration-transfer.ts`, which reads
-`pragma_foreign_key_list` for the keys). It overwrites the columns a table lists in
-`locationColumns` with the importing venue's location, and the export leaves out the columns a
-table lists in `omit`. Any other column the export carries that holds a row's id arrives holding
-the EXPORTING venue's id. Before W72a (#1230) the import replaced any text equal to a bundle id in every
-column, so a product named like an id arrived renamed; the narrowing is what makes this rule
-necessary. A reference the schema cannot give a foreign key goes in `references`, as
-`option_lists.default_label_id` does.
+`references` (`importConfigurationTables`, `packages/provisioning/src/configuration-transfer.ts`,
+which reads `pragma_foreign_key_list` for the keys), and the export leaves out the columns a table
+lists in `omit`. Until `locations` is dropped, a column whose foreign key points at it is set to the
+importing venue's row (`venueLocationId`), whatever the export carried. Any other column the export
+carries that holds a row's id arrives holding the EXPORTING venue's id. Before W72a (#1230) the
+import replaced any text equal to a bundle id in every column, so a product named like an id arrived
+renamed; the narrowing is what makes this rule necessary. A reference the schema cannot give a
+foreign key goes in `references`, as `option_lists.default_label_id` does.
 
 Cost: W72a's narrowing (#1230) made two existing columns need a `references` entry; without them
 two transfer cases failed.
@@ -1767,7 +1769,7 @@ device profile, `retired_at`), or whose `leaveBehindWhenFalse` column holds fals
 (a deleted course or station, `active`). Archived products still travel: their `active` field
 has no leave-behind selector. The export then excludes every row of a transferred table whose foreign key names a
 row left behind, repeating until nothing more is left behind (`exportConfigurationTables`,
-`apps/server/src/configuration-transfer.ts`). It reads the keys from `pragma_foreign_key_list`,
+`packages/provisioning/src/configuration-transfer.ts`). It reads the keys from `pragma_foreign_key_list`,
 never the `references` lists, and follows only those between transferred tables that lead from a
 table declaring either selector to its children, and on to theirs. A key's parent table is
 matched ignoring the case of ASCII letters, as SQLite matches table names; a key that names no
@@ -5642,12 +5644,13 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ### Configuration preview field guard
 
-- **A configuration bundle value that is not a setup field stays out of `venue`'s own keys; the
-  setup app copies `venue.location` by `VenueDraft`'s fields.** Cost: from #1752 to A980 S1a2 no
-  production box could be set up from an export. Guard: the preview row in
+- **A configuration bundle value that is not a setup field stays out of `venue`'s own keys** (the
+  default menu travels as the top-level `defaultCatalogueId`); the setup app copies the preview's
+  `venue` by `country`, `TAXPAYER_FIELDS` and `CLAIM_VENUE_FIELDS`. Cost: from #1752 to A980 S1a2
+  no production box could be set up from an export. Guards:
   `apps/server/src/first-fiscal-setup.e2e.test.ts` and `apps/setup/src/setup-app-first-fiscal.test.ts`,
-  weaker than the rule: the e2e row cuts the location by its own keys, so only the setup-app case
-  catches a copied `fireControl`. [Detail](conventions-data.md#a-configuration-bundle-value-that-is-not-a-setup-field-stays-out-of-the-venues-own-keys).
+  weaker than the rule: one export shape.
+  [Detail](conventions-data.md#a-configuration-bundle-value-that-is-not-a-setup-field-stays-out-of-the-venues-own-keys).
 
 ### Spare file release and recovery
 

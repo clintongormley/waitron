@@ -6607,8 +6607,12 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   needing no taxpayer row (`reset-request`), and second-location cases whose code slice deletes them.
   S16 sends setup venue fields directly and names the venue in restore previews. Old
   `first-setup.json` files are refused, including after a completed setup, so boxes set up through
-  first setup are reset. The configuration bundle stays nested until S17; the node and storage ids
-  remain for S18 and the schema slices.
+  first setup are reset; the node and storage ids remain for S18 and the schema slices. S17 makes
+  the configuration export format 10: its `venue` holds the venue's own setup fields, the default
+  menu travels as the top-level `defaultCatalogueId`, a format-9 export is refused as outdated, and
+  the module contract's `locationColumns` is gone. Until the schema slices drop the columns, the
+  import sets every column whose foreign key points at `locations` to the importing venue's row
+  (`venueLocationId`); the export no longer carries `fire_control`, whose column A773-2 removes.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](superpowers/plans/2026-11-01-a1301-remove-location.md),
   [working-time plan](superpowers/plans/2026-11-02-a1301-working-time-slices.md)
@@ -6617,6 +6621,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `apps/server/scripts/demo-seed/seed-catalogue.ts` (S19), and the
   English and Spanish guide `content-and-images.md`, whose receipt-language paragraph still speaks
   of "the location's default".
+
+- **The setup app's configuration preview types four address fields as always text.**
+  `ConfigurationPreview.venue` in `apps/setup/src/api/client.ts` is `VenueDraft`'s shape, which
+  declares `addressLine1`, `postalCode`, `city` and `province` as `string`; the server's
+  `PreparedVenue` (`packages/provisioning/src/configuration-transfer.ts`) sends each as
+  `string | null`. Type the preview as the server sends it and check what the preview screen shows
+  for an empty one.
 
 - **A1301 S13 left an unread `locationId` in `readChoiceChangeableOrder`'s columns**
   (`apps/server/src/working-order.ts`): it selects `workingOrders.locationId`, and neither caller

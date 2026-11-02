@@ -6,7 +6,7 @@ describe("STAFFING_CONFIGURATION_TRANSFER", () => {
     expect(STAFFING_CONFIGURATION_TRANSFER).toEqual({
       kind: "tables",
       tables: [
-        { name: "staff_roles", locationColumns: ["location_id"] },
+        { name: "staff_roles" },
         { name: "person_staff_roles" },
         { name: "staffing_days" },
         { name: "staffing_blocks" },

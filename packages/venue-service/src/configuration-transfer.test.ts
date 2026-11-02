@@ -218,7 +218,6 @@ describe("validateHolidayConfiguration", () => {
     expect(names).not.toContain("local_holidays");
     expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.at(-1)).toEqual({
       name: "holiday_geographies",
-      locationColumns: ["location_id"],
     });
   });
 });
@@ -1307,7 +1306,6 @@ describe("season weeks in a configuration bundle", () => {
     expect(at).toBeGreaterThan(names.indexOf("zone_service_policies"));
     expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables[at]).toEqual({
       name: "seasons",
-      locationColumns: ["location_id"],
     });
   });
 
@@ -1580,11 +1578,9 @@ describe("special days in a configuration bundle", () => {
     const names = tables.map((table) => table.name);
     expect(tables.find((table) => table.name === "special_days")).toEqual({
       name: "special_days",
-      locationColumns: ["location_id"],
     });
     expect(tables.find((table) => table.name === "special_day_dates")).toEqual({
       name: "special_day_dates",
-      locationColumns: ["location_id"],
     });
     expect(names.indexOf("special_days")).toBeLessThan(names.indexOf("special_day_dates"));
     expect(names.indexOf("special_day_dates")).toBeLessThan(names.indexOf("department_days"));
@@ -1629,7 +1625,7 @@ describe("special days in a configuration bundle", () => {
     oneOffs.special_days![0]!.repeats_yearly = 0;
     oneOffs.special_day_dates![1]!.date = "2025-08-15";
     expect(() => validate(oneOffs, clock)).toThrowError(refusal("special_day_dates.date"));
-    // The import gives every location column the importing venue's location.
+    // The import sets every foreign key into `locations` to the importing venue's row.
     oneOffs.special_day_dates![1]!.location_id = "elsewhere";
     expect(() => validate(oneOffs, clock)).toThrowError(refusal("special_day_dates.date"));
     twice.special_day_dates![2]!.date = "2027-08-15";
