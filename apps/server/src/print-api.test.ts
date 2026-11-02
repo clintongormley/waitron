@@ -22,7 +22,7 @@ import {
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   IDENTITY_MIGRATIONS,
   hashPin,
@@ -103,9 +103,6 @@ const suite = useVenueDb({
 });
 
 async function seedPrintRouteFixture(db: Database) {
-  await seedTenant(db);
-  // Through the table definitions: `locations.id` and `persons.id` are `$defaultFn` generators a
-  // raw insert never reaches.
   await seedVenue(db, {
     name: "Main bar",
     invoiceLocales: ["es-ES"],
@@ -1963,7 +1960,7 @@ describe("portable printers", () => {
   });
 
   async function seedHolder(label?: string): Promise<string> {
-    const device = await seedDevice(suite.db, { locationId, ...(label ? { label } : {}) });
+    const device = await seedDevice(suite.db, label ? { label } : {});
     seeded.push(device);
     return device.deviceId;
   }

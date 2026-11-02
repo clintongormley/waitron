@@ -112,8 +112,7 @@ interface Seeded {
  *  Bacon 0.50, reduced). */
 async function setupVenue(): Promise<Seeded> {
   await seedTenant(db);
-  // Through the table definitions rather than raw SQL: `units.id` and `locations.id` are
-  // `$defaultFn` generators a raw insert never reaches.
+  // Through the table definition rather than raw SQL: `units.id` is a `$defaultFn` generator a raw insert never reaches.
   await db.insert(units).values([
     {
       staffName: "Staff unit",

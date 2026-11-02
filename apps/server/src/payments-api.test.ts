@@ -90,8 +90,7 @@ interface Venue {
 }
 
 async function seedVenueWithStaff(): Promise<Venue> {
-  // Through the table definitions: `$defaultFn` generators and the locale list's write mapping are
-  // never reached by a raw insert.
+  // Through the table definition: `tenants.created_at` is a `$defaultFn` generator a raw insert never reaches.
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });

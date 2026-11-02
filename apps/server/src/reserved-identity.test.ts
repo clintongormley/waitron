@@ -44,8 +44,7 @@ describe("establishReservedStandbyIdentity", () => {
   let NIF: string;
 
   // A fresh tenant per test: the idempotency case starts from an unsealed vault, so it cannot share a
-  // tenant with the establish case (which seals one). Tenants accumulate for the suite, each on its own
-  // NIF via seedTenant's counter.
+  // tenant with the establish case (which seals one).
   beforeEach(async () => {
     await seedVenue(suite.db, {
       name: "Barra",

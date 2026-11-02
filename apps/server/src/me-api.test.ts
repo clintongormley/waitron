@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { generateSync } from "otplib";
 import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   IDENTITY_MIGRATIONS,
   hashPin,
@@ -62,9 +62,6 @@ const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS, WORKFORCE_MIGRATIONS],
   timeoutMs: 60_000,
   setup: async (db) => {
-    await seedTenant(db);
-    // Through the table definitions: `$defaultFn` generators and the locale list's write mapping
-    // are never reached by a raw insert.
     await seedVenue(db, {
       name: "Counter",
       invoiceLocales: ["es-ES"],

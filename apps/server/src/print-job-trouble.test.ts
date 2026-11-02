@@ -11,7 +11,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { MAX_DELIVERY_ATTEMPTS, PRINTER_UNPAIRED } from "@waitron/printing";
 import { printersInTrouble } from "./print-job-trouble.js";
 
@@ -93,7 +93,6 @@ async function read() {
 
 describe("printersInTrouble", () => {
   it("names an active printer whose document has waited past two minutes, with how many and the oldest", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const id = await seedPrinter({ locationId, name: "Bar" });
     await seedJob({ locationId, printerId: id, createdAt: minsAgo(10), status: "done" });
@@ -106,7 +105,6 @@ describe("printersInTrouble", () => {
   });
 
   it("names nothing for a young job, a drawer pulse, a job an Unpair ended, or a switched-off printer", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const bar = await seedPrinter({ locationId, name: "Bar" });
     const off = await seedPrinter({ locationId, name: "Kitchen", active: false });
@@ -125,7 +123,6 @@ describe("printersInTrouble", () => {
   });
 
   it("a printer that has printed a later document is in trouble but not stuck", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const id = await seedPrinter({ locationId, name: "Bar" });
     await seedJob({ locationId, printerId: id, createdAt: minsAgo(10), ...exhausted });
@@ -135,7 +132,6 @@ describe("printersInTrouble", () => {
   });
 
   it("a printer whose only printed document came before its stuck one stays stuck", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const id = await seedPrinter({ locationId, name: "Bar" });
     await seedJob({ locationId, printerId: id, createdAt: minsAgo(5), status: "done" });
@@ -155,7 +151,6 @@ describe("printersInTrouble", () => {
   });
 
   it("marks a printer an active kitchen station prints to", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const id = await seedPrinter({ locationId, name: "Kitchen" });
     await seedStation({ locationId, printerId: id, active: true });
@@ -165,7 +160,6 @@ describe("printersInTrouble", () => {
   });
 
   it("a printer whose only station is switched off is not a kitchen printer", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const id = await seedPrinter({ locationId, name: "Kitchen" });
     await seedStation({ locationId, printerId: id, active: false });

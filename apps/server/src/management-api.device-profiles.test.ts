@@ -563,7 +563,6 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as ProfileRow;
 
-    // Through the table definition, whose `$defaultFn` generators a raw SQL insert never reaches.
     await seedDevice(suite.db, { profileId: id, label: uniqueName("Bound device") });
 
     const res = await app.request(`/management-api/device-profiles/${id}`, {

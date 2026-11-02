@@ -64,8 +64,7 @@ function nextNif(): string {
 }
 
 async function seedTenantWithLocation(): Promise<Tenant> {
-  // Through the table definitions: `tenants.created_at` and `locations.id` are `$defaultFn`
-  // generators a raw insert never reaches.
+  // Through the table definition: `tenants.created_at` is a `$defaultFn` generator a raw insert never reaches.
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: nextNif(), legalName: "Deli Test SL" });

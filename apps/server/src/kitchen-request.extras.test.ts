@@ -112,7 +112,7 @@ async function jobsAt(tx: Transaction, printerId: string) {
   ).map((job) => decodeTicket(job.payload));
 }
 
-async function madeHereDevice(tx: Transaction, _venue: Venue, stationId: string) {
+async function madeHereDevice(tx: Transaction, stationId: string) {
   const [profile] = await tx
     .insert(deviceProfiles)
     .values({ name: "Bar till", formFactor: "till", capabilities: [] })
@@ -234,7 +234,7 @@ describe("A773 waiter request: extras", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
-      const here = await madeHereDevice(tx, venue, venue.stations.fryer);
+      const here = await madeHereDevice(tx, venue.stations.fryer);
       const placed = await placeGroups(
         tx,
         { ...venue.cfg, sendingDeviceId: here },
@@ -263,7 +263,7 @@ describe("A773 waiter request: extras", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
-      const here = await madeHereDevice(tx, venue, venue.stations.grill);
+      const here = await madeHereDevice(tx, venue.stations.grill);
       const placed = await placeGroups(
         tx,
         { ...venue.cfg, sendingDeviceId: here },
