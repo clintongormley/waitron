@@ -51,7 +51,7 @@ import type {
   AdoptBody,
   ApiError,
   ConfigurationPreview,
-  LocationDraft,
+  VenueDraft,
   ProvisionBody,
   ResetCredential,
   SetupApi,
@@ -171,7 +171,7 @@ export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
     delete body.aeatCert;
   }
   if (draft.mode !== "live") delete body.email;
-  if (draft.mode !== "demo") delete body.demoLocationNameSource;
+  if (draft.mode !== "demo") delete body.demoVenueNameSource;
   return body as ProvisionBody;
 }
 
@@ -198,8 +198,8 @@ const TAXPAYER_FIELDS = [
   "rectificativeSeriesCode",
 ] as const;
 
-/** The claim refuses a location carrying any other key (`apps/server/src/setup-first-fiscal-api.ts`, `exact(raw.location`). */
-const CLAIM_LOCATION_FIELDS = [
+/** Configuration-only location keys must not enter the flat claim. */
+const CLAIM_VENUE_FIELDS = [
   "name",
   "fiscalTerritory",
   "invoiceLocales",
@@ -211,13 +211,24 @@ const CLAIM_LOCATION_FIELDS = [
   "province",
   "timeZone",
   "dayCutover",
-] as const satisfies readonly (keyof LocationDraft)[];
-const claimLocationFieldsComplete: [
-  Exclude<keyof LocationDraft, (typeof CLAIM_LOCATION_FIELDS)[number]>,
+] as const satisfies readonly (keyof VenueDraft)[];
+const claimVenueFieldsComplete: [
+  Exclude<
+    keyof VenueDraft,
+    | (typeof CLAIM_VENUE_FIELDS)[number]
+    | "country"
+    | "taxId"
+    | "legalName"
+    | "taxpayerDomicile"
+    | "seriesCode"
+    | "fullSeriesCode"
+    | "rectificativeSeriesCode"
+    | "admin"
+  >,
 ] extends [never]
   ? true
   : never = true;
-void claimLocationFieldsComplete;
+void claimVenueFieldsComplete;
 
 const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
   "setup.owner_required": "shell.first_setup.owner_required",
@@ -648,11 +659,9 @@ export class SetupApp extends LitElement {
   @state() private draft: DeepPartial<ProvisionBody> = {
     venue: {
       country: "ES",
-      location: {
-        fiscalTerritory: "ES-common",
-        timeZone: "Europe/Madrid",
-        invoiceLocales: ["es-ES"],
-      },
+      fiscalTerritory: "ES-common",
+      timeZone: "Europe/Madrid",
+      invoiceLocales: ["es-ES"],
     },
   };
 
@@ -893,19 +902,19 @@ export class SetupApp extends LitElement {
       mode !== this.draft.mode &&
       (mode === "demo" || this.draft.mode === "demo")
     ) {
-      const venue = { ...this.draft.venue, location: { ...this.draft.venue?.location } };
-      if (this.draft.mode === "demo" && this.draft.demoLocationNameSource === "automatic") {
-        delete venue.location.name;
+      const venue = { ...this.draft.venue };
+      if (this.draft.mode === "demo" && this.draft.demoVenueNameSource === "automatic") {
+        delete venue.name;
       }
       delete venue.taxId;
       delete venue.legalName;
       delete venue.seriesCode;
       delete venue.rectificativeSeriesCode;
-      delete venue.location.operationDescription;
-      delete venue.location.dayCutover;
-      delete venue.location.invoiceLocales;
+      delete venue.operationDescription;
+      delete venue.dayCutover;
+      delete venue.invoiceLocales;
       this.draft = { ...this.draft, venue };
-      delete this.draft.demoLocationNameSource;
+      delete this.draft.demoVenueNameSource;
       delete this.draft.configurationImport;
       delete this.draft.newTaxpayer;
       this.#invalidateFiscalTest();
@@ -1093,7 +1102,7 @@ export class SetupApp extends LitElement {
   #afterFirstOwner(): void {
     this.screen =
       this.draft.mode === "live" && !this.developmentMode
-        ? this.draft.venue?.location?.fiscalTerritory === "ES-common"
+        ? this.draft.venue?.fiscalTerritory === "ES-common"
           ? "cert"
           : "email"
         : "review";
@@ -1242,9 +1251,7 @@ export class SetupApp extends LitElement {
     this.firstOwnerError = undefined;
     this.screen = "first-owner";
     try {
-      const result = await this.api.firstSetupOfferings(
-        submitted.venue!.location!.fiscalTerritory!,
-      );
+      const result = await this.api.firstSetupOfferings(submitted.venue!.fiscalTerritory!);
       if (!current()) return;
       this.firstOfferings = result.modules;
       if (!result.modules.length) {
@@ -1332,7 +1339,7 @@ export class SetupApp extends LitElement {
         return;
       }
       this.firstOfferings = (
-        await this.api.firstSetupOfferings(session.state!.venue.location.fiscalTerritory)
+        await this.api.firstSetupOfferings(session.state!.venue.fiscalTerritory)
       ).modules;
       if (!current()) return;
       this.#afterFirstOwner();
@@ -2068,13 +2075,16 @@ export class SetupApp extends LitElement {
       );
       if (!this.isConnected || generation !== this.#rootGeneration || (owner && !owner.isConnected))
         return;
-      const exported = preview.venue.location;
-      const location: Partial<LocationDraft> = Object.fromEntries(
-        CLAIM_LOCATION_FIELDS.filter((key) => key in exported).map((key) => [key, exported[key]]),
+      const { location: exportedFields, ...exported } = preview.venue;
+      const venueFields: Partial<VenueDraft> = Object.fromEntries(
+        CLAIM_VENUE_FIELDS.filter((key) => key in exportedFields).map((key) => [
+          key,
+          exportedFields[key],
+        ]),
       );
       this.draft = deepMerge(this.draft, {
         configurationImport: true,
-        venue: { ...preview.venue, location },
+        venue: { ...exported, ...venueFields },
       }) as DeepPartial<ProvisionBody>;
       delete this.draft.newTaxpayer;
       this.#rootScope?.changed();
@@ -2761,7 +2771,7 @@ export class SetupApp extends LitElement {
           .adminEmail=${this.draft.venue?.admin?.email ?? ""}
           .api=${firstSession === undefined ? this.api : { runEmailTest: (email: EmailSettingsDraft) => firstSession.runEmailTest(email) }}
           .errorMessage=${this.emailError?.()}
-          .backScreen=${this.firstFinishing ? (this.draft.venue?.location?.fiscalTerritory === "ES-common" ? "cert" : "first-owner") : this.draft.venue?.location?.fiscalTerritory === "ES-common" && !this.developmentMode ? "fiscal-test" : "venue"}
+          .backScreen=${this.firstFinishing ? (this.draft.venue?.fiscalTerritory === "ES-common" ? "cert" : "first-owner") : this.draft.venue?.fiscalTerritory === "ES-common" && !this.developmentMode ? "fiscal-test" : "venue"}
         ></setup-email-screen>`;
       case "mode":
         return html`<setup-mode-screen

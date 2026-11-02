@@ -134,7 +134,7 @@ const EXPECTED_VENUE = {
   taxId: "B12345674",
   legalName: "Deli del Sol SL",
   taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
-  location: EXPECTED_LOCATION,
+  ...EXPECTED_LOCATION,
   seriesCode: "FA",
   fullSeriesCode: "FF",
   rectificativeSeriesCode: "RF",
@@ -309,7 +309,7 @@ describe("setup-venue-screen", () => {
     await type(el, "addressLine2", "   "); // whitespace-only counts as blank
     q(el, "[data-test=next]")!.click();
     let patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
-    expect(patch.venue?.location?.addressLine2).toBeNull();
+    expect(patch.venue?.addressLine2).toBeNull();
 
     const second = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events2 = collect(second.host);
@@ -317,7 +317,7 @@ describe("setup-venue-screen", () => {
     await type(second.el, "addressLine2", "Piso 2");
     q(second.el, "[data-test=next]")!.click();
     patch = (events2[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
-    expect(patch.venue?.location?.addressLine2).toBe("Piso 2");
+    expect(patch.venue?.addressLine2).toBe("Piso 2");
   });
 
   it("emits a screen-agnostic advance even for a live draft (no in-screen cert routing)", async () => {
@@ -356,19 +356,17 @@ describe("setup-venue-screen", () => {
         country: "ES",
         taxId: "B12345674",
         legalName: "Bar Pepe SL",
-        location: {
-          name: "Plaza Vieja",
-          fiscalTerritory: "ES-common",
-          invoiceLocales: ["ca-ES"],
-          operationDescription: "Bar",
-          addressLine1: "Plaza Vieja 3",
-          addressLine2: "Local B",
-          postalCode: "08002",
-          city: "Barcelona",
-          province: "Barcelona",
-          timeZone: "Atlantic/Canary",
-          dayCutover: "05:30",
-        },
+        name: "Plaza Vieja",
+        fiscalTerritory: "ES-common",
+        invoiceLocales: ["ca-ES"],
+        operationDescription: "Bar",
+        addressLine1: "Plaza Vieja 3",
+        addressLine2: "Local B",
+        postalCode: "08002",
+        city: "Barcelona",
+        province: "Barcelona",
+        timeZone: "Atlantic/Canary",
+        dayCutover: "05:30",
         seriesCode: "AA",
         rectificativeSeriesCode: "RA",
       },
@@ -389,7 +387,7 @@ describe("setup-venue-screen", () => {
 
   it("seeds a null addressLine2 as a blank field", async () => {
     const draft: DeepPartial<ProvisionBody> = {
-      venue: { location: { addressLine2: null } },
+      venue: { addressLine2: null },
     };
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { draft });
     expect((q(el, "[data-test=addressLine2]") as unknown as { value: string }).value).toBe("");
@@ -541,7 +539,8 @@ describe("setup-venue-screen", () => {
       draft: {
         venue: {
           ...EXPECTED_VENUE,
-          location: { ...EXPECTED_LOCATION, invoiceLocales: ["es-ES", "gl-ES"] },
+          ...EXPECTED_LOCATION,
+          invoiceLocales: ["es-ES", "gl-ES"],
         },
       },
     });
@@ -559,8 +558,8 @@ describe("setup-venue-screen", () => {
     await toggleLocale(el, "gl-ES", true);
     q(el, "[data-test=next]")!.click();
     const patch = (events[0].detail as { patch: DeepPartial<ProvisionBody> }).patch;
-    expect(patch.venue?.location?.invoiceLocales).toEqual(["gl-ES"]);
-    expect(patch.venue?.location?.timeZone).toBe("Europe/Madrid");
+    expect(patch.venue?.invoiceLocales).toEqual(["gl-ES"]);
+    expect(patch.venue?.timeZone).toBe("Europe/Madrid");
   });
 
   it("clears the bottom message once the form is valid and Next succeeds", async () => {
@@ -628,7 +627,7 @@ describe("setup-venue-screen", () => {
 
   it("shows a refused internal description above Next without an editable field", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
-      invalidField: "location.operationDescription",
+      invalidField: "operationDescription",
     });
     expect(q(el, "[data-test=operationDescription]")).toBeNull();
     expect(await bottomOf(el)).toContain("500 characters");
@@ -859,7 +858,7 @@ describe("A2 shop form", () => {
     q(el, "[data-test=next]")!.click();
     const venue = (events[0]!.detail as { patch: ProvisionBody }).patch.venue;
     expect(venue.taxpayerDomicile).toBe("Calle Fiscal 8, 28013 Madrid");
-    expect(venue.location.addressLine1).toBe("Calle Mayor 1");
+    expect(venue.addressLine1).toBe("Calle Mayor 1");
   });
 
   it("asks for no till name, in any mode", async () => {
@@ -884,7 +883,7 @@ describe("A2 shop form", () => {
       expect((q(el, `[data-test=${field}]`) as HTMLInputElement).value).toBe(value);
     }
   });
-  it("collects only a location name and address in Demo, taking the country's fixed demo identity", async () => {
+  it("collects only a venue name and address in Demo, taking the country's fixed demo identity", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "demo" },
       defaults,
@@ -913,11 +912,11 @@ describe("A2 shop form", () => {
     const venue = (events[0]!.detail as { patch: ProvisionBody }).patch.venue;
     expect(venue.taxId).toBe("B00000000");
     expect(venue.legalName).toBe("Waitron Demo S.L.");
-    expect(venue.location.name).toBe("Calle Mayor");
+    expect(venue.name).toBe("Calle Mayor");
     expect(venue.seriesCode).toBe("FS");
     expect(venue.fullSeriesCode).toBe("FF");
     expect(venue.rectificativeSeriesCode).toBe("FR");
-    expect(venue.location.operationDescription).toBe("Venta en establecimiento");
+    expect(venue.operationDescription).toBe("Venta en establecimiento");
     const validation = getVenueSetupCountryPack("ES")!.taxIdentifier!.validate(venue.taxId);
     expect(validation).toEqual({ valid: true, normalized: venue.taxId, kind: "entity" });
     const returned = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
@@ -935,7 +934,7 @@ describe("A2 shop form", () => {
     const expected = {
       taxId: ["Enter the tax ID.", "Of the business that issues the invoices"],
       legalName: ["Enter the legal name.", "As on the business's tax documents"],
-      name: ["Enter the location name.", "The name you use for this location"],
+      name: ["Enter the venue name.", "The name you use for this venue"],
       addressLine1: ["Enter the street address.", "Street and building number"],
       postalCode: ["Enter the postal code.", "Used to suggest the province"],
       city: ["Enter the city.", "Town or city"],
@@ -953,7 +952,7 @@ describe("A2 shop form", () => {
 });
 
 it.each(["prepare", "live"] as const)(
-  "leaves the demo identity out of %s: tax ID, legal name and location name start empty",
+  "leaves the demo identity out of %s: tax ID, legal name and venue name start empty",
   async (mode) => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { draft: { mode } });
     await type(el, "postalCode", "28013");
@@ -964,7 +963,7 @@ it.each(["prepare", "live"] as const)(
     }
   },
 );
-it("starts the Demo location name as the demo location, which the operator may keep or change", async () => {
+it("starts the Demo venue name as the demo location, which the operator may keep or change", async () => {
   const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
   const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft: { mode: "demo" },
@@ -980,28 +979,28 @@ it("starts the Demo location name as the demo location, which the operator may k
     await type(el, field, value);
   q(el, "[data-test=next]")!.click();
   const venue = (events[0]!.detail as { patch: ProvisionBody }).patch.venue;
-  expect(venue.location.name).toBe("Casa Delgado");
+  expect(venue.name).toBe("Casa Delgado");
   expect(venue.legalName).toBe("Waitron Demo S.L.");
 });
-it("keeps a location name the Demo draft already holds rather than the demo location", async () => {
+it("keeps a venue name the Demo draft already holds rather than the demo location", async () => {
   const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
-    draft: { mode: "demo", venue: { location: { name: "Bar Pepe" } } },
+    draft: { mode: "demo", venue: { name: "Bar Pepe" } },
   });
   expect((q(el, "[data-test=name]") as HTMLInputElement).value).toBe("Bar Pepe");
 });
-it("explains the Demo location name with a ? rather than a hint the filled-in field would never show", async () => {
+it("explains the Demo venue name with a ? rather than a hint the filled-in field would never show", async () => {
   const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft: { mode: "demo" },
   });
   const name = q(el, "[data-test=name]")!;
   expect(name.getAttribute("hint")).toBe("");
   const help = name.querySelector("wt-help-tooltip[slot=help]")!;
-  expect(help.getAttribute("aria-label")).toBe("Help with location name");
+  expect(help.getAttribute("aria-label")).toBe("Help with venue name");
   expect(help.textContent!.trim()).toBe(
-    "The name you use for this location. You can keep the suggested name or change it.",
+    "The name you use for this venue. You can keep the suggested name or change it.",
   );
 });
-it("explains the Demo location name's ? in Spanish", async () => {
+it("explains the Demo venue name's ? in Spanish", async () => {
   setLocale("es-ES");
   try {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
@@ -1017,11 +1016,11 @@ it("explains the Demo location name's ? in Spanish", async () => {
   }
 });
 it.each(["prepare", "live"] as const)(
-  "keeps the location name's hint and no ? in %s, where the field starts empty",
+  "keeps the venue name's hint and no ? in %s, where the field starts empty",
   async (mode) => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { draft: { mode } });
     const name = q(el, "[data-test=name]")!;
-    expect(name.getAttribute("hint")).toBe("The name you use for this location");
+    expect(name.getAttribute("hint")).toBe("The name you use for this venue");
     expect(name.querySelector("wt-help-tooltip")).toBeNull();
   },
 );
@@ -1050,10 +1049,10 @@ it("takes a late installed bootstrap without overwriting authored fields", async
   await el.updateComplete;
   expect(q(el, "[data-test=operationDescription]")).toBeNull();
   q(el, "[data-test=next]")!.click();
-  expect(
-    (events[0]!.detail as { patch: ProvisionBody }).patch.venue.location.operationDescription,
-  ).toBe("Late bootstrap");
-  expect((events[0]!.detail as { patch: ProvisionBody }).patch.venue.location.city).toBe("Madrid");
+  expect((events[0]!.detail as { patch: ProvisionBody }).patch.venue.operationDescription).toBe(
+    "Late bootstrap",
+  );
+  expect((events[0]!.detail as { patch: ProvisionBody }).patch.venue.city).toBe("Madrid");
 });
 
 it("offers a retry when Demo defaults are unavailable, without generating a partial venue", async () => {
@@ -1075,7 +1074,7 @@ it("offers a retry when Demo defaults are unavailable, without generating a part
   expect(q(el, "[data-test=retry-defaults]")).not.toBeNull();
   expect(el.shadowRoot!.activeElement).toBe(q(el, "[role=alert]"));
 });
-it("shows a Demo legal-name refusal above Next, leaving the location name unmarked", async () => {
+it("shows a Demo legal-name refusal above Next, leaving the venue name unmarked", async () => {
   const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft: { mode: "demo" },
     invalidField: "legalName",
@@ -1090,7 +1089,7 @@ it("shows a Demo legal-name refusal above Next, leaving the location name unmark
 it.each([
   ["seriesCode", "server_fields.series_code"],
   ["rectificativeSeriesCode", "server_fields.series_code"],
-  ["location.operationDescription", "server_fields.operation_description"],
+  ["operationDescription", "server_fields.operation_description"],
 ] as const)(
   "shows a Demo refusal of the hidden %s above Next, and pressing Next tries again",
   async (invalidField, message) => {
@@ -1141,7 +1140,7 @@ it("derives invoice language from the retained province after leaving Demo", asy
   const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft: {
       mode: "prepare",
-      venue: { country: "ES", location: { province: "Barcelona", postalCode: "08001" } },
+      venue: { country: "ES", province: "Barcelona", postalCode: "08001" },
     },
   });
   expect((q(el, "[data-test=locale-ca-ES]") as HTMLInputElement).checked).toBe(true);
@@ -1171,7 +1170,7 @@ it("emits Barcelona's fixed Catalan as its one receipt language", async () => {
   await fillValid(el, { postalCode: "08001", province: "08", city: "Barcelona" });
   q(el, "[data-test=next]")!.click();
   const patch = (events[0]!.detail as { patch: DeepPartial<ProvisionBody> }).patch;
-  expect(patch.venue?.location?.invoiceLocales).toEqual(["ca-ES"]);
+  expect(patch.venue?.invoiceLocales).toEqual(["ca-ES"]);
 });
 
 it("pre-ticks only Spanish where there is no regional language", async () => {
@@ -1188,7 +1187,8 @@ it("lets the province re-seed languages that arrived from the draft unchanged", 
     draft: {
       venue: {
         country: "ES",
-        location: { province: "Barcelona", invoiceLocales: ["ca-ES"] },
+        province: "Barcelona",
+        invoiceLocales: ["ca-ES"],
       },
     },
   });
@@ -1204,7 +1204,8 @@ it("keeps languages the draft customised when the province changes", async () =>
     draft: {
       venue: {
         country: "ES",
-        location: { province: "Barcelona", invoiceLocales: ["eu-ES"] },
+        province: "Barcelona",
+        invoiceLocales: ["eu-ES"],
       },
     },
   });
@@ -1265,7 +1266,7 @@ it("drops the server's mark when the shell withdraws the refused field", async (
 
 it("refuses a draft country that has no venue-setup pack and derives nothing from it", async () => {
   const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
-    draft: { venue: { country: "GB", location: { province: "Kent" } } },
+    draft: { venue: { country: "GB", province: "Kent" } },
     defaults: { verifactu: { operationDescription: "Venta en establecimiento" } },
   });
   const events = collect(host);
@@ -1340,19 +1341,17 @@ it("emits a country pack with no provinces or validators as the operator typed i
               taxId: " zz 42 ",
               legalName: "Zed Foods",
               taxpayerDomicile: "1 Fiscal Quay, zz-9 Port",
-              location: {
-                name: "Harbour",
-                fiscalTerritory: "ZZ-main",
-                invoiceLocales: ["zz-ZZ"],
-                operationDescription: "Venta en establecimiento",
-                addressLine1: "1 Quay",
-                addressLine2: null,
-                postalCode: " zz-9 ",
-                city: "Port",
-                province: "North Riding",
-                timeZone: "Etc/GMT-3",
-                dayCutover: "05:00",
-              },
+              name: "Harbour",
+              fiscalTerritory: "ZZ-main",
+              invoiceLocales: ["zz-ZZ"],
+              operationDescription: "Venta en establecimiento",
+              addressLine1: "1 Quay",
+              addressLine2: null,
+              postalCode: " zz-9 ",
+              city: "Port",
+              province: "North Riding",
+              timeZone: "Etc/GMT-3",
+              dayCutover: "05:00",
               seriesCode: "A",
               fullSeriesCode: "FF",
               rectificativeSeriesCode: "B",
@@ -1452,7 +1451,7 @@ describe("one receipt language", () => {
     expect(ticked(el)).toEqual(["gl-ES"]);
     q(el, "[data-test=next]")!.click();
     const patch = (events[0]!.detail as { patch: DeepPartial<ProvisionBody> }).patch;
-    expect(patch.venue?.location?.invoiceLocales).toEqual(["gl-ES"]);
+    expect(patch.venue?.invoiceLocales).toEqual(["gl-ES"]);
   });
 
   it("offers no English", async () => {
@@ -1472,7 +1471,7 @@ describe("one receipt language", () => {
     expect(q(el, "fieldset.locales")!.getAttribute("aria-describedby")).toBe(reason.id);
     q(el, "[data-test=next]")!.click();
     const patch = (events[0]!.detail as { patch: DeepPartial<ProvisionBody> }).patch;
-    expect(patch.venue?.location?.invoiceLocales).toEqual(["ca-ES"]);
+    expect(patch.venue?.invoiceLocales).toEqual(["ca-ES"]);
   });
 
   it("gives the region's reason in Spanish", async () => {
@@ -1558,7 +1557,7 @@ describe("setup-venue-screen layout", () => {
     ).toEqual({
       taxId: "Of the business that issues the invoices",
       legalName: "As on the business's tax documents",
-      name: "The name you use for this location",
+      name: "The name you use for this venue",
       addressLine1: "Street and building number",
       addressLine2: "Floor, unit or other detail",
       postalCode: "Used to suggest the province",
@@ -1602,7 +1601,7 @@ describe("setup-venue-screen layout", () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     expect([...el.shadowRoot!.querySelectorAll("h2")].map((h) => h.textContent!.trim())).toEqual([
       "Business",
-      "Location",
+      "Venue",
       "Invoicing",
     ]);
   });
@@ -1641,7 +1640,7 @@ describe("department descriptions leave onboarding", () => {
     "uses the installed bootstrap without a sales-description field in %s",
     async (mode) => {
       const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
-        draft: { mode, venue: { location: { operationDescription: "Old venue description" } } },
+        draft: { mode, venue: { operationDescription: "Old venue description" } },
         defaults: { verifactu: { operationDescription: "Installed bootstrap" } },
       });
       const events = collect(host);
@@ -1651,9 +1650,9 @@ describe("department descriptions leave onboarding", () => {
       }
       q(el, "[data-test=next]")!.click();
       expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
-      expect(
-        (events[0]!.detail as { patch: ProvisionBody }).patch.venue.location.operationDescription,
-      ).toBe("Installed bootstrap");
+      expect((events[0]!.detail as { patch: ProvisionBody }).patch.venue.operationDescription).toBe(
+        "Installed bootstrap",
+      );
     },
   );
   it("offers the bootstrap retry in Prepare and emits no partial venue", async () => {
@@ -1706,9 +1705,9 @@ it("can onboard an installed filing module with no description field", async () 
       await type(el, field, value);
     q(el, "[data-test=next]")!.click();
     expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
-    expect(
-      (events[0]!.detail as { patch: ProvisionBody }).patch.venue.location.operationDescription,
-    ).toBe("");
+    expect((events[0]!.detail as { patch: ProvisionBody }).patch.venue.operationDescription).toBe(
+      "",
+    );
     expect(q(el, "[data-test=retry-defaults]")).toBeNull();
   } finally {
     packs.pop();

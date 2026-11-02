@@ -36,7 +36,7 @@ async function mount(runEmailTest = vi.fn().mockResolvedValue({ accepted: true }
     draft: {
       mode: "live",
       email,
-      venue: { admin: { email: "admin@example.com" }, location: { fiscalTerritory: "ES-other" } },
+      venue: { admin: { email: "admin@example.com" }, fiscalTerritory: "ES-other" },
     },
   });
   await el.updateComplete;

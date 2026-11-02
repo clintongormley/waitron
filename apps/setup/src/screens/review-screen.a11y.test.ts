@@ -11,7 +11,9 @@ const draft: DeepPartial<ProvisionBody> = {
     country: "ES",
     taxId: "B12345678",
     legalName: "Deli del Sol SL",
-    location: { name: "Calle Mayor", fiscalTerritory: "ES-common", invoiceLocales: ["es-ES"] },
+    name: "Calle Mayor",
+    fiscalTerritory: "ES-common",
+    invoiceLocales: ["es-ES"],
     seriesCode: "FA",
     rectificativeSeriesCode: "RF",
     admin: {
