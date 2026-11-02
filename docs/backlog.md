@@ -6490,11 +6490,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   English and Spanish guide `content-and-images.md`, whose receipt-language paragraph still speaks
   of "the location's default".
 
-- **The A1301 plan's rule for a second location in a shared test database is out of date.** It
-  says a slice "may not delete that case" and lands after the owning slice; the watcher's standing
-  rule of 2026-11-01 lets a slice delete another slice's cross-location half instead, as S9 (#2389)
-  did for `floor-delete.test.ts`'s last case on S7's behalf. Reword the plan's rule to match.
-
 - **A1301 S8: reword the week routes' "another venue's" season refusal.**
   `docs/developers/conventions-data.md` (the menu-week and closed-week routes paragraph) says an
   unknown or another venue's season is refused `season.not_found`. The check still exists, in
