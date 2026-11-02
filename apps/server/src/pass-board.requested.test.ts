@@ -12,7 +12,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { setRoutingCell, setStationToday } from "@waitron/venue-service";
+import { setRoutingCell, setStationToday, writePartyAllergy } from "@waitron/venue-service";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
@@ -26,6 +26,8 @@ import { createStation } from "./kitchen.js";
 import { routeProductTo } from "./testing/zone-offers.js";
 import { fireGroup } from "./order-groups.js";
 import { withStationDishes } from "./station-closing.js";
+import { createTable } from "./testing/live-table.js";
+import { seatTable } from "./parties.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -100,6 +102,17 @@ async function burgerAndWater(tx: Transaction, venue: Venue) {
     burgerItem: await ticketItemOf(tx, burgerLine),
     waterItem: await ticketItemOf(tx, waterLine),
   };
+}
+
+async function seatAnotherParty(tx: Transaction, venue: Venue, label: string): Promise<string> {
+  const { id: tableId } = await createTable(tx, venue.cfg, { label, zoneId: venue.party.zoneId });
+  const { partyId } = await seatTable(tx, venue.cfg, {
+    tableId,
+    guestCount: null,
+    operatorId: OPERATOR,
+  });
+  await writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, OPERATOR);
+  return partyId;
 }
 
 const onOrder = (orderId: string) => sql`${workingOrders.id} = ${orderId}`;
@@ -186,6 +199,41 @@ describe("A773 pass board: reads", () => {
       } finally {
         now.mockRestore();
       }
+    });
+  });
+
+  it("dates a group's party by its first stored group, read or not", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      vi.setSystemTime(new Date(Date.parse(AT) - 60 * 60_000));
+      const other = await seatAnotherParty(tx, venue, "Earlier party");
+      await placeGroups(tx, venue.cfg, other, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [dish(venue, "burger")], release: "hold" }],
+      });
+      vi.setSystemTime(new Date(AT));
+      const first = await burgerAndWater(tx, venue);
+      vi.setSystemTime(new Date(Date.parse(AT) + 60 * 60_000));
+      const later = (
+        await placeGroups(tx, venue.cfg, venue.party.partyId, {
+          operatorId: OPERATOR,
+          groups: [{ lines: [dish(venue, "burger")], release: "hold" }],
+        })
+      ).groups[0]!;
+      const rows = await readPassRows(
+        tx,
+        venue.cfg.locationId,
+        sql`${workingOrderLines.groupId} = ${later.id}`,
+        Date.now(),
+      );
+      expect(rows.map((row) => row.group?.id)).toEqual([later.id]);
+      expect(rows[0]!.group!.createdAt).not.toBe(AT);
+      const [stored] = await tx
+        .select({ createdAt: orderGroups.createdAt })
+        .from(orderGroups)
+        .where(eq(orderGroups.id, first.groupId));
+      expect(rows[0]!.group!.partyFirstCreatedAt).toBe(stored!.createdAt);
     });
   });
 

@@ -31,6 +31,8 @@ export interface PassRow {
     createdAt: string;
     displayNumber: number;
     numberPartyLabel?: string;
+    /** The earliest `createdAt` of every group the party has stored, live or not (D64). */
+    partyFirstCreatedAt: string;
   } | null;
   requestedAt: string | null;
   firedAt: string | null;
@@ -200,16 +202,11 @@ function itemOrder(a: PassRow, b: PassRow): number {
 interface Placed {
   card: PassCard;
   column: Column;
-  /** Held order: the party's earliest group creation (a bill's opening), that party (bill), position. */
+  /** Held order: the party's first group's creation (a bill's opening), that party (bill), position. */
   heldOrder: [string, string, number];
 }
 
-function placeCard(
-  key: string,
-  cardRows: PassRow[],
-  scope: PassScope,
-  partyCreatedAt: ReadonlyMap<string, string>,
-): Placed | null {
+function placeCard(key: string, cardRows: PassRow[], scope: PassScope): Placed | null {
   cardRows.sort(itemOrder);
   const items = cardRows.map((row) => cardItem(row, scope));
   if (!items.some((item) => item.visible)) return null;
@@ -278,7 +275,7 @@ function placeCard(
   const heldOrder: Placed["heldOrder"] =
     group === null
       ? [first.order.openedAt, first.orderId, 0]
-      : [partyCreatedAt.get(group.partyId)!, group.partyId, group.position];
+      : [group.partyFirstCreatedAt, group.partyId, group.position];
   return { card, column, heldOrder };
 }
 
@@ -289,19 +286,12 @@ export function buildPassBoard(
 ): PassBoard {
   const live = rows.filter((row) => !row.recalled && row.remaining > 0);
   const byCard = new Map<string, PassRow[]>();
-  const partyCreatedAt = new Map<string, string>();
   for (const row of live) {
     const key = passCardKey(row);
     byCard.set(key, [...(byCard.get(key) ?? []), row]);
-    if (row.group !== null) {
-      const earliest = partyCreatedAt.get(row.group.partyId);
-      if (earliest === undefined || row.group.createdAt < earliest) {
-        partyCreatedAt.set(row.group.partyId, row.group.createdAt);
-      }
-    }
   }
   const placed = [...byCard]
-    .map(([key, cardRows]) => placeCard(key, cardRows, scope, partyCreatedAt))
+    .map(([key, cardRows]) => placeCard(key, cardRows, scope))
     .filter((entry): entry is Placed => entry !== null);
   const column = (name: Column, order: (a: Placed, b: Placed) => number) =>
     placed

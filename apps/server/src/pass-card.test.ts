@@ -35,6 +35,7 @@ const groupG: Group = {
   position: 1,
   createdAt: at("11:50"),
   displayNumber: 1,
+  partyFirstCreatedAt: at("11:50"),
 };
 
 const openedAt: Record<string, string> = { [bill1]: at("12:00"), [bill2]: at("12:01") };
@@ -341,6 +342,7 @@ describe("A773 pass board: cards", () => {
       createdAt: string,
       position: number,
       partyId = party,
+      partyFirstCreatedAt = createdAt,
     ): Group => ({
       ...groupG,
       id,
@@ -348,11 +350,12 @@ describe("A773 pass board: cards", () => {
       state: "held",
       createdAt,
       position,
+      partyFirstCreatedAt,
     });
     const oneParty = buildPassBoard(
       [
-        held({ id: "g1", group: heldGroup(a, at("12:00"), 2) }),
-        held({ id: "g2", group: heldGroup(b, at("12:05"), 1) }),
+        held({ id: "g1", group: heldGroup(a, at("12:00"), 2, party, at("12:00")) }),
+        held({ id: "g2", group: heldGroup(b, at("12:05"), 1, party, at("12:00")) }),
       ],
       EVERY,
     );
@@ -366,6 +369,15 @@ describe("A773 pass board: cards", () => {
       EVERY,
     );
     expect(twoParties.held.map((card) => card.key)).toEqual([`group:${b}`, `group:${a}`]);
+
+    const firstCourseServed = buildPassBoard(
+      [
+        held({ id: "pa", partyId: a, group: heldGroup(a, at("12:10"), 2, a, at("11:00")) }),
+        held({ id: "pb", partyId: b, group: heldGroup(b, at("12:00"), 1, b) }),
+      ],
+      EVERY,
+    );
+    expect(firstCourseServed.held.map((card) => card.key)).toEqual([`group:${a}`, `group:${b}`]);
   });
 
   it("11. fires a held group's Requested extras as its request kind", () => {

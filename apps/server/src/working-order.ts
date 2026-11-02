@@ -8553,6 +8553,10 @@ export async function readPassRows(
       ...queueGroupColumns,
       groupRequestKind: orderGroups.requestKind,
       groupCreatedAt: orderGroups.createdAt,
+      partyFirstGroupAt: sql<string | null>`(
+        select min(earlier.created_at) from order_groups earlier
+        where earlier.party_id = ${orderGroups.partyId}
+      )`,
       // Not exposed; read only to name the order's table (`orderTableLabels`).
       deliveryTableId: workingOrders.deliveryTableId,
       deliveryTableLabel: workingOrders.deliveryTableLabel,
@@ -8669,6 +8673,7 @@ export async function readPassRows(
               createdAt: row.groupCreatedAt!,
               displayNumber: group.displayNumber,
               ...optional("numberPartyLabel", group.numberPartyLabel),
+              partyFirstCreatedAt: row.partyFirstGroupAt!,
             },
       requestedAt: row.requestedAt,
       firedAt: row.firedAt,
