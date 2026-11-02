@@ -2514,9 +2514,10 @@ station is still sent there by the pass's Fire, as a waiter's fire does. A dish 
 the pass and was served in full no longer blocks recording an unpaid departure (B2's D41: keep as
 built); its refusal's words are on the copy sheet.
 
-**One question still open** (lane C, 2026-11-02; B4 builds the answer): when a waiter fires one
-held dish on its own as the table's first food, its pass card says «Siguiente pase» / Next
-course. Recommended: «Nuevo pedido», as for a whole held course.
+**B4 builds one owner answer B3 did not** (owner, 2026-11-02): when a waiter fires one held dish on
+its own as the table's first food, its pass card says «Nuevo pedido» / New order, as for a whole
+held course; B3 still says «Siguiente pase» / Next course there. B4 changes the test on main that
+pins «Siguiente pase» and names it in its PR.
 
 **Before PR C:** the expo board (`listExpoQueue`) measures a dish waiting for the pass from
 `queued_at`, which firing a held group does not move, so the dish reads overdue the moment it is

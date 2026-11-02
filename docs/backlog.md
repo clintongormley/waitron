@@ -89,7 +89,8 @@ Everything not listed here needs more spec work first.
    [reviewed plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) for the remaining
    kitchen and pass work, following A773-1's Sent and New order panel. PR B is cut into four
    ([slice plan](superpowers/plans/2026-11-01-a773-2b-requested-release.md)); B4 (the
-   screens) remains, then PRs C–D. The owner answered the copy sheet and its questions on 2026-11-02. One question remains open (`backlog/till.md`, A773-2).
+   screens) remains, then PRs C–D. The owner answered the copy sheet and every question on 2026-11-02;
+   B4 carries one answer B3 did not build (`backlog/till.md`, A773-2).
    **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
    slices wait for A773-2.
 2. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
