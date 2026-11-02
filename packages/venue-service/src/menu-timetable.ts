@@ -666,7 +666,11 @@ export async function readRoutingUses(
 }
 
 /** The venue's active departments, the default first. */
-export async function readActiveDepartments(tx: Transaction, _cfg: VenueScope) {
+export async function readActiveDepartments(
+  tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
+) {
   return tx
     .select({ id: departments.id, name: departments.name, active: departments.active })
     .from(departments)
@@ -675,7 +679,11 @@ export async function readActiveDepartments(tx: Transaction, _cfg: VenueScope) {
 }
 
 /** The menu periods of the venue's active departments. */
-export async function readActivePeriods(tx: Transaction, _cfg: VenueScope) {
+export async function readActivePeriods(
+  tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
+) {
   return tx
     .select({
       id: menuPeriods.id,

@@ -816,6 +816,7 @@ const storedDate = (row: {
 /** Every special day of the venue with its dates, by name then id; no paint. */
 export async function listSpecialDays(
   tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
   _cfg: VenueScope,
 ): Promise<SpecialDaySummary[]> {
   const days = await tx
@@ -1009,9 +1010,12 @@ export async function saveSpecialDay(
 
   const values = { name: parsed.name, repeatsYearly: parsed.repeatsYearly };
   const specialDayId = id ?? newId();
-  const venueRowId = await venueLocationId(tx);
+  let venueId: string | undefined;
+  const venueRowId = async () => (venueId ??= await venueLocationId(tx));
   if (id === null)
-    await tx.insert(specialDays).values({ id: specialDayId, locationId: venueRowId, ...values });
+    await tx
+      .insert(specialDays)
+      .values({ id: specialDayId, locationId: await venueRowId(), ...values });
   else await tx.update(specialDays).set(values).where(eq(specialDays.id, id));
 
   const existing = await tx
@@ -1034,15 +1038,15 @@ export async function saveSpecialDay(
     if (closedAllDay !== row.closedAllDay)
       await tx.update(specialDayDates).set({ closedAllDay }).where(eq(specialDayDates.id, row.id));
   }
-  const added = parsed.dates
-    .filter((entry) => !dateIds.has(entry.date))
-    .map((entry) => ({
-      ...entry,
-      id: newId(),
-      specialDayId,
-      locationId: venueRowId,
-      holidayName: ruleOf.get(entry.date)!.holidayName,
-    }));
+  const newDates = parsed.dates.filter((entry) => !dateIds.has(entry.date));
+  const locationId = newDates.length > 0 ? await venueRowId() : "";
+  const added = newDates.map((entry) => ({
+    ...entry,
+    id: newId(),
+    specialDayId,
+    locationId,
+    holidayName: ruleOf.get(entry.date)!.holidayName,
+  }));
   if (added.length > 0) await tx.insert(specialDayDates).values(added);
   for (const row of added) dateIds.set(row.date, row.id);
 

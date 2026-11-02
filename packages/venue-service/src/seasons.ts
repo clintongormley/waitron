@@ -35,7 +35,11 @@ const SEASON_COLUMNS = {
   colour: seasons.colour,
 };
 
-export async function readSeasons(tx: Transaction, _cfg: VenueScope): Promise<Season[]> {
+export async function readSeasons(
+  tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
+  _cfg: VenueScope,
+): Promise<Season[]> {
   return tx.select(SEASON_COLUMNS).from(seasons).orderBy(asc(seasons.startsOn));
 }
 
@@ -171,11 +175,12 @@ export async function saveSeasons(
       .where(eq(seasons.id, entry.id!));
   for (const { id, name, startsOn, colour } of changed)
     await tx.update(seasons).set({ name, startsOn, colour }).where(eq(seasons.id, id!));
-  const venueRowId = await venueLocationId(tx);
+  let venueId: string | undefined;
+  const venueRowId = async () => (venueId ??= await venueLocationId(tx));
   for (const { name, startsOn, colour, split } of added) {
     const [row] = await tx
       .insert(seasons)
-      .values({ name, startsOn, colour, locationId: venueRowId })
+      .values({ name, startsOn, colour, locationId: await venueRowId() })
       .returning({ id: seasons.id });
     for (const [departmentId, weeks] of departmentWeeks) {
       const week = weeks.get(split);

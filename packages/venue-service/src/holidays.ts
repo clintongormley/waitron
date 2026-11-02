@@ -239,6 +239,7 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
 
   async function readHolidayAreaModel(
     tx: Transaction,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
     _cfg: VenueScope,
   ): Promise<HolidayAreaModel> {
     const address = await readAddress(tx);

@@ -52,7 +52,7 @@ export function joinTouching<T extends { startsAt: string; endsAt: string }>(
 }
 
 /** The seasons a week write lands in: every season, after giving a venue without any its four,
- *  or the one named, which must be this venue's. */
+ *  or the one named, which must exist. */
 export async function targetSeasons(
   tx: Transaction,
   cfg: VenueScope,
@@ -63,7 +63,7 @@ export async function targetSeasons(
 }
 
 /** The venue's seasons, after giving a venue without any its four, and the one `id` names, which
- *  must be this venue's. */
+ *  must exist. */
 export async function seasonsNaming(
   tx: Transaction,
   cfg: VenueScope,

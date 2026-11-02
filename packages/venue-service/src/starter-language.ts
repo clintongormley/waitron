@@ -8,6 +8,7 @@ import type { VenueScope } from "./operations.js";
 /** A database with no tenant row still reads the receipt language. */
 export async function readStarterStaffLanguage(
   tx: Transaction,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
   _cfg: VenueScope,
 ): Promise<StarterStaffLanguage> {
   const venue = await readVenue(tx);

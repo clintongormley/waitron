@@ -493,6 +493,15 @@ describe("an address that does not resolve", () => {
       ],
       sources: [],
     });
+    await moveTo(cfg, { country: "ZZ", province: null, city: null });
+    expect(await run((tx) => store.readHolidayAreaModel(tx, cfg))).toEqual({
+      venue: { country: "ZZ", provinceCode: null, city: null },
+      readiness: "unresolved_address",
+      localHolidaysPerYear: 1,
+      areaOptions: [],
+      areaRequired: false,
+      chosen: null,
+    });
   });
 
   it("reports no local holidays for a known province whose region is unknown, a special day included", async () => {
