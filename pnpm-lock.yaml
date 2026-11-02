@@ -1565,6 +1565,9 @@ importers:
       '@waitron/db':
         specifier: workspace:*
         version: link:../db
+      '@waitron/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@waitron/sync-enrolment':
         specifier: workspace:*
         version: link:../sync-enrolment

@@ -1,4 +1,9 @@
 // The Drizzle snapshot is built from this file's exports: name each table, never `export *`.
+export {
+  nodeHandoverEvents,
+  nodeHandoverOperations,
+  nodeHandoverRestriction,
+} from "./node-handover.js";
 export { nodeMirrorLink } from "./node-mirror-link.js";
 export { nodeMode } from "./node-mode.js";
 export { nodePrimaryKey } from "./node-primary-key.js";

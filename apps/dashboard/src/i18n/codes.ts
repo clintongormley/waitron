@@ -1319,6 +1319,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The handover is at a different stage, so this step cannot be taken now. Refresh the page to see where it stands.",
     es: "El cambio de servidor está en otra fase, así que este paso no se puede dar ahora. Actualiza la página para ver en qué punto está.",
   },
+  "handover.operation_conflict": {
+    en: "This handover was already started with different details, so nothing was changed. Start a new handover.",
+    es: "Este cambio de servidor ya se empezó con otros datos, así que no se ha cambiado nada. Empieza un cambio de servidor nuevo.",
+  },
+  "handover.operation_in_progress": {
+    en: "This server is already in the middle of another handover, so a new one cannot start until that one has finished or been closed.",
+    es: "Este servidor ya está en medio de otro cambio de servidor, así que no se puede empezar otro hasta que ese termine o se cierre.",
+  },
+  "handover.restriction_conflict": {
+    en: "This server has already recorded that it handed over its work, with different details, so the record was not changed.",
+    es: "Este servidor ya registró que pasó su trabajo a otro, con otros datos, así que el registro no se ha cambiado.",
+  },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",
     es: "Este aviso ya no existe. Actualiza la lista.",

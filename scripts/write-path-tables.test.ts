@@ -191,6 +191,9 @@ describe("no source writes a table the application role may only read", () => {
   it("keeps every table whose writes belong in the named provisioning or identity files", () => {
     expect(TABLES.slice().sort()).toEqual([
       "deployment",
+      "node_handover_events",
+      "node_handover_operations",
+      "node_handover_restriction",
       "node_mirror_link",
       "node_mode",
       "node_primary_key",

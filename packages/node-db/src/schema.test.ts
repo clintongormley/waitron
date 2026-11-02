@@ -5,6 +5,9 @@ import { NODE_MIGRATIONS } from "./migrations.js";
 import { nodeMode, nodeSigningKey } from "./schema/index.js";
 
 const NODE_TABLES = [
+  "node_handover_events",
+  "node_handover_operations",
+  "node_handover_restriction",
   "node_mirror_link",
   "node_mode",
   "node_primary_key",
@@ -15,7 +18,7 @@ const NODE_TABLES = [
 describe("node.db's tables", () => {
   const suite = useVenueDb({ migrations: [NODE_MIGRATIONS] });
 
-  it("creates the five tables in node.db and none in venue.db", () => {
+  it("creates its tables in node.db and none in venue.db", () => {
     expect(migratedTableNames(suite.node)).toEqual(NODE_TABLES);
     expect(migratedTableNames(suite.db).filter((name) => NODE_TABLES.includes(name))).toEqual([]);
   });
