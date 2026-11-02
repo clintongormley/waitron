@@ -79,6 +79,31 @@ it("recovers the existing location, node and all three series without allocating
   });
 });
 
+it.each(["name", "fiscalTerritory"] as const)(
+  "refuses recovery after the retained venue's %s changes",
+  async (field) => {
+    await fixture();
+    await withTransaction(suite.db, (tx) =>
+      tx.execute(
+        field === "name"
+          ? sql`update locations set name = 'Renamed venue'`
+          : sql`update locations set fiscal_territory = 'ES-common'`,
+      ),
+    );
+    const before = {
+      venue: (await suite.db.execute(sql`select * from locations`)).rows,
+      series: (await suite.db.execute(sql`select * from invoice_series order by purpose`)).rows,
+    };
+    await expect(recoverProvisionedVenue(suite.db, { venue }, ALL_MODULES)).rejects.toMatchObject(
+      refusal,
+    );
+    expect({
+      venue: (await suite.db.execute(sql`select * from locations`)).rows,
+      series: (await suite.db.execute(sql`select * from invoice_series order by purpose`)).rows,
+    }).toEqual(before);
+  },
+);
+
 it("refuses recovery when no matching node was committed", async () => {
   await expect(recoverProvisionedVenue(suite.db, { venue }, ALL_MODULES)).rejects.toMatchObject(
     refusal,

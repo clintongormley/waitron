@@ -133,6 +133,17 @@ it("accepts the flat request", async () => {
   expect((await f.store.read())?.frozen.request).toEqual(request);
 });
 
+it.each([null, "es-ES", []])(
+  "refuses a frozen receipt-language value of %j before saving the claim",
+  async (invoiceLocales) => {
+    const f = await fixture();
+    const input = frozen();
+    input.request.invoiceLocales = invoiceLocales as never;
+    await expect(f.claim(input)).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+    expect(await f.store.read()).toBeNull();
+  },
+);
+
 it("does not read a bound venue replaced by a symlink after claiming", async () => {
   const f = await fixture();
   await f.claim();
