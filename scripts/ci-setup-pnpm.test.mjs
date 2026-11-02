@@ -40,7 +40,7 @@ function temporaryDirectory(prefix) {
   return directory;
 }
 
-const hasTimeout = ["gtimeout", "timeout"].some(
+const hasTimeout = ["gnutimeout", "gtimeout", "timeout"].some(
   (name) => spawnSync("sh", ["-c", `command -v ${name}`]).status === 0,
 );
 
@@ -113,6 +113,7 @@ function run(mode, env = {}, scriptPath = script) {
     runnerTemp,
     githubPath: read("github-path"),
     npmArgs: read("npm.args"),
+    gnutimeoutCalls: read("gnutimeout.calls"),
   };
 }
 
@@ -122,7 +123,7 @@ const failureLines = (stderr) =>
 describe("ci-setup-pnpm.sh", () => {
   it("finds a timeout command, which the script needs", () => {
     // Fails rather than skips: without one every bound below is untested.
-    expect(hasTimeout, "neither gtimeout nor timeout is on PATH").toBe(true);
+    expect(hasTimeout, "none of gnutimeout, gtimeout or timeout is on PATH").toBe(true);
   });
 
   it("installs the package.json version and puts its bin directory on GITHUB_PATH", () => {
@@ -167,6 +168,25 @@ describe("ci-setup-pnpm.sh", () => {
     expect(failureLines(result.stderr)).toHaveLength(3);
     expect(result.githubPath).toBe("");
     expect(result.elapsedMs).toBeLessThan(15_000);
+  });
+
+  it("prefers gnutimeout, Ubuntu 26.04's name for GNU's timeout, when it is on PATH", () => {
+    // Failing case: the script runs gtimeout or timeout first, so gnutimeout.calls stays empty.
+    const realTimeout = ["gnutimeout", "gtimeout", "timeout"]
+      .map((name) => spawnSync("sh", ["-c", `command -v ${name}`], { encoding: "utf8" }))
+      .find((probe) => probe.status === 0)
+      ?.stdout.trim();
+    expect(realTimeout, "no timeout command to wrap").toBeTruthy();
+    const gnuBin = temporaryDirectory("ci-setup-pnpm-gnutimeout-");
+    writeFileSync(
+      join(gnuBin, "gnutimeout"),
+      `#!/usr/bin/env bash\necho called >> "$STUB_STATE/gnutimeout.calls"\nexec "${realTimeout}" "$@"\n`,
+    );
+    chmodSync(join(gnuBin, "gnutimeout"), 0o755);
+    const result = run("ok", { PATH: `${gnuBin}:${STUB_BIN}:${process.env.PATH}` });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout, result.stderr).toContain(`pnpm ${VERSION} installed on attempt 1 of 3`);
+    expect(result.gnutimeoutCalls).toBe("called\ncalled\n");
   });
 
   it("succeeds on a later attempt after a failed one", () => {
@@ -230,22 +250,26 @@ describe("ci-setup-pnpm.sh", () => {
     expect(result.npmArgs).toBe("");
   });
 
-  it("stops before calling npm when neither gtimeout nor timeout is on PATH", () => {
-    // Only what the script runs before its timeout lookup, so neither timeout command is reachable.
+  it("stops before calling npm when no timeout command is on PATH", () => {
+    // Only what the script runs before its timeout lookup, so no timeout command is reachable.
     const tools = temporaryDirectory("ci-setup-pnpm-tools-");
     symlinkSync(process.execPath, join(tools, "node"));
     const dirname = spawnSync("sh", ["-c", "command -v dirname"], { encoding: "utf8" });
     symlinkSync(dirname.stdout.trim(), join(tools, "dirname"));
     const path = `${STUB_BIN}:${tools}`;
-    const probe = spawnSync(BASH, ["-c", "command -v gtimeout || command -v timeout"], {
-      env: { PATH: path },
-    });
-    expect(probe.status, "the PATH must really hide both timeout commands").not.toBe(0);
+    const probe = spawnSync(
+      BASH,
+      ["-c", "command -v gnutimeout || command -v gtimeout || command -v timeout"],
+      {
+        env: { PATH: path },
+      },
+    );
+    expect(probe.status, "the PATH must really hide every timeout command").not.toBe(0);
     const node = spawnSync(BASH, ["-c", "node -p 1"], { encoding: "utf8", env: { PATH: path } });
     expect(node.stdout, "node must still run, or the script stops before the lookup").toBe("1\n");
     const result = run("ok", { PATH: path });
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain("neither gtimeout nor timeout is on PATH");
+    expect(result.stderr).toContain("none of gnutimeout, gtimeout or timeout is on PATH");
     expect(result.npmArgs).toBe("");
     expect(result.githubPath).toBe("");
   });

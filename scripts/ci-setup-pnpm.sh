@@ -33,9 +33,11 @@ bound="$(positive_seconds PNPM_SETUP_ATTEMPT_SECONDS 60)"
 kill_grace="$(positive_seconds PNPM_SETUP_KILL_SECONDS 10)"
 version_bound="$(positive_seconds PNPM_SETUP_VERSION_SECONDS 10)"
 
-TIMEOUT="$(command -v gtimeout || command -v timeout || true)"
+# GNU's first: uutils' timeout sends its forced kill to its child alone.
+# docs/developers/ci-and-gates.md#every-pnpm-setup-is-bounded
+TIMEOUT="$(command -v gnutimeout || command -v gtimeout || command -v timeout || true)"
 if [[ -z "$TIMEOUT" ]]; then
-  echo "neither gtimeout nor timeout is on PATH" >&2
+  echo "none of gnutimeout, gtimeout or timeout is on PATH" >&2
   exit 1
 fi
 
