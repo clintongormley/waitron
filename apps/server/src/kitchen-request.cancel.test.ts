@@ -17,8 +17,10 @@ import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
+import { createStation } from "./kitchen.js";
 import { fireGroup } from "./order-groups.js";
 import { printedLines } from "./testing/decode-ticket.js";
+import { moveDishesToStation } from "./testing/order-writer-fixture.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -126,8 +128,8 @@ const jobs = () =>
       .from(printJobs)
       .orderBy(sql`rowid`),
   );
-const notices = async (order: Order) =>
-  (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, venue.stationId))).filter(
+const notices = async (order: Order, stationId = venue.stationId) =>
+  (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, stationId))).filter(
     (notice) => notice.workingOrderId === order.billId,
   );
 
@@ -204,5 +206,61 @@ describe("A773 requested lifecycle: cancel", () => {
       code: "management.request_invalid",
       params: { field: "preparationStarted" },
     });
+  });
+  it("keeps the charge on a Requested dish moved away from its group's HOLD paper without telling either station", async () => {
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }, [venue.stationId]));
+    try {
+      const before = (await jobs()).length;
+      const order = await requestedPizzas("hold");
+      expect((await jobs()).slice(before)).toHaveLength(1);
+      const elsewhere = await inTx(venue, async (tx) => {
+        const station = await createStation(tx, venue.cfg, { name: "No HOLD paper here" });
+        await moveDishesToStation(
+          tx,
+          venue.cfg,
+          order.billId,
+          { submissionId: randomUUID(), lineIds: [order.parent.id], stationId: station.id },
+          { deviceId: venue.deviceId, personId: venue.staffId },
+        );
+        return station.id;
+      });
+      await pay(order);
+      const beforeCancel = (await jobs()).length;
+      await cancel(order, await askFor(order, "keep_charge"));
+      expect((await jobs()).slice(beforeCancel)).toEqual([]);
+      expect(await notices(order, elsewhere)).toEqual([]);
+      expect(await notices(order)).toEqual([]);
+    } finally {
+      await inTx(venue, (tx) =>
+        setStationPrinting(tx, { printHeldWork: false }, [venue.stationId]),
+      );
+    }
+  });
+
+  it("with no station waiting, keeps the charge on a held dish with no HOLD paper: one HOLD CANCELLED slip", async () => {
+    const order = await billWith(venue, [{ name: "Pizza", quantity: "3", olives: 2 }], {
+      release: "hold",
+      shape: "grouped",
+    });
+    const parent = await inTx(venue, async (tx) => {
+      const [line] = await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, order.billId))
+        .orderBy(workingOrderLines.lineNo);
+      const [group] = await tx.select().from(orderGroups).where(eq(orderGroups.id, line!.groupId!));
+      expect(group).toMatchObject({ state: "held", holdPrintedAt: null });
+      return line!;
+    });
+    const held = { ...order, parent };
+    await pay(held);
+    const before = (await jobs()).length;
+    await cancel(held, await askFor(held, "keep_charge"));
+    const printed = (await jobs()).slice(before);
+    expect(printed.map((job) => job.printerId)).toEqual([venue.printerId]);
+    const lines = printedLines(printed[0]!.payload);
+    expect(lines).toContain(`*** ${kitchenTicketWords("es").holdCancelled} ***`);
+    expect(lines.join("\n")).toContain("2.000 x PIZZA");
+    expect(await notices(held)).toMatchObject([{ kind: "void", quantity: "2.000" }]);
   });
 });

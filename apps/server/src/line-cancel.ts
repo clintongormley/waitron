@@ -35,6 +35,7 @@ import { captureKitchenActivity } from "./attendance-capture.js";
 import { requireBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { refuseRecalledWrite } from "./draft-source.js";
+import { heldPaperStations } from "./order-groups.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueCorrectionSlips, enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
 import { bumpPartyRevision, partyRevision, runServiceCommand } from "./parties.js";
@@ -493,14 +494,22 @@ export async function cancelItem(
           corrections.filter(({ item }) => item.fired).map(({ item }) => item),
           "VOID",
         );
-        if (groups.length > 0)
+        if (groups.length > 0) {
+          const heldPaper = await heldPaperStations(
+            tx,
+            corrections.flatMap(({ group, requested }) =>
+              requested && group !== undefined ? [group.id] : [],
+            ),
+          );
           await enqueueHoldCorrections(
             tx,
             cfg,
             bill!.id,
             corrections.flatMap(({ group, requested, item }) =>
-              // Requested work printed nothing unless its group's HOLD ticket did.
-              item.fired || group === undefined || (requested && group.holdPrintedAt === null)
+              // Requested work printed nothing unless its station has its group's HOLD paper.
+              item.fired ||
+              group === undefined ||
+              (requested && heldPaper.get(group.id)?.has(item.stationId) !== true)
                 ? []
                 : [
                     {
@@ -512,6 +521,7 @@ export async function cancelItem(
             ),
             { kind: "HOLD CANCELLED" },
           );
+        }
         for (const { family } of families) {
           for (const { row, remaining } of family) {
             const servedQuantity = Math.min(row.servedQuantity, remaining);

@@ -261,7 +261,14 @@ D1–D20 are the slice plan's and bind unchanged. These are B2's, dated 2026-11-
   paper: `cancelItem`'s keep-charge branch (`line-cancel.ts:495-512`) skips a Requested record
   (`requestedAt !== null && firedAt === null`) whose group's `holdPrintedAt` is null; where the
   group's HOLD ticket printed it keeps today's HOLD CANCELLED. A legacy-recalled record (both
-  stamps null, D20) keeps today's behaviour. **Handed to B3:** a Requested record whose station
+  stamps null, D20) keeps today's behaviour. **Narrowed to the station (2026-11-02, Task 2.3
+  review Minor 1):** the group test still sent a `void` kitchen notice to a station that never had
+  the group's HOLD paper (a Requested dish moved there from the station that did), because
+  `enqueueHoldCorrections` records notices before `printCorrectionSlips` filters by station. The
+  branch now keeps a Requested record only when `heldPaperStations` lists its own station for its
+  group. Receipt: `kitchen-request.cancel.test.ts` "keeps the charge on a Requested dish moved away
+  from its group's HOLD paper…" failed on the group test and passes; control: the group test back
+  turns it red. **Handed to B3:** a Requested record whose station
   still holds HOLD paper from before the fire is today corrected only by that keep-charge branch;
   draft recall, the remove-charge branch and a station move send it nothing (they test
   `group.state === "held"`). `heldPaperStations` (`order-groups.ts:2142-2160`) already answers for
