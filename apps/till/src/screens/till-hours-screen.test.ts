@@ -18,10 +18,6 @@ async function mount(props: Partial<TillHoursScreen> = {}) {
   setLocale("en-GB");
   return mountWidget<TillHoursScreen>("till-hours-screen", {
     view: hoursView(),
-    locations: [
-      { id: "venue", name: "Deli", timeZone: "Europe/Madrid" },
-      { id: "old", name: "Old workplace", timeZone: "UTC" },
-    ],
     ...props,
   });
 }
@@ -126,36 +122,35 @@ it("emits calendar day and current prompt ids once across its shadow root", asyn
   await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-refresh]")!);
   await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-back]")!);
   expect(seen).toEqual([
-    { name: "hours-day", detail: { date: "2026-01-05", locationId: "venue" } },
+    { name: "hours-day", detail: { date: "2026-01-05" } },
     { name: "hours-prompt", detail: { promptId: "question", action: "confirm" } },
     { name: "hours-refresh", detail: null },
     { name: "back", detail: null },
   ]);
 });
-it("selectors emit only admitted locations and use calendar arithmetic for the next window", async () => {
+it("selectors use calendar arithmetic for the next window", async () => {
   const { el } = await mount();
   const select = vi.fn();
   el.addEventListener("hours-select", select);
-  el.shadowRoot!.querySelector('[name="hoursLocation"]')!.dispatchEvent(
-    new CustomEvent("wt-change", {
-      detail: { value: "not-offered" },
-      bubbles: true,
-      composed: true,
-    }),
-  );
-  expect(select).not.toHaveBeenCalled();
-  el.shadowRoot!.querySelector('[name="hoursLocation"]')!.dispatchEvent(
-    new CustomEvent("wt-change", { detail: { value: "old" }, bubbles: true, composed: true }),
-  );
-  expect((select.mock.calls[0]![0] as CustomEvent).detail).toEqual({
-    locationId: "old",
-    selection: { kind: "week", date: "2026-01-05" },
-  });
   await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-next]")!);
-  expect((select.mock.calls[1]![0] as CustomEvent).detail).toEqual({
-    locationId: "old",
+  expect((select.mock.calls[0]![0] as CustomEvent).detail).toEqual({
     selection: { kind: "week", date: "2026-01-12" },
   });
+});
+it("has no Location field", async () => {
+  const { el } = await mount({ view: hoursView() });
+  expect(el.shadowRoot!.querySelector('[name="hoursLocation"]')).toBeNull();
+  const select = vi.fn();
+  el.addEventListener("hours-select", select);
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-next]")!);
+  const detail = (select.mock.calls[0]![0] as CustomEvent).detail as Record<string, unknown>;
+  expect(detail).toEqual({ selection: { kind: "week", date: "2026-01-12" } });
+  expect("locationId" in detail).toBe(false);
+});
+it("heads a pending question card by its work day alone", async () => {
+  const { el } = await mount();
+  const headings = [...el.shadowRoot!.querySelectorAll("section article[data-prompt] h3")];
+  expect(headings.map((h) => h.textContent!.trim())).toEqual(["2026-01-05"]);
 });
 it("loading and refusal states expose Retry without rendering a raw code or enabling stale actions", async () => {
   const { el } = await mount({ view: null, reading: true });
@@ -205,11 +200,11 @@ it("month navigation crosses a year boundary from the first day rather than over
   await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-next]")!);
   await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-next]")!);
   expect(seen).toEqual([
-    { locationId: "venue", selection: { kind: "week", date: "2026-01-31" } },
-    { locationId: "venue", selection: { kind: "month", date: "2026-01-31" } },
-    { locationId: "venue", selection: { kind: "month", date: "2025-12-01" } },
-    { locationId: "venue", selection: { kind: "month", date: "2026-01-01" } },
-    { locationId: "venue", selection: { kind: "month", date: "2026-02-01" } },
+    { selection: { kind: "week", date: "2026-01-31" } },
+    { selection: { kind: "month", date: "2026-01-31" } },
+    { selection: { kind: "month", date: "2025-12-01" } },
+    { selection: { kind: "month", date: "2026-01-01" } },
+    { selection: { kind: "month", date: "2026-02-01" } },
   ]);
 });
 it("refuses malformed dates, impossible dates and unsupported windows without replacing the last valid selection", async () => {
@@ -226,7 +221,7 @@ it("refuses malformed dates, impossible dates and unsupported windows without re
     );
   expect(seen).toEqual([]);
   await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-next]")!);
-  expect(seen).toEqual([{ locationId: "venue", selection: { kind: "week", date: "2026-01-12" } }]);
+  expect(seen).toEqual([{ selection: { kind: "week", date: "2026-01-12" } }]);
 });
 it("a proposal can be accepted only when ready, while disagreement and missing-time edits keep their prompt identities", async () => {
   const item = attendanceItem({ personId: "p1", readyToApply: false });

@@ -1,8 +1,8 @@
 import { languageDisplayName } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 
-/** The stored language while the location still offers it. One no longer offered is filed in the
- * location's (`saleLanguageFor`, apps/server/src/venue-locale.ts), so the till shows that instead. */
+/** The stored language while the venue still offers it. One no longer offered is filed in the
+ * venue's (`saleLanguageFor`, apps/server/src/venue-locale.ts), so the till shows that instead. */
 export function offeredReceiptLanguage(
   stored: string | undefined,
   offered: readonly string[],
@@ -10,7 +10,7 @@ export function offeredReceiptLanguage(
   return stored !== undefined && offered.includes(stored) ? stored : undefined;
 }
 
-/** The language a receipt prints in: the chosen or stored one, else the location's, listed first. */
+/** The language a receipt prints in: the chosen or stored one, else the venue's, listed first. */
 export function shownReceiptLanguage(
   chosen: string | undefined,
   offered: readonly string[],

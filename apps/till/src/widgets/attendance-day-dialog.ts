@@ -2,12 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import type { WtDialog } from "@waitron/ui";
-import type {
-  AttendanceDayView,
-  AttendanceInbox,
-  AttendanceChange,
-  CorrectionItem,
-} from "../api/client.js";
+import type { AttendanceDayView, AttendanceChange, CorrectionItem } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { trackDialog } from "./track-dialog.js";
@@ -67,9 +62,7 @@ export class AttendanceDayDialog extends LitElement {
   ];
   @property({ type: Boolean }) open = false;
   @property({ attribute: false }) view: AttendanceDayView | null = null;
-  @property({ attribute: false }) locations: AttendanceInbox["locations"] = [];
   @property() date = "";
-  @property() locationId = "";
   @property({ type: Boolean }) reading = false;
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) blocked = false;
@@ -85,8 +78,7 @@ export class AttendanceDayDialog extends LitElement {
       !this.blocked &&
       !this.reading &&
       this.view !== null &&
-      this.view.date === this.date &&
-      this.view.locationId === this.locationId
+      this.view.date === this.date
     );
   }
   #emit(event: Event, type: string, detail: unknown): void {
@@ -94,19 +86,14 @@ export class AttendanceDayDialog extends LitElement {
     if (!this.#current()) return;
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
-  #select(event: CustomEvent<{ value: string }>, field: "date" | "locationId"): void {
+  #select(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     if (!this.isConnected || !this.open || this.busy) return;
-    if (
-      field === "locationId" &&
-      !this.locations.some((location) => location.id === event.detail.value)
-    )
-      return;
-    this[field] = event.detail.value;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(this.date) || !this.locationId) return;
+    this.date = event.detail.value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(this.date)) return;
     this.dispatchEvent(
       new CustomEvent("attendance-day", {
-        detail: { date: this.date, locationId: this.locationId },
+        detail: { date: this.date },
         bubbles: true,
         composed: true,
       }),
@@ -165,11 +152,7 @@ export class AttendanceDayDialog extends LitElement {
     </article>`;
   }
   override render() {
-    const matches =
-      !this.reading &&
-      this.view !== null &&
-      this.view.date === this.date &&
-      this.view.locationId === this.locationId;
+    const matches = !this.reading && this.view !== null && this.view.date === this.date;
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.open}
@@ -179,15 +162,6 @@ export class AttendanceDayDialog extends LitElement {
     >
       <div class="body">
         <div class="selectors">
-          <wt-combobox
-            name="attendanceLocation"
-            required
-            .label=${t("attendance.location")}
-            .value=${this.locationId}
-            .options=${this.locations.map((location) => ({ value: location.id, label: location.name }))}
-            .disabled=${this.busy}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => this.#select(event, "locationId")}
-          ></wt-combobox>
           <wt-input
             name="attendanceDay"
             type="date"
@@ -195,7 +169,7 @@ export class AttendanceDayDialog extends LitElement {
             .label=${t("attendance.date")}
             .value=${this.date}
             .disabled=${this.busy}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => this.#select(event, "date")}
+            @wt-change=${(event: CustomEvent<{ value: string }>) => this.#select(event)}
           ></wt-input>
         </div>
         ${this.error ? html`<p role="status">${this.error}</p>` : this.reading ? html`<p role="status">${t("attendance.reading")}</p>` : nothing}

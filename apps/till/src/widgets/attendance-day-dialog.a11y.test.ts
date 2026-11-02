@@ -61,8 +61,6 @@ describe.each(["light", "dark"] as const)("chosen attendance day in %s", (theme)
               open: true,
               view: state === "loading" || state === "refused" ? null : view,
               date: view.date,
-              locationId: "deli",
-              locations: [{ id: "deli", name: "The deli", timeZone: "Europe/Madrid" }],
               reading: state === "loading",
               error: state === "refused" ? "Hours could not be read" : "",
             },

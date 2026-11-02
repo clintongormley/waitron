@@ -46,7 +46,7 @@ export interface TicketIssuer {
 /**
  * A filed line's goods name (art. 7.1.e), looked up under the sale's names language.
  *
- * `descriptions` is keyed by the location's receipt languages when the line was added; a line added
+ * `descriptions` is keyed by the venue's receipt languages when the line was added; a line added
  * from an order holds the same text under every key (`defaultLanguageDescriptions`,
  * `packages/catalogue/src/default-language-text.ts`). A later change can leave the keys without the
  * names language, so the lookup falls back to the first stored name. The line's `unitName` is keyed

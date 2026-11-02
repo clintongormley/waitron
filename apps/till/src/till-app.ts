@@ -3236,15 +3236,15 @@ export class TillApp extends LitElement {
   /** The working order that produced the ticket currently shown, a bill split off another included. */
   private ticketWorkingOrderId?: string;
   #receiptPrintVisit = 0;
-  /** The location's receipt language, never the operator-UI `currentLocale()`. */
+  /** The venue's receipt language, never the operator-UI `currentLocale()`. */
   @state() private invoiceLocale = "es-ES";
-  /** The receipt languages staff may choose, the location's own first. */
+  /** The receipt languages staff may choose, the venue's own first. */
   @state() private receiptLanguages: string[] = [];
   @state() private fullInvoices = false;
   #simplifiedInvoiceLimit: string | null = null;
   /** The counter basket's receipt language: the one staff chose, or the one stored with a retrieved
    * order. `saved` is false while the server does not hold it yet. With none, or one naming another
-   * order, the basket prints in the location's. */
+   * order, the basket prints in the venue's. */
   @state() private receiptLanguageChoice?: { orderId: string; language: string; saved: boolean };
   /** The order whose receipt language is being asked: the counter's, or a party bill as it was read
    * when asked. */
@@ -5007,9 +5007,7 @@ export class TillApp extends LitElement {
           ? html`<till-attendance-day-dialog
               .open=${true}
               .view=${snapshot?.day ?? null}
-              .locations=${snapshot?.inbox?.locations ?? []}
               .date=${this.attendanceDayDate}
-              .locationId=${snapshot?.inbox?.locations[0]?.id ?? ""}
               .reading=${snapshot?.dayReading || snapshot?.reading || this.attendancePinReading}
               .busy=${snapshot?.busy ?? false}
               .blocked=${blocked}
@@ -9190,7 +9188,7 @@ export class TillApp extends LitElement {
       : [...this.receiptLanguages, filedLanguage];
   }
 
-  /** The language staff chose or the order stored; undefined while the location's applies. */
+  /** The language staff chose or the order stored; undefined while the venue's applies. */
   #chosenReceiptLanguage(orderId: string): string | undefined {
     const choice = this.receiptLanguageChoice;
     return choice?.orderId === orderId ? choice.language : undefined;
@@ -19354,17 +19352,9 @@ export class TillApp extends LitElement {
           .blocked=${this.attendanceSnapshot?.busy === true || this.attendanceSnapshot?.uncertainCommandId != null || this.attendanceSnapshot?.retryCommand != null || !this.attendanceSnapshot?.inbox || this.attendanceSnapshot?.readError != null}
           .canRetry=${this.attendanceSnapshot?.retryCommand != null && !this.attendanceSnapshot?.busy}
           .error=${this.#attendanceMessage() || (this.hoursSnapshot?.readError ? codeMessage(this.hoursSnapshot.readError.code) : "")}
-          .locations=${this.attendanceSnapshot?.inbox?.locations ?? []}
-          @hours-select=${(
-            event: CustomEvent<{ locationId: string; selection: HoursSelection }>,
-          ) => {
+          @hours-select=${(event: CustomEvent<{ selection: HoursSelection }>) => {
             event.stopPropagation();
-            if (
-              this.attendanceSnapshot?.inbox?.locations.some(
-                (l) => l.id === event.detail.locationId,
-              )
-            )
-              void this.#hours?.select(event.detail.selection);
+            if (this.attendanceSnapshot?.inbox) void this.#hours?.select(event.detail.selection);
           }}
           @hours-refresh=${(event: Event) => {
             event.stopPropagation();
@@ -19372,7 +19362,7 @@ export class TillApp extends LitElement {
             else this.#startHours();
             void this.#attendance?.refresh();
           }}
-          @hours-day=${(event: CustomEvent<{ date: string; locationId: string }>) => {
+          @hours-day=${(event: CustomEvent<{ date: string }>) => {
             event.stopPropagation();
             this.#requestLeave(() => this.#openAttendanceDay(event.detail));
           }}

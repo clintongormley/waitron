@@ -163,7 +163,7 @@ export interface TillInfo {
    */
   invoiceLocale: string;
   /**
-   * The receipt languages staff may choose for a sale or a copy, the location's own first
+   * The receipt languages staff may choose for a sale or a copy, the venue's own first
    * (`readOfferedReceiptLanguages`).
    */
   receiptLanguages: string[];
@@ -1318,8 +1318,8 @@ export interface CounterWaitingOrder {
   total: string;
   counts: OrderStateCounts;
   canHandOver: boolean;
-  /** A placed order's own service mode, frozen when it was opened, or the order flow of the till's
-   * location when the order has none frozen; null on a settled one. */
+  /** A placed order's own service mode, frozen when it was opened, or the venue's order flow when
+   * the order has none frozen; null on a settled one. */
   serviceMode: OrderFlow | "table_tab" | null;
   /** Only on a placed order whose invoice is issued: its number ("A/12"). */
   invoiceNumber?: string;
@@ -1398,7 +1398,7 @@ export interface HeldOrder {
   label: string | null;
   /** What a save of this copy sends back, so a save from a copy since changed is refused. */
   revision: number;
-  /** The receipt language staff chose for the order; absent while the location's own applies. */
+  /** The receipt language staff chose for the order; absent while the venue's own applies. */
   receiptLanguage?: string;
   lines: (Omit<SaleLine, "extras" | "options"> & {
     productId?: string;
@@ -3242,7 +3242,7 @@ export class TillApi {
   }
 
   /** Save the language the order's receipt prints in, one of {@link TillInfo.receiptLanguages};
-   * `null` goes back to the location's own → `PUT /api/working-orders/:id/receipt-language`. */
+   * `null` goes back to the venue's own → `PUT /api/working-orders/:id/receipt-language`. */
   setOrderReceiptLanguage(
     id: string,
     choice: { revision: number; language: string | null; expectedEdit: BillEditExpected | null },
