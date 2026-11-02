@@ -1472,7 +1472,7 @@ describe("a kitchen display's pass levers", () => {
 });
 
 describe("A773 pass board", () => {
-  it("lists no card for a Requested burger outside the pass screen's zones", async () => {
+  it("lists no card for a Requested burger outside the pass screen's or pass monitor's zones", async () => {
     const grill = await inTx(v, (tx) =>
       createStation(tx, v.cfg, { name: `Grill ${randomUUID().slice(0, 4)}` }),
     );
@@ -1498,30 +1498,35 @@ describe("A773 pass board", () => {
     );
     const deliGroup = await fire(deliTable.id, deliTablesBurger);
     const restGroup = await fire(await v.table(`R${randomUUID().slice(0, 4)}`), v.item("Burger"));
-    const [kds] = await suite.db
-      .insert(deviceProfiles)
-      .values({ name: `Pass ${randomUUID()}`, formFactor: "kds", capabilities: [] })
-      .returning({ id: deviceProfiles.id });
-    const device = await enrolDeviceForTest(suite.db, v.cfg, {
-      name: `Pass ${randomUUID()}`,
-      profileId: kds!.id,
-      kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.restTables, f.bar] },
-    });
-    const answer = await app.request("/api/device/pass-board", {
-      headers: { cookie: `${DEVICE_COOKIE}=${device.deviceId}.${device.token}` },
-    });
-    expect(answer.status).toBe(200);
-    const { board } = (await answer.json()) as {
-      board: Record<
-        "held" | "toFire" | "inProgress" | "ready",
-        { target: { kind: string; groupId?: string } }[]
-      >;
-    };
-    const groups = [...board.held, ...board.toFire, ...board.inProgress, ...board.ready].map(
-      (card) => card.target.groupId,
-    );
-    expect(groups).not.toContain(deliGroup);
-    expect(board.toFire.map((card) => card.target.groupId)).toContain(restGroup);
+    for (const [kind, path] of [
+      ["pass", "/api/device/pass-board"],
+      ["pass_monitor", "/api/device/pass-monitor-board"],
+    ] as const) {
+      const [kds] = await suite.db
+        .insert(deviceProfiles)
+        .values({ name: `Pass ${randomUUID()}`, formFactor: "kds", capabilities: [] })
+        .returning({ id: deviceProfiles.id });
+      const device = await enrolDeviceForTest(suite.db, v.cfg, {
+        name: `Pass ${randomUUID()}`,
+        profileId: kds!.id,
+        kitchenScreen: { kind, stationIds: null, zoneIds: [f.restTables, f.bar] },
+      });
+      const answer = await app.request(path, {
+        headers: { cookie: `${DEVICE_COOKIE}=${device.deviceId}.${device.token}` },
+      });
+      expect(answer.status).toBe(200);
+      const { board } = (await answer.json()) as {
+        board: Record<
+          "held" | "toFire" | "inProgress" | "ready",
+          { target: { kind: string; groupId?: string } }[]
+        >;
+      };
+      const groups = [...board.held, ...board.toFire, ...board.inProgress, ...board.ready].map(
+        (card) => card.target.groupId,
+      );
+      expect(groups).not.toContain(deliGroup);
+      expect(board.toFire.map((card) => card.target.groupId)).toContain(restGroup);
+    }
   });
 });
 

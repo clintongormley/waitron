@@ -99,13 +99,14 @@ async function routeBottledToBar(tx: Transaction, venue: Venue) {
   );
 }
 
-/** A Requested burger at a waiting Grill and a Bar water advanced to ready, placed at AT. */
+/** A Requested burger at a waiting Grill and a Bar water, placed at AT; the water is ready at LATER. */
 async function requestedBurgerAndReadyWater(tx: Transaction, venue: Venue) {
   await routeBottledToBar(tx, venue);
   await setStationsWaitForPass(tx, true, [venue.stations.grill]);
   await place(tx, venue, "fire", [dish(venue, "burger"), dish(venue, "water")]);
   const water = await lineOf(tx, venue, "water");
   await advanceTicketItem(tx, venue.cfg, water.itemId!, "preparing");
+  vi.setSystemTime(new Date(LATER));
   await advanceTicketItem(tx, venue.cfg, water.itemId!, "ready");
   return { burger: await lineOf(tx, venue, "burger"), water };
 }
@@ -127,7 +128,9 @@ describe("A773 pass fields", () => {
       const bar = await queueItem(tx, venue.stations.bar, water.id);
       expect(bar).toMatchObject({
         phase: "ready",
-        readyAt: AT,
+        requestedAt: AT,
+        firedAt: AT,
+        readyAt: LATER,
         passControlled: false,
       });
     });
@@ -191,6 +194,31 @@ describe("A773 pass fields", () => {
 
       const row = await currentRow(tx, venue, burger.id);
       expect(row).toMatchObject({ requestedAt: AT, firedAt: null });
+    });
+  });
+
+  it("dates a row with no kitchen work by its fire, and a held one not at all", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      const placed = await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [
+          { lines: [dish(venue, "water")], release: "fire" },
+          { lines: [dish(venue, "water")], release: "hold" },
+        ],
+      });
+      const [fired, held] = placed.groups.map((group) => group.lineIds[0]!) as [string, string];
+      expect(await currentRow(tx, venue, fired)).toMatchObject({
+        kitchen: null,
+        requestedAt: AT,
+        firedAt: AT,
+      });
+      expect(await currentRow(tx, venue, held)).toMatchObject({
+        kitchen: null,
+        requestedAt: null,
+        firedAt: null,
+      });
     });
   });
 

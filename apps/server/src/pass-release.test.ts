@@ -60,7 +60,7 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { withStationDishes } from "./station-closing.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import { allergyTargets, applyPartyAllergyPatch, readPartyAllergyView } from "./party-allergy.js";
-import { ALLERGEN_NAMES } from "./i18n/kitchen-allergy.js";
+import { ALLERGEN_NAMES, KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -365,12 +365,30 @@ describe("A773 pass release: set and stamps", () => {
       [{ ...good, ticketItemIds: [id, id] }, "ticketItemIds"],
       [{ ...good, ticketItemIds: ["x"] }, "ticketItemIds"],
       [{ ...good, target: { kind: "counter", orderId: randomUUID() } }, "target"],
+      [{ ...good, target: { kind: "group", partyId: randomUUID() } }, "target"],
+      [{ ...good, target: { kind: "bill", workingOrderId: "x" } }, "target"],
       [{ ...good, expectedContext: "a".repeat(63) }, "expectedContext"],
+      [{ ...good, expectedContext: "A".repeat(64) }, "expectedContext"],
+      [{ ...good, submissionId: undefined }, "submissionId"],
+      [{ ...good, submissionId: "x" }, "submissionId"],
     ] as const)
       expect(thrown(() => passReleaseAsk(body))).toMatchObject({
         code: "management.request_invalid",
         params: { field },
       });
+    const upper = (value: string) => value.toUpperCase();
+    expect(
+      passReleaseAsk({
+        ...good,
+        submissionId: upper(good.submissionId),
+        target: {
+          kind: "group",
+          partyId: upper(good.target.partyId),
+          groupId: upper(good.target.groupId),
+        },
+        ticketItemIds: good.ticketItemIds.map(upper),
+      }),
+    ).toEqual(good);
   });
 
   it("refuses an ask naming anything but exactly the card's candidates", async () => {
@@ -582,6 +600,27 @@ describe("A773 pass release: authority", () => {
       watched,
     );
     await refusedWhole(release(f.venue, elsewhere.by, ask), "service_zone.not_allowed", watched);
+  });
+
+  it("refuses a pass screen a narrowing took, writing nothing", async () => {
+    const f = await hotAndCold();
+    const [hotCard] = await toFire(f.venue, f.hot);
+    const narrowed = await profiledPass(f.venue, "Narrowed", "kds", ALL_PASS);
+    const by: PassActor = { deviceId: narrowed.deviceId, personId: null };
+    expect((await toFire(f.venue, by)).map((card) => card.target)).toContainEqual(hotCard!.target);
+    await withTransaction(db, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, f.venue.cfg, narrowed.profileId, {
+        station: { stationIds: null, zoneIds: null },
+      }),
+    );
+    const screens = await withTransaction(db, (tx) =>
+      VENUE_SERVICE.readDeviceKitchenScreens(tx, f.venue.cfg, narrowed.deviceId),
+    );
+    expect(screens.find((screen) => screen.kind === "pass")).toMatchObject({ available: false });
+    await refusedWhole(release(f.venue, by, askOf(hotCard!)), "device.unauthorized", [
+      f.burger,
+      f.salad,
+    ]);
   });
 
   it("answers the authority before the ask's shape", async () => {
@@ -827,9 +866,8 @@ describe("A773 pass release: paper", () => {
     const before = await printed(venue);
     await release(venue, every, askOf(card));
     const added = gained(before, await printed(venue));
-    expect(added.grill).toHaveLength(1);
-    expect(added.grill![0]).toContain(`*** ${kitchenTicketWords("en").fire} ***`);
-    expect(added.grill![0]).toContain("1.000 x BURG");
+    const fired = `*** ${kitchenTicketWords("en").fire} ***\nGrill\nSplit extras\n1\n13:00\nGROUP 1\n1.000 x BURG\n`;
+    expect(added).toEqual({ ...nothing, grill: [fired], pass: [fired] });
   });
 
   it("prints what is left to serve, the chips in proportion", async () => {
@@ -863,10 +901,14 @@ describe("A773 pass release: paper", () => {
     const before = await printed(venue);
     await release(venue, every, askOf(card!));
     const added = gained(before, await printed(venue));
-    expect(added.grill).toHaveLength(1);
-    expect(added.grill![0]).toContain("1.000 x BURG");
-    expect(added.fryer).toHaveLength(1);
-    expect(added.fryer![0]).toContain("1.000 x CHIPS");
+    const burger = "1.000 x BURG\n  > with CHIPS from Fryer\n";
+    const chips = "1.000 x CHIPS\n  > for BURG at Grill\n";
+    expect(added).toEqual({
+      ...nothing,
+      grill: [`Grill\nSplit extras\n1\n13:00\n${burger}`],
+      fryer: [`Fryer\nSplit extras\n1\n13:00\n${chips}`],
+      pass: [`Fryer · Grill\nSplit extras\n1\n13:00\nFryer\n${chips}Grill\n${burger}`],
+    });
   });
   it("prints the frozen allergy block, then the correction, where the answer changed while the dish waited", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
@@ -937,11 +979,15 @@ describe("A773 pass release: paper", () => {
     const every = await passOn(v, "Every pass", null);
     await release(v, every, askOf(await cardOf(v, every, first)));
     const added = (await printedAt(printerId)).slice(before);
+    const words = KITCHEN_ALLERGY_WORDS.es;
+    const guest = (who: string) => words.guestHeading.replace("{who}", who);
+    const head = `${station!.name}\nAllergy\n1\n13:00\n`;
+    const milk = ALLERGEN_NAMES.milk.es.toUpperCase();
     expect(added).toEqual([
-      "!!! ALERGIA EN ESTE TICKET !!!\nCocina\nAllergy\n1\n13:00\nGRUPO 1\n1.000 x BURG\n" +
-        "  *** ALERGIA: Window guest ***\n  LECHE\n  Separate pan\n",
-      "*** ALERGIA CAMBIADA ***\nCocina\nAllergy\n1\n13:00\n1.000 x BURG\n" +
-        "  *** ALERGIA: Corrected guest ***\n  LECHE\n  New tools\n",
+      `${words.ticketHeading}\n${head}${kitchenTicketWords("es").group} 1\n1.000 x BURG\n` +
+        `  ${guest(ORIGINAL.who)}\n  ${milk}\n  Separate pan\n`,
+      `*** ${words.changed} ***\n${head}1.000 x BURG\n` +
+        `  ${guest(CURRENT.who)}\n  ${milk}\n  New tools\n`,
     ]);
     expect((await notices()).map((notice) => notice.kind)).toEqual(["allergy_changed"]);
 
@@ -953,7 +999,7 @@ describe("A773 pass release: paper", () => {
     await release(v, every, askOf(await cardOf(v, every, second)));
     const secondAdded = (await printedAt(printerId)).slice(beforeSecond);
     expect(secondAdded).toHaveLength(1);
-    expect(secondAdded[0]).toContain("*** ALERGIA: Corrected guest ***");
+    expect(secondAdded[0]).toContain(guest(CURRENT.who));
     expect(await notices()).toEqual(noticesBefore);
   });
 
@@ -993,9 +1039,8 @@ describe("A773 pass release: paper", () => {
     const before = await printed(venue);
     await release(venue, every, askOf(moved));
     const added = gained(before, await printed(venue));
-    expect(added.fryer).toHaveLength(1);
-    expect(added.fryer![0]).toContain("1.000 x BURG");
-    expect(added.grill).toEqual([]);
+    const atFryer = "Fryer\nSplit extras\n1\n13:00\nGROUP 1\n1.000 x BURG\n";
+    expect(added).toEqual({ ...nothing, fryer: [atFryer], pass: [atFryer] });
     expect(await closedStationAlerts(venue.party.tabId)).toEqual([]);
   });
 
@@ -1020,8 +1065,8 @@ describe("A773 pass release: paper", () => {
     const before = await printed(venue);
     await release(venue, every, askOf(card));
     const added = gained(before, await printed(venue));
-    expect(added.grill).toHaveLength(1);
-    expect(added.grill![0]).toContain("1.000 x BURG");
+    const atGrill = "Grill\nSplit extras\n1\n13:00\nGROUP 1\n1.000 x BURG\n";
+    expect(added).toEqual({ ...nothing, grill: [atGrill], pass: [atGrill] });
     expect(await closedStationAlerts(venue.party.tabId)).toEqual([]);
   });
 
@@ -1053,8 +1098,10 @@ describe("A773 pass release: paper", () => {
     const before = await printed(venue);
     await release(venue, every, askOf(card));
     const added = gained(before, await printed(venue));
-    expect(added.bar).toHaveLength(1);
-    expect(added.bar![0]).toContain("1.000 x BURG");
+    expect(added).toEqual({
+      ...nothing,
+      bar: ["Bar\nSplit extras\n1\n13:00\nGROUP 1\n1.000 x BURG\n"],
+    });
     expect(await closedStationAlerts(venue.party.tabId)).toEqual([]);
   });
 
@@ -1112,9 +1159,8 @@ describe("A773 pass release: paper", () => {
     vi.setSystemTime(new Date(LATER));
     await release(venue, every, askOf(card));
     const added = gained(before, await printed(venue));
-    expect({ ...added, fryer: [], pass: [] }).toEqual(nothing);
-    expect(added.fryer).toHaveLength(1);
-    expect(added.fryer![0]).toContain("1.000 x CHIPS");
+    const chips = "Fryer\nSplit extras\n1\n13:05\nGROUP 1\n1.000 x CHIPS\n  > for BURG at Grill\n";
+    expect(added).toEqual({ ...nothing, fryer: [chips], pass: [chips] });
     expect((await rows([placed.chips]))[0]).toMatchObject({
       stationId: venue.stations.fryer,
       firedAt: LATER,
@@ -1203,5 +1249,63 @@ describe("A773 pass release: paper", () => {
       expect(added[name]).toEqual([
         `Grill\nSplit extras\n${bill!.orderNumber}\n13:00\nGROUP 1\n1.000 x BURG\n`,
       ]);
+  });
+
+  it("prints one ticket per bill at each output, each under its own bill's number", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    const placed = await withTransaction(db, async (tx) => {
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      const group = (
+        await placeGroups(tx, venue.cfg, venue.party.partyId, {
+          operatorId: OPERATOR,
+          groups: [
+            {
+              lines: [dish(venue, "burger"), dish(venue, "burger"), dish(venue, "burger")],
+              release: "fire",
+            },
+          ],
+        })
+      ).groups[0]!;
+      return { groupId: group.id, moved: group.lineIds[2]! };
+    });
+    vi.setSystemTime(new Date("2026-03-14T12:01:00.000Z"));
+    const billId = await withTransaction(
+      db,
+      async (tx) =>
+        (
+          await moveDishes(tx, venue.cfg, venue.party.tabId, null, [placed.moved], {
+            partyId: venue.party.partyId,
+            expectedPartyRevision: await partyRevisionOf(tx, venue.party.partyId),
+            operatorId: OPERATOR,
+          })
+        ).billId,
+    );
+    const numberOf = async (orderId: string) =>
+      (
+        await withTransaction(db, (tx) =>
+          tx
+            .select({ orderNumber: workingOrders.orderNumber })
+            .from(workingOrders)
+            .where(eq(workingOrders.id, orderId)),
+        )
+      )[0]!.orderNumber;
+    const [tabNumber, billNumber] = [await numberOf(venue.party.tabId), await numberOf(billId)];
+    expect(tabNumber).not.toBe(billNumber);
+    const every = await passOn(venue, "Every pass", null);
+    const card = await cardOf(venue, every, placed.groupId);
+    expect(card.releaseTicketItemIds).toHaveLength(3);
+
+    const before = await printed(venue);
+    vi.setSystemTime(new Date(LATER));
+    await release(venue, every, askOf(card));
+    const added = gained(before, await printed(venue));
+    const ticket = (orderNumber: unknown, quantity: string) =>
+      `Grill\nSplit extras\n${orderNumber}\n13:05\nGROUP 1\n${quantity} x BURG\n`;
+    expect(added).toEqual({
+      ...nothing,
+      grill: [ticket(tabNumber, "2.000"), ticket(billNumber, "1.000")],
+      pass: [ticket(tabNumber, "2.000"), ticket(billNumber, "1.000")],
+    });
   });
 });
