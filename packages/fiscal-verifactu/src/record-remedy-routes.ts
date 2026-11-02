@@ -12,6 +12,7 @@ import { AppError } from "@waitron/shared";
 import { admitRecordRemedy, REMEDY_KINDS, type RemedyKind } from "./record-remedy.js";
 import { applyCorrectedRecordFacts } from "./record-remedy-http.js";
 import { applyAbsentOriginalCancellation } from "./record-remedy-absent.js";
+import { releaseHeldCancellation } from "./record-remedy-held.js";
 import { applyCorrectiveInvoiceRequest } from "./record-remedy-corrective-http.js";
 
 // Legal enablement belongs to server policy; a client request cannot grant it.
@@ -81,6 +82,8 @@ export function mountRecordRemedies(
             enabledRemedies,
             body,
           );
+        if (kind === "release-held-cancellation")
+          return releaseHeldCancellation(tx, ctx.recordGeneration, token, enabledRemedies, body);
         throw new AppError("fiscal.remedy_disabled", { kind });
       });
       return c.json(result, 200);

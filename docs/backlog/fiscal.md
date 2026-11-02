@@ -492,8 +492,9 @@ Client-supplied enablement and operator fields cannot grant authority. No produc
 enabled. The HTTP adapter covers synthetic corrections to stored invoice facts for rejected records
 and records accepted with errors. The separately gated synthetic absent-original operation is
 described below. The separately gated corrective HTTP adapter is also described below. Resolution
-of existing held cancellations, brake release and staff cancellation/refund qualification remain
-Task 8 work. The live second-correction prerequisite is recorded in the dated entry below.
+of existing held cancellations now has the synthetic path described below. Manual brake release
+and actual staff cancellation/refund qualification remain Task 8 work. The live second-correction
+prerequisite is recorded in the dated entry below.
 
 **2 November 2026, Task 8 synthetic corrective-invoice transaction.** The internal operation
 uses the existing core correction writer, which now accepts a management session and still checks
@@ -524,6 +525,27 @@ changed decisions, live write authority and clock refusals. These synthetic oper
 earlier sale, fiscal records and payment/refund rows unchanged. The route's default policy remains
 empty. Existing held-record resolution, manual brake release and actual staff cancellation/refund
 integration remain unfinished; this HTTP milestone does not complete Task 8.
+
+**2 November 2026, Task 8 synthetic held-cancellation release.** A cancellation already set
+aside has its own immutable identity, so this operation submits that existing record. With a test
+policy allowing `release-held-cancellation`, you name the held cancellation, its case and the
+accepted current invoice version. The operation requires the same sale, invoice identity, node,
+environment and issuing chain, an ordinary cancellation still set aside, and its matching
+`fiscal.anulacion_retenida` case. A pending, unknown, rejected, accepted-with-errors or superseded
+invoice version is refused. Production policy remains empty.
+
+The delivery becomes pending and due at the action's clock reading, its held acknowledgement is
+deleted, and a resolution event records the signed-in administrator and complete decision in one
+transaction. The event names no new remedy record. Changed decisions or another administrator
+cannot reuse the action key. A retry returns the saved release even after submission; it still
+checks the current administrator, server policy, writable host, node and environment. An earlier
+different resolution rolls the delivery and acknowledgement changes back.
+
+`record-remedy-held.test.ts` sends a correction through the real client to the fake tax service,
+releases the held cancellation, and then submits that same cancellation. Its fiscal rows, chain
+head and sales stay unchanged by the release. This synthetic exercise does not qualify the actual
+staff cancellation/refund path, other issuing chains, manual brake release or a production legal
+remedy. Those remain before whole-item review and publication.
 
 **2 November 2026, Task 8 synthetic absent-original cancellation.** An administrator explicitly
 selects the operation for a current rejected alta with matching case evidence. Unknown outcomes,

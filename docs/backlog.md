@@ -410,8 +410,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   under management-session authorisation, appends its own numbered R5 and saves the case decision.
   Its retries preserve the saved invoice without a second payment or refund. The synthetic corrective
   HTTP adapter now validates signed line facts, rejects client-supplied host identity and uses the
-  existing accounting writer with a server-owned operator origin. Resolution of existing held
-  cancellations, brake release and staff accounting/refund qualification remain unfinished.
+  existing accounting writer with a server-owned operator origin. A separate synthetic release
+  now submits the existing held ordinary cancellation after the explicitly selected current
+  invoice version is accepted. It records the case decision and clears the held acknowledgement
+  without another fiscal record. Manual brake release and actual staff cancellation/refund
+  qualification remain unfinished; the release currently requires the same issuing chain.
   The 2 November AEAT TEST run accepted an original and two successive S/N description corrections as `Correcto`; consultation matched
   the second correction's fingerprint. This one-identity probe does not enable production remedies.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).

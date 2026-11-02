@@ -20,6 +20,7 @@ export const REMEDY_KINDS = [
   "corrective-invoice",
   "absent-original-cancellation",
   "release-brake",
+  "release-held-cancellation",
 ] as const;
 export type RemedyKind = (typeof REMEDY_KINDS)[number];
 
