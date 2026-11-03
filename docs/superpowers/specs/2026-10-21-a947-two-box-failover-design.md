@@ -50,6 +50,14 @@
 >   7's declaration and activation. A764's collection owner, which §6.3 left to the switch slice, is
 >   Slice 4b. 3b, 3c, 4c, 4d and 5e are unchanged.
 
+> **A947 slice 3b, 4 November 2026:** the build plan (revision 1, not yet reviewed) cuts 3b into six
+> pull requests and departs from this text in three places: each box's own name is
+> `box-<id>.waitron.local`, not `equipo-<id>` (§4 item 5, under CLAUDE.md's English-only rule); the
+> server carries the TLS between the boxes, and versitygw and Litestream speak only on loopback (§3);
+> and 3b includes one fiscal pull request, because today's code refuses to add a spare to a venue
+> that files with Veri*Factu (§11 says "Not fiscal"; owner question Q1)
+> ([slice 3b plan](../plans/2026-11-04-a947-3b-spare-hosts-store.md), "Decisions made in this plan").
+
 # A947 — Go-live on two local boxes: a spare box that takes over
 
 **Date:** 2026-10-21, revised twice the same day for the owner's answers, amended 2026-10-22.
