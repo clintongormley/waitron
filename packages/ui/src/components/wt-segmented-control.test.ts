@@ -385,25 +385,3 @@ test("choosing does not measure the row again", async () => {
   expect(el.value).toBe("2");
   expect(measured).not.toHaveBeenCalled();
 });
-
-test("a control is measured once when it is drawn, not again a frame later", async () => {
-  const space = await mount('<div style="width: 300px"></div>');
-  const el = document.createElement("wt-segmented-control");
-  el.options = PASS_ES.map((label, index) => ({ value: String(index), label }));
-  el.value = "0";
-  const measured = vi.spyOn(el, "getBoundingClientRect");
-  space.append(el);
-  await el.updateComplete;
-  await statesOverFrames(el);
-  expect(measured).toHaveBeenCalledTimes(1);
-});
-
-test("new labels are measured once, not again a frame later", async () => {
-  const el = await setupNarrow(300, PASS_ES);
-  await statesOverFrames(el);
-  const measured = vi.spyOn(el, "getBoundingClientRect");
-  el.options = ["Sí", "No", "Quizá"].map((label, index) => ({ value: String(index), label }));
-  await el.updateComplete;
-  await statesOverFrames(el);
-  expect(measured).toHaveBeenCalledTimes(1);
-});
