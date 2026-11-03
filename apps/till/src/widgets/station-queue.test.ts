@@ -5314,6 +5314,17 @@ describe("A773 held column", () => {
     expect(shadow(el).querySelector("[data-held-part]")).toBeNull();
   });
 
+  it("draws the held part in the small, muted words", async () => {
+    const { el } = await mountBoard(scene());
+    el.style.setProperty("--wt-font-size-sm", "13px");
+    el.style.setProperty("--wt-color-text-muted", "rgb(21, 22, 23)");
+    const style = getComputedStyle(heldPart(el)!);
+    expect(parseFloat(style.fontSize)).toBe(
+      parseFloat(getComputedStyle(el).getPropertyValue("--wt-font-size-sm")),
+    );
+    expect(style.color).toBe("rgb(21, 22, 23)");
+  });
+
   it("at a 1024 px tablet the default columns stay columns, held card or not; Waiting and Held apart turn it to tabs, held card or not", async () => {
     const el = await atTablet(scene());
     expect(shadow(el).querySelector(".kanban")).not.toBeNull();

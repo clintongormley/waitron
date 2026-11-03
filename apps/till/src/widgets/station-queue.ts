@@ -35,6 +35,7 @@ import {
   dishAllergens,
   dishModifiers,
   dishNote,
+  heldPart,
   kitchenBoardStyles,
   lateWords,
   measureBoard,
@@ -169,14 +170,6 @@ export class TillStationQueue extends LitElement {
 
       .width-probe {
         height: 0;
-      }
-
-      .held-part {
-        margin: var(--wt-space-3) 0 var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-medium);
-        color: var(--wt-color-text-muted);
-        text-transform: uppercase;
       }
 
       .column-tabs {
@@ -1244,15 +1237,7 @@ export class TillStationQueue extends LitElement {
     if (drawn.heldPart === undefined) return html`${inColumn.map((card) => this.#card(card))}`;
     const held = inColumn.filter((card) => card.since === null);
     return html`${inColumn.filter((card) => card.since !== null).map((card) => this.#card(card))}
-    ${
-      held.length === 0
-        ? nothing
-        : html`<h3 class="held-part" data-held-part>
-            ${t("pass.column.held")}<span aria-hidden="true"> ·</span>
-            <span data-held-count>${held.length}</span>
-          </h3>`
-    }
-    ${held.map((card) => this.#card(card))}`;
+    ${held.length === 0 ? nothing : heldPart(held.length)} ${held.map((card) => this.#card(card))}`;
   }
 
   /** A card with no fired dish is held: dashed, untimed and saying so, whatever its group (D3). */
