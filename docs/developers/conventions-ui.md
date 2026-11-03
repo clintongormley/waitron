@@ -227,7 +227,7 @@ checks that a guide says what its screen does, nor that a twin says what the Eng
 nor that either was updated with the screen.
 
 A page with no Spanish twin is shown in English to a Spanish reader, under one line saying so
-(`missingTwin` in `guide-pages.ts`; the "serves the English page with one line saying so" case in
+(`missingTwin` in `GUIDE_FRAME_WORDS` in `apps/server/src/i18n/guide-pages.ts`; the "serves the English page with one line saying so" case in
 `guide-pages.test.ts`). While every page in `GUIDE_PAGES` has a Spanish twin, a box never shows that line. A page
 in the list with no English file is a broken build: the route answers its 500 page and logs
 `guide.page_missing`. A read that fails for any reason other than a missing file gets the same 500
@@ -277,7 +277,7 @@ else. The "sends no-cache and a policy that allows only the page's own script" c
 `guide-pages.test.ts` hashes the page's script and compares the whole header.
 
 The page's own words (the "Waitron guide" trail, each guide's short name, the missing-twin line, the
-404 and 500 pages) are in `GUIDE_TEXT` in `guide-pages.ts`.
+404 and 500 pages) are in `GUIDE_FRAME_WORDS` in `apps/server/src/i18n/guide-pages.ts`.
 
 ### Which boots serve it
 

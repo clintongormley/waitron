@@ -1,22 +1,12 @@
-import { STAFF_GUIDE_TITLE } from "./i18n/staff.js";
-import { PURCHASES_GUIDE_TITLE } from "./i18n/guide-purchases.js";
-import { TIME_ZONE_GUIDE } from "./i18n/time-zone-guide.js";
 import { createHash } from "node:crypto";
 import type { Context, Hono } from "hono";
 import { GUIDE_LANGUAGES, GUIDE_PAGES, guideRoot, readGuide } from "./guide-catalogue.js";
 import { renderGuide } from "./guide-markdown.js";
+import { GUIDE_FRAME_WORDS } from "./i18n/guide-pages.js";
 import type { Logger } from "./logger.js";
 import { escapeHtml } from "./recovery-surface.js";
-import { KITCHEN_ALLERGY_WORDS } from "./i18n/kitchen-allergy.js";
-import { GUIDE_CERTIFICATE_TITLE } from "./i18n/guide-certificate.js";
-import { TABLE_SERVICE_GUIDE_TITLE } from "./i18n/table-service-guide.js";
-import { TILL_NOTICES_GUIDE_TITLE } from "./i18n/till-notices-guide.js";
-import { BACKUP_RECOVERY_GUIDE_TITLE } from "./i18n/backup-recovery-guide.js";
-import { BOX_STATUS_GUIDE_TITLE } from "./i18n/box-status-guide.js";
-import { DATA_PROTECTION_GUIDE_TITLE } from "./i18n/data-protection-guide.js";
 
 type GuideLanguage = (typeof GUIDE_LANGUAGES)[number];
-type GuidePage = (typeof GUIDE_PAGES)[number];
 
 export interface GuidePagesDeps {
   /** The folder holding `<language>/<page>.md`; defaults to `guideRoot()`. Injected by tests. */
@@ -56,66 +46,6 @@ export const GUIDE_THEME_KEY = "waitron-theme";
 const THEME_SCRIPT = `try{var t=localStorage.getItem(${JSON.stringify(GUIDE_THEME_KEY)});if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
 
 const CSP = `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${createHash("sha256").update(THEME_SCRIPT).digest("base64")}'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`;
-
-interface GuideWords {
-  trail: string;
-  names: Record<GuidePage, string>;
-  notFoundTitle: string;
-  notFound: string;
-  brokenTitle: string;
-  broken: string;
-}
-
-/** English is required, so only a translation carries the line saying its page fell back to English. */
-const GUIDE_TEXT: { en: GuideWords; es: GuideWords & { missingTwin: string } } = {
-  en: {
-    trail: "Waitron guide",
-    names: {
-      products: "Products",
-      modifiers: "Modifiers",
-      "content-and-images": "Languages and photos",
-      "kitchen-service": KITCHEN_ALLERGY_WORDS.en.guideTitle,
-      appearance: "Appearance",
-      "aeat-certificate": GUIDE_CERTIFICATE_TITLE.en,
-      "table-service": TABLE_SERVICE_GUIDE_TITLE.en,
-      staff: STAFF_GUIDE_TITLE.en,
-      "data-protection": DATA_PROTECTION_GUIDE_TITLE.en,
-      purchases: PURCHASES_GUIDE_TITLE.en,
-      "till-notices": TILL_NOTICES_GUIDE_TITLE.en,
-      "box-status": BOX_STATUS_GUIDE_TITLE.en,
-      "backup-recovery": BACKUP_RECOVERY_GUIDE_TITLE.en,
-      "time-zone": TIME_ZONE_GUIDE.en.name,
-    },
-    notFoundTitle: "Page not found",
-    notFound: "There is no guide page at this address.",
-    brokenTitle: "Page unavailable",
-    broken: "This guide page could not be shown.",
-  },
-  es: {
-    trail: "Guía de Waitron",
-    names: {
-      products: "Productos",
-      modifiers: "Modificadores",
-      "content-and-images": "Idiomas y fotos",
-      "kitchen-service": KITCHEN_ALLERGY_WORDS.es.guideTitle,
-      appearance: "Apariencia",
-      "aeat-certificate": GUIDE_CERTIFICATE_TITLE.es,
-      "table-service": TABLE_SERVICE_GUIDE_TITLE.es,
-      staff: STAFF_GUIDE_TITLE.es,
-      "data-protection": DATA_PROTECTION_GUIDE_TITLE.es,
-      purchases: PURCHASES_GUIDE_TITLE.es,
-      "till-notices": TILL_NOTICES_GUIDE_TITLE.es,
-      "box-status": BOX_STATUS_GUIDE_TITLE.es,
-      "backup-recovery": BACKUP_RECOVERY_GUIDE_TITLE.es,
-      "time-zone": TIME_ZONE_GUIDE.es.name,
-    },
-    missingTwin: "Esta página aún no está en español. Se muestra en inglés.",
-    notFoundTitle: "Página no encontrada",
-    notFound: "No hay ninguna página de la guía en esta dirección.",
-    brokenTitle: "Página no disponible",
-    broken: "No se ha podido mostrar esta página de la guía.",
-  },
-};
 
 function tokenDeclarations(): string {
   return Object.entries(GUIDE_PAGE_TOKENS)
@@ -197,7 +127,7 @@ function answer(c: Context, html: string, status: 200 | 404 | 500): Response {
 }
 
 function notFound(c: Context, lang: GuideLanguage): Response {
-  const text = GUIDE_TEXT[lang];
+  const text = GUIDE_FRAME_WORDS[lang];
   const links = GUIDE_PAGES.map(
     (name) => `<li><a href="/help/${lang}/${name}">${escapeHtml(text.names[name])}</a></li>`,
   ).join("");
@@ -209,7 +139,7 @@ function notFound(c: Context, lang: GuideLanguage): Response {
 }
 
 function broken(c: Context, lang: GuideLanguage): Response {
-  const text = GUIDE_TEXT[lang];
+  const text = GUIDE_FRAME_WORDS[lang];
   const body = `<p class="trail">${escapeHtml(text.trail)}</p>
 <h1>${escapeHtml(text.brokenTitle)}</h1>
 <p>${escapeHtml(text.broken)}</p>`;
@@ -236,7 +166,7 @@ export function mountGuidePages(app: Hono, deps: GuidePagesDeps, log: Logger): v
       markdown = readGuide(root, lang, name);
       if (markdown === undefined && lang !== "en") {
         shownLang = "en";
-        notice = `<p class="notice" lang="${lang}">${escapeHtml(GUIDE_TEXT[lang].missingTwin)}</p>\n`;
+        notice = `<p class="notice" lang="${lang}">${escapeHtml(GUIDE_FRAME_WORDS[lang].missingTwin)}</p>\n`;
         markdown = readGuide(root, "en", name);
       }
     } catch (error) {
@@ -257,7 +187,7 @@ export function mountGuidePages(app: Hono, deps: GuidePagesDeps, log: Logger): v
       return broken(c, lang);
     }
 
-    const shownText = GUIDE_TEXT[shownLang];
+    const shownText = GUIDE_FRAME_WORDS[shownLang];
     const body = `<p class="trail">${escapeHtml(shownText.trail)} › ${escapeHtml(shownText.names[name])}</p>
 ${notice}${rendered.html}`;
     return answer(c, page(shownLang, rendered.title, body), 200);
