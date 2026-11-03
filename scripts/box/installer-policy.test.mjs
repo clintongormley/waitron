@@ -361,6 +361,14 @@ describe("the path chosen from the disk survey", () => {
     ).toEqual([refused("no-tpm", "no-tpm")]);
   });
 
+  it('a complete Waitron disk whose attachment is "unknown" → waitron-found with attachmentUnclear true', () => {
+    const [decision] = play([observed(survey([completeWaitronDisk({ attachment: "unknown" })]))]);
+    expect(decision.state.phase).toBe("waitron-found");
+    expect(decision.state.target).toEqual(
+      target({ kind: "waitron", layoutVersion: 1, attachmentUnclear: true }),
+    );
+  });
+
   it('two internal disks and tpm "absent" → refuse disk-multiple with hardware "no-tpm"', () => {
     expect(
       play([
@@ -398,9 +406,9 @@ describe("the path chosen from the disk survey", () => {
 describe("the venue name tag", () => {
   it("normalises a decomposed name with NFC", () => {
     const [decision] = play([
-      observed(survey([completeWaitronDisk()]), { name: "Bar Àngels", live: true }),
+      observed(survey([completeWaitronDisk()]), { name: "Bar A\u0300ngels", live: true }),
     ]);
-    expect(decision).toEqual(waitronFound({ venueTag: { name: "Bar Àngels", live: true } }));
+    expect(decision).toEqual(waitronFound({ venueTag: { name: "Bar \u00C0ngels", live: true } }));
   });
 
   it.each([
@@ -452,6 +460,8 @@ describe("events", () => {
     ["clock-set ok without a time", { kind: "clock-set", atMs: AT, ok: true, utcMs: null }],
     ["clock-set failed with a time", { kind: "clock-set", atMs: AT, ok: false, utcMs: 5 }],
     ["clock-set ok not a boolean", { kind: "clock-set", atMs: AT, ok: 1, utcMs: 5 }],
+    ["clock-set ok with a negative time", { kind: "clock-set", atMs: AT, ok: true, utcMs: -1 }],
+    ["clock-set ok with a string time", { kind: "clock-set", atMs: AT, ok: true, utcMs: "5" }],
     [
       "a verified release with a version",
       { kind: "release-checked", atMs: AT, outcome: "verified", releaseVersion: "1.0.0" },
@@ -463,6 +473,24 @@ describe("events", () => {
         atMs: AT,
         outcome: "installer-too-old",
         releaseVersion: "1.0.0\n",
+      },
+    ],
+    [
+      "a too-old installer with U+0085 in its version",
+      {
+        kind: "release-checked",
+        atMs: AT,
+        outcome: "installer-too-old",
+        releaseVersion: "1.0.0\u0085",
+      },
+    ],
+    [
+      "a too-old installer with an accented letter in its version",
+      {
+        kind: "release-checked",
+        atMs: AT,
+        outcome: "installer-too-old",
+        releaseVersion: "1.0.0\u00E9",
       },
     ],
     [
@@ -561,8 +589,11 @@ describe("events a phase does not name", () => {
       ["wait", true, true],
       ["wait", true, false],
     ]);
-    const [inserted] = play([{ kind: "usb-inserted", atMs: AT }]);
-    expect(inserted.state.usbPresent).toBe(true);
+    const [removed, inserted] = play([
+      { kind: "usb-removed", atMs: AT },
+      { kind: "usb-inserted", atMs: AT },
+    ]);
+    expect([removed.state.usbPresent, inserted.state.usbPresent]).toEqual([false, true]);
   });
 });
 
@@ -642,5 +673,367 @@ describe("copies", () => {
     expect(Object.isFrozen(decision.state)).toBe(true);
     expect(Object.isFrozen(decision.state.target)).toBe(true);
     expect(Object.isFrozen(decision.state.target.venueTag)).toBe(true);
+  });
+});
+
+const SANTET = Object.freeze({ name: "Bar Santet", live: true });
+const key = (atMs) => ({ kind: "key", atMs });
+const tick = (atMs) => ({ kind: "tick", atMs });
+const submit = (text, atMs) => ({ kind: "submit", atMs, text });
+const waitronSeen = (venueTag = SANTET, overrides = {}) =>
+  observed(survey([completeWaitronDisk()], overrides), venueTag);
+const actions = (decisions) => decisions.map((d) => [d.action, d.diskId]);
+const STARTING_INSTALLED = { key: "installer.starting_installed", params: {} };
+const LOADING = { key: "installer.loading", params: {} };
+const reinstallMessage = ({ venueTag = SANTET, mismatch = false } = {}) => ({
+  key: "installer.reinstall",
+  params: {
+    prompt: venueTag === null ? "erase-word" : "venue-name",
+    venueName: venueTag?.name ?? null,
+    live: venueTag?.live ?? null,
+    mismatch,
+  },
+});
+const NEVER = ["write-owned-target", "download", "set-clock", "find-network"];
+/** @param {any[]} decisions */
+const noWriteNorNetwork = (decisions) =>
+  expect(decisions.filter((d) => NEVER.includes(d.action))).toEqual([]);
+/** @param {any[]} decisions */
+const last = (decisions) => decisions[decisions.length - 1];
+
+describe("guard 3: a box that already holds Waitron", () => {
+  it("Waitron disk observed at 1000, ticks at 15999 and 16000 → wait, then boot-installed with the internal disk id at 16000", () => {
+    const decisions = play([waitronSeen(null), tick(15_999), tick(16_000)]);
+    expect(actions(decisions)).toEqual([
+      ["wait", null],
+      ["wait", null],
+      ["boot-installed", INTERNAL_ID],
+    ]);
+    expect(decisions[1].deadlineMs).toBe(16_000);
+    expect(decisions[2]).toEqual({
+      action: "boot-installed",
+      diskId: INTERNAL_ID,
+      message: STARTING_INSTALLED,
+      deadlineMs: null,
+      state: {
+        ...waitronFound().state,
+        phase: "booting",
+        atMs: 16_000,
+        deadlineMs: null,
+        message: STARTING_INSTALLED,
+      },
+    });
+    noWriteNorNetwork(decisions);
+  });
+
+  it('the same with venueTag {name: "Bar Santet", live: true} → the first message is installer.waitron_found with the name', () => {
+    const decisions = play([waitronSeen(), tick(15_999), tick(16_000)]);
+    expect(decisions[0].message).toEqual({
+      key: "installer.waitron_found",
+      params: { seconds: 15, venueName: "Bar Santet", live: true, hardware: null },
+    });
+    expect(actions(decisions)).toEqual([
+      ["wait", null],
+      ["wait", null],
+      ["boot-installed", INTERNAL_ID],
+    ]);
+  });
+
+  it("Waitron disk observed at 1000, a key at 16500 with no tick before it → confirm-erase, reinstall-screen, deadline 136500", () => {
+    const decisions = play([waitronSeen(), key(16_500)]);
+    expect(decisions[1]).toMatchObject({
+      action: "confirm-erase",
+      diskId: null,
+      deadlineMs: 136_500,
+      message: reinstallMessage(),
+      state: { phase: "reinstall-screen", deadlineMs: 136_500 },
+    });
+    expect(decisions.map((d) => d.action)).not.toContain("boot-installed");
+  });
+
+  it("a submit during the 15 seconds only opens the reinstall screen; its text confirms nothing", () => {
+    const decisions = play([waitronSeen(), submit("Bar Santet", 2_000)]);
+    expect(decisions[1]).toMatchObject({
+      action: "confirm-erase",
+      message: reinstallMessage(),
+      state: { phase: "reinstall-screen", confirmed: null, deadlineMs: 122_000 },
+    });
+  });
+
+  it("a 513-unit submit during the 15 seconds → confirm-erase, reinstall-screen, like any submit", () => {
+    const decisions = play([waitronSeen(), submit("x".repeat(513), 2_000)]);
+    expect(decisions[1]).toMatchObject({
+      action: "confirm-erase",
+      message: reinstallMessage(),
+      state: { phase: "reinstall-screen", deadlineMs: 122_000 },
+    });
+  });
+
+  it("ignores a choice in the 15 seconds", () => {
+    const decisions = play([waitronSeen(), { kind: "choice", atMs: 2_000, choice: "install-now" }]);
+    expect(decisions[1]).toMatchObject({ action: "wait", state: { phase: "waitron-found" } });
+  });
+});
+
+describe("the reinstall screen", () => {
+  it("a key at 5000 → confirm-erase, prompt venue-name, deadline 125000; a key at 60000 → deadline 180000; a tick at 179999 → wait; at 180000 → boot-installed", () => {
+    const decisions = play([waitronSeen(), key(5_000), key(60_000), tick(179_999), tick(180_000)]);
+    expect(decisions.map((d) => [d.action, d.diskId, d.deadlineMs])).toEqual([
+      ["wait", null, 16_000],
+      ["confirm-erase", null, 125_000],
+      ["wait", null, 180_000],
+      ["wait", null, 180_000],
+      ["boot-installed", INTERNAL_ID, null],
+    ]);
+    expect(decisions[1].message).toEqual(reinstallMessage());
+    expect(decisions[2].message).toEqual(reinstallMessage());
+    expect(last(decisions)).toMatchObject({
+      message: STARTING_INSTALLED,
+      state: { phase: "booting" },
+    });
+    noWriteNorNetwork(decisions);
+  });
+
+  it("a key after the idle deadline but before the tick counts as typing", () => {
+    const decisions = play([waitronSeen(), key(5_000), key(126_000), tick(126_001)]);
+    expect(decisions.map((d) => [d.action, d.deadlineMs])).toEqual([
+      ["wait", 16_000],
+      ["confirm-erase", 125_000],
+      ["wait", 246_000],
+      ["wait", 246_000],
+    ]);
+  });
+
+  it('a scanner\'s line "8412345678905" submitted on the screen → mismatch true, no erase path', () => {
+    const decisions = play([
+      waitronSeen(),
+      key(5_000),
+      submit("8412345678905", 6_000),
+      tick(126_000),
+    ]);
+    expect(decisions[2]).toMatchObject({
+      action: "confirm-erase",
+      deadlineMs: 126_000,
+      message: reinstallMessage({ mismatch: true }),
+      state: { phase: "reinstall-screen", confirmed: null },
+    });
+    expect(actions(decisions.slice(3))).toEqual([["boot-installed", INTERNAL_ID]]);
+    noWriteNorNetwork(decisions);
+  });
+
+  it("the exact name typed → confirmed typed, loading", () => {
+    const decisions = play([waitronSeen(), key(5_000), submit("Bar Santet", 6_000)]);
+    expect(decisions[2]).toEqual({
+      action: "wait",
+      diskId: null,
+      message: LOADING,
+      deadlineMs: null,
+      state: {
+        ...waitronFound({ venueTag: SANTET }).state,
+        phase: "loading",
+        atMs: 6_000,
+        confirmed: "typed",
+        deadlineMs: null,
+        message: LOADING,
+      },
+    });
+  });
+
+  it.each([
+    ['"bar santet" (case)', "bar santet"],
+    ['"Bar Santet " (trailing space)', "Bar Santet "],
+    ['"ERASE-CONFIRM" with a readable name (D7)', "ERASE-CONFIRM"],
+  ])("%s → mismatch", (_name, text) => {
+    const decisions = play([waitronSeen(), key(5_000), submit(text, 6_000)]);
+    expect(decisions[2]).toMatchObject({
+      action: "confirm-erase",
+      message: reinstallMessage({ mismatch: true }),
+      state: { phase: "reinstall-screen", confirmed: null },
+    });
+  });
+
+  it("the name typed with a decomposed accent when the tag holds the composed one → matches", () => {
+    const decisions = play([
+      waitronSeen({ name: "Bar Àngels", live: false }),
+      key(5_000),
+      submit("Bar Àngels", 6_000),
+    ]);
+    expect(decisions[2].state).toMatchObject({ phase: "loading", confirmed: "typed" });
+  });
+
+  it('with an unreadable tag (venueTag null) the prompt is erase-word, and "ERASE-CONFIRM" confirms; "erase-confirm" → mismatch', () => {
+    const decisions = play([
+      waitronSeen(null),
+      key(5_000),
+      submit("erase-confirm", 6_000),
+      submit("ERASE-CONFIRM", 7_000),
+    ]);
+    expect(decisions[1].message).toEqual(reinstallMessage({ venueTag: null }));
+    expect(decisions[2].message).toEqual(reinstallMessage({ venueTag: null, mismatch: true }));
+    expect(decisions[3].state).toMatchObject({ phase: "loading", confirmed: "typed" });
+  });
+
+  it('forgery: a tag whose name is "ERASE-CONFIRM" → prompt venue-name, and "ERASE-CONFIRM" confirms', () => {
+    const forged = { name: "ERASE-CONFIRM", live: true };
+    const decisions = play([waitronSeen(forged), key(5_000), submit("ERASE-CONFIRM", 6_000)]);
+    expect(decisions[1].message).toEqual(reinstallMessage({ venueTag: forged }));
+    expect(decisions[2].state).toMatchObject({ phase: "loading", confirmed: "typed" });
+  });
+
+  it.each([
+    ["live true", { name: "Bar Santet", live: true }],
+    ["live false", { name: "ERASE-CONFIRM", live: false }],
+    ["an unreadable tag", null],
+  ])(
+    "forgery: whatever the tag says (%s), with no key the run ends in boot-installed at 15 s",
+    (_name, venueTag) => {
+      const decisions = play([waitronSeen(venueTag), tick(16_000)]);
+      expect(actions(decisions)).toEqual([
+        ["wait", null],
+        ["boot-installed", INTERNAL_ID],
+      ]);
+    },
+  );
+
+  it("a long accented name: waitron_found carries the whole name, no key boots, typed exactly it confirms", () => {
+    const name = "À".repeat(30) + " " + "é".repeat(29);
+    const venueTag = { name, live: true };
+    const alone = play([waitronSeen(venueTag), tick(16_000)]);
+    expect(alone[0].message.params.venueName).toBe(name);
+    expect(actions(alone)).toEqual([
+      ["wait", null],
+      ["boot-installed", INTERNAL_ID],
+    ]);
+    const typed = play([waitronSeen(venueTag), key(5_000), submit(name, 6_000)]);
+    expect(typed[2].state).toMatchObject({ phase: "loading", confirmed: "typed" });
+  });
+
+  it("a long name typed decomposed (D8): 256 code points typed in 768 units → matches", () => {
+    const typedText = "ệ".repeat(256);
+    expect(typedText.length).toBe(768);
+    const decisions = play([
+      waitronSeen({ name: "ệ".repeat(256), live: true }),
+      key(5_000),
+      submit(typedText, 6_000),
+    ]);
+    expect(decisions[2].state).toMatchObject({ phase: "loading", confirmed: "typed" });
+  });
+
+  it("over-long text (M5): a 513-unit submit → mismatch, and the state keeps none of it", () => {
+    const decisions = play([
+      waitronSeen(null),
+      key(5_000),
+      submit("CANARY-".padEnd(513, "x"), 6_000),
+    ]);
+    expect(decisions[2]).toMatchObject({
+      action: "confirm-erase",
+      deadlineMs: 126_000,
+      message: reinstallMessage({ venueTag: null, mismatch: true }),
+    });
+    expect(JSON.stringify(decisions[2].state)).not.toContain("CANARY");
+  });
+
+  it("not kept: a mismatching submit leaves no trace of its text", () => {
+    const decisions = play([waitronSeen(), key(5_000), submit("CANARY-2b9c", 6_000)]);
+    expect(JSON.stringify(decisions[2])).not.toContain("CANARY");
+    expect(JSON.stringify(decisions[2].state)).not.toContain("CANARY");
+  });
+});
+
+describe("hardware off on a box that holds Waitron (D2)", () => {
+  it('tpm "disabled", no key → boot-installed at 15 s, the message carries hardware "no-tpm"', () => {
+    const decisions = play([waitronSeen(SANTET, { tpm: "disabled" }), tick(16_000)]);
+    expect(decisions[0].message.params.hardware).toBe("no-tpm");
+    expect(actions(decisions)).toEqual([
+      ["wait", null],
+      ["boot-installed", INTERNAL_ID],
+    ]);
+    expect(decisions[1].state.target.hardware).toBe("no-tpm");
+  });
+
+  it("the same, name typed on the reinstall screen → refuse no-tpm, and nothing is written after it", () => {
+    const decisions = play([
+      waitronSeen(SANTET, { tpm: "disabled" }),
+      key(5_000),
+      submit("Bar Santet", 6_000),
+      { kind: "online", atMs: 7_000 },
+      { kind: "release-checked", atMs: 8_000, outcome: "verified", releaseVersion: null },
+      tick(200_000),
+      { kind: "write-finished", atMs: 200_001, ok: true },
+    ]);
+    expect(decisions[2]).toMatchObject({
+      action: "refuse",
+      message: {
+        key: "installer.refused",
+        params: { reason: "no-tpm", hardware: "no-tpm", releaseVersion: null },
+      },
+      state: { phase: "refused", confirmed: null },
+    });
+    expect(decisions.slice(3).map((d) => d.action)).toEqual(["wait", "wait", "wait", "wait"]);
+  });
+});
+
+describe("the unknown disk", () => {
+  const damagedSeen = () => observed(survey([waitronWith(luks(damaged(), damaged()))]));
+
+  it('a damaged Waitron disk, "ERASE-CONFIRM" submitted → confirmed typed, loading', () => {
+    const decisions = play([damagedSeen(), submit("ERASE-CONFIRM", 2_000)]);
+    expect(decisions[1]).toEqual({
+      action: "wait",
+      diskId: null,
+      message: LOADING,
+      deadlineMs: null,
+      state: {
+        ...unknownDisk().state,
+        phase: "loading",
+        atMs: 2_000,
+        confirmed: "typed",
+        message: LOADING,
+      },
+    });
+  });
+
+  it.each([
+    ['"ERASE-CONFIRM\\n" (the adapter takes off the Enter)', "ERASE-CONFIRM\n"],
+    ['"erase-confirm"', "erase-confirm"],
+  ])("%s → mismatch", (_name, text) => {
+    const decisions = play([damagedSeen(), submit(text, 2_000)]);
+    const message = {
+      key: "installer.unknown_disk",
+      params: { attachmentUnclear: false, mismatch: true },
+    };
+    expect(decisions[1]).toEqual({
+      action: "confirm-erase",
+      diskId: null,
+      message,
+      deadlineMs: null,
+      state: { ...unknownDisk().state, atMs: 2_000, message },
+    });
+  });
+
+  it("keeps attachmentUnclear in the mismatch message", () => {
+    const decisions = play([
+      observed(survey([blankDisk({ attachment: "unknown" })])),
+      submit("nope", 2_000),
+    ]);
+    expect(decisions[1].message.params).toEqual({ attachmentUnclear: true, mismatch: true });
+  });
+
+  it("a key, then ticks for an hour → still awaiting-erase-word, no action but wait", () => {
+    const ticks = Array.from({ length: 61 }, (_, minute) => tick(2_000 + minute * 60_000));
+    const decisions = play([damagedSeen(), key(1_500), ...ticks]);
+    expect(decisions.slice(1).every((d) => d.action === "wait" && d.deadlineMs === null)).toBe(
+      true,
+    );
+    expect(last(decisions).state.phase).toBe("awaiting-erase-word");
+  });
+
+  it("over-long text (M5): a 513-unit submit → mismatch, and the state keeps none of it", () => {
+    const decisions = play([damagedSeen(), submit("CANARY-".padEnd(513, "x"), 2_000)]);
+    expect(decisions[1]).toMatchObject({
+      action: "confirm-erase",
+      message: { key: "installer.unknown_disk", params: { mismatch: true } },
+    });
+    expect(JSON.stringify(decisions[1].state)).not.toContain("CANARY");
   });
 });

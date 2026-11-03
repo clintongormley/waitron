@@ -45,7 +45,6 @@ const ADAPTER_PHASES = Object.freeze({
   "release-checked": "downloading",
   "write-finished": "writing",
 });
-const PERSON_INPUTS = ["key", "submit", "choice"];
 const BARE_KINDS = ["ram-ready", "usb-removed", "usb-inserted", "key", "online", "tick"];
 const RELEASE_OUTCOMES = [
   "verified",
@@ -56,6 +55,7 @@ const RELEASE_OUTCOMES = [
   "too-large",
   "installer-too-old",
 ];
+const MAX_TYPED_UNITS = 512;
 const PRINTABLE_ASCII = /^[\x20-\x7E]{1,32}$/;
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
@@ -231,6 +231,87 @@ function observe(state, event) {
   });
 }
 
+/** @param {InstallerState} state */
+function bootInstalled(state) {
+  return Object.freeze({
+    ...decide(state, "boot-installed", {
+      phase: "booting",
+      deadlineMs: null,
+      message: message("installer.starting_installed"),
+    }),
+    diskId: /** @type {NonNullable<InstallerState["target"]>} */ (state.target).diskId,
+  });
+}
+
+/** @param {InstallerState} state @param {number} atMs @param {boolean} mismatch */
+function reinstallScreen(state, atMs, mismatch) {
+  const venueTag = /** @type {NonNullable<InstallerState["target"]>} */ (state.target).venueTag;
+  return decide(state, "confirm-erase", {
+    phase: "reinstall-screen",
+    deadlineMs: atMs + INSTALLER_TIMINGS_MS.reinstallIdle,
+    message: message("installer.reinstall", {
+      prompt: venueTag === null ? "erase-word" : "venue-name",
+      venueName: venueTag?.name ?? null,
+      live: venueTag?.live ?? null,
+      mismatch,
+    }),
+  });
+}
+
+/** D7, M5. The text is compared and dropped. @param {InstallerState} state @param {string} text */
+function typedMatches(state, text) {
+  const normalised = text.normalize("NFC");
+  if (normalised.length > MAX_TYPED_UNITS) return false;
+  const venueTag = /** @type {NonNullable<InstallerState["target"]>} */ (state.target).venueTag;
+  return venueTag === null ? text === state.eraseWord : normalised === venueTag.name;
+}
+
+/** @param {InstallerState} state */
+function typedConfirmation(state) {
+  const { hardware } = /** @type {NonNullable<InstallerState["target"]>} */ (state.target);
+  if (hardware !== null) return refuse(state, hardware, hardware);
+  return decide(state, "wait", {
+    phase: "loading",
+    confirmed: "typed",
+    deadlineMs: null,
+    message: message("installer.loading"),
+  });
+}
+
+/** @type {Record<string, (state: InstallerState, event: any) => InstallerDecision|undefined>} */
+const PHASE_RULES = {
+  "waitron-found": (state, event) => {
+    if (event.kind === "key" || event.kind === "submit")
+      return reinstallScreen(state, event.atMs, false);
+    if (event.kind === "tick" && event.atMs >= /** @type {number} */ (state.deadlineMs))
+      return bootInstalled(state);
+    return undefined;
+  },
+  "reinstall-screen": (state, event) => {
+    if (event.kind === "key")
+      return decide(state, "wait", {
+        deadlineMs: event.atMs + INSTALLER_TIMINGS_MS.reinstallIdle,
+      });
+    if (event.kind === "submit")
+      return typedMatches(state, event.text)
+        ? typedConfirmation(state)
+        : reinstallScreen(state, event.atMs, true);
+    if (event.kind === "tick" && event.atMs >= /** @type {number} */ (state.deadlineMs))
+      return bootInstalled(state);
+    return undefined;
+  },
+  "awaiting-erase-word": (state, event) => {
+    if (event.kind !== "submit") return undefined;
+    if (typedMatches(state, event.text)) return typedConfirmation(state);
+    const { attachmentUnclear } = /** @type {NonNullable<InstallerState["target"]>} */ (
+      state.target
+    );
+    return decide(state, "confirm-erase", {
+      message: message("installer.unknown_disk", { attachmentUnclear, mismatch: true }),
+    });
+  },
+};
+
 /** Pure. @param {unknown} state @param {unknown} event @returns {InstallerDecision} */
 export function nextInstallerStep(state, event) {
   if (state === null || typeof state !== "object" || !GENUINE.has(state))
@@ -252,10 +333,10 @@ export function nextInstallerStep(state, event) {
   const adapterPhase = ADAPTER_PHASES[/** @type {keyof typeof ADAPTER_PHASES} */ (e.kind)];
   if (adapterPhase !== undefined && adapterPhase !== timed.phase)
     return refuse(timed, "sequence-invalid", null);
-  if (PERSON_INPUTS.includes(e.kind)) return decide(timed, "wait");
   if (e.kind === "observed") return observe(timed, e);
   if (e.kind === "ram-ready") return decide(timed, "wait", { ramReady: true });
   if (e.kind === "usb-removed") return decide(timed, "wait", { usbPresent: false });
   if (e.kind === "usb-inserted") return decide(timed, "wait", { usbPresent: true });
-  return decide(timed, "wait");
+  const rules = PHASE_RULES[/** @type {keyof typeof PHASE_RULES} */ (timed.phase)];
+  return rules?.(timed, e) ?? decide(timed, "wait");
 }
