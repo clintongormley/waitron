@@ -2533,11 +2533,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **The till's `ScreenSlot` lacks the server's `switchedOff` (left open by A773-2 B3).** Nothing on
   the till needs it yet: the pass reads `available` (`apps/till/src/api/client.ts`).
 
-- **A row of segmented choices can grow wider than its space (left by A773-2 B4b).**
-  `wt-segmented-control` no longer breaks a word inside it; when the choices' longest words cannot
-  all fit side by side, the control widens past its space instead, as its 44 px tap target already
-  did. Decide whether such a control should stack its choices instead.
-  [Design system](developers/design-system.md)
+- **Segmented choices still break words when whole words cannot fit (left by A773-2 B4b).**
+  `wt-segmented-control` keeps words whole while they fit and otherwise breaks inside them to stay
+  in its space: the dashboard's Corners choice at 390 px in Spanish at 130% text and the till's
+  other-stations choice at 320 px in Spanish at 130% still break mid-word. Decide whether such a
+  control should stack its choices instead. [Design system](developers/design-system.md)
 
 - **Look at what A773-2 B4b's look at the running app did not reach.** The table screen's «en el
   pase», department transfers' "Waiting for the pass", the closed-station alert on the dashboard's
