@@ -219,10 +219,11 @@ describe("withPendingSweep", () => {
     await withPendingSweep(
       async () => REPORT,
       async () => [fakeProvider("stripe", resolvePending)],
+      () => OWNERS,
       vi.fn(),
       signal,
     )(now);
-    expect(resolvePending).toHaveBeenCalledWith(now, signal);
+    expect(resolvePending).toHaveBeenCalledWith(now, OWNERS, signal);
   });
 
   it("sweeps EVERY enumerated provider (the simulator + a pooled provider), each once", async () => {
@@ -370,8 +371,8 @@ describe("withPendingSweep", () => {
     role = "primary";
     await pass(now);
     expect(resolvePending.mock.calls).toEqual([
-      [now, sweepOwners(box, "secondary")],
-      [now, sweepOwners(box, "primary")],
+      [now, sweepOwners(box, "secondary"), undefined],
+      [now, sweepOwners(box, "primary"), undefined],
     ]);
   });
 

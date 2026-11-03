@@ -196,6 +196,7 @@ describe("Stripe unknown outcomes", () => {
       });
       const sweep = await provider(client).resolvePending(
         now,
+        await ownsEveryPayment(suite.db),
         signalled ? controller.signal : undefined,
       );
       expect(sweep.forwarded).toBe(settled);
