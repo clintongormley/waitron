@@ -446,7 +446,54 @@ describe("A773 pass screen: Fire", () => {
     });
   }
 
-  it("keeps a Fire's ask through a board read that lands while it is out, so a lost answer resends it unchanged", () =>
+  /** A read that lands while a Fire is out, then the Fire's answer is lost. */
+  async function loseAnswerAfterRead(readContext: string): Promise<PassReleaseAsk[]> {
+    const answer = deferred<PassReleaseResult>();
+    const api = fakeApi({
+      releaseDevicePass: vi
+        .fn()
+        .mockImplementationOnce(() => answer.promise)
+        .mockResolvedValue({ releasedTicketItemIds: [] }),
+      getDevicePassBoard: vi
+        .fn()
+        .mockResolvedValue(
+          deviceBoard(
+            toFireBoard(
+              fireCard({ releaseContext: readContext, releaseTicketItemIds: ["r-1", "r-3"] }),
+            ),
+          ),
+        ),
+    });
+    const el = await mountDisplay(api);
+    await pressFire(el);
+    await refresh(el);
+    expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
+    answer.reject(new TypeError("Failed to fetch"));
+    await flush(el);
+    await pressFire(el);
+    expect(api.releaseDevicePass).toHaveBeenCalledTimes(2);
+    return api.releaseDevicePass.mock.calls.map((call) => call[0] as PassReleaseAsk);
+  }
+
+  it("keeps a Fire's ask through a board read that lands while it is out with the same context, so a lost answer resends it unchanged", () =>
+    withFakeTimers(async () => {
+      const [first, second] = await loseAnswerAfterRead("ctx-1");
+      expect(second).toEqual(first);
+    }));
+
+  it("drops a Fire's ask when a board read that landed while it was out offers a different context, so the next press sends the card as last read", () =>
+    withFakeTimers(async () => {
+      const [first, second] = await loseAnswerAfterRead("ctx-2");
+      expect(second).toEqual({
+        submissionId: expect.stringMatching(UUID),
+        target: { kind: "group", partyId: "p-1", groupId: "g-1" },
+        ticketItemIds: ["r-1", "r-3"],
+        expectedContext: "ctx-2",
+      });
+      expect(second!.submissionId).not.toBe(first!.submissionId);
+    }));
+
+  it("drops a Fire's ask when a board read that landed while it was out no longer offers the card, so a later Fire event sends nothing", () =>
     withFakeTimers(async () => {
       const answer = deferred<PassReleaseResult>();
       const api = fakeApi({
@@ -454,21 +501,22 @@ describe("A773 pass screen: Fire", () => {
           .fn()
           .mockImplementationOnce(() => answer.promise)
           .mockResolvedValue({ releasedTicketItemIds: [] }),
-        getDevicePassBoard: vi
-          .fn()
-          .mockResolvedValue(deviceBoard(toFireBoard(fireCard({ releaseContext: "ctx-2" })))),
+        getDevicePassBoard: vi.fn().mockResolvedValue(deviceBoard(passBoard())),
       });
       const el = await mountDisplay(api);
       await pressFire(el);
       await refresh(el);
-      expect(api.getDevicePassBoard).toHaveBeenCalledOnce();
       answer.reject(new TypeError("Failed to fetch"));
       await flush(el);
-      await pressFire(el);
-      const [first, second] = api.releaseDevicePass.mock.calls.map(
-        (call) => call[0] as PassReleaseAsk,
+      boardOf(el)!.dispatchEvent(
+        new CustomEvent("pass-fire", {
+          detail: { key: "group:g-1" },
+          bubbles: true,
+          composed: true,
+        }),
       );
-      expect(second).toEqual(first);
+      await flush(el);
+      expect(api.releaseDevicePass).toHaveBeenCalledOnce();
     }));
 
   it("on a till whose screen changed while a Fire was out, the answer shows no refusal and reads no board", () =>

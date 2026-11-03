@@ -328,11 +328,13 @@ export class TillPassScreen extends LitElement {
     this.board = read.board;
     this.lostLines = lostLines(read);
     this.nothingLeft = nothingLeft(read);
-    for (const [key, ask] of this.#asks) {
-      if (this.sending.has(key)) continue;
-      const card = read.board.toFire.find((offered) => offered.key === key);
-      if (card?.releaseContext !== ask.expectedContext) this.#asks.delete(key);
-    }
+    for (const key of this.#asks.keys()) if (!this.sending.has(key)) this.#dropAskIfChanged(key);
+  }
+
+  /** A kept ask survives only while the board still offers its card under the same context. */
+  #dropAskIfChanged(key: string): void {
+    const card = this.board.toFire.find((offered) => offered.key === key);
+    if (card?.releaseContext !== this.#asks.get(key)?.expectedContext) this.#asks.delete(key);
   }
 
   async #fire(boardId: BoardId, key: string): Promise<void> {
@@ -362,6 +364,7 @@ export class TillPassScreen extends LitElement {
       const { code, status } = (error ?? {}) as { code?: string; status?: unknown };
       if (typeof status !== "number") {
         reload = false;
+        this.#dropAskIfChanged(key);
         if (this.#isCurrent(boardId)) this.stale = true;
       } else {
         this.#asks.delete(key);
@@ -370,11 +373,7 @@ export class TillPassScreen extends LitElement {
           rechoose = code === "device.unauthorized" && this.#followsChoice();
           if (code === "ticket.pass_context_changed" || code === "party.not_open" || rechoose)
             this.#tableChangedNext = {};
-          else
-            this.leverError = {
-              code: code ?? "server.internal",
-              card: card === undefined ? "" : cardLabel(card),
-            };
+          else this.#leverRefused(card, error);
         }
       }
     } finally {
