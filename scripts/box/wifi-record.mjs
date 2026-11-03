@@ -159,6 +159,85 @@ export function formatWifiRecord(network) {
 }
 
 /**
+ * @typedef {{kind:'cable-only'}
+ *   | {kind:'wifi', ssidHex:string, keyMgmt:string|null, psk:string|null, hidden:boolean}} WifiSettings
+ *   the box's normal network settings as the network adapter reads them from NetworkManager:
+ *   keyMgmt is 802-11-wireless-security.key-mgmt, null when the connection has no security
+ *   setting; psk is null when NetworkManager holds no password the host can read
+ * @typedef {'cable-only'|'open'|'open-or-wep'|'dynamic-wep'|'owe'|'enterprise'
+ *   |'unsupported-security'|'password-unavailable'|'password-not-printable'|'password-too-long'
+ *   |'password-invalid'} WifiNoCopyReason
+ * @typedef {{kind:'write', bytes:Uint8Array} | {kind:'remove', reason:WifiNoCopyReason}} WifiCopyDecision
+ *   frozen; remove: no copy should exist, so any copy present is obsolete
+ */
+
+const SETTINGS_CODE = "wifi_record.settings_invalid";
+const WIFI_SETTINGS_KEYS = ["kind", "ssidHex", "keyMgmt", "psk", "hidden"];
+/** @type {Map<string, WifiNoCopyReason>} NetworkManager's key-mgmt values that have no copy */
+const SECURITY_REASONS = new Map([
+  ["none", "open-or-wep"],
+  ["ieee8021x", "dynamic-wep"],
+  ["owe", "owe"],
+  ["wpa-eap", "enterprise"],
+  ["wpa-eap-suite-b-192", "enterprise"],
+]);
+
+/** @param {WifiNoCopyReason} reason @returns {WifiCopyDecision} */
+function noCopy(reason) {
+  return Object.freeze({ kind: "remove", reason });
+}
+
+/** A WPA3 password the reader would accept but for its size. @param {string} psk */
+function saeTooLong(psk) {
+  return (
+    psk.isWellFormed() && !hasControl(psk) && new TextEncoder().encode(psk).length > SAE_MAX_BYTES
+  );
+}
+
+/**
+ * Pure (spec §7.5). Throws code "wifi_record.settings_invalid", reason "settings-invalid", for
+ * settings of the wrong shape.
+ * @param {WifiSettings} settings @returns {WifiCopyDecision}
+ */
+export function decideWifiBootCopy(settings) {
+  if (exactRecord(settings, ["kind"]) && /** @type {any} */ (settings).kind === "cable-only") {
+    return noCopy("cable-only");
+  }
+  const { kind, ssidHex, keyMgmt, psk, hidden } = /** @type {any} */ (settings ?? {});
+  if (
+    !exactRecord(settings, WIFI_SETTINGS_KEYS) ||
+    kind !== "wifi" ||
+    typeof ssidHex !== "string" ||
+    !SSID_HEX.test(ssidHex) ||
+    (keyMgmt !== null && typeof keyMgmt !== "string") ||
+    (psk !== null && typeof psk !== "string") ||
+    typeof hidden !== "boolean"
+  ) {
+    throw Object.assign(new Error(SETTINGS_CODE), {
+      code: SETTINGS_CODE,
+      reason: "settings-invalid",
+    });
+  }
+
+  if (keyMgmt === null) return noCopy("open");
+  if (!KEY_MANAGEMENT.includes(keyMgmt)) {
+    return noCopy(SECURITY_REASONS.get(keyMgmt) ?? "unsupported-security");
+  }
+  if (psk === null) return noCopy("password-unavailable");
+  // The reader answers record-corrupt for a too-long WPA3 password and for a damaged one alike.
+  if (keyMgmt === "sae" && saeTooLong(psk)) return noCopy("password-too-long");
+  let bytes;
+  try {
+    bytes = formatWifiRecord({ ssidHex, keyMgmt, psk, hidden });
+  } catch (error) {
+    // The shape is already checked, so the reader's refusal can only be about the password.
+    const reason = /** @type {any} */ (error).reason;
+    return noCopy(reason === "record-unsupported" ? "password-not-printable" : "password-invalid");
+  }
+  return /** @type {WifiCopyDecision} */ (Object.freeze({ kind: "write", bytes }));
+}
+
+/**
  * @typedef {{ bootRoot: string, rootId: string }} BootMountIdentity  rootId is "<dev>:<ino>" of bootRoot
  * @typedef {object} WifiReaderDeps
  * @property {string} bootRoot  absolute and equal to its own path.resolve (checked at construction);

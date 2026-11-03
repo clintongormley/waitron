@@ -5,12 +5,13 @@ import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clearTimeout, setTimeout } from "node:timers";
-import { TextEncoder, inspect } from "node:util";
+import { TextDecoder, TextEncoder, inspect } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BOOT_ROOT,
   WIFI_RECORD_MAX_BYTES,
   createWifiRecordReader,
+  decideWifiBootCopy,
   formatWifiRecord,
   parseWifiRecord,
   readActiveWifiRecord,
@@ -1301,4 +1302,245 @@ describe("formatWifiRecord refuses with the reader's reason", () => {
       for (const text of errorTexts(error)) expect(text).not.toContain("CANARY");
     },
   );
+});
+
+/** @param {Record<string, unknown>} [overrides] */
+const wifi = (overrides = {}) => ({
+  kind: "wifi",
+  ssidHex: SSID,
+  keyMgmt: "wpa-psk",
+  psk: "correct horse",
+  hidden: false,
+  ...overrides,
+});
+
+/** @param {Record<string, unknown>} settings */
+const networkOf = (settings) => {
+  const { ssidHex, keyMgmt, psk, hidden } = settings;
+  return { ssidHex, keyMgmt, psk, hidden };
+};
+
+/** @param {any} decision */
+function expectDecisionShape(decision) {
+  expect(Object.isFrozen(decision)).toBe(true);
+  const keys = decision.kind === "write" ? ["kind", "bytes"] : ["kind", "reason"];
+  expect(Object.keys(decision).sort()).toEqual([...keys].sort());
+}
+
+/** @param {any} decision */
+const decisionTexts = (decision) => [
+  JSON.stringify(decision),
+  inspect(decision, { depth: 10, showHidden: true }),
+];
+
+/** @type {Array<[string, Record<string, unknown>]>} */
+const writeCases = [
+  ["a WPA2 network", wifi()],
+  [
+    "a hidden WPA3 network with a non-ASCII password",
+    wifi({ keyMgmt: "sae", psk: "Crème brûlée Àngels", hidden: true }),
+  ],
+  ["a 64-hex-digit WPA2 password", wifi({ psk: HEX_64 })],
+];
+
+/** @type {Array<[string, string, unknown, unknown]>} name, reason, settings, the same case with a password holding CANARY (null when none can) */
+const removeCases = [
+  ["cable only", "cable-only", { kind: "cable-only" }, null],
+  ["no security setting and no password", "open", wifi({ keyMgmt: null, psk: null }), null],
+  [
+    "no security setting but a password (type before password)",
+    "open",
+    wifi({ keyMgmt: null, psk: "correct horse" }),
+    wifi({ keyMgmt: null, psk: "CANARY-pass" }),
+  ],
+  ...[
+    ["none", "open-or-wep"],
+    ["ieee8021x", "dynamic-wep"],
+    ["owe", "owe"],
+    ["wpa-eap", "enterprise"],
+    ["wpa-eap-suite-b-192", "enterprise"],
+    ["wep", "unsupported-security"],
+    ["WPA-PSK", "unsupported-security"],
+  ].map(([keyMgmt, reason]) => [
+    `keyMgmt "${keyMgmt}"`,
+    reason,
+    wifi({ keyMgmt }),
+    wifi({ keyMgmt, psk: "CANARY-pass" }),
+  ]),
+  ["wpa-psk with no readable password", "password-unavailable", wifi({ psk: null }), null],
+  [
+    "sae with no readable password",
+    "password-unavailable",
+    wifi({ keyMgmt: "sae", psk: null }),
+    null,
+  ],
+  [
+    "a WPA2 password holding a tab",
+    "password-not-printable",
+    wifi({ psk: "pass\tword" }),
+    wifi({ psk: "CANARY-\tx1" }),
+  ],
+  [
+    "a WPA2 password holding \u00F1",
+    "password-not-printable",
+    wifi({ psk: "pass\u00F1word" }),
+    wifi({ psk: "CANARY-\u00F1x1" }),
+  ],
+  [
+    "a WPA2 password of 40 emoji (80 UTF-16 units, 40 code points)",
+    "password-not-printable",
+    wifi({ psk: "\u{1F600}".repeat(40) }),
+    wifi({ psk: "CANARY" + "\u{1F600}".repeat(34) }),
+  ],
+  [
+    "a WPA2 password of 4 emoji and a letter (9 UTF-16 units, 5 code points)",
+    "password-invalid",
+    wifi({ psk: "\u{1F600}".repeat(4) + "a" }),
+    wifi({ psk: "CANARY" + "\u{1F600}" }),
+  ],
+  [
+    'a WPA2 password of "a".repeat(1000)',
+    "password-invalid",
+    wifi({ psk: "a".repeat(1000) }),
+    wifi({ psk: "CANARY-" + "a".repeat(993) }),
+  ],
+  [
+    'a WPA3 password of "a".repeat(1000)',
+    "password-too-long",
+    wifi({ keyMgmt: "sae", psk: "a".repeat(1000) }),
+    wifi({ keyMgmt: "sae", psk: "CANARY-" + "a".repeat(993) }),
+  ],
+  [
+    'a WPA3 password of "a".repeat(1000) + "\\t"',
+    "password-invalid",
+    wifi({ keyMgmt: "sae", psk: "a".repeat(1000) + "\t" }),
+    wifi({ keyMgmt: "sae", psk: "CANARY-" + "a".repeat(993) + "\t" }),
+  ],
+  [
+    "a WPA3 password of 257 bytes",
+    "password-too-long",
+    wifi({ keyMgmt: "sae", psk: "a".repeat(257) }),
+    wifi({ keyMgmt: "sae", psk: "CANARY" + "a".repeat(251) }),
+  ],
+  [
+    "a WPA2 password of 7 characters",
+    "password-invalid",
+    wifi({ psk: "1234567" }),
+    wifi({ psk: "CANARY-" }),
+  ],
+  [
+    "a WPA2 password of 65 characters",
+    "password-invalid",
+    wifi({ psk: "a".repeat(65) }),
+    wifi({ psk: "CANARY-" + "a".repeat(58) }),
+  ],
+  [
+    "a WPA2 password of 64 non-hex characters",
+    "password-invalid",
+    wifi({ psk: "g".repeat(64) }),
+    wifi({ psk: "CANARY-" + "g".repeat(57) }),
+  ],
+  ["an empty WPA3 password", "password-invalid", wifi({ keyMgmt: "sae", psk: "" }), null],
+  [
+    "a WPA3 password holding U+0000",
+    "password-invalid",
+    wifi({ keyMgmt: "sae", psk: "abc\u0000def" }),
+    wifi({ keyMgmt: "sae", psk: "CANARY-\u0000x" }),
+  ],
+  [
+    'a WPA3 password of "\\uD800"',
+    "password-invalid",
+    wifi({ keyMgmt: "sae", psk: "\uD800" }),
+    wifi({ keyMgmt: "sae", psk: "CANARY-\uD800" }),
+  ],
+];
+
+/** @type {Array<[string, unknown, unknown]>} name, settings, the same case with a password holding CANARY (null when none can) */
+const settingsThrows = [
+  ["null", null, null],
+  [
+    "cable only with an ssidHex",
+    { kind: "cable-only", ssidHex: SSID },
+    { kind: "cable-only", ssidHex: SSID, psk: "CANARY-pass" },
+  ],
+  ["kind ethernet", { kind: "ethernet" }, { kind: "ethernet", psk: "CANARY-pass" }],
+  ["an extra key", wifi({ band: "5GHz" }), wifi({ band: "5GHz", psk: "CANARY-pass" })],
+  ["a missing key", withoutHidden(wifi()), withoutHidden(wifi({ psk: "CANARY-pass" }))],
+  ['ssidHex "ABCD"', wifi({ ssidHex: "ABCD" }), wifi({ ssidHex: "ABCD", psk: "CANARY-pass" })],
+  ['ssidHex ""', wifi({ ssidHex: "" }), wifi({ ssidHex: "", psk: "CANARY-pass" })],
+  [
+    "ssidHex of 33 bytes",
+    wifi({ ssidHex: "ab".repeat(33) }),
+    wifi({ ssidHex: "ab".repeat(33), psk: "CANARY-pass" }),
+  ],
+  ["keyMgmt 7", wifi({ keyMgmt: 7 }), wifi({ keyMgmt: 7, psk: "CANARY-pass" })],
+  ["psk 7", wifi({ psk: 7 }), null],
+  ['hidden "false"', wifi({ hidden: "false" }), wifi({ hidden: "false", psk: "CANARY-pass" })],
+];
+
+/** @param {any} error */
+function expectSettingsInvalid(error) {
+  expect(error.code).toBe("wifi_record.settings_invalid");
+  expect(error.reason).toBe("settings-invalid");
+}
+
+describe("decideWifiBootCopy writes a copy the reader loads", () => {
+  it.each(writeCases)("%s", (_name, settings) => {
+    const decision = /** @type {any} */ (decideWifiBootCopy(/** @type {any} */ (settings)));
+    expect(decision.kind).toBe("write");
+    expectDecisionShape(decision);
+    expect(decision.bytes).toEqual(formatWifiRecord(/** @type {any} */ (networkOf(settings))));
+    expect(parseWifiRecord(decision.bytes)).toEqual({
+      kind: "loaded",
+      network: networkOf(settings),
+    });
+  });
+});
+
+describe("decideWifiBootCopy says why there is no copy", () => {
+  it.each(removeCases)("%s: %s", (_name, reason, settings) => {
+    const decision = decideWifiBootCopy(/** @type {any} */ (settings));
+    expect(decision).toEqual({ kind: "remove", reason });
+    expectDecisionShape(decision);
+  });
+
+  it("the emoji cases count as the brief says", () => {
+    const forty = "\u{1F600}".repeat(40);
+    expect([forty.length, [...forty].length]).toEqual([80, 40]);
+    const five = "\u{1F600}".repeat(4) + "a";
+    expect([five.length, [...five].length]).toEqual([9, 5]);
+    expect(textBytes("CANARY" + "a".repeat(251)).length).toBe(257);
+  });
+});
+
+describe("decideWifiBootCopy throws for settings of the wrong shape", () => {
+  it.each(settingsThrows)("%s", (_name, settings) => {
+    expectSettingsInvalid(thrown(() => decideWifiBootCopy(/** @type {any} */ (settings))));
+  });
+});
+
+describe("decideWifiBootCopy never lets the password out except in a write", () => {
+  it.each(removeCases.filter(([, , , canary]) => canary !== null))(
+    "%s: the decision holds no password",
+    (_name, reason, _settings, canary) => {
+      const decision = decideWifiBootCopy(/** @type {any} */ (canary));
+      expect(decision).toEqual({ kind: "remove", reason });
+      for (const text of decisionTexts(decision)) expect(text).not.toContain("CANARY");
+    },
+  );
+
+  it.each(settingsThrows.filter(([, , canary]) => canary !== null))(
+    "%s: the error holds no password",
+    (_name, _settings, canary) => {
+      const error = thrown(() => decideWifiBootCopy(/** @type {any} */ (canary)));
+      expectSettingsInvalid(error);
+      for (const text of errorTexts(error)) expect(text).not.toContain("CANARY");
+    },
+  );
+
+  it("a write decision's bytes do hold it (the positive control)", () => {
+    const decision = /** @type {any} */ (decideWifiBootCopy(wifi({ psk: "CANARY-pass" })));
+    expect(decision.kind).toBe("write");
+    expect(new TextDecoder().decode(decision.bytes)).toContain("CANARY");
+  });
 });
