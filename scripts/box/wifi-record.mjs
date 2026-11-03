@@ -1,5 +1,8 @@
+import { constants } from "node:fs";
+import * as fs from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { TextDecoder, TextEncoder } from "node:util";
-import { exactRecord } from "./upgrades/contracts.mjs";
+import { exactRecord, safeInteger } from "./upgrades/contracts.mjs";
 
 /**
  * @typedef {object} WifiNetwork  frozen
@@ -118,4 +121,196 @@ export function parseWifiRecord(bytes) {
     kind: "loaded",
     network: Object.freeze({ ssidHex, keyMgmt, psk, hidden }),
   });
+}
+
+/**
+ * @typedef {{ bootRoot: string, rootId: string }} BootMountIdentity  rootId is "<dev>:<ino>" of bootRoot
+ * @typedef {object} WifiReaderDeps
+ * @property {string} bootRoot  absolute and equal to its own path.resolve (checked at construction);
+ *   being equal to its realpath is the caller's duty, not checked
+ * @property {number} ownerUid  0 in production; tests pass process.getuid()
+ * @property {() => Promise<BootMountIdentity>} inspectBootMount
+ * @property {{ lstat: typeof fs.lstat, open: typeof fs.open }} [io]  test-only override; the reader
+ *   has no other file operation
+ * @typedef {{kind:'loaded', network: WifiNetwork} | {kind:'absent'}
+ *   | {kind:'refused', reason: string}} WifiReadResult  frozen
+ */
+
+// The Linux pull request confirms where the startup image mounts the boot partition.
+export const BOOT_ROOT = "/boot";
+
+const DEPS_CODE = "wifi_record.deps_invalid";
+const FOLDER = "waitron-recovery";
+const RECORD = "wifi.json";
+const ROOT_ID = /^\d+:\d+$/;
+// Without O_NONBLOCK, opening a FIFO waits for a writer that may never come; with it, the open
+// returns and the handle's stat shows what the path really is.
+const OPEN_RECORD = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
+
+const ABSENT = Object.freeze({ kind: "absent" });
+// Only answers built here end a read early: whatever an injected io throws becomes "io-failed".
+const answers = new WeakSet([ABSENT]);
+
+/** @param {string} reason */
+function refusedRead(reason) {
+  const answer = Object.freeze({ kind: "refused", reason });
+  answers.add(answer);
+  return answer;
+}
+
+/** @param {unknown} error */
+function errnoCode(error) {
+  return Object(error).code;
+}
+
+/** @param {unknown} io */
+function validIo(io) {
+  return (
+    io !== null &&
+    typeof io === "object" &&
+    typeof (/** @type {any} */ (io).lstat) === "function" &&
+    typeof (/** @type {any} */ (io).open) === "function"
+  );
+}
+
+/** @param {unknown} deps */
+function validDeps(deps) {
+  const keys = ["bootRoot", "ownerUid", "inspectBootMount"];
+  const withIo = exactRecord(deps, [...keys, "io"]);
+  if (!withIo && !exactRecord(deps, keys)) return false;
+  const { bootRoot, ownerUid, inspectBootMount, io } = /** @type {any} */ (deps);
+  return (
+    typeof bootRoot === "string" &&
+    resolve(bootRoot) === bootRoot &&
+    safeInteger(ownerUid) &&
+    typeof inspectBootMount === "function" &&
+    (!withIo || validIo(io))
+  );
+}
+
+/**
+ * Throws code "wifi_record.deps_invalid", reason "deps-invalid", at construction when deps is not
+ * exactly these keys (io optional): bootRoot an absolute path equal to its own path.resolve,
+ * ownerUid a non-negative safe integer, inspectBootMount a function, io (if given) an object whose
+ * lstat and open are functions. Nothing is read first.
+ * @param {WifiReaderDeps} deps @returns {{ read(): Promise<WifiReadResult> }}
+ */
+export function createWifiRecordReader(deps) {
+  if (!validDeps(deps)) {
+    throw Object.assign(new Error(DEPS_CODE), { code: DEPS_CODE, reason: "deps-invalid" });
+  }
+  const { bootRoot, ownerUid, inspectBootMount } = deps;
+  const { lstat, open } = deps.io ?? fs;
+  const folder = join(bootRoot, FOLDER);
+  const recordPath = join(folder, RECORD);
+
+  /** @param {{uid:number|bigint, mode:number|bigint}} stats @param {number} forbidden */
+  function owned(stats, forbidden) {
+    return Number(stats.uid) === ownerUid && (Number(stats.mode) & forbidden) === 0;
+  }
+
+  /** @param {{isSymbolicLink():boolean, isDirectory():boolean, uid:bigint, mode:bigint}} stats @param {number} forbidden */
+  function checkFolder(stats, forbidden) {
+    if (stats.isSymbolicLink() || !stats.isDirectory()) throw refusedRead("path-unsafe");
+    if (!owned(stats, forbidden)) throw refusedRead("permissions-unsafe");
+  }
+
+  async function checkMount() {
+    let seen;
+    try {
+      seen = await inspectBootMount();
+    } catch {
+      throw refusedRead("mount-unverified");
+    }
+    if (
+      !exactRecord(seen, ["bootRoot", "rootId"]) ||
+      seen.bootRoot !== bootRoot ||
+      typeof seen.rootId !== "string" ||
+      !ROOT_ID.test(seen.rootId)
+    )
+      throw refusedRead("mount-unverified");
+
+    let root;
+    try {
+      root = await lstat(bootRoot, { bigint: true });
+    } catch (error) {
+      if (errnoCode(error) === "ENOENT") throw refusedRead("mount-unverified");
+      throw error;
+    }
+    if (`${root.dev}:${root.ino}` !== seen.rootId) throw refusedRead("root-changed");
+    // The boot partition is normally 0755, so only group and other writes are refused here.
+    checkFolder(root, 0o022);
+  }
+
+  /** @param {import("node:fs/promises").FileHandle} handle */
+  async function readBytes(handle) {
+    const record = await handle.stat();
+    if (!record.isFile() || record.nlink !== 1) throw refusedRead("path-unsafe");
+    if (!owned(record, 0o077)) throw refusedRead("permissions-unsafe");
+    if (record.size > WIFI_RECORD_MAX_BYTES) throw refusedRead("record-oversized");
+    // One byte over the limit, so a file that grew after the stat is seen without reading more.
+    const buffer = new Uint8Array(WIFI_RECORD_MAX_BYTES + 1);
+    let filled = 0;
+    while (filled < buffer.length) {
+      const { bytesRead } = await handle.read(buffer, filled, buffer.length - filled, null);
+      if (bytesRead === 0) break;
+      filled += bytesRead;
+    }
+    if (filled > WIFI_RECORD_MAX_BYTES) throw refusedRead("record-oversized");
+    return buffer.subarray(0, filled);
+  }
+
+  async function readRecord() {
+    await checkMount();
+    let stats;
+    try {
+      stats = await lstat(folder, { bigint: true });
+    } catch (error) {
+      if (errnoCode(error) === "ENOENT") throw ABSENT;
+      throw error;
+    }
+    checkFolder(stats, 0o077);
+
+    let handle;
+    try {
+      handle = await open(recordPath, OPEN_RECORD);
+    } catch (error) {
+      if (errnoCode(error) === "ENOENT") throw ABSENT;
+      if (errnoCode(error) === "ELOOP") throw refusedRead("path-unsafe");
+      throw error;
+    }
+    try {
+      return parseWifiRecord(await readBytes(handle));
+    } finally {
+      await handle.close();
+    }
+  }
+
+  return {
+    async read() {
+      try {
+        return await readRecord();
+      } catch (error) {
+        // The error itself is never kept: an injected io's message may hold the password.
+        return answers.has(/** @type {object} */ (error)) ? error : refusedRead("io-failed");
+      }
+    },
+  };
+}
+
+const fixedReader = createWifiRecordReader({
+  bootRoot: BOOT_ROOT,
+  ownerUid: 0,
+  inspectBootMount: async () => {
+    throw new Error("no boot mount check exists yet");
+  },
+});
+
+/**
+ * Fixed production entry point. No boot-mount check exists until the Linux pull request, so it
+ * answers refused "mount-unverified" with no file call.
+ * @returns {Promise<WifiReadResult>}
+ */
+export async function readActiveWifiRecord() {
+  return fixedReader.read();
 }
