@@ -2400,10 +2400,11 @@ describe("whole runs", () => {
       const { decisions, tag } = sweep(run);
 
       it(`ends with ${run.ends}`, () => {
-        const last = decisions.findLast((d) => d.action !== "wait");
-        expect(last.action === "refuse" ? `refuse:${last.state.refusal.reason}` : last.action).toBe(
-          run.ends,
-        );
+        const ending = decisions.findLast((d) => d.action !== "wait");
+        expect(ending).toBeDefined();
+        expect(
+          ending.action === "refuse" ? `refuse:${ending.state.refusal.reason}` : ending.action,
+        ).toBe(run.ends);
       });
 
       it("answers only with the nine actions", () => {
