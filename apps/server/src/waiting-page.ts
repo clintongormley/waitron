@@ -3,7 +3,9 @@ import type { Hono } from "hono";
 import { nodes, type Database } from "@waitron/db";
 import { FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
 import { WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
+import { codeOf } from "@waitron/server-kit";
 import { resolveLoginLocale } from "./login-locale.js";
+import type { Logger } from "./logger.js";
 import { escapeHtml } from "./recovery-surface.js";
 
 /** Each box's name from this box's `nodes` rows, or `null` where it has no row or no name. */
@@ -50,13 +52,20 @@ function renderPage(names: readonly (string | null)[], locale: SupportedLocale):
 /** The page a person opening a box that waits for its peers sees; `names` is read per request. */
 export function waitingPageRoute(
   names: () => Promise<readonly (string | null)[]>,
+  log: Logger,
 ): (app: Hono) => void {
   return (app) => {
     app.get("/", async (c) => {
       const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
       c.header("Cache-Control", "no-store");
       c.header("Vary", "Accept-Language");
-      return c.html(renderPage(await names(), locale));
+      let shown: readonly (string | null)[] = [];
+      try {
+        shown = await names();
+      } catch (error) {
+        log("warn", "waiting_page.names_failed", { errorCode: codeOf(error) });
+      }
+      return c.html(renderPage(shown, locale));
     });
   };
 }

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { nodes } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -9,7 +9,10 @@ import { readPeerNames, waitingPageRoute } from "./waiting-page.js";
 
 async function page(names: readonly (string | null)[], language: string): Promise<string> {
   const app = new Hono();
-  waitingPageRoute(() => Promise.resolve(names))(app);
+  waitingPageRoute(
+    () => Promise.resolve(names),
+    () => {},
+  )(app);
   const res = await app.request("/", { headers: { "accept-language": language } });
   expect(res.headers.get("cache-control")).toBe("no-store");
   return res.text();
@@ -27,6 +30,16 @@ describe("the waiting page", () => {
   it("names every box it waits for, escaped", async () => {
     const html = await page(["Bar <b>", "Terrace"], "en-GB");
     expect(html).toContain("<h1>This box is waiting for Bar &lt;b&gt; and Terrace</h1>");
+  });
+
+  it("a name read that fails still answers the page, waiting for the other box", async () => {
+    const log = vi.fn();
+    const app = new Hono();
+    waitingPageRoute(() => Promise.reject(new Error("database is closed")), log)(app);
+    const res = await app.request("/", { headers: { "accept-language": "en-GB" } });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("<h1>This box is waiting for the other box</h1>");
+    expect(log).toHaveBeenCalledWith("warn", "waiting_page.names_failed", expect.any(Object));
   });
 
   it("with no box to name, waits for the other box", async () => {

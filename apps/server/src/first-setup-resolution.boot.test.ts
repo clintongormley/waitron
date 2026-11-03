@@ -167,6 +167,21 @@ it("direct entry still boots a normal unclaimed workspace", async () => {
   expect(boot).toHaveBeenCalledOnce();
 });
 
+it("a normal start's failure after waiting for its peers reaches the returned handle", async () => {
+  const f = await torn();
+  await rm(join(f.venueDir, "first-setup-claim.json"));
+  const failure = new Error("failed after the wait");
+  let fail: (error: unknown) => void = () => {};
+  const fullyStarted = new Promise<void>((_, reject) => (fail = reject));
+  const handle = await entry.startServerOrFirstSetupResolution(
+    { WAITRON_STATE_DIR: f.stateDir, WAITRON_VENUE_DIR: f.venueDir },
+    {},
+    { startServer: vi.fn(async () => ({ ...(await stopped()), fullyStarted })) },
+  );
+  fail(failure);
+  await expect(handle.failedLater).rejects.toBe(failure);
+});
+
 it("an ordinary filesystem refusal still belongs to strict boot", async () => {
   const f = await torn();
   const file = join(f.root, "file");

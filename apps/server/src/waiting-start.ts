@@ -84,7 +84,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     log,
   );
   let waitingOn = deps.waitingOn;
-  waitingPageRoute(() => deps.namesOf(waitingOn))(app);
+  waitingPageRoute(() => deps.namesOf(waitingOn), log)(app);
 
   let resolveEnd: (end: WaitEnd) => void = () => {};
   const ended = new Promise<WaitEnd>((resolve) => (resolveEnd = resolve));
