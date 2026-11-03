@@ -41,7 +41,7 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     path: "/api/node/peer-status",
     boxes: ["mirror", "fenced"],
     authenticates:
-      "a `query` envelope signed by a key the held chart vouches for and does not evict; answers only signed status",
+      "a `query` envelope signed by a key this box stores for that node or the held chart vouches for, from a node the held chart neither evicts nor clears (`peerKeyOf`); answers only signed status",
   },
   {
     method: "POST",

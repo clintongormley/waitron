@@ -29,6 +29,8 @@
 >   signed query, and a till hands over a newer chart (Slice 3). «Seguir sin el equipo de reserva»
 >   must name the other box and confirm it is switched off and that no other recovery is running,
 >   and is refused when this box's `node.db` holds a handover (A1018 design §4, point 1).
+>   A1018 Slice 3, 2026-11-03: built as «Seguir como equipo principal» ("Carry on as the main
+>   box"), for a person holding `node.promote` (an administrator).
 > - **§7.1 (the tail):** fiscal-only. The batch carries tax records, their chain and filing rows,
 >   `envio_flujo`, every AEAT answer and every unanswered send — never sales, orders, payments,
 >   cash, stock or printing rows, which stay in the returning box's archive. The topology design's

@@ -818,6 +818,13 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
   inline. TODAY a venue has ONE node and no failover at all. Detail:
   [conventions-data.md](docs/developers/conventions-data.md).
+- **A box that is not a mirror, whose held chart lists another box that finished joining, asks it
+  by signed query before selling or filing, and waits while every box it counts is silent (a box
+  it took over from, or demoted by its own promotion, it asks but never waits for), until one
+  answers or an administrator carries on over HTTPS for that start only. Carrying on is refused
+  once this box's `node.db` records that it handed over.** Guards: `apps/server/src/boot-peer-check.test.ts`,
+  `boot.start-check.test.ts` and `waiting-start.test.ts`, weaker than the rule: named cases only.
+  [Detail](docs/superpowers/plans/2026-11-02-a1018-handover-build.md#slice-3-as-built-2026-11-03).
 - **The bucket stream never waits on the bucket to sell or fails `/health`; its local checkpoint
   can hold the write lock and delay sales.** Fifteen minutes behind raises `backup.stream_behind`
   unless a stopped/refused/unusable-settings alert explains it. Guards: stream loop/pause e2e and

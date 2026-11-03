@@ -596,8 +596,8 @@ otherwise:
 ```
 
 A box that takes no sales answers `200` with only `{ "ok": true, "tradingAvailable": false }`:
-trading is not admitted yet, or the box has stepped down and started restricted
-(`src/restricted-start.ts`).
+trading is not admitted yet, the box has stepped down and started restricted
+(`src/restricted-start.ts`), or it is waiting for the other box (`src/waiting-start.ts`).
 
 `venueHolder` is read from `venue.holder.json`, the file a monitored venue holder
 keeps beside `venue.lock`. It gives the holder's kind, when it took the folder, its last heartbeat,

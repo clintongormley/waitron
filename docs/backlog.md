@@ -5704,8 +5704,20 @@ Not in any track until the standalone primary is done.
   nothing. Left open by A1018 Slice 3.
   [Detail](backlog/replication-cloud.md#the-waiting-starts-loose-ends)
 
-- **The membership route checks a chart and saves it in two steps, not under one write lock.**
-  `apps/server/src/node-membership-api.ts`; no test covers another writer saving in between. Left
+- **The membership route ignores a different chart at the term this box holds.** The start check
+  counts a trusted chart at the held term with another body that fences this box, and names
+  another box as serving primary, as a takeover
+  (`apps/server/src/boot-peer-check.ts`), but `POST /api/node/membership` answers `{ accepted: false }`
+  and steps nothing down (`apps/server/src/node-membership-api.ts`). Left open by A1018 Slice 3.
+
+- **The start check may still stop for a chart whose signer was evicted while it asked.** If a
+  chart that fences this box is refused at the save because a chart committed during the check
+  evicts its signer, the check still answers "superseded" and names that chart's serving primary
+  as its successor. Read, not run. Left open by A1018
+  Slice 3.
+
+- **The waiting page does not change when the wait ends.** A person already looking at it keeps
+  seeing "This box is waiting for…" until they reload (`apps/server/src/waiting-page.ts`). Left
   open by A1018 Slice 3.
 
 - **The peer-status route's minor follow-ups.** A bad signature from a known box answers 403, the

@@ -321,9 +321,9 @@ async function releaseSpareToStart(
  *    setup's inspection fails on a full disk and would serve resolution (plan F4), and its
  *    admission takes the venue lock before the count.
  *
- * `startServer` resolving is the signal rather than a healthy `/health`, because `/health` is 503
- * on a setup box by design, so a health-gated reset would drive every unprovisioned box into
- * recovery.
+ * `startServer` resolving, and its `fullyStarted` settling where present, is the signal rather
+ * than a healthy `/health`, because `/health` is 503 on a setup box by design, so a health-gated
+ * reset would drive every unprovisioned box into recovery.
  */
 export async function runEntry(deps: EntryDeps): Promise<void> {
   // `docker compose run app <command>` appends `<command>` here. Booting instead would start a

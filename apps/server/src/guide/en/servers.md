@@ -15,28 +15,18 @@ The page is in Spanish when your browser prefers Spanish, and in English otherwi
 
 ## When a box is waiting for another box {#waiting}
 
-When a box starts and cannot reach the other box the venue has run on, it waits rather than sell
-beside a box that may have taken over. If you open its address in a browser, you see a page titled
-**This box is waiting for** and the other box's name. While it waits it takes no sales and sends
-nothing to the tax agency, and it asks the other box again every 15 seconds. As soon as the other
-box answers, the box carries on by itself.
+When a box starts and cannot reach the other box the venue runs on, it waits instead of selling,
+because the other box may have taken over. Its page, titled **This box is waiting for** and the
+other box's name, says so. While it waits it takes no sales and sends nothing to the tax agency.
+It asks again every 15 seconds; once the other box answers, this box starts normally or, if the
+other box has taken over, says so.
 
 ## Carry on as the main box {#carry-on}
 
-If you know the other box is switched off, you can let this box carry on without it. Over the
-box's `https://` address, the page shows the **Carry on as the main box** form:
+If you know the other box is switched off, you can let this box carry on without it. Open the box
+at its `https://` address, sign in as an administrator under **Carry on as the main box**, and
+tick both statements. This box then runs the venue until it next restarts, when it asks the other
+box again.
 
-- Sign in with your email and password. If your account uses an authenticator app, the page then
-  asks for your password again and the app's code, or one of your recovery codes instead. Only an
-  administrator can carry on.
-- Tick **{other box} is switched off** and **No other recovery of this venue is in progress**.
-  The button stays greyed out until every field marked `*` is filled in and both are ticked.
-
-If the other box answers while you are signing in, its answer wins: when it says it has not taken
-over, this box starts normally; when it says it has taken over, this box does not carry on.
-
-The box then takes sales and sends records to the tax agency again. This lasts until the box next
-starts: when it starts again, it asks the other box again, and waits again if it gets no answer.
-
-If this box has already handed over to another box, the page says so instead of showing the form:
-a box cannot carry on once it has handed over.
+If the other box answers first, its answer wins. A box that has already handed over cannot carry
+on; its page says so instead of showing the form.
