@@ -861,6 +861,42 @@ large release assets and the A940/A947/A798 coordination.
   Linux pull request confirms, and answers `mount-unverified` with no file call until that pull
   request adds the mount check.
 
+**Built so far (2026-11-03), PR 3.** [PR 3](../superpowers/plans/2026-11-03-b3-3-installer-policy.md)
+(#2426) adds two more host libraries under `scripts/box/`, none called yet. Both are pure decisions:
+they take events (a key pressed, a timer firing, an adapter's report) and answer what to do next,
+and the real screen, network and disk adapters come with the Linux pull request.
+
+- `installer-policy.mjs`: the installer's decisions. `nextInstallerStep` picks the disk with PR 1's
+  `classifyDisk`; no internal disk or more than one is refused. A disk already holding Waitron
+  starts the installed box after 15 seconds; a key pressed before then opens the reinstall screen,
+  which goes back to starting the installed box after two minutes with no typing. Erasing that disk
+  needs the venue's name from its name tag typed (compared after NFC normalisation, which makes the
+  composed and decomposed spellings of an accented letter equal), or the erase word, compared
+  exactly as typed, when the tag cannot be read. A disk it cannot classify, or a blank or Windows
+  disk whose attachment is unclear, also needs the erase word. A box whose TPM (the security chip) or Secure Boot is off
+  still starts an installed Waitron, but any install or reinstall on it is refused. The stick may
+  come out only once the installer is wholly in memory; taken out earlier, the installer stops. The
+  clock is set from the network before anything is downloaded; a failed setting, or a time earlier
+  than the floor the installer is started with (`clockFloorMs`), is tried again a minute later, as
+  is a download that is unavailable or cut short. Only a release that checked out leads to a write; a disk
+  erased with no question waits 60 seconds after that check, and a key stops it and offers the choices to
+  install now or power off (the spec's «Instalar ahora» and «Apagar»). Each request to find the
+  network, set the clock or download carries a new number, and its answer must carry the same number
+  back; an answer with any other number stops the installer as out of order (`sequence-invalid`), so
+  a late answer to an earlier download cannot lead to an erase. After the write the installer restarts into the box only once the stick is
+  out. `installerStatus` gives the public status page the step, whether the stick can come out, the
+  stop reason, the firmware setting that is off and, for a too-old installer, the release's
+  version; never a disk id, the venue's name or typed text. The four waits are the spec's calls, in
+  one constant (`INSTALLER_TIMINGS_MS`).
+- `installer-network.mjs`: the network fallback's decisions. `nextNetworkStep` opens the
+  installer's own Wi-Fi network (a hotspot) when no internet has been found after one minute, and
+  while it is open tries the internet again every minute. A join a person asks for that fails, or
+  gives no internet within a minute, reopens the hotspot, and `networkStatus` says which of the two
+  happened. Each join carries a new number, and its result must carry it back; a result for an
+  earlier join of the same network state, for example one that arrives after that join ran out of
+  time, is ignored. The decisions name the network to join but never carry its password, which stays with
+  the adapter. The waits are in `NETWORK_TIMINGS_MS`.
+
 Still waiting, all needing a Linux machine with KVM, OVMF and swtpm, or the hardware: the recipe and
 dracut files; the rig entry point (`bench/box-installer/run.mjs`) and disk fixtures; the real
 observation, mount and cleanup adapters (until then the disk-key store's fixed entry points
@@ -871,14 +907,24 @@ and the letters-to-bytes decoder; the public CA download and its help page; the 
 and the startup-fingerprint check before resealing; the real `cryptsetup`, observation,
 boot-mount, certificate-file and listener adapters; joining Wi-Fi; the address fallback; the four
 preboot rig cases; and the key-memory measurements.
+PR 3 left for later, from its plan's "Out", among them: the installer's screens, words, `LEEME`, printed card
+and progress figures; typing the recovery key on the reinstall screen to see the disk's last sale
+and unsent records; the real in-memory, stick, keyboard, clock, download, write, boot and hotspot
+adapters and the `waitron-instalar.local` status page; joining Wi-Fi and staging the first Wi-Fi
+boot copy; and the source-history floor on reinstall, still gated on A1042.
 
 **For the owner: a box that already holds Waitron, with its TPM or Secure Boot switched off.**
 Should the stick start the installed box anyway, or stop and show the firmware message? Starting it
 keeps the venue selling; stopping it tells someone the box has lost the protection its disk
 encryption relies on. The spec does not settle it: §5 step 2 lists the checks, and guard 3 says the
 stick starts Waitron "without leaving a venue dark". Today's message, «…vuelve a empezar», is
-written for installing; a box that already holds Waitron would need its own wording. Slice 2
-decides; PR 1 reports the disk's state and the hardware state separately so either answer fits.
+written for installing; a box that already holds Waitron would need its own wording. Until
+the owner answers, the installer's decisions (PR 3) follow the start-it half of lane B's 2026-11-01
+recommendation ("start it and raise an alert") as one rule (D2):
+the installed box starts after 15 seconds, the screen and the status page name the setting that is
+off, and a reinstall on such a box is refused. The opposite answer is a one-line change in the policy; its screen wording would still be new. The
+recommendation's alert is slice 3's: the installer writes nothing to the installed disk, so the
+installed box's host service must notice the setting itself.
 
 **For later slices, from PR 1's re-map against main:**
 
@@ -890,9 +936,9 @@ decides; PR 1 reports the disk's state and the hardware state separately so eith
 - The spec's `deploy/waitron.sh` line numbers have moved; the recipe pull request re-reads them.
 - Slice 8's recovery-document files are gone (A1187 part 1 replaced them with the recovery pack);
   slice 8 re-maps onto `backup-recovery-pack-*.ts` and `recovery-pack-card.ts`.
-- A lone disk whose attachment is `unknown` counts as internal, so it can be the disk the installer
-  erases; and a Waitron disk whose two partition tables were both wiped reads as blank. The Linux
-  observation adapter decides how to look for an encryption header in that case.
+- A lone disk whose attachment is `unknown` counts as internal; PR 3's decisions never erase one
+  without something typed (D3). A Waitron disk whose two partition tables were both wiped reads as
+  blank; the Linux observation adapter decides how to look for an encryption header in that case.
 
 **For later slices, from PR 2's [re-map against main](../superpowers/plans/2026-11-03-b3-2-preboot-logic.md#re-map-against-main-on-2026-11-03):**
 
@@ -904,14 +950,59 @@ decides; PR 1 reports the disk's state and the hardware state separately so eith
 - The address fallback widens `freezeLockedTarget`'s one-name rule for the recovery certificate
   and `decideLockedRequest`'s host rule together.
 - Slice 8's sheet and the preboot screen share one letters-to-bytes alphabet.
-- Slice 2: `classifyDisk` calls a Waitron disk that also holds a foreign encrypted partition
-  `waitron` (re-map finding 16); the installer policy decides whether that is right.
 - A weak test assertion, not a production defect: `apps/server/src/box-tls-repair.test.ts:397`
   checks a repaired leaf with `X509Certificate.checkIssued`, which matches the issuer's name and
   key identifier, both of which another CA can copy, and not the signature. So the test would also
   pass for a leaf another key signed with copied issuer fields; a `verify(ca.publicKey)` assertion
   would check the signature. Production checks the signature
   (`apps/server/src/box-tls-repair.ts:163-164`).
+
+**For later slices, from PR 3's [re-map against main](../superpowers/plans/2026-11-03-b3-3-installer-policy.md#re-map-against-main-on-2026-11-03):**
+
+- The signed release list waits for two things not on main: A940's release version (its slices 2
+  and 4) and a chosen signature format (algorithm, key encoding, signed byte layout). It is shared
+  with slice 5 and with A950's `verifyManifest`, carries the fields A950's `parseVerifiedRelease`
+  reads, and must name the oldest installer a release accepts, which needs an installer version
+  scheme nobody has defined yet. Who holds the signing keys gates publication (parent Task 5.1),
+  not the verifier.
+- The name tag's format and its decoder: the Linux driver hands the policy the frozen internal
+  disk's own decoded tag, and no other.
+- The write adapter re-checks the frozen disk's partition table and the disk's size before its
+  first write, because the survey has no size field.
+- The rig cases `install`, `existing-stick`, `damaged-marker`, `two-disks`, `cut-header`,
+  `remove-usb`, `disk-write-cut` and `network-fallback` join `RIG_CASES` with the runner that can
+  run them.
+- Slice 3's host service raises an alert on an installed box whose TPM or Secure Boot is off (D2's
+  other half).
+- The Linux pull request's translation file sets the erase word (the spec's «BORRAR»), passed as
+  `eraseWord`. It is one word for both the Spanish and the English screen: a different English word
+  would need the policy's option to change (for example, to a list of accepted words), not only the
+  translation file (D7). That file also supplies the disk's model and size for the 60-second
+  message.
+- The name tag's format sets the real length limit for a usable venue name (D8's 256 code points is
+  a placeholder).
+- The network adapter reports `link` whenever a route appears, unasked. Otherwise a cable plugged
+  in after the start is seen only at the first probe, a minute after the hotspot opens (two minutes
+  in), and a join whose one
+  probe is answered before the box has its address reopens the hotspot when the join's minute runs
+  out. It never sends the installer an `online` it did not ask for: an `online` outside the
+  network step, for example during the 60-second wait, stops the install as out of order
+  (`sequence-invalid`), which is safe but ends the run.
+- Every adapter result echoes the number of the request it answers: `online`, `clock-set` and
+  `release-checked` carry the `requestId` of the `find-network`, `set-clock` or `download` decision
+  that asked for them, and `join-result` carries the `joinId` of its `join`. In the installer's
+  decisions, an answer to an earlier request that arrives after a newer one stops the install; in
+  the network decisions, an answer to an earlier join is ignored. Join numbers start again at 0 in
+  each new network state, so the adapter drops any join result left over from an earlier one.
+- The boot adapter checks for the stick again just before restarting: a stick put back in after
+  the policy has ordered the start is not seen by the policy (guard 3 then catches the restart with
+  the stick in).
+- On a refusal with no setting of its own (`sequence-invalid`, `usb-removed-early`), the status page
+  still shows which firmware setting is off, beside the stop reason. The page's wording must not
+  present the setting as the cause.
+- Decisions recorded for review: a lone blank or Windows disk of unknown attachment needs the erase word (D3); a
+  Waitron disk with a foreign encrypted partition is never erased unattended (D18); a typed venue
+  name is compared after NFC normalisation, and the erase word exactly as typed (D7).
 
 **Left open by PR 1's review (#2370):**
 
