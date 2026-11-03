@@ -57,7 +57,13 @@ interface Box {
 /** A set-up box whose held chart lists it and PEER; `joined` adds PEER's `nodes` row. */
 async function box(
   suite: VenueDb,
-  options: { joined?: boolean; peerUrl?: string; peerStanding?: NodeStanding } = {},
+  options: {
+    joined?: boolean;
+    peerUrl?: string;
+    peerStanding?: NodeStanding;
+    /** Sign the held chart with the peer's key, so it is not this box's own promotion chart. */
+    heldSignedByPeer?: boolean;
+  } = {},
 ): Promise<Box> {
   const venue = await setupVenue(suite.db);
   const nodeId = venue.cfg.nodeId;
@@ -89,10 +95,18 @@ async function box(
       endorsements: [],
     };
   };
-  const held = chart(1, [
+  const own = chart(1, [
     [nodeId, "serving-primary", OWN_URL],
     [PEER.nodeId, options.peerStanding ?? "serving-secondary", options.peerUrl ?? PEER_URL],
   ]);
+  const held =
+    options.heldSignedByPeer === true
+      ? {
+          ...own,
+          signerNodeId: PEER.nodeId,
+          signature: signDocumentBody(own.body, PEER.privateKey),
+        }
+      : own;
   await writeNodeMembership(suite.db, held);
   return { nodeId, held, chart };
 }
@@ -265,7 +279,7 @@ describe("the real start check's inputs", () => {
   const suite = useVenueDb({ migrations });
 
   it("a box that activated as destination does not count the operation's source, and proceeds with that source silent", async () => {
-    const b = await box(suite, { peerStanding: "sell-only" });
+    const b = await box(suite, { peerStanding: "sell-only", heldSignedByPeer: true });
     await insertOperation(suite, b.nodeId, { role: "destination", state: "return_complete" });
     const fetch = peerFetch("silent");
     expect((await check(suite, b, fetch)).result).toBe("proceed");
@@ -274,7 +288,7 @@ describe("the real start check's inputs", () => {
   });
 
   it("control: the same chart and rows without the activated operation waits", async () => {
-    const b = await box(suite, { peerStanding: "sell-only" });
+    const b = await box(suite, { peerStanding: "sell-only", heldSignedByPeer: true });
     expect((await check(suite, b, peerFetch("silent"))).result).toBe("wait");
   });
 

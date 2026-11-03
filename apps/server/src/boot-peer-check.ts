@@ -119,13 +119,17 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const ownOrigin = originOf(deps.ownOrigin);
 
+  // This box's own promotion chart: the person attested the box it demoted is switched off.
+  const ownPromotion =
+    held !== null && held.signerNodeId === nodeId && standingOf(held, nodeId) === "serving-primary";
   const peers: { server: RoutableServer; counted: boolean }[] = [];
   for (const n of held?.body.nodes ?? []) {
     if (n.nodeId === nodeId) continue;
     const standing = standingOf(held!, n.nodeId);
     if (standing === undefined || !ROUTABLE.includes(standing)) continue;
     const server: RoutableServer = { nodeId: n.nodeId, url: n.contactUrl, standing };
-    if (deps.activatedFrom.has(n.nodeId)) peers.push({ server, counted: false });
+    const demoted = ownPromotion && standing === "sell-only";
+    if (demoted || deps.activatedFrom.has(n.nodeId)) peers.push({ server, counted: false });
     else if (await deps.joined(n.nodeId)) peers.push({ server, counted: true });
   }
 

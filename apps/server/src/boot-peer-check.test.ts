@@ -133,11 +133,15 @@ const NEWER_FENCING = chart(4, [
 ]);
 const SAME = HELD;
 
-// M2's held chart after it activated: M1 (the source) is sell-only, still routable.
-const M2_HELD = chart(5, [
-  [OLD, "sell-only"],
-  [SELF, "serving-primary", OWN_ORIGIN],
-]);
+// M2's held chart after it activated: M1 (the source) is sell-only, still routable. Signed by
+// another box, so only `activatedFrom` (not this box's own promotion chart) leaves M1 uncounted.
+const M2_HELD = {
+  ...chart(5, [
+    [OLD, "sell-only"],
+    [SELF, "serving-primary", OWN_ORIGIN],
+  ]),
+  signerNodeId: OLD,
+};
 
 describe("checkPeersAtStart — one case per cell of the decision table", () => {
   it("counted F → superseded", async () => {
@@ -453,6 +457,54 @@ describe("checkPeersAtStart — the review's cases", () => {
   it("control: the same chart and rows without the activated operation waits", async () => {
     const d = deps({ held: M2_HELD, joinedIds: [OLD], answers: { [OLD]: null } });
     expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  // This box's own promotion chart: it signed it, it is primary, the box it demoted is sell-only.
+  const PROMOTED = chart(5, [
+    [OLD, "sell-only"],
+    [SELF, "serving-primary", OWN_ORIGIN],
+  ]);
+
+  it("a box restarted after its own promotion does not count the box it demoted, and proceeds with it switched off", async () => {
+    const onAnswers = vi.fn();
+    const d = deps({ held: PROMOTED, joinedIds: [OLD], answers: { [OLD]: null }, onAnswers });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+    expect(d.asked).toEqual([OLD]);
+    expect(onAnswers.mock.calls[0]![0]).toEqual([
+      { nodeId: OLD, answer: "S", counted: false, byOperation: false, why: "no_answer" },
+    ]);
+  });
+
+  it("control: the same chart signed by another box counts the sell-only peer and waits", async () => {
+    const d = deps({
+      held: { ...PROMOTED, signerNodeId: SPARE },
+      joinedIds: [OLD],
+      answers: { [OLD]: null },
+    });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("control: a sell-only peer in a chart this box signed that names another box primary is counted", async () => {
+    const d = deps({
+      held: chart(5, [
+        [OLD, "sell-only"],
+        [SELF, "serving-secondary", OWN_ORIGIN],
+        [SPARE, "serving-primary"],
+      ]),
+      joinedIds: [OLD],
+      answers: { [OLD]: null },
+    });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("the demoted box is still asked: a newer chart from it that fences this box gives superseded", async () => {
+    const fencing = chart(6, [
+      [OLD, "serving-primary"],
+      [SELF, "sell-only", OWN_ORIGIN],
+    ]);
+    const d = deps({ held: PROMOTED, joinedIds: [OLD], answers: { [OLD]: status(fencing) } });
+    expect(await checkPeersAtStart(d)).toBe("superseded");
+    expect(d.asked).toEqual([OLD]);
   });
 
   it("a destination whose operation is activated and still return_pending proceeds", async () => {

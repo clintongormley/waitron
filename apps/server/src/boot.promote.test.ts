@@ -43,7 +43,6 @@ import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { freePort } from "./testing/free-ports.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
-import type { StartServerSeams } from "./boot.js";
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -496,21 +495,15 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       );
       const records = mirrorDb.all(sql`select * from registros_facturacion order by secuencia`);
       const attempts = mirrorDb.all(sql`select * from envios order by registro_id`);
-      const restarted = await startServer(
-        {
-          ...KEY_ENV,
-          ...TICK_ENV,
-          ...persisted,
-          WAITRON_VENUE_DIR: mirrorVenueDir,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-          WAITRON_STATE_DIR: stateDir,
-        },
-        {},
-        // The promoted chart lists the old main box at https://old, which is not running; this case
-        // tests the promotion.
-        { peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }) },
-      );
+      const restarted = await startServer({
+        ...KEY_ENV,
+        ...TICK_ENV,
+        ...persisted,
+        WAITRON_VENUE_DIR: mirrorVenueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+      });
       try {
         const node = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
         expect(await node.json()).toEqual({ acceptingSales: false });
@@ -540,22 +533,17 @@ describe("a mirror's promotion whose role write is lost", () => {
     stateDir: string,
     nodeId: string,
     extraEnv: Record<string, string> = {},
-    seams: StartServerSeams = {},
   ) {
-    return startServer(
-      {
-        ...KEY_ENV,
-        ...extraEnv,
-        ...TICK_ENV,
-        WAITRON_NODE_ID: nodeId,
-        WAITRON_VENUE_DIR: venueDir,
-        WAITRON_HTTP_PORT: String(await freePort()),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_STATE_DIR: stateDir,
-      },
-      {},
-      seams,
-    );
+    return startServer({
+      ...KEY_ENV,
+      ...extraEnv,
+      ...TICK_ENV,
+      WAITRON_NODE_ID: nodeId,
+      WAITRON_VENUE_DIR: venueDir,
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_STATE_DIR: stateDir,
+    });
   }
 
   async function writeStatus(): Promise<number> {
@@ -609,11 +597,7 @@ describe("a mirror's promotion whose role write is lost", () => {
         singletonRole: "secondary",
       });
 
-      // The promoted chart lists the old main box at https://old, which is not running; this case
-      // tests the promotion.
-      const second = await bootMirror(venueDir, stateDir, seed.nodeId, allocationEnv, {
-        peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }),
-      });
+      const second = await bootMirror(venueDir, stateDir, seed.nodeId, allocationEnv);
       try {
         expect(await readNodeMode(node, seed.nodeId)).toEqual({
           mode: "primary",
