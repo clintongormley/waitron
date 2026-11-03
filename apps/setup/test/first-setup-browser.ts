@@ -10,7 +10,6 @@ export const venue: ProvisionBody["venue"] = {
   name: "Olivo",
   fiscalTerritory: "ES-common",
   invoiceLocales: ["es-ES"],
-  operationDescription: "Restaurant",
   addressLine1: "Mayor 1",
   addressLine2: null,
   postalCode: "28001",
@@ -76,8 +75,6 @@ export function wizardApi(
         needs: ["venue"],
       });
     if (path === "/setup-api/discovery") return Response.json({ caDownloadAvailable: false });
-    if (path === "/setup-api/venue-defaults")
-      return Response.json({ verifactu: { operationDescription: "Restaurant" } });
     if (path.endsWith("/offerings"))
       return Response.json({
         modules:

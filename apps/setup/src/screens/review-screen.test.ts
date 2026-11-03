@@ -499,11 +499,3 @@ describe("setup-review-screen in Spanish", () => {
     expect(text(el, "[data-test=summary-cert]")).toBe("adjunto");
   });
 });
-
-it("does not present the internal bootstrap as the venue sales description", async () => {
-  const draft = everyRowDraft("live");
-  draft.venue!.operationDescription = "Internal bootstrap";
-  const { el } = await mountWidget<SetupReviewScreen>("setup-review-screen", { draft });
-  expect(q(el, "[data-test=summary-operationDescription]")).toBeNull();
-  expect(el.shadowRoot!.textContent).not.toContain("Internal bootstrap");
-});

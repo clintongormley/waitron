@@ -729,7 +729,6 @@ it("claims a staged preview's venue with only the venue fields the claim accepts
       "invoiceLocales",
       "legalName",
       "name",
-      "operationDescription",
       "postalCode",
       "province",
       "rectificativeSeriesCode",

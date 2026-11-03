@@ -38,8 +38,6 @@ export const venueEn = {
   "venue.intro": "Enter the business that issues your invoices and the address of this venue.",
   "venue.intro_demo":
     "Name your demo venue and enter its address. Waitron supplies a made-up business identity and invoice settings; you can review them before setup.",
-  "venue.defaults_not_loaded": "Invoice settings have not loaded yet.",
-  "venue.retry_defaults": "Try loading settings again",
   "venue.section.business": "Business",
   "venue.section.venue": "Venue",
   "venue.section.invoicing": "Invoicing",
@@ -50,7 +48,6 @@ export const venueEn = {
   "venue.label.taxpayer_domicile": "Registered business address",
   "venue.label.venue_name": "Venue name",
   "venue.label.invoice_locales": "Receipt language",
-  "venue.label.operation_description": "Invoice operation description",
   "venue.label.address_line1": "Address line 1",
   "venue.label.address_line2": "Address line 2 (optional)",
   "venue.label.postal_code": "Postal code",
@@ -77,7 +74,6 @@ export const venueEn = {
   "venue.field.legal_name": "legal name",
   "venue.field.taxpayer_domicile": "registered business address",
   "venue.field.name": "venue name",
-  "venue.field.operation_description": "invoice operation description",
   "venue.field.address_line1": "street address",
   "venue.field.address_line2": "address detail",
   "venue.field.postal_code": "postal code",
@@ -99,8 +95,6 @@ export const venueEn = {
   "venue.hint.name": "The name you use for this venue",
   "venue.help.name":
     "The name you use for this venue. You can keep the suggested name or change it.",
-  "venue.help.operation_description":
-    "This text describes the sale on every record sent to the tax agency. Keep the suggested wording; you can change it later in the dashboard.",
   "venue.hint.address_line1": "Street and building number",
   "venue.hint.address_line2": "Floor, unit or other detail",
   "venue.address_lookup.label": "Find the address",
@@ -151,7 +145,6 @@ export const venueEn = {
   "review.venue_name": "Venue",
   "review.address": "Address",
   "review.invoice_locales": "Receipt language",
-  "review.operation_description": "Invoice operation description",
   "review.day_cutover": "Business day cutover",
   "review.series_base": "Invoice series base",
   "review.full_series_base": "Full invoice series base",
@@ -284,8 +277,6 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
     "Introduce los datos del negocio que emite tus facturas y la dirección de este local.",
   "venue.intro_demo":
     "Pon nombre a tu local de demostración e introduce su dirección. Waitron aporta una identidad de negocio inventada y los ajustes de factura; puedes revisarlos antes de la configuración.",
-  "venue.defaults_not_loaded": "Los ajustes de factura aún no se han cargado.",
-  "venue.retry_defaults": "Volver a cargar los ajustes",
   "venue.section.business": "Negocio",
   "venue.section.venue": "Local",
   "venue.section.invoicing": "Facturación",
@@ -296,7 +287,6 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.label.taxpayer_domicile": "Domicilio fiscal del negocio",
   "venue.label.venue_name": "Nombre del local",
   "venue.label.invoice_locales": "Idioma del recibo",
-  "venue.label.operation_description": "Descripción de la operación en la factura",
   "venue.label.address_line1": "Dirección (línea 1)",
   "venue.label.address_line2": "Dirección (línea 2, opcional)",
   "venue.label.postal_code": "Código postal",
@@ -321,7 +311,6 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.field.legal_name": "la razón social",
   "venue.field.taxpayer_domicile": "el domicilio fiscal del negocio",
   "venue.field.name": "el nombre del local",
-  "venue.field.operation_description": "la descripción de la operación en la factura",
   "venue.field.address_line1": "la calle y el número",
   "venue.field.address_line2": "el detalle de la dirección",
   "venue.field.postal_code": "el código postal",
@@ -343,8 +332,6 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.hint.name": "El nombre que usas para este local",
   "venue.help.name":
     "El nombre que usas para este local. Puedes mantener el nombre propuesto o cambiarlo.",
-  "venue.help.operation_description":
-    "Este texto describe la venta en cada registro que se envía a la Agencia Tributaria. Mantén el texto propuesto; puedes cambiarlo más adelante en el panel de control.",
   "venue.hint.address_line1": "Calle y número",
   "venue.hint.address_line2": "Piso, puerta u otro detalle",
   "venue.address_lookup.label": "Buscar la dirección",
@@ -396,7 +383,6 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "review.venue_name": "Local",
   "review.address": "Dirección",
   "review.invoice_locales": "Idioma del recibo",
-  "review.operation_description": "Descripción de la operación en la factura",
   "review.day_cutover": "Cambio de día comercial",
   "review.series_base": "Base de la serie de facturas",
   "review.full_series_base": "Base de la serie de facturas completas",

@@ -30,7 +30,6 @@ async function mount(certDraft = initialCert) {
     firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({ environment: "preproduction", needs: ["venue"] }),
-    getVenueDefaults: vi.fn().mockResolvedValue({}),
     provision: vi.fn(),
   } as unknown as SetupApi;
   const { el, host } = await mountWidget<SetupApp>("setup-app", { api });

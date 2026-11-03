@@ -56,7 +56,6 @@ import type {
   ResetCredential,
   SetupApi,
   CloudRecoveryView,
-  VenueDefaults,
 } from "./api/client.js";
 import { dispatchSetupGoto } from "./events.js";
 import type {
@@ -202,7 +201,6 @@ const CLAIM_VENUE_FIELDS = [
   "name",
   "fiscalTerritory",
   "invoiceLocales",
-  "operationDescription",
   "addressLine1",
   "addressLine2",
   "postalCode",
@@ -649,7 +647,6 @@ export class SetupApp extends LitElement {
    * wizard asks rather than checks. */
   @state() private connectionAnswered = false;
   #connectionGeneration = 0;
-  @state() private venueDefaults: VenueDefaults = {};
 
   @state() private environment?: "production" | "preproduction";
   @state() private developmentMode = false;
@@ -795,16 +792,6 @@ export class SetupApp extends LitElement {
 
   override firstUpdated(): void {
     void this.#boot();
-    void this.#loadVenueDefaults();
-  }
-
-  async #loadVenueDefaults(): Promise<void> {
-    try {
-      const defaults = await this.api.getVenueDefaults();
-      if (this.isConnected) this.venueDefaults = defaults;
-    } catch {
-      return;
-    }
   }
 
   /** Late initial reads must not overwrite a newer user-initiated connection check. */
@@ -909,7 +896,6 @@ export class SetupApp extends LitElement {
       delete venue.legalName;
       delete venue.seriesCode;
       delete venue.rectificativeSeriesCode;
-      delete venue.operationDescription;
       delete venue.dayCutover;
       delete venue.invoiceLocales;
       this.draft = { ...this.draft, venue };
@@ -2325,10 +2311,6 @@ export class SetupApp extends LitElement {
     // Listening on the container lets each screen talk back without the shell knowing which is mounted.
     return html`${this.leaveConfirmation()}
       <main
-        @setup-defaults-requested=${(event: CustomEvent) => {
-          event.stopPropagation();
-          void this.#loadVenueDefaults();
-        }}
         @setup-patch=${(e: CustomEvent<{ patch: DeepPartial<ProvisionBody> }>) => this.#onPatch(e)}
         @setup-goto=${(e: CustomEvent<{ screen: Screen }>) => this.#onGoto(e)}
         @setup-advance=${(e: CustomEvent) => this.#onAdvance(e)}
@@ -2800,7 +2782,6 @@ export class SetupApp extends LitElement {
         return html`<setup-venue-screen
           data-test="screen-venue"
           .draft=${this.draft}
-          .defaults=${this.venueDefaults}
           .errorMessage=${this.venueError?.()}
           .invalidField=${this.venueInvalidField}
         ></setup-venue-screen>`;

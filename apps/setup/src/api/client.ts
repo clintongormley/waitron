@@ -23,8 +23,6 @@ import type {
 
 export type FetchLike = typeof fetch;
 
-export type VenueDefaults = Readonly<Record<string, { readonly operationDescription: string }>>;
-
 export interface SetupStatus {
   provisioned: boolean;
   environment: "production" | "preproduction";
@@ -69,7 +67,6 @@ export interface VenueDraft {
   name: string;
   fiscalTerritory: string;
   invoiceLocales: string[];
-  operationDescription: string;
   addressLine1: string;
   addressLine2: string | null;
   postalCode: string;
@@ -379,10 +376,6 @@ export class SetupApi {
 
   getDiscovery(): Promise<{ caDownloadAvailable: boolean }> {
     return this.#request("/setup-api/discovery", "GET");
-  }
-
-  getVenueDefaults(): Promise<VenueDefaults> {
-    return this.#request<VenueDefaults>("/setup-api/venue-defaults", "GET");
   }
 
   getStatus(): Promise<SetupStatus> {

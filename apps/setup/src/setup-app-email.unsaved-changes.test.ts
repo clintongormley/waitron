@@ -26,7 +26,6 @@ async function mount(runEmailTest = vi.fn().mockResolvedValue({ accepted: true }
     firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({ environment: "production", needs: ["venue"] }),
-    getVenueDefaults: vi.fn().mockResolvedValue({}),
     runEmailTest,
   } as unknown as SetupApi;
   const { el } = await mountWidget<SetupApp>("setup-app", { api });

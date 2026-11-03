@@ -103,9 +103,7 @@ it.each(["archive", "cloud"])(
         ? { environment: "preproduction", needs: ["venue"] }
         : path.endsWith("/discovery")
           ? { caDownloadAvailable: false }
-          : path.endsWith("/venue-defaults")
-            ? {}
-            : { restoreStaged: true, restarting: true };
+          : { restoreStaged: true, restarting: true };
       return new Response(JSON.stringify(answer));
     });
     const { el } = await mountWidget<SetupApp>("setup-app", { api });

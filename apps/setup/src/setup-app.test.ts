@@ -30,9 +30,6 @@ function stubApi(overrides: Partial<Record<keyof SetupApi, unknown>> = {}): Setu
       environment: "preproduction",
       needs: ["venue"],
     } satisfies SetupStatus),
-    getVenueDefaults: vi
-      .fn()
-      .mockResolvedValue({ verifactu: { operationDescription: "Venta en establecimiento" } }),
     provision: vi.fn().mockResolvedValue({ provisioned: true, restarting: true }),
     adopt: vi.fn().mockResolvedValue({
       adopted: true,
@@ -760,6 +757,16 @@ describe("setup-app", () => {
       expect(Object.hasOwn(body, "newTaxpayer")).toBe(false);
       expect(body.configurationImport).toBe(true);
       expect(body.venue).toMatchObject(sixFields);
+    });
+
+    it("sends no operation description from the export", async () => {
+      const provision = vi.fn().mockResolvedValue({ provisioned: true, restarting: true });
+      const el = await staged({ provision });
+      await choose(el, false);
+      provisionRequest(el);
+      await flush(el);
+      const body = provision.mock.calls[0]![0] as ProvisionBody;
+      expect(Object.keys(body.venue)).not.toContain("operationDescription");
     });
 
     it("puts the exported taxpayer back when new is changed to same", async () => {
@@ -2870,7 +2877,6 @@ describe("A2 mode boundaries", () => {
           admin: { displayName: "Ada" },
           name: "Calle Mayor",
           addressLine1: "Calle Mayor 1",
-          operationDescription: "Demo description",
           invoiceLocales: ["es-ES"],
           dayCutover: "04:00",
         },
@@ -2879,22 +2885,37 @@ describe("A2 mode boundaries", () => {
       const draft = readDraft(el);
       expect(draft.venue?.taxId).toBeUndefined();
       expect(draft.venue?.legalName).toBeUndefined();
-      expect(draft.venue?.operationDescription).toBeUndefined();
       expect(draft.venue?.admin?.displayName).toBe("Ada");
       expect(draft.venue?.addressLine1).toBe("Calle Mayor 1");
     },
   );
-  it("passes fiscal defaults from the server to the shop form", async () => {
-    const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
-    const el = await mountSetupApp(
-      stubApi({ getVenueDefaults: vi.fn().mockResolvedValue(defaults) }),
-    );
-    await flush(el);
+  it("sends no operation description from a fresh setup that passed the venue screen", async () => {
+    const provision = vi.fn().mockResolvedValue({ provisioned: true, restarting: true });
+    const el = await mountSetupApp(stubApi({ provision }));
+    patch(el, {
+      mode: "prepare",
+      venue: {
+        country: "ES",
+        taxId: "B12345674",
+        legalName: "Deli del Sol SL",
+        taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
+        name: "Calle Mayor",
+        addressLine1: "Calle Mayor 1",
+        postalCode: "28013",
+        city: "Madrid",
+        province: "Madrid",
+      },
+    });
     goto(el, "venue");
     await flush(el);
-    expect(((await screenHost(el, "venue")) as unknown as { defaults: unknown }).defaults).toEqual(
-      defaults,
-    );
+    const venue = await screenHost(el, "venue");
+    venue.shadowRoot!.querySelector<HTMLElement>("[data-test=next]")!.click();
+    await flush(el);
+    expect(readDraft(el).venue?.fiscalTerritory).toBe("ES-common");
+    provisionRequest(el);
+    await flush(el);
+    const body = provision.mock.calls[0]![0] as ProvisionBody;
+    expect(Object.keys(body.venue)).not.toContain("operationDescription");
   });
 });
 
@@ -3075,42 +3096,6 @@ describe("connection checks", () => {
       screen: "connection",
       environment: undefined,
     });
-  });
-});
-
-describe("venue defaults", () => {
-  it("keeps defaults that arrive after the element is detached off the element", async () => {
-    const defaults = deferred<unknown>();
-    const el = await mountSetupApp(
-      stubApi({ getVenueDefaults: vi.fn().mockReturnValue(defaults.promise) }),
-    );
-    el.remove();
-    defaults.resolve({ verifactu: { operationDescription: "Venta en establecimiento" } });
-    await flush(el);
-    expect(readState(el, ["venueDefaults"])).toEqual({ venueDefaults: {} });
-  });
-
-  it("reloads the defaults when the shop form asks again, without the request leaving the shell", async () => {
-    const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
-    const getVenueDefaults = vi
-      .fn()
-      .mockRejectedValueOnce(new TypeError("network"))
-      .mockResolvedValue(defaults);
-    const el = await mountSetupApp(stubApi({ getVenueDefaults }));
-    const leaked: Event[] = [];
-    el.parentElement!.addEventListener("setup-defaults-requested", (e) => leaked.push(e));
-    patch(el, { mode: "demo" });
-    goto(el, "venue");
-    await flush(el);
-    const venue = await screenHost(el, "venue");
-    expect(venue.shadowRoot!.querySelector("[data-test=defaults-error]")).not.toBeNull();
-    venue.shadowRoot!.querySelector<HTMLElement>("[data-test=retry-defaults]")!.click();
-    await flush(el);
-    expect(getVenueDefaults).toHaveBeenCalledTimes(2);
-    expect(((await screenHost(el, "venue")) as unknown as { defaults: unknown }).defaults).toEqual(
-      defaults,
-    );
-    expect(leaked).toEqual([]);
   });
 });
 

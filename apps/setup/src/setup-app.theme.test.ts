@@ -36,7 +36,6 @@ function stubApi(): SetupApi {
       environment: "preproduction",
       needs: ["venue"],
     } satisfies SetupStatus),
-    getVenueDefaults: vi.fn().mockResolvedValue({}),
   } as unknown as SetupApi;
 }
 
