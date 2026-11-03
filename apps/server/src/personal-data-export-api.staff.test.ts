@@ -46,7 +46,6 @@ const MARTA = {
 
 const exportModules = ALL_MODULES.filter((m) => m.name === "identity" || m.name === "adjustments");
 const logger = vi.fn();
-let nodeId: string;
 let ids: Record<"admin" | "otherAdmin" | "manager" | "supervisor" | "staff" | "marta", string>;
 let tokens: Record<"admin" | "otherAdmin" | "manager" | "supervisor" | "staff", string>;
 let martaToken: string;
@@ -72,7 +71,6 @@ function mounted(patch: Partial<PersonalDataExportDeps> = {}) {
   const app = new Hono();
   const deps: PersonalDataExportDeps = {
     db: suite.db,
-    nodeId,
     modules: exportModules,
     serverParts: [stubPart],
     venueLocale: "en-GB",
@@ -126,7 +124,7 @@ beforeEach(async () => {
     operationDescription: "Sale on premises",
     timeZone: "Europe/Madrid",
   });
-  nodeId = await seedNode(suite.db);
+  await seedNode(suite.db);
   const rows = await suite.db
     .insert(persons)
     .values([

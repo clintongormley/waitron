@@ -691,7 +691,6 @@ async function download(path = PATH, as = cookie): Promise<Record<string, Uint8A
     app,
     {
       db: suite.db,
-      cfg: { nodeId: NODE_ID },
       venueLocale: "en-GB",
       modules: ALL_MODULES.map((m) => m.name),
       credentialKeyRing: { current: { version: 1, key: Buffer.alloc(32, 6) } },

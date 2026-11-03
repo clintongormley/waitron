@@ -23,7 +23,6 @@ describe("mountMeApi — a database holding no tenant", () => {
       app,
       {
         db: suite.db,
-        cfg: { nodeId: "11111111-1111-4111-8111-111111111111" },
         venueLocale: "en-GB",
         modules: ["core"],
         credentialKeyRing: TOTP_KEY_RING,

@@ -12,6 +12,7 @@ import {
   isUniqueViolation,
   nowIso,
   sameTarget,
+  venueLocationId,
 } from "@waitron/db";
 import type { ConstraintTarget, Transaction } from "@waitron/db";
 import {
@@ -302,7 +303,6 @@ export async function switchActiveProfile(
       active: devices.active,
       label: devices.label,
       deviceProfileId: devices.deviceProfileId,
-      locationId: devices.locationId,
     })
     .from(devices)
     .where(eq(devices.id, input.deviceId));
@@ -323,7 +323,7 @@ export async function switchActiveProfile(
   // Before the move is written: the narrowing reads the current profile as what the device had.
   await VENUE_SERVICE.narrowDeviceKitchenScreens(
     tx,
-    { locationId: brandLocationId(device.locationId) },
+    { locationId: brandLocationId(await venueLocationId(tx)) },
     device.id,
     input.profileId,
   );

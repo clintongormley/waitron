@@ -113,7 +113,7 @@ export function mountInvoiceCustomerDataApi(
       const first = await deps.db.withWriteLock(async () => {
         const { authorizedBy } = await authorize(token);
         const identity = queriedIdentifier(c);
-        const place = await venuePlace(tx, deps.nodeId);
+        const place = await venuePlace(tx);
         const tenant = await readTenant(tx);
         const privacyNoticeUrl = (await readPrivacyContact(tx))?.privacyNoticeUrl ?? null;
         const sales = await findInvoiceCustomerSales(tx, identity.taxId, identity);

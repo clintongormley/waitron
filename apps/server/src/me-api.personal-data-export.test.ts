@@ -11,13 +11,7 @@ import {
   venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  seedDevice,
-  seedNode,
-  seedTenant,
-  seedWorkingOrder,
-  seedVenue,
-} from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedWorkingOrder, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ADJUSTMENTS_MIGRATIONS, adjustments, recordAdjustment } from "@waitron/adjustments";
@@ -47,7 +41,6 @@ function mounted(modules: string[], patch: { venueLocale?: string } = {}): Hono 
     app,
     {
       db: suite.db,
-      cfg: { nodeId: NODE_ID },
       venueLocale: "en-GB",
       modules,
       credentialKeyRing: { current: { version: 1, key: Buffer.alloc(32, 6) } },
@@ -63,7 +56,7 @@ async function download(
   patch: { venueLocale?: string } = {},
   beforeRequest?: (personId: string) => Promise<void>,
 ): Promise<Record<string, string>> {
-  await seedTenant(suite.db);
+  await seedVenue(suite.db);
   const [row] = await suite.db
     .insert(persons)
     .values({ displayName: "Marta Canary", role: "staff" })
@@ -212,11 +205,6 @@ describe("the own personal-data download, mounted by mountMeApi", () => {
 
   describe("a person with one comp she asked for", () => {
     async function compAskedFor(personId: string): Promise<void> {
-      await seedVenue(suite.db, {
-        name: "Dining room",
-        invoiceLocales: ["en"],
-        operationDescription: "Meals",
-      });
       const order = await seedWorkingOrder(suite.db, {
         source: "dashboard",
         deviceId: null,

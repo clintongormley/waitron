@@ -3426,24 +3426,12 @@ it("carries a department's reminder minutes to the importing venue", async () =>
 });
 
 it("leaves out a print agent's node, so the importing venue does not show it as on this box", async () => {
-  const configFor = (venue: {
-    nodeId: string;
-    seriesIds: string[];
-    locationId: string;
-  }): TradingContext => ({
-    nodeId: nodeId(venue.nodeId),
-    locationId: locationId(venue.locationId),
-    locale: "es-ES",
-    invoiceLocales: ["es-ES"],
-    tipsEnabled: false,
-    simplifiedInvoiceLimit: null,
-  });
   const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
     db: suite.db,
     modules: ALL_MODULES,
   });
   await withTransaction(suite.db, (tx) =>
-    selfEnrolNodeAgent(tx, configFor(source), { nodeId: source.nodeId, name: "Source box" }),
+    selfEnrolNodeAgent(tx, { nodeId: source.nodeId, name: "Source box" }),
   );
   const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
@@ -3471,7 +3459,7 @@ it("leaves out a print agent's node, so the importing venue does not show it as 
   // The box's own agent still enrols as a new row beside the imported one; had the imported row held
   // this node, self-enrolment would find it inactive and refuse it as revoked.
   await withTransaction(targetSuite.db, (tx) =>
-    selfEnrolNodeAgent(tx, configFor(target), { nodeId: target.nodeId, name: "Target box" }),
+    selfEnrolNodeAgent(tx, { nodeId: target.nodeId, name: "Target box" }),
   );
   const enrolled = await targetSuite.db
     .select({ name: printAgents.name, nodeId: printAgents.nodeId, active: printAgents.active })

@@ -430,26 +430,6 @@ describe("device names among a location's active devices", () => {
     expect(await activeNamed(cfg.locationId, "Bar")).toBe(1);
   });
 
-  it("accepts the same name at another location", async () => {
-    const { cfg } = await setupVenue();
-    const profileId = await seedProfile("till", "Till profile");
-    await enrolDeviceForTest(suite.db, cfg, { name: "Bar", profileId });
-    const [other] = await suite.db
-      .insert(locations)
-      .values({
-        name: "Terrace",
-        invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    const otherCfg: TradingContext = { ...cfg, locationId: brandLocationId(other!.id) };
-
-    await enrolDeviceForTest(suite.db, otherCfg, { name: "Bar", profileId });
-
-    expect(await activeNamed(cfg.locationId, "Bar")).toBe(1);
-    expect(await activeNamed(other!.id, "Bar")).toBe(1);
-  });
-
   it("accepts the name of a revoked device there", async () => {
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("till", "Till profile");

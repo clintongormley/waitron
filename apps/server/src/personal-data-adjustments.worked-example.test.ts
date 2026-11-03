@@ -459,14 +459,13 @@ async function download(
   personId: string,
   parts = personalDataParts(modulesNamed(["core", "identity", "adjustments"])),
 ) {
-  const { db, cfg } = story.venue;
+  const { db } = story.venue;
   const build = await db.withWriteLock(() =>
     preparePersonalData(db, parts, {
       personId,
       language: "en",
       at: new Date(),
       timeZone: "UTC",
-      locationId: cfg.locationId,
     }),
   );
   return build();

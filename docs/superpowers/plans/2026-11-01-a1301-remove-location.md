@@ -408,6 +408,9 @@ function no longer reads the scope. It fails before the change. It is marked
   ("Cloud follow-up" below).
 - If S2 lands after S13: the attendance recorder's optional, ignored `locationId?` and
   `captureBillPaymentAttendance`'s `requested.locationId` (working-time plan, decision 5).
+- `InvoiceCustomerDataDeps.nodeId` (`apps/server/src/invoice-customer-data-api.ts`), filled with
+  `dataNodeId` in `boot.ts`: nothing reads it since S12c. Removing it also removes the assertion on
+  it in `boot.node-configuration.test.ts` ("`observed.customers?.nodeId`"), so S12's fix-up left it.
 - **Before S18 removes `TradingContext.locationId`:** the open design point "the venue's stable id"
   under "Carried to the schema plan" must be settled, because that field is today's Cloud pairing
   value and backup folder name.
@@ -453,8 +456,9 @@ function no longer reads the scope. It fails before the change. It is marked
   - **the backup bucket.** Every stream and backup-settings call passes
     `venueId: tradingContext.locationId` (`apps/server/src/boot.ts:2372,2749,2823,2843,2860` at main
     `0160250f67`), which names the bucket folder `venues/<venueId>/`
-    (`packages/stream/src/names.ts:26-28`); and `apps/server/src/restore-stream.ts:217` reads
-    `locations where id = venueId`, where `venueId` is the backup settings' venue id (`:180-187`).
+    (`packages/stream/src/names.ts:26-28`); and `apps/server/src/restore-stream.ts` reads the
+    bucket's pointer and downloads its generation under `kit.venueId` (`readPointer`,
+    `restoreGeneration`). Since S12c the restored copy's venue is read with no id (`readVenue`).
   - **Waitron Cloud's pairing value.** At pairing the box sends
     `localVenueId: tradingContext.locationId` (`boot.ts:2759,2768` at main; `:2884,2893` at
     main `929c1e70e0`) and signs it into the pairing bytes (`apps/server/src/cloud-client.ts:269-276`); Cloud keeps
@@ -489,6 +493,14 @@ function no longer reads the scope. It fails before the change. It is marked
   drops `printers.location_id` re-keys that index on `local_key` and deletes the condition. The
   same slice for `print_jobs` removes `enqueuePrintJob`'s `venueId` option
   (`packages/printing/src/outbox.ts`) and the callers that read the venue id once to pass it.
+- **A bucket restore reads the venue from a copy that has not been migrated.** Since S12c,
+  `readRestoredVenue` (`apps/server/src/restore-stream.ts`) reads the downloaded copy through
+  `readVenue` before any migration runs; before it, the copy is only checked for damage and for a
+  schema ahead of this software. So the slice that moves or renames the venue's columns must keep
+  that read working on a copy written by older software: read the name after the private migration,
+  as `readRecoveryCopyPreview` (`recovery-backup-preview.ts`) does, or keep a reader for the old
+  shape. It also moves the cut in `recovery-backup-preview.older.test.ts` (today just before
+  `0151_`) to just before that slice's migration, or no test reads a copy from before the move.
 - **The live-query table names** (`location_day_cutover_changes`, `{ type: "locations" }`) and the
   unique-index column lists (`columns: ["location_id", "name"]`) named as leftovers below go with
   S23 and S24.
@@ -3449,8 +3461,7 @@ The restore confirmation's `locationName` → `venueName` rename (`RestoredVenue
 - [ ] **Step 4: delete:** `personal-data-export-api.test.ts:280` ("dates the file in UTC with no
   location when this node has no row" — the node no longer decides the zone; the unknown-zone case
   at `:291` keeps the UTC fallback covered); `personal-data-time-record.test.ts:250` ("builds no
-  files when the node has no location") and `:254` ("…whose only entries are at another
-  location"). Keep `restore-stream.test.ts:292`, `:417`, `:430`: "another venue" there is another
+  files when the node has no location"). Keep `restore-stream.test.ts:292`, `:417`, `:430`: "another venue" there is another
   bucket's copy, not a location.
 - [ ] **Step 5:** run `pnpm --filter @waitron/server exec vitest run src/personal-data*.test.ts
   src/restore-stream*.test.ts src/restore-request*.test.ts`;

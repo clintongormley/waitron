@@ -99,13 +99,7 @@ export async function withTenderRefundAuthorization<T>(
         .select(deviceBindingColumns)
         .from(devices)
         .innerJoin(deviceProfiles, deviceProfileJoin)
-        .where(
-          and(
-            eq(devices.id, cfg.origin.deviceId),
-            eq(devices.locationId, cfg.locationId),
-            isNull(deviceProfiles.retiredAt),
-          ),
-        );
+        .where(and(eq(devices.id, cfg.origin.deviceId), isNull(deviceProfiles.retiredAt)));
       if (row === undefined) throw new AppError("device.unauthorized", {});
       const device = toDeviceBinding(cfg.origin.deviceId, row);
       if (device.formFactor === "kds")

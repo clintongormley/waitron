@@ -8,10 +8,8 @@ import {
   devices,
   deviceProfiles,
   lineServiceCancellations,
-  locations,
   products,
   workingOrderLines,
-  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
@@ -288,6 +286,18 @@ it.each(["preview", "move"])("requires an open session for %s", async (action) =
   expect(frozen()).toEqual(before);
 });
 
+it("refuses an allergy move of an unknown bill as not open, writing nothing", async () => {
+  const f = await fixture();
+  const before = frozen();
+  const response = await f.app.request(`/api/bills/${randomUUID()}/move`, {
+    method: "POST",
+    headers: f.headers,
+    body: JSON.stringify(adoption(f)),
+  });
+  await refused(response, 409, "tab.not_open");
+  expect(frozen()).toEqual(before);
+});
+
 const authority = {
   device: [401, "device.unauthorized"],
   action: [403, "device.forbidden_action"],
@@ -401,38 +411,6 @@ for (const action of ["preview", "move"] as const) {
     },
   );
 }
-
-// A1301: deleted with the move route's own source-bill location check in S12
-it("move refuses a source bill from another location", async () => {
-  const f = await fixture();
-  const [other] = await v.db
-    .insert(locations)
-    .values({
-      name: "Other location",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
-    })
-    .returning();
-  const [bill] = await v.db
-    .select({ locationId: workingOrders.locationId })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, f.billId));
-  try {
-    await v.db
-      .update(workingOrders)
-      .set({ locationId: other!.id })
-      .where(eq(workingOrders.id, f.billId));
-    const before = frozen();
-    await refused(await f.request("", adoption(f)), 409, "tab.not_open");
-    expect(frozen()).toEqual(before);
-  } finally {
-    await v.db
-      .update(workingOrders)
-      .set({ locationId: bill!.locationId })
-      .where(eq(workingOrders.id, f.billId));
-    await v.db.delete(locations).where(eq(locations.id, other!.id));
-  }
-});
 
 it("previews parent nutrition and distinct extras, retaining unknown versus reviewed empty", async () => {
   const f = await fixture();

@@ -75,7 +75,6 @@ function buildApp(opts: { isPrimary?: boolean; limiter?: EnrolRateLimiter } = {}
     app,
     {
       db: suite.db,
-      cfg,
       nodeId: cfg.nodeId,
       isPrimary: opts.isPrimary ?? true,
       enrolRateLimiter: opts.limiter,

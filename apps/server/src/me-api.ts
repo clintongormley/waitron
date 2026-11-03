@@ -61,7 +61,6 @@ export interface MeApiDeps {
   db: Database;
   readTradingAdmission?: () => TradingAdmissionView;
   describeShifts?: WaitronModule["describeShifts"];
-  cfg: { nodeId: string };
   /** The language the dashboard defaults to before a signed-in person's own preference is known. */
   venueLocale: string;
   /** The setup journey that created this installation, shown persistently by the dashboard. */
@@ -124,7 +123,6 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     app,
     {
       db: deps.db,
-      nodeId: deps.cfg.nodeId,
       modules,
       serverParts: [...timeRecordPersonalData(modules), ...actionsPersonalData(deps.db)],
       venueLocale: deps.venueLocale,

@@ -161,7 +161,6 @@ function mountAppWithMe(): Hono {
     app,
     {
       db: suite.db,
-      cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       venueLocale: LOCALE,
       modules: [],
       credentialKeyRing: TOTP_KEY_RING,

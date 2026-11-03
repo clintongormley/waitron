@@ -66,13 +66,7 @@ async function checkAccess(
     .select(deviceBindingColumns)
     .from(devices)
     .innerJoin(deviceProfiles, deviceProfileJoin)
-    .where(
-      and(
-        eq(devices.id, session.deviceId),
-        eq(devices.locationId, cfg.locationId),
-        isNull(deviceProfiles.retiredAt),
-      ),
-    );
+    .where(and(eq(devices.id, session.deviceId), isNull(deviceProfiles.retiredAt)));
   if (row === undefined) throw new AppError("device.unauthorized", {});
   const device = toDeviceBinding(session.deviceId, row);
   if (device.formFactor === "kds")

@@ -37,17 +37,13 @@ export const joinRequests = table(
     // `apps/server/src/join-requests.ts` filters on it, so another node holding this database
     // neither lists nor accepts the request — the same fail-closed posture as the in-memory pairing
     // window. No foreign key to `nodes`, for the reason on `location_id` below. Nothing checks
-    // that `nodes` holds this id, when the row is written or later: accept copies `location_id`,
-    // never this id, so it only decides which node sees the request.
+    // that `nodes` holds this id, when the row is written or later: accept never copies it, so it
+    // only decides which node sees the request.
     nodeId: id("node_id").notNull(),
-    // The venue the joiner belongs to — stamped from the node's own `cfg.locationId`, never asked
-    // for, so a joiner says nothing about which venue it is joining. No foreign key to `locations`:
-    // a `local` table holds no key into a venue table (guard:
-    // `scripts/two-file-foreign-keys.test.ts`). Unlike the identity tables, that id is
-    // configuration rather than a row this request read, and nothing checks it exists when the row
-    // is written; a misconfigured venue is refused later, when accept copies it into a new row —
-    // `devices` for a device, `print_agents` for an agent — both of which do hold a key to
-    // `locations`. Accepting a disabled device coming back does not read it: that row keeps its own.
+    // The venue's id, stamped from `venueLocationId`, never asked for, so a joiner says nothing
+    // about which venue it is joining. No foreign key to `locations`: a `local` table holds no key
+    // into a venue table (guard: `scripts/two-file-foreign-keys.test.ts`). Nothing reads it:
+    // accept stamps the venue on the new `devices` or `print_agents` row itself.
     locationId: id("location_id").notNull(),
     kind: joinRequestKind("kind").notNull(),
     // The name the joiner asked for. An agent accept copies it to `print_agents.name`; a device accept

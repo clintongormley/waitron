@@ -23,7 +23,7 @@ const NOW = new Date("2026-10-04T22:30:00Z");
 const PRIVACY = "https://venue.example/privacy";
 
 const identityModules = ALL_MODULES.filter((m) => m.name === "identity");
-let nodeId: string, martaId: string, martaToken: string;
+let martaId: string, martaToken: string;
 
 const extraPart: PersonalDataPart = {
   owner: "server",
@@ -43,7 +43,6 @@ function mounted(patch: Partial<PersonalDataExportDeps> = {}) {
     app,
     {
       db: suite.db,
-      nodeId,
       modules: identityModules,
       serverParts: [extraPart, silentPart],
       venueLocale: "en-GB",
@@ -80,7 +79,7 @@ beforeEach(async () => {
     operationDescription: "Sale on premises",
     timeZone: "Europe/Madrid",
   });
-  nodeId = await seedNode(suite.db);
+  await seedNode(suite.db);
   const [marta] = await suite.db
     .insert(persons)
     .values({ displayName: "Marta López", email: "marta@example.test", role: "staff" })

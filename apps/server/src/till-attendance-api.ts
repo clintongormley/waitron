@@ -43,7 +43,7 @@ import type { Logger } from "./logger.js";
 
 export interface TillAttendanceApiDeps {
   db: Database;
-  cfg: { nodeId: string; locationId: string };
+  cfg: { nodeId: string };
   now: () => Date;
   attemptsFor: (deviceId: string) => PinAttempts;
 }
@@ -88,7 +88,7 @@ function id(value: unknown, field: string): string {
 function noQuery(c: Context): void {
   if (new URL(c.req.url).search) invalid("query");
 }
-async function admit(tx: Transaction, deps: TillAttendanceApiDeps, session: SignedIn) {
+async function admit(tx: Transaction, session: SignedIn) {
   await assertStillSignedIn(tx, session);
   const [current] = await tx
     .select(deviceBindingColumns)
@@ -96,8 +96,6 @@ async function admit(tx: Transaction, deps: TillAttendanceApiDeps, session: Sign
     .innerJoin(deviceProfiles, deviceProfileJoin)
     .where(eq(devices.id, session.deviceId));
   if (!current) throw new AppError("device.unauthorized", {});
-  if (current.locationId !== deps.cfg.locationId)
-    throw new AppError("attendance.not_permitted", { personId: session.personId });
   assertProfileAction(toDeviceBinding(session.deviceId, current), "clock-in");
   if (!(await canUseDeviceProfile(tx, current.deviceProfileId, session.personId)))
     throw new AppError("attendance.not_permitted", { personId: session.personId });
@@ -139,7 +137,7 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
       const scope = parseHoursQuery(new URL(c.req.url).searchParams, "own");
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          await admit(tx, deps, session);
+          await admit(tx, session);
           const now = deps.now();
           const clock = await readVenueClock(tx);
           return readPersonHours(tx, { ...scope, personId: session.personId, clock, now });
@@ -153,7 +151,7 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
       noQuery(c);
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          await admit(tx, deps, session);
+          await admit(tx, session);
           await reconcileAttendanceBeforeClock(
             tx,
             { ...deps.cfg, personId: session.personId },
@@ -171,7 +169,7 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
       const scope = parseAttendanceDayQuery(new URL(c.req.url).searchParams, "worker");
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          await admit(tx, deps, session);
+          await admit(tx, session);
           return readAttendanceDay(tx, { ...scope, personId: session.personId });
         }),
       );
@@ -184,7 +182,7 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
       const commandId = id(c.req.param("commandId"), "commandId");
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          await admit(tx, deps, session);
+          await admit(tx, session);
           return readAttendanceCommand(tx, { commandId, requestedByPersonId: session.personId });
         }),
       );
@@ -199,7 +197,7 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
       const itemId = id(c.req.param("itemId"), "itemId");
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          await admit(tx, deps, session);
+          await admit(tx, session);
           const item = await ownItem(tx, session.personId, itemId);
           if (item.direction !== "worker_request" || item.status !== "waiting-manager")
             throw new AppError("correction.not_pending", { correctionId: itemId });
@@ -227,7 +225,7 @@ export function mountTillAttendanceApi(app: Hono, deps: TillAttendanceApiDeps, l
       const attempts = deps.attemptsFor(session.deviceId);
       const result = await withPinCheckAhead(deps.db, override, attempts, (checked) =>
         withTransaction(deps.db, async (tx) => {
-          await admit(tx, deps, session);
+          await admit(tx, session);
           if ("itemId" in command) await ownItem(tx, session.personId, command.itemId);
           const authorizedByPersonId =
             override === undefined

@@ -29,10 +29,13 @@ import {
   assertTakesCash,
   clearDeviceCookie,
   cookieDomainFor,
+  deviceBindingColumns,
+  deviceProfileJoin,
   readDeviceCookie,
   requireDevice,
   requireDeviceProof,
   setDeviceCookie,
+  toDeviceBinding,
   tryReadDevice,
   VERIFIED_TOKENS_LIMIT,
 } from "./device-session.js";
@@ -396,7 +399,7 @@ describe("device cookie helpers", () => {
 
 describe("requireDevice (venue database)", () => {
   it("authenticates a valid cookie and touches last_seen_at", async () => {
-    const { cfg, deviceId, token, deviceProfileId } = await enrolDeviceFixture();
+    const { deviceId, token, deviceProfileId } = await enrolDeviceFixture();
     expect(await lastSeenAt(deviceId)).toBeNull(); // never seen yet
 
     const result = await probe(`${deviceId}.${token}`);
@@ -406,7 +409,6 @@ describe("requireDevice (venue database)", () => {
         deviceId,
         formFactor: "kds",
         label: "Screen",
-        locationId: cfg.locationId,
         deviceProfileId,
         ...NO_BINDINGS,
       },
@@ -416,14 +418,13 @@ describe("requireDevice (venue database)", () => {
   });
 
   it("carries the device's assigned profile + hardware bindings back on the binding (SP-A.2 §16, device-profile §5)", async () => {
-    const { cfg, deviceId, token, deviceProfileId } = await enrolTillDeviceFixture();
+    const { deviceId, token, deviceProfileId } = await enrolTillDeviceFixture();
     expect(await probe(`${deviceId}.${token}`)).toEqual({
       ok: true,
       binding: {
         deviceId,
         formFactor: "till",
         label: "Counter till",
-        locationId: cfg.locationId,
         deviceProfileId,
         // The `till` profile declares both fenced flags — carried on the binding by the profile join.
         capabilities: ["integrated-card-payment", "open-cash-drawer"],
@@ -519,15 +520,32 @@ describe("requireDevice (venue database)", () => {
   });
 });
 
+describe("toDeviceBinding (venue database)", () => {
+  it("carries the device's identity, profile and capabilities, and nothing else", async () => {
+    const { deviceId, deviceProfileId } = await enrolDeviceFixture();
+    const [row] = await suite.db
+      .select(deviceBindingColumns)
+      .from(devices)
+      .innerJoin(deviceProfiles, deviceProfileJoin)
+      .where(eq(devices.id, deviceId));
+    expect(toDeviceBinding(deviceId, row!)).toEqual({
+      deviceId,
+      formFactor: "kds",
+      label: "Screen",
+      deviceProfileId,
+      capabilities: [],
+    });
+  });
+});
+
 describe("tryReadDevice (venue database)", () => {
   it("tryReadDevice returns the binding for a valid cookie and null at every miss", async () => {
-    const { cfg, deviceId, token, deviceProfileId } = await enrolDeviceFixture();
+    const { deviceId, token, deviceProfileId } = await enrolDeviceFixture();
     // Success resolves to the same binding `requireDevice` returns.
     expect(await probeTry(`${deviceId}.${token}`)).toEqual({
       deviceId,
       formFactor: "kds",
       label: "Screen",
-      locationId: cfg.locationId,
       deviceProfileId,
       ...NO_BINDINGS,
     });
@@ -596,7 +614,7 @@ describe("requireDeviceProof and assertDeviceStillProven (venue database)", () =
   });
 
   it("returns the device as it stands now, not as the proof read it", async () => {
-    const { cfg, deviceId, token } = await enrolDeviceFixture();
+    const { deviceId, token } = await enrolDeviceFixture();
     const proof = await proofFor({ cookie: `${DEVICE_COOKIE}=${deviceId}.${token}` });
     expect(proof.device.formFactor).toBe("kds");
     const tillProfileId = await seedDeviceProfile("Bar tills", "till", ["take-cash"]);
@@ -610,7 +628,6 @@ describe("requireDeviceProof and assertDeviceStillProven (venue database)", () =
       deviceId,
       formFactor: "till",
       label: "Bar till",
-      locationId: cfg.locationId,
       deviceProfileId: tillProfileId,
       capabilities: ["take-cash"],
     });
@@ -750,7 +767,6 @@ describe("assertTakesCash on a resolved device", () => {
     deviceId: randomUUID(),
     formFactor,
     label: "Waiter phone",
-    locationId: randomUUID(),
     deviceProfileId: randomUUID(),
     capabilities,
   });

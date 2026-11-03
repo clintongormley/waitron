@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { beforeEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deviceProfiles, devices, locations, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -219,7 +219,7 @@ it.each(routes)("rejects a profile without clock-in on %s", async (path, body) =
     error: { code: "device.forbidden_action", params: { action: "clock-in" } },
   });
 });
-it.each(["ended", "disabled", "deleted", "admission", "suspended", "location"] as const)(
+it.each(["ended", "disabled", "deleted", "admission", "suspended"] as const)(
   "rechecks %s admission on every attendance route",
   async (kind) => {
     const valid = await command();
@@ -244,16 +244,6 @@ it.each(["ended", "disabled", "deleted", "admission", "suspended", "location"] a
         .update(persons)
         .set({ status: "suspended" })
         .where(eq(persons.id, venue.personId));
-    if (kind === "location") {
-      const [other] = await suite.db
-        .insert(locations)
-        .values({ name: "Moved", invoiceLocales: ["es"], operationDescription: "Restaurant" })
-        .returning();
-      await suite.db
-        .update(devices)
-        .set({ locationId: other!.id })
-        .where(eq(devices.id, venue.deviceId));
-    }
     const before = await snapshot();
     for (const [path, body] of routes) {
       const response = await request(pathOf(path), body === undefined ? undefined : valid);

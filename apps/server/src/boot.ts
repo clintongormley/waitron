@@ -1823,7 +1823,6 @@ async function bootServer(
       app,
       {
         db,
-        cfg: { nodeId: tradingContext.nodeId },
         venueLocale,
         onboardingIntent: config.onboardingIntent,
         modules: setsToMigrate.map((module) => module.name),
@@ -2020,7 +2019,6 @@ async function bootServer(
     app,
     {
       db,
-      cfg: tradingContext,
       nodeId: tradingContext.nodeId,
       isPrimary: isSingletonPrimary && !fencedOrMirror,
     },
@@ -2432,7 +2430,6 @@ async function bootServer(
       db,
       describeShifts,
       readTradingAdmission: () => tradingAdmission.snapshot(),
-      cfg: { nodeId: tradingContext.nodeId },
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       modules: setsToMigrate.map((m) => m.name),

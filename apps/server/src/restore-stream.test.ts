@@ -190,18 +190,19 @@ const POINTER: StreamPointer = {
  * at `lastChangeAt` on the bucket's clock. The bucket's clock then reads NOW.
  */
 async function bucket(
-  opts: { lastChangeAt?: Date; signWith?: string } = {},
+  opts: { lastChangeAt?: Date; signWith?: string; venueId?: string } = {},
 ): Promise<MemoryObjectStore> {
   let clock = opts.lastChangeAt ?? new Date(NOW.getTime() - 60 * 60_000);
   const store = createMemoryObjectStore({ now: () => clock });
+  const venueId = opts.venueId ?? T.locationId;
   await writePointer(
     store,
-    T.locationId,
-    signPointer(POINTER, opts.signWith ?? signer.privateKey),
+    venueId,
+    signPointer({ ...POINTER, venueId }, opts.signWith ?? signer.privateKey),
     null,
   );
   await store.put(
-    `${generationPrefix(T.locationId, GENERATION)}ltx/0/0000000000000001.ltx`,
+    `${generationPrefix(venueId, GENERATION)}ltx/0/0000000000000001.ltx`,
     Uint8Array.from([1]),
   );
   clock = NOW;
@@ -591,6 +592,39 @@ describe("prepareStreamRestore", () => {
     const prepared = await prepareStreamRestore(deps);
     expect(prepared.venue.venueName).toBe(VENUE.venueName);
     await prepared.discard();
+  });
+
+  it("confirms the restored copy's venue whatever venue id the backup settings name", async () => {
+    const venueId = "c0000000-0000-4000-8000-0000000000ff";
+    const deps = await prepareDeps(await bucket({ venueId }), { kit: { ...KIT, venueId } });
+    const prepared = await prepareStreamRestore(deps);
+    expect(prepared.venue.venueName).toBe(VENUE.venueName);
+    await prepared.discard();
+  });
+
+  it.each([
+    [
+      "two venue rows",
+      "insert into locations (id, name, invoice_locales, operation_description) values ('c0000000-0000-4000-8000-0000000000aa', 'Other', '[\"es\"]', 'Venta')",
+    ],
+    ["no venue row", "delete from locations"],
+  ])("refuses a copy with %s as an unknown identity, as an archive of it is", async (_, change) => {
+    const deps = await prepareDeps(await bucket(), {
+      restoreGeneration: async (args) => {
+        await copyFile(fixtureDb, args.outPath);
+        const copy = new DatabaseSync(args.outPath, { enableForeignKeyConstraints: false });
+        try {
+          copy.exec(change);
+        } finally {
+          copy.close();
+        }
+      },
+    });
+    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.identity_unknown",
+      params: { nodeId: T.nodeId },
+    });
+    await expectStateUntouched(deps.stateDir);
   });
 });
 

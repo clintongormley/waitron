@@ -1518,6 +1518,9 @@ open under Task 1b. _2026-10-04 (A238):_ `tills` is gone; `sessions.device_id` n
 `restrict` key to `devices`, and `sessions` still has none to `persons`
 (`packages/identity/src/schema/sessions.ts`).
 
+_2026-11-03 (A1301 S12b):_ `join_requests.location_id` is now stamped with the venue's id, and
+nothing reads it: accept stamps the venue on the new `devices` or `print_agents` row itself.
+
 **What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
 which of three ties it uses: a `node_id` column every read and write names (`join_requests`,
 `node_sealed_state`, `recovery_packs`; every `node.db` table carries one too, though a key-ring

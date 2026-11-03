@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deviceProfiles, devices, locations, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -82,7 +82,7 @@ it("requires the current session before parsing the hours query", async () => {
   expect(response.status).toBe(401);
   expect(await response.json()).toMatchObject({ error: { code: "session.required" } });
 });
-it.each(["ended", "disabled", "deleted", "suspended", "admission", "profile", "location"] as const)(
+it.each(["ended", "disabled", "deleted", "suspended", "admission", "profile"] as const)(
   "refuses changed %s admission without revealing hours",
   async (kind) => {
     if (kind === "ended")
@@ -111,16 +111,6 @@ it.each(["ended", "disabled", "deleted", "suspended", "admission", "profile", "l
         .update(deviceProfiles)
         .set({ capabilities: [] })
         .where(eq(deviceProfiles.id, venue.profileId));
-    if (kind === "location") {
-      const [other] = await suite.db
-        .insert(locations)
-        .values({ name: "Other", invoiceLocales: ["es"], operationDescription: "Restaurant" })
-        .returning();
-      await suite.db
-        .update(devices)
-        .set({ locationId: other!.id })
-        .where(eq(devices.id, venue.deviceId));
-    }
     const before = snapshot();
     const response = await read();
     expect(response.status).toBe(kind === "ended" ? 401 : 403);

@@ -40,7 +40,7 @@ const COLLEAGUE = {
 
 const identityModules = ALL_MODULES.filter((m) => m.name === "identity");
 const logger = vi.fn();
-let locationId: string, nodeId: string, martaId: string, colleagueId: string;
+let locationId: string, martaId: string, colleagueId: string;
 let martaToken: string, colleagueToken: string;
 let order: string[];
 let subjects: PersonalDataSubject[];
@@ -65,7 +65,6 @@ const stubPart: PersonalDataPart = {
 function deps(patch: Partial<PersonalDataExportDeps> = {}): PersonalDataExportDeps {
   return {
     db: suite.db,
-    nodeId,
     modules: identityModules,
     serverParts: [stubPart],
     venueLocale: "en-GB",
@@ -116,7 +115,7 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
   });
   locationId = await venueLocationId(suite.db);
-  nodeId = await seedNode(suite.db);
+  await seedNode(suite.db);
   const [marta, colleague] = await suite.db
     .insert(persons)
     .values([
@@ -160,7 +159,7 @@ describe("GET /management-api/me/personal-data/export", () => {
     ]);
     expect(files["profile.json"]).toContain("marta@example.test");
     expect(subjects).toEqual([
-      { personId: martaId, language: "en", at: NOW, timeZone: "Europe/Madrid", locationId },
+      { personId: martaId, language: "en", at: NOW, timeZone: "Europe/Madrid" },
     ]);
   });
 
@@ -175,7 +174,7 @@ describe("GET /management-api/me/personal-data/export", () => {
       PERSONAL_DATA_README_WORDS.es.title.replace("{venue}", "Test SL"),
     );
     expect(subjects).toEqual([
-      { personId: martaId, language: "es", at: NOW, timeZone: "Europe/Madrid", locationId },
+      { personId: martaId, language: "es", at: NOW, timeZone: "Europe/Madrid" },
     ]);
   });
 
@@ -272,17 +271,6 @@ describe("GET /management-api/me/personal-data/export", () => {
     await refused(response, 401, "management_session.required");
   });
 
-  it("dates the file in UTC with no location when this node has no row", async () => {
-    const response = await ask(mounted({ nodeId: "no-such-node" }));
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-disposition")).toBe(
-      'attachment; filename="marta-lopez-2026-10-04.zip"',
-    );
-    expect(subjects).toEqual([
-      { personId: martaId, language: "en", at: NOW, timeZone: "UTC", locationId: null },
-    ]);
-  });
-
   it("dates the file in UTC when the venue's stored zone is unknown", async () => {
     await suite.db
       .update(locations)
@@ -294,9 +282,21 @@ describe("GET /management-api/me/personal-data/export", () => {
     expect(response.headers.get("content-disposition")).toBe(
       'attachment; filename="marta-lopez-2026-10-04.zip"',
     );
-    expect(subjects).toEqual([
-      { personId: martaId, language: "en", at: NOW, timeZone: "UTC", locationId },
-    ]);
+    expect(subjects).toEqual([{ personId: martaId, language: "en", at: NOW, timeZone: "UTC" }]);
+    expect(subjects[0]).not.toHaveProperty("locationId");
+  });
+
+  it("refuses venue.not_found when the box holds no venue row", async () => {
+    const [venueRow] = await suite.db.select().from(locations);
+    suite.db.run(sql`pragma foreign_keys = off`);
+    try {
+      suite.db.run(sql`delete from locations`);
+      await refused(await ask(mounted()), 400, "venue.not_found");
+      expect(subjects).toEqual([]);
+    } finally {
+      await suite.db.insert(locations).values(venueRow!);
+      suite.db.run(sql`pragma foreign_keys = on`);
+    }
   });
 
   it("names the file for the real date when the box's clock reads 1970", async () => {

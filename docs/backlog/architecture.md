@@ -1036,8 +1036,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
-  slices. Still open: S12 (S12a–S12c), F3, S18, S19 and the schema slices S20–S28; every other
-  slice has landed.
+  slices. Still open: F3, S18, S19 and the schema slices S20–S28; every other slice has landed.
   `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
   `venueLocationId` are on main for the remaining consumer slices (S1, #2379).
   `@waitron/db/testing/seed.js` has `seedVenue` and `seedWorkingOrder`, and
@@ -1047,11 +1046,6 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
   What the landed slices left, by owner:
 
-  - **S12a** (left by S11, #2411): the device admission checks in `order-kitchen-note-api.ts`,
-    `party-allergy-api.ts`, `line-cancel-api.ts`, `tender-refund-api.ts` and
-    `tender-refund-authorization.ts`, and the bill move route's source-bill location check in
-    `till-api.ts` (an allergy move), whose case "move refuses a source bill from another location"
-    in `till-api.allergy-move.test.ts` is deleted with it.
   - **S18:** the contract's node location ids remain for S18 (S3, #2387). Staffing's season,
     day-plan and month reads still hand venue-service a `{ locationId }` scope, which S6 and S8
     leave as an ignored `_cfg` and S18 removes, and its rota verbs keep theirs as an unread
@@ -1066,7 +1060,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     (S8, #2405). Left for S18 by S11 (#2411): the unread `_cfg` in `kitchen.ts`, `dead-ends.ts`
     and `kitchen-allergy.ts`, the `VENUE_SERVICE.stationStates` scopes in `kitchen.ts` and
     `station-move.ts`, the floor annotator's `cfg`, and `receipt-guests.ts`'s `cfg`. The node and
-    storage ids remain for S18 and the schema slices (S16, #2402).
+    storage ids remain for S18 and the schema slices (S16, #2402). `InvoiceCustomerDataDeps.nodeId`
+    is read only by `boot.node-configuration.test.ts` and remains for S18 (S12).
   - **The schema slices S20–S28:** the schema changes remain for S20–S28 (S3, #2387). Until the
     schema slices drop `print_jobs.location_id`, `enqueuePrintJob` takes the venue id as an
     optional `venueId`, so a sale, a kitchen send or a payment's slips read it once, and the demo
@@ -1078,7 +1073,9 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     `fire_control`, whose column A773-2 removes (S17, #2415). Two raw
     `insert into working_orders` statements (`working-order.test.ts`'s `seedForeignNodeOrder`,
     `station-order-migration.test.ts`): the schema slice that drops `working_orders.location_id`
-    changes them (F5, #2403).
+    changes them (F5, #2403). A bucket restore reads the venue from the downloaded copy before any
+    migration runs, so the slice that moves the venue's columns keeps that read working on an older
+    copy (S12; the plan's "Carried to the schema plan").
   - **Fixture lines the helpers could not take:** F5 (#2403), F2 (#2410) and F4 (#2412) list the
     lines they left (fixed ids the helpers cannot keep, second-location cases and standby copies)
     with their owning slice in their commit messages and PR bodies. Reporting's

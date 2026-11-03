@@ -106,8 +106,6 @@ export function mountPartyAllergyApi(app: Hono, deps: TillApiDeps, log: Logger, 
               device: session.device,
               tokenHash: null,
             });
-            if (device.locationId !== deps.cfg.locationId)
-              throw new AppError("device.unauthorized", {});
             assertProfileAction(device, "take-orders");
             if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
               throw new AppError("device_profile.not_admitted", {});

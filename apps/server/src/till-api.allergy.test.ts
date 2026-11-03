@@ -6,7 +6,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   devices,
   deviceProfiles,
-  locations,
   parties,
   partyTables,
   serviceCommands,
@@ -624,19 +623,6 @@ describe("A669 allergy preview validation", () => {
   });
 });
 
-it.each(verbs)("A669 refuses a device relocated away from this process for %s", async (verb) => {
-  const [other] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Other location",
-      invoiceLocales: ["en-GB"],
-      operationDescription: "Hospitality",
-    })
-    .returning();
-  await suite.db.update(devices).set({ locationId: other!.id }).where(eq(devices.id, deviceId));
-  await expectError(await request(verb, route(verb), bodyFor(verb)), 401, "device.unauthorized");
-  expect(await snapshot()).toMatchObject({ answer: null, revision: 0 });
-});
 it("A669 keeps the current answer when a command omits the optional patch", async () => {
   await ticked();
   const before = await snapshot();

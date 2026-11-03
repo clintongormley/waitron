@@ -9,6 +9,7 @@ import {
   joinRequests,
   nowIso,
   printAgents,
+  venueLocationId,
   withTransaction,
 } from "@waitron/db";
 import { endDeviceSessions, hashSecret, verifySecretAsync } from "@waitron/identity";
@@ -204,7 +205,7 @@ export async function createJoinRequest(
     .values({
       ...(returningId === undefined ? {} : { id: returningId }),
       nodeId: cfg.nodeId,
-      locationId: cfg.locationId,
+      locationId: await venueLocationId(tx),
       kind: input.kind,
       label: input.label,
       tokenHash,
@@ -334,7 +335,6 @@ async function requirePending(
   verificationNumber: string;
   decoyNumbers: string[];
   tokenHash: string;
-  locationId: string;
 }> {
   await sweepLapsed(tx, cfg);
   const [row] = await tx
@@ -345,7 +345,6 @@ async function requirePending(
       verificationNumber: joinRequests.verificationNumber,
       decoyNumbers: joinRequests.decoyNumbers,
       tokenHash: joinRequests.tokenHash,
-      locationId: joinRequests.locationId,
     })
     .from(joinRequests)
     .where(and(ownedBy(cfg), eq(joinRequests.id, id)));
@@ -525,7 +524,6 @@ export async function acceptDeviceJoinRequest(
     .returning({
       id: joinRequests.id,
       tokenHash: joinRequests.tokenHash,
-      locationId: joinRequests.locationId,
     });
   if (row === undefined) throw new AppError("join_request.not_found", {});
   const [existing] = await tx
@@ -562,7 +560,7 @@ export async function acceptDeviceJoinRequest(
 
   await insertDevice(tx, {
     id: row.id,
-    locationId: row.locationId,
+    locationId: await venueLocationId(tx),
     deviceProfileId: input.profileId,
     label: input.label,
     tokenHash: row.tokenHash,
@@ -600,7 +598,6 @@ export async function acceptPrintAgentJoinRequest(
       label: joinRequests.label,
       verificationNumber: joinRequests.verificationNumber,
       tokenHash: joinRequests.tokenHash,
-      locationId: joinRequests.locationId,
     });
   if (row === undefined) throw new AppError("join_request.not_found", {});
   if (input.choice !== row.verificationNumber) {
@@ -610,7 +607,7 @@ export async function acceptPrintAgentJoinRequest(
 
   await tx.insert(printAgents).values({
     id: row.id,
-    locationId: row.locationId,
+    locationId: await venueLocationId(tx),
     name: row.label,
     tokenHash: row.tokenHash,
     active: true,
@@ -704,7 +701,6 @@ export async function endReturningRequest(
  */
 export async function selfEnrolNodeAgent(
   tx: Transaction,
-  cfg: TradingContext,
   input: { nodeId: string; name: string },
 ): Promise<{ agentId: string; token: string }> {
   const [existing] = await tx
@@ -727,7 +723,7 @@ export async function selfEnrolNodeAgent(
   const agentId = randomUUID();
   await tx.insert(printAgents).values({
     id: agentId,
-    locationId: cfg.locationId,
+    locationId: await venueLocationId(tx),
     nodeId: input.nodeId,
     name: input.name,
     tokenHash,

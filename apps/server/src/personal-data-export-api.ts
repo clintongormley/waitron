@@ -1,7 +1,7 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
 import { eq } from "drizzle-orm";
-import { locations, nodes, readTenant, type Database, type Transaction } from "@waitron/db";
+import { readTenant, readVenue, type Database, type Transaction } from "@waitron/db";
 import { authorizeManager, persons, resolveManagementSession } from "@waitron/identity";
 import {
   personalDataParts,
@@ -21,7 +21,6 @@ import { knownZone } from "./venue-time-zone.js";
 
 export interface PersonalDataExportDeps {
   db: Database;
-  nodeId: string;
   modules: readonly WaitronModule[];
   /** Parts the server adds itself. */
   serverParts: readonly PersonalDataPart[];
@@ -48,14 +47,8 @@ export const withPersonalDataErrors = createErrorBoundary(
 
 export const toLanguage = (locale: string): "en" | "es" => (locale.startsWith("es-") ? "es" : "en");
 
-export async function venuePlace(tx: Transaction, nodeId: string) {
-  const [row] = await tx
-    .select({ locationId: nodes.locationId, timeZone: locations.timeZone })
-    .from(nodes)
-    .innerJoin(locations, eq(locations.id, nodes.locationId))
-    .where(eq(nodes.id, nodeId));
-  if (row === undefined) return { locationId: null, timeZone: "UTC" };
-  return { locationId: row.locationId, timeZone: knownZone(row.timeZone) };
+export async function venuePlace(tx: Transaction) {
+  return { timeZone: knownZone((await readVenue(tx)).timeZone) };
 }
 
 /** Does not catch: wrap the call in `withPersonalDataErrors`. */
@@ -72,7 +65,7 @@ export async function sendPersonalData(
   const tx = deps.db;
   const snapshot = await deps.db.withWriteLock(async () => {
     const who = await authorize(tx);
-    const place = await venuePlace(tx, deps.nodeId);
+    const place = await venuePlace(tx);
     const tenant = await readTenant(tx);
     const privacyNoticeUrl = (await readPrivacyContact(tx))?.privacyNoticeUrl ?? null;
     const build = await preparePersonalData(tx, parts, {

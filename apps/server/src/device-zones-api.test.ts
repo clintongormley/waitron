@@ -1,4 +1,3 @@
-import { locationId } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -365,32 +364,4 @@ describe("the device's zone preferences", () => {
     expect(await suite.db.select().from(payments)).toEqual(before);
     expect((await f.request("GET")).status).toBe(200);
   });
-});
-
-it("refuses a session belonging to another venue location on both preference routes", async () => {
-  const f = await fixture();
-  const foreign = new Hono();
-  mountDeviceApi(
-    foreign,
-    {
-      db: suite.db,
-      cfg: { ...f.venue.cfg, locationId: locationId(randomUUID()) },
-      secureCookies: false,
-      pairingMode: createPairingMode(),
-    },
-    () => {},
-  );
-  for (const method of ["GET", "PUT"]) {
-    const response = await foreign.request("http://localhost/api/device/zones", {
-      method,
-      headers: {
-        cookie: `${tillSession.SESSION_COOKIE}=${f.session.token}`,
-        "content-type": "application/json",
-      },
-      ...(method === "PUT" ? { body: JSON.stringify(f.input) } : {}),
-    });
-    expect(response.status).toBe(401);
-    expect(await response.json()).toEqual({ error: { code: "device.unauthorized", params: {} } });
-  }
-  expect(await count(f)).toBe(0);
 });
