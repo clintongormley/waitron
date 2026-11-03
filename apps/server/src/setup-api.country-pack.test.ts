@@ -313,6 +313,33 @@ describe("persisted Demo name ownership", () => {
       ]);
     },
   );
+  it("stores the filing module's operation description when the request leaves it out", async () => {
+    const app = new Hono();
+    const { deps: setupDeps } = deps();
+    setupDeps.provision = async (request) =>
+      applyHistoricalTestVenue(planVenue(request.venue, ALL_MODULES), {
+        db: suite.db,
+        modules: ALL_MODULES,
+      });
+    mountSetup(app, setupDeps, () => {});
+    const { operationDescription: _, ...body } = venue("ES", {
+      fiscalTerritory: "ES-common",
+      postalCode: "08001",
+      city: "Barcelona",
+      province: "08",
+      timeZone: "Europe/Madrid",
+      invoiceLocales: ["ca-ES"],
+    });
+    void _;
+    const response = await post(app, {
+      mode: "demo",
+      venue: { ...body, taxId: "B00000000", legalName: "Waitron Demo S.L." },
+    });
+    expect(response.status).toBe(200);
+    expect(suite.db.all(sql`select operation_description from locations`)).toEqual([
+      { operation_description: "Venta en establecimiento" },
+    ]);
+  });
 });
 
 it("refuses an unknown country before deriving an automatic demo name", async () => {
