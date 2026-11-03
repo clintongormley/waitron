@@ -943,6 +943,8 @@ export interface StartServerSeams {
   requestFromBox?: (c: Context) => boolean;
   /** The box's clock service; unset, the server talks to the host's socket. */
   boxHost?: BoxHostClient;
+  /** Every card provider the till and the card sweeps reach, built on the server's own handle. */
+  cardPool?: (deps: { db: Database }) => CardProviderPool;
   /**
    * The full start's stepdown, handed to a test that mounts its own route behind the handover gate
    * (no production route asks for a stepdown yet); `restart` stands in for the SIGTERM.
@@ -2069,13 +2071,15 @@ async function bootServer(
   );
   // One pool, shared by the pay route and the payments management surface below, so a reader added
   // or a credential rotated there evicts the exact provider the next sale uses.
-  const cardPool = createCardProviderPool({
-    providers: CARD_PROVIDERS,
-    db,
-    ring,
-    environment: config.environment,
-    incidents: recordIncidentOnce,
-  });
+  const cardPool =
+    seams.cardPool?.({ db }) ??
+    createCardProviderPool({
+      providers: CARD_PROVIDERS,
+      db,
+      ring,
+      environment: config.environment,
+      incidents: recordIncidentOnce,
+    });
   const tillClock = systemClock();
   const boxHost = seams.boxHost ?? boxHostClient();
   // Before the tills' routes, which set the clock through it.
