@@ -16,9 +16,10 @@ export interface PassCoverageGap {
   zoneName: string | null;
 }
 
-/** Each active waiting station in each active zone that no pass device's Fire could release, by
- *  zone order, then station name and id. A pass device passes the Fire's own profile check
- *  (`passReleaseRefusal`), is active, and has an available pass screen. */
+/** Each active waiting station in each active zone (or in no zone, when the venue has no active
+ *  zone) that no pass device's Fire could release, by zone order, then station name and id. A pass
+ *  device passes the Fire's own profile check (`passReleaseRefusal`), is active, and has an
+ *  available pass screen; it covers a zone its screen sees and its profile's zone list allows. */
 export async function readPassCoverage(
   tx: Transaction,
   cfg: TradingContext,
@@ -47,16 +48,32 @@ export async function readPassCoverage(
     cfg,
     candidates.map((row) => row.id),
   );
-  const scopes: PassScope[] = [];
+  const passes: { scope: PassScope; profileZones: ReadonlySet<string> | null }[] = [];
+  const profilesZones = await VENUE_SERVICE.readProfilesZones(tx, [
+    ...new Set(candidates.map((row) => row.deviceProfileId)),
+  ]);
   for (const row of candidates) {
     const pass = screens.get(row.id)?.find((screen) => screen.kind === "pass");
-    if (pass?.available === true) scopes.push(passScopeOf(pass));
+    if (pass?.available !== true) continue;
+    const allowed = profilesZones.get(row.deviceProfileId) ?? null;
+    passes.push({
+      scope: passScopeOf(pass),
+      profileZones: allowed === null ? null : new Set(allowed),
+    });
   }
 
+  const pairZones: { id: string | null; name: string | null }[] =
+    zones.length === 0 ? [{ id: null, name: null }] : zones;
   const gaps: PassCoverageGap[] = [];
-  for (const zone of zones)
+  for (const zone of pairZones)
     for (const station of stations)
-      if (!scopes.some((scope) => passSees(scope, { stationId: station.id, zoneId: zone.id })))
+      if (
+        !passes.some(
+          ({ scope, profileZones }) =>
+            passSees(scope, { stationId: station.id, zoneId: zone.id }) &&
+            (zone.id === null || profileZones === null || profileZones.has(zone.id)),
+        )
+      )
         gaps.push({
           stationId: station.id,
           stationName: station.name,

@@ -25,6 +25,8 @@ import {
   assertProfileZone,
   readProfileServiceAccess,
   readProfileServiceScopes,
+  readProfileZones,
+  readProfilesZones,
   setProfileServiceAccess,
   setProfileServiceScope,
   type ProfileServiceAccessInput,
@@ -808,5 +810,51 @@ describe("a new order's zone for a profile", () => {
     await expect(start(venue, { zoneId: venue.counter })).resolves.toEqual({
       resolved: venue.counter,
     });
+  });
+});
+
+describe("A773 station policy: readProfilesZones", () => {
+  it("A773 station policy: readProfilesZones answers each profile as readProfileZones does", async () => {
+    const venue = await seedVenueWithZones();
+    const access = (profileId: string, input: ProfileServiceAccessInput) =>
+      scoped((tx) => setProfileServiceAccess(tx, venue.cfg, profileId, input));
+    const display = await seedProfile();
+    await access(display, restaurantScope(venue));
+    await db
+      .update(deviceProfiles)
+      .set({ formFactor: "kds" })
+      .where(eq(deviceProfiles.id, display));
+    const noDepartment = venue.profile;
+    const everyZone = await seedProfile();
+    await access(everyZone, restaurantScope(venue));
+    const listed = await seedProfile();
+    await access(listed, restaurantScope(venue, { allowedZoneIds: [venue.dining] }));
+    const deli = await seedProfile();
+    await access(deli, {
+      departmentId: venue.deli,
+      allowedZoneIds: null,
+      startingZoneId: venue.counter,
+    });
+    await scoped(async (tx) => {
+      await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, venue.dining));
+      await tx.execute(sql`update departments set active = false where id = ${venue.deli}`);
+    });
+
+    const profiles = [display, noDepartment, everyZone, listed, deli];
+    const unknown = randomUUID();
+    const answers = await scoped((tx) => readProfilesZones(tx, [...profiles, unknown]));
+    expect([...answers.keys()].sort()).toEqual([...profiles].sort());
+    for (const profileId of profiles) {
+      const one = await scoped((tx) => readProfileZones(tx, venue.cfg, profileId));
+      expect(answers.get(profileId)).toEqual(one.allowedZoneIds);
+    }
+    expect(profiles.map((profileId) => answers.get(profileId))).toEqual([
+      null,
+      null,
+      [venue.terrace],
+      [],
+      [],
+    ]);
+    await expect(scoped((tx) => readProfilesZones(tx, []))).resolves.toEqual(new Map());
   });
 });

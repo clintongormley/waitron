@@ -1,15 +1,29 @@
+import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, devices, floorZones, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, floorZones, ticketItems, withTransaction } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import type { CapabilityFlag } from "@waitron/layouts";
+import type { CapabilityFlag, FormFactor } from "@waitron/layouts";
 import type { DeviceKitchenScreen } from "@waitron/module";
+import { persons } from "@waitron/identity";
+import { setProfileServiceAccess, zoneServicePolicies } from "@waitron/venue-service";
 import { enrolDeviceForTest } from "./testing/enrol.js";
+import { fixturePinHash } from "./testing/known-secret-hashes.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
+import { OPERATOR } from "./testing/party-venue.js";
+import { openTillSession } from "./testing/session-device.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
-import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
+import {
+  fireNewOrder,
+  setupSplitExtrasVenue,
+  useSplitExtrasDb,
+} from "./testing/split-extras-venue.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
+import type { PassCard } from "./pass-card.js";
+import { releasePassItems, type PassActor } from "./pass-release.js";
 import { readPassCoverage, type PassCoverageGap } from "./pass-coverage.js";
 import "./errors.js";
 
@@ -28,17 +42,19 @@ type Venue = Awaited<ReturnType<typeof setupSplitExtrasVenue>>;
 const ALL_PASS: CapabilityFlag[] = ["act-as-kds", "prepare-orders", "run-the-pass"];
 const STATION_NAMES = { grill: "Grill", fryer: "Fryer", kitchen: "Kitchen", bar: "Bar" } as const;
 
-/** A device on a kitchen-display profile of its own with exactly `capabilities`. */
+/** A device on a profile of its own, a kitchen display's unless `formFactor` says otherwise, with
+ *  exactly `capabilities`. */
 async function kitchenDisplay(
   venue: Venue,
   name: string,
   kitchenScreen: DeviceKitchenScreen,
   capabilities: CapabilityFlag[] = ALL_PASS,
+  formFactor: FormFactor = "kds",
 ): Promise<{ deviceId: string; profileId: string }> {
   const [profile] = await withTransaction(db, (tx) =>
     tx
       .insert(deviceProfiles)
-      .values({ name: `${name} profile`, formFactor: "kds", capabilities })
+      .values({ name: `${name} profile`, formFactor, capabilities })
       .returning({ id: deviceProfiles.id }),
   );
   const joined = await enrolDeviceForTest(db, venue.cfg, {
@@ -228,4 +244,124 @@ describe("A773 station policy: pass coverage", () => {
       ]),
     );
   });
+
+  it("case 10: a till pass whose profile serves only the tables zone leaves the counter zone", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    await tablesTillPass(venue);
+    expect(await coverage(venue)).toEqual(await gaps(venue, [["grill", venue.counter.zoneId]]));
+  });
+
+  it("case 13: the till pass's Fire refuses the counter dish and releases the table's", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    const placed = await withTransaction(db, async (tx) => {
+      const group = (
+        await placeGroups(tx, venue.cfg, venue.party.partyId, {
+          operatorId: OPERATOR,
+          groups: [
+            {
+              lines: [{ menuItemId: venue.tables.offerFor(venue.products.burger), quantity: "1" }],
+              release: "fire",
+            },
+          ],
+        })
+      ).groups[0]!;
+      const counterId = await fireNewOrder(tx, venue.cfg, [
+        { productId: venue.products.burger, quantity: "1" },
+      ]);
+      const [tableItem] = await tx
+        .select({ id: ticketItems.id })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderLineId, group.lineIds[0]!));
+      return { counterId, tableBurger: tableItem!.id };
+    });
+    const pass = await tablesTillPass(venue);
+    const cards = await toFire(venue, pass.by);
+    const counterCard = cards.find((card) => card.target.kind === "bill")!;
+    const tableCard = cards.find((card) => card.target.kind === "group")!;
+    expect(counterCard.target).toEqual({ kind: "bill", workingOrderId: placed.counterId });
+
+    await expect(release(venue, pass.by, counterCard)).rejects.toMatchObject({
+      code: "service_zone.not_allowed",
+      params: { zoneId: venue.counter.zoneId },
+    });
+    expect(await release(venue, pass.by, tableCard)).toEqual({
+      releasedTicketItemIds: [placed.tableBurger],
+    });
+  });
+
+  it("case 12: with no active zone, a waiting station needs an every-zone pass", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    await passOn(venue, "Tables pass", [venue.stations.grill], [venue.party.zoneId]);
+    await withTransaction(db, (tx) =>
+      tx.update(floorZones).set({ active: false }).where(eq(floorZones.active, true)),
+    );
+    expect(await zonesInOrder()).toEqual([]);
+    expect(await coverage(venue)).toEqual([
+      { stationId: venue.stations.grill, stationName: "Grill", zoneId: null, zoneName: null },
+    ]);
+    await passOn(venue, "Every pass", null);
+    expect(await coverage(venue)).toEqual([]);
+  });
 });
+
+/** A till pass on every station and zone, signed in as a new person, whose profile serves the
+ *  tables zone's department and, of its zones, only the tables zone. The fixture's counter zone is
+ *  in the same department, so the zone list alone keeps it out. */
+async function tablesTillPass(venue: Venue) {
+  const T = venue.party.zoneId;
+  const departmentOf = async (zoneId: string) =>
+    (
+      await db
+        .select({ id: zoneServicePolicies.departmentId })
+        .from(zoneServicePolicies)
+        .where(eq(zoneServicePolicies.zoneId, zoneId))
+    )[0]!.id;
+  const department = await departmentOf(T);
+  expect(await departmentOf(venue.counter.zoneId)).toBe(department);
+  const made = await kitchenDisplay(
+    venue,
+    "Till pass",
+    { kind: "pass", stationIds: null, zoneIds: null },
+    ALL_PASS,
+    "till",
+  );
+  await withTransaction(db, (tx) =>
+    setProfileServiceAccess(tx, venue.cfg, made.profileId, {
+      departmentId: department,
+      allowedZoneIds: [T],
+      startingZoneId: T,
+    }),
+  );
+  const [person] = await withTransaction(db, (tx) =>
+    tx
+      .insert(persons)
+      .values({ displayName: "Till pass cook", pinHash: fixturePinHash("2468"), role: "staff" })
+      .returning({ id: persons.id }),
+  );
+  const personId = person!.id;
+  const sessionId = await openTillSession(db, { deviceId: made.deviceId, personId });
+  return { ...made, by: { deviceId: made.deviceId, personId, sessionId } satisfies PassActor };
+}
+
+/** The device's pass screen's To fire cards, read as its board reads them. */
+async function toFire(venue: Venue, by: PassActor): Promise<PassCard[]> {
+  return withTransaction(db, async (tx) => {
+    const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, by.deviceId)).find(
+      (candidate) => candidate.kind === "pass",
+    )!;
+    return (await readScopedPassBoard(tx, venue.cfg, passScopeOf(screen))).toFire;
+  });
+}
+
+const release = (venue: Venue, by: PassActor, card: PassCard) =>
+  withTransaction(db, (tx) =>
+    releasePassItems(tx, venue.cfg, by, {
+      submissionId: randomUUID(),
+      target: card.target,
+      ticketItemIds: card.releaseTicketItemIds,
+      expectedContext: card.releaseContext,
+    }),
+  );

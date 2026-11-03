@@ -1271,6 +1271,12 @@ export interface VenueServiceContribution {
     allowedZoneIds: string[] | null;
     startingZoneId: string | null;
   }>;
+  /** Each named profile's `readProfileZones(…).allowedZoneIds`, in a fixed number of queries; an
+   *  unknown id is absent from the map. */
+  readProfilesZones(
+    tx: Transaction,
+    profileIds: readonly string[],
+  ): Promise<Map<string, string[] | null>>;
   /** Refused `service_zone.not_allowed` when the profile has a department and `zoneId` is not one of
    *  the zones it may order in now. */
   assertProfileZone(
