@@ -16,8 +16,9 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { listExpoQueue, listStationQueue, markCollected } from "./working-order.js";
-import { listPassScreen, type PassScope } from "./pass-board.js";
+import { listStationQueue, markCollected } from "./working-order.js";
+import { readScopedPassBoard, withoutRelease } from "./pass-board.js";
+import { boardOrderIds, EVERY } from "./testing/pass-board-probe.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { serveLine } from "./testing/serve-line.js";
 import "./errors.js";
@@ -39,16 +40,15 @@ async function onStationQueue(v: PartyVenue, stationId: string, billId: string):
   return groups.some((group) => group.orderId === billId);
 }
 
+/** The till's All stations board, which names nothing to release. */
 async function onPass(v: PartyVenue, billId: string): Promise<boolean> {
-  const orders = await inTx(v, (tx) => listExpoQueue(tx));
-  return orders.some((order) => order.orderId === billId);
+  const board = withoutRelease(await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY)));
+  return boardOrderIds(board).includes(billId);
 }
 
-const EVERY: PassScope = { stationIds: null, zoneIds: null };
-
-async function onPassScreen(v: PartyVenue, deviceId: string, billId: string): Promise<boolean> {
-  const board = await inTx(v, (tx) => listPassScreen(tx, v.cfg, deviceId, EVERY));
-  return board.orders.some((order) => order.orderId === billId);
+async function onPassScreen(v: PartyVenue, billId: string): Promise<boolean> {
+  const board = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY));
+  return boardOrderIds(board).includes(billId);
 }
 
 describe("what takes a paid table bill's dishes off today's kitchen screens", () => {
@@ -63,7 +63,7 @@ describe("what takes a paid table bill's dishes off today's kitchen screens", ()
     expect(await billRow(v, tabId)).toMatchObject({ status: "settled", collectedAt: null });
     expect(await onStationQueue(v, stationId, tabId)).toBe(true);
     expect(await onPass(v, tabId)).toBe(true);
-    expect(await onPassScreen(v, deviceId, tabId)).toBe(true);
+    expect(await onPassScreen(v, tabId)).toBe(true);
 
     const [item] = await inTx(v, (tx) =>
       tx
@@ -79,26 +79,26 @@ describe("what takes a paid table bill's dishes off today's kitchen screens", ()
         doneByPersonId: OPERATOR,
       }),
     );
-    expect(await onPassScreen(v, deviceId, tabId)).toBe(true);
+    expect(await onPassScreen(v, tabId)).toBe(true);
     await inTx(v, (tx) =>
       tx
         .delete(passItemMarks)
         .where(and(eq(passItemMarks.deviceId, deviceId), eq(passItemMarks.ticketItemId, item!.id))),
     );
-    expect(await onPassScreen(v, deviceId, tabId)).toBe(true);
+    expect(await onPassScreen(v, tabId)).toBe(true);
     await inTx(v, (tx) => serveLine(tx, v.cfg, tabId, 1));
-    expect(await onPassScreen(v, deviceId, tabId)).toBe(false);
+    expect(await onPassScreen(v, tabId)).toBe(false);
 
     await markCollected({ db: v.db }, v.cfg, tabId);
     expect(await onStationQueue(v, stationId, tabId)).toBe(false);
     expect(await onPass(v, tabId)).toBe(false);
-    expect(await onPassScreen(v, deviceId, tabId)).toBe(false);
+    expect(await onPassScreen(v, tabId)).toBe(false);
   });
 
   it("leaves a table bill paid through a full bill payment on both until collection", async () => {
     const v = await setupPartyVenue(suite.db);
     const stationId = await cocina(v);
-    const deviceId = await seedSessionDevice(suite.db, v.cfg);
+    await seedSessionDevice(suite.db, v.cfg);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 2"));
     await orderForParty(v, partyId, ["Burger"], tabId);
     await takeBillPayment(
@@ -120,11 +120,11 @@ describe("what takes a paid table bill's dishes off today's kitchen screens", ()
     expect(await billRow(v, tabId)).toMatchObject({ status: "settled", collectedAt: null });
     expect(await onStationQueue(v, stationId, tabId)).toBe(true);
     expect(await onPass(v, tabId)).toBe(true);
-    expect(await onPassScreen(v, deviceId, tabId)).toBe(true);
+    expect(await onPassScreen(v, tabId)).toBe(true);
 
     await markCollected({ db: v.db }, v.cfg, tabId);
     expect(await onStationQueue(v, stationId, tabId)).toBe(false);
     expect(await onPass(v, tabId)).toBe(false);
-    expect(await onPassScreen(v, deviceId, tabId)).toBe(false);
+    expect(await onPassScreen(v, tabId)).toBe(false);
   });
 });

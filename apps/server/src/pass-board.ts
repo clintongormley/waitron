@@ -1,6 +1,5 @@
 import "./errors.js";
 import { and, eq, gte, inArray, isNull, or, type SQL } from "drizzle-orm";
-import { worstBand } from "@waitron/shared";
 import {
   kitchenStations,
   orderGroups,
@@ -17,27 +16,13 @@ import { VENUE_SERVICE } from "./modules.js";
 import { unchosenAtClosedStation } from "./station-move.js";
 import { orderWatchZones } from "./watch-zones.js";
 import { buildPassBoard, type PassBoard, type PassRow, type PassTarget } from "./pass-card.js";
-import {
-  liveKitchenDish,
-  readPassBoard,
-  readPassRows,
-  type ExpoCourse,
-  type ExpoGroup,
-  type ExpoOrder,
-} from "./working-order.js";
+import { liveKitchenDish, readPassRows } from "./working-order.js";
 
 /** null: every station (zone). */
 export interface PassScope {
   stationIds: readonly string[] | null;
   zoneIds: readonly string[] | null;
 }
-
-export type PassCourse = ExpoCourse & { allReady: boolean };
-export type PassGroup = ExpoGroup & { allReady: boolean };
-export type PassOrder = Omit<ExpoOrder, "courses" | "groups"> & {
-  courses: PassCourse[];
-  groups: PassGroup[];
-};
 
 /** A dish in no zone is seen only by a pass on every zone. */
 export function passSees(
@@ -57,69 +42,6 @@ export function passScopeOf(screen: ResolvedKitchenScreen): PassScope {
   return {
     stationIds: shown(screen.stations),
     zoneIds: screen.zones === null ? null : shown(screen.zones),
-  };
-}
-
-/** The pass retains unserved food until service ends, independently of device marks. */
-export async function listPassScreen(
-  tx: Transaction,
-  cfg: TradingContext,
-  deviceId: string,
-  scope: PassScope,
-): Promise<{ orders: PassOrder[] }> {
-  void deviceId;
-  const kept = await scopedItems(tx, cfg, scope);
-  if (!kept.length) return { orders: [] };
-  const ids = new Set(kept.map((item) => item.id));
-  const orders = await readPassBoard(
-    tx,
-    inArray(workingOrders.id, [...new Set(kept.map((item) => item.orderId))]),
-  );
-  const section = <T extends ExpoCourse | ExpoGroup>(
-    part: T,
-  ): (T & { allReady: boolean }) | null => {
-    const allReady = part.items.every((item) => item.state === "ready");
-    const items = part.items.filter((item) => ids.has(item.id));
-    return items.length
-      ? ({ ...part, allReady, items } as unknown as T & { allReady: boolean })
-      : null;
-  };
-  return {
-    orders: orders.map((order) =>
-      withSections(
-        order,
-        order.courses.flatMap((part) => section(part) ?? []),
-        order.groups.flatMap((part) => section(part) ?? []),
-      ),
-    ),
-  };
-}
-
-/** The monitor shares the pass's service lifetime and cannot mark work complete. */
-export async function listPassMonitor(
-  tx: Transaction,
-  cfg: TradingContext,
-  scope: PassScope,
-): Promise<{ orders: ExpoOrder[] }> {
-  const kept = await scopedItems(tx, cfg, scope);
-  if (!kept.length) return { orders: [] };
-  const ids = new Set(kept.map((item) => item.id));
-  const orders = await readPassBoard(
-    tx,
-    inArray(workingOrders.id, [...new Set(kept.map((item) => item.orderId))]),
-  );
-  const section = <T extends ExpoCourse | ExpoGroup>(part: T): T | null => {
-    const items = part.items.filter((item) => ids.has(item.id));
-    return items.length ? { ...part, items } : null;
-  };
-  return {
-    orders: orders.map((order) =>
-      withSections(
-        order,
-        order.courses.flatMap((part) => section(part) ?? []),
-        order.groups.flatMap((part) => section(part) ?? []),
-      ),
-    ),
   };
 }
 
@@ -327,18 +249,4 @@ function rowsWatchZones(
       ]),
     ).values(),
   ]);
-}
-
-function withSections<C extends ExpoCourse, G extends ExpoGroup>(
-  order: ExpoOrder,
-  courses: C[],
-  groups: G[],
-): Omit<ExpoOrder, "courses" | "groups"> & { courses: C[]; groups: G[] } {
-  const visible = [...courses, ...groups].flatMap((part) => part.items);
-  return {
-    ...order,
-    courses,
-    groups,
-    worstBand: worstBand(visible.map((item) => item.band)),
-  };
 }

@@ -17,7 +17,9 @@ import { createStation } from "./kitchen.js";
 import { setMadeHereStations } from "./made-here.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { listPassMonitor, listPassScreen } from "./pass-board.js";
+import { readScopedPassBoard, withoutRelease } from "./pass-board.js";
+import type { PassBoard } from "./pass-card.js";
+import { boardCards, EVERY } from "./testing/pass-board-probe.js";
 import {
   OPERATOR,
   billRow,
@@ -31,7 +33,6 @@ import {
 import {
   fireLines,
   listCounterWaiting,
-  listExpoQueue,
   listHeldOrders,
   listStationQueues,
 } from "./working-order.js";
@@ -177,8 +178,18 @@ async function cancelLine(billId: string, name: string) {
   });
 }
 
+/** The bill as the cards holding it name it (undefined when none does); every such card names it alike. */
+function boardOrder(board: PassBoard, billId: string) {
+  const named = boardCards(board).flatMap((card) =>
+    card.orders.filter((o) => o.orderId === billId),
+  );
+  if (named.some((o) => JSON.stringify(o) !== JSON.stringify(named[0])))
+    throw new Error(`cards name bill ${billId} differently`);
+  return named[0];
+}
+
 async function expoOrder(billId: string) {
-  return (await inTx(v, (tx) => listExpoQueue(tx))).find((o) => o.orderId === billId);
+  return boardOrder(await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY)), billId);
 }
 
 async function stationGroup(station: keyof typeof stations, billId: string) {
@@ -278,13 +289,11 @@ describe("the numbers an order's sent dishes were sent under, on the kitchen rea
     await send(partyId, b28, "Burger");
     const n28 = await numberOf(b28);
     await merge(partyId, b27, b28);
-    const scope = { stationIds: null, zoneIds: null };
+    const screen = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY));
+    const monitor = withoutRelease(screen);
 
-    const screen = await inTx(v, (tx) => listPassScreen(tx, v.cfg, randomUUID(), scope));
-    const monitor = await inTx(v, (tx) => listPassMonitor(tx, v.cfg, scope));
-
-    expect(screen.orders.find((o) => o.orderId === b27)).toMatchObject({ formerNumbers: [n28] });
-    expect(monitor.orders.find((o) => o.orderId === b27)).toMatchObject({ formerNumbers: [n28] });
+    expect(boardOrder(screen, b27)).toMatchObject({ formerNumbers: [n28] });
+    expect(boardOrder(monitor, b27)).toMatchObject({ formerNumbers: [n28] });
   });
 });
 

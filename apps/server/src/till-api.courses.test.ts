@@ -37,6 +37,8 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import type { TradingContext } from "./trading-context.js";
+import type { PassBoard, PassCard, PassCardItem } from "./pass-card.js";
+import { boardCards, boardItems } from "./testing/pass-board-probe.js";
 import "./errors.js";
 import { seedSessionDevice, sessionCookieForTest } from "./testing/session-device.js";
 
@@ -628,36 +630,24 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
   });
 });
 
-type ExpoItem = {
-  name: string;
-  stationName: string;
-  state: string;
-  firedAt: string | null;
-};
-type ExpoCourse = {
-  courseId: string | null;
-  fired: boolean;
-  items: ExpoItem[];
-};
-type ExpoOrder = {
-  orderId: string;
-  courses: ExpoCourse[];
-};
-
-async function expoOrder(orderId: string): Promise<ExpoOrder> {
-  const res = await app.request("/api/expo/queue", { headers: { cookie } });
+/** The order's cards and dishes on the till's All stations board. */
+async function expoOrder(orderId: string): Promise<{ cards: PassCard[]; items: PassCardItem[] }> {
+  const res = await app.request("/api/expo/board", { headers: { cookie } });
   expect(res.status).toBe(200);
-  const orders = (await res.json()) as ExpoOrder[];
-  return orders.find((o) => o.orderId === orderId)!;
+  const { board } = (await res.json()) as { board: PassBoard };
+  return {
+    cards: boardCards(board).filter((card) => card.orders.some((o) => o.orderId === orderId)),
+    items: boardItems(board).filter((item) => item.orderId === orderId),
+  };
 }
 
 /** An expo order's items across ALL its courses, keyed by their resolved kitchen name. */
-function itemsByName(order: ExpoOrder): Map<string, ExpoItem> {
-  return new Map(order.courses.flatMap((c) => c.items).map((i) => [i.name, i]));
+function itemsByName(order: { items: PassCardItem[] }): Map<string, PassCardItem> {
+  return new Map(order.items.map((i) => [i.name, i]));
 }
 
 describe("KDS-3 expo routes: cross-station queue read + whole-course ready", () => {
-  it("GET /api/expo/queue aggregates the node's order into courses; each item carries its station name and course release", async () => {
+  it("GET /api/expo/board carries every dish of the node's order; each carries its station name, course and release", async () => {
     const orderId = await placeOrder([SOPA, FILETE, PAN]);
     const order = await expoOrder(orderId);
     const items = itemsByName(order);
@@ -667,16 +657,22 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready", () 
     expect(items.get(SOPA)!.stationName).toBe("Cocina");
     expect(items.get(FILETE)!.stationName).toBe("Cocina");
 
-    const ent = order.courses.find((c) => c.courseId === entCourseId)!;
-    const pri = order.courses.find((c) => c.courseId === priCourseId)!;
-    expect(ent.fired).toBe(true);
-    expect(pri.fired).toBe(true);
+    // A course is released when every one of its dishes is fired.
+    const inCourse = (courseId: string | null) =>
+      order.items.filter((item) => (item.course?.id ?? null) === courseId);
+    const ent = inCourse(entCourseId);
+    const pri = inCourse(priCourseId);
+    expect(ent.length).toBeGreaterThan(0);
+    expect(pri.length).toBeGreaterThan(0);
+    expect(ent.every((item) => item.firedAt !== null)).toBe(true);
+    expect(pri.every((item) => item.firedAt !== null)).toBe(true);
     expect(items.get(SOPA)!.firedAt).not.toBeNull();
     expect(items.get(FILETE)!.firedAt).not.toBeNull();
 
-    expect(ent).not.toHaveProperty("away");
+    expect(order.cards.length).toBeGreaterThan(0);
+    for (const card of order.cards) expect(card).not.toHaveProperty("away");
     expect(items.get(SOPA)).not.toHaveProperty("awayAt");
-    expect(order.courses.find((c) => c.courseId === null)!.items[0]!.name).toBe(PAN);
+    expect(inCourse(null)[0]!.name).toBe(PAN);
   });
 
   it("the Ready route still bumps fired food, while retired Away leaves it ready", async () => {
@@ -800,8 +796,8 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready", () 
     });
   });
 
-  it("requires sign-in for the queue and Ready while Away is retired", async () => {
-    const queue = await app.request("/api/expo/queue");
+  it("requires sign-in for the board and Ready while Away is retired", async () => {
+    const queue = await app.request("/api/expo/board");
     expect(queue.status).toBe(401);
     expect(await queue.json()).toMatchObject({ error: { code: "session.required" } });
 
