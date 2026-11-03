@@ -1,6 +1,7 @@
 // Needs a filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_DIR_FROM_SPARE names, or on
-// macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). Both are 48 MiB, so
-// the venue, the 6 MiB spare and the cases' 21.5 MiB of free room fit. Without one each case
+// macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). CI's mount and the
+// macOS image are 48 MiB, so the venue, the 6 MiB spare and the cases' 21.5 MiB of free room fit;
+// a folder you name needs room for the same. Without one each case
 // is reported SKIPPED; with CI=true or WAITRON_REQUIRE_FULL_DISK=1 it FAILS instead (testing-guide.md,
 // "The full-disk start tests run on a small filesystem"). Its own filesystem: two files filling one
 // at once can fail each other.
