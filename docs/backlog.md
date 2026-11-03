@@ -6364,6 +6364,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   (`apps/server/src/recovery-start-again.ts`) is the last recovery-page wording outside `i18n/`.
   It stays a table of its own, apart from `OPERATOR_TEXT`, and must load without the database.
 
+- **The recovery page's tables keep their old names.** `OPERATOR_TEXT`, `GENERIC_TEXT` and
+  `OperatorText` in `apps/server/src/i18n/recovery-page.ts` do not end in `_WORDS` like the
+  folder's other tables, and `recovery-surface.ts` passes them on so A968 (#2419) left every test
+  unedited. Renaming them means changing the importing tests too.
+
 
 - **Spanish text in a server test venue, for A913's English-only audit.**
   `apps/server/src/testing/bill-venue.ts` names its products "Paella" and "Caña", and in the look
