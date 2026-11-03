@@ -1,4 +1,5 @@
 import { classifyDisk } from "./disk-state.mjs";
+import { usableText, usableVenueName } from "./name-tag.mjs";
 import { exactRecord, safeInteger } from "./upgrades/contracts.mjs";
 
 /** Spec §5.1 guard 3, §5.2 and §5.3 item 4. The spec's calls, not separately the owner's. */
@@ -10,7 +11,7 @@ export const INSTALLER_TIMINGS_MS = Object.freeze({
 });
 
 /**
- * @typedef {{ name: string, live: boolean }} VenueTag  decoded from the frozen internal disk's name tag (spec §7.6)
+ * @typedef {import("./name-tag.mjs").VenueTag} VenueTag
  * @typedef {'observing'|'refused'|'waitron-found'|'reinstall-screen'|'awaiting-erase-word'|'loading'|'network'
  *   |'clock'|'clock-retry'|'downloading'|'download-retry'|'erase-countdown'|'erase-stopped'|'writing'
  *   |'remove-usb'|'booting'|'powering-off'} InstallerPhase
@@ -61,8 +62,6 @@ const RELEASE_OUTCOMES = [
 ];
 const MAX_TYPED_UNITS = 512;
 const PRINTABLE_ASCII = /^[\x20-\x7E]{1,32}$/;
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
 
 /** @type {WeakSet<object>} */
 const GENUINE = new WeakSet();
@@ -72,13 +71,6 @@ function refusal(code, reason) {
   return Object.assign(new Error(code), { code, reason });
 }
 const eventInvalid = (reason = "event-invalid") => refusal("installer.event_invalid", reason);
-
-/** @param {unknown} value @param {number} maxCodePoints */
-function usableText(value, maxCodePoints) {
-  if (typeof value !== "string" || !value.isWellFormed() || CONTROL.test(value)) return false;
-  const length = [...value].length;
-  return length >= 1 && length <= maxCodePoints;
-}
 
 /** @param {unknown} state */
 function genuine(state) {
@@ -194,8 +186,8 @@ function refuse(state, reason, hardware, releaseVersion = null) {
 /** @param {{name: string, live: boolean}|null} tag @returns {VenueTag|null} */
 function usableTag(tag) {
   if (tag === null) return null;
-  const name = tag.name.normalize("NFC");
-  return usableText(name, 256) ? Object.freeze({ name, live: tag.live }) : null;
+  const name = usableVenueName(tag.name);
+  return name === null ? null : Object.freeze({ name, live: tag.live });
 }
 
 /** @param {InstallerState} state @param {any} event */

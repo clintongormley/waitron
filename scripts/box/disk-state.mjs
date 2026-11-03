@@ -14,7 +14,7 @@ import { exactRecord } from "./upgrades/contracts.mjs";
  * @property {'gpt'|'mbr'|'none'|'unreadable'} table
  * @property {readonly PartitionObservation[]} partitions  empty when table is none or unreadable
  * @property {SignatureObservation} whole  signature of the whole device (a disk with no partition table)
- * @property {Uint8Array|null} nameTag  raw name-tag bytes, display only
+ * @property {Uint8Array|null} nameTag  the name-tag token's bytes as findNameTag (name-tag.mjs) returns them; never read here
  * @typedef {object} MachineObservation
  * @property {'enabled'|'disabled'|'absent'|'unknown'} tpm
  * @property {'user-mode'|'setup-mode'|'off'|'unknown'} secureBoot

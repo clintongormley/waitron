@@ -913,18 +913,38 @@ and unsent records; the real in-memory, stick, keyboard, clock, download, write,
 adapters and the `waitron-instalar.local` status page; joining Wi-Fi and staging the first Wi-Fi
 boot copy; and the source-history floor on reinstall, still gated on A1042.
 
-**For the owner: a box that already holds Waitron, with its TPM or Secure Boot switched off.**
-Should the stick start the installed box anyway, or stop and show the firmware message? Starting it
-keeps the venue selling; stopping it tells someone the box has lost the protection its disk
-encryption relies on. The spec does not settle it: §5 step 2 lists the checks, and guard 3 says the
-stick starts Waitron "without leaving a venue dark". Today's message, «…vuelve a empezar», is
-written for installing; a box that already holds Waitron would need its own wording. Until
-the owner answers, the installer's decisions (PR 3) follow the start-it half of lane B's 2026-11-01
-recommendation ("start it and raise an alert") as one rule (D2):
-the installed box starts after 15 seconds, the screen and the status page name the setting that is
-off, and a reinstall on such a box is refused. The opposite answer is a one-line change in the policy; its screen wording would still be new. The
-recommendation's alert is slice 3's: the installer writes nothing to the installed disk, so the
-installed box's host service must notice the setting itself.
+**Built so far (2026-11-03), PR 4.** [PR 4](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md)
+(#2430) adds one host library under `scripts/box/` and extends PR 2's Wi-Fi record module, none of
+it called yet. Like PR 3's, both are pure: they read bytes or settings handed to them and answer
+bytes or a plan, and nothing in this pull request reads or writes a real disk header, a boot
+folder or NetworkManager.
+
+- `name-tag.mjs`: the name tag is one LUKS2 token (a small JSON record in the encrypted disk's
+  header, readable and writable without the key) of type `waitron-name-tag`, version 1, assigned to
+  no keyslot, never the header's label or subsystem field. `encodeNameTag` writes its one byte
+  form; `decodeNameTag` accepts only that byte form and answers `null` for anything else.
+  `findNameTag` reads it from `cryptsetup luksDump --dump-json-metadata` output and answers `null`
+  for none, for two or more, and for output it cannot read. `planNameTagWrite` names only
+  Waitron's own tokens or a free token number, replaces before it removes, refuses when all 32
+  token numbers are taken, and refuses a header holding a token number written other than "0" to
+  "31" (for example "007" or "32"). For a
+  venue name the tag cannot hold (empty, over 256 code points, or with a control character such as
+  a tab) the plan writes no tag and removes any that is there, and the installer's decisions (PR
+  3) ask for the erase word on a disk with no readable tag. `usableVenueName` is that name rule;
+  the installer's decisions now take it, with its 256-code-point limit
+  (`NAME_TAG_MAX_CODE_POINTS`), and the text check under it (`usableText`), which the erase-word
+  check uses too, from `name-tag.mjs` instead of their own copy.
+- `wifi-record.mjs`: `formatWifiRecord` writes version 1 only in the form `parseWifiRecord` loads,
+  from the values it checked, and refuses anything else. `decideWifiBootCopy` turns the box's
+  NetworkManager settings, as an adapter would hand them over, into a copy to write or a named
+  reason for none: cable only; an open network; NetworkManager's `none` (open or static WEP);
+  dynamic WEP; OWE; enterprise; any other security type; a password the host cannot read; a WPA2
+  password of 8 to 63 characters outside printable ASCII; a well-formed WPA3 password over 256 bytes
+  with no C0 control character or DEL; or another password the
+  reader would refuse (`password-invalid`). The reader's three refusals are what become password
+  reasons; an error the reader throws is not caught and reaches the caller.
+
+**A box that already holds Waitron, with its TPM or Secure Boot switched off:** the owner decided on 2026-11-03; see [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 **For later slices, from PR 1's re-map against main:**
 
@@ -944,9 +964,9 @@ installed box's host service must notice the setting itself.
 
 - The installation id in the recovery address must be a new per-disk value made at first start,
   never Waitron Cloud's `installationId` or the fiscal `installationIdentity` (re-map finding 7).
-- Task 3.1's writer writes the version-1 Wi-Fi format and reads it back with `parseWifiRecord`.
-  Open, WEP, enterprise and OWE networks, and WPA2 passwords outside printable ASCII, get no Wi-Fi
-  unlock in version 1, a gap 3.1 reports rather than hides.
+- Task 3.1's publication writes `decideWifiBootCopy`'s bytes (built in PR 4) and removes the copy
+  on every "no copy" answer; it shows the answer's reason with the copy state, because open, WEP,
+  OWE and enterprise networks and the password cases get no Wi-Fi unlock in version 1.
 - The address fallback widens `freezeLockedTarget`'s one-name rule for the recovery certificate
   and `decideLockedRequest`'s host rule together.
 - Slice 8's sheet and the preboot screen share one letters-to-bytes alphabet.
@@ -965,22 +985,24 @@ installed box's host service must notice the setting itself.
   reads, and must name the oldest installer a release accepts, which needs an installer version
   scheme nobody has defined yet. Who holds the signing keys gates publication (parent Task 5.1),
   not the verifier.
-- The name tag's format and its decoder: the Linux driver hands the policy the frozen internal
-  disk's own decoded tag, and no other.
+- The Linux installer fills `DiskObservation.nameTag` with `findNameTag` of the frozen internal
+  disk's own `luksDump --dump-json-metadata` output and hands the policy
+  `nameTag === null ? null : decodeNameTag(nameTag)`, for that disk and no other.
 - The write adapter re-checks the frozen disk's partition table and the disk's size before its
   first write, because the survey has no size field.
 - The rig cases `install`, `existing-stick`, `damaged-marker`, `two-disks`, `cut-header`,
   `remove-usb`, `disk-write-cut` and `network-fallback` join `RIG_CASES` with the runner that can
   run them.
-- Slice 3's host service raises an alert on an installed box whose TPM or Secure Boot is off (D2's
-  other half).
+- Slice 3's host service raises an alert on an installed box whose TPM or Secure Boot is off (the
+  owner's decision of 2026-11-03).
+- The Linux pull request's translation file words `installer.waitron_found` when its `hardware` is
+  set: the spec's firmware messages end «…vuelve a empezar» and are written for installing, not for
+  a box that goes on to start.
 - The Linux pull request's translation file sets the erase word (the spec's «BORRAR»), passed as
   `eraseWord`. It is one word for both the Spanish and the English screen: a different English word
   would need the policy's option to change (for example, to a list of accepted words), not only the
   translation file (D7). That file also supplies the disk's model and size for the 60-second
   message.
-- The name tag's format sets the real length limit for a usable venue name (D8's 256 code points is
-  a placeholder).
 - The network adapter reports `link` whenever a route appears, unasked. Otherwise a cable plugged
   in after the start is seen only at the first probe, a minute after the hotspot opens (two minutes
   in), and a join whose one
@@ -1003,6 +1025,28 @@ installed box's host service must notice the setting itself.
 - Decisions recorded for review: a lone blank or Windows disk of unknown attachment needs the erase word (D3); a
   Waitron disk with a foreign encrypted partition is never erased unattended (D18); a typed venue
   name is compared after NFC normalisation, and the erase word exactly as typed (D7).
+
+**For later slices, from PR 4's [re-map against main](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md#re-map-against-main-on-2026-11-03):**
+
+- Slice 3's `tag.write` runs `planNameTagWrite`'s steps with `cryptsetup token import --token-id <n>`
+  (`--token-replace` for a replace) and `cryptsetup token remove --token-id <n>`, never
+  `--key-slot`, inside the host's one header-write turn (so no other header write runs at the same
+  time). On "Token <n> in use" it reads the header and plans again. A step refused for lack of
+  space is reported, because the plan does not estimate free space (D8).
+- Slice 3 writes the tag at installation handoff and whenever the venue's name or Live state
+  changes, and chooses which name it holds: the legal name the dashboard banner shows, or a trading
+  name.
+- Slice 1's recipe: `systemd-repart` v257, read in its source and not run, sets the LUKS2 label to
+  the partition's label and sets no subsystem, so the `waitron-box-1` subsystem marker PR 1
+  recognises needs its own step. The real header's free metadata space, with systemd's TPM and
+  recovery tokens in it, is a rig measurement; on a 64 MiB test file, cryptsetup 2.7.5's default
+  metadata area was 12,288 bytes, and the largest tag is 1100.
+- Two rig checks: that a token of an unknown type assigned to no keyslot leaves
+  `systemd-cryptsetup`'s automatic unlock unchanged, and that a too-big `--token-replace` leaves the
+  header as it was (both read in the source, not measured).
+- Decisions recorded for review: a name the tag cannot hold gets no tag, never a cut-down one
+  (D4); a power cut while removing a doubled tag can leave one old tag readable until the next
+  write (D7).
 
 **Left open by PR 1's review (#2370):**
 
@@ -1110,6 +1154,7 @@ The owner's four answers: no reserved
 
 **Full-disk write stop (owner, 2026-10-21, A798-B slice 3, #1950):** refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21.
 
+- **A box that already holds Waitron but has its TPM or Secure Boot switched off still starts (owner, 2026-11-03).** The stick starts the installed Waitron after 15 seconds so the venue keeps selling; the installer's message and the status page carry the setting that is off; slice 3's host service raises the alert; a reinstall on that box stays refused. Built as the installer's decision D2 in B3 PR 3 (`scripts/box/installer-policy.mjs`, #2426) and kept as built. The 15 seconds, two minutes, 60 seconds and one minute stay the spec's proposals; the owner was not asked about them. ([B3 PR 4's plan](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md), D13.)
 - **Cloud verification keeps worker threads denied (owner, 2026-10-22, A1004).** Only the fresh
   disposable venue copy omits its watchdog; it still takes the venue lock. Ordinary server and
   restore opens retain monitoring. Cloud must pin the implementing release and requalify its

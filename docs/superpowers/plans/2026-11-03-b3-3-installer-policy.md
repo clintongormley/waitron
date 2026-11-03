@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Every implementer is dispatched as `subagent_type: "implementer"`.
 
+> 2026-11-03: PR 4 made D8's 256 code points the name tag's real limit (`NAME_TAG_MAX_CODE_POINTS`): [2026-11-03-b3-4-name-tag-wifi-copy.md](2026-11-03-b3-4-name-tag-wifi-copy.md), D3.
+
 **Goal:** Build the parts of the USB installer's behaviour that an unprivileged macOS machine and CI's root Vitest project can fully test. The installer is the small system on the stick that downloads a Waitron release and writes it to the box's own disk (spec §3–§5). Two pieces:
 
 - the **installer's decisions** (`installer-policy.mjs`): given what the installer has seen so far and the next thing that happens (the disk survey, a key press, the download's result, a tick of the clock), what it does next. This holds the spec's three guards (§5.1), the 15-second start of a box that already holds Waitron, the two-minute return from the reinstall screen, the typed venue name or «BORRAR» before an erase that needs a person, the 60-second wait before an unattended erase, the «Ya puedes quitar el USB» moment, the refusals for no security chip, Secure Boot off, no disk or two disks, and the rule that the clock is set before anything is downloaded;
