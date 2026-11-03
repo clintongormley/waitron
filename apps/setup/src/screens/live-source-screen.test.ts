@@ -46,6 +46,13 @@ const FIX_FIELDS = "Correct the highlighted fields to continue.";
 const EXPORT = new File(["encrypted"], "prepared.waitron-config");
 
 describe("SetupLiveSourceScreen", () => {
+  it("explains the passphrase with a hint in the empty field and no ?", async () => {
+    const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+    const passphrase = q(el, "wt-input[name=export-passphrase]")!;
+    expect(passphrase.getAttribute("hint")).toBe("The passphrase set when exporting");
+    expect(passphrase.querySelector("wt-help-tooltip")).toBeNull();
+  });
+
   it("offers a separate empty production path", async () => {
     const { el, host } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
     const patch = vi.fn();
@@ -216,6 +223,14 @@ describe("SetupLiveSourceScreen", () => {
 
 describe("SetupLiveSourceScreen in Spanish", () => {
   afterEach(() => setLocale("en-GB"));
+
+  it("explains the passphrase with a Spanish hint", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+    expect(q(el, "wt-input[name=export-passphrase]")!.getAttribute("hint")).toBe(
+      "La que se usó al exportar",
+    );
+  });
 
   it("offers both paths and explains its refusals in Spanish", async () => {
     setLocale("es-ES");

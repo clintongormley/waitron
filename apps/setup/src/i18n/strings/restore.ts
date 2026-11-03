@@ -46,9 +46,7 @@ export const restoreEn = {
   "restore.backup_file_help": "Choose the encrypted backup from the server you are recovering.",
   "restore.backup_file_missing": "Choose a backup file.",
   "restore.recovery_key": "Recovery key",
-  "restore.recovery_key_help_label": "Help with recovery key",
-  "restore.recovery_key_help":
-    "Enter the recovery key saved for this backup. It unlocks the encrypted backup.",
+  "restore.recovery_key_hint": "The key that unlocks this backup",
   "restore.recovery_key_missing": "Enter the recovery key.",
   "restore.show_recovery_key": "Show recovery key",
   "restore.hide_recovery_key": "Hide recovery key",
@@ -83,9 +81,8 @@ export const restoreEn = {
   "restore_bucket.pack_damaged":
     "This recovery pack is damaged, or was changed after it was made. Choose the pack as it was saved, or paste the code.",
   "restore_bucket.kit": "Recovery kit",
-  "restore_bucket.kit_help_label": "Help with the recovery kit",
-  "restore_bucket.kit_help":
-    "Choose your recovery pack or kit file above, or paste the kit here: one long line starting with WAITRON-RECOVERY-KIT-1.",
+  "restore_bucket.kit_hint":
+    "Or paste the kit here: one long line starting with WAITRON-RECOVERY-KIT-1",
   "restore_bucket.kit_missing": "Choose your recovery pack or kit file, or paste the kit.",
   "restore_bucket.environment": "Environment",
   "restore_bucket.environment_help_label": "Help with environment",
@@ -140,8 +137,7 @@ export const restoreEn = {
   "live_source.export_missing": "Choose a configuration export.",
   "live_source.passphrase": "Export passphrase",
   "live_source.passphrase_short": "Enter a passphrase of at least 12 characters.",
-  "live_source.passphrase_help_label": "Help with export passphrase",
-  "live_source.passphrase_help": "Enter the passphrase used to encrypt the configuration export.",
+  "live_source.passphrase_hint": "The passphrase set when exporting",
   "live_source.show_passphrase": "Show export passphrase",
   "live_source.hide_passphrase": "Hide export passphrase",
   "live_source.fix_fields": "Correct the highlighted fields to continue.",
@@ -229,9 +225,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Elige la copia de seguridad cifrada del servidor que estás recuperando.",
   "restore.backup_file_missing": "Elige un archivo de copia de seguridad.",
   "restore.recovery_key": "Clave de recuperación",
-  "restore.recovery_key_help_label": "Ayuda sobre la clave de recuperación",
-  "restore.recovery_key_help":
-    "Introduce la clave de recuperación guardada para esta copia. Es la que abre la copia cifrada.",
+  "restore.recovery_key_hint": "La clave que abre esta copia",
   "restore.recovery_key_missing": "Introduce la clave de recuperación.",
   "restore.show_recovery_key": "Mostrar la clave de recuperación",
   "restore.hide_recovery_key": "Ocultar la clave de recuperación",
@@ -268,9 +262,8 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore_bucket.pack_damaged":
     "Este paquete de recuperación está dañado o se modificó después de hacerse. Elige el paquete tal como se guardó o pega el código.",
   "restore_bucket.kit": "Kit de recuperación",
-  "restore_bucket.kit_help_label": "Ayuda sobre el kit de recuperación",
-  "restore_bucket.kit_help":
-    "Elige arriba tu paquete de recuperación o el archivo del kit, o pega aquí el kit: una sola línea larga que empieza por WAITRON-RECOVERY-KIT-1.",
+  "restore_bucket.kit_hint":
+    "O pega aquí el kit: una sola línea larga que empieza por WAITRON-RECOVERY-KIT-1",
   "restore_bucket.kit_missing":
     "Elige tu paquete de recuperación o el archivo del kit, o pega el kit.",
   "restore_bucket.environment": "Entorno",
@@ -328,9 +321,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "live_source.export_missing": "Elige una exportación de configuración.",
   "live_source.passphrase": "Contraseña de exportación",
   "live_source.passphrase_short": "Introduce una contraseña de al menos 12 caracteres.",
-  "live_source.passphrase_help_label": "Ayuda sobre la contraseña de exportación",
-  "live_source.passphrase_help":
-    "Introduce la contraseña con la que se cifró la exportación de configuración.",
+  "live_source.passphrase_hint": "La que se usó al exportar",
   "live_source.show_passphrase": "Mostrar la contraseña de exportación",
   "live_source.hide_passphrase": "Ocultar la contraseña de exportación",
   "live_source.fix_fields": "Corrige los campos marcados para continuar.",

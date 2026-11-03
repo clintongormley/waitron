@@ -357,6 +357,7 @@ export class SetupCertScreen extends LitElement {
         class="field"
         label=${t("cert.passphrase_label")}
         name="certificate-passphrase"
+        hint=${t("cert.passphrase_hint")}
         autocomplete="off"
         type=${this.passphraseVisible ? "text" : "password"}
         required
@@ -366,9 +367,6 @@ export class SetupCertScreen extends LitElement {
         .value=${this.passphrase}
         @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onPassphrase(e)}
       >
-        <wt-help-tooltip slot="help" aria-label=${t("cert.passphrase_help_label")}
-          >${t("cert.passphrase_help")}</wt-help-tooltip
-        >
         <wt-button
           slot="end"
           variant="ghost"

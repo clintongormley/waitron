@@ -170,27 +170,6 @@ existing venue retains its saved zone (`applyPreparedVenue`,
 `packages/provisioning/src/configuration-transfer.ts`); importing venue details is a creation concern,
 not an edit through that applicator.
 
-## Remaining "?" buttons that should be hints (A237, owner 2026-10-03)
-
-**OPEN.** The rule — a short
-explanation is the field's hint, and the "?" button is only for one too long for a hint or a field
-that starts filled in — was applied to the setup wizard's first four screens only, and nothing
-enforces it. Candidates still showing a "?" for a short explanation: every field on
-`apps/setup/src/screens/connect-screen.ts` (strings `connect.*.help` in
-`apps/setup/src/i18n/strings/start.ts`), and the backup file and the recovery key on the backup
-restore screen (`restore.backup_file_help` and `restore.recovery_key_help` in
-`apps/setup/src/i18n/strings/restore.ts`). The dashboard's "?" buttons, Department and Starting zone on the device profile form among them,
-are help-mode badges since A582's slice 2b, which settles A237's dashboard half (A582
-design §7). The connect screen fills its fields in again from the
-earlier request when the operator comes back to it, which is the rule's "starts filled in"
-exception, so each of its fields needs a judgement rather than a straight swap. Other screens' "?"
-buttons were not reviewed against the rule. A243 removed every "?" button from the setup review
-screen. Separately, the role screen
-(`apps/setup/src/screens/role-screen.ts`), reached from Join or recover, still shows its choices as
-cards with buttons rather than `wt-choice-row` rows. The certificate help page the setup wizard opens
-(`/setup/trust`, drawn by `apps/server/src/trust-page.ts`) still writes the browser's warning as
-“not secure” in quotes, where the wizard's first screen (#1107) now writes Not secure without them.
-
 ## No test covers the setup review screen's value cell's own centring
 
 Left open: no test covers the value cell's own centring (`align-self: center` on the value in

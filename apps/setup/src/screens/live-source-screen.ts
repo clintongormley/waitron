@@ -172,6 +172,7 @@ export class SetupLiveSourceScreen extends LitElement {
         <wt-input
           class="field"
           name="export-passphrase"
+          hint=${t("live_source.passphrase_hint")}
           label=${t("live_source.passphrase")}
           type=${this.passphraseVisible ? "text" : "password"}
           autocomplete="off"
@@ -186,9 +187,6 @@ export class SetupLiveSourceScreen extends LitElement {
             this.#scope?.changed();
           }}
         >
-          <wt-help-tooltip slot="help" aria-label=${t("live_source.passphrase_help_label")}
-            >${t("live_source.passphrase_help")}</wt-help-tooltip
-          >
           <wt-button
             slot="end"
             variant="ghost"

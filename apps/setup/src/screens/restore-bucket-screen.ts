@@ -375,6 +375,7 @@ export class SetupRestoreBucketScreen extends LitElement {
         class="field"
         label=${t("restore_bucket.kit")}
         name="recovery-kit"
+        hint=${t("restore_bucket.kit_hint")}
         required
         rows="6"
         autocapitalize="off"
@@ -388,9 +389,6 @@ export class SetupRestoreBucketScreen extends LitElement {
           this.#setKit(e.detail.value);
         }}
       >
-        <wt-help-tooltip slot="help" aria-label=${t("restore_bucket.kit_help_label")}
-          >${t("restore_bucket.kit_help")}</wt-help-tooltip
-        >
       </wt-textarea>
       <wt-combobox
         class="field"
