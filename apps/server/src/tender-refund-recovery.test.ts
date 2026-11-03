@@ -17,6 +17,7 @@ import {
 } from "./tender-refund-sends.js";
 import { recoverTenderRefunds, runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { TradingAdmission } from "./trading-admission.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
 
 let v: Awaited<ReturnType<typeof zonePaymentVenue>>;
 useVenueDb({
@@ -416,4 +417,60 @@ describe("bill refund admission", () => {
     await resumeCardRefund(v.deps, refund!.id, "loop", "stored");
     expect(v.snapshot()).toEqual(saved);
   });
+});
+describe("bill refund recovery stopping", () => {
+  it.each([true, false])(
+    "a signal stops before the next bill refund's lookup (signalled: %s)",
+    async (signalled) => {
+      vi.spyOn(v.card, "sendRefund").mockResolvedValue({ kind: "uncertain", reason: "network" });
+      for (let i = 0; i < 2; i++) {
+        const t = await billRefund();
+        await refundBillPayment(
+          v.deps,
+          v.cfg,
+          t.id,
+          t.paymentId,
+          t.request,
+          v.operator,
+          "reader-card",
+        );
+      }
+      const stateOf = async (id: string) =>
+        (
+          await v.db
+            .select({ state: billPaymentRefunds.state })
+            .from(billPaymentRefunds)
+            .where(eq(billPaymentRefunds.id, id))
+        )[0]!.state;
+      // Sent and pending: each one this pass would ask its provider about.
+      const waiting = (
+        await v.db
+          .select({ id: billPaymentRefunds.id })
+          .from(billPaymentRefunds)
+          .where(and(eq(billPaymentRefunds.state, "pending"), isNotNull(billPaymentRefunds.sentAt)))
+      ).map(({ id }) => id);
+      expect(waiting.length).toBeGreaterThanOrEqual(2);
+      const controller = new AbortController();
+      const asked: string[] = [];
+      vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
+        asked.push(query.refundId);
+        controller.abort();
+        return {
+          kind: "match",
+          providerRefundRef: randomUUID(),
+          outcome: "completed",
+          providerStatus: "completed",
+        };
+      });
+      await settlePendingBillPayments(
+        { ...v.deps, cfg: v.cfg },
+        signalled ? controller.signal : undefined,
+      );
+      expect(asked).toHaveLength(signalled ? 1 : waiting.length);
+      expect(waiting).toEqual(expect.arrayContaining(asked));
+      for (const id of waiting) {
+        expect(await stateOf(id)).toBe(asked.includes(id) ? "completed" : "pending");
+      }
+    },
+  );
 });

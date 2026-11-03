@@ -588,7 +588,7 @@ export function pendingCardPass(
     owners: () => CollectionOwners;
     recover: () => ReturnType<typeof recoverAutomaticCardPayments>;
     release: () => Promise<number>;
-    settle: () => Promise<BillPaymentsPass>;
+    settle: (signal?: AbortSignal) => Promise<BillPaymentsPass>;
     getRole: () => SingletonRole;
     log: Logger;
   },
@@ -682,7 +682,7 @@ const BILL_PENDING_RECHECK_MS = 60_000;
  */
 export function withPendingBillPayments(
   inner: (now: Date) => Promise<PassReport>,
-  settle: () => Promise<BillPaymentsPass>,
+  settle: (signal?: AbortSignal) => Promise<BillPaymentsPass>,
   getRole: () => SingletonRole,
   log: Logger,
   signal?: AbortSignal,
@@ -691,7 +691,7 @@ export function withPendingBillPayments(
     const report = await inner(now);
     if (signal?.aborted || getRole() !== "primary") return report;
     try {
-      const { errors, pending, ...counts } = await settle();
+      const { errors, pending, ...counts } = await settle(signal);
       const settled =
         counts.received + counts.failed + counts.refundsCompleted + counts.refundsFailed;
       if (settled > 0) {
@@ -3402,16 +3402,19 @@ async function bootServer(
             log,
           }),
         release: () => releaseStalePaymentAttempts(db),
-        settle: () =>
-          settlePendingBillPayments({
-            db,
-            backend: nodeBackend,
-            admission: tradingAdmission,
-            clock: tillClock,
-            cfg: tradingContext,
-            refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
-            log,
-          }),
+        settle: (signal) =>
+          settlePendingBillPayments(
+            {
+              db,
+              backend: nodeBackend,
+              admission: tradingAdmission,
+              clock: tillClock,
+              cfg: tradingContext,
+              refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
+              log,
+            },
+            signal,
+          ),
         getRole: () => holders.singletonRole.current,
         log,
       },

@@ -32,6 +32,7 @@ describe("pendingCardPass", () => {
     async (signalled) => {
       const controller = new AbortController();
       const ran: string[] = [];
+      let settledWith: AbortSignal | undefined;
       const empty: ForwardResult = {
         nextDueAt: null,
         forwarded: 0,
@@ -55,8 +56,9 @@ describe("pendingCardPass", () => {
             ran.push("release");
             return 0;
           },
-          settle: async () => {
+          settle: async (signal) => {
             ran.push("settle");
+            settledWith = signal;
             return {
               received: 0,
               failed: 0,
@@ -75,6 +77,7 @@ describe("pendingCardPass", () => {
       );
       expect(await pass(new Date())).toEqual(REPORT);
       expect(ran).toEqual(signalled ? [] : ["recover", "release", "settle"]);
+      if (!signalled) expect(settledWith).toBe(controller.signal);
     },
   );
 });
