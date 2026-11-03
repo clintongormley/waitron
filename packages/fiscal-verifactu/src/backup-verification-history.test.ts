@@ -1093,3 +1093,40 @@ it("a stored version 2 approval saying neither offline, absent nor relinquished 
   });
   expect(await verify()).toEqual(result("invalid"));
 });
+
+function rewriteApproval(db: DatabaseSync, eventKey: string, fields: Record<string, unknown>) {
+  const row = db
+    .prepare("select approval from fiscal_allocations where event_key=?")
+    .get(eventKey)!;
+  db.prepare("update fiscal_allocations set approval=? where event_key=?").run(
+    JSON.stringify({ ...JSON.parse(String(row.approval)), ...fields }),
+    eventKey,
+  );
+}
+it.each([
+  [
+    "a promotion saying offline but not relinquished",
+    "event-2",
+    { oldMachineRelinquished: false, oldMachineOffline: true },
+  ],
+  ["a restore saying offline", "event-1", { version: 2, oldMachineRelinquished: false }],
+  ["a first setup saying absent", "event-0", { version: 2, oldMachineRelinquished: true }],
+])("a stored version 2 approval no promotion writes is refused: %s", async (_name, key, fields) => {
+  await captureWithPromotion();
+  both((db) => rewriteApproval(db, key, fields));
+  expect(await verify()).toEqual(result("invalid"));
+});
+
+it("a stored version 2 relinquished approval on an emergency row is refused", async () => {
+  await capture();
+  both((db) => paper(db, false, true));
+  expect(await verify()).toEqual(result("passed"));
+  both((db) =>
+    rewriteApproval(db, "event-0", {
+      version: 2,
+      oldMachineOffline: false,
+      oldMachineRelinquished: true,
+    }),
+  );
+  expect(await verify()).toEqual(result("invalid"));
+});
