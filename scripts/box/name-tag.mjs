@@ -13,6 +13,8 @@ export const NAME_TAG_MAX_CODE_POINTS = 256;
 export const NAME_TAG_MAX_BYTES = 1100;
 /** cryptsetup v2.7.5 lib/luks2/luks2.h:28. */
 export const LUKS2_TOKENS_MAX = 32;
+/** Four times the largest JSON area LUKS2 lists. */
+export const NAME_TAG_METADATA_MAX_BYTES = 16 * 1024 * 1024;
 
 const KEYS = ["type", "keyslots", "version", "name", "live"];
 /** U+0000-U+001F and U+007F-U+009F. */
@@ -94,4 +96,45 @@ export function decodeNameTag(bytes) {
   // Bytes, not values: an escaped character or a reordered key parses to the same value.
   if (!sameBytes(canonicalBytes(name, live), bytes)) return null;
   return Object.freeze({ name, live });
+}
+
+/** @param {unknown} value */
+function isPlainObject(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** @param {unknown} token */
+function isWaitronToken(token) {
+  return isPlainObject(token) && /** @type {{type?: unknown}} */ (token).type === NAME_TAG_TYPE;
+}
+
+/**
+ * The header's `tokens` object, or null when metadata is too large, not UTF-8 JSON, or has none.
+ * @param {Uint8Array} metadata @returns {Record<string, unknown>|null}
+ */
+function readTokens(metadata) {
+  if (!(metadata instanceof Uint8Array)) throw refusal("name_tag.input_invalid", "input-invalid");
+  if (metadata.length > NAME_TAG_METADATA_MAX_BYTES) return null;
+  let value;
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(metadata);
+    value = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  return isPlainObject(value) && isPlainObject(value.tokens) ? value.tokens : null;
+}
+
+/**
+ * Pure. metadata is what `cryptsetup luksDump --dump-json-metadata` prints. Answers the one token of
+ * type NAME_TAG_TYPE as JSON.stringify writes it (its own key order kept), or null for none, two or
+ * more, or metadata that is not UTF-8 JSON with a `tokens` object. Throws name_tag.input_invalid
+ * (input-invalid) unless metadata is a Uint8Array.
+ * @param {Uint8Array} metadata @returns {Uint8Array|null} a fresh array
+ */
+export function findNameTag(metadata) {
+  const tokens = readTokens(metadata);
+  if (tokens === null) return null;
+  const tags = Object.values(tokens).filter(isWaitronToken);
+  return tags.length === 1 ? new TextEncoder().encode(JSON.stringify(tags[0])) : null;
 }
