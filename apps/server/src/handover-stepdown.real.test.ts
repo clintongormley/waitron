@@ -14,6 +14,7 @@ import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures
 import type { HandoverBinding } from "@waitron/handover";
 import { startManagementSession } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { scheduledRuns } from "@waitron/scheduler";
 import { readHandoverRestriction } from "@waitron/node-db";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -36,7 +37,35 @@ const outside = vi.hoisted(() => ({
   reconciles: [] as number[],
   sweeps: [] as number[],
   holdSubmit: null as Promise<void> | null,
+  holdSweep: null as Promise<void> | null,
 }));
+
+// The pending-card loop sleeps at most 50 ms between passes, so a loop nobody stopped sweeps again
+// inside the window the test holds open after the stepdown.
+vi.mock("./pending-card-recovery.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./pending-card-recovery.js")>();
+  return {
+    ...actual,
+    runPendingCardLoop: (...args: Parameters<typeof actual.runPendingCardLoop>) => {
+      const [deps] = args;
+      return actual.runPendingCardLoop({
+        ...deps,
+        sleep: (ms, signal) =>
+          new Promise<void>((done) => {
+            const timer = setTimeout(done, Math.min(ms, 50));
+            signal.addEventListener(
+              "abort",
+              () => {
+                clearTimeout(timer);
+                done();
+              },
+              { once: true },
+            );
+          }),
+      });
+    },
+  };
+});
 
 // AEAT's clock reading answers nothing, so the only AEAT traffic is the drain's, through the
 // stand-in below.
@@ -139,6 +168,22 @@ const KEY_ENV = {
 const DESTINATION = "22222222-2222-4222-8222-222222222222";
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
+/** Rejects naming `what` if `promise` has not settled within `ms`. */
+async function within<T>(promise: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} still waiting after ${ms} ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** How long the test keeps the server up after releasing AEAT and the sweep, before the sale. */
+const WINDOW_MS = 300;
+
 function hold() {
   let release!: () => void;
   const wait = new Promise<void>((done) => (release = done));
@@ -220,6 +265,21 @@ describe("a card sale in flight when the box steps down", () => {
       JSON.stringify({ modules: { "fiscal-none": false } }),
     );
     await suite.db.execute(sql`update card_readers set provider = 'stripe'`);
+    // A reconcile recorded twenty days ago leaves every day since a gap, and one period a pass
+    // keeps the rest due on every pass, so a pass nobody stopped reconciles again.
+    const dayStart = Date.UTC(
+      new Date().getUTCFullYear(),
+      new Date().getUTCMonth(),
+      new Date().getUTCDate(),
+    );
+    const oldPeriod = new Date(dayStart - 20 * 24 * 60 * 60_000);
+    await suite.db.insert(scheduledRuns).values({
+      duty: "payments.reconcile.stripe",
+      periodFrom: oldPeriod.toISOString(),
+      periodTo: new Date(oldPeriod.getTime() + 24 * 60 * 60_000).toISOString(),
+      state: "succeeded",
+      attempts: 1,
+    });
     let restarts = 0;
     const restarted = hold();
     const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
@@ -236,6 +296,7 @@ describe("a card sale in flight when the box steps down", () => {
       WAITRON_MAX_TICK_MS: "600000",
       WAITRON_MIN_TICK_MS: "200",
       WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
+      WAITRON_SCHEDULER_MAX_PERIODS_PER_TICK: "1",
     };
 
     let card: FakePaymentProvider | undefined;
@@ -246,8 +307,11 @@ describe("a card sale in flight when the box steps down", () => {
         card = new FakePaymentProvider(db);
         Object.defineProperty(card, "provider", { value: "stripe" });
         const resolvePending = card.resolvePending.bind(card);
-        card.resolvePending = (now) => {
+        card.resolvePending = async (now) => {
           outside.sweeps.push(Date.now());
+          const held = outside.holdSweep;
+          outside.holdSweep = null;
+          if (held !== null) await held;
           return resolvePending(now);
         };
         return {
@@ -271,9 +335,12 @@ describe("a card sale in flight when the box steps down", () => {
       },
     });
     const base = `http://127.0.0.1:${httpPort()}`;
-    await vi.waitFor(async () => {
-      expect((await fetch(`${base}/health`)).status).toBe(200);
-    });
+    await vi.waitFor(
+      async () => {
+        expect((await fetch(`${base}/health`)).status).toBe(200);
+      },
+      { timeout: 10_000 },
+    );
     // Each stand-in is reached before the stepdown, so a zero after it is not a stand-in nobody calls.
     await vi.waitFor(
       () => {
@@ -311,6 +378,12 @@ describe("a card sale in flight when the box steps down", () => {
       }),
     });
     await vi.waitFor(() => expect(card!.collectCalls).toHaveLength(1), { timeout: 10_000 });
+    // A sweep held across the stepdown: its pass began before the restriction, so any later sweep
+    // is a pass the stopped loop should never have started.
+    const sweep = hold();
+    releases.push(sweep.release);
+    outside.holdSweep = sweep.wait;
+    await vi.waitFor(() => expect(outside.holdSweep).toBeNull(), { timeout: 10_000 });
 
     const before = {
       submitsBeforeStepdown: outside.submits.length,
@@ -331,10 +404,14 @@ describe("a card sale in flight when the box steps down", () => {
     const refused = { status: afterBegan.status, body: await afterBegan.json() };
 
     aeat.release();
+    sweep.release();
+    // The held sale keeps the server up, so a drain pass or a card loop nobody stopped would
+    // reach its stand-in in this window.
+    await new Promise((resolve) => setTimeout(resolve, WINDOW_MS));
     releaseCard();
-    const paid = await paying;
+    const paid = await within(paying, 10_000, "the held sale's answer");
     const sale = { status: paid.status, body: (await paid.json()) as Record<string, unknown> };
-    await restarted.wait;
+    await within(restarted.wait, 10_000, "the restart after the stepdown's close");
     // The stepdown closed the server before it restarted; reading the folder now is after close().
     const restriction = await readHandoverRestriction(suite.node, nodeId);
     const [{ n }] = suite.db.all<{ n: number }>(
@@ -349,7 +426,7 @@ describe("a card sale in flight when the box steps down", () => {
       recordedAt: restriction!.recordedAt.getTime(),
       ...before,
     };
-  }, 45_000);
+  }, 120_000);
 
   afterAll(async () => {
     for (const release of releases) release();
@@ -391,6 +468,11 @@ describe("a card sale in flight when the box steps down", () => {
     expect(outside.submits.filter((at) => at >= seen().recordedAt)).toEqual([]);
   });
 
+  // Control, run locally and not committed: with `signalDuties(deps.duties)` in `stepDown` made a
+  // no-op, this case fails with
+  //   expected [ 1793667767103, 1793667767309 ] to deeply equal []
+  // (times vary) on the reconcile line: the held drain pass goes on to reconcile a due gap. With
+  // that line removed, the sweep line fails the same way.
   it("the Stripe reconcile and the card sweep are not called after the restriction is recorded", () => {
     expect(seen().reconcilesBeforeStepdown).toBeGreaterThan(0);
     expect(seen().sweepsBeforeStepdown).toBeGreaterThan(0);
