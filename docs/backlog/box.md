@@ -826,12 +826,41 @@ large release assets and the A940/A947/A798 coordination.
   checking the `@host-state` mount before any file call, storing once per disk UUID, never
   replacing. A sweep checks that the key appears in no returned value, error, log line or other file.
 
+**Built so far (2026-11-03).** [PR 2](../superpowers/plans/2026-11-03-b3-2-preboot-logic.md)
+(#PR2) adds three more host libraries under `scripts/box/`, none called yet:
+
+- `preboot.mjs`: the preboot unlock gate. `freezeUnlockTarget` decides, once, from PR 1's
+  whole-machine observation, which disk may be opened: the one Waitron disk whose encryption UUID
+  matches the expected one, carried by nothing else on any attachment, after first start is
+  complete. `createUnlockGate` runs one check at a time behind one wait shared by every screen,
+  the proposed 2/4/8/16/32/60 seconds (`UNLOCK_DELAYS_MS`, spec §7.5, not the owner's choice), and
+  clears every copy of a typed key when its attempt ends. The fixed `prebootUnlockGate` refuses
+  with `adapter-missing` until the Linux adapters exist.
+- `preboot-locked.mjs`: what a locked box answers. `freezeLockedTarget` checks the two
+  certificates before anything listens: the recovery certificate is signed by the box's CA (by
+  signature), names only `unlock-<installationId>.waitron.local` and has its own key; the redirect
+  certificate is self-signed, names only `waitron.local`, and does not share the recovery
+  certificate's key (one carrying the CA's key is already refused as CA-signed or not
+  self-signed). `decideLockedRequest` sends `waitron.local` to the one recovery address with a 302,
+  refuses other methods (405) and other names (421), and answers 503 `unlock.remote_unavailable`
+  when there is no recovery address. Host and TLS names outside printable ASCII match nothing.
+- `wifi-record.mjs`: version 1 of the boot copy's Wi-Fi record. `parseWifiRecord` accepts only
+  `wpa-psk` and `sae` networks; `createWifiRecordReader` reads only
+  `/boot/waitron-recovery/wifi.json`, never the staging copy `wifi.json.next`, from a boot mount
+  it has checked. A mount check that throws, or whose answer throws when read, is
+  `mount-unverified`. The fixed `readActiveWifiRecord` answers `mount-unverified` with no file
+  call until the Linux pull request adds the mount check.
+
 Still waiting, all needing a Linux machine with KVM, OVMF and swtpm, or the hardware: the recipe and
 dracut files; the rig entry point (`bench/box-installer/run.mjs`) and disk fixtures; the real
 observation, mount and cleanup adapters (until then the disk-key store's fixed entry points
 refuse); the root-owned
 check run as root; real power cuts; seal experiments (a)–(i) and every slice-1 measurement.
-PR 2, the preboot logic (unlock gate, locked-mode redirect, Wi-Fi record reader), needs no Linux machine and can be built now.
+PR 2 left for later, from its plan's "Out": the preboot screen, the words for the `explain` answer
+and the letters-to-bytes decoder; the public CA download and its help page; the key-use record
+and the startup-fingerprint check before resealing; the real `cryptsetup`, observation,
+boot-mount, certificate-file and listener adapters; joining Wi-Fi; the address fallback; the four
+preboot rig cases; and the key-memory measurements.
 
 **For the owner: a box that already holds Waitron, with its TPM or Secure Boot switched off.**
 Should the stick start the installed box anyway, or stop and show the firmware message? Starting it
@@ -854,6 +883,25 @@ decides; PR 1 reports the disk's state and the hardware state separately so eith
 - A lone disk whose attachment is `unknown` counts as internal, so it can be the disk the installer
   erases; and a Waitron disk whose two partition tables were both wiped reads as blank. The Linux
   observation adapter decides how to look for an encryption header in that case.
+
+**For later slices, from PR 2's [re-map against main](../superpowers/plans/2026-11-03-b3-2-preboot-logic.md#re-map-against-main-on-2026-11-03):**
+
+- The installation id in the recovery address must be a new per-disk value made at first start,
+  never Waitron Cloud's `installationId` or the fiscal `installationIdentity` (re-map finding 7).
+- Task 3.1's writer writes the version-1 Wi-Fi format and reads it back with `parseWifiRecord`.
+  Open, WEP, enterprise and OWE networks, and WPA2 passwords outside printable ASCII, get no Wi-Fi
+  unlock in version 1, a gap 3.1 reports rather than hides.
+- The address fallback widens `freezeLockedTarget`'s one-name rule for the recovery certificate
+  and `decideLockedRequest`'s host rule together.
+- Slice 8's sheet and the preboot screen share one letters-to-bytes alphabet.
+- Slice 2: `classifyDisk` calls a Waitron disk that also holds a foreign encrypted partition
+  `waitron` (re-map finding 16); the installer policy decides whether that is right.
+- A weak test assertion, not a production defect: `apps/server/src/box-tls-repair.test.ts:397`
+  checks a repaired leaf with `X509Certificate.checkIssued`, which matches the issuer's name and
+  key identifier, both of which another CA can copy, and not the signature. So the test would also
+  pass for a leaf another key signed with copied issuer fields; a `verify(ca.publicKey)` assertion
+  would check the signature. Production checks the signature
+  (`apps/server/src/box-tls-repair.ts:163-164`).
 
 **Left open by PR 1's review (#2370):**
 
