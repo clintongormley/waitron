@@ -148,7 +148,8 @@ const ROOT_ID = /^\d+:\d+$/;
 const OPEN_RECORD = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK;
 
 const ABSENT = Object.freeze({ kind: "absent" });
-// Only answers built here end a read early: whatever an injected io throws becomes "io-failed".
+// A read ends early with its thrown value only when that value is in this set; anything else
+// thrown becomes "io-failed".
 const answers = new WeakSet([ABSENT]);
 
 /** @param {string} reason */
@@ -216,18 +217,16 @@ export function createWifiRecordReader(deps) {
   }
 
   async function checkMount() {
-    let seen;
+    let seenRoot;
+    let rootId;
+    // Every read of the answer is inside the try, so an answer that throws when read is unverified.
     try {
-      seen = await inspectBootMount();
+      const seen = await inspectBootMount();
+      if (exactRecord(seen, ["bootRoot", "rootId"])) ({ bootRoot: seenRoot, rootId } = seen);
     } catch {
       throw refusedRead("mount-unverified");
     }
-    if (
-      !exactRecord(seen, ["bootRoot", "rootId"]) ||
-      seen.bootRoot !== bootRoot ||
-      typeof seen.rootId !== "string" ||
-      !ROOT_ID.test(seen.rootId)
-    )
+    if (seenRoot !== bootRoot || typeof rootId !== "string" || !ROOT_ID.test(rootId))
       throw refusedRead("mount-unverified");
 
     let root;
@@ -237,7 +236,7 @@ export function createWifiRecordReader(deps) {
       if (errnoCode(error) === "ENOENT") throw refusedRead("mount-unverified");
       throw error;
     }
-    if (`${root.dev}:${root.ino}` !== seen.rootId) throw refusedRead("root-changed");
+    if (`${root.dev}:${root.ino}` !== rootId) throw refusedRead("root-changed");
     // The boot partition is normally 0755, so only group and other writes are refused here.
     checkFolder(root, 0o022);
   }
@@ -271,6 +270,8 @@ export function createWifiRecordReader(deps) {
     }
     checkFolder(stats, 0o077);
 
+    // Only root can write in a root-only folder, so only root could swap it between these checks
+    // and the open below, and root is already trusted (spec §7.5).
     let handle;
     try {
       handle = await open(recordPath, OPEN_RECORD);

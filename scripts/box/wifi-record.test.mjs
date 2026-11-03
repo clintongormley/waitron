@@ -333,17 +333,40 @@ const rootIdOf = async (path) => {
   return { dev: stats.dev, ino: stats.ino, rootId: `${stats.dev}:${stats.ino}` };
 };
 
-/** A real io that logs every call's name and path; `overrides` replace single operations. */
+/** Handles opened and closed through every countingIo; a test resets it before it reads. */
+const handles = { opened: 0, closed: 0 };
+
+/**
+ * A real io that logs every call's name and path, and counts in `handles` each handle it opens and
+ * each close of one; `overrides` replace single operations.
+ */
 function countingIo(overrides = {}) {
   const log = [];
-  const io = {};
-  for (const name of ["lstat", "open"]) {
-    const run = overrides[name] ?? fs[name];
-    io[name] = (...args) => {
-      log.push([name, args[0]]);
-      return run(...args);
-    };
-  }
+  const lstat = overrides.lstat ?? fs.lstat;
+  const open = overrides.open ?? fs.open;
+  const io = {
+    lstat: (...args) => {
+      log.push(["lstat", args[0]]);
+      return lstat(...args);
+    },
+    open: async (...args) => {
+      log.push(["open", args[0]]);
+      const handle = await open(...args);
+      handles.opened++;
+      return new Proxy(handle, {
+        get(target, key) {
+          if (key === "close") {
+            return async () => {
+              await target.close();
+              handles.closed++;
+            };
+          }
+          const value = Reflect.get(target, key);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    },
+  };
   return { io, log };
 }
 
@@ -752,14 +775,37 @@ const mountAnswers = [
   ["answers a numeric rootId", (a) => ({ ...a, rootId: 12 })],
   ["answers another bootRoot", (a) => ({ ...a, bootRoot: `${a.bootRoot}-other` })],
   ["answers null", () => null],
+  [
+    "answers a rootId that throws, holding the password, when read",
+    (a) => ({
+      bootRoot: a.bootRoot,
+      get rootId() {
+        throw new Error(`rootId unreadable: ${PASSWORD}`);
+      },
+    }),
+  ],
+  [
+    "answers a Proxy whose keys throw when listed",
+    () =>
+      new Proxy(
+        {},
+        {
+          ownKeys() {
+            throw new Error(PASSWORD);
+          },
+        },
+      ),
+  ],
 ];
 
 describe("createWifiRecordReader reads the one fixed record", () => {
   it("a valid record → loaded, frozen, and the one path opened is …/waitron-recovery/wifi.json", async () => {
     const f = await fixture();
+    handles.opened = handles.closed = 0;
     const result = await f.read();
     expect(result).toEqual(LOADED);
     expect(Object.isFrozen(result)).toBe(true);
+    expect(handles).toEqual({ opened: 1, closed: 1 });
     expect(opened(f)).toEqual([f.recordPath]);
     expect(f.counting.log).toEqual([
       ["lstat", f.bootRoot],
@@ -818,10 +864,18 @@ describe("createWifiRecordReader reads the one fixed record", () => {
 });
 
 describe("createWifiRecordReader answers absent or refused", () => {
-  it.each(nonLoadedCases)("%s", async (_name, run, expected) => {
+  it.each(nonLoadedCases)("%s, and every handle opened is closed", async (_name, run, expected) => {
+    handles.opened = handles.closed = 0;
     const result = await run();
     expect(result).toEqual(expected);
     expect(Object.isFrozen(result)).toBe(true);
+    expect(handles.closed).toBe(handles.opened);
+  });
+
+  it("the cases that open the record open at least one handle, so the close check above can fail", async () => {
+    handles.opened = handles.closed = 0;
+    for (const [, run] of nonLoadedCases) await run();
+    expect(handles.opened).toBeGreaterThan(5);
   });
 
   it("only a valid wifi.json.next → absent, and .next was never opened or lstat'd", async () => {
@@ -1030,7 +1084,7 @@ describe("the Wi-Fi password never leaves in a refusal, an absence or output", (
     inspect(result, { depth: null, showHidden: true }),
   ];
 
-  it("every refusal and absence holds no form of the password, and nothing was written to the console", async () => {
+  it("every refusal and absence holds no form of the password, and console.*, process.stdout.write and process.stderr.write were not called", async () => {
     const spies = [
       ...["log", "info", "warn", "error", "debug", "trace"].map((name) => vi.spyOn(console, name)),
       vi.spyOn(process.stdout, "write"),
