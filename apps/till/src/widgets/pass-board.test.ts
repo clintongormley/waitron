@@ -1070,9 +1070,13 @@ describe("A773 pass board widget", () => {
         ...root(el).querySelectorAll<HTMLButtonElement>(`[data-pass-fire="${toFireCard.key}"]`),
       ];
       expect(fires()).toHaveLength(2);
+      expect(toFire.contains(fires()[0]!)).toBe(true);
+      expect(fires().map((fire) => fire.disabled)).toEqual([false, false]);
       const fired = eventsOf(el, "pass-fire");
       await userEvent.click(fires()[1]!);
       expect(fired).toEqual([{ key: toFireCard.key }]);
+      await userEvent.click(fires()[0]!);
+      expect(fired).toEqual([{ key: toFireCard.key }, { key: toFireCard.key }]);
       el.sending = new Set([toFireCard.key]);
       await el.updateComplete;
       expect(fires().map((fire) => fire.disabled)).toEqual([true, true]);

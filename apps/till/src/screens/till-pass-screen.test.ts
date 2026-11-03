@@ -1744,6 +1744,60 @@ describe("A773 pass screen", () => {
         expect(cardKeys(el)).toEqual(["bill:b"]);
       }));
 
+    it("at a till moved to the monitor and back to the pass, a late success of the old pass choice re-reads the board and shows the value the server accepted", () =>
+      withFakeTimers(async () => {
+        const { api, sent } = movesToMonitorAndBack();
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await open(el);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+        vi.mocked(api.getDevicePassBoard).mockResolvedValueOnce({
+          ...deviceBoard(),
+          display: display(true),
+        });
+        const reads = vi.mocked(api.getDevicePassBoard).mock.calls.length;
+        sent.resolve();
+        await settle(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(reads + 1);
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+      }));
+
+    it("at a till, a choice answered after a refresh of the same board began shows the choice and frees the window", () =>
+      withFakeTimers(async () => {
+        const sent = deferred<void>();
+        const held = deferred<DevicePassBoard>();
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          getDevicePassBoard: vi
+            .fn()
+            .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+          setDeviceKitchenScreenDisplay: vi.fn().mockReturnValueOnce(sent.promise),
+        });
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        vi.mocked(api.getDevicePassBoard)
+          .mockImplementationOnce(() => held.promise)
+          .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        sent.resolve();
+        await settle(el);
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+        expect(control(el)!.disabled).toBe(false);
+        expect(el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
+        held.resolve({ ...deviceBoard(), display: display(false) });
+        await settle(el);
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+        expect(control(el)!.disabled).toBe(false);
+      }));
+
     it("on a kitchen display, drops the section when a refresh says a narrowing took every station", () =>
       withFakeTimers(async () => {
         const api = fakeApi({
