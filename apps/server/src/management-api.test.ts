@@ -2032,12 +2032,17 @@ describe("/management-api/stations (KDS-1 config)", () => {
     onTestFinished(() =>
       withTransaction(suite.db, (tx) => setStationsWaitForPass(tx, false, [grill])),
     );
+    const ownZone = await createZone(unique("Pass coverage"));
+    onTestFinished(async () => {
+      const removed = await req(`/zones/${ownZone}`, { method: "DELETE" }, managerCookie);
+      expect(removed.status).toBe(200);
+    });
     const zones = await suite.db
       .select({ id: floorZones.id, name: floorZones.name })
       .from(floorZones)
       .where(eq(floorZones.active, true))
       .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
-    expect(zones.length).toBeGreaterThan(0);
+    expect(zones.length).toBeGreaterThan(1);
     const res = await req("/stations/pass-coverage", { method: "GET" }, managerCookie);
     expect(res.status).toBe(200);
     const gaps = (await res.json()) as { stationId: string }[];

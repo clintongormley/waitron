@@ -28,8 +28,7 @@ export interface OutputsDown {
   screensDark: { stationId: string; stationName: string; lastSeenAt: string | null }[];
 }
 
-/** A waiting station and zone no pass device could fire; `zoneId` is null when the venue has no
- *  active zone. */
+/** A waiting station and zone no pass device could fire. */
 export interface PassCoverageGap {
   stationId: string;
   stationName: string;
