@@ -51,7 +51,7 @@ const PAGE_TEXT: Readonly<
     progress: "Progress",
   },
   "es-ES": {
-    title: "Este equipo ya no lleva el local",
+    title: "El local ya no funciona con este equipo",
     body: ["No hace ventas ni envía nada a Hacienda. El local funciona ahora con ", "."],
     progress: "Progreso",
   },

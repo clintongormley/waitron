@@ -97,7 +97,7 @@ describe("the restricted box's own page", () => {
     expect(spanish.status).toBe(200);
     expect(spanish.html).toContain('<html lang="es-ES">');
     inOrder(spanish.html, [
-      "<h1>Este equipo ya no lleva el local</h1>",
+      "<h1>El local ya no funciona con este equipo</h1>",
       "No hace ventas ni envía nada a Hacienda. El local funciona ahora con <strong>Bar counter box</strong>.",
       "Traspaso iniciado",
       "Ha dejado de vender",
