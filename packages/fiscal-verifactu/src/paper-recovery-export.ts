@@ -87,6 +87,7 @@ export async function preparePaperRecoveryExport(
     ...scope,
     mode: "recovery",
     ...binding,
+    oldMachineRelinquished: undefined,
     operatorId,
     incidentEvidence: evidence.incidentEvidence,
     priorActivation: evidence.priorActivation,

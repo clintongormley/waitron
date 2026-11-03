@@ -156,6 +156,7 @@ export function prepareInitialCloudSetup(
     ...request.scope,
     mode: "initial-setup",
     ...context.binding,
+    oldMachineRelinquished: undefined,
     operatorId: context.administratorId,
     incidentEvidence: request.binding.incidentEvidence,
     requiredBases: context.bases,

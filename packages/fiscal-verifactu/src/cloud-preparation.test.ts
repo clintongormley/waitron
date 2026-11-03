@@ -184,6 +184,23 @@ it.each(["sourceId", "eventId", "targetNodeId", "operatorId", "receiptId"])(
     expect(await readdir(receiptDirectory)).toEqual([]);
   },
 );
+it("refuses a binding carrying the relinquished fact", async () => {
+  const carrying = { ...binding, oldMachineRelinquished: true };
+  current = { ...current, binding: carrying };
+  await saveCurrent();
+  await expect(
+    withOperationAuthority(carrying, operatorId, (authority) =>
+      preparation().prepare({ binding: carrying, input: input(), authority }, (ready) =>
+        withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, ready)),
+      ),
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "event_mismatch" },
+  });
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+});
+
 it("refuses omission of the configured full purpose before spending a receipt", async () => {
   current.requiredBases = bases.filter((base) => base.purpose !== "full");
   await saveCurrent();
