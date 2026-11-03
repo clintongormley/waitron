@@ -1522,6 +1522,9 @@ importers:
       '@waitron/fiscal':
         specifier: workspace:*
         version: link:../fiscal
+      '@waitron/membership':
+        specifier: workspace:*
+        version: link:../membership
       '@waitron/migrations':
         specifier: workspace:*
         version: link:../migrations

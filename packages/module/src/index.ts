@@ -13,6 +13,8 @@ export {
   validateBackupVerificationContribution,
   validateBackupModuleResult,
 } from "./backup-verification.js";
+export type { ModuleHandoverContribution } from "./handover.js";
+export { collectHandoverSummaries, checkHandoverCopy } from "./handover.js";
 export type {
   WaitronModule,
   NonDbSource,

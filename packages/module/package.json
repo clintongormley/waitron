@@ -14,6 +14,7 @@
   "dependencies": {
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
+    "@waitron/membership": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "@waitron/recovery-pack": "workspace:*",
     "@waitron/server-kit": "workspace:*",
