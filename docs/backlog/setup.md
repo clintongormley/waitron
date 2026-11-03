@@ -701,7 +701,7 @@ Left open by A1042; the behaviour predates it. Taking an invoice series name nee
 a time reading from somewhere other than the box, and a reading more than 30 seconds older than the
 box's own counts as stale (`packages/fiscal-verifactu/src/hour-clock.ts:81`). A1042's U4a review
 held a Waitron Cloud recovery's commit step before its download in the test host
-`apps/server/test/hour-recovery-host.ts`, whose internet clock answers "offline" (`:111-115`), so
+`apps/server/test/hour-recovery-host.ts`, whose internet clock answers "offline" (`:140-144`), so
 the only second clock was the browser's reading. Held 29 seconds, the commit finished; held 31
 seconds, it was refused `sif.allocation_invalid` with reason `second_clock_missing`. The same run on
 main at 21d01dfac gave the same result. A Cloud download may run for up to 14 minutes
