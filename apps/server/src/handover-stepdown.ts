@@ -1,8 +1,9 @@
 import type { Context } from "hono";
-import { withNodeTransaction, type NodeDatabase } from "@waitron/db";
-import type { HandoverBinding } from "@waitron/handover";
+import { withNodeTransaction, type NodeDatabase, type NodeTransaction } from "@waitron/db";
+import { bindingFingerprint, type HandoverBinding } from "@waitron/handover";
 import { codeOf } from "@waitron/server-kit";
-import { recordHandoverRestrictionTx } from "@waitron/node-db";
+import { readHandoverOperation, recordHandoverRestrictionTx } from "@waitron/node-db";
+import { AppError } from "@waitron/shared";
 import type { BackgroundDuties } from "./background-duties.js";
 import type { HandoverGate } from "./handover-gate.js";
 import { advanceHandoverTx } from "./handover-store.js";
@@ -52,6 +53,7 @@ export async function stepDown(
   // The restriction is written before the answer, so a lost answer leaves the box stepped down.
   await withNodeTransaction(deps.node, async (tx) => {
     if (kind === "handed-over") {
+      await assertBindingTx(tx, deps.nodeId, binding);
       await advanceHandoverTx(tx, deps.nodeId, binding.operationId, "source_stepped_down", {});
     }
     await recordHandoverRestrictionTx(tx, {
@@ -71,6 +73,18 @@ export async function stepDown(
     setTimeout(() => void afterAnswer(deps), 0);
   }
   return { restarting: true, replayed: false };
+}
+
+/** The operation is selected by id alone, so the rest of the binding is checked against its own. */
+async function assertBindingTx(
+  tx: NodeTransaction,
+  nodeId: string,
+  binding: HandoverBinding,
+): Promise<void> {
+  const operation = await readHandoverOperation(tx, nodeId, binding.operationId);
+  if (operation !== null && operation.fingerprint !== bindingFingerprint(binding)) {
+    throw new AppError("handover.operation_conflict", { operationId: binding.operationId });
+  }
 }
 
 /** Every duty is told even when one throws; the first throw is rethrown after. */

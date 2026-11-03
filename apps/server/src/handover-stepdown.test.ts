@@ -527,9 +527,79 @@ describe("a stepdown", () => {
         self: self!,
       }),
     );
-    expect((error as AppError).code).toBe("handover.restriction_conflict");
+    expect((error as AppError).code).toBe("handover.operation_conflict");
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
     expect((await readHandoverRestriction(suite.node, SOURCE))?.successorNodeId).toBe(DESTINATION);
+  });
+
+  it("a second supersession naming another successor is refused and changes nothing", async () => {
+    const r = rig(suite.node);
+    const superseded = (destinationNodeId: string) => ({
+      binding: { ...BINDING, scenario: "emergency" as const, destinationNodeId },
+      kind: "superseded" as const,
+    });
+    let error: unknown;
+    r.app.post("/superseded-twice", async (c) => {
+      await stepDown(r.deps, { ...superseded(DESTINATION), self: c });
+      error = await captureError(() =>
+        stepDown(r.deps, { ...superseded("33333333-3333-4333-8333-333333333333"), self: c }),
+      );
+      return c.body(null);
+    });
+    await r.app.request("/superseded-twice", { method: "POST" });
+    expect((error as AppError | undefined)?.code).toBe("handover.restriction_conflict");
+    await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+    expect((await readHandoverRestriction(suite.node, SOURCE))?.successorNodeId).toBe(DESTINATION);
+  });
+
+  describe("a first call whose binding is not the one the operation was begun with", () => {
+    const cases = [
+      [
+        "another destination",
+        { ...BINDING, destinationNodeId: "33333333-3333-4333-8333-333333333333" },
+      ],
+      [
+        "another membership digest",
+        { ...BINDING, membership: { term: 3, digest: "b".repeat(64) } },
+      ],
+    ] as const;
+
+    it.each(cases)("naming %s is refused and changes nothing", async (_name, binding) => {
+      await begin();
+      const before = await readHandoverOperation(suite.node, SOURCE, OP);
+      const r = rig(suite.node);
+      let error: unknown;
+      r.app.post("/other", async (c) => {
+        error = await captureError(() =>
+          stepDown(r.deps, { binding, kind: "handed-over", self: c }),
+        );
+        return c.body(null);
+      });
+      await r.app.request("/other", { method: "POST" });
+      expect((error as AppError | undefined)?.code).toBe("handover.operation_conflict");
+      expect(await readHandoverRestriction(suite.node, SOURCE)).toBeNull();
+      expect(await readHandoverOperation(suite.node, SOURCE, OP)).toEqual(before);
+      expect(r.deps.gate.isClosed()).toBe(false);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(r.restart).not.toHaveBeenCalled();
+      expect(r.calls).toEqual([]);
+    });
+
+    it("control: the binding the operation was begun with steps down", async () => {
+      await begin();
+      const r = rig(suite.node);
+      let result: unknown;
+      r.app.post("/same", async (c) => {
+        result = await stepDown(r.deps, { binding: { ...BINDING }, kind: "handed-over", self: c });
+        return c.body(null);
+      });
+      await r.app.request("/same", { method: "POST" });
+      expect(result).toEqual({ restarting: true, replayed: false });
+      expect((await readHandoverOperation(suite.node, SOURCE, OP))?.state).toBe(
+        "source_stepped_down",
+      );
+      await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+    });
   });
 
   it("a superseded box records its restriction without moving an operation", async () => {
