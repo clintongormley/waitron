@@ -77,6 +77,8 @@ export type BillRefundDeps = Pick<TillSaleDeps, "db" | "backend" | "clock" | "ad
   cfg: TradingContext;
   refundProviderFor?: RefundProviderFor;
   attendance?: AttendanceRecorder;
+  /** Once aborted, no provider lookup starts; the refund stays pending for a later pass. */
+  stopSignal?: AbortSignal;
 };
 
 export async function issuanceStopsRefund(tx: Transaction, deps: BillRefundDeps): Promise<boolean> {
@@ -380,14 +382,13 @@ async function sendCardRefund(
     // A throw is no answer: the provider may or may not have made the refund.
     answer = { kind: "uncertain", reason: "network" };
   }
-  const evidence: RefundEvidence =
-    answer.kind === "accepted"
-      ? {
-          kind: "lookup",
-          lookup: await lookUp(deps, provider, refund, provided!.processorRef, refund.sentAt!),
-        }
-      : { kind: "answer", answer, sendCount: refund.sendCount };
-  return recordRefundOutcome(deps, refundId, evidence, raisedBy);
+  if (answer.kind !== "accepted") {
+    const evidence: RefundEvidence = { kind: "answer", answer, sendCount: refund.sendCount };
+    return recordRefundOutcome(deps, refundId, evidence, raisedBy);
+  }
+  const lookup = await lookUp(deps, provider, refund, provided!.processorRef, refund.sentAt!);
+  if (lookup === "stopped") return refund;
+  return recordRefundOutcome(deps, refundId, { kind: "lookup", lookup }, raisedBy);
 }
 
 /** The provider refund ids already attributed to the payment's other refunds, made or failed:
@@ -413,28 +414,12 @@ async function lookUp(
   refund: RefundRow,
   processorRef: string,
   sentAt: string,
-): Promise<RefundLookup>;
-async function lookUp(
-  deps: BillRefundDeps,
-  provider: PaymentProvider,
-  refund: RefundRow,
-  processorRef: string,
-  sentAt: string,
-  stopSignal: AbortSignal | undefined,
-): Promise<RefundLookup | "stopped">;
-async function lookUp(
-  deps: BillRefundDeps,
-  provider: PaymentProvider,
-  refund: RefundRow,
-  processorRef: string,
-  sentAt: string,
-  stopSignal?: AbortSignal,
 ): Promise<RefundLookup | "stopped"> {
   deps.admission.require();
   if (provider.lookupRefund === undefined) return { kind: "unreachable" };
   try {
     const excludeRefs = await withTransaction(deps.db, (tx) => attributedRefundRefs(tx, refund));
-    if (stopSignal?.aborted) return "stopped";
+    if (deps.stopSignal?.aborted) return "stopped";
     return await provider.lookupRefund({
       processorRef,
       refundId: refund.id,
@@ -465,7 +450,7 @@ async function providerOf(
 export type RefundResolver = "retry" | "manager" | "loop";
 
 /** `claimed: false`: the refund was no longer pending, another resolver in this process holds it,
- * or `stopSignal` was raised before the provider was asked, so nothing was done. `lookup` is what
+ * or `deps.stopSignal` was raised before the provider was asked, so nothing was done. `lookup` is what
  * the provider showed, when it was asked. */
 export type ResumedRefund =
   | { claimed: false; refund: RefundRow }
@@ -483,7 +468,6 @@ export async function resumeCardRefund(
   refundId: string,
   resolver: RefundResolver,
   raisedBy: AlertOrigin,
-  stopSignal?: AbortSignal,
 ): Promise<ResumedRefund> {
   const live = liveRefundsOf(deps.db);
   const target = await withTransaction(deps.db, async (tx) => {
@@ -511,7 +495,7 @@ export async function resumeCardRefund(
     const lookup =
       provider === undefined
         ? ({ kind: "unreachable" } as const)
-        : await lookUp(deps, provider, refund, provided!.processorRef, refund.sentAt, stopSignal);
+        : await lookUp(deps, provider, refund, provided!.processorRef, refund.sentAt);
     if (lookup === "stopped") return { claimed: false, refund };
     const window = provider?.refundResendWindowMs ?? null;
     const age = deps.clock.now().instant.getTime() - Date.parse(refund.sentAt);

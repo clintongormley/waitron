@@ -196,7 +196,6 @@ interface Observed {
   sale: { status: number; body: Record<string, unknown> };
   salesForOrder: number;
   restarts: number;
-  recordedAt: number;
   stepdownAt: number;
   submitsBeforeStepdown: number;
   reconcilesBeforeStepdown: number;
@@ -415,7 +414,7 @@ describe("a card sale in flight when the box steps down", () => {
     const sale = { status: paid.status, body: (await paid.json()) as Record<string, unknown> };
     await within(restarted.wait, 10_000, "the restart after the stepdown's close");
     // The stepdown closed the server before it restarted; reading the folder now is after close().
-    const restriction = await readHandoverRestriction(suite.node, nodeId);
+    expect(await readHandoverRestriction(suite.node, nodeId)).not.toBeNull();
     const [{ n }] = suite.db.all<{ n: number }>(
       sql`select count(*) as n from sales where working_order_id = ${workingOrderId}`,
     ) as [{ n: number }];
@@ -425,7 +424,6 @@ describe("a card sale in flight when the box steps down", () => {
       sale,
       salesForOrder: n,
       restarts,
-      recordedAt: restriction!.recordedAt.getTime(),
       stepdownAt,
       ...before,
     };
@@ -465,10 +463,9 @@ describe("a card sale in flight when the box steps down", () => {
     });
   });
 
-  it("AEAT receives no second submission after the restriction is recorded", () => {
+  it("AEAT receives exactly one submission, the batch held before the stepdown began", () => {
     expect(seen().submitsBeforeStepdown).toBe(1);
     expect(outside.submits).toHaveLength(1);
-    expect(outside.submits.filter((at) => at >= seen().recordedAt)).toEqual([]);
   });
 
   // Control, run locally and not committed: with `signalDuties(deps.duties)` in `stepDown` made a

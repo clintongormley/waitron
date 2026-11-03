@@ -529,4 +529,45 @@ describe("bill refund recovery stopping", () => {
       }
     },
   );
+  it("a signal raised during a send the provider accepted leaves the refund sent and pending, unasked", async () => {
+    const t = await billRefund();
+    const controller = new AbortController();
+    vi.spyOn(v.card, "sendRefund").mockImplementation(async () => {
+      controller.abort();
+      return { kind: "accepted" };
+    });
+    const asked: string[] = [];
+    vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
+      asked.push(query.refundId);
+      return {
+        kind: "match",
+        providerRefundRef: randomUUID(),
+        outcome: "completed",
+        providerStatus: "completed",
+      };
+    });
+    await refundBillPayment(
+      { ...v.deps, stopSignal: controller.signal },
+      v.cfg,
+      t.id,
+      t.paymentId,
+      t.request,
+      v.operator,
+      "reader-card",
+    );
+    const [saved] = await v.db
+      .select()
+      .from(billPaymentRefunds)
+      .where(eq(billPaymentRefunds.billPaymentId, t.paymentId));
+    expect(asked).toEqual([]);
+    expect(saved).toMatchObject({ state: "pending", sendCount: 1 });
+    expect(saved!.sentAt).not.toBeNull();
+    await resumeCardRefund(v.deps, saved!.id, "loop", "stored");
+    expect(asked).toEqual([saved!.id]);
+    const [settled] = await v.db
+      .select({ state: billPaymentRefunds.state })
+      .from(billPaymentRefunds)
+      .where(eq(billPaymentRefunds.id, saved!.id));
+    expect(settled!.state).toBe("completed");
+  });
 });

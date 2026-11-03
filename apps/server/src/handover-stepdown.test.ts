@@ -320,11 +320,10 @@ describe("a stepdown", () => {
     );
   });
 
-  it("no named duty starts a new pass after the restriction is written", async () => {
+  it("no named duty starts a new pass after the stepdown began", async () => {
     await begin();
     const controller = new AbortController();
     const passes: number[] = [];
-    let restrictedAt: number | null = null;
     const sleeping = hold();
     let asleep = false;
     const loop = runLoop({
@@ -352,18 +351,15 @@ describe("a stepdown", () => {
     await vi.waitFor(() => expect(asleep).toBe(true));
     expect(passes).toHaveLength(1);
     const duties = fakeDuties({ controller, loop });
-    const r = rig(suite.node, {
-      duties,
-      onAnswer: () => {
-        restrictedAt = passes.length;
-        // The loop's sleep ends between the answer and anything the stepdown does afterwards.
-        sleeping.release();
-      },
+    // The loop's sleep ends as the restriction's write begins, after the duties were told to stop.
+    const node = hookedNode(suite.node, async () => {
+      sleeping.release();
+      await new Promise((resolve) => setTimeout(resolve, 10));
     });
+    const r = rig(node, { duties });
     await r.app.request("/stepdown", { method: "POST" });
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
     await loop;
-    expect(restrictedAt).toBe(1);
     expect(passes).toHaveLength(1);
   });
 

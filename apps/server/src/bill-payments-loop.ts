@@ -159,11 +159,11 @@ export async function settleFromProviderRow(
  * amount is completed as the live attempt's P3 would have (the invoice included); one with no
  * provider row or with an automatic confirmed noncharge is failed; one charged for another amount raises `payment.bill_capture_mismatch`
  * and stays pending; any other stays pending for a manager. Each payment in its own transaction.
- * Once `signal` is aborted no further refund is looked up; each one not reached stays pending.
+ * Once `stopSignal` is aborted no further refund is looked up; each one not reached stays pending.
  */
 export async function settlePendingBillPayments(
   deps: BillPaymentsLoopDeps,
-  signal?: AbortSignal,
+  stopSignal?: AbortSignal,
 ): Promise<BillPaymentsPass> {
   deps.admission.require();
   const pending = await withTransaction(deps.db, (tx) =>
@@ -202,7 +202,7 @@ export async function settlePendingBillPayments(
       }
     }
   }
-  await settlePendingBillRefunds(deps, pass, signal);
+  await settlePendingBillRefunds(deps, pass, stopSignal);
   return pass;
 }
 
@@ -251,7 +251,7 @@ async function raiseSettleFailed(
 async function settlePendingBillRefunds(
   deps: BillPaymentsLoopDeps,
   pass: BillPaymentsPass,
-  signal: AbortSignal | undefined,
+  stopSignal: AbortSignal | undefined,
 ): Promise<void> {
   const reading = deps.clock.now();
   // A completed refund's time places it in a cash-up window, so none is settled by a clock that
@@ -278,13 +278,13 @@ async function settlePendingBillRefunds(
     if (!pendingIds.has(id)) lastLookups.delete(id);
   }
   for (const { refund: found, workingOrderId } of pending) {
-    if (signal?.aborted) break;
+    if (stopSignal?.aborted) break;
     const id = found.id;
     try {
       let refund = found;
       const now = deps.clock.now().instant;
       if (lookupDue(found, lastLookups.get(id), now.getTime())) {
-        const resumed = await resumeCardRefund(deps, id, "loop", PAYMENT_CHECK, signal);
+        const resumed = await resumeCardRefund({ ...deps, stopSignal }, id, "loop", PAYMENT_CHECK);
         if (!resumed.claimed) continue;
         lastLookups.set(id, now.getTime());
         refund = resumed.refund;
