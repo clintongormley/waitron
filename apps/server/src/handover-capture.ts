@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { KeyRing } from "@waitron/credentials";
@@ -103,6 +103,9 @@ async function captureOnce(deps: CaptureDeps, operationId: string): Promise<Fina
   }
   const path = finalCopyPath(deps.stateDir, operationId);
   await mkdir(dirname(path), { recursive: true });
+  // Reached only when the read above found no stored indicator. `archiveTo` writes beside the file
+  // before replacing it, so an abandoned copy left here would make it need room for two.
+  await rm(path, { force: true });
   // VACUUM INTO: a file a read-only open leaves byte for byte as it was.
   await deps.venue.archiveTo(path);
   const facts = await describeCopy(deps, binding, path);

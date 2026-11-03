@@ -166,13 +166,22 @@ function deps(self: string, overrides: Partial<CaptureDeps> = {}): CaptureDeps {
   };
 }
 
-/** The venue handle, counting copies and running `after` once each copy is written. */
-function countingVenue(after: () => void = () => {}): { venue: Database; copies: () => number } {
+/**
+ * The venue handle, counting copies and running `after` once each copy is written. `foundAtPath`
+ * holds, per copy, whether a file already sat at its path when the copy began.
+ */
+function countingVenue(after: () => void = () => {}): {
+  venue: Database;
+  copies: () => number;
+  foundAtPath: () => boolean[];
+} {
   let copies = 0;
+  const found: boolean[] = [];
   const venue = new Proxy(suite.db, {
     get: (target, key) => {
       if (key === "archiveTo") {
         return async (path: string) => {
+          found.push(existsSync(path));
           await target.archiveTo(path);
           copies++;
           after();
@@ -182,7 +191,7 @@ function countingVenue(after: () => void = () => {}): { venue: Database; copies:
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
-  return { venue, copies: () => copies };
+  return { venue, copies: () => copies, foundAtPath: () => [...found] };
 }
 
 /** The node handle, failing its first write as a crash before the write would. */
@@ -300,6 +309,18 @@ describe("capturing a stepped-down box's final copy", () => {
       canonicalize(envelope as unknown as CanonicalValue),
     ]);
     expect(envelope.body.snapshot.sha256).toBe(sha256Hex(await readFile(copyPath())));
+  });
+
+  it("a retry after a crash removes the unsigned copy before copying again, so it needs room for one copy", async () => {
+    const self = await steppedDown();
+    const { venue, foundAtPath } = countingVenue();
+    await expect(captureFinalCopy(deps(self, { venue, node: crashingNode() }), OP)).rejects.toThrow(
+      "the box stopped before the event was written",
+    );
+    expect(existsSync(copyPath())).toBe(true);
+
+    await captureFinalCopy(deps(self, { venue }), OP);
+    expect(foundAtPath()).toEqual([false, false]);
   });
 
   it("verifies with this box's key", async () => {
