@@ -6,7 +6,6 @@ import type { TrustedReading } from "@waitron/fiscal";
 import { hashPin, IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { cardReaders, DEMO_READER_ID, PAYMENTS_MIGRATIONS } from "@waitron/payments";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import {
   collectBoxHealth,
@@ -73,8 +72,8 @@ async function seedLocation(): Promise<string> {
 }
 
 async function seedSales(issued: { id: string; at: string; corrects?: string }[]): Promise<void> {
-  const location = await seedLocation();
-  const node = await seedNode(suite.db, brandLocationId(location));
+  await seedLocation();
+  const node = await seedNode(suite.db);
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId: node, code: "FA", purpose: "standard" })

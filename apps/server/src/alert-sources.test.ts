@@ -795,14 +795,12 @@ async function readAlerts(now = NOW) {
 
 describe("printingAlertSource — agent.silent", () => {
   it("stays quiet for an agent seen 4 minutes ago", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     await seedAgent({ locationId, name: "Kitchen agent", lastSeenAt: minsAgo(4) });
     expect(await readAlerts()).toEqual([]);
   });
 
   it("raises agent.silent for an agent seen 6 minutes ago, then clears on a fresh pull", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const agentId = await seedAgent({
       locationId,
@@ -826,7 +824,6 @@ describe("printingAlertSource — agent.silent", () => {
   });
 
   it("gives two silent agents that share a name two distinct alerts", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const first = await seedAgent({ locationId, name: "Kitchen agent", lastSeenAt: minsAgo(6) });
     const second = await seedAgent({
@@ -843,7 +840,6 @@ describe("printingAlertSource — agent.silent", () => {
   });
 
   it("ignores a deactivated silent agent and a never-seen agent", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     await seedAgent({
       locationId,
@@ -858,7 +854,6 @@ describe("printingAlertSource — agent.silent", () => {
 
 describe("stationOutputAlertSource", () => {
   it("alerts an open default station's stopped printer and stays quiet while it is closed without waiting dishes", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const [station] = await suite.db
       .insert(kitchenStations)
@@ -895,7 +890,6 @@ describe("stationOutputAlertSource", () => {
 
 describe("printingAlertSource — printer.jobs_waiting", () => {
   it("raises for a document job queued 3 minutes ago, with the printer name and count", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     await seedJob({ locationId, printerId, createdAt: minsAgo(3) });
@@ -914,7 +908,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("stays quiet for a job only 1 minute old", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     await seedJob({ locationId, printerId, createdAt: minsAgo(1) });
@@ -922,7 +915,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("never counts a drawer job, however old", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     await seedJob({ locationId, printerId, createdAt: minsAgo(30), kind: "drawer" });
@@ -930,7 +922,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("raises for a fresh failed job that has hit the delivery-attempt ceiling", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     // 1 minute old — below the stuck-time threshold — but exhausted, so it will never print again.
@@ -947,7 +938,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("does not count a job ended because its printer was unpaired, and still counts an ordinary stuck job beside it", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     await seedJob({
@@ -972,7 +962,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("still counts a job whose Bluetooth transport exhausted its attempts", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     await seedJob({
@@ -989,7 +978,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("stops counting a job that ran out of attempts once a resend of it has printed, and not while the resend waits", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
@@ -1004,7 +992,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("still counts a job whose resend also ran out of attempts, and the resend beside it", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
@@ -1020,7 +1007,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("stops counting a job and its failed resend once a resend of that resend has printed", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
@@ -1032,7 +1018,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("stops counting a failed resend once a later resend of the same job has printed", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
@@ -1043,7 +1028,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("still counts a resend that ran out of attempts though the job it copies printed before it", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     const printed = await seedJob({
@@ -1060,7 +1044,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("still counts a resend that ran out of attempts though an earlier resend of the same job printed", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
@@ -1074,7 +1057,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("still counts a job that ran out of attempts beside a printed job with the same bytes that is not its resend", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
@@ -1086,7 +1068,6 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   });
 
   it("ignores jobs on a deactivated printer", async () => {
-    await seedTenant(suite.db);
     const locationId = await seedLocation();
     const printerId = await seedPrinter({ locationId, name: "Off", active: false });
     await seedJob({ locationId, printerId, createdAt: minsAgo(10) });

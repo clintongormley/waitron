@@ -40,10 +40,7 @@ async function venue(): Promise<{ locationId: string; deviceId: string; profileI
     operationDescription: "Restaurant sale",
   });
   const venueId = await venueLocationId(suite.db);
-  const { deviceId, profileId } = await seedDevice(suite.db, {
-    locationId: venueId,
-    label: "Counter",
-  });
+  const { deviceId, profileId } = await seedDevice(suite.db, { label: "Counter" });
   return { locationId: venueId, deviceId, profileId };
 }
 
@@ -293,7 +290,7 @@ describe("the Demo printer", () => {
       .update(devices)
       .set({ receiptPrinterId: bar, paymentSlipPrinterId: bar })
       .where(eq(devices.id, deviceId));
-    const { deviceId: revokedId } = await seedDevice(suite.db, { locationId, profileId });
+    const { deviceId: revokedId } = await seedDevice(suite.db, { profileId });
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, revokedId));
 
     await configureDemoPrinter(suite.db, true);
@@ -315,10 +312,8 @@ describe("the Demo printer", () => {
   });
 
   it("leaves a retired profile off, so it gains no printer list", async () => {
-    const { locationId, profileId } = await venue();
-    const { deviceId: revokedId, profileId: retiredId } = await seedDevice(suite.db, {
-      locationId,
-    });
+    const { profileId } = await venue();
+    const { deviceId: revokedId, profileId: retiredId } = await seedDevice(suite.db);
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, revokedId));
     await suite.db
       .update(deviceProfiles)

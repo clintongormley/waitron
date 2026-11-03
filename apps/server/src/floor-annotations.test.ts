@@ -55,7 +55,6 @@ function asApp<T>(cfg: TradingContext, fn: (tx: Transaction) => Promise<T>): Pro
 }
 
 async function insertBooking(cfg: TradingContext, tableId: string, time: string): Promise<void> {
-  // Through the table definition for the same reason as the venue row above.
   await asApp(cfg, (tx) =>
     tx.insert(bookings).values({
       locationId: cfg.locationId,
