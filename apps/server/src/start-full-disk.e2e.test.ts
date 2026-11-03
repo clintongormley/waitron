@@ -439,7 +439,6 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       app,
       {
         db,
-        nodeId,
         modules: ALL_MODULES,
         serverParts: [...timeRecordPersonalData(ALL_MODULES), ...actionsPersonalData(db)],
         venueLocale: "en-GB",

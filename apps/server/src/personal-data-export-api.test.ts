@@ -40,7 +40,7 @@ const COLLEAGUE = {
 
 const identityModules = ALL_MODULES.filter((m) => m.name === "identity");
 const logger = vi.fn();
-let locationId: string, nodeId: string, martaId: string, colleagueId: string;
+let locationId: string, martaId: string, colleagueId: string;
 let martaToken: string, colleagueToken: string;
 let order: string[];
 let subjects: PersonalDataSubject[];
@@ -65,7 +65,6 @@ const stubPart: PersonalDataPart = {
 function deps(patch: Partial<PersonalDataExportDeps> = {}): PersonalDataExportDeps {
   return {
     db: suite.db,
-    nodeId,
     modules: identityModules,
     serverParts: [stubPart],
     venueLocale: "en-GB",
@@ -116,7 +115,7 @@ beforeEach(async () => {
     timeZone: "Europe/Madrid",
   });
   locationId = await venueLocationId(suite.db);
-  nodeId = await seedNode(suite.db);
+  await seedNode(suite.db);
   const [marta, colleague] = await suite.db
     .insert(persons)
     .values([

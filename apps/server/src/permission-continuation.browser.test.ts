@@ -170,7 +170,6 @@ async function fixture() {
     app,
     {
       db: suite.db,
-      cfg: venue,
       venueLocale: "en-GB",
       modules: ["test-continuation"],
       credentialKeyRing: TOTP_KEY_RING,

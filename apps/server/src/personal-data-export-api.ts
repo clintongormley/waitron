@@ -21,7 +21,6 @@ import { knownZone } from "./venue-time-zone.js";
 
 export interface PersonalDataExportDeps {
   db: Database;
-  nodeId: string;
   modules: readonly WaitronModule[];
   /** Parts the server adds itself. */
   serverParts: readonly PersonalDataPart[];

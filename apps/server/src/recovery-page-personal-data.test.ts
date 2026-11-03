@@ -227,7 +227,6 @@ function me(log: Logger, sendAccountEmail?: AccountEmailSender): Hono {
     app,
     {
       db: suite.db,
-      cfg: { nodeId: "00000000-0000-0000-0000-000000000000" },
       venueLocale: "en-GB",
       modules: ["core"],
       credentialKeyRing: { current: { version: 1, key: Buffer.alloc(32, 6) } },

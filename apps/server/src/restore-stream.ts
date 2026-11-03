@@ -206,15 +206,27 @@ async function scratchFolder(stateDir: string, prefix: string): Promise<string> 
   return mkdtemp(join(stateDir, prefix));
 }
 
-async function readRestoredVenue(store: VenueDatabase): Promise<RestoredVenue> {
+async function readRestoredVenue(store: VenueDatabase, nodeId: string): Promise<RestoredVenue> {
   const [tenant] = await store.venue
     .select({ legalName: tenants.legalName, taxId: tenants.taxId })
     .from(tenants)
     .where(eq(tenants.id, 1));
+  let venue;
+  try {
+    venue = await readVenue(store.venue);
+  } catch (error) {
+    if (
+      isAppError(error) &&
+      (hasCode(error, "venue.not_found") || hasCode(error, "provisioning.second_venue"))
+    ) {
+      throw new AppError("restore.identity_unknown", { nodeId });
+    }
+    throw error;
+  }
   return {
     legalName: tenant?.legalName ?? "",
     taxId: tenant?.taxId ?? "",
-    venueName: (await readVenue(store.venue)).name,
+    venueName: venue.name,
   };
 }
 
@@ -243,7 +255,7 @@ async function readRestoredCopy(args: {
     );
     const sealed = table.rows.length === 0 ? null : await readSealedStateRow(store.venue, nodeId);
     if (sealed === null) throw new AppError("restore.stream_state_missing", { nodeId });
-    return { sealed, venue: await readRestoredVenue(store) };
+    return { sealed, venue: await readRestoredVenue(store, nodeId) };
   } finally {
     await store.close();
   }

@@ -99,8 +99,6 @@ const suite = useVenueDb({
 // Not the ES default, so a route echoing a hardcoded constant fails.
 const VENUE_LOCALE = "en-GB";
 
-const NODE_ID = "11111111-1111-4111-8111-111111111111";
-
 const MODULES = ["core", "bookings"];
 
 // As the composition root does at boot, so the manager whoami below carries `booking.manage`.
@@ -114,7 +112,6 @@ function mountApp(overrides: Partial<MeApiDeps> = {}): Hono {
     app,
     {
       db: suite.db,
-      cfg: { nodeId: NODE_ID },
       venueLocale: VENUE_LOCALE,
       onboardingIntent: "prepare",
       modules: MODULES,
@@ -1076,7 +1073,6 @@ describe("mountMeApi — own credentials and second factor", () => {
       app,
       {
         db: suite.db,
-        cfg: { nodeId: NODE_ID },
         venueLocale: VENUE_LOCALE,
         modules: MODULES,
         credentialKeyRing: PROFILE_KEY_RING,

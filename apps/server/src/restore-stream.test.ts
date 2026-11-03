@@ -601,6 +601,31 @@ describe("prepareStreamRestore", () => {
     expect(prepared.venue.venueName).toBe(VENUE.venueName);
     await prepared.discard();
   });
+
+  it.each([
+    [
+      "two venue rows",
+      "insert into locations (id, name, invoice_locales, operation_description) values ('c0000000-0000-4000-8000-0000000000aa', 'Other', '[\"es\"]', 'Venta')",
+    ],
+    ["no venue row", "delete from locations"],
+  ])("refuses a copy with %s as an unknown identity, as an archive of it is", async (_, change) => {
+    const deps = await prepareDeps(await bucket(), {
+      restoreGeneration: async (args) => {
+        await copyFile(fixtureDb, args.outPath);
+        const copy = new DatabaseSync(args.outPath, { enableForeignKeyConstraints: false });
+        try {
+          copy.exec(change);
+        } finally {
+          copy.close();
+        }
+      },
+    });
+    await expect(prepareStreamRestore(deps)).rejects.toMatchObject({
+      code: "restore.identity_unknown",
+      params: { nodeId: T.nodeId },
+    });
+    await expectStateUntouched(deps.stateDir);
+  });
 });
 
 describe("measureBucketSkew", () => {

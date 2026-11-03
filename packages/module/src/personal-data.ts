@@ -9,7 +9,7 @@ export interface PersonalDataSubject {
   readonly language: "en" | "es";
   /** The moment of the request, from the box's clock. */
   readonly at: Date;
-  /** The venue's IANA time zone, or "UTC" when it cannot be read. */
+  /** The venue's IANA time zone, or "UTC" when the stored zone is one this runtime does not know. */
   readonly timeZone: string;
 }
 export interface PersonalDataFile {

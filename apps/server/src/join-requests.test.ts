@@ -1840,8 +1840,17 @@ describe("the venue a join stamps", () => {
         .from(joinRequests)
         .where(eq(joinRequests.id, device.joinId));
       expect(request).toEqual({ locationId: venue.cfg.locationId });
+      // An accept that read the request's location would now fail the device's foreign key.
+      await tx
+        .update(joinRequests)
+        .set({ locationId: brandLocationId(randomUUID()) })
+        .where(eq(joinRequests.id, device.joinId));
       await acceptDeviceJoinRequest(tx, elsewhere, device.joinId, { label: "Bar 1", profileId });
       const agent = await createJoinRequest(tx, elsewhere, { kind: "print_agent", label: "pi" });
+      await tx
+        .update(joinRequests)
+        .set({ locationId: brandLocationId(randomUUID()) })
+        .where(eq(joinRequests.id, agent.joinId));
       await acceptPrintAgentJoinRequest(tx, elsewhere, agent.joinId, {
         choice: agent.verificationNumber,
       });

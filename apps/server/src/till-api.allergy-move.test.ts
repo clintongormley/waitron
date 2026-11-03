@@ -286,6 +286,18 @@ it.each(["preview", "move"])("requires an open session for %s", async (action) =
   expect(frozen()).toEqual(before);
 });
 
+it("refuses an allergy move of an unknown bill as not open, writing nothing", async () => {
+  const f = await fixture();
+  const before = frozen();
+  const response = await f.app.request(`/api/bills/${randomUUID()}/move`, {
+    method: "POST",
+    headers: f.headers,
+    body: JSON.stringify(adoption(f)),
+  });
+  await refused(response, 409, "tab.not_open");
+  expect(frozen()).toEqual(before);
+});
+
 const authority = {
   device: [401, "device.unauthorized"],
   action: [403, "device.forbidden_action"],
