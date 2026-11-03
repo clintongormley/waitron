@@ -2623,6 +2623,18 @@ describe("A773 pass display policy", () => {
     await expect(deviceValues(line)).resolves.toEqual({ station: null });
   });
 
+  it("writes only the kind it names on a device holding a station screen and a pass", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.till, { station: every, pass: every });
+    const till = await seedDevice(venue.till, "Till");
+    await choose(venue, till, venue.till, [
+      { kind: "station", ...every },
+      { kind: "pass", ...every },
+    ]);
+    await scoped((tx) => setDeviceKitchenScreenDisplay(tx, till, "pass", false));
+    await expect(deviceValues(till)).resolves.toEqual({ station: null, pass: false });
+  });
+
   it("reads true and null for a station screen", async () => {
     const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every });
