@@ -1776,6 +1776,11 @@ export interface ResolvedKitchenScreen {
   stations: ScreenSlot[];
   /** null: no zone filter. */
   zones: ScreenSlot[] | null;
+  /** The device's own stored choice of showing other stations' dishes; null when it holds none,
+   *  and always null on a station screen. */
+  nonPassStationsOverride: boolean | null;
+  /** `nonPassStationsOverride`, else the profile's row of this kind, else true. */
+  showNonPassStations: boolean;
 }
 
 export interface ProfileChoice {

@@ -571,6 +571,8 @@ const kitchenDisplay = {
           profileEveryStation: true,
           stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
           zones: null,
+          nonPassStationsOverride: null,
+          showNonPassStations: true,
         },
       ],
     },

@@ -2098,7 +2098,14 @@ describe("till-station-screen follows its device's station screen choice (A366 d
   });
   const stationScreen = (
     slots: { id: string; name: string; available: boolean }[],
-  ): ResolvedKitchenScreen => ({ kind: "station", available: true, stations: slots, zones: null });
+  ): ResolvedKitchenScreen => ({
+    kind: "station",
+    available: true,
+    stations: slots,
+    zones: null,
+    nonPassStationsOverride: null,
+    showNonPassStations: true,
+  });
 
   async function mountOperator(identityRead: () => Promise<DeviceIdentity>) {
     const api = stubApi({
@@ -2173,7 +2180,18 @@ describe("till-station-screen follows its device's station screen choice (A366 d
 
   it("with no station screen choice shows every station, the default first", async () => {
     const { el, api } = await mountOperator(() =>
-      Promise.resolve(identity([{ kind: "pass", available: true, stations: [], zones: null }])),
+      Promise.resolve(
+        identity([
+          {
+            kind: "pass",
+            available: true,
+            stations: [],
+            zones: null,
+            nonPassStationsOverride: null,
+            showNonPassStations: true,
+          },
+        ]),
+      ),
     );
     expect(picks(el)).toEqual(["st-c", "st-g", "st-f"]);
     expect(api.getStationQueue).toHaveBeenCalledWith("st-c");
@@ -2197,7 +2215,16 @@ describe("till-station-screen follows its device's station screen choice (A366 d
     try {
       const { el, api } = await mountOperator(() =>
         Promise.resolve(
-          identity([{ kind: "station", available: false, stations: [], zones: null }]),
+          identity([
+            {
+              kind: "station",
+              available: false,
+              stations: [],
+              zones: null,
+              nonPassStationsOverride: null,
+              showNonPassStations: true,
+            },
+          ]),
         ),
       );
       expect(
@@ -2326,7 +2353,16 @@ describe("till-station-screen follows its device's station screen choice (A366 d
   });
 
   describe("given back while its line shows", () => {
-    const screenGone = identity([{ kind: "station", available: false, stations: [], zones: null }]);
+    const screenGone = identity([
+      {
+        kind: "station",
+        available: false,
+        stations: [],
+        zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
+      },
+    ]);
     const grillOnly = identity([stationScreen([{ id: "st-g", name: "Grill", available: true }])]);
     const withFakeTimers = async (run: () => Promise<void>) => {
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });

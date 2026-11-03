@@ -63,7 +63,16 @@ const identity = (): DeviceIdentity => ({
   deviceId: "dev-1",
   formFactor: "till",
   name: "Till 1",
-  kitchenScreens: [{ kind: "pass", available: true, stations: [], zones: null }],
+  kitchenScreens: [
+    {
+      kind: "pass",
+      available: true,
+      stations: [],
+      zones: null,
+      nonPassStationsOverride: null,
+      showNonPassStations: true,
+    },
+  ],
 });
 
 type Fn = ReturnType<typeof vi.fn>;

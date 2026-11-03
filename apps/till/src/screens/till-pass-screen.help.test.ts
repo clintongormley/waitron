@@ -100,7 +100,16 @@ const identity = (kind: "pass" | "pass_monitor"): DeviceIdentity => ({
   deviceId: "dev-1",
   formFactor: "till",
   name: "Till 1",
-  kitchenScreens: [{ kind, available: true, stations: [], zones: null }],
+  kitchenScreens: [
+    {
+      kind,
+      available: true,
+      stations: [],
+      zones: null,
+      nonPassStationsOverride: null,
+      showNonPassStations: true,
+    },
+  ],
 });
 
 function stubApi(board: PassBoard, overrides: Record<string, unknown> = {}) {

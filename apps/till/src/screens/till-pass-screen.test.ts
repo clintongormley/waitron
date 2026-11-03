@@ -62,6 +62,8 @@ const chosen = (kind: ResolvedKitchenScreen["kind"], available = true): Resolved
   available,
   stations: [],
   zones: null,
+  nonPassStationsOverride: null,
+  showNonPassStations: true,
 });
 
 function fakeApi(overrides: Record<string, unknown> = {}) {

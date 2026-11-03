@@ -191,6 +191,8 @@ const onOffStation: DeviceRow = {
         { id: "s-off", name: "Old", available: false, switchedOff: true },
       ],
       zones: null,
+      nonPassStationsOverride: null,
+      showNonPassStations: true,
     },
   ],
   receiptPrinterId: "pr1",
@@ -213,6 +215,8 @@ const screenTaken: DeviceRow = {
       profileEveryStation: false,
       stations: [],
       zones: null,
+      nonPassStationsOverride: null,
+      showNonPassStations: true,
     },
   ],
 };
@@ -235,6 +239,8 @@ const heldAndGone: DeviceRow = {
         { id: "s-off", name: "Old", available: false, switchedOff: true },
       ],
       zones: null,
+      nonPassStationsOverride: null,
+      showNonPassStations: true,
     },
   ],
 };

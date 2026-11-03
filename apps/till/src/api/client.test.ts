@@ -3451,8 +3451,17 @@ describe("TillApi", () => {
             { id: "st-2", name: "Deli", available: false },
           ],
           zones: [{ id: "z-1", name: "Terraza", available: true }],
+          nonPassStationsOverride: null,
+          showNonPassStations: true,
         },
-        { kind: "station", available: false, stations: [], zones: null },
+        {
+          kind: "station",
+          available: false,
+          stations: [],
+          zones: null,
+          nonPassStationsOverride: null,
+          showNonPassStations: true,
+        },
       ],
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(identity));

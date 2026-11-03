@@ -93,6 +93,8 @@ const devices: DeviceRow[] = [
         profileEveryStation: true,
         stations: [{ id: "s1", name: "Hot line", available: true, switchedOff: false }],
         zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
       },
     ],
     label: "Grill display",
@@ -4686,6 +4688,8 @@ describe("add a device", () => {
             profileEveryStation: false,
             stations: [{ id: "s1", name: "Cocina", available: true, switchedOff: false }],
             zones: null,
+            nonPassStationsOverride: null,
+            showNonPassStations: true,
           },
         ],
         profileRetired: false,
@@ -4840,6 +4844,8 @@ describe("add a device", () => {
               profileEveryStation: true,
               stations: [slot("s1", "Cocina"), slot("s2", "Barra")],
               zones: null,
+              nonPassStationsOverride: null,
+              showNonPassStations: true,
             },
           ],
           profileRetired: false,
@@ -4922,6 +4928,8 @@ describe("add a device", () => {
               profileEveryStation: false,
               stations: [{ id: "s1", name: "Cocina", available: false, switchedOff: true }],
               zones: null,
+              nonPassStationsOverride: null,
+              showNonPassStations: true,
             },
           ],
         },
@@ -5242,6 +5250,8 @@ describe("a device's kitchen screens", () => {
             profileEveryStation: true,
             stations: [],
             zones: [],
+            nonPassStationsOverride: null,
+            showNonPassStations: true,
           },
         ]),
       ],
@@ -5281,6 +5291,8 @@ describe("a device's kitchen screens", () => {
             profileEveryStation: true,
             stations: [],
             zones: [slot("z1"), slot("z2")],
+            nonPassStationsOverride: null,
+            showNonPassStations: true,
           },
         ]),
       ],
@@ -5452,6 +5464,8 @@ describe("a device's kitchen screens", () => {
         profileEveryStation: true,
         stations: [slot("s1"), slot("s2"), slot("s3")],
         zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
       },
     ]);
     const api = ksApi([row]);
@@ -5478,6 +5492,8 @@ describe("a device's kitchen screens", () => {
         profileEveryStation: false,
         stations: [slot("s1"), slot("s3", false)],
         zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
       },
     ]);
     const api = ksApi([row]);
@@ -5522,6 +5538,8 @@ describe("a device's kitchen screens", () => {
         profileEveryStation: false,
         stations: [],
         zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
       },
     ]);
     const el = await openEdit(ksApi([row]), "t1");
@@ -5548,6 +5566,8 @@ describe("a device's kitchen screens", () => {
         profileEveryStation: false,
         stations: [slot("s1"), slot("s2")],
         zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
       },
     ]);
     const api = ksApi([row]);
@@ -5577,6 +5597,8 @@ describe("a device's kitchen screens", () => {
         profileEveryStation: false,
         stations: [slot("s1"), slot("s2")],
         zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
       },
     ]);
     const api = ksApi([row]);
@@ -5603,6 +5625,8 @@ describe("a device's kitchen screens", () => {
         profileEveryStation: false,
         stations: [slot("s1"), slot("s2"), slot("s3", false)],
         zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
       },
     ]);
     const api = ksApi([row]);
@@ -5646,6 +5670,8 @@ describe("a device's kitchen screens", () => {
           profileEveryStation: false,
           stations: [slot("s1"), slot("s2")],
           zones: null,
+          nonPassStationsOverride: null,
+          showNonPassStations: true,
         },
       ]);
 
@@ -5716,6 +5742,8 @@ describe("a device's kitchen screens", () => {
         profileEveryStation: true,
         stations: [slot("s1"), slot("s2")],
         zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
       });
       const api = ksApi([tillRow("t1", [list("station"), list("pass_monitor")])], {
         updateDevice: vi.fn().mockRejectedValue(error),
@@ -5762,6 +5790,8 @@ describe("a device's kitchen screens", () => {
         profileEveryStation: true,
         stations: [slot("s1"), slot("s2")],
         zones: [slot("z1")],
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
       },
     ]);
     const api = ksApi([row], { updateDevice: vi.fn().mockRejectedValue(error) });
@@ -5790,6 +5820,8 @@ describe("a device's kitchen screens", () => {
         profileEveryStation: true,
         stations: [slot("s1"), slot("s2")],
         zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
       },
       {
         kind: "pass_monitor",
@@ -5799,6 +5831,8 @@ describe("a device's kitchen screens", () => {
         profileEveryStation: true,
         stations: [slot("s1"), slot("s2"), slot("s3")],
         zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
       },
     ]);
     const api = ksApi([row], { updateDevice: vi.fn().mockRejectedValue(error) });
@@ -5823,6 +5857,8 @@ describe("a device's kitchen screens", () => {
         profileEveryStation: false,
         stations: [slot("s1")],
         zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
       },
     ]);
     const api = ksApi([row]);
@@ -5853,6 +5889,8 @@ describe("a device's kitchen screens", () => {
               profileEveryStation: false,
               stations: [slot("s1"), slot("s2")],
               zones: null,
+              nonPassStationsOverride: null,
+              showNonPassStations: true,
             },
           ]),
           tillRow("t1", [
@@ -5864,6 +5902,8 @@ describe("a device's kitchen screens", () => {
               profileEveryStation: true,
               stations: [slot("s1"), slot("s2"), slot("s3")],
               zones: [slot("z1")],
+              nonPassStationsOverride: null,
+              showNonPassStations: true,
             },
           ]),
           tillRow("t2", [
@@ -5875,6 +5915,8 @@ describe("a device's kitchen screens", () => {
               profileEveryStation: true,
               stations: [slot("s1"), slot("s2"), slot("s3")],
               zones: null,
+              nonPassStationsOverride: null,
+              showNonPassStations: true,
             },
           ]),
           kds("k2", [
@@ -5886,6 +5928,8 @@ describe("a device's kitchen screens", () => {
               profileEveryStation: false,
               stations: [slot("s1"), slot("s3", false)],
               zones: null,
+              nonPassStationsOverride: null,
+              showNonPassStations: true,
             },
           ]),
         ];
@@ -5928,6 +5972,8 @@ describe("a device's kitchen screens", () => {
               profileEveryStation: false,
               stations: [slot("s1"), slot("s3")],
               zones: null,
+              nonPassStationsOverride: null,
+              showNonPassStations: true,
             },
           ]),
         ]);
@@ -5953,6 +5999,8 @@ describe("a device's kitchen screens", () => {
         profileEveryStation: false,
         stations: [slot("s1"), { ...slot("s3", false), name: "Deli $&" }],
         zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
       },
     ]);
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
