@@ -173,14 +173,15 @@ each counter order. Its columns are **Held**, **To fire**, **In progress** and *
 moves along them as its dishes do: **Held** while every dish on it is held, **To fire** while it has
 dishes waiting for this pass to fire them, **In progress** while its dishes are at their stations,
 and **Ready** once every dish is ready. **Overview** is hidden until you show it in **Columns**, and
-then comes first.
+then comes first. It leaves out dimmed dishes and counts the rest as the kitchen screen's does, with
+dishes held or waiting for the pass after the **+**.
 
 A card's heading says what the waiter sent, **New order**, **Next course** or **Added** (a held
 card says none of them), then its order number, table and group. Its minutes count from when the
 waiter sent it; a **Ready** card shows **Ready 3 min**, counted from when its last dish was ready,
 and a held card shows none. The card's left edge takes the brand colour, then turns red, as its
 dishes wait, by their stations' late flags; a dish that waits too long says **Forgotten**, and the
-row above the columns counts the late cards (**2 overdue**). Each dish shows its state and station,
+row above the columns counts the red cards (**2 overdue**). Each dish shows its state and station,
 such as **Preparing · Grill**.
 
 A dish whose station waits for the pass is not cooked until the pass fires it. When the waiter
@@ -200,8 +201,7 @@ its dishes that wait for this pass show in full, and the pass dims the dishes of
 do not wait and dishes sent before their station began waiting: they say, for example, **Preparing
 · Already at Bar**. A dish from a station or service zone this pass does not cover, on a card it
 shares with another pass, is always dimmed; while it waits for that pass it says **Bar: waiting for
-its pass**. Dimmed dishes are there for information only. **Overview** leaves them out and counts
-the rest as the kitchen screen's does, with dishes held or waiting for the pass after the **+**.
+its pass**. Dimmed dishes are there for information only.
 
 On a card **In progress**, **Group ready** marks every sent dish of the table's group ready at every
 station, not only the ones this pass shows, and on a counter order **Course ready** does the same
@@ -210,7 +210,7 @@ a till, a card that is not held also offers **Reprint** for each of its bills.
 
 A pass monitor shows the same board for watching, with no **Fire**, Ready or **Reprint** buttons. A
 till whose device has no pass screen or pass monitor opens **Pass** on every station and service
-zone, with the Ready buttons but no **Fire**: only a pass screen fires.
+zone, without **Fire**: only a pass screen fires.
 
 Tap a column's heading to collapse it, and use **Columns**, at the end of the row above the columns,
 to move or hide columns, as on the [kitchen screen](kitchen-service.md#kitchen-screen); this device
@@ -268,9 +268,10 @@ person sending is not a manager, the till asks for a manager's PIN after **Kitch
 ## Request cooking from the till {#request-cooking}
 
 Request held food from the table's order screen. Station queues and the pass show held courses and groups
-without a Fire button. A dish whose station waits for the pass goes to the pass's **To fire**
-column instead: see [Work the pass](kitchen-service.md#pass-screen). Held dishes stay dimmed and cannot be advanced by tapping them.
-Once released, a dish can move through preparation to Ready at its station.
+without a Fire button. Held dishes stay dimmed and cannot be advanced by tapping them.
+Once released, a dish can move through preparation to Ready at its station. A dish whose station
+waits for the pass goes to the pass's **To fire** column instead: see
+[Work the pass](kitchen-service.md#pass-screen).
 While the box is out of disk space, moving a dish on is refused. The station says
 **Not saved: the box is out of disk space. Tell a manager.** and the dish stays where it was.
 

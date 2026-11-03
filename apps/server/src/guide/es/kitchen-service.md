@@ -198,6 +198,8 @@ por cada pedido de mostrador. Sus columnas son **En espera**, **Por marchar**, *
 platos están en espera, en **Por marchar** mientras tiene platos que esperan a que este pase los
 marche, en **En curso** mientras sus platos están en sus estaciones y en **Listo** cuando todos
 están listos. **Resumen** está oculta hasta que la muestras en **Columnas**, y entonces va primero.
+No cuenta los platos atenuados y cuenta los demás como el de la pantalla de cocina, con los que están
+en espera o esperan al pase tras el **+**.
 
 La cabecera de una tarjeta dice qué envió el camarero, **Nuevo pedido**, **Siguiente pase** o
 **Añadido** (una tarjeta en espera no dice ninguno), y después su número de pedido, su mesa y su
@@ -205,7 +207,7 @@ grupo. Sus minutos cuentan desde que el camarero lo envió; una tarjeta en **Lis
 3 min**, contados desde que su último plato estuvo listo, y una en espera no muestra ninguno. El
 borde izquierdo de la tarjeta toma el color de marca y luego pasa a rojo mientras sus platos
 esperan, según los avisos de demora de sus estaciones; un plato que espera demasiado dice
-**Olvidado**, y la fila encima de las columnas cuenta las tarjetas con retraso (**2 con retraso**).
+**Olvidado**, y la fila encima de las columnas cuenta las tarjetas en rojo (**2 con retraso**).
 Cada plato muestra su estado y su estación, como **Preparando · Parrilla**.
 
 Un plato cuya estación espera al pase no se prepara hasta que el pase lo marcha. Cuando el camarero
@@ -225,9 +227,7 @@ Cuando una espera, sus platos que esperan a este pase se ven enteros, y el pase 
 sus estaciones que no esperan y los enviados antes de que su estación empezara a esperar: dicen, por
 ejemplo, **Preparando · Ya en Barra**. Un plato de una estación o zona de servicio que este pase no
 cubre, en una tarjeta que comparte con otro pase, siempre se atenúa; mientras espera a ese pase dice
-**Barra: esperando a su pase**. Los platos atenuados son solo información. **Resumen** no los cuenta
-y cuenta los demás como el de la pantalla de cocina, con los que están en espera o esperan al pase
-tras el **+**.
+**Barra: esperando a su pase**. Los platos atenuados son solo información.
 
 En una tarjeta en **En curso**, **Grupo listo** marca como listos todos los platos enviados del
 grupo de la mesa, en todas las estaciones, no solo los que muestra este pase, y en un pedido de
@@ -237,8 +237,8 @@ ofrece además **Reimprimir** por cada una de sus cuentas.
 
 Un monitor de pase muestra el mismo tablero para mirarlo, sin **Marchar**, botones de listo ni
 **Reimprimir**. Un terminal cuyo dispositivo no tiene pantalla de pase ni monitor de pase abre
-**Pase** con todas las estaciones y zonas de servicio, con los botones de listo pero sin
-**Marchar**: solo marcha una pantalla de pase.
+**Pase** con todas las estaciones y zonas de servicio, sin **Marchar**: solo marcha una pantalla
+de pase.
 
 Toca la cabecera de una columna para plegarla, y usa **Columnas**, al final de la fila encima de las
 columnas, para mover u ocultar columnas, como en la [pantalla de cocina](kitchen-service.md#kitchen-screen);
@@ -298,9 +298,10 @@ quien envía no es encargado, el terminal pide el PIN de un encargado tras **La 
 ## Pide la preparación desde el terminal {#request-cooking}
 
 Pide los platos en espera desde el pedido de la mesa. Las colas de las estaciones y el pase muestran los pases
-y grupos en espera sin botón Marchar. Un plato cuya estación espera al pase va en cambio a la columna
-**Por marchar** del pase: consulta [Trabaja en el pase](kitchen-service.md#pass-screen). Esos platos se muestran atenuados y no avanzan al tocarlos.
-Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estación.
+y grupos en espera sin botón Marchar. Los platos en espera se muestran atenuados y no avanzan al tocarlos.
+Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estación. Un plato cuya
+estación espera al pase va en cambio a la columna **Por marchar** del pase: consulta
+[Trabaja en el pase](kitchen-service.md#pass-screen).
 Si el equipo no tiene espacio en disco, no se puede avanzar un plato. La estación dice
 **No se ha guardado: el equipo no tiene espacio en disco. Avisa al encargado.** y el plato se
 queda donde estaba.
