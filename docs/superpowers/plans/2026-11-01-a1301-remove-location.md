@@ -3461,8 +3461,7 @@ The restore confirmation's `locationName` → `venueName` rename (`RestoredVenue
 - [ ] **Step 4: delete:** `personal-data-export-api.test.ts:280` ("dates the file in UTC with no
   location when this node has no row" — the node no longer decides the zone; the unknown-zone case
   at `:291` keeps the UTC fallback covered); `personal-data-time-record.test.ts:250` ("builds no
-  files when the node has no location") and `:254` ("…whose only entries are at another
-  location"). Keep `restore-stream.test.ts:292`, `:417`, `:430`: "another venue" there is another
+  files when the node has no location"). Keep `restore-stream.test.ts:292`, `:417`, `:430`: "another venue" there is another
   bucket's copy, not a location.
 - [ ] **Step 5:** run `pnpm --filter @waitron/server exec vitest run src/personal-data*.test.ts
   src/restore-stream*.test.ts src/restore-request*.test.ts`;

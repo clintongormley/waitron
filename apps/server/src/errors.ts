@@ -1533,7 +1533,8 @@ declare module "@waitron/shared" {
      * missing). Validation refuses with the target intact, before identity set-aside or database
      * restore. `missing` is the fixed key or file name. */
     "restore.identity_incomplete": { missing: string };
-    /** The artifact's identity names a node the restored database does not hold. */
+    /** The artifact's identity names a node the restored database does not hold, or the restored
+     * copy holds no taxpayer row, no venue row, or more than one venue row. */
     "restore.identity_unknown": { nodeId: string };
     /** More than one module's restore hook returned replacement series; only one may own the node's
      * numbering. `modules` is the comma-joined list of their names. */

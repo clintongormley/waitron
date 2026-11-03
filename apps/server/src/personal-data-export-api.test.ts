@@ -286,6 +286,19 @@ describe("GET /management-api/me/personal-data/export", () => {
     expect(subjects[0]).not.toHaveProperty("locationId");
   });
 
+  it("refuses venue.not_found when the box holds no venue row", async () => {
+    const [venueRow] = await suite.db.select().from(locations);
+    suite.db.run(sql`pragma foreign_keys = off`);
+    try {
+      suite.db.run(sql`delete from locations`);
+      await refused(await ask(mounted()), 400, "venue.not_found");
+      expect(subjects).toEqual([]);
+    } finally {
+      await suite.db.insert(locations).values(venueRow!);
+      suite.db.run(sql`pragma foreign_keys = on`);
+    }
+  });
+
   it("names the file for the real date when the box's clock reads 1970", async () => {
     await suite.db
       .update(locations)
