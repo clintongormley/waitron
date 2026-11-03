@@ -6,6 +6,14 @@ Part: every file Waitron writes outside `venue.db` and `node.db`. Read against `
 (2 November 2026). Read only: nothing was run except `grep`, `sed` and `git log`. Each claim below
 that is not a `file:line` names the grep behind it.
 
+(refreshed 2026-11-03 against main 68732329c1: every cite into a file changed since `64eeabb036` was
+re-read on main and given its new line; cites into unchanged files were checked with
+`git diff --quiet 64eeabb036 68732329c1 -- <path>`. The inventory was re-measured by listing every
+non-test line that writes, renames or removes a file, and every quoted file name, at both commits and
+comparing them. Since 2 November only the B3 USB-installer scripts add a kind of file (item 85); the
+same comparison also found one kind already on `64eeabb036` that the inventory missed (item 86). Both
+are written by code nothing on a box calls yet. Items 0–84 are otherwise unchanged.)
+
 Two words used throughout:
 
 - **flow** — a job that spans a restart, such as a first setup, a restore, a Start again or a TLS
@@ -21,19 +29,27 @@ Two words used throughout:
 the database for one of seven reasons (rule F1): it is needed before a database can be opened; it
 must outlive the database being replaced, restored or deleted; it is a secret that must stay out of
 backups; it is a lock; it is a log; it is a backup or export; or another program owns it (Docker,
-systemd, the print agent, Litestream). Today most files pass that test. Three things fail it:
+systemd, the print agent, Litestream). Today most files pass that test. Three things failed it when this was written; README §5 U5 has
+since kept the third, so two fail it now:
 
 1. **`modules.json`** is a venue-wide, dashboard-editable setting (on/off overrides only,
    `packages/module/src/config.ts:5-11`) that travels in backups as a loose file
    (`apps/server/src/backup-optional-state.ts:10-16`). It belongs in the `settings` table, so it
    always travels with the database it describes. That is a decision (§6, D3) because boot reads it
-   before opening the database (`boot.ts:929`, database opened at `boot.ts:998`).
+   before opening the database (`boot.ts:1077`, database opened at `boot.ts:1146`). (refreshed
+   2026-11-03 against main 68732329c1: line numbers only, were `:929` and `:998`.)
 2. **`backup.env`'s rotation time** (`WAITRON_BACKUP_KEY_ROTATED_AT`, `backup-env-writer.ts:46`)
    is not a secret. It belongs in `box_settings`.
 3. **The join ("adopt") flow** writes `pending-adoption.json`, `tls/venue-ca.*` and
-   `reset-request.json` for a step that `finish-adoption.ts:31-44` says "CANNOT SUCCEED TODAY". It
-   is still reachable from the setup API (`grep -rln adoptFromPrimary apps/server/src` → `setup-api.ts`,
-   `boot.ts`). I recommend deleting it until the replication work it waits for exists (D1).
+   `reset-request.json`. It cannot finish yet: finishing refuses `mirror.venue_not_copied` while the
+   spare holds no venue row (`apps/server/src/reserved-identity.ts:68-69`, explained at
+   `finish-adoption.ts:28-33`). It is reachable from the setup API (`setup-api.ts:130-132` takes an
+   `adopt` hook; `boot.ts:1618-1619` supplies it with `adoptFromPrimary`). README §5 U5 keeps it: A947
+   slice 3b finishes adoption, and A1018's start check already reads what adoption writes. These files
+   stay (D1). (refreshed 2026-11-03 against main 68732329c1: this said the step "CANNOT SUCCEED TODAY", quoting
+   `finish-adoption.ts:31-44`; those words are gone. The grep this cited no longer lists
+   `setup-api.ts`, which now imports only adoption's types. The recommendation to delete the flow is
+   withdrawn.)
 
 **One record per flow.** Today a flow is a constellation of single-purpose files at the top of the
 state folder: a restore is 7 files (`restore-request.ts:62-71`); a first setup is 9 kinds of file
@@ -72,6 +88,16 @@ which must stay out of backups (`state-secrets.ts:10-14`). The TLS repair archiv
 every old certificate-authority private key forever inside `tls/` — so it even survives a plain
 reset — keeps only the newest repair, deleted after the next healthy start.
 
+(refreshed 2026-11-03 against main 68732329c1: new paragraph.) The B3 USB-installer scripts add two
+host-side secrets that stay out of `secrets.env` on purpose: the disk recovery key
+(`/var/lib/waitron-host/disk-recovery/<disk id>.json`, `scripts/box/disk-key.mjs:33,39`) and the
+Wi-Fi password in the boot copy (`/boot/waitron-recovery/wifi.json`, `scripts/box/wifi-record.mjs:11,282`).
+The installer design keeps the first outside every venue backup and rollback, and the second on the
+unencrypted boot partition so the box can join Wi-Fi before its disk is unlocked
+(`docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md:619-626`, `:699-725`; read in the
+design, not run). Both belong to
+the host, not the Waitron server, so this design leaves them where they are (items 85 and 86).
+
 **The resulting layout** (documented once, in one source module that every path is read from, and
 that the `waitron.sh` reset keep-list and the guards are tested against):
 
@@ -97,7 +123,11 @@ that the `waitron.sh` reset keep-list and the guards are tested against):
 /var/lib/waitron/logs/                  waitron.log (+5), crash-reports/ (7 days at every start)
 /var/lib/waitron/backups/               *.backup.enc (7 copies / 30 days)
 /var/lib/waitron-print-agent/           the print agent's own config, token, CA copy
+/var/lib/waitron-host/disk-recovery/    B3 host only: disk recovery key, one file per disk
+/boot/waitron-recovery/wifi.json        B3 host only: Wi-Fi join copy, read before unlock
 ```
+
+(refreshed 2026-11-03 against main 68732329c1: the last two lines are new, items 85 and 86.)
 
 ---
 
@@ -136,13 +166,16 @@ that the `waitron.sh` reset keep-list and the guards are tested against):
 | Docker apt source | Lets install put Docker on a bare host | Install file |
 | Mailpit database | Practice inbox | Another program; retention added |
 | Development files | Local dev box | Development only |
+| `/var/lib/waitron-host/disk-recovery/<disk id>.json` (B3 host) | Disk recovery key, written once per disk | Secret that must stay out of venue backups and rollback; owned by the host service (refreshed 2026-11-03: new row) |
+| `/boot/waitron-recovery/wifi.json` (B3 host) | Wi-Fi join settings for the locked box | Needed before the disk is unlocked; owned by the host service (refreshed 2026-11-03: new row) |
 
 ---
 
 ## 3. Mapping (every current item)
 
 Numbers are the item's position in the inventory. Items 33 and 56 describe one folder and are mapped
-together.
+together. (refreshed 2026-11-03 against main 68732329c1: items 85 and 86 added at the end, so the
+table now has 86 rows for 87 numbers; it had 84 rows for 85.)
 
 | # | Current | Fate | Why |
 | --- | --- | --- | --- |
@@ -150,7 +183,7 @@ together.
 | 1 | `secrets.env` | keep; **becomes the one short-secret file** | Absorbs the account key from `trading.env` and the recovery key from `backup.env`. |
 | 2 | `tls/ca.*` | keep | Needed before the listener; survives reset by design. |
 | 3 | `tls/server.*` (+ `.previous`, `.tmp`) | keep; close the crash window | A crash between two renames can leave a mismatched pair (`box-secrets.ts:231-237`); write key+cert as one file or one folder swap (§5, test T6). |
-| 4 | `tls/venue-ca.*` | delete (D1) | Only written by the join flow, which cannot finish (`finish-adoption.ts:31-44`); the listener never reads them (`box-secrets.ts:89-91`). |
+| 4 | `tls/venue-ca.*` | keep (U5) | Written by the join flow (`box-secrets.ts:99-100`); the listener never reads them (`box-secrets.ts:89-91`). They hold the main box's certificate authority (`box-secrets.ts:90-91`), the venue's authority A947 relies on: a spare that takes over issues its certificate from it (A947 design §6.3 step 4). (refreshed 2026-11-03 against main 68732329c1: was delete (D1)) |
 | 5 | `tls/repair-pending.json` + `tls/repair-archive/` | replace with `flows/tls-repair/record.json` + `tls/repair/` (newest only) | Archive holds old private keys and nothing deletes it (`grep -rn repair-archive` → only `box-tls-repair.ts:292`, `box-secrets.ts:202`); it survives plain reset inside `tls/`. |
 | 6 | `recovery.lock` | keep | Lock; never unlinked (CLAUDE.md §3). |
 | 7 | `recovery.json` | keep; durable write | Must work when the database cannot; today `writeFileAtomic` without flush. |
@@ -164,22 +197,22 @@ together.
 | 15 | `backup-staging/` | move to `scratch/backup/` | Same sweep as every scratch folder; the staging-turn rule (CLAUDE.md §3) moves with it. |
 | 16 | local backup archives | keep | Backup; already pruned (7 copies, 30 days). |
 | 17 | `restore-request.*` (7 files) | merge into `flows/restore/` (one record + payload) | Marker-last crash safety is kept; ending becomes one folder rename instead of a parallel delete (`restore-request.ts:329-340`). |
-| 18 | `reset-request.json` | delete (D1) | Only undoes an adopt (`reset-request.ts:24-28`, `:102-114`). |
+| 18 | `reset-request.json` | keep (U5) | Undoes an adopt (`reset-request.ts:24-28`, `:102-114`), and U5 keeps adoption. (refreshed 2026-11-03 against main 68732329c1: was delete (D1)) |
 | 19 | `rebuild-first-start.json` | merge into `flows/restore/record.json` (phase "first start pending") | It is the restore flow's last phase; one record per flow. |
-| 20 | `pending-adoption.json` | delete (D1) | Cannot succeed today (`finish-adoption.ts:31-44`); stays until a reset. |
-| 21 | `restore-staging/` | move to `scratch/restore/` | Only `staged-recovery/` is swept at start (`start-space.ts:98-101`, `boot.ts:1002`); the other four prefixes are never swept. |
+| 20 | `pending-adoption.json` | keep (U5) | The adoption latch: finishing refuses `mirror.venue_not_copied` until the spare holds a venue row (`reserved-identity.ts:68-69`, `finish-adoption.ts:28-33`); it closes in A947 slice 3b. (refreshed 2026-11-03 against main 68732329c1: was delete (D1)) |
+| 21 | `restore-staging/` | move to `scratch/restore/` | Only `staged-recovery/` is swept at start (`start-space.ts:98-101`, `boot.ts:1150`); the other four prefixes are never swept. (refreshed 2026-11-03 against main 68732329c1: line numbers only) |
 | 22 | `restore-entry-*`, `stream-restore-*` | move to `scratch/` | No start sweep (grep above); a crash leaves a plain venue copy in the state folder. |
 | 23 | `*.incoming`, `.venue.db-replaced-*` | keep | Crash-safe database swap; the set-aside folder already has a recovery path (`restore.ts:770-790`). |
 | 24 | `/tmp` folders (holdings, history, proof, repair-cloud, node-copy) | move to `scratch/` | `/tmp` is the container's own layer; `restart: unless-stopped` restarts the same container, so a crash leftover persists unswept. |
 | 25 | `cloud-connection.json` | move to `cloud/connection.json` (D5) | Secret that must stay out of backups; no deleter today. |
 | 26 | `cloud-recovery.json` | move to `cloud/recovery.json`, deleted when the flow ends (D5) | Preproduction only (`cloud-recovery.ts:153`); no deleter today. |
-| 27 | `cloud-replacement.json` | move to `cloud/replacement.json`, deleted when the flow ends (D5) | Preproduction only (`boot.ts:2902-2903`); no deleter today. |
+| 27 | `cloud-replacement.json` | move to `cloud/replacement.json`, deleted when the flow ends (D5) | Preproduction only (`boot.ts:3174-3175`); no deleter today. (refreshed 2026-11-03 against main 68732329c1: line numbers only) |
 | 28 | `cloud-staff.key/.crt` | move to `cloud/` | Operator-installed; kept out of backups on purpose (`cloud-remote.ts:24`). |
 | 29 | `cloud-snapshots/` | keep `state.json` in `cloud/`; staging to `scratch/` | Staging (a plain copy) is cleared only after a successful Cloud status call (`cloud-snapshot-worker.ts:153-163`). |
 | 30 | `first-fiscal-documents/<module>.json` + chunks | move to `flows/setup/documents/` | Immutable chunks with manifest last are a real crash-safety split; keep them as attachments. |
 | 31 | `module-operation-public.json` | merge into `flows/setup/record.json` | Setup-time record of public keys; one record per flow. |
 | 32 | `module-evidence/<module>/<source>.json` | merge into `module-records/<module>.json` | Same fiscal hour history as item 54; one copy per module. |
-| 33 + 56 | `first-setup-resolutions/backup-recovery/<id>/` | move to `flows/setup/backup-recovery/<id>/`; **a selected recovery is promoted into the real folders** (D2) | Today a selected recovery leaves the box running for good from a nested state folder (`first-setup-launch.ts:104-110`). |
+| 33 + 56 | `first-setup-resolutions/backup-recovery/<id>/` | move to `flows/setup/backup-recovery/<id>/`; **a selected recovery is promoted into the real folders** (D2) | Today a selected recovery leaves the box running for good from a nested state folder (`first-setup-launch.ts:123-129`). (refreshed 2026-11-03 against main 68732329c1: line numbers only) |
 | 34 | `waitron-recovery unpack` output | keep | Operator-owned export of a recovery bundle. |
 | 35 | backup verification scratch (caller's) | keep | Caller-chosen scratch; nothing on the box calls it (`grep -rln verifyBackupArtifact` → only its own entry files). |
 | 36 | dev `.env`, dev state, receipt-look output | keep | Development only. |
@@ -196,7 +229,7 @@ together.
 | 47 | bucket download `.part` | keep | Safe-download working name; removed on failure. |
 | 48 | `setup-operation.json` + `.lock` | record → `flows/setup/record.json`; lock → delete (D4 test T3) | The lock is a create-exclusive file that any other owner id "takes over" (`packages/provisioning/src/setup-operation.ts:102-145`); the venue lock already allows one process. |
 | 49 | `configuration-import.*` | move to `flows/setup/import/` | Marker-last pair is kept as an attachment; one flow folder. |
-| 50 | `fiscal-readiness.json` | merge into `flows/setup/record.json` | Setup-time evidence; Start again does not delete it today (`first-setup-start-again-deletion.ts:131-148` does not list it). |
+| 50 | `fiscal-readiness.json` | merge into `flows/setup/record.json` | Setup-time evidence; Start again does not delete it today (`first-setup-start-again-deletion.ts:135-154` does not list it). (refreshed 2026-11-03 against main 68732329c1: line numbers only) |
 | 51 | `first-setup.json` + `first-setup-claim.json` | state → `flows/setup/record.json`; claim → keep (D4) | One setup record; the claim exists because the venue folder can be configured apart from the state folder. |
 | 52 | `first-setup-node-key.json` | merge into `flows/setup/record.json` | A verifier, not the key; one record per flow. |
 | 53 | `<module>.recovery.json` | merge into `flows/setup/record.json` | A manifest of the delivered document. |
@@ -230,6 +263,8 @@ together.
 | 82 | journal lines, timesyncd timestamp | keep | Audit of clock changes on the host. |
 | 83 | Docker apt source | keep | Install on a bare host. |
 | 84 | Docker images | keep; clear build cache after a branch install | `grep -n prune deploy/waitron.sh` finds none. |
+| 85 | `/boot/waitron-recovery/wifi.json` + `wifi.json.next` (B3 Wi-Fi boot copy, #2432) | keep (host-owned) | Read before the disk is unlocked, so it cannot live in the state volume. Written as `.next`, flushed, renamed, folder flushed (`scripts/box/wifi-boot-copy.mjs:36-38`, `:236-253`); removed by `:262-268`. It holds the Wi-Fi password (`scripts/box/wifi-record.mjs:11`). Nothing outside `scripts/box/` calls it yet (`git grep -l -E 'publishWifiBootCopy|createWifiBootCopyPublisher'` → its own file and its test). (refreshed 2026-11-03: new row) |
+| 86 | `/var/lib/waitron-host/disk-recovery/<disk id>.json` + `.next` (B3 disk recovery key, #2370) | keep (host-owned) | Already on `64eeabb036` and missed by the first inventory. Written once per disk and never removed (`scripts/box/disk-key.mjs:33,39`, `:246-273`, "nothing may remove a key" at `:259`). The design keeps it outside venue backups and rollback (`docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md:619-626`). Nothing outside `scripts/box/` calls it yet (`git grep -l createDiskRecoveryStore` → its own file and its test). (refreshed 2026-11-03: new row) |
 
 ---
 
@@ -238,7 +273,8 @@ together.
 **Performance.** Files are off the sale path except two: the log and the holder heartbeat.
 
 - Every log line is an `appendFileSync` on the main thread (`log-file.ts:70`), plus a copy to
-  standard output (`boot.ts:974`, `:990`). This design does not change it, but it is the one file
+  standard output (`boot.ts:1122`, `:1138`; refreshed 2026-11-03 against main 68732329c1, line
+  numbers only). This design does not change it, but it is the one file
   cost worth measuring (T1).
 - The holder heartbeat is a 150-byte rename every 5 seconds (`venue-liveness.ts:10`); it stays
   unflushed on purpose.
@@ -295,9 +331,9 @@ together.
 | T2 | Copy a 200 MB database into `/tmp` and into the state volume inside the container, timing both. | If the volume is much slower, keep a box-local scratch on a different mount, but still under one swept root. |
 | T3 | Confirm that every first-setup operation runs while its process holds `venue.lock` (setup mode, the repair page, the provisioning command). | If any does not, keep a lock for setup, but make it a SQLite lock like `migrations.lock`, not a create-exclusive file with takeover. |
 | T4 | Kill the process between the parallel deletes in `clearStagedRestore` (`restore-request.ts:329-340`), leaving the marker without its artifact, then start. | If the next start refuses or loops, the folder-rename ending is a fix, not just tidying. That raises its priority. |
-| T5 | List every reader of the module list that runs before `venue.db` can be opened (`boot.ts:929`, `first-setup-entry.ts:350`, `mirror-bundle.ts:163`) and check whether the core migration set can run first. | If a module's migrations must run before the core set can be read, `modules.json` stays a file (D3 becomes "keep, but make it durable"). |
+| T5 | List every reader of the module list that runs before `venue.db` can be opened (`boot.ts:1077`, `first-setup-entry.ts:350`, `mirror-bundle.ts:163`; refreshed 2026-11-03, was `boot.ts:929`) and check whether the core migration set can run first. | If a module's migrations must run before the core set can be read, `modules.json` stays a file (D3 becomes "keep, but make it durable"). |
 | T6 | Check that Node's TLS listener accepts key and certificate read from one PEM file. | If not, use a folder swap (write `tls/leaf-new/`, rename over `tls/leaf/`). |
-| T7 | `git log -S module-evidence` to establish whether Start again leaving `module-evidence/` (it is not in `first-setup-start-again-deletion.ts:131-148`) is deliberate. | If deliberate, `module-records/<module>.json` keeps two sections with different Start-again treatment; if not, one. |
+| T7 | `git log -S module-evidence` to establish whether Start again leaving `module-evidence/` (it is not in `first-setup-start-again-deletion.ts:135-154`, refreshed 2026-11-03 from `:131-148`) is deliberate. | If deliberate, `module-records/<module>.json` keeps two sections with different Start-again treatment; if not, one. |
 | T8 | Power-cut test on a box: rotate the vault key, cut power within 1 second, then boot. | If the old key survives intact today, the flush is still right but less urgent; if `secrets.env` comes back empty, it is urgent. |
 | T9 | Check whether a selected backup recovery can still be abandoned (phases at `first-setup-backup-workspace.ts:34-35`). | If it can, promotion (D2) must wait until abandonment is no longer possible, and the evidence moves to `records/set-aside/` rather than being deleted. |
 
@@ -305,12 +341,11 @@ together.
 
 ## 6. Decisions for the owner
 
-- **D1. Delete the join ("adopt") flow until replication lands.**
-  - What it would delete: `pending-adoption.json`, `tls/venue-ca.*`, `reset-request.json`, their
-    routes and the reset step.
-  - Today the flow leaves a box "adoption-pending until a replacement copy mechanism lands"
-    (`finish-adoption.ts:41-44`).
-  - **Recommend: delete.** The backlog's replication work will design its own join.
+- **D1. Superseded by U5: keep.** README §5 U5 keeps the join ("adopt") flow and its files
+  (`pending-adoption.json`, `tls/venue-ca.*`, `reset-request.json`), because A947 slice 3b finishes
+  adoption and A1018's start check reads what it writes. (refreshed 2026-11-03 against main 68732329c1: this asked whether to delete
+  the flow until replication lands, quoting `finish-adoption.ts:41-44`; that comment is now
+  `:28-33`, and the approved A947 design is that replication work.)
 - **D2. Promote a selected first-setup backup recovery into the real folders, instead of running
   from `flows/setup/backup-recovery/<id>/target/`.**
   - **Recommend: yes, once T9 shows abandonment is closed.** One layout is what makes every other

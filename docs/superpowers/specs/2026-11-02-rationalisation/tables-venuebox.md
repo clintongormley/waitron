@@ -4,21 +4,40 @@
 
 Area: the taxpayer (`tenants`), the venue (`locations`, being removed by A1301), departments and their
 side tables, seasons, special days, opening hours for departments and zones, business-day settings,
-and the box itself (`nodes`, the five `node.db` tables, `deployment`, membership, sealed state,
+and the box itself (`nodes`, the eight `node.db` tables, `deployment`, membership, sealed state,
 recovery packs, `incidents`, `change_log`, `scheduled_runs`, `tenant_credentials`). Also: how the
 shared `settings` / `box_settings` tables fit the live-update, configuration-transfer and
 backup-verification machinery.
 
+(refreshed 2026-11-03 against main 68732329c1: `node.db` now holds eight tables, not five. A1018
+slice 1 (#2417) added `node_handover_operations`, `node_handover_events` and
+`node_handover_restriction`. §1.18 describes them; README §5 U5 keeps them as tables of their own.
+The other five `node.db` tables came with A947 slice 3a (#2371,
+`packages/node-db/drizzle/0000_adorable_zarek.sql`). So the area now has 35 current tables.)
+
 Read at `main` = `64eeabb036`. Nothing was run except `git grep`/`sed`/`perl` text searches over the
 tree; every behavioural statement below is "traced by reading" unless it says otherwise.
+(refreshed 2026-11-03 against main 68732329c1: every cite into a file that changed since
+`64eeabb036` was re-read on main, and each changed paragraph carries a note like this one. A cite
+into an unchanged file was kept, with `git diff --quiet 64eeabb036 origin/main -- <file>` as its
+receipt. The area's 32 tables have the same columns on main as at `64eeabb036`: compared from each
+set's latest drizzle snapshot.)
 
 **Where A1301 stands.** A1301's design (`docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md`)
 moves the venue's settings to a new one-row `venue_settings` table, plus `business_day_settings`,
-`day_cutover_changes` and `venue_catalogues`, in its slice S23 (design §2.1 and its slice table). S23
-has not started: `git grep -n 'table("venue_settings"'` prints nothing, and the A1301 branches that
-exist are S2, S3, S4, S6 and S13 (`git branch -a | grep a1301`). The backlog says the schema slices
-S20–S28 "get a plan of their own" (`docs/backlog.md:6442-6466`). So this design can still change what
-S23 creates; decision D1 below is exactly that.
+`day_cutover_changes` and `venue_catalogues`, in its slice S23 (design §2.1 and its slice table,
+`:620`). (refreshed 2026-11-03 against main 68732329c1: the code and fixture slices have landed. The
+backlog says "Still open: S18, S19 and the schema slices S20–S28; every other slice has landed"
+(`docs/backlog.md:6421-6422`). S23 has not started: `git grep -n -E
+'table\("(venue_settings|venue_catalogues|business_day_settings|day_cutover_changes)"' origin/main --
+packages` prints nothing. No plan for S20–S28 exists yet: the A1301 plan says they "are a separate
+plan, written once F1–F5 and S18 have landed" (`docs/superpowers/plans/2026-11-01-a1301-remove-location.md:124-125`),
+and `docs/superpowers/plans/` holds only the code plan and the working-time plan for A1301. The
+backlog says that plan "first settles what the venue id sent to Cloud and naming the backup folder
+becomes" (`docs/backlog/architecture.md:1044-1045`; see §2.1). A1308's own backlog entry says that, if
+approved, this design "absorbs A1301's schema slices (S20–S28, S23's `venue_settings` included)"
+(`docs/backlog/architecture.md:1026-1027`).) So this design can still change what S23 creates;
+decision D1 below is exactly that.
 
 Reference venue: one restaurant, 250 bills a day × 4 lines, 360 trading days a year, one box, 1–3
 departments, about 6 floor zones.
@@ -28,6 +47,9 @@ departments, about 6 floor zones.
 ## 1. Target tables
 
 Seventeen tables replace the area's 32. Columns marked "(new)" do not exist today.
+(refreshed 2026-11-03 against main 68732329c1: the 32 are the tables this design was written for.
+With the three handover tables added since, which U5 keeps as they are (§1.18), twenty tables
+replace the area's 35.)
 
 ### 1.1 `taxpayer` (today `tenants`, renamed by README §5 U9) — the taxpayer (core set, `venue.db`, `state`, not append-only)
 
@@ -63,6 +85,10 @@ Unchanged except that A1301 S25 deletes `location_id`.
 
 Protections: write-path guard (three writer files). 22 foreign keys point at it, 13 from fiscal tables
 (A1301 design §4). Rows: 1 (2 while a standby identity is reserved).
+(refreshed 2026-11-03 against main 68732329c1: still 22 keys, from 21 tables. Counted as the
+`foreignKeys` whose `tableTo` is `nodes` in each set's latest drizzle snapshot; the same count gives
+22 at `64eeabb036`. The write-path guard still lists three writer files for `nodes`,
+`scripts/write-path-tables.json:11-15`.)
 
 ### 1.3 `deployment` — which environment this database was stamped for (core, `state`)
 
@@ -86,7 +112,8 @@ both CHECKs, write-path guard. Rows: 1.
 (`setWhere term < new term`, `:119`) becomes `json_extract(document, '$.body.term') < ?`. The document
 itself must stay verbatim because it is signed. Used on a one-box venue too: seeded at first setup
 (`apps/server/src/membership-seed.ts:22`) and read by the till API to list routable servers
-(`apps/server/src/till-api.ts:1530`). Rows: 1.
+(`apps/server/src/till-api.ts:1528`; refreshed 2026-11-03 against main 68732329c1: the line moved
+from `:1530`). Rows: 1.
 
 ### 1.5 `incidents` — problems shown as alerts (core, `state`)
 
@@ -159,8 +186,10 @@ and `policy`, `packages/shared/src/receipt-text.ts:19-22`).
 | `receipt_updated_at` | text | | yes | `department_receipts.updated_at` |
 | `created_at` | text | | no | departments |
 
-Protections: the two partial unique indexes lose `location_id` (A1301 S6: the default key becomes a
-partial unique index on the flag); the four enum CHECKs move here; the two side tables' foreign keys
+Protections: the two partial unique indexes lose `location_id` (A1301 S21: the default key becomes a
+partial unique index on the flag; refreshed 2026-11-03 against main 68732329c1: this said S6, but S6
+was a code slice with no migration, and the A1301 design's slice table gives "venue-service's 8
+tables; one-default keys on the flag column" to S21, design `:618`); the four enum CHECKs move here; the two side tables' foreign keys
 to `departments` disappear because the rows are one. Classification `state`. Rows: 1–3.
 
 ### 1.11 `seasons`, 1.12 `special_days`, 1.13 `special_day_dates` (venue-service, `state`)
@@ -170,7 +199,9 @@ Kept, less `location_id` (A1301):
 - `seasons`: `id`, `name`, `starts_on` (`MM-DD`), `colour`. Unique `name`, unique `starts_on`; CHECKs
   on name and `starts_on`. The colour has no CHECK on purpose today, because adding one rebuilds the
   table and the rebuild's drop cascades its weeks (`schema/seasons.ts:29-30`); if A760 squashes the
-  sets before go-live (`docs/backlog.md:6509`) the CHECK can be written into the new baseline. Rows: 4.
+  sets before go-live (`docs/backlog.md:6474`; refreshed 2026-11-03 against main 68732329c1: the entry
+  moved from `:6509` and now says "If A1308 is approved, the squash runs first, merged into its eight
+  sets") the CHECK can be written into the new baseline. Rows: 4.
 - `special_days`: `id`, `name`, `repeats_yearly`. CHECK on name. Rows: 3–10.
 - `special_day_dates`: `id`, `special_day_id` (FK cascade), `date`, `closed_all_day`,
   `holiday_name`. Unique `date`; CHECK on the date. Rows: 5–20, a few more a year.
@@ -203,7 +234,7 @@ CHECKs:
 - `weekday between 0 and 6`;
 - the 15-minute step on both times;
 - kind by owner and day (new — today "the writers check", comments at `schema/seasons.ts:144,211`
-  and `season-weeks.ts:107,156`): a department row is `period` with a `period_id`, or `closed` with no
+  and `season-weeks.ts:106,155`; refreshed 2026-11-03 against main 68732329c1: the two comments moved up one line): a department row is `period` with a `period_id`, or `closed` with no
   period only on a special-day date; a zone row has no `period_id` and is `closed`, or `open` only on a
   special-day date.
 
@@ -218,10 +249,13 @@ Rows: today's ranges — 60–200 department ranges and 0–300 zone ranges — 
 
 Kept as is (`id`, `duty`, `period_from`, `period_to`, `generation`, `state`, `attempts`,
 `next_attempt_at`, `started_at`, `finished_at`, `summary`, `error_code`, `created_at`, `updated_at`).
-It is a work queue the scheduler reads back (`packages/scheduler/src/run.ts`, `store.ts`) and Box
-health reads (`apps/server/src/pass.ts`), so it is a typed table, not `activity_log`. Only the Stripe
-reconciliation uses it today (`rg -c 'runDue\('` in `boot.ts` = 1, per the tables file). Rows: 0
-without Stripe; about 360–700 a year with it.
+It is a work queue the scheduler reads back (`packages/scheduler/src/run.ts`, `store.ts`), so it is a
+typed table, not `activity_log`. (refreshed 2026-11-03 against main 68732329c1: this also said "Box
+health reads (`apps/server/src/pass.ts`)". On main `pass.ts` does not read the table. It logs each
+run record the scheduler's tick returns that did not succeed (`logNonSucceededRun`, `pass.ts:211`).
+So the claim is narrowed to the scheduler.) Only the Stripe reconciliation uses it today
+(`rg -c 'runDue\('` in `boot.ts` = 1, re-run 2026-11-03 on main). Rows: 0 without Stripe; about
+360–700 a year with it.
 
 ### 1.16 `venue_credentials` (today `tenant_credentials`, renamed by README §5 U9) — the venue's sealed secrets (credentials set, `local`)
 
@@ -231,7 +265,8 @@ The two purposes marked DEPRECATED and never written (`sync.mirror_token`, `memb
 be deleted, CLAUDE.md §3 "Before a venue is live, rename/delete freely"). Non-secret fields sealed
 alongside the secrets are D7. Not merged with the box's signing key: that key was moved OUT of this
 table into `node.db` on purpose so a spare holding a copy of `venue.db` still knows who it is
-(`conventions-data.md:1459-1463`). Rows: 4–6.
+(`conventions-data.md:1459-1465`; refreshed 2026-11-03 against main 68732329c1: the passage grew by two
+lines when the handover tables were added to it). Rows: 4–6.
 
 ### 1.17 `box` — what this box remembers about itself (node set, `node.db`, `local`)
 
@@ -255,14 +290,54 @@ thing, each keyed by `node_id`, one row each).
 
 CHECKs: the recovery-key pair is all-or-none; the signing-key group is all-or-none with
 `signing_key_version >= 1`, `octet_length(iv) = 12`, `octet_length(auth_tag) = 16`; the three
-`node_mode` CHECKs. Write-path guard: one entry, `box`, whose allowed files are today's four
-(`mode.ts`, `recovery-key.ts`, `node-signing-key.ts`; `mirror-link.ts` and `primary-key.ts` only if D2
-keeps them). A missing row still reads as "sole primary", as `readNodeMode` does today
+`node_mode` CHECKs. Write-path guard: one entry, `box`, whose allowed files are today's five
+(`mode.ts`, `recovery-key.ts`, `node-signing-key.ts`, `mirror-link.ts`, `primary-key.ts`;
+`scripts/write-path-tables.json:6-10`). (refreshed 2026-11-03 against main 68732329c1: said "today's four", with the last two
+only if D2 kept them; U5 keeps them.) A missing row still reads as "sole primary", as `readNodeMode` does today
 (`packages/node-db/src/mode.ts`). Rows: 1.
 
-If D2 keeps the mirror arc, the mirror link (`relay_url`, `box_hostname`, `box_ca_pem`,
+Because U5 keeps the mirror arc, the mirror link (`relay_url`, `box_hostname`, `box_ca_pem`,
 `origin_node_id`, `adopted_at`) and the pinned main-box key (`primary_node_id`, `public_key`,
-`pinned_at`) become nullable "second box" column groups here, each all-or-none.
+`pinned_at`) become nullable "second box" column groups here, each all-or-none. (refreshed 2026-11-03 against main 68732329c1: said
+"If D2 keeps". Adoption writes both, and nothing else in product code does (`apps/server/src/adopt.ts:179,187`).
+A1018's start check reads both: the other box's answer is checked with the pinned key
+(`peerKeyOf`, `apps/server/src/handover-signing.ts:36-41`, through `readStoredTrustSet`,
+`membership-trust.ts:35-43`) and its certificate with the mirror link's (`readMirrorLink`,
+`apps/server/src/start-peer-check.ts:186-195`).)
+
+### 1.18 Kept as tables of their own: `node.db`'s three handover tables (node set, `local`)
+
+(added 2026-11-03 against main 68732329c1.) A1018 slice 1 (#2417) added three tables to `node.db`,
+in the node set's second migration (`packages/node-db/drizzle/0001_chubby_dust.sql`).
+(refreshed 2026-11-03 against main 68732329c1: this section first left them to U5. U5 keeps all three, beside `box`, because A1018
+builds on them. None folds into `box`: a box has many operation rows, at most one open; product
+code reads the events back (`apps/server/src/restricted-page.ts:76-83`), and they cannot go to
+`activity_log`, which lives in `venue.db` (README §3) and so is overwritten when a box takes the other
+box's copy; the restriction is written once and a different value is refused
+(`packages/node-db/src/handover.ts:126-147`), while `box` is rewritten on every role change.)
+
+- `node_handover_operations`: this box's progress through each handover operation it takes part
+  in. Columns `node_id`, `operation_id` (primary key together), `role` (`source`/`destination`),
+  `scenario` (`controlled`/`emergency`), `source_node_id`, `destination_node_id`, `binding` JSON,
+  `fingerprint`, `state` (13 states), `waiting_reason`, `created_at`, `updated_at`. CHECKs on role,
+  scenario and state. A partial unique index allows at most one open operation per box
+  (`node_handover_one_open_uq`). Schema: `packages/node-db/src/schema/node-handover.ts:33-67`.
+- `node_handover_events`: what this box decided and received during handovers. Columns
+  `event_id` (primary key), `node_id`, `operation_id` (nullable), `kind`, `detail` JSON, `envelope`,
+  `recorded_at`. The schema comment says it is insert-only because its writer has no update
+  (`:69`); no trigger enforces that, since the node set lists no append-only tables
+  (`packages/migrations/migrations.manifest.json`, set `node`).
+- `node_handover_restriction`: why this box no longer acts as the main box. One row per box
+  (`node_id` primary key). Columns `operation_id` (nullable), `kind` (`handed-over`/`superseded`),
+  `successor_node_id`, `membership_term`, `recorded_at`. CHECK on kind. Schema `:84-102`. Boot reads
+  it (`apps/server/src/boot.ts:1801`), as do the step-down, membership and peer-status code
+  (`handover-stepdown.ts:145`, `node-membership-api.ts:87`, `peer-status-api.ts:108`).
+
+All three are classified `local`, "this box's own handover record, in node.db, keyed by this box's
+node id" (`packages/node-db/src/classification.ts:6,14-16`). None has a foreign key: the schema
+comments say node.db holds no venue table and no key crosses the two files. The write-path guard
+lists one writer file for all three, `packages/node-db/src/handover.ts`
+(`scripts/write-path-tables.json:3-5`). Rows were not measured.
 
 ---
 
@@ -290,6 +365,27 @@ greps); `catalogue_id` (the default menu) is an id, so under R4 it becomes a fla
 "An operational venue exists" (A1301 §3's live-venue guard) becomes "the `settings` row `venue`
 exists"; the primary key on `module` makes a second one impossible.
 
+(refreshed 2026-11-03 against main 68732329c1: since #2415 the configuration export no longer
+carries `fire_control`. The backlog says A773-2 removes that column (`docs/backlog/architecture.md:1072-1073`,
+`docs/backlog/kitchen.md:291`). On main no product code outside the schema reads either
+`locations` column. `bumpMode` in `kitchen.ts` and `working-order.ts` reads `kitchen_stations`,
+not `locations`.)
+
+**The venue's stable id: an open A1301 point this table does not settle.** (added 2026-11-03
+against main 68732329c1.) `settings.venue` has no id, and the `locations` row's id goes with the
+table. But two things are keyed by that id today. Boot passes `tradingContext.locationId` as
+`venueId` to the backup stream and backup settings (`apps/server/src/boot.ts:2786,3160,3234,3254,3271`),
+and that names the bucket folder `venues/<venueId>/` (`packages/stream/src/names.ts:26-29`). It
+also sends it as Waitron Cloud's pairing value `localVenueId` (`boot.ts:3170,3179`). That was read,
+not run; the A1301 plan traced the same uses, and that `tradingContext.locationId` is the
+`locations` row's id is the plan's statement, not re-traced here. The plan lists this as an open
+design point to settle before S18, and its controller recommends "the venue keeps a stable id that
+a restore carries — today's location id moved onto the venue row"
+(`docs/superpowers/plans/2026-11-01-a1301-remove-location.md:454-470`). If the owner keeps such an
+id, under this design it is a plain value field of `settings.venue` (for example `venueId`). It is
+not a key to another row, so R4 does not forbid it. It must then be carried by a restore, and must
+NOT be carried by configuration transfer, since the importing venue keeps its own.
+
 ### 2.2 `settings.business_day` (owned by core)
 
 | field | type | default | from |
@@ -313,10 +409,12 @@ not wake, or conflict with, the business-day screens.
 
 The document records which place the choice was made for, so a later address change reads as "no
 area chosen", which is what today's lookup does when no row matches (`readHolidays`,
-`packages/venue-service/src/holidays.ts:153-155`). Dropped: the row `id` (R4), `location_id`, and the
+`packages/venue-service/src/holidays.ts:143-145`). Dropped: the row `id` (R4), `location_id`, and the
 `city` display text (the venue address holds it). Lost: today's table can remember a choice per city
-if the venue's address moves back and forth (`createGeography` adds a row per place, `:127-143`); one
-venue = one premises makes that moot. If another area also adds a `venue_service` document, the fields
+if the venue's address moves back and forth (`createGeography` adds a row per place, `:121-133`); one
+venue = one premises makes that moot. (refreshed 2026-11-03 against main 68732329c1: both line
+ranges moved after A1301 S8 (#2405). `createGeography` now fills `location_id` from
+`venueLocationId`, `:125`.) If another area also adds a `venue_service` document, the fields
 merge into one document.
 
 ### 2.4 How a per-module `settings` row fits the live-update machinery, transfer and backup verification
@@ -329,8 +427,8 @@ merge into one document.
 2. The server matches a subscription when either side has no id
    (`apps/server/src/live-api.ts:117-121`), so an id-less change matches every `settings` interest.
 3. Dashboard dependencies are plain type names with no id — `QUERY_DEPENDENCIES` is
-   `Record<query, string[]>` turned into `{ type }` (`apps/dashboard/src/api/live-queries.ts:587`,
-   `attendance.ts:58`), and `scripts/live-subscriptions.test.ts:10-33` checks type names only.
+   `Record<query, string[]>` turned into `{ type }` (`apps/dashboard/src/api/live-queries.ts:586`,
+   `attendance.ts:58`; refreshed 2026-11-03 against main 68732329c1: `:587` moved to `:586`), and `scripts/live-subscriptions.test.ts:10-33` checks type names only.
 
 So with the table as centrally defined, saving `settings.catalogue` would make every open dashboard
 re-run every query that depends on any settings document. The smallest fix that keeps the dashboard
@@ -343,19 +441,28 @@ not to the table; it is unverified (§8, first item). The alternative — emit `
 dependencies carry ids — touches every dependency list's type.
 
 **Configuration export/import.** Today a table may be declared by one module only
-(`packages/provisioning/src/configuration-transfer.ts:202`), the import EMPTIES every declared table
-before inserting (`:732-737`), and it rewrites ids only in `id`, foreign-key and declared `references`
-columns (`:705,759`), never inside JSON. So `settings` cannot be declared as a transferred table by
+(`packages/provisioning/src/configuration-transfer.ts:172`), the import EMPTIES every declared table
+before inserting (`:690-701`; for `persons` it keeps the administrators), and it rewrites ids only in
+`id`, foreign-key and declared `references` columns (`:662-665,720`), never inside JSON. (refreshed
+2026-11-03 against main 68732329c1: the file changed in format 10, #2415, and these are its new
+lines. The new import also sets every column whose foreign key points at `locations` to the
+importing venue's one row, `:637-639,666-669`. That is an interim rule until the schema slices drop
+those columns.) So `settings` cannot be declared as a transferred table by
 each module: one owner would have to declare it, and the import would wipe the rows of modules that
 did not transfer (box-local or not exported). It needs its own path: each module says whether its
 document transfers; the export writes `{ key: { version, doc } }`; the import replaces only those keys,
 runs the module's validator and shape upgrade, resets `revision`, and sets `updated_by` to the importer
 or null (a source person id means nothing on the target). R4 is what makes this safe: an id inside a
 document would arrive naming the source venue's row, because nothing rewrites JSON. From this area:
-`venue` and `business_day` already travel in the bundle's `venue.location` block
-(`configuration-transfer.ts:95-160`) and are written by the provision request, so they do not
+`venue` and `business_day` already travel in the bundle's own fields, not as tables, so they do not
 transfer as documents; `venue_service.holidayArea` transfers (today `holiday_geographies` is a
-transferred table, `packages/venue-service/src/configuration-transfer.ts:725`).
+transferred table, `packages/venue-service/src/configuration-transfer.ts:725`). (refreshed 2026-11-03
+against main 68732329c1: this said they travel in "the bundle's `venue.location` block". Format 10
+(#2415) has no `location` block. The bundle's `venue` field carries the taxpayer's fields, the
+venue's fields and the day start side by side (`PreparedVenue`, `configuration-transfer.ts:34-53`,
+built at `:118-137`). The default menu travels as the top-level `defaultCatalogueId` (`:133`), and
+the privacy contact as `privacyContact` (`:134`). The claim that the provision request writes them
+was not re-traced.)
 
 **Backup verification.** Each table must have exactly one owning module (the compatibility check
 refuses a table claimed twice, `apps/server/src/backup-verification-compatibility.ts:170-175`; the
@@ -374,23 +481,28 @@ exists".
 not follow `venue.db` to another box — and only those. What that brings, from the code:
 
 - It stays on the box when a spare holds a copy of `venue.db` (that is what `node.db` is for,
-  `conventions-data.md:1459-1463`), and comes back with a full restore: a restore places the
+  `conventions-data.md:1459-1465`), and comes back with a full restore: a restore places the
   archive's `node.dump` as `node.db` (case "places the archive's node.dump as node.db" in
   `apps/server/src/restore-file-placement.test.ts:304`, read, not run).
-- It is never streamed to the bucket (`conventions-data.md:1463`); a bucket restore gets it only
+- It is never streamed to the bucket (`conventions-data.md:1465`); a bucket restore gets it only
   through the sealed state's `node.dump` entry, so a change is safe only after the sealed-state refresh
   has run (§8).
 - `node.db` has no `change_log`, and `withTransaction` refuses the node handle
-  (`conventions-data.md:1485-1487`), so a `box_settings` save wakes no dashboard by itself; the writer
+  (`conventions-data.md:1487-1489`), so a `box_settings` save wakes no dashboard by itself; the writer
   must publish its own event, as the non-table resources `backup_status` and others do
   (`live-resources.ts`).
 - A change that also writes `venue.db` follows the two-file rules: node lock outside venue lock, venue
-  saved first (`conventions-data.md:1475-1484`).
+  saved first (`conventions-data.md:1477-1486`).
 - It is outside configuration transfer (which reads `venue.db` only) — correct for box-local values.
 - Backup verification checks the node sets against the archive's node copy
   (`backup-verification-compatibility.ts:162-180`), so `box_settings` is owned by the node set.
-- Key it `(node_id, module)`: the five `node.db` tables carry `node_id` (`conventions-data.md:1520-1521`),
+- Key it `(node_id, module)`: every `node.db` table carries `node_id` (`conventions-data.md:1525-1526`),
   and the local-table rule asks each to say what ties a row to its node.
+
+(refreshed 2026-11-03 against main 68732329c1: `conventions-data.md` changed, so its cites above have
+new line numbers. The last bullet said "the five `node.db` tables"; the doc now says "every `node.db`
+table carries one". That is true of the three handover tables too: each has a `node_id` column,
+§1.18.)
 
 ---
 
@@ -412,11 +524,15 @@ Settings saves (who changed which document) are the central design's to log.
 
 **Typed history tables that remain**, each read back by product code:
 
-- `day_cutover_changes` — `readVenueClock` (`packages/db/src/venue.ts:85`), which day a sale belongs
-  to (`packages/reporting/src/business-day.ts`), attendance (`packages/workforce/src/attendance-responses.ts`),
-  setup's re-apply check (`packages/provisioning/src/venue-apply.ts:272`).
+- `day_cutover_changes` — the venue clock (`readVenueClockAndPlace` reads the table,
+  `packages/db/src/venue.ts:88-93`; `readVenueClock` wraps it, `:118-120`), which day a sale belongs
+  to (`packages/reporting/src/business-day.ts`), attendance (`packages/workforce/src/attendance-responses.ts:25`)
+  (both through `readVenueClock`), setup's re-apply check (`packages/provisioning/src/venue-apply.ts:270-276`).
+  (refreshed 2026-11-03 against main 68732329c1: `venue.ts` and `venue-apply.ts` changed; new lines.)
 - `recovery_packs` — `packStatus` (`apps/server/src/backup-recovery-pack-status.ts:221`).
-- `scheduled_runs` — `packages/scheduler/src/run.ts`, `apps/server/src/pass.ts`.
+- `scheduled_runs` — `packages/scheduler/src/run.ts` (refreshed 2026-11-03 against main 68732329c1:
+  `apps/server/src/pass.ts` removed from this line; it logs the tick's run records and does not
+  read the table, §1.15).
 - `incidents` — `apps/server/src/alerts-api.ts`, `box-alert-email.ts`, `box-health.ts`.
 
 ---
@@ -438,9 +554,9 @@ Settings saves (who changed which document) are the central design's to log.
 | `recovery_packs` | keep | history read back by `packStatus` |
 | `location_business_day_settings` | → `settings.business_day` (its `revision`) | a lone revision counter; the settings row has one |
 | `location_day_cutover_changes` | rename to `day_cutover_changes` (absorbs `locations.day_cutover`) | typed history read by the venue clock |
-| `node_mirror_link` | delete (D2), or merge into `box` as second-box columns | adoption cannot finish today |
+| `node_mirror_link` | merge into `box` as second-box columns (U5) | written only by adoption (`adopt.ts:179`, `:187`); A1018's start check reads both (refreshed 2026-11-03 against main 68732329c1: said delete or merge, D2) |
 | `node_mode` | merge into `box` (second-box columns) | one row per box |
-| `node_primary_key` | delete (D2), or merge into `box` as second-box columns | written only by adoption |
+| `node_primary_key` | merge into `box` as second-box columns (U5) | as `node_mirror_link` (refreshed 2026-11-03 against main 68732329c1: said delete or merge, D2) |
 | `node_recovery_key` | merge into `box` | one row per box |
 | `node_signing_key` | merge into `box` | one row per box |
 | `department_sale_policies` | merge into `departments` | one-to-one side table |
@@ -457,6 +573,9 @@ Settings saves (who changed which document) are the central design's to log.
 | `department_floor_plan_sets` | merge into `floor_plan_sets` (floor area owns; D5) | one-to-one extension of `floor_plan_sets`, whose only other column is `id` after A1301 |
 | `scheduled_runs` | keep | work queue read back |
 | `tenant_credentials` | keep (two dead purposes deleted; D7) | sealed secrets, `local` |
+| `node_handover_operations` | keep, a table of its own (U5, §1.18) | many rows per box, at most one open (`packages/node-db/src/schema/node-handover.ts:33-67`); added by A1018 slice 1 (refreshed 2026-11-03 against main 68732329c1: was left to U5) |
+| `node_handover_events` | keep, a table of its own (U5, §1.18) | a history product code reads back (`restricted-page.ts:76-83`); `activity_log` is in `venue.db`, which a copy overwrites (refreshed 2026-11-03 against main 68732329c1: was left to U5) |
+| `node_handover_restriction` | keep, a table of its own (U5, §1.18) | one row per box, written once, a different value refused (`handover.ts:126-147`); `box` is rewritten on every role change (refreshed 2026-11-03 against main 68732329c1: was left to U5) |
 
 ---
 
@@ -484,10 +603,10 @@ Settings saves (who changed which document) are the central design's to log.
 | `location_day_cutover_changes` PK, date and time CHECKs | kept on `day_cutover_changes`, key without location |
 | `node_mode` CHECKs (mode, singleton_role, not mirror+primary) | kept on `box` |
 | `node_signing_key` CHECKs (version ≥ 1, iv 12 bytes, tag 16 bytes) | kept on `box`, plus all-or-none for the group |
-| write-path guard on the five `node.db` tables | one entry for `box`, listing the same writer files. Weaker: the guard judges a file per table, so it can no longer tell `mode.ts` from `recovery-key.ts` writing the other's columns |
+| write-path guard on the five `node.db` tables | one entry for `box`, listing the same writer files. Weaker: the guard judges a file per table, so it can no longer tell `mode.ts` from `recovery-key.ts` writing the other's columns. (refreshed 2026-11-03 against main 68732329c1: the guard now also lists the three handover tables, all against `packages/node-db/src/handover.ts`, `scripts/write-path-tables.json:3-5`; U5 keeps those three tables, so their entries stay as they are, §1.18) |
 | `department_sale_policies` four enum CHECKs, FK to departments | CHECKs on `departments`; FK unnecessary (same row) |
 | `department_receipts` FK to departments | unnecessary (same row) |
-| `departments_location_name_key`, `departments_one_default_per_location_key` | kept without `location_id` (A1301 S6) |
+| `departments_location_name_key`, `departments_one_default_per_location_key` | kept without `location_id` (A1301 S21; refreshed 2026-11-03 against main 68732329c1: said S6, see §1.10) |
 | `holiday_geographies` unique place key, city CHECK, FK | dropped: one document entry has no duplicates; city check moves to the module's validator — a database refusal becomes a code refusal |
 | `department_days` FKs (cascade to department, season, date), one-day and weekday CHECKs, partial unique season/date keys, `department_days_department_key` | FKs and CHECKs move to `opening_hours`; the unique day keys and the composite-key target are dropped because there is no day row any more (several ranges per day were always allowed) |
 | `department_day_ranges` FK (`day_id`, `department_id`) → days | dropped: the department is on the same row |
@@ -503,7 +622,13 @@ Settings saves (who changed which document) are the central design's to log.
 No migration-SQL trigger sits on any of the area's 32 tables, and only the four language checks read
 one (perl scan of every set's `drizzle/*.sql` for `create trigger … on <table>` and for trigger bodies
 naming an area table; control: the same scan lists `working_orders` with 8 and `media_images` with 10).
-Code-created triggers: the append-only pair above and the change-feed triggers.
+Code-created triggers: the append-only pair above and the change-feed triggers. (refreshed
+2026-11-03 against main 68732329c1: three migration files were added since `64eeabb036`,
+`packages/fiscal-verifactu/drizzle/0014_w41s8_record_replacements.sql`, `0015_w41s8_remedy_markers.sql`
+and `packages/node-db/drizzle/0001_chubby_dust.sql`. A case-insensitive grep of the three for
+`create trigger` or a name of this area's tables prints nothing, so the statement still holds for
+the 32. The three handover tables have no trigger either: that same grep prints nothing for
+`0001_chubby_dust.sql`, the file that creates them.)
 
 ---
 
@@ -516,22 +641,36 @@ Code-created triggers: the append-only pair above and the change-feed triggers.
    `day_cutover_changes`, with setup writing the first row.
 2. **The day containers, twice.** `department_days`/`zone_days` are the same shape (owner × season ×
    weekday, or owner × special date) and neither means anything without its ranges: every reader
-   inner-joins the ranges (`business-day-schedule.ts:69-147`, `operations.ts:335-338`,
-   `special-days.ts:268-290,898-918`, `service-delete-settings.ts:187-202`); the one left join
-   (`readDepartmentSeasonWeeks`/`readZoneSeasonWeeks`, `season-weeks.ts:208-285`) turns an empty day
-   into an empty list, the same as a missing day (`seasonWeekList`, `:189-197`); and special-day writes
-   skip the day row when there are no ranges (`special-days.ts:1080,1102`). Readers already UNION the
-   department and zone halves (`business-day-schedule.ts:117-147`, `special-days.ts:268-290`). One home:
-   `opening_hours`.
+   inner-joins the ranges (`business-day-schedule.ts:73-144`, `operations.ts:309-312`,
+   `special-days.ts:269-291,880-901`, `service-delete-settings.ts:161-172`); the one left join
+   (`readDepartmentSeasonWeeks`/`readZoneSeasonWeeks`, `season-weeks.ts:207-282`) turns an empty day
+   into an empty list, the same as a missing day (`seasonWeekList`, `:188-196`); and special-day writes
+   skip the day row when there are no ranges (`special-days.ts:1063,1085`). Readers already UNION the
+   department and zone halves (`business-day-schedule.ts:120-144`, `special-days.ts:269-291`). One home:
+   `opening_hours`. (refreshed 2026-11-03 against main 68732329c1: the five venue-service files changed
+   in A1301 S6 and S8 (#2394, #2405). Every cite here was re-read on main and given its new lines. The
+   joins, the one left join, the empty-ranges skips and the two unions are as described.)
 3. **The clock revision.** `location_business_day_settings` holds only a revision; it becomes the
    `settings.business_day` row's own revision.
 4. **The membership term.** `node_membership.term` copies `document.body.term`.
 5. **The operation description, three times.** `locations.operation_description`, each department's
    receipt `operationDescription`, and the configured default `operationDescriptionDefault`. Production
    files the department's or the configured default (`sale-operation-description.ts:38-49`); the
-   venue's is the fallback only when a caller passes none (`packages/core/src/sale-location.ts:6-32`,
-   used by `record-sale.ts:348`, `record-correction.ts:298`, `record-substitution.ts:226`), which A1301
-   says no production route does (design §3). One home: `departments.operation_description` (D3).
+   venue's is the fallback only when a caller passes none, which A1301 says no production route does
+   (design §3). One home: `departments.operation_description` (D3).
+   (refreshed 2026-11-03 against main 68732329c1: `packages/core/src/sale-location.ts` is gone. A1301
+   S2 (#2384) replaced it with `operationDescriptionFor` (`packages/core/src/operation-description.ts:4-7`),
+   which returns the text it is given or else the venue's, read through `readVenue`. It is called at
+   `record-sale.ts:347`, `record-correction.ts:304` and `record-substitution.ts:226`. Two scripts
+   pass none and so take the venue's: `git grep -c operationDescription` finds no match in
+   `apps/server/scripts/demo-seed/seed-sales.ts` or `apps/server/scripts/testing/sale.ts`, which call
+   `recordSale` at `:300` and `:47`. Since A1315 PR 5 (#2441) the setup wizard sends no description.
+   When a setup request has none, the server stores the filing module's default
+   (`apps/server/src/setup-api.ts:502-507`; "Venta en establecimiento" for Veri*Factu, per #2441's
+   commit message). So the venue's copy now normally holds the same text as the configured default.
+   It can differ only when it comes from the command-line `--operation-description` option
+   (`packages/provisioning/src/cli.ts:217-221`) or from a configuration bundle, whose `venue` field
+   still carries it (`packages/provisioning/src/configuration-transfer.ts:41`).)
 6. **Receipt policy split from receipt design.** `print_trading_name`/`receipt_print_mode` live in
    `department_sale_policies`, the rest of the receipt in `department_receipts`, and one editor writes
    both. One home: `departments`.
@@ -550,8 +689,8 @@ Code-created triggers: the append-only pair above and the change-feed triggers.
     keeps only the key used to match.
 11. **Not removed, named:** the box's role is held both in `node_mode` (`mode`, `singleton_role`) and in
     the membership document's `standing`; the backlog's "Node-role collapse" item owns that
-    (`docs/backlog.md:5891`). `nodes.public_key` also appears inside signed endorsements; signed
-    documents must stay verbatim, so both stay.
+    (`docs/backlog.md:5852`; (refreshed 2026-11-03 against main 68732329c1: the line moved from `:5891`). `nodes.public_key` also appears
+    inside signed endorsements; signed documents must stay verbatim, so both stay.
 
 ---
 
@@ -579,6 +718,8 @@ Code-created triggers: the append-only pair above and the change-feed triggers.
 - **Payments / backups / email:** the non-secret fields sealed in `tenant_credentials` (D7).
 - **Central `settings` definition:** the per-row change type (§2.4); the document-upgrade rule for
   backup verification; a transfer path for documents; per-module triggers on `settings`.
+- **A1301's schema plan:** the venue's stable id (§2.1), which the A1301 plan says must be settled
+  before S18 (added 2026-11-03 against main 68732329c1).
 
 ---
 
@@ -616,24 +757,45 @@ Code-created triggers: the append-only pair above and the change-feed triggers.
   not started, so the change is free now. Recommendation: yes — `settings.venue` and
   `settings.business_day`, the default menu as a `catalogues` flag. The cost is the language triggers
   reading JSON (§8.2) and a per-module trigger replacing a CHECK.
-- **D2. The second-box data in `node.db`.** Adoption writes `node_mirror_link` and `node_primary_key`,
-  but finishing it cannot succeed today and nothing copies the main box's data
-  (`apps/server/src/finish-adoption.ts:29-43`); whether the setup wizard should still offer "Add a
-  mirror node" is an open owner decision (`docs/backlog.md:703-706`); the mirror and failover are
-  recorded as coming afterwards (`docs/backlog.md:9,35`). Recommendation: delete those two tables'
-  data and the wizard option now (R11); keep `mode`/`singleton_role` as `box` columns marked "second
-  box", because boot's fence path and promotion read them and removing promotion is the larger
-  "Node-role collapse" call.
+  (refreshed 2026-11-03 against main 68732329c1: still free. S23 has not started and no S20–S28
+  plan exists yet; see "Where A1301 stands" at the top.)
+- **D2. The second-box data in `node.db`.** Keep both as `box` column groups: A1018 Slice 3 reads
+  them and A947 3b finishes adoption (U5). Adoption writes `node_mirror_link` and `node_primary_key`
+  (`apps/server/src/adopt.ts:179,187`). It cannot finish yet: the finisher refuses
+  `mirror.venue_not_copied` while the spare holds no venue row (`apps/server/src/reserved-identity.ts:68-69`,
+  explained at `finish-adoption.ts:28-33`), and A947 slice 3b brings the main box's data to the spare and closes adoption-pending (A947 design
+  §11, slice 3b).
+  Whether the setup wizard should still offer "Add a mirror node" is still an open owner decision
+  (`docs/backlog.md:706-709`). `mode`/`singleton_role` stay as `box` columns marked "second box",
+  because boot's fence path and promotion read them and removing promotion is the larger
+  "Node-role collapse" call. (refreshed 2026-11-03 against main 68732329c1: the recommendation was
+  to delete the two tables' data and the wizard option (R11). U5 replaces it: A1018 Slice 3 (#2436)
+  checks the other box's answer with the key adoption pinned and its certificate with the mirror
+  link's, §1.17. The cites `finish-adoption.ts:29-43` and `docs/backlog.md:703-706` had moved, and
+  the sentence they supported now reads differently; the old `docs/backlog.md:9,35` cite for "the
+  mirror and failover come afterwards" is dropped, since it no longer supports the recommendation:
+  A947 is approved, open work, `docs/backlog.md:5795-5796`.)
 - **D3. Delete the venue's operation description** and make the description a required input to
   record a sale (§6.5). Fiscal: it can reach AEAT's `DescripcionOperacion`, so you land it.
-  Recommendation: delete; the demo seed passes its own text.
+  Recommendation: delete; the demo seed passes its own text. (refreshed 2026-11-03 against main
+  68732329c1: A1315 PR 5 (#2441) did not delete the venue's copy; it changed where the value comes
+  from. Setup still writes `locations.operation_description`
+  (`packages/provisioning/src/venue-apply.ts:310`), and when the request has none the server now fills
+  in the filing module's default (`apps/server/src/setup-api.ts:502-507`). So the venue's copy normally
+  holds the configured default, which the sale path already falls back to
+  (`sale-operation-description.ts:43-47`). §6.5 has the detail. Deleting it now also removes:
+  `setup-api.ts`'s fill, the write and the re-apply comparison in `venue-apply.ts` (`:252,289,310`),
+  the CLI option, the bundle's `venue.operationDescription`, `readVenue`'s field
+  (`packages/db/src/venue.ts:12,37`) and the fallback in `operationDescriptionFor`. The two scripts
+  that pass none (§6.5) would pass the text themselves. The recommendation stands.)
 - **D4. One `opening_hours` table for departments and zones** (vs two tables, one per owner).
   Recommendation: one; the readers already union the two halves, and `staffing_days` uses the same
   one-owner shape. The alternative keeps two tables but still drops the day containers.
 - **D5. Where departments live.** Folding `department_floor_plan_sets` into `floor_plan_sets` puts a
   key to `departments` (venue-service set) on a core table, and a set may only reference sets applied
-  before it (`requires`, composition comment at `packages/composition/src/modules.ts:142-143`).
-  venue-service is not a swappable module (the only slot is fiscal, `modules.ts:142-145`).
+  before it (`requires`, composition comment at `packages/composition/src/modules.ts:143-144`).
+  venue-service is not a swappable module (the only slot is fiscal, `modules.ts:144-146`; refreshed
+  2026-11-03 against main 68732329c1: both ranges moved down one line).
   Recommendation: move `departments` (and with it seasons, special days and opening hours, which
   nothing in core needs but which belong with it) into the core set; then every key into them comes
   from a later set. Alternative: keep `department_floor_plan_sets` as a link table.

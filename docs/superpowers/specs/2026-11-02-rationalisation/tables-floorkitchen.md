@@ -8,6 +8,18 @@ tables. Researched read-only on `main` at `64eeabb036` (2 November 2026). Nothin
 `grep`/`sed` over the source; every "the code does X" below was read, not executed, unless it says
 otherwise. Section 8 lists what must be run before building.
 
+(Refreshed 2026-11-03 against main `68732329c1`.) The 41 tables this appendix names (the 40 below
+plus `department_floor_plan_sets`) are unchanged since `64eeabb036`: a script comparing each one's
+columns, indexes, foreign keys, unique constraints and CHECKs in every migration set's latest drizzle
+snapshot (`*/drizzle/meta/NNNN_snapshot.json`) at the two revisions reported no difference, and the
+only migration files added since (`packages/fiscal-verifactu/drizzle/0014_*`, `0015_*`,
+`packages/node-db/drizzle/0001_*`) name none of them. The landed A1301 slices S6 and S7 (#2394,
+#2398) took the location conditions out of venue-service's and the floor's reads; the columns, keys
+and FKs that carry `location_id` are still in the schema, waiting for A1301's schema slices S20–S28.
+A773-2 PRs B2, B3 and B4a (#2392, #2406, #2425) changed no table here (the only schema file any of
+them touched is a comment in `packages/db/src/schema/order-groups.ts`). Cites into files changed
+since `64eeabb036` were re-read on main and carry main's line numbers; each changed paragraph says so.
+
 **Result: 40 current tables → 24 target tables** (plus one table from the venue-and-box area,
 `department_floor_plan_sets`, absorbed into `floor_plan_sets`).
 
@@ -67,14 +79,15 @@ append-only, set `core`. Rows: about 6.
 
 Why the "today" and "kept open" columns can be columns: `floor_today_zones` is unique on `zone_id`;
 an absent row reads as revision 0 and "no business day" (`resetZoneFor`,
-`apps/server/src/floor-today-store.ts:218-232`; `ensureToday` filters `isNull(businessDay)`,
-`:1017`), which the nullable `today_business_day` and default `today_revision` 0 express. Every
+`apps/server/src/floor-today-store.ts:215-231`; `ensureToday` filters `isNull(businessDay)`,
+`:1008`), which the nullable `today_business_day` and default `today_revision` 0 express. Every
 `zone_extensions` writer deletes the zone's rows for other days first (`keepZoneOpen`,
 `packages/venue-service/src/keep-open.ts:144-154`) and every reader filters to one business day
-(`zone-closed-times.ts:248`, `business-day-schedule.ts:310`), so at most one row per zone is ever
+(`zone-closed-times.ts:242`, `business-day-schedule.ts:302`), so at most one row per zone is ever
 read. The configuration export must `omit` the `today_*` and `kept_open_*` columns, as it omits
 `zone_extensions` today (`docs/developers/conventions-data.md` "Today's station destination and zone
-extension").
+extension"). (Refreshed 2026-11-03 against main `68732329c1`: line numbers only; A1301 S6/S7 took
+the location condition out of these reads, and each still filters to one business day.)
 
 ### 1.2 `dining_tables` — one physical table: its design, the last reset's copy, its live name and its state today
 
@@ -128,15 +141,19 @@ ACTION` … Cascading here would allow removal to discard the records the releas
 must handle"). Classification `state`, not append-only, set `core`. Rows: about 40–50.
 
 Why one row is safe: a live table is created only from a reset row with no table yet
-(`floor-today-store.ts:711-725`, the only product `insert(diningTables)`), and such a row exists only
+(`floor-today-store.ts:702-717`, the only product `insert(diningTables)`: `git grep -n
+"insert(diningTables)" origin/main -- apps packages` outside tests and `testing/` finds only `:705`),
+and such a row exists only
 for a design table no live table follows (`targetsFromMaster`, `apps/server/src/floor-reset-plan.ts:228-280`),
 so in product paths at most one live table follows a design table; the `plan_table_id` pointer
 (`dining_tables`, `floor_reset_tables`) disappears because the row *is* the design table. A design
 table deleted in the dashboard today has its followers' `plan_table_id` set null and stays live until
-a reset removes it once free (`floor-plan.ts:582-590`); in the target that is `plan_label` null with
+a reset removes it once free (`floor-plan.ts:573-582`); in the target that is `plan_label` null with
 the live columns untouched. A design table deleted while its reset row is still waiting to create it
-keeps that reset row today (`floor-plan.ts:586-588` nulls the pointer, the row stays pending), so the
+keeps that reset row today (`floor-plan.ts:578-581` nulls the pointer, the row stays pending), so the
 target keeps the row while `reset_pending` is set (the last CHECK above) — see §8, item 3.
+(Refreshed 2026-11-03 against main `68732329c1`: line numbers only. Since A1301 S7 the insert fills
+`location_id` from `venueLocationId(tx)`, `floor-today-store.ts:702`, rather than from the request.)
 
 ### 1.3 `floor_plan_sets` — a named group of layouts for one department (summer, winter …)
 
@@ -167,7 +184,8 @@ about 6–18. Kept because it is the thing a save's revision guards (`saveLayout
 
 Absorbs `floor_plan_table_sizes`. The two never hold a row for the same layout and table at once: a
 save that places a table deletes its kept size, and one that takes a table off writes its size
-(`floor-plan.ts:560-578`, `:622-628`); the layout read joins both (`layoutTables`, `floor-plan.ts:126-160`).
+(`floor-plan.ts:552-570`, `:614-620`); the layout read joins both (`layoutTables`, `floor-plan.ts:120-156`).
+(Refreshed 2026-11-03 against main `68732329c1`: line numbers only.)
 
 | column | type | key / null |
 | --- | --- | --- |
@@ -246,10 +264,11 @@ bill), and a bill of an open party can already be settled, whose lines the
 `working_order_id` id PK, FK `working_orders` ON DELETE CASCADE; `note` label null; `revision` count
 not null default 0, CHECK integer ≥ 0. The `id`, `party_id`, its unique key and the one-owner CHECK go
 (party notes move to `parties`). Kept separate from `working_orders` for a protection reason: a
-bill's note can be edited after it is settled, until it is collected (`order-kitchen-note.ts:202`
+bill's note can be edited after it is settled, until it is collected (`order-kitchen-note.ts:198`
 refuses only abandoned or collected), while the `working_orders` transition trigger lets a settled
 bill change only `collected_at` (`packages/db/drizzle/0198_recipient_identifier_guards.sql:117-134`).
-See D3. Rows: about 3,500–11,000 a year.
+See D3. Rows: about 3,500–11,000 a year. (Refreshed 2026-11-03 against main `68732329c1`: line
+number only, `:202` → `:198`.)
 
 ### 1.12 `service_steps` and `service_step_completions` (kept)
 
@@ -269,9 +288,13 @@ Current columns minus `location_id`, plus:
 | closed_sends_to_station_id | id | null, FK `kitchen_stations` | station_day_states.sends_to_station_id |
 
 `station_day_states.open` is dropped: every writer writes `false` (`setStationToday`,
-`packages/venue-service/src/station-times.ts:69-79`; reopening deletes the row, `:57-64`), and the
-reader asks only for closed rows (`routing-store.ts:440-446`). The writer also deletes the station's
-rows for other days first (`station-times.ts:48-55`), so one pair of columns holds everything read.
+`packages/venue-service/src/station-times.ts:61-73`; reopening deletes the row, `:50-59`), and the
+reader asks only for closed rows (`routing-store.ts:420-426`). The writer also deletes the station's
+rows for other days first (`station-times.ts:42-49`), so one pair of columns holds everything read.
+(Refreshed 2026-11-03 against main `68732329c1`: line numbers only. `git grep -n
+"stationDayStates.open" origin/main -- apps packages` outside tests finds only `routing-store.ts:425`;
+station deletion, `packages/venue-service/src/station-delete-settings.ts:62-70`, `:153-169`, reads and
+deletes rows and clears `sends_to_station_id`, never `open`.)
 Protections: `kitchen_stations_name_key` (now `name` where active), `kitchen_stations_default_key`
 (one default station, venue-wide), `kitchen_stations_thresholds_ordered`; plus the not-self CHECK of
 `station_day_states_sends_to_not_self_ck` and "sends-to only while closed". Export `omit` adds the two
@@ -293,7 +316,7 @@ which the lines' freeze trigger would refuse (0177, above). Changes:
 | --- | --- |
 | + `allergy_frozen` flag not null default 0, `allergy_original` json null, `allergy_current` json null | from `ticket_item_allergies` (PK `ticket_item_id`, one row per item; "row presence also freezes an unticked dish", `packages/venue-service/src/schema/kitchen-allergy.ts`) |
 | − `away_at` | no product writer: `grep -rnE "ticketItems\.awayAt\|awayAt:" apps packages --include='*.ts'` outside tests finds only the schema; removal is already planned (A773 PR D, `docs/superpowers/plans/2026-11-01-a773-2b-requested-release.md:201`) |
-| − `node_id` (proposed) | one box per venue; only reader is the overdue report's filter (`packages/reporting/src/overdue-orders.ts:63`). Depends on the venue-and-box area's node decision |
+| − `node_id` (proposed) | one box per venue; only reader is the overdue report's filter (`packages/reporting/src/overdue-orders.ts:61`; refreshed 2026-11-03 against main `68732329c1`: line number only, and `git grep -n "ticketItems\.nodeId" origin/main` outside tests still finds only that line). Depends on the venue-and-box area's node decision |
 | − `working_order_id` (proposed, after §8 item 1) | a copy of `working_order_lines.working_order_id`, no FK ("Denormalised grouping key", schema comment) |
 
 Protections: `ticket_items_working_order_line_id_key` (one per line, the double-fire guard),
@@ -302,7 +325,13 @@ Protections: `ticket_items_working_order_line_id_key` (one per line, the double-
 `working_order_id` goes. The two allergy block CHECKs (`kitchenAllergyBlockCheck`) move onto
 `allergy_original`/`allergy_current`, plus `allergy_frozen` = 0 ⇒ both null. Classification stays
 `ledger`, not append-only. Rows: about 1,000 a day, 360,000 a year (no housekeeping deletes them).
-Note: A773-2 is changing this table now (`requested_at`, `pass_controlled`); this design keeps them.
+Note: the A773-2 columns `requested_at` and `pass_controlled` are on main
+(`packages/db/src/schema/ticket-items.ts:65-66`); this design keeps them. (Refreshed 2026-11-03
+against main `68732329c1`: A773-2 PRs B2, B3 and B4a, #2392, #2406, #2425, landed without changing
+this table's schema; the removal of `away_at` and `pass_item_marks` is still planned for A773 PR D,
+`docs/superpowers/plans/2026-11-01-a773-2b-requested-release.md:201`. The open PR B4b, #2440, not
+landed, adds `show_non_pass_stations` to the devices area's two kitchen-screen tables and changes
+nothing here.)
 
 ### 1.16 `ticket_item_moves` (kept — typed history)
 
@@ -314,9 +343,10 @@ station move follows insertion order"). Actor CHECK, four FKs, line index kept. 
 
 Both are link tables between `print_jobs` and bills/lines with both sides checked (R7). The bill link
 is not a column of `print_jobs`: one job can carry several stations (`linkKitchenJob` inserts one row
-per station, `apps/server/src/kitchen-print.ts:838-848`) and several bills, and a copied link has its
-own `reprint` and position (`writeLinksAfter`, `:2209-2240`, which relies on `rowid` order). All
-FKs, unique keys and indexes kept. Rows: 180,000–270,000 and 250,000–360,000 a year where stations
+per station, `apps/server/src/kitchen-print.ts:841-851`) and several bills, and a copied link has its
+own `reprint` and position (`writeLinksAfter`, `:2221-2252`; the reader just above it orders a
+bill's links by `rowid`, `:2205`). All FKs, unique keys and indexes kept. (Refreshed 2026-11-03
+against main `68732329c1`: line numbers only.) Rows: 180,000–270,000 and 250,000–360,000 a year where stations
 print; zero with screens only.
 
 ### 1.18 `kitchen_notices` (kept)
@@ -332,12 +362,18 @@ WHERE clauses; four CHECKs and the category (cascade), product, zone and station
 `routing_cell_periods` is a many-per-cell child, not one-per-parent, so it stays; proposed: drop
 `department_id`, a copy of `menu_periods.department_id`, and replace the composite FK with FK
 `period_id` → `menu_periods` ON DELETE CASCADE (the zone-move clean-up at
-`packages/venue-service/src/operations.ts:455-469` then joins `menu_periods`). Target CHECK and
-`(cell_id, period_id)` unique kept. Rows 0–40.
+`packages/venue-service/src/operations.ts:417-430` then joins `menu_periods`). Target CHECK and
+`(cell_id, period_id)` unique kept. Rows 0–40. (Refreshed 2026-11-03 against main `68732329c1`:
+line numbers only.)
 
 ### 1.20 `bookings` (kept, own set)
 
-Loses `location_id` (A1301 S20); `bookings_location_date_idx` becomes an index on `booking_date`.
+Loses `location_id` (A1301's schema slices S20–S28; no plan yet names which slice);
+`bookings_location_date_idx` becomes an index on `booking_date`. (Refreshed 2026-11-03 against main
+`68732329c1`: the slice number "S20" was not in the A1301 plan, so it is narrowed to the range. The
+plan now records the same index change and why the day list keeps its location condition until
+then: S9a measured the read falling back to a scan without it,
+`docs/superpowers/plans/2026-11-01-a1301-remove-location.md:479-485`.)
 `table_label` stays (written when the table is removed, `packages/bookings/src/table-removal.ts`).
 FKs to `dining_tables` and `working_orders`, the status/date index, party-size and status CHECKs kept.
 Set `bookings` (toggleable module). Rows 7,000–14,000 a year.
@@ -390,7 +426,7 @@ Proposed `activity_log` kinds, for facts that are overwritten in place today (se
 | floor_plan_placements | keep (absorbs floor_plan_table_sizes) | same key (layout, table) |
 | floor_plan_table_sizes | merge into floor_plan_placements | never coexists with a placement row |
 | floor_zones | keep (absorbs four tables) | the zone |
-| zone_service_policies | merge into floor_zones | PK zone_id; every zone gets one at creation (`createServiceZone`, `operations.ts:486-530`) |
+| zone_service_policies | merge into floor_zones | PK zone_id; every zone gets one at creation (`createServiceZone`, `operations.ts:448-484`, through `configureZone`'s insert at `:405-412`; refreshed 2026-11-03 against main `68732329c1`: line numbers only) |
 | zone_sale_policies | merge into floor_zones | PK zone_id; null columns already mean "follow the department" |
 | zone_extensions | merge into floor_zones (`kept_open_*`) | one live row per zone; other days deleted by the writer |
 | parties | keep (absorbs party_allergy, party kitchen notes) | the party |
@@ -416,9 +452,21 @@ Proposed `activity_log` kinds, for facts that are overwritten in place today (se
 | routing_cell_periods | keep | many per rule |
 | bookings | keep | the reservation (own module) |
 
-`pass_item_marks`: `grep -rlE "passItemMarks|pass_item_marks" apps packages scripts` outside drizzle
-snapshots finds only its schema file, one test and `scripts/schema-constraints.test.ts`; its writer
-went in #1944 (`509e8d42a6`), and its removal is already planned (A773 PR D).
+`pass_item_marks`: no product code reads or writes it. `git grep -lE "passItemMarks|pass_item_marks"
+origin/main -- apps packages scripts`, outside drizzle snapshots, lists its migration (`0118`), its
+schema file and that file's test, the `@waitron/db` export (`packages/db/src/index.ts`) and
+classification (`packages/db/src/classification.ts`), six `apps/server` test files (which insert
+marks themselves), the frozen `country-es` demo capture and `scripts/schema-constraints.test.ts`
+— no non-test file in `apps/`. Its writer went in #1944 (`509e8d42a6`), and its removal is still
+planned for A773 PR D (`docs/superpowers/plans/2026-11-01-a773-2b-requested-release.md:201`).
+(Refreshed 2026-11-03 against main `68732329c1`: the earlier sentence said the grep finds "only its
+schema file, one test and `scripts/schema-constraints.test.ts`"; the same grep at `64eeabb036` lists
+the same fifteen files as on main, so that sentence was wrong when written. "Dead" still holds:
+A773-2 PRs B2–B4a added no reader or writer, and the open PR B4b, #2440, not landed, adds none
+outside its plan document. Dropping the table also drops the `pass_item_marks.done_by_person_id`
+entry in `apps/server/src/personal-data-actions.coverage.test.ts:57`, and needs a `REMOVED_TABLES`
+entry in `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`, which accepts it because the
+capture's manifest counts 0 rows for the table in every phase.)
 
 ## 5. Protections
 
@@ -547,14 +595,20 @@ Kept on purpose, with the reason:
 - **People:** person ids without FKs (`opened_by`, `closed_by`, `allergy_answered_by`, `done_by`,
   `created_by`, `moved_by_person_id`), because `identity` is toggleable.
 - **Staffing (toggleable):** points at `kitchen_stations` (`packages/staffing/src/schema/staffing.ts`).
-- **In-flight work:** A773-2 (firing and the pass) is changing `ticket_items` and removing `away_at`
-  and `pass_item_marks`; A1301 is removing `location_id` from every table here.
+- **In-flight work:** A773-2 (firing and the pass) plans to remove `away_at` and `pass_item_marks` in
+  its PR D; A1301 is removing `location_id` from every table here. (Refreshed 2026-11-03 against main
+  `68732329c1`: A773-2 PRs B2, B3 and B4a landed with no schema change to this area, and the open PR
+  B4b, #2440, not landed, touches only the devices area's kitchen-screen tables. A1301's code slices
+  S6 and S7 landed, so venue-service and the floor no longer filter by location; the columns go in
+  its schema slices S20–S28, still to be planned.)
 
 ## 8. Measure before building
 
 1. **Dropping `ticket_items.working_order_id`.** 55 non-test reads name it
-   (`grep -rnE "ticketItems\.workingOrderId" apps packages --include='*.ts' | grep -v test | wc -l`).
-   Time the station screen, pass board, print-problem and overdue reads on a database with 360,000
+   (`grep -rnE "ticketItems\.workingOrderId" apps packages --include='*.ts' | grep -v test | wc -l`,
+   run in a checkout of main `68732329c1`; refreshed 2026-11-03: the same count with `git grep` at
+   `64eeabb036` is 54, and the one added since is A773-2 B3's `apps/server/src/pass-release.ts`).
+   Time the station screen, pass board, pass release, print-problem and overdue reads on a database with 360,000
    ticket items and 360,000 lines, with and without the column (join through `working_order_lines`).
    Failing result: the join version is noticeably slower on the reference box (for example the p95 of
    the station queue read more than doubles, or exceeds 50 ms). Then keep the column, and add a
@@ -564,7 +618,7 @@ Kept on purpose, with the reason:
    pass with their assertions unchanged; only setup may change. Failing result: any assertion that has
    to be rewritten to pass means behaviour moved; stop and revisit D1.
 3. **Deleting a design table whose creation is still waiting.** Today the waiting reset row survives
-   with its pointer nulled (`floor-plan.ts:586-588`) and the catch-up still creates the table, which
+   with its pointer nulled (`floor-plan.ts:578-581`, main `68732329c1`; was `:586-588`) and the catch-up still creates the table, which
    the next reset then removes. Write a test of that sequence against today's code first; the target
    must give the same result. Failing result: the target loses the waiting creation.
 4. **The incoming foreign keys.** Re-run the `pragma_foreign_key_list` measurement the conventions
@@ -588,14 +642,16 @@ Kept on purpose, with the reason:
   before its live table and outlive it (different lifetime, R1), and fold the other five into
   `dining_tables`. **Recommendation: fold all seven** — the lifetime difference is two nullable names
   (`plan_label`, `label`), the reset code's pointer-following and "more than one live table follows
-  one design table" case (`copyParts`, `floor-today-store.ts:302-327`) disappear, and the floor's
+  one design table" case (`copyParts`, `floor-today-store.ts:300-325` on main `68732329c1`, was
+  `:302-327`) disappear, and the floor's
   large behaviour suites are the safety net (§8 item 2). Cost: a rewrite of `floor-today-store.ts`,
   `floor-plan.ts`, `floor-plan-sets.ts`, `floor-reset-plan.ts` inputs, `joined-parts.ts` and the SQL in
   `catchUpDue`/`placeTaken`.
 - **D2. One migration set for the floor and kitchen.** `floor_zones` (core) needs an FK to
   `departments` (venue-service), and `parties`/`ticket_items`/`kitchen_stations` (core) gain columns from
   venue-service tables. Core requires no other set, so it cannot point at venue-service. Both sets are
-  `tier: "mandatory"` (`packages/composition/src/modules.ts:151`, `:192`), so nothing swappable is lost.
+  `tier: "mandatory"` (`packages/composition/src/modules.ts:152`, `:193` on main `68732329c1`, was
+  `:151`, `:192`), so nothing swappable is lost.
   **Recommendation: merge the venue-service migration set into core** (a cross-area decision; the
   venue-and-box area owns `departments`). Alternative: move `departments` alone into core.
 - **D3. A bill's kitchen note.** Keep `order_kitchen_notes` for bills (recommended), or fold it into

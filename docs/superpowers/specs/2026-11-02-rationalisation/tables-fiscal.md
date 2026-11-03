@@ -8,6 +8,11 @@ cancellations, comps and discounts (`adjustments` set). 34 current tables.
 
 Read on `main` at `64eeabb036`, read-only. Every claim cites the file and line or the grep run.
 Nothing here was run as a test; where a claim needs a measurement it is listed in section 8.
+(refreshed 2026-11-03 against main 68732329c1: the area still has 34 tables, measured from each set's latest drizzle snapshot; only
+`registros_facturacion` changed shape. Cites into files that changed since `64eeabb036` were re-read
+on main and renumbered; cites into unchanged files were left, with `git diff --quiet 64eeabb036
+origin/main -- <file>` as the receipt. The second-box passages, `fiscal_reservations` and decision 1,
+were refreshed afterwards against README §5 U5; each carries its own note.)
 
 ## 0. The owner's question: why ~15 fiscal tables, and does "3 or 4" hold?
 
@@ -24,13 +29,13 @@ states:
 | (1) records | **Holds.** `registros_facturacion` unchanged. | — |
 | Chain head `cadenas` read from the records | **Holds — derive it.** | See 0.1. |
 | Next invoice number `invoice_series.next_number` read from sales | **Holds for the number; the series stays a table.** | See 0.2. |
-| (2) submissions absorbs `envios`, `acks`, `filing_cases`, `filing_case_events` | **Holds** for `envios`, `acks`, `filing_cases`. `filing_case_events` has no writer and is deleted (R5). | `filing_cases` is one per record (unique `registro_id`), so it folds as columns; its append-only protection becomes a set-once trigger. See 0.3. |
+| (2) submissions absorbs `envios`, `acks`, `filing_cases`, `filing_case_events` | **Holds** for `envios`, `acks`, `filing_cases`. `filing_case_events` splits: its one resolution per case folds into the submission row; its notes go to (3). | `filing_cases` is one per record (unique `registro_id`), so it folds as columns; its append-only protection becomes a set-once trigger. A case has at most one resolution (`filing_case_events_one_resolution_uq`), so that folds too. See 1.1. (refreshed 2026-11-03 against main 68732329c1: `filing_case_events` now has writers — W41s-8's five remedy actions, #2399 — so it is no longer deleted under R5.) |
 | (2) absorbs `fiscal_conflict_evidence` | **Breaks** — it is many rows per record (one per sending attempt and cause). | Goes to (3) instead. |
 | (3) one history log: clock checks and confirmations, conflicts, case notes | **Holds**, with every typed CHECK and unique index re-expressed per kind (section 5). | Read back on the sale path, so it needs its own indexes (section 8). |
 | (3) absorbs certificate installs and reminders | **Breaks.** | Those two tables are classified `local` (`classification.ts:20-27`); the history log is `ledger`. A table has one classification. Reminders are also updated in place (claim, then report: `certificate-reminders.ts:87-150`), so they are not history. |
-| (3) absorbs identity allocations | **Better elsewhere** — fold them into the identity table. | Each activation writes exactly one identity row and one allocation row in one transaction (`allocation.ts:434-462`); the two rows repeat the same NIF, software id and installation number (`allocation.ts:441-444` vs `:462-470`). |
+| (3) absorbs identity allocations | **Better elsewhere** — fold them into the identity table. | Each activation writes exactly one identity row and one allocation row in one transaction (`allocation.ts:437-465`); the two rows repeat the same NIF, software id and installation number (`allocation.ts:444-447` vs `:465-473`). (refreshed 2026-11-03 against main 68732329c1: lines renumbered.) |
 | (4) identity as one row | **Breaks.** | Every record points at the identity that made it (`registros_facturacion.sif_id` → `registro_sif`), and setup, restore and promotion must refuse an installation name ever used before (`hour-history-reader.ts:225-259`; `docs/compliance/verifactu-findings.md:276-280`, "No puede repetirse nunca"). Past identities are rows, so identity is a table of identities. |
-| (4) sending state as settings | **Breaks.** | It is machine state written after every AEAT reply in the same transaction as the submission rows (`drain.ts:481`, `:1182`, `:1199`), with a compare-and-clear on the incident token (`drain.ts:1199-1200`). A settings save bumps a revision and names a person; a background writer would collide with every owner save. It must also stay in `venue.db`: it commits with `envios` updates, and `node.db` is a separate file with its own write queue (CLAUDE.md §3). It stays a one-row state table. |
+| (4) sending state as settings | **Breaks.** | It is machine state written after every AEAT reply in the same transaction as the submission rows (`drain.ts:505`, `:1244`, `:1261`), with a compare-and-clear on the incident token (`drain.ts:1261-1262`; refreshed 2026-11-03 against main 68732329c1: lines renumbered). A settings save bumps a revision and names a person; a background writer would collide with every owner save. It must also stay in `venue.db`: it commits with `envios` updates, and `node.db` is a separate file with its own write queue (CLAUDE.md §3). It stays a one-row state table. |
 
 The fiscal tables in the target: `registros_facturacion`, `fiscal_submissions`, `fiscal_history`,
 `fiscal_identities`, `fiscal_sending_state`, `fiscal_certificates`, `fiscal_certificate_reminders`.
@@ -39,14 +44,14 @@ Down from 16 in the `fiscal-verifactu` set. `invoice_series` (core) stays beside
 ### 0.1 Can the chain head be read from the records under concurrent sales? Yes.
 
 - Writes are serial: "one write transaction runs on the venue file at a time"
-  (`packages/fiscal-verifactu/src/chain.ts:84-89`, the comment on `selectHead`, which reads the head
+  (`packages/fiscal-verifactu/src/chain.ts:85-90`, the comment on `selectHead`, which reads the head
   without a row lock for exactly this reason). A derived read inside the same write transaction is
   as safe as the current one.
 - What actually refuses a forked chain is not `cadenas` but the unique index on the position,
   `registros_tenant_node_secuencia_uq (node_id, secuencia)` (`chain.ts:24-32`; drizzle snapshot
   `0013_snapshot.json`). That index stays, so a derived head loses no guarantee.
 - `cadenas.secuencia` is never reset; only the pointer is, and only when a new identity is
-  registered (`registro-sif.ts:49-66`, `allocation.ts:445-451`). So:
+  registered (`registro-sif.ts:49-66`, `allocation.ts:448-454`). So:
   - next `secuencia` = `max(secuencia) + 1` over the node's records (the unique index serves it);
   - the predecessor = the node's record with the largest `secuencia`, **if** its `sif_id` is the
     current identity; otherwise this is the chain's first record (`PrimerRegistro = S`). This holds
@@ -57,6 +62,10 @@ Down from 16 in the `fiscal-verifactu` set. `invoice_series` (core) stays beside
   (`docs/compliance/verifactu-findings.md:272-274`); reading it from the record itself removes the
   copy that could drift, which the `cadenas` schema comment already argues for its other four values
   (`schema/cadenas.ts:6-13`).
+- A correction is a chain record like any other. W41s-8's internal correction appends a new
+  `alta` through `appendToChain`, naming the record it replaces in `corrects_registro_id`
+  (`chain.ts:215-249`), so it takes the next `secuencia` and the derivation above covers it.
+  (refreshed 2026-11-03 against main 68732329c1: added for W41s-8, #2399; read, not run.)
 - Readers to change: `chain.ts` (`selectHead`, `readChainHead`), `registro-sif.ts:191-197`
   (`esPrimerRegistro`), `apps/server/src/chain-height.ts:15-21` (Box status: height = max
   `secuencia`, last-at = the latest record's `creado_en`), and `backup-verification-chain.ts:55-140`,
@@ -64,7 +73,7 @@ Down from 16 in the `fiscal-verifactu` set. `invoice_series` (core) stays beside
 
 ### 0.2 Can the next invoice number be read from the sales? Yes; the series row stays.
 
-- Every number allocated becomes a `sales` row (`record-sale.ts:270`, `record-correction.ts:259`,
+- Every number allocated becomes a `sales` row (`record-sale.ts:270`, `record-correction.ts:265`,
   `record-substitution.ts:171`, each followed by an insert into `sales`), and `sales` is append-only
   (`scripts/append-only-triggers.test.ts` EXPECTED list) with `UNIQUE (series_id, invoice_number)`
   (`packages/db/src/schema/sales.ts:122`). Every series starts at 1
@@ -117,16 +126,24 @@ in `scripts/behavioural-triggers.test.ts`.
 
 **`registros_facturacion`** — the legal, hash-chained invoice record. `ledger`, append-only.
 
-- **Unchanged:** the same 34 columns and the same 11 CHECKs.
+- **Unchanged:** the same 38 columns and the same 11 CHECKs.
 - **Unchanged foreign keys:** `device_id` → devices (restrict), `node_id` → nodes,
-  `sif_id` → `fiscal_identities`, `sale_id` → sales.
-- **Unchanged unique indexes:** `registros_tenant_node_secuencia_uq (node_id, secuencia)` and
+  `sif_id` → `fiscal_identities`, `sale_id` → sales, and `corrects_registro_id` →
+  `registros_facturacion` (a correction names the record it replaces).
+- **Unchanged unique indexes:** `registros_tenant_node_secuencia_uq (node_id, secuencia)`;
   `registros_identidad_uq (id_emisor_factura, num_serie_factura, fecha_expedicion_factura,
-  tipo_registro)`.
+  tipo_registro)`, which now applies only where `corrects_registro_id is null`, so a correction may
+  share its original's invoice identity; and `registros_corrects_registro_uq (corrects_registro_id)`,
+  so a record is replaced at most once.
 - **Unchanged plain indexes:** `registros_sale_idx` and `registros_generado_idx`.
 - **One change proposed:** drop `registros_node_secuencia_idx (node_id, secuencia)`. It is a plain
-  index on exactly the columns of the unique index above (`schema/registros.ts:115` and `:126`), so
+  index on exactly the columns of the unique index above (`schema/registros.ts:121` and `:128`), so
   the unique index serves every query it serves.
+- (refreshed 2026-11-03 against main 68732329c1: W41s-8, #2399, added `corrects_registro_id`, `subsanacion`, `rechazo_previo` and
+  `sin_registro_previo` (34 → 38 columns), the self foreign key and `registros_corrects_registro_uq`,
+  and made `registros_identidad_uq` partial: `packages/fiscal-verifactu/drizzle/0014_w41s8_record_replacements.sql`
+  and `0015_w41s8_remedy_markers.sql`; counts measured from `drizzle/meta/0015_snapshot.json`. The
+  CHECK count is unchanged.)
 - **Rows:** about 250–260 a day, about 92,000 a year.
 
 **`fiscal_submissions`** (was `envios`; absorbs `filing_cases` and `acks`) — one row per record,
@@ -145,31 +162,49 @@ append-only, with a guard trigger.
 | `case_cause` | text | null, set-once, CHECK `<> ''` | filing_cases.cause |
 | `case_evidence` | JSON text | null, set-once | filing_cases.evidence |
 | `case_opened_at` | text | null, set-once; CHECK: the three case columns are all null or all set | filing_cases.opened_at |
+| `case_resolved_at`, `case_resolved_by`, `case_resolution_action` | text | null, set-once; all null or all set, and only on a row whose case is open | filing_case_events `recorded_at`, `person_id`, `action` (kind `resolved`) |
+| `case_resolution_key` | text | null, set-once, UNIQUE; set with the three above | filing_case_events.action_key (kind `resolved`) |
+| `case_remedy_registro_id` | text | null, set-once, FK → registros_facturacion; never this row's own record | filing_case_events.remedy_registro_id |
 
 - **Protections kept:** `envios_estado_ck`, `envios_drenaje_idx (estado, proximo_intento_en)` and
   `envios_confirmado_idx (confirmado_en)`.
 - **New partial index** on `(case_opened_at) WHERE case_opened_at is not null`, for the alert read
   and the sale-path read (section 8).
-- **New guard trigger:** `registro_id` is fixed, and the three case columns are set-once.
-  - This replaces `filing_cases`' append-only triggers.
+- **New guard trigger:** `registro_id` is fixed, and the case and resolution columns are set-once.
+  - This replaces the append-only triggers of `filing_cases` and `filing_case_events`.
+  - "One resolution per case" (`filing_case_events_one_resolution_uq`) is now built into the shape.
   - It also replaces `filing_cases`' unique index on `registro_id`; the primary key now does that
     job.
 - **The case's own id goes.** Its readers use `registro_id` instead (`conflict-recovery.ts:31,58,75`,
-  `conflict-recovery-routes.ts:39`).
-- **Resolution columns are not added now.** These would record who resolved a case and which
-  corrective record fixed it. No product code writes a resolution today (see `filing_case_events` in
-  section 4). A1089 (`docs/backlog.md:224`) brings them, as further set-once columns on this table.
+  `conflict-recovery-routes.ts:39`). (refreshed 2026-11-03 against main 68732329c1: W41s-8, #2399, added more readers of the case id: each
+  remedy request names a `caseId` (`record-remedy.ts:42`), `releaseBrakeHold` joins on it
+  (`drain.ts:1033`), and `filing_case_events.case_id` points at it. Each would take `registro_id`
+  instead. Read, not run.)
+- **Resolution columns are added.** (refreshed 2026-11-03 against main 68732329c1: this replaces "not added now": W41s-8, #2399, writes
+  resolutions.) Four of W41s-8's five remedy actions record a `resolved` event through
+  `recordCaseEvent` (`record-remedy.ts:184`, `record-remedy-absent.ts:158`,
+  `record-remedy-corrective.ts:151`, `record-remedy-held.ts:100`); the fifth, releasing the first
+  brake-held record, records a `note` (`record-remedy-brake.ts:62`). The route is mounted
+  (`routes.ts:26`), but the server's set of enabled remedies is empty
+  (`record-remedy-routes.ts:20`), and `admitRecordRemedy` refuses a remedy not in that set before
+  anything is written (`record-remedy.ts:37`). So no production box writes these rows yet; the
+  writers exist, so the table is folded, not deleted.
+- **Weaker in one way:** today one unique index on `action_key` covers notes and resolutions
+  together (`filing_case_events_action_key_uq`). Split, the resolution's key is unique among
+  submission rows and a note's key among `fiscal_history` rows, so the database no longer refuses
+  one key reused across the two. `recordCaseEvent` would have to look in both places.
 - **Rows:** about 92,000 a year, one per record.
 
 **`fiscal_history`** — the fiscal module's own append-only log. It holds clock checks, clock
-confirmations and conflicts AEAT reported, and case notes once A1089 is built. `ledger`, append-only.
+confirmations, conflicts AEAT reported, and case notes. `ledger`, append-only. (refreshed 2026-11-03 against main 68732329c1: case notes are
+written today, by W41s-8's brake release, #2399, though no remedy is enabled yet; see above.)
 
 | Column | Type | Key / null | Notes |
 | --- | --- | --- | --- |
 | `id` | text | PK | |
 | `seq` | integer | not null, UNIQUE | `max(seq)+1` in the write transaction, as `clock-checks.ts:60-70` does today. `seq` orders the log, not time, because the clock is what is in doubt |
-| `kind` | text | not null, CHECK in (`clock.check_opened`, `clock.confirmed`, `conflict.observed`, `aeat.answer_cleared`) | A1089 adds `case.note` |
-| `event_key` | text | null, UNIQUE | Natural idempotency key: `clock.confirmed:<check id>` (one confirmation per check), `conflict:<registro>:<attempt>:<cause>` |
+| `kind` | text | not null, CHECK in (`clock.check_opened`, `clock.confirmed`, `conflict.observed`, `aeat.answer_cleared`, `case.note`) | `case.note` from `filing_case_events` kind `note` (refreshed 2026-11-03) |
+| `event_key` | text | null, UNIQUE | Natural idempotency key: `clock.confirmed:<check id>` (one confirmation per check), `conflict:<registro>:<attempt>:<cause>`, and a note's `action_key` |
 | `node_id` | text | not null, FK → nodes | |
 | `at` | text | not null | The box's time when written |
 | `registro_id` | text | null, FK → registros_facturacion | The record a confirmation, conflict or cleared answer names |
@@ -184,9 +219,12 @@ confirmations and conflicts AEAT reported, and case notes once A1089 is built. `
   - `(registro_id, kind, seq)`, for the clock stop's "latest confirmation naming this record".
 - **Rows:** normally a handful a year; tens after a clock or restore incident.
 
-**`fiscal_identities`** (was `registro_sif`; absorbs `fiscal_allocations`, and `fiscal_reservations`
-if you keep it — decision 1). It lists every installation identity this box has signed under, and the
-approval that granted each one. `ledger`, not append-only, with a guard trigger.
+**`fiscal_identities`** (was `registro_sif`; absorbs `fiscal_allocations`). It lists every
+installation identity this box has signed under, and the approval that granted each one. `ledger`,
+not append-only, with a guard trigger. (refreshed 2026-11-03 against main 68732329c1: "and `fiscal_reservations` if you keep it"
+removed: U5 deletes that table, decision 1. A1018 slice 5a (#2428) changed what an `approval` may
+hold, not the schema: a promotion whose old box gave up filing stores a version 2 approval saying so
+(`packages/fiscal-verifactu/src/allocation-envelope.ts:402-404`); no migration came with it.)
 
 | Column | Type | Key / null | From |
 | --- | --- | --- | --- |
@@ -220,7 +258,7 @@ approval that granted each one. `ledger`, not append-only, with a guard trigger.
 
 Why the fold is sound:
 
-- In product code, every identity row is written by `activate` (`allocation.ts:434-470`), together
+- In product code, every identity row is written by `activate` (`allocation.ts:437-473`; refreshed 2026-11-03: renumbered), together
   with exactly one allocation row naming it.
 - `registro_sif` has two other writers, `registerSif` and `writeReservedSif`. Neither has a non-test
   caller: `git grep -n "\bregisterSif\b\|\bwriteReservedSif\b" -- 'packages/*.ts' 'apps/*.ts'
@@ -245,7 +283,7 @@ on this box. The newest is the one in use (`certificate-record.ts:8-13`). `local
 - **Unchanged:** all 14 columns.
 - **Protections unchanged:** the three CHECKs (source, kind, proof of a dashboard install) and the
   index on `(node_id, installed_at)`.
-- **The sealed certificate itself** stays in `tenant_credentials` (`certificate-install.ts:237-244`,
+- **The sealed certificate itself** stays in `tenant_credentials` (`certificate-install.ts:235-242`,
   another area).
 - **Rows:** 1–2 a year.
 
@@ -275,13 +313,15 @@ failed, and a failed one may be claimed again (`certificate-reminders.ts:87-150`
 **`payments`** (absorbs `payment_resolutions`, `payment_holds` and `payment_hold_outcomes`) — one
 row per card payment, moving through its states. `ledger`, not append-only, with a new guard trigger.
 
-- **Kept: 20 of the 21 columns** — `id`, `working_order_id`, `source`, `device_id`, `sale_id`,
-  `reader_id`, `provider`, `payment_ref`, `external_ref`, `card_scheme`, `card_last4`,
+- **Kept: all 21 columns** — `id`, `working_order_id`, `source`, `device_id`, `sale_id`,
+  `node_id`, `reader_id`, `provider`, `payment_ref`, `external_ref`, `card_scheme`, `card_last4`,
   `card_entry_mode`, `card_auth_code`, `amount`, `state`, `settled_at`, `reconcile_remediated_at`,
   `created_at`, `updated_at` and `bill_payment_id`.
-- **Dropped: `node_id`.** The schema says "no writer sets it yet"
-  (`packages/payments/src/schema/payments.ts:57`): `insertPayment` (`store.ts:81-97`) leaves it out,
-  and no non-test code reads it.
+- **`node_id` stays.** (refreshed 2026-11-03 against main 68732329c1: this replaces "Dropped: `node_id`".) Since A764, #2422, it is the
+  payment's collection owner, the box that started it (`packages/payments/src/schema/payments.ts:57`).
+  `insertPayment` writes it (`store.ts:87`), and the card sweep's `listAttempting` reads only the
+  rows this box owns (`store.ts:515-521`), with the owners built by `sweepOwners`
+  (`apps/server/src/boot.ts:542`). Read, not run.
 
 Added columns, all null and set-once:
 
@@ -290,7 +330,7 @@ Added columns, all null and set-once:
 | `resolution_outcome` (captured/failed), `resolution_cancelled_at_provider`, `resolution_provider_status`, `resolved_by`, `resolved_at` | payment_resolutions | Outcome and `resolved_at` both null or both set; `cancelled_at_provider = 0 or outcome = 'failed'` (`0008:13-14`) |
 | `hold_provider_amount`, `held_at` | payment_holds | Amount > 0 (`0009:20`); both set or neither |
 | `hold_outcome` (refunded_at_provider/kept), `hold_note`, `hold_decided_by`, `hold_decided_at` | payment_hold_outcomes | An outcome only on a held row; note null or non-blank (`0009:9-10`) |
-| — | the race guard in `holds.ts:48` and `store.ts:820` | New CHECK `held_at is null or reconcile_remediated_at is null` |
+| — | the race guard in `holds.ts:48` and `store.ts:831` | New CHECK `held_at is null or reconcile_remediated_at is null` |
 
 - **Protections kept:** every current CHECK and foreign key (listed in section 5), the unique
   `payments_provider_ref_key`, the partial uniques `payments_provider_external_ref_key` and
@@ -306,8 +346,8 @@ Added columns, all null and set-once:
 - **Columns:** `id`; `payment_id` FK → payments (restrict); `amount`, CHECK > 0; `state`, CHECK in
   (succeeded, failed); `authorized_by` null; `provider_refund_ref` null; `created_at`.
 - **Dropped: `provider` and `payment_ref`.** They copy the parent payment's own columns.
-- **The index on `payment_id` stays.** The refund ceiling sums over it (`store.ts:238-264`,
-  `:667-680`).
+- **The index on `payment_id` stays.** The refund ceiling sums over it (`store.ts:241-267`,
+  `:678-691`).
 - **Rows:** about 400–1,000 a year.
 
 **`card_readers`** (absorbs `card_reader_holders`) — one row per registered card terminal. `state`.
@@ -318,7 +358,8 @@ Added columns, all null and set-once:
   `card_reader_holders.device_id`.
 - **Dropped: `active`.** Every writer sets it together with `disabled_at`, so it is just
   `disabled_at is null`. The sites, from the payments research: `payments-api.ts:569` and
-  `:626-627`; `card-reader-delete.ts:219-220`, `:252` and `:284-286`; `boot.ts:496`.
+  `:626-627`; `card-reader-delete.ts:219-220`, `:252` and `:284-286`; `boot.ts:529` (refreshed
+  2026-11-03: renumbered from `:496`).
 - **Dropped: `card_reader_holders.held_at`.** It is written but never read.
 - **Protections:**
   - Kept: the partial unique `card_readers_provider_ref_key (provider, provider_ref) WHERE
@@ -355,9 +396,9 @@ default". FK → card_readers, ON DELETE restrict. It sits beside `devices.recei
 **`adjustments`** — one row per cancellation, comp or discount. `ledger`, append-only.
 
 - **Dropped: `comped_extras`.** It is a JSON list of `working_order_lines` ids that no product code
-  reads: it is built at `adjustments-apply.ts:931-936` and written at `record.ts:61` (from the
+  reads: it is built at `adjustments-apply.ts:930-935` and written at `record.ts:61` (from the
   adjustments research). The extras it names already get their own `adjustment_lines` rows
-  (`adjustments-apply.ts:1302-1327`).
+  (`adjustments-apply.ts:1301-1326`; refreshed 2026-11-03: both renumbered by one line).
 - **`splits` breaks R4.** It is a JSON list of `{from, to}` line ids, read by
   `receipt-adjustments.ts:107,155-156`. Section 8 says what must be checked before it can move into
   `adjustment_lines`.
@@ -418,6 +459,9 @@ state (section 0). **No `box_settings` row.**
 - `clock-misdated.ts:52-64` and `clock-stop-incidents.ts:205-216`.
 - `readActiveConflicts` in `conflict-evidence.ts`. It runs on every sale, through
   `refuseNewIssuance` (`backend.ts:185-187`).
+- For `case.note`: `listFilingCases` (`filing-cases.ts:180`), which lists each case with its events,
+  and `recordCaseEvent` (`filing-cases.ts:109`), which looks up an earlier event by its action key so
+  a retried request returns it. (refreshed 2026-11-03 against main 68732329c1: added for W41s-8, #2399.)
 
 Its kinds, and what each one's `data` holds:
 
@@ -431,10 +475,15 @@ Its kinds, and what each one's `data` holds:
 - **`conflict.observed`** (from `fiscal_conflict_evidence`): `attempt`, `cause`
   (fiscal.huella_divergente, fiscal.duplicado_anulado) and `evidence`, with `registro_id` as a column.
   Its old `case_id` is dropped: the case is now the same record's submission row.
+- **`case.note`** (from `filing_case_events` kind `note`): `action` in `data`; `registro_id` (the
+  case's record), `person_id` and `event_key` (the action key) as columns. (refreshed 2026-11-03 against main 68732329c1: added; W41s-8's
+  brake release writes it, #2399.)
 - **`aeat.answer_cleared`** (new; decision 6) keeps the values a submission row held — `csv`,
   `codigo_error`, `mensaje_error` and `confirmado_en` — written just before they are cleared:
-  - by reconcile, for a resubmission (`reconcile.ts:378-388`);
-  - by a hold, which clears the CSV (`drain.ts:900`).
+  - by reconcile, for a resubmission (`reconcile.ts:385-395`);
+  - by a hold, which clears the CSV (`drain.ts:934`).
+
+  (refreshed 2026-11-03 against main 68732329c1: lines renumbered.)
 
   Today those values are overwritten and lost, yet AEAT says the CSV "no podrá ser recuperado a
   través de consultas posteriores": it cannot be fetched again later (`schema/envios.ts`, the
@@ -479,7 +528,7 @@ Saves to `settings.adjustments` are logged however the shared `settings` table l
 | `payment_policy` | delete (decision 3) | No product writer; only the configuration import copies it in and out. |
 | `payment_refunds` | keep, append-only | The provider's record of each refund attempt; drop two columns copied from the payment. |
 | `payment_resolutions` | merge into `payments` | One per payment (unique `payment_id`); set-once columns. |
-| `payments` | keep | A real thing; drop the unused `node_id`. Gains a guard trigger. |
+| `payments` | keep | A real thing. Gains a guard trigger. (Refreshed 2026-11-03: `node_id` is no longer dropped; since A764, #2422, it names the collection owner.) |
 | `acks` | delete | No product reader (the brief's grep), and its `state` and `csv` repeat `envios`. |
 | `cadenas` | delete (derive) | The chain head is the latest record on the node (0.1). |
 | `clock_checks` | → fiscal history | Append-only events, read back in `seq` order. |
@@ -487,13 +536,13 @@ Saves to `settings.adjustments` are logged however the shared `settings` table l
 | `clock_stop_restarts` | delete | Written by nothing (`schema/clock-stop-restarts.ts:6`). |
 | `envio_flujo` | rename to `fiscal_sending_state` | Machine state that commits together with the submission rows; not a setting. |
 | `envios` | rename to `fiscal_submissions` | One per record. It changes over time, so it cannot fold into the unchangeable record. |
-| `filing_case_events` | delete | No product writer: `recordCaseEvent` has no non-test caller. A1089 brings resolution columns and a `case.note` history kind. |
+| `filing_case_events` | split: the resolution → set-once columns on `fiscal_submissions`; notes → fiscal history (`case.note`) | One resolution per case (partial unique on `case_id`), so it folds as columns. (Refreshed 2026-11-03: was "delete, no product writer"; W41s-8, #2399, made `recordCaseEvent` the writer for its five remedy actions, all disabled in production until a remedy is enabled — see 1.1.) |
 | `filing_cases` | merge into `fiscal_submissions` | One per record (unique `registro_id`); set-once columns. |
 | `fiscal_allocations` | merge into `fiscal_identities` | One per identity, written in the same transaction, and repeats the identity's NIF, software id and installation number. |
 | `fiscal_certificate_installs` | rename to `fiscal_certificates` | Classified `local`, so it cannot join the `ledger` history log. |
 | `fiscal_certificate_reminders` | keep | Classified `local`, and updated in place (claimed, then reported). |
 | `fiscal_conflict_evidence` | → fiscal history | Many rows per record: one per attempt and cause. |
-| `fiscal_reservations` | merge into `fiscal_identities`, or delete (decision 1) | Serves only a second box. |
+| `fiscal_reservations` | delete (U5; decision 1) | Serves only a second box, and A947 does not use it: A947 §4 item 3 says no fiscal identity is reserved at joining, and its only writer is `establishDormantAllocation` (`packages/fiscal-verifactu/src/standby-allocation.ts:184`), reached only from `allocated-standby.ts:209`. Fiscal, so you land it. (refreshed 2026-11-03 against main 68732329c1: was merge or delete) |
 | `registro_sif` | rename to `fiscal_identities` | Records point at past identities, and the never-reuse rule needs all of them. |
 | `registros_facturacion` | keep | The legal record. |
 | `adjustment_reasons` | keep | A list people edit. |
@@ -511,27 +560,27 @@ payments and adjustments research, found none.
 
 | Current protection | Home in the target |
 | --- | --- |
-| **registros_facturacion**: append-only pair; 11 CHECKs; uniques `…_secuencia_uq` and `…_identidad_uq`; FKs to devices (restrict), nodes, registro_sif, sales | Unchanged; the `sif_id` FK now points at `fiscal_identities`. |
+| **registros_facturacion**: append-only pair; 11 CHECKs; uniques `…_secuencia_uq`, partial `…_identidad_uq` (originals only) and `…_corrects_registro_uq`; FKs to devices (restrict), nodes, registro_sif, sales and itself (`corrects_registro_id`) | Unchanged; the `sif_id` FK now points at `fiscal_identities`. (Refreshed 2026-11-03: W41s-8, #2399, added the self FK and `…_corrects_registro_uq`, and made `…_identidad_uq` partial.) |
 | registros: index `registros_node_secuencia_idx` | **Dropped:** it duplicates the unique index on the same columns. |
 | **cadenas**: `cadenas_puntero_ck` (the pointer is both null or both set); FKs to nodes and registros | Dropped with the table. The pointer no longer exists, and "first record" (`PrimerRegistro`) follows from whether the latest record on this node is under the current identity (0.1). That cannot be half-set. |
 | **envios**: `envios_estado_ck`, `envios_drenaje_idx`, `envios_confirmado_idx`; FK to registros | `fiscal_submissions`, unchanged. |
 | **acks**: `acks_state_ck`; FK to registros | Dropped with the table; nothing reads it. |
 | **envio_flujo**: `envio_flujo_singleton_ck` | `fiscal_sending_state`. |
 | **filing_cases**: append-only pair; unique `registro_id`; `filing_cases_cause_ck`; FK to registros | The set-once guard on the case columns. Uniqueness comes from the submission row's primary key, the cause CHECK moves to `case_cause`, and the FK is the row's own. |
-| **filing_case_events**: append-only pair; unique `action_key`; a partial unique allowing one resolution per case; kind CHECK; FKs | Dropped with the table: nothing writes it. A1089 re-creates "one resolution" as set-once columns, and the idempotency key as `fiscal_history.event_key`. |
+| **filing_case_events**: append-only pair; unique `action_key`; a partial unique allowing one resolution per case; kind CHECK; FKs to filing_cases and registros (`remedy_registro_id`) | A resolution: the set-once guard on `fiscal_submissions`' resolution columns, "one per case" built into the shape, its key unique as `case_resolution_key`, and the remedy FK as `case_remedy_registro_id`. A note: a `fiscal_history` row of kind `case.note`, its key as `event_key`. The kind CHECK goes: the kind is now which table holds the row. One unique key across both kinds is lost (1.1). (Refreshed 2026-11-03: was "dropped, nothing writes it"; W41s-8, #2399, writes it.) |
 | **fiscal_conflict_evidence**: append-only pair; unique `(registro_id, attempt, cause)`; attempt CHECK `> 0`; cause CHECK; FKs to registros and filing_cases | `fiscal_history`: the append-only pair, the unique `event_key`, `json_extract` CHECKs for attempt and cause on kind `conflict.observed`, and the FK to registros. The case FK is dropped, because the case is now the same record's submission row. |
 | **clock_checks**: append-only pair; unique `seq`; reason CHECK; FK to nodes | `fiscal_history`: the shared unique `seq`, the reason CHECK on kind `clock.check_opened`, and the FK to nodes. |
 | **clock_confirmations**: append-only pair; unique `seq`; unique `check_id`; index on `registro_id`; CHECKs on source, reason, person pairing and record pairing; FKs to nodes, clock_checks, registros | `fiscal_history` (see the note after this table). |
 | **clock_stop_restarts**: append-only pair; unique `registro_id`; FKs | Dropped with the table; nothing writes it. |
 | **registro_sif**: numero CHECK; uniques `…_instalacion_uq` and partial `…_activo_uq`; FK to nodes | `fiscal_identities`, unchanged, plus a new guard trigger: only `revocado_en` may change, and only once. |
 | **fiscal_allocations**: append-only pair; uniques on `allocation_key` and on `(taxpayer_nif, software_id, environment, installation_identity)`; FKs to nodes and registro_sif | `fiscal_identities`: the guard trigger holds these columns fixed, and both uniques are kept. The FK to registro_sif is now the row itself. |
-| **fiscal_reservations**: append-only pair; the same two uniques; two FKs to nodes | If kept (decision 1): reserved rows in `fiscal_identities`, covered by the same uniques. If deleted: dropped with the feature. |
+| **fiscal_reservations**: append-only pair; the same two uniques; two FKs to nodes | Dropped with the table (U5; decision 1). (refreshed 2026-11-03 against main 68732329c1: the "if kept" branch is gone) |
 | **fiscal_certificate_installs**: append-only pair; three CHECKs; one index | `fiscal_certificates`, unchanged. |
 | **fiscal_certificate_reminders**: two CHECKs; unique `(install_id, stage, person_id)`; FK | Unchanged. |
 | **invoice_series**: unique `(node_id, code)`; purpose and code CHECKs; FK to nodes | Unchanged. |
 | invoice_series: CHECK `next_number >= 1` | Dropped with the column; `sales_invoice_number_ck` (`>= 1`) holds the same guarantee. |
 | **daily_closes**: append-only pair; uniques `(node_id, business_day)` and `(node_id, sequence_no)`; FK to nodes. **daily_close_chain**: PK and FK | Dropped with the feature (decision 2). If kept, the two uniques stay and the chain table still goes. |
-| **payments**: CHECKs on amount, last four digits, entry mode, state, source, and the source/device pairing; six FKs (four restrict, two no action); uniques on provider ref, partial external ref and partial bill payment; four indexes | Unchanged, except that the `node_id` FK goes with its column. Gains a new guard trigger. |
+| **payments**: CHECKs on amount, last four digits, entry mode, state, source, and the source/device pairing; six FKs (four restrict, two no action); uniques on provider ref, partial external ref and partial bill payment; four indexes | Unchanged, including the `node_id` FK. Gains a new guard trigger. (Refreshed 2026-11-03: `node_id` now stays, A764, #2422.) |
 | **payment_resolutions**: append-only pair; unique `payment_id`; CHECKs on outcome and cancelled-at-provider; FKs to payments and working_orders | Set-once columns on `payments`, with both CHECKs on the new columns. "One per payment" is now built into the shape. The working-order FK is the payment's own; the old one was a copy (`resolutions.ts:46-53`). |
 | **payment_holds**: append-only pair; unique `payment_id`; amount CHECK; FK | Set-once columns, with the amount CHECK; "one per payment" built into the shape. Adds the new "hold or remediation, never both" CHECK. |
 | **payment_hold_outcomes**: append-only pair; unique `hold_id`; outcome and note CHECKs; FK | Set-once columns, with both CHECKs; "one per hold" built into the shape. |
@@ -585,14 +634,15 @@ How `clock_confirmations`' protections land in `fiscal_history`:
 - **A completed refund is recorded twice:** once on the till side, in `tender_refunds` or
   `bill_payment_refunds`, and once on the provider side, in `payment_refunds`.
   - The amount, who authorised it, and the provider's refund reference appear in both
-    (`tender-refund-sends.ts:100,178-197`; `bill-refunds.ts:325,766`).
+    (`tender-refund-sends.ts:100,178-197`; `bill-refunds.ts:317,761`, refreshed 2026-11-03 from
+    `:325,766`).
   - `payment_refunds` cannot be removed. It also holds rows that have no till-side partner: failed
     attempts, and reconcile's orphan reversals (`reconcile.ts:536`).
   - Proposed one home: the provider's refund reference and the attempt's outcome live in
     `payment_refunds`, and the till-side row points at it instead of copying them. This needs the
     orders-and-sales area to agree.
 - **Some `payments` columns repeat the bill payment's** when `bill_payment_id` is set: `amount`
-  (= applied + tip, `bill-payments.ts:1500`), `working_order_id`, `source` and `device_id`. They stay,
+  (= applied + tip, `bill-payments.ts:1502`), `working_order_id`, `source` and `device_id`. They stay,
   because a payment for a whole order has no bill payment to read them from.
 - **The taxpayer's tax number** appears in `tenants.tax_id`, `fiscal_identities.nif`,
   `registros_facturacion.id_emisor_factura` and `fiscal_certificates.tax_id`. Each is fixed at the
@@ -602,7 +652,9 @@ How `clock_confirmations`' protections land in `fiscal_history`:
 ## 7. Depends on other areas
 
 - **Venue and box** (`nodes`, `tenants`, `tenant_credentials`, `incidents`):
-  - `node_id` foreign keys on the records, identities, series, history and sending state.
+  - `node_id` foreign keys on the records, identities, series, history and `payments` (refreshed
+    2026-11-03: `payments.node_id` is kept, A764; "sending state" removed, since `envio_flujo` has no
+    `node_id` column in `drizzle/meta/0015_snapshot.json` and 1.1 gives it none).
   - The certificate's sealed secret lives in `tenant_credentials`.
   - `chain.ts:257` records incidents.
   - This design assumes `nodes` survives A1301, which removes locations but not nodes.
@@ -660,36 +712,45 @@ How `clock_confirmations`' protections land in `fiscal_history`:
 5. **The new guard triggers on `payments` and `fiscal_submissions`.**
    - Measure: run every writer in `packages/payments/src/store.ts` and in
      `drain.ts`/`reconcile.ts` under the new triggers (`store.test.ts`, the `drain.*.test.ts` files
-     and `reconcile*.test.ts`).
+     and `reconcile*.test.ts`), and W41s-8's remedy writers, which update the submission row
+     (`record-remedy-held.ts:95-98`, `releaseBrakeHold` at `drain.ts:1033`) and record case events
+     (`record-remedy*.test.ts`). (Refreshed 2026-11-03: remedy writers added, #2399.)
    - Failing result: a writer that legitimately changes a column the trigger holds fixed. That
      column comes off the fixed list, with the reason written at the trigger.
-   - Not established here: whether `associatePaymentWithSale` (`store.ts:296-305`) ever
+   - Not established here: whether `associatePaymentWithSale` (`store.ts:299-308`) ever
      overwrites a `reader_id` that is already set.
 6. **Moving `adjustments.splits` into `adjustment_lines`.**
    - Not established here: whether every split's new line already has an `adjustment_lines` row.
-   - Measure: read `adjustments-apply.ts:476`, `:949-971` and `:1287-1327`, and test it.
+   - Measure: read `adjustments-apply.ts:475`, `:948-970` and `:1286-1326` (refreshed 2026-11-03:
+     renumbered by one line), and test it.
    - If every split has a row, `splits` becomes a `split_from_line_id` column on
      `adjustment_lines`. If not, `splits` stays and is recorded as the one place this area keeps row
      ids inside JSON.
 
 ## 9. Decisions for the owner
 
-1. **`fiscal_reservations` (second box).**
+1. **`fiscal_reservations` (second box). Settled by README §5 U5: delete.**
    - What it is: the reserved, inactive identity a standby box gets when it joins. It rests on your
      decision of 2026-09-03: "a standby node gets its full dormant identity at join/adopt time".
    - The code that writes it is wired into the mirror and promotion routes
-     (`apps/server/src/mirror-bundle.ts:190`, `promote.ts:272`).
-   - But the backlog says allocated standby adoption "still needs the primary's venue copy and fresh
-     establishment authority" (`docs/backlog.md:393-396`), and CLAUDE.md §5 says a venue has one node
-     today.
-   - **Recommendation: delete it now (R11),** and let the failover design bring it back.
-   - If you keep it instead, it becomes reserved rows in `fiscal_identities` with a set-once
-     activation time, so one never-reuse index covers both reserved and activated names.
+     (`apps/server/src/mirror-bundle.ts:190`, `promote.ts:276`).
+   - The approved two-box design does not use it. A947 §4 item 3: "No fiscal identity is reserved at
+     joining. Under A679 the spare joins dormant, with no series and no installation code (§2); its
+     name is chosen when it is switched on (§6.5)." The table's only writer is
+     `establishDormantAllocation` (`packages/fiscal-verifactu/src/standby-allocation.ts:184`), reached
+     only from `allocated-standby.ts:209`.
+   - **Delete it (R11).** Removing it is a fiscal slice, so you land it.
+   - (refreshed 2026-11-03 against main 68732329c1: the recommendation is unchanged, but it is no longer an open choice: U5 keeps the
+     rest of the second-box path and removes only this table. The "if you keep it" alternative and
+     the backlog's adoption sentence (now `docs/backlog.md:396-399`) are dropped as reasons. The
+     promotion cite moved from `promote.ts:272`; `mirror-bundle.ts:190` was re-read and still calls
+     the module's standby `reserve`.)
 2. **The daily close (`daily_closes` and `daily_close_chain`).**
    - What it is: the frozen end-of-day cash close. It is fully built in `packages/reporting`, but no
      route calls it.
    - **Recommendation: delete both tables and the reporting code (R5).** The backlog's "Richer daily
-     close" (`docs/backlog.md:5906`) brings its own design when it is built.
+     close" (`docs/backlog.md:5867`, refreshed 2026-11-03 from `:5906`) brings its own design when it
+     is built.
    - If you keep it instead: keep `daily_closes` alone, and read its chain head from it, as for the
      fiscal chain.
 3. **`payment_policy` (taking cards while the card network is down).**

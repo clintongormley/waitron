@@ -11,45 +11,83 @@ established by reading code and the latest drizzle snapshots
 nothing was run or timed. Row counts are for the reference venue (one restaurant, 250 bills a day
 × 4 lines, 360 days a year) and come from the area inventory unless I say otherwise.
 
+(refreshed 2026-11-03 against main 68732329c1: every cite into a file that changed since
+`64eeabb036` was re-read on main and re-pointed or narrowed. The four snapshots above are still each
+set's latest and are unchanged (`git diff --quiet 64eeabb036 68732329c1 -- <snapshot>`), so the 32
+tables and their columns are as before. A1301 S13 (#2397) took the location out of this area's
+code: writers now fill `location_id` with `venueLocationId(tx)` (for example
+`apps/server/src/attendance-capture.ts:104-110`, `packages/workforce/src/attendance-state.ts:42`,
+`packages/workforce/src/clocking.ts:414-416`). The `location_id` columns and the keys that lead with
+them stay until A1301's schema slices
+(`docs/superpowers/plans/2026-11-01-a1301-remove-location.md:436-475`), so each "drop `location_id`"
+below is work those slices do anyway; this design only says what replaces each location-led key.)
+
 **Result: 32 current tables → 21 target tables** (one of them a new link table). No `location_id`
 anywhere (R10).
 
 ## The short version
 
 - **The attendance checker already reads the source tables directly.** `readAttendanceFacts`
-  (`apps/server/src/attendance-facts.ts:16-53`) unions `sessions`, `order_amendments`,
+  (`apps/server/src/attendance-facts.ts:9-63`) unions `sessions`, `order_amendments`,
   `order_draft_events`, `order_group_events`, `bill_payments` and `time_entries` for the day being
-  checked, and adds `attendance_operation_facts` only where no source row has the same key (`:48`).
+  checked. It takes a source row only where `attendance_operation_facts` has no row with the same
+  source and key, and then adds that table's qualifying rows for the day (`:42-48`), so where a copy
+  exists, the copy wins over its source row.
   So `attendance_source_state`'s ~1M watch rows a year are not evidence at all: they are a
   change detector — one remembered fingerprint per source row ever seen (`remember()`,
-  `apps/server/src/attendance-discovery.ts:246-318`), never deleted (a vanished row is marked
-  `fingerprint: "deleted"`, `:488-491`). I propose deleting the table and detecting change per DAY,
+  `apps/server/src/attendance-discovery.ts:233-309`), never deleted (a vanished row is marked
+  `fingerprint: "deleted"`, `:479-485`). I propose deleting the table and detecting change per DAY,
   not per row: the write paths already mark the affected day (the recorder,
-  `apps/server/src/attendance-capture.ts:57-146`; rota writes, `apps/server/src/attendance-source-changes.ts`,
-  called from `apps/server/src/workforce-api.ts:212-329`), and a stored hash of each day's evidence
+  `apps/server/src/attendance-capture.ts:54-132`; rota writes, `apps/server/src/attendance-source-changes.ts:12-83`,
+  called from `apps/server/src/workforce-api.ts:195-307`), and a stored hash of each day's evidence
   on `attendance_days` replaces the whole-history rescan as the safety net.
-- **Every start rescans all history today.** Boot calls `beginAttendanceDiscovery`
-  (`apps/server/src/boot.ts:2056-2060`), which deletes the scan rows and restarts every source at
-  cursor 0 up to its current max rowid (`attendance-discovery.ts:199-218`); `nextAttendanceDay`
-  evaluates no day until every scan is complete (`:508-509`), and a pass reads 100 rows
-  (`apps/server/src/attendance-loop.ts:29`). From reading, not measured: after a year, the checker
-  is blocked for as many passes as there are source rows ÷ 100 after each start.
+  (refreshed 2026-11-03 against main 68732329c1: new line numbers; the old text had the precedence
+  backwards, saying copies were added only where no source row had the key.)
+- **Every start rescans all history today.** When workforce is on and the box is the primary
+  (`isSingletonPrimary`), boot calls `beginAttendanceDiscovery` (`apps/server/src/boot.ts:2346-2348`),
+  which deletes the scan rows (`attendance-discovery.ts:199`) and restarts every source at cursor 0
+  (`:206`) up to its current max rowid (`:179`); `nextAttendanceDay` evaluates no day until every
+  scan is complete (`:505`), and a pass reads 100 rows (`apps/server/src/attendance-loop.ts:27`).
+  From reading, not measured: after a year, the checker is blocked for as many passes as there are
+  source rows ÷ 100 after each start. (refreshed 2026-11-03 against main 68732329c1: new line
+  numbers.)
 - **`attendance_operation_facts` is mostly a second copy.** The `session`, `bill-payment`,
-  `refund`, `draft` (`event:`/`group:`) facts are written with the source row's own id, person and
-  time (`apps/server/src/till-api.ts:1443-1450`, `apps/server/src/bill-payments.ts:1178-1183`,
-  `apps/server/src/bill-refunds.ts:128-135`, `apps/server/src/tender-refunds.ts:132-140`,
-  `apps/server/src/order-drafts.ts:1637-1646`, `apps/server/src/order-groups.ts:2450-2459`). The
-  reader's comment gives the reason for copying: "Captured operations retain their location across
-  later device and party changes" (`attendance-facts.ts:15`). A1301 removes location, so the
-  reason goes. What has no other home: order edits per revision (`${orderId}:${revision}:${action}`,
-  `apps/server/src/working-order.ts:354-363`), kitchen service actions (`service:…`,
-  `attendance-capture.ts:35-44`) and card payments in flight (`whole-payment`,
-  `apps/server/src/attendance-integrated.ts:19-65`, because `payments` has no person column). That
-  remainder becomes `staff_activity`.
+  `refund` and `draft` (`event:`/`group:`) facts, and each order amendment under its own id, are
+  written with the source row's own id and person (`apps/server/src/till-api.ts:1442-1450`,
+  `apps/server/src/bill-payments.ts:1178-1187`, `apps/server/src/bill-refunds.ts:121-129`,
+  `apps/server/src/tender-refunds.ts:134-142`, `apps/server/src/order-drafts.ts:1592-1600`,
+  `apps/server/src/order-groups.ts:2558-2566`, `apps/server/src/working-order.ts:7272-7289`).
+  Sessions and refunds also copy the row's own time. The others take the time from the write's own
+  clock reading (`attendance.at`, or `reading.instant` for a bill payment, `bill-payments.ts:1150-1159`),
+  while the source row's `created_at` is filled by `nowIso` at insert
+  (`packages/db/src/schema/bill-payments.ts:57`, `order-drafts.ts:134`, `order-groups.ts:103`), so
+  the copy's time can differ from the row's; by how much I have not measured. At `64eeabb036` the
+  reader's comment gave the reason for copying: "Captured operations retain their location across
+  later device and party changes". A1301 S13 (#2397) removed that comment and the reader's location
+  filters, so the reason has gone; the copies are still written. What has no other home: order edits
+  per revision (`${orderId}:${revision}:${action}`, `apps/server/src/working-order.ts:361-369`),
+  kitchen service actions (`service:…`, `attendance-capture.ts:23-43`) and payments whose row names
+  no person (`whole-payment`: card payments in flight, `apps/server/src/attendance-integrated.ts:19-60`,
+  and a whole-order payment taken at the till, keyed by the order id,
+  `apps/server/src/till-sale.ts:121-142`), because `payments` has no person column (still true in
+  `packages/payments/drizzle/meta/0010_snapshot.json` on main, after A764). That remainder becomes
+  `staff_activity`. (refreshed 2026-11-03 against main 68732329c1: new line numbers; the
+  order-amendment copy and the till's `whole-payment` writer were missing, though both were already
+  there at `64eeabb036`; "and time" narrowed to sessions and refunds.)
 - **No product writer** (R5, greps in the area inventory, re-checked where marked): `availability`,
   `shift_templates`, `employments`, `convenio_config`, `pay_period_closures`, `pay_period_settings`
   are deleted; their features (A586 contract terms, A587 availability, "who closes a pay period")
-  bring their own design (`docs/backlog/workforce.md:154-175`, `:222-229`, `:330-334`).
+  bring their own design (`docs/backlog/workforce.md:154-175`, `:222-229`, `:329-334`).
+  (refreshed 2026-11-03 against main 68732329c1: A587's lines moved; the rest of this bullet is
+  new.) A grep of non-test code on main for `insert`/`update`/`delete` on each table's drizzle name finds only
+  `closePayPeriod` (`packages/workforce/src/pay-period-close.ts`) and `setPayPeriodSettings`
+  (`packages/workforce/src/pay-periods.ts`), and neither has a caller outside tests. Five of the six
+  are also listed for configuration transfer (`packages/workforce/src/configuration-transfer.ts:1-9`,
+  `packages/workforce-es/src/configuration-transfer.ts:1-4`, both lists already there at
+  `64eeabb036`), so an import inserts whatever rows a bundle carries
+  (`packages/provisioning/src/configuration-transfer.ts:747`). Nothing in the product writes those
+  rows first, but deleting the tables also takes them out of these lists, and so out of the
+  configuration bundle.
 - **Short-lived sign-in rows** get one table and one sweep: `webauthn_challenges` (no sweep at all;
   `passkey.ts:95` deletes only on completion), `google_oidc_states` (swept, `google-oidc.ts:55-60`)
   and `totp_enrollments` (≤1 per person, `profile.ts:169`) become `sign_in_challenges`. Ended till
@@ -106,6 +144,10 @@ One PIN sign-in on one device. 50–200 a day; with the retention in D3, ≈4,50
 
 Index `(device_id)` kept; **new** index `(opened_at)` for the checker's day read (§8). Pruning:
 ended rows older than the attendance-evidence window (D3) are deleted by the attendance sweep.
+Since A941 (#2409), a till action also refuses a request whose enrolled-device proof names a device
+other than the session's `device_id` (`apps/server/src/till-session.ts:137-156`), so `device_id`
+now matters for authorising actions as well as for reading the session. The table's shape did not
+change. (refreshed 2026-11-03 against main 68732329c1: A941 added.)
 
 #### `dashboard_sessions` — rename of `management_sessions` (state, mutable)
 One dashboard sign-in. 2–10 a day; pruned, so tens of rows.
@@ -206,9 +248,13 @@ One planned shift. ≈18 a day, 6,500–10,000 a year.
 | station_id | id | null, FK → kitchen_stations (cascade) — from `shift_assignments` |
 | created_at | ts | not null |
 
-`roster_version_id` becomes not null because every product insert passes a version
-(`packages/workforce/src/clocking.ts:409, 435, 506, 519`; `packages/staffing/src/rota.ts:295`
-repoints to a version). New CHECK: `staff_role_id is null` exactly when `department_id` and
+`roster_version_id` becomes not null because both product inserts pass a version: the copy into a
+new draft (`packages/workforce/src/clocking.ts:326-329`) and `addShift`, whose `versionId` is a
+required string (`clocking.ts:127-128`, `:413-419`). A null today comes only from deleting a
+version (the FK's `set null`, `packages/workforce/src/schema/shifts.ts:42`; a grep of non-test code
+finds no write of a null version); `packages/staffing/src/rota.ts:287-290` attaches such a shift to a
+version before editing it. (refreshed 2026-11-03 against main 68732329c1: the old cites pointed at
+error lines, not inserts.) New CHECK: `staff_role_id is null` exactly when `department_id` and
 `station_id` are both null, otherwise exactly one area (`shift_assignments_one_area_ck` carried
 over). If D1 is refused, `shift_assignments` stays as the R1 exception, for the module-toggle reason.
 
@@ -226,16 +272,17 @@ The checker's work item: one row per business day. 360 a year.
 | --- | --- | --- |
 | id | id | PK |
 | business_day | day | not null, **UNIQUE** |
-| start_at, end_at | ts | not null, CHECK end > start — saved bounds, fixed when the row is written (`attendance-state.ts:36-38` refuses a change) |
+| start_at, end_at | ts | not null, CHECK end > start — saved bounds. A new mark with different bounds is refused (`attendance-state.ts:32-34`); `nextAttendanceDay` re-derives them only while the day is unevaluated and refuses a change after (`apps/server/src/attendance-discovery.ts:507-529`, `:548-550`) (refreshed 2026-11-03 against main 68732329c1: "fixed when the row is written" was too strong, at `64eeabb036` too) |
 | dirty_revision, evaluated_revision | int | not null, CHECK as today |
 | next_due_at | ts | not null |
 | evidence_hash | text | null — hash of the evidence the last evaluation read (new, §8) |
 
 `deferred_shift_ids` (a JSON list of shift ids, R4) is dropped: it is written once
-(`packages/workforce/src/end-of-day.ts:429-435`) and read only for its length
-(`attendance-loop.ts:51`, `attendance-discovery.ts:543`). The same evaluation sets `next_due_at`
-to the earliest deferred shift's end, or the day's end when none is deferred, so "has deferred
-shifts" is `next_due_at > end_at`. Index `(next_due_at)`.
+(`packages/workforce/src/end-of-day.ts:412-419`) and read only for its length
+(`attendance-loop.ts:48`, `attendance-discovery.ts:537`). The same evaluation sets `next_due_at`
+to the earliest deferred shift's end (`end-of-day.ts:393`), or the day's end when none is deferred,
+so "has deferred shifts" is `next_due_at > end_at`. Index `(next_due_at)`. (refreshed 2026-11-03
+against main 68732329c1: new line numbers.)
 
 #### `staff_activity` — rename of `attendance_operation_facts`, narrowed (state)
 "This person did something on the till at this moment", for activity no other table records with
@@ -348,7 +395,9 @@ goes under R5 (§4). If the owner keeps one of those features (D2), its document
 **Typed history tables that remain** (product code reads them back):
 - `time_entries` — read by `packages/workforce/src/record-reads.ts` and `hours-reads.ts` (till
   Hours, dashboard My hours), `apps/server/src/till-clock-state.ts`, the checker
-  (`end-of-day.ts:155-158`) and `packages/workforce-es/src/record-export.ts` (registro de jornada).
+  (`end-of-day.ts:144-146`) and `packages/workforce-es/src/record-export.ts` (registro de jornada,
+  which since A1301 S14/S15b (#2404, #2408) takes no location and prints the venue's name). (refreshed
+  2026-11-03 against main 68732329c1: new line number; export note added.)
 - `attendance_answers` + `attendance_answer_entries` — read by `attendance-response-commands.ts`
   (replay), `attendance-reads.ts`, `attendance-question-responses.ts`.
 
@@ -418,7 +467,17 @@ Append-only triggers come from `appendOnly()` in each module's classification
 (`packages/workforce/src/classification.ts:12-13`) and are listed in
 `scripts/append-only-triggers.test.ts:60, 75`. None of this area's tables has a behavioural trigger
 (no hit for any of them in `scripts/behavioural-triggers.test.ts`, and no `create trigger` in any
-of the four sets' `drizzle/*.sql`).
+of the four sets' `drizzle/*.sql`; both re-checked on main 68732329c1).
+
+Identity's backup check also reads these tables by name (`packages/identity/src/backup-verification.ts:173-235`,
+unchanged since `64eeabb036`; its test was hardened by A1314, #2429). It decrypts
+`persons.totp_secret` and `totp_enrollments.encrypted_secret`; checks the token and code hashes of
+`sessions`, `management_sessions`, `recovery_codes` and `management_account_actions`; checks the
+shape of `webauthn_challenges` and `google_oidc_states` rows (encodings, lengths, and whether
+`person_id` is set for the purpose or mode); and marks any row whose `person_id` names no person.
+The merge into `sign_in_challenges` and the renames (D8) move each case to the new table name: the
+TOTP decrypt and the two shape checks apply to `sign_in_challenges` by kind. (refreshed 2026-11-03 against main 68732329c1: this check was
+missing from the old text.)
 
 | current table | protection | home |
 | --- | --- | --- |
@@ -467,7 +526,7 @@ of the four sets' `drizzle/*.sql`).
 | shift_swaps | indexes ×3; CHECK status; FKs persons ×3, from_shift cascade, to_shift set null | kept |
 | shift_templates | index; CHECKs label, weekday, minutes; FK | dropped with the table (R5) |
 | shifts | indexes (person, starts_at), (roster_version); CHECKs offsets, interval; FK person restrict | kept |
-| | FK roster_version set null | becomes not null + cascade (a draft's shifts go with it; clocking.ts:474 already deletes only draft shifts) |
+| | FK roster_version set null | becomes not null + cascade (a draft's shifts go with it; `removeShift` already deletes only a shift on a draft version or on none, `clocking.ts:444-464`; refreshed 2026-11-03 against main 68732329c1: new cite) |
 | | FK location | dropped (R10) |
 | time_entries | append-only triggers | kept |
 | | UNIQUE (id, person); UNIQUE chain position (node, sequence); indexes person/event, person/chain, corrects | kept |
@@ -487,22 +546,29 @@ of the four sets' `drizzle/*.sql`).
 
 ## 6. Duplicates removed
 
-1. **Activity evidence stored twice.** Sessions, bill payments, refunds and draft/group events are
-   copied into `attendance_operation_facts` with the source row's id, person and time (citations in
-   the short version). One home: the source row. The checker reads it directly; it already does for
-   all of them except refunds, which join the union from `bill_payment_refunds` and `tender_refunds`
-   (both carry `requested_by` and `created_at`; tables.json). `staff_activity` keeps only what has
-   no other home.
+1. **Activity evidence stored twice.** Sessions, bill payments, refunds, draft/group events and
+   order amendments are copied into `attendance_operation_facts` with the source row's id and
+   person; sessions and refunds also copy its time (citations in the short version). One home: the
+   source row. The checker reads it directly; it already does for all of them except refunds, which
+   join the union from `bill_payment_refunds` and `tender_refunds` (both carry `requested_by`,
+   `created_at` and `state` in main's latest drizzle snapshots). `staff_activity` keeps only
+   what has no other home. Reading the source row instead moves a bill payment's or draft event's
+   time from the write's clock reading to the row's `created_at`, so measurement 3's tests cover a
+   fact near a day's boundary. (refreshed 2026-11-03 against main 68732329c1: amendments added; the
+   time claim narrowed; the refund columns re-read.)
 2. **Every source row's fingerprint** in `attendance_source_state` watch rows — a copy of
-   person/location/time/outcome per row (`attendance-discovery.ts:268-276`). One home: the source
-   rows; change is tracked per day.
+   person/time/outcome per row (`attendance-discovery.ts:261-268`; since A1301 S13 it no longer
+   carries the location). One home: the source rows; change is tracked per day. (refreshed
+   2026-11-03 against main 68732329c1: new lines, location gone.)
 3. **The chain head.** `workforce_chains` repeats the newest `time_entries` row's id, hash,
    sequence and `recorded_at` (`packages/workforce/src/schema/workforce-chains.ts:10-21`). One home:
-   `time_entries`. The attendance scan's use of it (`attendance-discovery.ts:191-194`) goes with
+   `time_entries`. The attendance scan's use of it (`attendance-discovery.ts:183-186`, refreshed
+   2026-11-03 against main 68732329c1) goes with
    discovery; `record-reads.ts:100-110` enumerates chains from it and would read
    `select distinct node_id from time_entries where person_id = ?` instead.
 4. **A day's bounds on every question.** `attendance_questions.business_day/start_at/end_at` repeat
-   the day row's and must match it (`attendance-questions.ts:124-131` throws "bounds changed").
+   the day row's and must match it (`attendance-questions.ts:123-129` throws "bounds changed";
+   refreshed 2026-11-03 against main 68732329c1: new lines).
    One home: `attendance_days`, through `attendance_day_id`.
 5. **The address waiting for confirmation.** `persons.pending_email` (`profile.ts:326-327`) and
    `management_account_actions.target_email` (`account-action.ts:130`) hold the same address; the
@@ -529,21 +595,26 @@ of the four sets' `drizzle/*.sql`).
   `order_draft_events` (actor_id, created_at), `order_group_events` (actor_id, created_at),
   `bill_payments` (requested_by, created_at, received_at), `bill_payment_refunds` and
   `tender_refunds` (requested_by, created_at, state). It needs those columns kept and a time index
-  on each (none exists today: `order_amendments_order_idx`, `order_draft_events_draft_idx` and
-  `order_group_events_party_idx`/`_group_idx` are the only indexes, from `packages/db/src/schema/`).
+  on each. None of the four order and bill tables has one on main: their indexes in
+  `packages/db/drizzle/meta/0204_snapshot.json` (unchanged since `64eeabb036`) are
+  `order_amendments` (working_order_id) and (working_order_id, sequence_no), `order_draft_events`
+  (draft_id), `order_group_events` (party_id) and (group_id), and `bill_payments`
+  (working_order_id, submission_id). (refreshed 2026-11-03 against main 68732329c1: the old list
+  left out the two unique keys; neither is on a time column.)
 - **payments area (D5):** a `requested_by` person column on `payments`, set when a card payment
-  starts, would let `whole-payment` be read directly and remove the last poller
-  (`attendance-integrated.ts:19-157`).
-- **venue clock (venue/box area):** business-day bounds come from the venue clock
-  (`readLocationClock` today; `readVenueClock` after A1301).
+  starts, would let the in-flight `whole-payment` rows be read directly and remove the last poller
+  (`attendance-integrated.ts:19-152`; refreshed 2026-11-03 against main 68732329c1: new lines).
+- **venue clock (venue/box area):** business-day bounds come from the venue clock, which the reader
+  takes from `readVenueClock` on main (`attendance-facts.ts:13`, since A1301 S13). (refreshed
+  2026-11-03 against main 68732329c1: was `readLocationClock`.)
 - **activity_log and settings:** used as defined centrally.
 
 ## 8. Measure before building
 
 1. **The day-evidence read at a year's volume.** Seed one year (≈1M source rows) and time
    `readAttendanceFacts` for one day. Today it filters by `julianday(r.at)` over a union with no
-   time index on any source (`attendance-facts.ts:46-47`), inside the attendance pass's write
-   transaction (`attendance-loop.ts:25`), which holds the venue's write lock. Failing result: more
+   time index on any source (`attendance-facts.ts:43`), inside the attendance pass's write
+   transaction (`attendance-loop.ts:24`), which holds the venue's write lock (refreshed 2026-11-03 against main 68732329c1: new lines). Failing result: more
    than a few tens of milliseconds per day even with time indexes on each source and plain text
    comparison → keep `staff_activity` as the one evidence table for every kind (copies included) and
    index only it.
@@ -553,15 +624,15 @@ of the four sets' `drizzle/*.sql`).
    to delay a sale (the pass would have to be split per day, or run only after a restore).
 3. **That write-path marking covers every change.** Before deleting discovery, list each change the
    watches catch — a bill payment received after the day was checked, a shift moved between days
-   (needs both old and new day marked at the write, `attendance-source-changes.ts:46-56` keeps
-   "previous days" in the watch row today), a correction to a time entry from an earlier day, a
+   (needs both old and new day marked at the write, `attendance-source-changes.ts:38-40`, `:59-82` keep
+   "previous days" in the watch row today; refreshed 2026-11-03 against main 68732329c1: new lines), a correction to a time entry from an earlier day, a
    venue-clock change — and write a failing test for each against the new design. Failing result:
    a change with no write path to hook → that one source keeps a narrow watch.
 4. **The derived chain head.** `EXPLAIN QUERY PLAN` on the head query must show
    `time_entries_chain_position_uq` and no table scan; time an append at 22,000 entries. Failing
    result: a scan → keep `workforce_chains`.
 5. **Activity volume.** Count `staff_activity` rows per bill on a real service (the 6–10 per bill
-   figure is from reading `working-order.ts:354-363`, not measured). Failing result: well over
+   figure is from reading `working-order.ts:361-369`, not measured; refreshed 2026-11-03 against main 68732329c1: new lines). Failing result: well over
    2,000 a day → collapse order edits to one row per person per order per minute before building.
 6. **Email change without `target_email`.** A test: request address A, then B, then redeem A's
    link — must be refused. Failing result: it confirms B → keep the column.
@@ -570,19 +641,19 @@ of the four sets' `drizzle/*.sql`).
 
 - **D1. Fold staffing into the workforce module.** `shift_assignments` is one-to-one with `shifts`,
   but staffing is a separate toggleable module that requires workforce
-  (`packages/composition/src/modules.ts:386-389`), so putting its columns on `shifts` with foreign
+  (`packages/composition/src/modules.ts:388-391`, refreshed 2026-11-03 against main 68732329c1), so putting its columns on `shifts` with foreign
   keys to `staff_roles` would make workforce depend on staffing — a loop. Staffing has no meaning
   without rotas. **Recommend:** merge the `staffing` set into `workforce` (staff roles, painted
   staffing days and blocks become part of "rota"); `shifts` carries role and area. If refused,
   `shift_assignments` stays as the stated R1 exception.
 - **D2. Delete the six tables with no product writer.** `employments` (overtime sums refuse without
   a row, so they never work in the product today), `convenio_config` (rota warnings treat a
-  missing row as "no rules", `apps/server/src/workforce-api.ts:304`), `pay_period_closures` and
+  missing row as "no rules", `apps/server/src/workforce-api.ts:285-288`, refreshed 2026-11-03 against main 68732329c1), `pay_period_closures` and
   `pay_period_settings` (closing a period is called only from tests), `availability`,
   `shift_templates`. Deleting `pay_period_closures` also removes `time_entries.pay_period_closure_id`,
   which is one of the inputs to the entry hash (`packages/workforce/src/chain-hash.ts:91`) — a
   change to the legal record's hash format, harmless before go-live and impossible after it. Note:
-  `docs/backlog/workforce.md:411` already says "a closed period keeps its frozen record", which no
+  `docs/backlog/workforce.md:410` (refreshed 2026-11-03 against main 68732329c1) already says "a closed period keeps its frozen record", which no
   product path does. **Recommend:** delete all six now; A586 and the pay-period
   item bring their own tables or documents.
 - **D3. How long attendance evidence is kept.** `staff_activity` rows and ended `till_sessions`
@@ -602,7 +673,7 @@ of the four sets' `drizzle/*.sql`).
   lost its newest entries but kept the head, which I have not seen a path to. **Recommend:** delete.
 - **D7. Evidence keys stay as text tokens.** `attendance_questions.evidence_keys` is a JSON list of
   `source:id` strings — row ids, so R4 bites in letter. They are only compared as sets
-  (`end-of-day.ts:197-285`, `attendance-questions.ts:102`), never used to fetch a row, and they span
+  (`end-of-day.ts:186-271`, `attendance-questions.ts:101`; refreshed 2026-11-03 against main 68732329c1: new lines), never used to fetch a row, and they span
   several tables, so no foreign key could check them. A link table would need every kind of
   evidence in one table — the copy §6.1 removes. **Recommend:** keep them as matching tokens and say
   so at the column; choose the link table only if measurement 1 forces the single evidence table

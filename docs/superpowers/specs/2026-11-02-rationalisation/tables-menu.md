@@ -6,6 +6,13 @@ Read on `main` at `64eeabb036`, read only. Every "today" claim cites the file it
 that showed it. Where I say "I propose", that is the design; where I say "could not establish", I did not
 find the answer in the code.
 
+(Refreshed 2026-11-03 against main `68732329c1`. The 36 tables of this area have the same columns,
+indexes, foreign keys and CHECKs as at `64eeabb036`: their entries in each set's latest drizzle
+snapshot compare identical, and no migration added since touches them. The only source change in
+`packages/catalogue/src` outside tests is A1301 S2's removal of two unused `_locationId` parameters
+from `operations.ts`. Cites into files changed since then are re-read and marked where they moved.
+New: how the default and offered menus travel in configuration export format 10, §1.1 and §7.)
+
 Summary: **36 current tables → 26 tables plus one `settings` row (`settings.catalogue`).**
 
 The six moves that matter most:
@@ -70,6 +77,26 @@ also offered, and how a handheld and a till lay out its home page.
   combined with the member rows, with duplicates removed (`resolveAccessibleCatalogueIds`,
   `operations.ts:1372-1383`). `setVenueDefaultCatalogue` keeps its rule "the old default is demoted
   to a member" (`operations.ts:1316-1334`) by setting the old default's `offered = 1`.
+- **Who reads the default today, and so switches to `is_default`** (refreshed 2026-11-03 against
+  main `68732329c1`: added). The value is `readVenue`'s `defaultCatalogueId`, read from
+  `locations.catalogue_id` (`packages/db/src/venue.ts:46`). Its readers outside tests: catalogue's
+  `setVenueDefaultCatalogue` and `resolveAccessibleCatalogueIds` (`operations.ts:1327,1375`),
+  catalogue provisioning, which makes a starter menu the default when there is none and then adds
+  the default as a member row as well (`packages/catalogue/src/provisioning.ts:116-129`),
+  venue-service's new-department period (`packages/venue-service/src/operations.ts:202`) and its
+  provisioning (`packages/venue-service/src/provisioning.ts:143`), and the configuration export.
+  Found with `git grep -n -E 'defaultCatalogueId|locations\.catalogueId|catalogue_id' -- apps
+  packages`, leaving out tests, migrations, fixtures and `products.catalogueId`.
+- **Configuration export format 10** (#2415, refreshed 2026-11-03 against main `68732329c1`:
+  added). Today the default travels as the bundle's top-level `defaultCatalogueId`
+  (`packages/provisioning/src/configuration-transfer.ts:108,133,155`), and the offered menus as the
+  `location_catalogues` table entry (`packages/db/src/configuration-transfer.ts:76`), whose
+  `location_id` the import fills with the importing venue's row (provisioning's
+  `configuration-transfer.ts:637-669`). The import clears the default before it deletes the starter menu, because the
+  pointer is a foreign key (`:680-684`), and sets it again afterwards (`:759-764`). With the two
+  flags, both facts travel inside the exported `menus` rows: the top-level field, the
+  `location_catalogues` entry and that clear-and-restore step all go, and the bundle's shape
+  changes, so its `version` (checked as `10`, `:467`) moves on. Read, not run.
 - state; not append-only; 1–3 rows.
 
 ### 1.2 `categories` — core set
@@ -422,8 +449,9 @@ Columns: `period_id` FK → menu_periods.id ON DELETE CASCADE, `menu_id` FK → 
 primary key `(period_id, menu_id)`.
 
 - **Dropped:** `department_id`. It is a copy of the period's department, used as a filter shortcut
-  (`packages/venue-service/src/menu-timetable.ts:190`, `service-delete-settings.ts:188,434`), and
-  can be read by joining `menu_periods` (R6).
+  (`packages/venue-service/src/menu-timetable.ts:190`, `service-delete-settings.ts:160,406`), and
+  can be read by joining `menu_periods` (R6). (Refreshed 2026-11-03 against main `68732329c1`: A1301
+  S6 moved the two `service-delete-settings.ts` uses from lines 188 and 434.)
 - state; 3–16 rows.
 
 ### 1.25 `media_images` — media set (takes in `media_image_edits`)
@@ -509,10 +537,15 @@ My area adds nothing to `box_settings`.
 
 **Typed history tables that remain** (read back by product code):
 
-- `menu_versions`. Read on the sale path: `readLiveDocuments`/`readLiveMenu`
-  (`packages/catalogue/src/menu-publication.ts:248,675`) are used by
-  `packages/venue-service/src/operations.ts` (zone offers, line pricing). The till reads them in
-  `apps/till/src/state/menu-refresh.ts`. Sale lines point at them by `menu_version_id`.
+- `menu_versions`. Read on the sale path: `readLiveDocuments`
+  (`packages/catalogue/src/menu-publication.ts:248`) is called by venue-service's
+  `liveDocumentsByZone` (`packages/venue-service/src/operations.ts:813`), and `readLiveMenu`
+  (`menu-publication.ts:675`) by the management API's menu route
+  (`apps/server/src/catalogue-api.ts:1117`). The till reads them in
+  `apps/till/src/state/menu-refresh.ts`. Sale lines point at them by `menu_version_id`. (Refreshed
+  2026-11-03 against main `68732329c1`: each reader now named with its line; the earlier text gave
+  venue-service as the caller of both, but `git grep -n -w readLiveMenu -- apps packages` finds only
+  `catalogue-api.ts` outside tests, at `64eeabb036` too.)
 - `menu_version_images`. Read by media's photo delete and rename triggers.
 - `menu_releases` is current state, not history, but its `superseded` and `cancelled` rows keep the
   publishing record (`listMenuPublications`, `menu-schedule.ts:166`).
@@ -676,8 +709,14 @@ feature.
   `menu_periods` → `departments` and `floor_plan_sets`.
 - **Venue and box (A1301).** This design replaces A1301's `venue_catalogues` table and
   `venue_settings.default_catalogue_id` with `menus.is_default`/`offered`
-  (`docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md:137-138`). That area must not
-  add the id to its document.
+  (`docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md:137-138`, and its S23 row at
+  `:620`). That area must not add the id to its document. (Refreshed 2026-11-03 against main
+  `68732329c1`: both still hold. A1301 S5, which moved the menu routes to
+  `/management-api/venue/…`, landed before `64eeabb036` (#2386); the code slices since have left
+  `locations.catalogue_id` and `location_catalogues` for S23, as its plan says,
+  `docs/superpowers/plans/2026-11-01-a1301-remove-location.md:2125-2126`.)
+  - Configuration export format 10 (#2415) carries the default as a top-level bundle field, not a
+    venue field. The venue area's document must not take it back (§1.1).
   - Content languages stay in `settings.catalogue`, not the venue's document. Invoice languages
     (`venue_settings.invoice_locales`) are theirs.
 - **Devices and theming.** Receipt logos (`department_receipts.receipt` → `$.logo`) and theme logos
@@ -727,7 +766,12 @@ feature.
   have to leave core for a set that requires it.
 - **D2 — The default and extra menus are flags on the menu.** These are `is_default` (at most one) and
   `offered`, instead of A1301's `venue_settings.default_catalogue_id` plus `venue_catalogues`.
-  Recommendation: yes; it is R4 applied, and it changes A1301 slice S23.
+  Recommendation: yes; it is R4 applied, and it changes A1301 slice S23. It also changes
+  configuration export format 10: the top-level `defaultCatalogueId` and the `location_catalogues`
+  entry give way to the two columns on the exported `menus` rows (§1.1). (Refreshed 2026-11-03
+  against main `68732329c1`: S23 is still unbuilt and its text is unchanged, the slice table's S23
+  row in `docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md:620`; no plan for the
+  schema slices S20–S28 is on main; format 10 is #2415.)
 - **D3 — Rename `catalogues` to `menus`** (and `catalogue_id` to `menu_id`). The code already calls
   them menus in the module (`menu_details.menu_id`, `menu_items.menu_id`). Recommendation: yes, while
   the database can be reset. Error codes such as `catalogue.not_found` can be renamed freely before
@@ -747,7 +791,8 @@ feature.
 
 - Whether `products.catalogue_id` still means anything beyond `menu_items`. Products are offered on
   menus through `menu_items`, yet each still names one catalogue. It is used by `listProducts`'
-  filter and `listAvailableProducts`' join (`operations.ts:1111,1474`). If it is only a leftover,
+  filter and `listAvailableProducts`' join (`operations.ts:1111,1466`; refreshed 2026-11-03 against
+  main `68732329c1`: A1301 S2 moved the join from line 1474). If it is only a leftover,
   it should go (R6); if a product belongs to one menu's library, it stays.
 - The size of a published menu document (§8, item 4).
 - Whether the Cloud translation service that `content_suggestion_*` talks to is reachable today. The

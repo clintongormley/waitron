@@ -8,6 +8,13 @@ only; nothing was run except greps and two small scripts that read the latest dr
 and the migration SQL of every set for live triggers. Every protection listed below comes from those
 two reads. Where I say "read, not run", the claim rests on reading code only.
 
+(Refreshed 2026-11-03 against main 68732329c1. The 41 tables of this area have the same columns,
+indexes, foreign keys and checks there as at 64eeabb036: a script compared each table's entry in the
+latest snapshot of every migration set at both commits and found no difference, and the same two
+snapshot files are still the latest. No migration added since 64eeabb036 names any of these tables.
+Line numbers into files that changed since then were re-read and updated; each changed paragraph
+says so.)
+
 **The area in one paragraph.** A bill while it is being served is a `working_orders` row with its
 `working_order_lines` (one row per dish since A803: a dish ordered ×3 becomes three rows of 1,
 `apps/server/src/order-portions.ts:46-104`). Unsent dishes sit in a waiter's draft
@@ -60,7 +67,13 @@ Absorbs `order_service_contexts`, `bill_identities`, `bill_edit_states`.
 | revision | integer | not null, default 0 | — |
 | invoice_type, recipient_tax_id, recipient_legal_name, recipient_address, recipient_country_code, recipient_identifier_type, recipient_identifier_country_code, invoice_delivery, receipt_locale | text | invoice_type not null default `F2`, rest null | — |
 
-Dropped: `location_id` (R10). Protections: every current one (§5), plus the folded tables' checks
+Dropped: `location_id` (R10). (Refreshed 2026-11-03 against main 68732329c1: since A1301 S11 (#2411)
+no order, bill, kitchen or refund code filters on this column, but it is still in the schema and every
+new order fills it from `venueLocationId` (`apps/server/src/working-order.ts:1722`); the same holds for
+`order_service_contexts.location_id` (`packages/venue-service/src/operations.ts:1099, 1406`) and
+`tender_refunds.location_id` (`apps/server/src/tender-refund-reservation.ts:246`). A1301's schema
+slices S20–S28, not yet planned, drop these columns, so this area's R10 drops may already be done by
+A1301 when this redesign is built.) Protections: every current one (§5), plus the folded tables' checks
 (service-mode enum; editor_version ≥ 0; bill name 1–40 trimmed; bill_number a whole number ≥ 1 and
 only with a party; partial unique `(party_id, bill_number) where bill_number is not null`), plus the
 new unique `order_number`. Zone, department and service mode are all-or-none (a bill with no recorded
@@ -82,7 +95,7 @@ classification, group_id, credited_to, list_unit_price_gross) and adds:
 | menu_item_id | text | null, FK menu_items or plain id (D1) | working_line_contexts |
 | menu_id, menu_name | text | null | working_line_contexts |
 | menu_version_id | text | null, FK menu_versions or plain id (D1) | working_line_contexts |
-| offer_department_id, department_name | text | null | working_line_contexts (the department when the line was added; it can differ from the bill's after a move, `packages/venue-service/src/operations.ts:1174` "retaining existing line snapshots") |
+| offer_department_id, department_name | text | null | working_line_contexts (the department when the line was added; it can differ from the bill's after a move, `packages/venue-service/src/operations.ts:1106` "retaining existing line snapshots"; line refreshed 2026-11-03 against main 68732329c1) |
 | unit_id | text | null, plain id (as today) | working_line_contexts |
 | sold_in_each | integer flag | null | working_line_contexts |
 | hardware_unit | text | null | working_line_contexts |
@@ -98,11 +111,15 @@ classification, group_id, credited_to, list_unit_price_gross) and adds:
 | whole_portion | integer flag | null | `not order_portions.measured` |
 
 The line id *is* the dish's identity: a portion is born with its line (every `registerPortions`
-caller makes a fresh line id and a fresh portion id together: `working-order.ts:1760, 6525`,
-`order-groups.ts:389`, `draft-recall.ts:279`; `registerPortions` refuses to rebind a line,
-`order-portions.ts:173-179`), moves with it (lines move in place, `working-order.ts:4092-4103`), and
+caller makes a fresh line id and a fresh portion id together: `working-order.ts:1752, 6638`,
+`order-groups.ts:391`, `draft-recall.ts:279`; `registerPortions` refuses to rebind a line,
+`order-portions.ts:173-179`), moves with it (lines move in place, `working-order.ts:4192-4203`), and
 is cancelled exactly when the line is deleted (`cancelPortions`, `order-portions.ts:372-383`, called
-at every bound-line delete: `working-order.ts:3230, 3334, 6623`).
+at every bound-line delete: `working-order.ts:3266, 3392, 6738`).
+(Refreshed 2026-11-03 against main 68732329c1: line numbers only. The non-test callers of
+`registerPortions` and `cancelPortions`, and the non-test deletes of `working_order_lines`, are the
+same sites as at 64eeabb036, after A773-2 B2/B3/B4a (#2392, #2406, #2425) let a dish waiting for the
+pass be served, recalled, cancelled, moved and fired.)
 Protections: all current ones plus the folded checks (§5); `unique(cohort_id, cohort_ordinal)`;
 cohort columns all-or-none and only on dish rows (`parent_line_id is null`); service-cancel columns
 all-or-none with quantity > 0; a new trigger refusing any change to `cohort_id`, `cohort_ordinal`,
@@ -113,7 +130,8 @@ all-or-none with quantity > 0; a new trigger refusing any change to `cohort_id`,
 Keep as is. Core, `state`, append-only. ≈50/day, ≈18,000/year. A typed history because it is a
 tamper-evident chain (each entry hashes the previous, `packages/db/src/append-order-amendment.ts`),
 which `activity_log` is not. Read back by the appender (previous hash), `packages/db/src/backup-evidence.ts:191-196`
-(chain check) and attendance (`apps/server/src/attendance-facts.ts:21-23`).
+(chain check) and attendance (`apps/server/src/attendance-facts.ts:19-20`; line refreshed
+2026-11-03 against main 68732329c1, where A1301 S13 (#2397) removed the location filter).
 
 ### 1.4 `order_groups` — a batch of a party's order released to the kitchen together
 
@@ -129,9 +147,10 @@ Keep (link table, both sides are rows: R7). Core, `state`. ≈100–400/day.
 ### 1.6 `order_drafts` — one waiter's unsent order round
 
 Keep, plus `taken_over_from text null` (plain person id: the owner before the latest takeover), which
-replaces the till's read of `order_draft_events` in `takenOverFrom` (`apps/server/src/order-drafts.ts:1931-1955`).
+replaces the till's read of `order_draft_events` in `takenOverFrom` (`apps/server/src/order-drafts.ts:1885-1907`).
 Core, `state`. ≈500–750/day, ≈180,000–270,000/year (finished headers are kept; the
-`draft.already_submitted` refusal reads their state, `order-drafts.ts:1527-1528`).
+`draft.already_submitted` refusal reads their state, `order-drafts.ts:1481-1482`). (Line numbers
+refreshed 2026-11-03 against main 68732329c1.)
 
 ### 1.7 `order_draft_lines` — a line in an unsent round: a new dish, or a sent dish recalled for change
 
@@ -263,9 +282,11 @@ None. No current table in this area is a switch, number, time or text. The one c
 | `sale.invoice_pdf_downloaded` | sale / sale id | requester | — | invoice_pdf_downloads | 0–10 |
 
 That is ≈1,800–2,300 rows/day, ≈650,000–830,000/year from this area. Remaining readers after the move:
-attendance (`apps/server/src/attendance-facts.ts:16-42`, `attendance-discovery.ts:139-151`, people
+attendance (`apps/server/src/attendance-facts.ts:14-48`, `attendance-discovery.ts:128-140`, people
 area) reads the order_group/order_draft kinds by person and time; the dashboard order detail
-(`apps/server/src/orders-list.ts:740-753, 1105-1120`) reads the two `sale.*` kinds by subject. Both are
+(`apps/server/src/orders-list.ts:736-749, 1103-1118`) reads the two `sale.*` kinds by subject.
+(Line numbers refreshed 2026-11-03 against main 68732329c1; since A1301 S13 (#2397) the attendance
+reads no longer pick out one location's rows.) Both are
 occasional reads, not till hot paths; they need an index on `(subject_kind, subject_id)` and on `at`
 (central definition, §7). The hot reads were replaced by columns: `order_drafts.taken_over_from` and
 `order_groups.last_joined_at`.
@@ -311,12 +332,12 @@ the fiscal history log.
 | sale_substitutions | keep | link of two sales (R7) |
 | sales | keep | absorbs two append-only side tables |
 | tenders | keep | payments on the sale |
-| sale_voids | delete | no product writer: `recordVoid`'s only caller is the test helper `apps/server/src/testing/order-venue.ts:227`; backlog says "No till screen or server route calls `recordVoid` yet" (`docs/backlog.md:290`) (D3) |
+| sale_voids | delete | no product writer: `recordVoid`'s only caller is the test helper `apps/server/src/testing/order-venue.ts:227`; backlog says "No till screen or server route calls `recordVoid` yet" (`docs/backlog.md:291`) (D3). Refreshed 2026-11-03 against main 68732329c1: still true after W41s-8 (#2399); `git grep -n -w recordVoid` outside tests finds `@waitron/core`'s `recordVoid` called only from that test helper |
 | unpaid_departures | keep | later append-only fact |
 | invoice_deliveries | keep | delivery queue |
 | tender_refunds | merge into refunds | D4 |
 | bill_edit_states | merge into working_orders | one row per bill, same lifetime |
-| order_service_contexts | merge into working_orders | one row per bill, same lifetime (it is updated on moves, `operations.ts:1174-1205`) |
+| order_service_contexts | merge into working_orders | one row per bill, same lifetime (it is updated on moves, `operations.ts:1106-1129`; line refreshed 2026-11-03 against main 68732329c1) |
 | sale_receipt_headers | merge into sales | fixed in the same transaction as the sale |
 | working_line_contexts | merge into working_order_lines | one row per line, same lifetime |
 | department_transfer_desks | merge into departments | one row per department, chooses a row (R4) |
@@ -376,7 +397,7 @@ only two shapes) — no reader exists to rely on them.
 
 **order_group_events** → activity_log: AO kept. Dropped: FKs party/group/device, kind CHECK, actor
 xor CHECK (the activity row names person or device; kinds are fixed in the writer
-`order-groups.ts:2437-2443`).
+`order-groups.ts:2541-2549`; line refreshed 2026-11-03 against main 68732329c1).
 
 **order_draft_events** → activity_log: AO kept; dropped FK draft and kind CHECK, same reason.
 
@@ -437,7 +458,8 @@ sale_line_dishes; `scripts/behavioural-triggers.test.ts`; `scripts/live-subscrip
 1. **The dish's identity stored three times** — line id, portion id, and the binding row. One home: the
    line id (§1.2).
 2. **Order number counter** — `working_order_counters.next_number` vs `max(working_orders.order_number)`.
-   One home: working_orders (only one product insert site, `working-order.ts:1724-1726`).
+   One home: working_orders (only one product insert site, `working-order.ts:1716-1718`; line
+   refreshed 2026-11-03 against main 68732329c1).
 3. **Bill number history** — `bill_number_allocations` (every number) vs `bill_identities.number`
    (current). One home: `working_orders.bill_number` plus `parties.last_bill_number` as the counter.
 4. **The bill's party, twice** — `working_orders.party_id` and `bill_identities.party_id`. They move
@@ -448,13 +470,14 @@ sale_line_dishes; `scripts/behavioural-triggers.test.ts`; `scripts/live-subscrip
    (read, not run). One home: `working_orders.party_id`; the merge moves settled bills too (D6).
 5. **Unit, VAT class and category, twice per line** — line's `unit_name`/`unit_precision`/`vat_class`/
    `category` vs context's `unit_name`/`unit_precision`/`vat_class`/`category_name`. They are not
-   obviously equal (the line leaves the unit name out for an "Each" unit, `working-order.ts:957-958`;
-   the context always has one, `operations.ts:1464`). One home if M3 shows equality; else both,
-   named apart.
+   obviously equal (the line leaves the unit name out for an "Each" unit, `working-order.ts:951-952`;
+   the context always has one, `operations.ts:1376`). One home if M3 shows equality; else both,
+   named apart. (Lines refreshed 2026-11-03 against main 68732329c1.)
 6. **Who asked for a receipt copy** — `receipt_reprints.sale_id` / `requested_at` duplicate
    `print_jobs.sale_id` / `created_at`. One home: print_jobs for the job, activity_log for the person.
 7. **Two location columns** — `working_orders.location_id`, `order_service_contexts.location_id`,
-   `tender_refunds.location_id`: removed (R10).
+   `tender_refunds.location_id`: removed (R10). (Refreshed 2026-11-03 against main 68732329c1: no
+   code filters on them since A1301 S11, but they are still written; see §1.1.)
 8. **Two refund tables with ~20 shared columns** — one home `refunds` (D4).
 9. **Draft owner history vs current owner** — the till only needs the previous owner; one column
    `order_drafts.taken_over_from`, history to activity_log.
@@ -464,7 +487,7 @@ change with the menu); `sales.counterparty_*` copying `working_orders.recipient_
 is editable until issue, the sale's is not); `tenders` copying a bill payment's amounts
 (`tenders.bill_payment_id`; the tender is part of the immutable sale record, the bill payment's outcome
 moves); `working_orders.status = 'settled'` ("the bill is finished", set when the sale is recorded,
-e.g. `till-sale.ts:1050-1055`) vs `sale_settlements` ("the sale is fully paid", may be later);
+e.g. `till-sale.ts:1050-1056`, line refreshed 2026-11-03 against main 68732329c1) vs `sale_settlements` ("the sale is fully paid", may be later);
 `order_groups.hold_printed_at` (group-level time, read in kitchen paths) beside the per-station links;
 `order_drafts.party_id` beside `bill_id` (a party-level draft has no bill).
 
@@ -474,13 +497,13 @@ e.g. `till-sale.ts:1050-1055`) vs `sale_settlements` ("the sale is fully paid", 
 
 - **venuebox**: `departments` gains `transfer_desk_profile_id` (FK device_profiles, on delete set null).
   `departments` lives in the venue-service set, which runs after core (`requires: { core, catalogue }`,
-  `packages/composition/src/modules.ts:193`); core tables cannot hold a foreign key into it — D1.
+  `packages/composition/src/modules.ts:194`, line refreshed 2026-11-03 against main 68732329c1); core tables cannot hold a foreign key into it — D1.
   The line locale triggers need the venue's languages from wherever `locations`' replacement puts them.
   `nodes`: `working_orders.node_id`, `sales.node_id`, `refunds.node_id` assume `nodes` stays a table.
 - **floorkitchen**: `parties.last_bill_number integer not null default 0` (plus a no-decrease trigger);
   FKs to `parties`, `floor_zones`, `dining_tables`, `kitchen_stations`, `kitchen_courses`.
   `ticket_items.working_order_id` copies the line's bill and is rewritten on every line move
-  (`working-order.ts:4106-4109`) — a duplicate in their area that this area's lines are the source for.
+  (`working-order.ts:4206-4209`, line refreshed 2026-11-03 against main 68732329c1) — a duplicate in their area that this area's lines are the source for.
   `kitchen_print_job_lines` FK working_order_lines.
 - **menu**: FKs from lines to `menu_items`, `menu_versions` (catalogue set, after core) — D1;
   `products` (core).
@@ -490,7 +513,7 @@ e.g. `till-sale.ts:1050-1055`) vs `sale_settlements` ("the sale is fully paid", 
   `adjustments.working_order_id`, `adjustment_lines.line_id`, `adjustment_refunds.tender_refund_id`
   (becomes `refund_id` if D4), `drawer_opens` → tender_refunds (same). `sales.fiscal_backend/fiscal_state`
   and `invoice_series` stay theirs. The void (D3) is also a fiscal-backend operation (`recordVoid` in
-  `packages/fiscal-verifactu/src/backend.ts:405`).
+  `packages/fiscal-verifactu/src/backend.ts:406`, line refreshed 2026-11-03 against main 68732329c1).
 - **people**: attendance reads `order_amendments`, `bill_payments`, and (after this change) the
   `order_group.*` / `order_draft.*` kinds in `activity_log` instead of two tables.
 - **central**: `activity_log` needs indexes on `(subject_kind, subject_id)` and `at` (or `(kind, at)`).
@@ -501,7 +524,9 @@ e.g. `till-sale.ts:1050-1055`) vs `sale_settlements` ("the sale is fully paid", 
 
 - **M1 order numbers.** Time `select max(order_number)+1` with a unique index at 90,000 and 900,000 bills
   (expected: an index seek). Run the suites with the new unique index: test seeds insert fixed numbers
-  (`packages/payments/test/seed.ts:66-67` always 1). Failing result that changes the design: none expected
+  (`packages/payments/test/seed.ts:68` takes the shared `seedWorkingOrder`, whose default is order
+  number 1, `packages/db/src/testing/seed.ts:122-138`; refreshed 2026-11-03 against main 68732329c1,
+  where A1301 F2 (#2410) moved the seed onto the shared helper). Failing result that changes the design: none expected
   for speed; a product path needing a repeated number would keep the counter.
 - **M2 wider line rows.** Time the till bill read and the kitchen print query for a 40-line bill with the
   ~20 extra columns. Failing result: a measurable slowdown on the bill screen would be the "real need"
@@ -538,7 +563,8 @@ e.g. `till-sale.ts:1050-1055`) vs `sale_settlements` ("the sale is fully paid", 
   deleted" (`docs/superpowers/plans/2026-10-19-a803-bills-and-tables.md:74-77`), for pre-bills that link
   to every invoice their dishes reached (spec §3.9, backlog A446, not built). Today nothing reads a
   deleted dish's portion. **Recommend:** fold; the pre-bill design brings its own record when built.
-- **D3. Delete `sale_voids`.** No till screen or route can void (`docs/backlog.md:290`). The owner's
+- **D3. Delete `sale_voids`.** No till screen or route can void (`docs/backlog.md:291`, line refreshed 2026-11-03 against
+main 68732329c1; W41s-8's worked case voids only through the test helper). The owner's
   2026-09-24 decision on which day a void counts stands for when it is built. **Recommend:** delete now.
 - **D4. One `refunds` table.** Before- and after-invoice refunds share most columns and the same
   lifecycle; two recovery loops and the dashboard Payments screen read both. **Recommend:** merge, in its

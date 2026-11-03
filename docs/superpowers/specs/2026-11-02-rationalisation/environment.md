@@ -8,6 +8,15 @@ here for the names that change fate (a per-name `grep -rl` over `apps packages s
 deploy .github docs`, test files counted apart). I ran no tests: everything below comes from
 reading the code and grepping it.
 
+(refreshed 2026-11-03 against main 68732329c1: the inventory was re-measured and cites into files
+that changed since `64eeabb036` were re-read and moved to their new lines. Only one variable name
+is new on main, the test-only `WAITRON_TEST_CRASH_AT`. The product's set of `WAITRON_*` names and
+every production reader and setter of them are unchanged: a per-name `git grep -l -w` at both
+commits over `apps packages scripts bench deploy .github docs`, test files left out, differs only
+in one new test helper, `apps/server/test/first-fiscal-hour-entry.ts`, and one plan. Files whose
+cites still hold, because `git diff --quiet 64eeabb036 origin/main -- <file>` reports them
+unchanged, were not re-read.)
+
 ## 1. The target picture
 
 **An environment variable is for something the box must know before its database opens, and
@@ -46,7 +55,14 @@ Everything else leaves the environment:
   log rotation, the backup-overdue threshold and the tunnel's pool size. Tests that shorten
   timings pass an option to `bootServer` instead. Every such test I checked runs the server in
   its own process (no `spawn`/`fork` in `boot.test.ts`, `boot.fiscal-retry.test.ts`,
-  `boot.promote.test.ts`, `promote-endpoint-e2e.test.ts`).
+  `boot.promote.test.ts`, `promote-endpoint-e2e.test.ts`). (refreshed 2026-11-03 against main
+  68732329c1: the handover work added six more test files that set a tick or scheduler name.
+  `handover-stepdown.crash.test.ts` sets two of them (`:380-381`) for a server it starts in a
+  child process (`:260-271`), but that child calls `startServer` itself (`:216-228`), so it can
+  pass the option too. The other five, `handover-stepdown.real.test.ts`,
+  `boot.restricted.test.ts`, `boot.restricted-quiet.test.ts`, `boot.start-check.test.ts` and
+  `read-only-exemptions.test.ts`, start no server process: a grep for `spawn(`/`fork(` finds
+  only `boot.restricted-quiet.test.ts:231`, which starts Litestream. Read, not run.)
 - **History goes to `activity_log`**: "backup key rotated" replaces
   `WAITRON_BACKUP_KEY_ROTATED_AT`.
 - **The Cloud tunnel's settings go to `cloud-connection.json`.** That file holds this physical
@@ -73,9 +89,14 @@ That rule is why compose has to repeat the passkey domain and origin today (`com
 The print agent keeps its own short list in its own `config.ts`, because the print-agent package
 imports nothing else from this repository (root `CLAUDE.md` §3). One guard reads both lists.
 
-Result: the product side goes from 111 `WAITRON_*` names to 51. Of those 51, 13 are build or
+Result: the product side goes from 111 `WAITRON_*` names to 53. Of those 53, 13 are build or
 compose wiring that waitron.sh manages and 9 are one-off command inputs. Four new
-`WAITRON_TEST_*` names replace 12 test overrides in the host scripts.
+`WAITRON_TEST_*` names replace 12 test overrides in the host scripts. (refreshed 2026-11-03
+against main 68732329c1: 111 re-measured on main, unchanged. The old figure, 51, counted the §3
+rows whose fate is "keep" and left out `WAITRON_ACCOUNT_KEY`, which changes file but keeps its
+name; §2 names 52. Main adds no product name. A second refresh the same day, for README §5 U5,
+made it 53: `WAITRON_TENANT_DOMAIN` is now kept under a new name. `WAITRON_MIRROR_ALLOW_EXPOSED` is
+left to A947 slice 3b and is not counted; it would make 54 if 3b keeps it.)
 
 ### How the part rules held up (E1–E7)
 
@@ -107,15 +128,23 @@ compose wiring that waitron.sh manages and 9 are one-off command inputs. Four ne
   read only). Decision D4.
 - **E3: no single list exists today.**
   - `env-value.ts` is one helper, `isUnset` (7 lines).
-  - `config.ts` reads most server variables, but 30 other non-test source files also read
-    `WAITRON_*` variables. Grep:
-    `grep -rlE 'WAITRON_[A-Z_]+' apps packages --include=*.ts`, minus tests. Among them are
+  - `config.ts` reads most server variables, but 31 other files outside tests also read
+    `WAITRON_*` variables, the same files at `64eeabb036` and on main. Grep:
+    `git grep -l -E '(env|environment|Env)(\.|\[\s*")WAITRON_' -- 'apps/*.ts' 'packages/*.ts'`,
+    minus `*.test.ts` and paths under `testing/`, `test/` or `scripts/`. That pattern misses a
+    file that keeps the name in a constant, such as `keyring.ts:5-8`. (refreshed 2026-11-03
+    against main 68732329c1: the old figure, 30, came from
+    `grep -rlE 'WAITRON_[A-Z_]+' apps packages --include=*.ts` minus tests, which finds 133 files
+    at `64eeabb036` once `*.test.ts` is left out, so that command could not reproduce it.) Among them are
     `box-secrets.ts`, `backup-config.ts`, `cloud-client.ts`, `mirror-bind-guard.ts`,
     `till-config.ts`, `restore-command.ts`, `packages/credentials/src/keyring.ts`,
     `packages/provisioning/src/cli.ts`, `packages/db/src/venue-holder-identity.ts` and
     `packages/stream/src/litestream.ts`.
-  - Nothing reports unknown names. The only `startsWith("WAITRON_")` in source is in a test
-    helper (`apps/server/src/testing/zone-process-matrix.ts:109`).
+  - Nothing reports unknown names. Outside `*.test.ts` files, `startsWith("WAITRON_")` appears
+    only in two test helpers, which strip the names from a child's environment rather than
+    report them (`apps/server/src/testing/zone-process-matrix.ts:109`;
+    `apps/server/test/first-fiscal-hour-entry.ts:38`). (refreshed 2026-11-03 against main
+    68732329c1: the second helper is new, added by A1297.)
   - Two readers of one name disagree: the server defaults `WAITRON_ADVERTISED_ORIGIN` to the
     management origin, but the command-line first setup refuses without it.
   - The rule that an empty value means "unset" is applied unevenly. The key ring's both-or-neither
@@ -128,7 +157,8 @@ compose wiring that waitron.sh manages and 9 are one-off command inputs. Four ne
     variables, `initial-setup.ts:368-385`) with `configure: undefined`
     (`initial-hour-setup.ts:108-115`).
   - The backlog entry calls that code "spread into production"
-    (`docs/backlog/fiscal.md:1094-1106`). The spread is real, but the code that reads the
+    (`docs/backlog/fiscal.md:1343-1355`; refreshed 2026-11-03 against main 68732329c1: the
+    entry moved from lines 1094-1106, text unchanged). The spread is real, but the code that reads the
     variables is the part production overrides.
   - The two runbook-only folder variables come from a runbook marked "Historical protocol,
     superseded 2026-10-19" (`offline-fiscal-restore.md:1-8`).
@@ -160,6 +190,7 @@ compose wiring that waitron.sh manages and 9 are one-off command inputs. Four ne
 | `WAITRON_TLS_CERT_FILE`, `WAITRON_TLS_KEY_FILE` | The operator's own certificate | The recovery page serves with it when the database is broken |
 | `WAITRON_BOX_ADDRESSES` | The box's LAN addresses | Certificate, QR code and recovery page, before the database |
 | `WAITRON_MANAGEMENT_RP_ID`, `WAITRON_MANAGEMENT_ORIGIN` | Passkey domain; the box's one public address (absorbs the advertised origin) | Required in production; image and compose wiring |
+| `WAITRON_VENUE_DOMAIN` (today `WAITRON_TENANT_DOMAIN`) | The device cookie's domain | One device credential reaches every one of the venue's servers after a promotion; README §5 U5 keeps it (refreshed 2026-11-03: new row) |
 | `WAITRON_MIGRATIONS_DIR`, `WAITRON_TILL_APP_DIR`, `WAITRON_DASHBOARD_APP_DIR`, `WAITRON_SETUP_APP_DIR`, `WAITRON_DEMO_MEDIA_SOURCE` | Where the image put its files | Image layout |
 | `WAITRON_LITESTREAM_BIN` | The backup streamer program | Tests and the bench point at a downloaded copy; the image uses PATH |
 | `WAITRON_CLOUD_ORIGIN` | Which Cloud this deployment talks to | Deployment wiring (to be passed through compose) |
@@ -198,7 +229,20 @@ The test families gain `WAITRON_TEST_HOST_ROOT`, `WAITRON_TEST_HEALTH_TRIES`,
 
 ## 3. Mapping
 
-All 220 items, in inventory order within each context. The same rows are in `rat-env-out.json`.
+All 221 items, in inventory order within each context. (refreshed 2026-11-03 against main
+68732329c1: was 220 at `64eeabb036`; the one new row is `WAITRON_TEST_CRASH_AT`, under Tests and
+CI. The sentence pointing at `rat-env-out.json` was removed: no such file is in the repository.
+How the count was checked: every `WAITRON_*` literal in tracked files outside `docs/`, from
+`git grep -h -o -E 'WAITRON_[A-Z0-9_]*[A-Z0-9]' <rev> -- . ':!docs'`, gives 188 names at
+`64eeabb036` and 189 on main. Leaving out 40 that are not variables a program reads (code
+constants such as `WAITRON_LAYOUTS`, retired names a test asserts are ignored such as
+`WAITRON_TILL_SERIES_ID`, and fixture filler such as `WAITRON_TEST_MARK`), and adding the
+runbook's two folder names, gives this table's 150 `WAITRON_*` names at `64eeabb036` exactly, and
+151 on main. All 40 are still present on main and none has gained a reader. For the 70 rows that
+are not `WAITRON_*`, every single name still appears on main outside `docs/`, and the lines added
+since `64eeabb036` read no new one: a grep of the added lines for `process.env`, `env.` and
+`${…}` reads found only names already listed. Those two checks are greps, weaker than the
+`WAITRON_*` reconciliation.)
 
 ### Box at runtime
 
@@ -214,35 +258,35 @@ All 220 items, in inventory order within each context. The same rows are in `rat
 | `WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION` | keep | secrets.env, written only by the one rotation command | Pairs with the previous key during rotation. |
 | `WAITRON_STATE_DIR` | keep | env (folder) | A folder the box needs before anything opens (config.ts:464). |
 | `WAITRON_VENUE_DIR` | keep | env (folder) | Where the database files are; needed before the database opens (config.ts:519). |
-| `WAITRON_SPARE_SPACE_DIR` | replace with a boot option | parameter passed from node-entry to bootServer | An in-process hand-off written into an env object by the server for itself (node-entry.ts:428-435, read at boot.ts:1033); a function argument says the same thing without a public name. |
+| `WAITRON_SPARE_SPACE_DIR` | replace with a boot option | parameter passed from node-entry to bootServer | An in-process hand-off written into an env object by the server for itself (node-entry.ts:432-439, read at boot.ts:1181); a function argument says the same thing without a public name. (refreshed 2026-11-03 against main 68732329c1: lines moved from node-entry.ts:428-435 and boot.ts:1033.) |
 | `WAITRON_LOG_DIR` | keep | env (folder; image sets it) | A folder, set by the image (Dockerfile:268). |
 | `WAITRON_LOG_MAX_BYTES` | make a constant | constant in config.ts (10,000,000) | Set nowhere outside config.test.ts; a tuning knob nobody sets. |
 | `WAITRON_LOG_MAX_FILES` | make a constant | constant in config.ts (5) | Set nowhere outside config.test.ts. |
 | `WAITRON_MIGRATIONS_DIR` | keep | env (image wiring) | Where the image puts the migration files (Dockerfile:270); dev sets its own (dev-server.mjs:68). |
 | `WAITRON_HTTP_PORT` | keep | env (port) | A port, needed before anything listens. |
 | `WAITRON_HTTP_HOST` | keep | env (image wiring) | Listening address; the image fixes 0.0.0.0 (Dockerfile:275), the code defaults to loopback. |
-| `WAITRON_HTTP_LANDING_PORT` | keep | env (port) | A port; the Cloud fixture turns it off with 0 (cloud-integration-fixture.ts:122). |
+| `WAITRON_HTTP_LANDING_PORT` | keep | env (port) | A port; the Cloud fixture turns it off with 0 (cloud-integration-fixture.ts:120). (refreshed 2026-11-03 against main 68732329c1: line moved from 122.) |
 | `WAITRON_TLS_CERT_FILE` | keep | env (file path) | An operator certificate the recovery listener needs even when the database will not open (recovery-listener.ts:109). |
 | `WAITRON_TLS_KEY_FILE` | keep | env (file path) | Pairs with WAITRON_TLS_CERT_FILE. |
 | `WAITRON_BOX_ADDRESSES` | keep | env (compose wiring) | Network wiring of the host, needed to mint the certificate and serve the recovery page before the database opens (config.ts:521; recovery-listener.ts:222). |
 | `WAITRON_MANAGEMENT_RP_ID` | keep | env (image/compose wiring) | Passkey domain; image and compose wiring (Dockerfile:276; compose.yml:32), required in production. |
 | `WAITRON_MANAGEMENT_ORIGIN` | keep | env (image/compose wiring); absorbs WAITRON_ADVERTISED_ORIGIN | The box's one public address. |
-| `WAITRON_ADVERTISED_ORIGIN` | merge into WAITRON_MANAGEMENT_ORIGIN | WAITRON_MANAGEMENT_ORIGIN | Set nowhere outside tests; the server defaults it to the management origin (config.ts:539-541) but the command-line first setup has no default and refuses without it (first-setup-command-deployment.ts:173-185): two readers, two defaults, one value. |
-| `WAITRON_TENANT_DOMAIN` | delete | (re-add as a venue setting when failover is designed) | Set nowhere outside config.test.ts; exists for cookies after a promotion, and today a venue has one node and no failover (root CLAUDE.md §5). |
-| `WAITRON_TILL_LOCALE` | move to settings | settings: venue document, optional display-language override | A venue choice read once at boot (boot.ts:1774; venue-locale.ts:50); setup never writes it (trading-config.ts:33-41), so only dev-setup sets it. Owner decision D5. |
-| `WAITRON_TILL_TIPS` | move to settings | settings: payments document, tipsEnabled | A venue's trading choice (bill-payments.ts:976,1118; till-sale.ts:1455) that only a hand-edited env file can set today. Owner decision D5. |
+| `WAITRON_ADVERTISED_ORIGIN` | merge into WAITRON_MANAGEMENT_ORIGIN | WAITRON_MANAGEMENT_ORIGIN | Set nowhere outside tests; the server defaults it to the management origin (config.ts:539-541) but the command-line first setup has no default and refuses without it (first-setup-command-deployment.ts:167-179): two readers, two defaults, one value. (refreshed 2026-11-03 against main 68732329c1: lines moved from 173-185.) |
+| `WAITRON_TENANT_DOMAIN` | keep, renamed `WAITRON_VENUE_DOMAIN` (proposed) | env | It sets the device cookie's `Domain`, so one device credential reaches every one of the venue's servers after a promotion (config.ts:106-112, read at config.ts:227; used in device-session.ts:39-73). Nothing sets it outside config.test.ts. README §5 U5 keeps the second-box path, so it stays. That A947 §6.3 step 4's same-site cookie work relies on it is an inference from that text, not something run. (refreshed 2026-11-03 against main 68732329c1: was delete, citing "today a venue has one node and no failover". Root CLAUDE.md:819 still says that, but :821 now adds the rule that a box whose chart lists another box asks it before selling, so code on main already acts on a second box.) |
+| `WAITRON_TILL_LOCALE` | move to settings | settings: venue document, optional display-language override | A venue choice read once at boot (boot.ts:2066; venue-locale.ts:48); setup never writes it (trading-config.ts:33-41), so only dev-setup sets it. Owner decision D5. (refreshed 2026-11-03 against main 68732329c1: lines moved from boot.ts:1774 and venue-locale.ts:50.) |
+| `WAITRON_TILL_TIPS` | move to settings | settings: payments document, tipsEnabled | A venue's trading choice (bill-payments.ts:976,1118; till-sale.ts:1457) that only a hand-edited env file can set today. Owner decision D5. (refreshed 2026-11-03 against main 68732329c1: line moved from till-sale.ts:1455.) |
 | `WAITRON_TILL_APP_DIR` | keep | env (image wiring) | Where the image puts the built web apps (Dockerfile:271-273). |
 | `WAITRON_DASHBOARD_APP_DIR` | keep | env (image wiring) | Where the image puts the built web apps (Dockerfile:271-273). |
 | `WAITRON_SETUP_APP_DIR` | keep | env (image wiring) | Where the image puts the built web apps (Dockerfile:271-273). |
-| `WAITRON_MIN_TICK_MS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:620, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. |
+| `WAITRON_MIN_TICK_MS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:614, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. (refreshed 2026-11-03 against main 68732329c1: boot.test.ts line moved from 620; the handover tests that also set tick or scheduler names are in §1.) |
 | `WAITRON_MAX_TICK_MS` | make a constant | constant DEFAULT_MAX_TICK_MS; tests pass a tuning option | Set nowhere outside tests; health's budget is already fixed against the default, not this value (health.ts:21-26), so a constant removes a mismatch. |
-| `WAITRON_SKIP_RETRY_MS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:620, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. |
-| `WAITRON_SETTLEMENT_LAG_MS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:620, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. |
-| `WAITRON_SCHEDULER_HORIZON_DAYS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:620, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. |
-| `WAITRON_SCHEDULER_MAX_PERIODS_PER_TICK` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:620, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. |
-| `WAITRON_SCHEDULER_MAX_ATTEMPTS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:620, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. |
-| `WAITRON_SCHEDULER_BACKOFF_BASE_MS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:620, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. |
-| `WAITRON_SCHEDULER_STALE_AFTER_MS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:620, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. |
+| `WAITRON_SKIP_RETRY_MS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:614, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. (refreshed 2026-11-03 against main 68732329c1: boot.test.ts line moved from 620; the handover tests that also set tick or scheduler names are in §1.) |
+| `WAITRON_SETTLEMENT_LAG_MS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:614, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. (refreshed 2026-11-03 against main 68732329c1: boot.test.ts line moved from 620; the handover tests that also set tick or scheduler names are in §1.) |
+| `WAITRON_SCHEDULER_HORIZON_DAYS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:614, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. (refreshed 2026-11-03 against main 68732329c1: boot.test.ts line moved from 620; the handover tests that also set tick or scheduler names are in §1.) |
+| `WAITRON_SCHEDULER_MAX_PERIODS_PER_TICK` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:614, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. (refreshed 2026-11-03 against main 68732329c1: boot.test.ts line moved from 620; the handover tests that also set tick or scheduler names are in §1.) |
+| `WAITRON_SCHEDULER_MAX_ATTEMPTS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:614, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. (refreshed 2026-11-03 against main 68732329c1: boot.test.ts line moved from 620; the handover tests that also set tick or scheduler names are in §1.) |
+| `WAITRON_SCHEDULER_BACKOFF_BASE_MS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:614, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. (refreshed 2026-11-03 against main 68732329c1: boot.test.ts line moved from 620; the handover tests that also set tick or scheduler names are in §1.) |
+| `WAITRON_SCHEDULER_STALE_AFTER_MS` | make a constant | constant in code; tests pass a tuning option to bootServer | Set nowhere outside tests; the in-process boot tests that shorten it (boot.test.ts:614, boot.fiscal-retry.test.ts:98, boot.promote.test.ts:235) spawn no child process, so an option replaces the env name. (refreshed 2026-11-03 against main 68732329c1: boot.test.ts line moved from 620; the handover tests that also set tick or scheduler names are in §1.) |
 | `WAITRON_LITESTREAM_BIN` | keep | env (program path; tests and bench use it too) | The image puts litestream on PATH (Dockerfile:182); tests and the bench point at a downloaded copy. Absorbs the bench's LITESTREAM_BIN. |
 | `WAITRON_STREAM_ACCESS_KEY_ID` | keep | internal child-process hand-off (listed as internal) | The server puts the bucket key into Litestream's own environment so it never lands in a file (litestream.ts:51-52,76-77); not an operator setting. |
 | `WAITRON_STREAM_SECRET_ACCESS_KEY` | keep | internal child-process hand-off (listed as internal) | The server puts the bucket key into Litestream's own environment so it never lands in a file (litestream.ts:51-52,76-77); not an operator setting. |
@@ -266,7 +310,7 @@ All 220 items, in inventory order within each context. The same rows are in `rat
 | `WAITRON_TUNNEL_BOX_ID` | merge into the Cloud connection file | <state>/cloud-connection.json, written by Cloud pairing | Belongs to this physical box's Cloud pairing, which already lives in that file and is deliberately left out of recovery bundles (state-secrets.ts:13-15); box_settings would travel with node.db in backups. |
 | `WAITRON_TUNNEL_TOKEN` | merge into the Cloud connection file | <state>/cloud-connection.json (mode 0600, checked at cloud-client.ts:188) | A per-box secret issued by pairing; the file already holds the box's Cloud private key. |
 | `WAITRON_TUNNEL_POOL_SIZE` | make a constant | constant (4) | Set nowhere outside tests. |
-| `WAITRON_MIRROR_ALLOW_EXPOSED` | delete | (none) | Set nowhere outside tests (Cloud repo grep finds no use either); its only job is to switch off the guard that keeps a sign-in-free admin dashboard off the network (mirror-bind-guard.ts:1-3). Owner decision D3. |
+| `WAITRON_MIRROR_ALLOW_EXPOSED` | left to A947 slice 3b | (decided there) | Set nowhere outside tests (Cloud repo grep finds no use either); its only job is to switch off the guard that keeps a sign-in-free admin dashboard off the network (mirror-bind-guard.ts:1-3; read at mirror-bind-guard.ts:27, guard called at boot.ts:2005). How a spare listens on the network is slice 3b's to decide. (refreshed 2026-11-03 against main 68732329c1: was delete, owner decision D3) |
 | `WAITRON_SERVER_URL` | merge into WAITRON_PRINT_AGENT_SERVER_URL | WAITRON_PRINT_AGENT_SERVER_URL | One value with two names: compose copies one into the other (compose.yml:124). |
 | `WAITRON_SETUP_URL` | merge into WAITRON_PRINT_AGENT_SETUP_URL | WAITRON_PRINT_AGENT_SETUP_URL | One value with two names (compose.yml:126). |
 | `WAITRON_SETUP_PORT` | keep | env (port; print-agent image) | A port (Dockerfile:120). |
@@ -275,8 +319,8 @@ All 220 items, in inventory order within each context. The same rows are in `rat
 | `WAITRON_BREAKGLASS_PASSWORD` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_BREAKGLASS_PIN` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_RECOVERY_PASSPHRASE` | keep | one-off command input | Read only by a command an operator runs by hand. |
-| `WAITRON_NODE_RECOVERY_KEY` | keep | one-off restore-command input only | Keep for the command; drop the server start's env fallback (node-entry.ts:650-651; restore-request.ts:469-494), since the web form stages them in files — see Measure 1. |
-| `WAITRON_RECOVERY_OPERATION_FILE` | keep | one-off restore-command input only | Keep for the command; drop the server start's env fallback (node-entry.ts:650-651; restore-request.ts:469-494), since the web form stages them in files — see Measure 1. |
+| `WAITRON_NODE_RECOVERY_KEY` | keep | one-off restore-command input only | Keep for the command; drop the server start's env fallback (node-entry.ts:685-686; restore-request.ts:469-494), since the web form stages them in files — see Measure 1. (refreshed 2026-11-03 against main 68732329c1: lines moved from node-entry.ts:650-651.) |
+| `WAITRON_RECOVERY_OPERATION_FILE` | keep | one-off restore-command input only | Keep for the command; drop the server start's env fallback (node-entry.ts:685-686; restore-request.ts:469-494), since the web form stages them in files — see Measure 1. (refreshed 2026-11-03 against main 68732329c1: lines moved from node-entry.ts:650-651.) |
 | `WAITRON_ADMIN_PIN` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_ADMIN_PASSWORD` | keep | one-off command input | Read only by a command an operator runs by hand. |
 | `WAITRON_INITIAL_VENUE_INPUT` | keep | one-off command input | Read only by a command an operator runs by hand. |
@@ -357,11 +401,12 @@ All 220 items, in inventory order within each context. The same rows are in `rat
 | `WAITRON_VERSITYGW_BIN` | keep | tests/CI | Test or rehearsal input; not the product. |
 | `WAITRON_REQUIRE_STREAM_BINARIES` | merge into WAITRON_REQUIRE_TEST_TOOLS | WAITRON_REQUIRE_TEST_TOOLS | Two local spellings of what CI=true already does (full-disk.ts:16; aws-send-gate.e2e.test.ts:36); set nowhere in the repo. |
 | `WAITRON_REQUIRE_FULL_DISK` | merge into WAITRON_REQUIRE_TEST_TOOLS | WAITRON_REQUIRE_TEST_TOOLS | Two local spellings of what CI=true already does (full-disk.ts:16; aws-send-gate.e2e.test.ts:36); set nowhere in the repo. |
-| `WAITRON_FULL_DISK_DIR` | merge into WAITRON_FULL_DISK_ROOT | WAITRON_FULL_DISK_ROOT with fixed subfolder names (each still its own mount) | CI mounts four folders side by side under one parent (ci.yml:1270-1284) and passes four names (ci.yml:1293-1296). |
-| `WAITRON_FULL_DISK_DIR_START_AGAIN` | merge into WAITRON_FULL_DISK_ROOT | WAITRON_FULL_DISK_ROOT with fixed subfolder names (each still its own mount) | CI mounts four folders side by side under one parent (ci.yml:1270-1284) and passes four names (ci.yml:1293-1296). |
-| `WAITRON_FULL_DISK_DIR_FROM_SPARE` | merge into WAITRON_FULL_DISK_ROOT | WAITRON_FULL_DISK_ROOT with fixed subfolder names (each still its own mount) | CI mounts four folders side by side under one parent (ci.yml:1270-1284) and passes four names (ci.yml:1293-1296). |
-| `WAITRON_FULL_DISK_DIR_BACKUP_ROOM` | merge into WAITRON_FULL_DISK_ROOT | WAITRON_FULL_DISK_ROOT with fixed subfolder names (each still its own mount) | CI mounts four folders side by side under one parent (ci.yml:1270-1284) and passes four names (ci.yml:1293-1296). |
+| `WAITRON_FULL_DISK_DIR` | merge into WAITRON_FULL_DISK_ROOT | WAITRON_FULL_DISK_ROOT with fixed subfolder names (each still its own mount) | CI mounts four folders side by side under one parent (ci.yml:1285-1299) and passes four names (ci.yml:1308-1311). (refreshed 2026-11-03 against main 68732329c1: lines moved from ci.yml:1270-1284 and 1293-1296.) |
+| `WAITRON_FULL_DISK_DIR_START_AGAIN` | merge into WAITRON_FULL_DISK_ROOT | WAITRON_FULL_DISK_ROOT with fixed subfolder names (each still its own mount) | CI mounts four folders side by side under one parent (ci.yml:1285-1299) and passes four names (ci.yml:1308-1311). (refreshed 2026-11-03 against main 68732329c1: lines moved from ci.yml:1270-1284 and 1293-1296.) |
+| `WAITRON_FULL_DISK_DIR_FROM_SPARE` | merge into WAITRON_FULL_DISK_ROOT | WAITRON_FULL_DISK_ROOT with fixed subfolder names (each still its own mount) | CI mounts four folders side by side under one parent (ci.yml:1285-1299) and passes four names (ci.yml:1308-1311). (refreshed 2026-11-03 against main 68732329c1: lines moved from ci.yml:1270-1284 and 1293-1296.) |
+| `WAITRON_FULL_DISK_DIR_BACKUP_ROOM` | merge into WAITRON_FULL_DISK_ROOT | WAITRON_FULL_DISK_ROOT with fixed subfolder names (each still its own mount) | CI mounts four folders side by side under one parent (ci.yml:1285-1299) and passes four names (ci.yml:1308-1311). (refreshed 2026-11-03 against main 68732329c1: lines moved from ci.yml:1270-1284 and 1293-1296.) |
 | `WAITRON_TEST_TRACE_FILES` | keep | tests/CI | Test or rehearsal input; not the product. |
+| `WAITRON_TEST_CRASH_AT` | keep | tests/CI | Test input: the crash suite tells its child server where to kill itself (handover-stepdown.crash.test.ts:208,271). Added by A1018 slice 2 (#2420). (refreshed 2026-11-03 against main 68732329c1: new row.) |
 | `WAITRON_PRE_PUSH_FETCH_SECONDS` | keep | tests/CI | Test or rehearsal input; not the product. |
 | `WAITRON_STARTUP_ENGINES` | keep | tests/CI | Test or rehearsal input; not the product. |
 | `WAITRON_WRITE_GOLDEN` | keep | tests/CI | Test or rehearsal input; not the product. |
@@ -450,8 +495,9 @@ All 220 items, in inventory order within each context. The same rows are in `rat
 **Performance.**
 - Environment variables are parsed once at start, so fewer of them changes nothing at run time.
 - The settings that move are read where they are used, and the payment path is the only hot
-  one. Tips are read in `bill-payments.ts:976,1118` and `till-sale.ts:1455`. Today that value
-  comes from the boot-time `TradingContext` (`boot.ts:1764-1771`). In the target it is one
+  one. Tips are read in `bill-payments.ts:976,1118` and `till-sale.ts:1457`. Today that value
+  comes from the boot-time `TradingContext` (`boot.ts:2056-2063`; refreshed 2026-11-03 against
+  main 68732329c1: lines moved from `till-sale.ts:1455` and `boot.ts:1764-1771`). In the target it is one
   primary-key read of one small row, or a value held in memory and replaced whenever a save
   bumps the document's revision. One process owns the venue folder (root `CLAUDE.md` §3), so a
   held copy cannot go stale behind another writer.
@@ -497,7 +543,8 @@ All 220 items, in inventory order within each context. The same rows are in `rat
 
 1. **The server start's fallback to environment variables for the node recovery key and
    operation file.** Today a staged restore takes them from the process environment when its
-   marker does not carry them (`restore-request.ts:469-494`; `node-entry.ts:650-651`). Remove
+   marker does not carry them (`restore-request.ts:469-494`; `node-entry.ts:685-686`; refreshed 2026-11-03 against main 68732329c1: lines moved from
+   650-651). Remove
    the fallback in a worktree and run the restore and hour-recovery suites, plus
    `waitron-cloud`'s authorised-archive fixture, which sets `WAITRON_NODE_RECOVERY_KEY` on the
    command (`snapshot-authorised-archive.test.ts:95`). *If any current flow stages a marker
@@ -505,7 +552,8 @@ All 220 items, in inventory order within each context. The same rows are in `rat
    or start input".
 2. **Whether a hosted profile injects the vault key through the environment.** `box-env.ts:10-12`
    says "a cloud profile [can] inject the vault key without a `secrets.env`". In this repo only
-   the Cloud fixture does that (`cloud-integration-fixture.ts:95,125`), and the `waitron-cloud`
+   the Cloud fixture does that (`cloud-integration-fixture.ts:93,123`; refreshed 2026-11-03 against main 68732329c1: lines
+   moved from 95,125), and the `waitron-cloud`
    grep shows no `WAITRON_CREDENTIALS_KEY`. *If a real hosted profile does it,* the key ring's
    declared source becomes "box file, or environment for hosted profiles". That source must then
    be refused on an on-premises box, or the one-source rule fails for the most important secret.
@@ -513,7 +561,12 @@ All 220 items, in inventory order within each context. The same rows are in `rat
    child-process hosts (`apps/server/test/hour-recovery-host.ts`, the stream scenarios, the Cloud
    fixtures) for the tick and scheduler names. *If any does,* keep one test-only
    `WAITRON_TEST_TUNING` (a small JSON value) that the list honours only when `WAITRON_ENV=dev`,
-   instead of an option passed in code.
+   instead of an option passed in code. (refreshed 2026-11-03 against main 68732329c1: one such
+   test now exists, `apps/server/src/handover-stepdown.crash.test.ts`, which sets the two tick
+   names (`:380-381`) for a child it spawns (`:260-271`). Its child script calls `startServer`
+   itself (`:216-228`), so it can pass an option as well; the measure still has to check the
+   other child hosts. `apps/server/test/hour-recovery-host.ts` and the new
+   `apps/server/test/first-fiscal-hour-entry.ts` set none of these names, by grep.)
 4. **Proof that production ignores `WAITRON_FISCAL_*`.** The grep-and-read proof needs a run:
    on a dev box, set `WAITRON_FISCAL_CUSTODIAN_FILE` to a missing path and do a first fiscal
    setup and a restore. If production ignores the variable, both behave exactly as they do
@@ -540,11 +593,12 @@ All 220 items, in inventory order within each context. The same rows are in `rat
   backlog item "Retire the historical allocation formats", landed with fiscal sign-off, together
   with the historical runbook's two folder variables.
   *Recommendation: yes, as its own fiscal PR, after Measure 4.*
-- **D3. Remove the failover-only switches now:** `WAITRON_TENANT_DOMAIN`,
-  `WAITRON_MIRROR_ALLOW_EXPOSED`, and `WAITRON_ADVERTISED_ORIGIN` as a separate name. When
-  failover is designed, they come back as venue settings.
-  *Recommendation: yes.* None is set outside tests, a venue has one node and no failover today,
-  and the mirror switch exists only to switch off a safety guard.
+- **D3. Merge `WAITRON_ADVERTISED_ORIGIN` into `WAITRON_MANAGEMENT_ORIGIN` now.**
+  *Recommendation: yes.* It is set nowhere outside tests and the server defaults it to the
+  management origin (§3). (refreshed 2026-11-03 against main 68732329c1: this also removed `WAITRON_TENANT_DOMAIN` and
+  `WAITRON_MIRROR_ALLOW_EXPOSED` as failover-only switches. README §5 U5 now decides both: the
+  first is kept under a new name, `WAITRON_VENUE_DOMAIN`; the second is left to A947 slice 3b. See
+  their §3 rows.)
 - **D4. "One home for secrets" means one owning module and three files by lifecycle, not one
   file.** `WAITRON_ACCOUNT_KEY` moves from `trading.env` to `secrets.env`, and each root key gets
   one rotation command that logs to `activity_log`.

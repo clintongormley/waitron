@@ -7,6 +7,13 @@ printers, page printers, print jobs, drawer opens, themes and `tenant_receipts`.
 (from `area-devices.json`), read at `main` 64eeabb036. Read-only: nothing was run except `grep`/`git
 grep` and file reads. Every "the code does X" below is a citation, not a test result.
 
+(refreshed 2026-11-03 against main 68732329c1: every cite into a file that changed since 64eeabb036
+was re-read on main and given its new line numbers; a cite into an unchanged file was left as it was,
+with `git diff --quiet 64eeabb036 origin/main -- <path>` as the receipt. The 27 tables are unchanged:
+their columns, indexes, foreign keys and CHECKs in each set's latest drizzle snapshot are identical at
+both revisions, and so are the foreign keys from other tables into `devices` and `print_jobs`. Still
+read-only: only `grep`, `git` and file reads were run.)
+
 **In one line:** 27 tables become 19. The seven kitchen-screen tables become three: one shape holds
 both what a profile allows and what a device chose. The "what a narrowing took away" notes are worked
 out when read instead of stored. Two one-row-per-parent side tables fold into their parents
@@ -66,6 +73,13 @@ written fresh before go-live has no rebuild to avoid:
 
 Rows: 6 live, plus deleted devices, which are kept.
 
+The enrolled-device proof for till actions (A941, #2409) adds no column here. It checks that the
+device the cookie proves is the device the staff session names (`assertRequestDevice`,
+`apps/server/src/till-session.ts:148-156`), so it reads `devices.id`, `token_hash` and
+`sessions.device_id`, all of which this design keeps. Its one change to how the row is written: a
+passive read no longer stamps `last_seen_at` (`apps/server/src/device-session.ts:244`).
+(refreshed 2026-11-03 against main 68732329c1: new paragraph, A941.)
+
 ### 1.2 `device_profiles` — core set (see D2), `state`, not append-only
 
 What it is: a reusable set-up that devices run. It now also holds the profile's ordering scope, which
@@ -115,18 +129,18 @@ for that profile.
 | device_id | text | pk part, fk→devices (no action; `device-delete.ts` deletes explicitly) |
 | device_profile_id | text | pk part, fk→device_profiles (cascade) |
 | starting_zone_id | text | null, fk→floor_zones — was `device_zone_selections.starting_zone_id` |
-| zones_saved_at | text | null = the device never saved a zone choice under this profile (today: "no `device_zone_selections` row", `packages/venue-service/src/device-zone-selection.ts:67-78`) |
+| zones_saved_at | text | null = the device never saved a zone choice under this profile (today: "no `device_zone_selections` row", `packages/venue-service/src/device-zone-selection.ts:61-72`; refreshed 2026-11-03, was `:67-78`) |
 
 Protections: the PK, and both FKs. New CHECK `starting_zone_id is null or zones_saved_at is not
 null`.
 
 Meaning: the device's active profile (`devices.device_profile_id`) counts as approved whether or not
-it has a row, as it does today (`apps/server/src/device.ts:186-188`). The difference is that saving a
+it has a row, as it does today (`apps/server/src/device.ts:187-189`). The difference is that saving a
 zone choice under the active profile now writes a row here. `readApprovedAlternatives` already
-leaves the active profile out (`device.ts:157`), so nothing new appears in the list.
-`keepApprovedAfterSwitch` stops deleting the new active profile's row (`device.ts:235-241`), because
+leaves the active profile out (`device.ts:158`), so nothing new appears in the list.
+`keepApprovedAfterSwitch` stops deleting the new active profile's row (`device.ts:236-242`), because
 that row now holds its zone memory. Cost (D4): withdrawing approval of a profile also forgets the
-device's zones for it.
+device's zones for it. (refreshed 2026-11-03 against main 68732329c1: line numbers only.)
 
 Rows: 4–12.
 
@@ -160,8 +174,8 @@ CASCADE, ON UPDATE RESTRICT. This keeps today's guarantee that zone rows exist o
 (the old FK to `device_profile_service_access`, `service.ts:203-207`). A profile with no department
 cannot hold zone rows, because a non-null child key has to match a parent whose
 `order_department_id` is the same value. The writer already deletes and rewrites the whole scope
-(`packages/venue-service/src/profile-access.ts:247-268`), so RESTRICT on update costs nothing. Rows:
-0–20.
+(`packages/venue-service/src/profile-access.ts:246-267`), so RESTRICT on update costs nothing. Rows:
+0–20. (refreshed 2026-11-03 against main 68732329c1: line numbers only.)
 
 ### 1.7 `device_profile_printers` — core set, `state` — kept as is
 
@@ -222,22 +236,31 @@ A real R7 link. Rows: 0–5.
 enum value), so folding it into a JSON column on `device_profiles` was considered. It stays a table
 for two reasons. A CHECK cannot validate the items of a JSON array in SQLite (it would need
 `json_each`, which is a subquery). And identity is a `toggleable` module
-(`packages/composition/src/modules.ts:213`), so R8 keeps its tables in its own set. Rows: 0–12.
+(`packages/composition/src/modules.ts:214`), so R8 keeps its tables in its own set. Rows: 0–12.
+(refreshed 2026-11-03 against main 68732329c1: line number only.)
 
 ### 1.13 `join_requests` — core set, `local`, not append-only
 
 Columns as today minus `location_id`: `id pk, node_id, kind (device|print_agent, CHECK), label,
 token_hash, verification_number, decoy_numbers (JSON list of two-digit numbers, not ids), created_at`.
 `node_id` stays. It is how a `local` table says which node a row belongs to (CLAUDE.md §3), and every
-verb filters on it (`apps/server/src/join-requests.ts:26`). With one box, it always holds that box's
+verb filters on it (`apps/server/src/join-requests.ts:27`). With one box, it always holds that box's
 id. Rows: 0–2.
+
+Since A1301 S12 (#2421), `join_requests.location_id` is written but never read: the request is
+stamped with `venueLocationId(tx)` (`join-requests.ts:208`), and an accept stamps the new `devices`
+or `print_agents` row the same way instead of copying the request's value (`:563`, `:610`).
+`git grep -n "joinRequests.locationId"` over `apps` and `packages` on main prints one line, a test
+(`apps/server/src/join-requests.test.ts:1839`). So no product code loses anything when the column
+goes. (refreshed 2026-11-03 against main 68732329c1: line number, and
+this new paragraph.)
 
 ### 1.14 `print_agents` — core set, `state`
 
 As today minus `location_id`: `id pk, name, host null, setup_url null, setup_port null, node_id null
 (unique), token_hash, active, last_seen_at null, enrolled_at`. Unique `node_id`
 (`print_agents_tenant_node_key`) keeps "at most one self-enrolled agent per node" (used at
-`join-requests.ts:713-726`). Second box: the reason `node_id` has no FK is the mirror
+`join-requests.ts:709-722`; refreshed 2026-11-03, was `:713-726`). Second box: the reason `node_id` has no FK is the mirror
 (`packages/db/src/schema/print-agents.ts:21-23`, `apps/server/src/mirror-bundle.ts`). The column
 itself is also needed with one box. Rows: 1–2.
 
@@ -271,11 +294,19 @@ apps packages ':!*.test.ts'` finds only its declaration and export.
 Protections:
 - kept: CHECKs on transport, paper width and resolution, and `printers_transport_fields_ck`;
 - kept: partial unique `local_key` where `local_key is not null and deleted_at is null`, minus the
-  location;
+  location. Since A1301 S10 (#2396) the demo printer's lookup keeps a `location_id` condition only
+  so that it can use today's key, which leads with the location (`apps/server/src/demo-printer.ts:34-45`).
+  It is the one qualified read of a `location_id` column on this area's tables left outside tests
+  (`git grep -n -E "(devices|printers|pagePrinters|printJobs|printAgents|joinRequests)\.locationId"`
+  over `apps` and `packages`, tests, migrations and `src/testing/` left out). The key without the
+  location serves that lookup with the condition gone (refreshed 2026-11-03 against main 68732329c1:
+  new note);
 - new: CHECK `(held_by_device_id is null) = (held_at is null)`;
 - new: CHECK `held_by_device_id is null or portable = 1` (making a printer fixed drops its holder:
-  `packages/layouts/src/device-equipment.ts:629-633`);
-- new: CHECK `deleted_at is null or active = 0` (`apps/server/src/printer-delete.ts:193`);
+  `packages/layouts/src/device-equipment.ts:615-617`);
+- new: CHECK `deleted_at is null or active = 0` (`apps/server/src/printer-delete.ts:183`)
+  (refreshed 2026-11-03 against main 68732329c1: line numbers; the holder cite now points at the
+  code, `:615-617`, rather than the comment above it);
 - "one holder per printer" (the old `printer_holders` PK) now holds by construction: a printer has
   one `held_by_device_id`.
 
@@ -288,7 +319,8 @@ CHECKs on format, media, port range and resolution stay, and so does `agent_id f
 `supported_formats` is a JSON list of formats the printer reported (not ids). Rows: 0–1.
 
 A merge with `printers` was considered and rejected. The two have different outboxes (`print_jobs`
-for thermal printers, `invoice_deliveries` for page printers: `apps/server/src/invoice-page-print.ts:82-91`).
+for thermal printers, `invoice_deliveries` for page printers: `apps/server/src/invoice-page-print.ts:74-83`;
+refreshed 2026-11-03 against main 68732329c1, was `:82-91`).
 Their connection columns hardly overlap. And keeping them apart is what lets plain foreign keys check
 that a receipt, slip or drawer role names a thermal printer (`devices.*_printer_id`,
 `device_profile_printers.printer_id`).
@@ -312,9 +344,15 @@ that a receipt, slip or drawer role names a thermal printer (`devices.*_printer_
 | resend_of | text | null, fk→print_jobs |
 | sale_id | text | null, fk→sales |
 
-Removed: `location_id`. `receipt_handover` breaks R4 (a person id inside JSON). It is written at
-`apps/server/src/receipt-print.ts:503` and read at `:444`; those are its only uses (`grep -rn
-receiptHandover`).
+Removed: `location_id`. Since A1301 S10 (#2396) a new job's `location_id` is filled from
+`venueLocationId(tx)`, or from a `venueId` option a caller that queues several jobs reads once
+(`packages/printing/src/outbox.ts:21-25`, `:62`; callers such as `receipt-print.ts:560-562`).
+Dropping the column also drops that option and what callers pass to it. `receipt_handover` breaks R4
+(a person id inside JSON). It is written at `apps/server/src/receipt-print.ts:509` and read at
+`:450`. `git grep -n "receiptHandover\|receipt_handover" -- apps packages ':!*.test.ts'
+':!*/drizzle/*'` prints only those two, its declaration (`packages/db/src/schema/print-jobs.ts:56`)
+and the frozen `country-es` demo captures. (refreshed 2026-11-03
+against main 68732329c1: line numbers, the narrowed grep, and the `venueId` sentence.)
 
 Protections: the CHECKs on kind and status, and the three indexes (`print_jobs_pull_idx`,
 `print_jobs_resend_of_idx`, `print_jobs_sale_id_idx`) stay. New CHECK `(handed_over_by is null) =
@@ -342,17 +380,22 @@ removed; D3 covers emptying old payloads instead.
 | via_override | integer flag | |
 
 Change: `printer_id` is replaced by `print_job_id`, and the printer is read from the job. Every
-insert writes a drawer job in the same transaction: `receipt-print.ts:401/409`, `:549/:557`,
-`:639/:648`, `:667/:674`, and `apps/server/src/print-api.ts:1247-1248`. Today the audit row cannot
+insert writes a drawer job in the same transaction: `receipt-print.ts:407/415`, `:552/:560`,
+`:643/:652`, `:671/:678`, and `apps/server/src/print-api.ts:1243-1244`. Today the audit row cannot
 say whether the kick was ever delivered: "`drawer_opens` holds no job id"
-(`packages/printing/src/runtime.ts:143`). The job's `status`/`delivered_at` now answer that.
+(`packages/printing/src/runtime.ts:140`). The job's `status`/`delivered_at` now answer that.
+`enqueuePrintJob` already returns the new job's id (`packages/printing/src/outbox.ts:26`). The four
+`receipt-print.ts` sites insert the open before they queue the job, so they would swap that order;
+`print-api.ts` already queues first. (refreshed 2026-11-03 against main 68732329c1: line numbers,
+and the last two sentences.)
 
 Protections:
 - the reason CHECK stays;
 - `drawer_opens_target_ck` (`packages/db/src/schema/drawer-opens.ts:58-71`) stays, except that its
   calibration branch drops `printer_id is not null` (the not-null `print_job_id` replaces it);
 - new: unique `tender_refund_id` where not null. This is the "at most one open per refund" rule that
-  `receipt-print.ts:632-636` checks by reading first;
+  `receipt-print.ts:636-640` checks by reading first (refreshed 2026-11-03 against main
+  68732329c1: was `:632-636`);
 - new: update and delete refused by `appendOnly()` triggers. `git grep -n -E
   "drawer_opens|update\(drawerOpens\)|delete\(drawerOpens\)"` outside tests and migrations finds no
   update or delete.
@@ -392,7 +435,8 @@ The printed-dot copy `theme.printedLogo` is a cache; see §6 and M3. Protections
   finds only `packages/layouts/src/receipt-store.ts` and the export in `packages/db/src/index.ts:191`.
   Receipt trim now lives on `department_receipts` (venue-service). One correction to
   `area-devices.json`: the table is **not** in the configuration export. It is missing from
-  `packages/db/src/configuration-transfer.ts:76-111`, and only an old test fixture names it.
+  `packages/db/src/configuration-transfer.ts:62-111` (refreshed 2026-11-03 against main 68732329c1:
+  was `:76-111`), and only an old test fixture names it.
 - Which theme is in use stays `custom_themes.in_use` (R4: a flag on the row, not an id in a document).
 - Every other value here configures one row (a profile's timeout, a printer's paper width), not the
   venue, so it stays a column on that row.
@@ -400,7 +444,8 @@ The printed-dot copy `theme.printedLogo` is a cache; see §6 and M3. Protections
 ## 3. History
 
 **Typed history kept:** `drawer_opens`, because product code reads it back:
-- `apps/server/src/receipt-print.ts:632-636` reads it so a refund opens the drawer at most once.
+- `apps/server/src/receipt-print.ts:636-640` reads it so a refund opens the drawer at most once
+  (refreshed 2026-11-03 against main 68732329c1: was `:632-636`).
   The new unique key makes the database hold this rule too.
 - `apps/server/src/personal-data-actions.ts:172-186`, the personal-data export for a person.
 
@@ -417,7 +462,7 @@ Subject ids go in `subject_kind`/`subject_id`/`person_id`/`device_id`; `data` ca
 | `device.join_denied` | join_request | a join is denied or fails the number check |
 | `device.disabled` / `device.enabled` / `device.deleted` | device | the dashboard Devices screen |
 | `device.profile_switched` | device | the active profile changes (`data`: from/to profile names) |
-| `device.approved_profiles_changed` | device | `approveDeviceProfiles` (`device.ts:191`) |
+| `device.approved_profiles_changed` | device | `approveDeviceProfiles` (`device.ts:192`; refreshed 2026-11-03, was `:191`) |
 | `device_profile.changed` | device_profile | a profile save (`data`: which sections changed) |
 | `print_agent.enrolled` / `print_agent.revoked` | print_agent | agent pairing and revoking |
 | `printer.added` / `printer.deleted` | printer | the dashboard Printers screen |
@@ -464,9 +509,11 @@ Sources: each schema file named in §1, the triggers found by `grep CREATE TRIGG
 `packages/*/drizzle/*.sql`, and `scripts/behavioural-triggers.test.ts:130`. Only one trigger lives
 on these tables today, `device_profile_form_factor_locked`. The device binding triggers were dropped
 in `packages/db/drizzle/0119_drop_device_binding_triggers.sql`, and that rule moved into
-`setDeviceKitchenScreens`/`assertKitchenDisplayHasScreen` (`kitchen-screens.ts:566`, `:923`).
+`setDeviceKitchenScreens`/`assertKitchenDisplayHasScreen` (`kitchen-screens.ts:537`, `:889`).
 `scripts/append-only-triggers.test.ts` names none of these tables, and neither does
-`scripts/write-path-tables.json`.
+`scripts/write-path-tables.json`. (refreshed 2026-11-03 against main 68732329c1: line numbers. No
+migration file of these tables' sets changed since 64eeabb036, so the trigger list stands; a grep of
+`write-path-tables.json` for this area's table names on main prints nothing.)
 
 | current protection | new home |
 |---|---|
@@ -509,9 +556,11 @@ in `packages/db/drizzle/0119_drop_device_binding_triggers.sql`, and that rule mo
    other is what the device picked.
 2. **What a narrowing took from a device** (`device_kitchen_screen_removals`) can be worked out from
    two things already stored: the device's choice, which a narrowing never changes
-   (`kitchen-screens.ts:786`), and the profile's current setting. A removal row is deleted as soon as
-   the profile allows the item again (`:805-809`), so the table only ever holds "chosen but no longer
-   allowed". It goes (D1), and M2 measures the one place the two differ.
+   (`kitchen-screens.ts:756`), and the profile's current setting. A removal row is deleted as soon as
+   the profile allows the item again (`:774-779`), so the table only ever holds "chosen but no longer
+   allowed". It goes (D1), and M2 measures the one place the two differ. (refreshed 2026-11-03
+   against main 68732329c1: line numbers; A1301 S6, #2394, took the per-location loop out of the
+   narrowing, and the two facts cited here are unchanged.)
 3. **`devices.created_at` and `devices.enrolled_at`**: both written at insert and never changed.
    One home: `enrolled_at`.
 4. **A theme logo's printed dots stored twice**: `custom_themes.theme.printedLogo` and
@@ -550,7 +599,7 @@ in `packages/db/drizzle/0119_drop_device_binding_triggers.sql`, and that rule mo
   rasters per image (§6 item 4).
 - **shared:** `activity_log` (§3).
 - **Lists that follow table names** and must be edited when the tables change: the configuration
-  export lists (`packages/db/src/configuration-transfer.ts:80-111`,
+  export lists (`packages/db/src/configuration-transfer.ts:64-108`,
   `packages/venue-service/src/configuration-transfer.ts:706-710`,
   `packages/identity/src/configuration-transfer.ts:20-21`), the classification lists
   (`packages/db/src/classification.ts:108-153`, `packages/venue-service/src/classification.ts:23-33`),
@@ -558,7 +607,9 @@ in `packages/db/drizzle/0119_drop_device_binding_triggers.sql`, and that rule mo
   `printers.held_by_device_id` must be added to the export's `omit` list, because devices are not
   exported. The export of `kitchen_screens` must skip rows owned by a device, together with their
   child rows. Today's `leaveBehindWhenSet` filters one table at a time
-  (`configuration-transfer.ts:80`), so the children need a filter through their parent row.
+  (`configuration-transfer.ts:79`), so the children need a filter through their parent row.
+(refreshed 2026-11-03 against main 68732329c1: line numbers in the core export list, which export
+format 10, #2415, shortened; no device-area table entered or left any export list.)
 
 ## 8. Measure before building
 
@@ -570,7 +621,8 @@ in `packages/db/drizzle/0119_drop_device_binding_triggers.sql`, and that rule mo
 - **M2 — removal notes worked out on read.** Change `readDevicesKitchenScreens` so that "taken
   away" means the device's choice minus what the profile now allows, then run
   `pnpm --filter @waitron/venue-service exec vitest run kitchen-screens` and the
-  `apps/server` device-api kitchen-screen tests. My reading of `kitchen-screens.ts:786-871` predicts
+  `apps/server` device-api kitchen-screen tests. My reading of `kitchen-screens.ts:754-845`
+  (refreshed 2026-11-03 against main 68732329c1: was `:786-871`) predicts
   that the only failing cases are a device whose choice is "every station/zone" and which used to
   show the narrowed items as "no longer available". The result that would change the design:
   failures anywhere else, which would mean a removal row carries a fact that cannot be derived.
@@ -590,17 +642,21 @@ in `packages/db/drizzle/0119_drop_device_binding_triggers.sql`, and that rule mo
   was "every station" simply shows fewer stations. It no longer lists the removed ones as "no longer
   available". The notice the dashboard shows when a profile is saved is worked out at save time from
   the before and after settings, so it is unchanged (`replaceProfileKitchenScreens` returns it,
-  `kitchen-screens.ts:206-215`). The cost is an owner column with two possible parents and an export
+  `kitchen-screens.ts:187-199`; refreshed 2026-11-03 against main 68732329c1: was `:206-215`, and
+  since A1301 S6, #2394, it reads one before and one after for the profile instead of one per
+  location). The cost is an owner column with two possible parents and an export
   filter (§7). Decide after M2.
 - **D2 — where the device-profile tables live.** Folding service access into `device_profiles` means
   a core table points at `departments`, which is in the venue-service set today. Venue-service is
-  `mandatory` (`packages/composition/src/modules.ts:192`), so there is no swappable module to protect.
+  `mandatory` (`packages/composition/src/modules.ts:193`; refreshed 2026-11-03, was `:192`), so there
+  is no swappable module to protect.
   I recommend moving `departments` into the core set (the venuebox researcher's table) so that the FK
   can exist. If that is refused, `device_profile_service_access` stays a separate table, and the only
   reason is which set can reference which.
 - **D3 — empty old print job payloads.** Only if M1 shows real size: after a job is `done` or
   `failed` and some number of days old, set `payload` to empty and keep the row (the four tables in §7
-  still point at it). A resend copies the original's payload (`packages/printing/src/outbox.ts:121`), so
+  still point at it). A resend copies the original's payload (`packages/printing/src/outbox.ts:123`; refreshed
+  2026-11-03, was `:121`), so
   the number of days is also how long staff can reprint by resending. I recommend 30 days, as a
   constant in code, not a setting.
 - **D4 — approvals and zone memory share a row.** Withdrawing a device's approval for a profile also
@@ -608,5 +664,6 @@ in `packages/db/drizzle/0119_drop_device_binding_triggers.sql`, and that rule mo
   useful while the device may run that profile.
 - **D5 — make `drawer_opens` append-only and tie each open to its kick job.** This closes the open
   backlog item "`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up)"
-  (`docs/backlog.md:6685`). I recommend yes. No code updates or deletes the table today, and with the
+  (`docs/backlog.md:6630`; refreshed 2026-11-03 against main 68732329c1, was `:6685`; the item is
+  still open). I recommend yes. No code updates or deletes the table today, and with the
   job id the audit can show whether the drawer was actually kicked.
