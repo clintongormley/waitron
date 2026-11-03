@@ -203,6 +203,7 @@ import { startRestricted } from "./restricted-start.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
+import { mountNodeMembershipApi } from "./node-membership-api.js";
 import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
 import { clockStartUp, tillClockCheck } from "./clock-start-up.js";
 import {
@@ -1637,6 +1638,7 @@ async function bootServer(
     // Unauthenticated and deliberately minimal: no ambient viewer exists yet.
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
     mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: config.node.nodeId }, log);
+    mountNodeMembershipApi(app, { db, node: store.node, nodeId: config.node.nodeId }, log);
     const finishWorker = runFinishAdoption({
       ownerDb: db,
       stateDir: config.stateDir,
@@ -1702,6 +1704,8 @@ async function bootServer(
             { db, node: store.node, ring, nodeId: node.nodeId },
             log,
           ),
+        (restrictedApp) =>
+          mountNodeMembershipApi(restrictedApp, { db, node: store.node, nodeId: node.nodeId }, log),
       ],
       log,
       listen: (restrictedApp) => {
@@ -2169,6 +2173,17 @@ async function bootServer(
     log,
   );
   mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
+  mountNodeMembershipApi(
+    app,
+    {
+      db,
+      node: store.node,
+      nodeId: tradingContext.nodeId,
+      stepDown: (request) => stepDownHere(request),
+      selling: () => holders.mode.current !== "mirror" && !fenced,
+    },
+    log,
+  );
   let demoPrinterLoop: { stop(): Promise<void> } | undefined;
   // Outside the block below so the alert sources have it on every node.
   const testPages = createPageTestPages(now);

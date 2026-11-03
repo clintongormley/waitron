@@ -3,11 +3,15 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { withNodeTransaction } from "@waitron/db";
+import { readNodeMembership, withNodeTransaction } from "@waitron/db";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
 import { signEnvelope, verifyEnvelope } from "@waitron/handover";
-import { generateNodeKeyPair } from "@waitron/membership";
+import {
+  generateNodeKeyPair,
+  signDocumentBody,
+  type MembershipDocumentBody,
+} from "@waitron/membership";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverRestriction, recordHandoverRestrictionTx } from "@waitron/node-db";
@@ -183,6 +187,19 @@ describe("a box holding a handover restriction starts restricted", () => {
     });
   }, 60_000);
 
+  it("is handed a chart through its own route, and answers only that it was not accepted", async () => {
+    const { port } = start();
+    const response = await fetch(`http://127.0.0.1:${port}/api/node/membership`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect({ status: response.status, body: await response.json() }).toEqual({
+      status: 200,
+      body: { accepted: false },
+    });
+  }, 60_000);
+
   it("refuses a till sign-in", async () => {
     const { port } = start();
     const response = await fetch(`http://127.0.0.1:${port}/api/session`, {
@@ -281,6 +298,47 @@ describe("a full start's stepdown, through its test seam", () => {
       kind: "superseded",
     });
     // The graceful close ran before the restart: the listener no longer answers.
+    await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
+  }, 60_000);
+
+  it("handed a newer chart that fences it, answers, then closes and restarts restricted", async () => {
+    const restart = vi.fn();
+    const successor = "00000000-0000-4000-8000-0000000000cc";
+    const { port, venue } = await boot(suite, {
+      restricted: false,
+      seams: { stepdown: { restart, mount: () => {} } },
+    });
+    const nodeId = venue.cfg.nodeId;
+    const body: MembershipDocumentBody = {
+      term: 1,
+      nodes: [
+        { nodeId, contactUrl: "https://box.example", standing: "sell-only" },
+        { nodeId: successor, contactUrl: "https://next.example", standing: "serving-primary" },
+      ],
+    };
+    const document = {
+      body,
+      signerNodeId: nodeId,
+      signature: signDocumentBody(
+        body,
+        await readNodeIdentityKey(suite.node, loadKeyRing(KEY_ENV), nodeId),
+      ),
+      endorsements: [],
+    };
+    const answer = await fetch(`http://127.0.0.1:${port}/api/node/membership`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ document }),
+    });
+    expect(await answer.json()).toEqual({ accepted: true });
+    await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    expect(await readNodeMembership(suite.db)).toEqual(document);
+    expect(await readHandoverRestriction(suite.node, nodeId)).toMatchObject({
+      kind: "superseded",
+      successorNodeId: successor,
+      operationId: null,
+      membershipTerm: 1,
+    });
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
   }, 60_000);
 

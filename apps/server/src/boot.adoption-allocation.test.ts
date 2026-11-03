@@ -10,6 +10,7 @@ import { signEnvelope, verifyEnvelope } from "@waitron/handover";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { withNodeTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { tenantCredentials } from "@waitron/credentials";
 import { managementSessions } from "@waitron/identity";
@@ -229,6 +230,59 @@ it("the pending-adoption start answers the main box's signed query", async () =>
         requestedOperation: null,
         nonce,
       },
+    });
+  } finally {
+    await server?.close();
+    await rm(scratch, { recursive: true, force: true });
+  }
+}, 60_000);
+
+it("the pending-adoption start is handed a chart through its own route", async () => {
+  await seedVenue(suite.db);
+  const origin = await seedNode(suite.db);
+  await stampDeployment(suite.db, "preproduction");
+  await setNodeMode({ venue: suite.db, node: suite.node }, STANDBY, "mirror");
+  const scratch = await mkdtemp(join(tmpdir(), "boot-adoption-membership-"));
+  let server: StartedServer | undefined;
+  try {
+    for (const [index, set] of manifestSets().entries())
+      await cp(migrations[index]!.migrationsFolder, join(scratch, "migrations", set.name), {
+        recursive: true,
+      });
+    await writeFile(
+      join(scratch, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-verifactu": false } }),
+    );
+    await writePendingAdoption(scratch, {
+      originNodeId: origin,
+      standby: { nodeId: STANDBY, publicKey: "synthetic-public" },
+      nodeName: "Spare",
+      filingModule: "none",
+      taxModule: "vat",
+      reserved: { modules: { "fiscal-none": {} }, series: [], endorsement: {} as never },
+    });
+    const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+    const [port] = await freePorts(1);
+    server = await startServer({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      WAITRON_VENUE_DIR: dirname(database),
+      WAITRON_STATE_DIR: scratch,
+      WAITRON_LOG_DIR: join(scratch, "logs"),
+      WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_LANDING_PORT: "0",
+      WAITRON_NODE_ID: STANDBY,
+      WAITRON_ENV: "dev",
+    });
+    const response = await fetch(`http://127.0.0.1:${httpPort()}/api/node/membership`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect({ status: response.status, body: await response.json() }).toEqual({
+      status: 200,
+      body: { accepted: false },
     });
   } finally {
     await server?.close();
