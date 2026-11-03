@@ -572,7 +572,7 @@ the server checks each at the route, never trusting the till's copy:
   `packages/venue-service/src/kitchen-screens.ts`): a kitchen display runs exactly one
   (`kitchen_screen.required` without one); a till or handheld may choose none, or a station screen
   and one of a pass screen or a pass monitor, which then narrow its Station and Pass screens. A
-  pass screen draws Ready only when its profile has "Run the pass"
+  pass screen draws Fire and Ready only when its profile has "Runs the pass"
   (`run-the-pass`, a screen setting, not an action). A kitchen display's station screen draws
   Move to station on each waiting dish only when its profile has `take-orders`; a till's own
   Station screen draws none (A439). What reaches a station still comes from the

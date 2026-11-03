@@ -119,8 +119,9 @@ Un pedido de mostrador sigue visible después del cobro hasta que lo entregues o
 una mesa pagada se cierra con **Lo recogerán en el mostrador**, sus platos por llegar pasan a ser
 un pedido así: cada estación con un plato por llegar en él recibe el aviso de que el pedido pasó al
 mostrador, e imprime un ticket **MOVIDO** si su ajuste **Imprimir un aviso al cambiar de mesa los
-platos enviados** es **Imprimir**; los platos siguen en el pase hasta que se entrega el pedido. Cada pase sigue mostrando solo las
-estaciones y zonas de servicio que tiene asignadas.
+platos enviados** es **Imprimir**; los platos siguen en el pase hasta que se entrega el pedido. Cada pase atiende solo las
+estaciones y zonas de servicio que tiene asignadas; un plato de otra estación en una de sus tarjetas
+se muestra atenuado.
 
 Tú decides cuándo pedir la preparación desde el terminal; no hay un modo de marcha para todo el
 local. Cada estación de preparación fija si su pantalla de cocina avanza la preparación un plato cada vez
@@ -233,7 +234,7 @@ atenúa; mientras espera a su propio pase dice **Barra: esperando a su pase**. L
 
 En una tarjeta en **En curso**, **Grupo listo** marca como listos todos los platos enviados del
 grupo de la mesa, en todas las estaciones, no solo los que muestra este pase, y en un pedido de
-mostrador **Curso listo** hace lo mismo con un curso. **Marchar** y estos botones solo aparecen en
+mostrador **Curso listo**, seguido del nombre del curso, hace lo mismo con ese curso. **Marchar** y estos botones solo aparecen en
 un dispositivo cuyo perfil **Lleva el pase**. En un terminal, una tarjeta que no está en espera
 ofrece además **Reimprimir** por cada una de sus cuentas.
 
@@ -300,7 +301,8 @@ quien envía no es encargado, el terminal pide el PIN de un encargado tras **La 
 ## Pide la preparación desde el terminal {#request-cooking}
 
 Pide los platos en espera desde el pedido de la mesa. Las colas de las estaciones y el pase muestran los pases
-y grupos en espera sin botón Marchar. Los platos en espera se muestran atenuados y no avanzan al tocarlos.
+y grupos en espera sin botón Marchar. En las colas de las estaciones, los platos en espera se muestran
+atenuados y no avanzan al tocarlos; en el pase esperan en **En espera**.
 Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estación. Un plato cuya
 estación espera al pase va en cambio a la columna **Por marchar** del pase: consulta
 [Trabaja en el pase](kitchen-service.md#pass-screen).

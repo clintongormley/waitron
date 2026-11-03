@@ -5688,7 +5688,7 @@ page's language as `active` and decides what a pick means. A signed-in operator'
 existing preference write; login, pairing and kitchen-display choices are local UI changes.
 
 At phone width the till's page keeps `--wt-space-2` at its edges (`apps/till/index.html`), and the
-Floor, table Order, Expo, Station, Counter and Schedule screens add no side padding of
+Floor, table Order, Pass, Station, Counter and Schedule screens add no side padding of
 their own; Schedule also drops its card's border there. Cases:
 `apps/till/src/screens/device-screens.phone-margin.test.ts`.
 
@@ -5744,7 +5744,7 @@ A dish sent after its period ended, once the kitchen agreed, carries "After {per
 (`station.after_period`) in a warning chip: `--wt-color-warning` with `--wt-color-on-warning` text,
 bold, the printing-problem chip's style (`.after-period`, `apps/till/src/widgets/station-queue.ts`).
 On a card it is a row of its own above each run of consecutive dishes with the same mark, within
-one course. The pass and expo show no mark. The kitchen ticket prints the same words in
+one course. The pass shows no mark. The kitchen ticket prints the same words in
 capitals between `**` above each such run; correction and MOVED slips print none.
 
 ### Identical portions share one row

@@ -68,10 +68,7 @@ their full text.
 - Found by #618 (`apps/till` `src/api` + `src/state` + `src/i18n`), not fixable in a
   comments-only change. Test titles repeat claims the branch corrected:
   `apps/till/src/state/working-order.test.ts` "previews the total via priceBasket" (the preview
-  sums line totals). The till client's old all-stations pass read had a title of the same kind
-  ("this node's" for a venue-wide read); it retires with that read (A773-2 B4, D76), and its
-  replacement's case in `apps/till/src/api/client.test.ts` ("getExpoBoard GETs every station's
-  board…") names no node.
+  sums line totals).
 
 ## Test titles repeat claims the branch corrected (#616)
 
@@ -79,9 +76,7 @@ their full text.
   repeat claims the branch corrected: `apps/server/src/working-order.test.ts` "lists the node's open
   orders" (the list is venue-wide); `station-queue.test.ts` "(nothing to release)" is false for a
   held line with no course, and several `station-queue`, `tender-pay` and `modifier-picker` test
-  titles carry task numbers. The old pass screen's `css` comment calling the courseless group
-  "auto-fired" retires with that screen (A773-2 B4, D76); `apps/till/src/widgets/station-queue.ts`
-  and the new pass (`apps/till/src/widgets/pass-board.ts`) no longer say it. `apps/till/README.md`
+  titles carry task numbers. `apps/till/README.md`
   says the held list is shared across the registers "on a node". Read, not run: a courseless
   section the server held shows its lines greyed with no fire button (`#fireAction` in
   `station-queue.ts`, from #131); `GET /api/till` never sends `stripe_on_device`, so the
@@ -876,9 +871,8 @@ Open:
   zero, a captured card payment with no sale still takes the recovery branch first, settling at
   the captured amount with all of it recorded as tip; the below-zero case with a capture was not
   run.
-- **Task 4 (#832, every paper names all of a party's tables).** At 390 px a pass card whose
-  label wraps also wrapped its "2 min" onto two lines, on the pass screen A773-2 B4 retired (D76);
-  nothing overflowed. Not yet looked at on the new pass card (`apps/till/src/widgets/pass-board.ts`). **DECIDED (owner, 2026-09-29): leave it** — after payment, the station queue
+- **Task 4 (#832, every paper names all of a party's tables).** Not yet looked at on the pass
+  card (`apps/till/src/widgets/pass-board.ts`): whether a wrapping label wraps its "2 min" too. **DECIDED (owner, 2026-09-29): leave it** — after payment, the station queue
   card, later kitchen notices and the till's list of a party's bills keep showing the frozen
   receipt label with the party's name ("Ana · Mesa 4, 5"). Not yet checked: the payment API's
   `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
@@ -2516,7 +2510,7 @@ once, and the HOLD paper corrections for dishes waiting for the pass. B4a put th
 monitor and the till's own Pass on that board (`apps/till/src/screens/till-pass-screen.ts`, the
 till's every-station view on `GET /api/expo/board`) and retired the old pass reads. What B1,
 [B2's task plan](../superpowers/plans/2026-11-01-a773-2b2-requested-lifecycle.md) and B3 leave to
-B4 is in the slice plan's "Left for B4". Old nonempty stamps remain in regression fixtures, outside the till's
+B4 is in the slice plan's "Left for B4"; what B4a left is B4b in [the B4 plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md). Old nonempty stamps remain in regression fixtures, outside the till's
 public contracts. Physical schema and configuration-transfer fields remain for Task 12.
 
 PRs B–D add Requested and scoped pass release, integrate the agreed columns and display policy,

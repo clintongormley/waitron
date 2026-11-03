@@ -1247,7 +1247,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   can mix languages when a locale exists on one half only.
   [Detail](backlog/catalogue.md#smaller-things-379-surfaced-and-did-not-take)
 
-- **The kitchen and expo screens still show allergens as text chips.** A668 brings icons to the
+- **The kitchen screens and the pass still show allergens as text chips.** A668 brings icons to the
   editor, the till's buttons and its order list, not to these screens.
 
 - **A928. The Courses list may move its rows under a held drag (found by A758-2's review, not
@@ -2446,6 +2446,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   runs on the new board (B4a). Next: B4b, the station's Held column, "at the pass" and the display
   setting ([B4 plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md), tasks B1a1–B13).
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
+
+- **The pass board and the station board still carry copies of each other's code (left open by
+  A773-2 B4a's finish review).** Three copies remain: the width watcher that switches between columns
+  and one list, with the age colours (`apps/till/src/widgets/pass-board.ts` and `station-queue.ts`);
+  the styles of the dish lines both now draw through `kitchen-board-parts.ts`; and the saved column
+  layouts (`till-pass-screen.ts` and `till-station-screen.ts`). B4b changes the column layouts again,
+  so join them there. Also from that review: when a newer refresh of the pass fails and an older one
+  then answers, the screen clears its stale line (the old pass screen did the same);
+  the server still works out each pass dish's age colour, which no screen reads (D68 keeps it); and
+  the pass screen's `operatorSession` property is never read.
 
 - **Warn the pass before it fires dishes to a station whose printer or screen is down (left open
   by A773-2 B3, decision D54).** Nothing warns the pass before its Fire: a closed station's

@@ -103,8 +103,8 @@ A counter order stays visible after payment until you collect or close it. When 
 finishes with **They'll collect it at the counter**, its food still to come becomes such an order:
 each station with a dish still to come on it is told it moved to the counter, and prints a **MOVED**
 slip when its **Print a slip when sent dishes move table** setting is **Print**; the food stays
-on the pass until the order is handed over. Each pass still shows only the stations and service
-zones assigned to it.
+on the pass until the order is handed over. Each pass handles only the stations and service zones
+assigned to it; another station's dish on one of its cards shows dimmed.
 
 You choose when to request cooking from the till; there is no venue-wide firing mode. Each prep
 station sets whether its kitchen screen moves preparation on one item at a time or a whole
@@ -205,8 +205,8 @@ card that also holds a dish this pass covers, and is always dimmed; while it wai
 it says **Bar: waiting for its pass**. Dimmed dishes are there for information only.
 
 On a card **In progress**, **Group ready** marks every sent dish of the table's group ready at every
-station, not only the ones this pass shows, and on a counter order **Course ready** does the same
-for one course. **Fire** and these buttons show only on a device whose profile **Runs the pass**. On
+station, not only the ones this pass shows, and on a counter order **Course ready**, followed by the
+course's name, does the same for that course. **Fire** and these buttons show only on a device whose profile **Runs the pass**. On
 a till, a card that is not held also offers **Reprint** for each of its bills.
 
 A pass monitor shows the same board for watching, with no **Fire**, Ready or **Reprint** buttons. A
@@ -269,7 +269,8 @@ person sending is not a manager, the till asks for a manager's PIN after **Kitch
 ## Request cooking from the till {#request-cooking}
 
 Request held food from the table's order screen. Station queues and the pass show held courses and groups
-without a Fire button. Held dishes stay dimmed and cannot be advanced by tapping them.
+without a Fire button. On a station queue, held dishes stay dimmed and cannot be advanced by
+tapping them; on the pass they wait in **Held**.
 Once released, a dish can move through preparation to Ready at its station. A dish whose station
 waits for the pass goes to the pass's **To fire** column instead: see
 [Work the pass](kitchen-service.md#pass-screen).

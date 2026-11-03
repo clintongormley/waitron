@@ -1,7 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
-import { setLocale } from "./i18n/t.js";
+import { currentLocale, setLocale } from "./i18n/t.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { passBoard, passCard, passItem } from "../test/pass-board-fixtures.js";
 import "./till-app.js";
@@ -16,8 +16,12 @@ import type {
   ZoneOfferCatalogue,
 } from "./api/client.js";
 
+const previousLocale = currentLocale();
 beforeEach(() => setLocale("es-ES"));
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale(previousLocale);
+});
 
 const till = {
   locale: "es-ES",
