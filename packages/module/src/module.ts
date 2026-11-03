@@ -1175,8 +1175,9 @@ export interface VenueServiceContribution {
     input: { deviceId: string; profileId: string; screens: readonly DeviceKitchenScreen[] },
   ): Promise<void>;
   /** Sets the device's own choice of showing other stations' dishes on its screen of `kind`
-   *  (null: the profile's), changing nothing else. Refused `device.unauthorized` when the device
-   *  has no screen of that kind. */
+   *  (null: the profile's), changing nothing else. Refused `device.unauthorized` for a kind other
+   *  than a pass or a pass monitor, and when the device's effective choice has no screen of that
+   *  kind (a kind a narrowing took keeps its row and stored value). */
   setDeviceKitchenScreenDisplay(
     tx: Transaction,
     deviceId: string,

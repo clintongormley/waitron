@@ -599,14 +599,17 @@ export async function setDeviceKitchenScreens(
 }
 
 /** Sets the device's own choice of showing other stations' dishes on its screen of `kind` (null:
- *  the profile's), changing nothing else. Refused `device.unauthorized` when its effective choice
- *  has no such screen: a kind a narrowing took has no choice to set (its override reads null). */
+ *  the profile's), changing nothing else. Refused `device.unauthorized` for a kind other than a
+ *  pass or a pass monitor, and when the device's effective choice has no screen of `kind`: none
+ *  chosen, or a narrowing took the kind or all its stations or zones (the stored value stays, and
+ *  its override reads null). */
 export async function setDeviceKitchenScreenDisplay(
   tx: Transaction,
   deviceId: string,
   kind: "pass" | "pass_monitor",
   value: boolean | null,
 ): Promise<void> {
+  if (kind !== "pass" && kind !== "pass_monitor") throw new AppError("device.unauthorized", {});
   const effective = (await readEffectiveChoices(tx, [deviceId])).get(deviceId)!;
   if (!effective.has(kind)) throw new AppError("device.unauthorized", {});
   await tx

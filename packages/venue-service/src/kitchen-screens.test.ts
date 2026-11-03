@@ -2612,6 +2612,17 @@ describe("A773 pass display policy", () => {
     await expect(deviceValues(partial)).resolves.toEqual({ pass: true });
   });
 
+  it("refuses through the seat a station screen's value, writing nothing", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, { station: every });
+    const line = await seedDevice(venue.kds, "Line");
+    await choose(venue, line, venue.kds, [{ kind: "station", ...every }]);
+    await expect(
+      outcome(scoped((tx) => setDeviceKitchenScreenDisplay(tx, line, "station" as never, false))),
+    ).resolves.toEqual({ code: "device.unauthorized", params: {} });
+    await expect(deviceValues(line)).resolves.toEqual({ station: null });
+  });
+
   it("reads true and null for a station screen", async () => {
     const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every });
