@@ -1687,3 +1687,204 @@ describe("one publication at a time, and the status while one runs", () => {
     }
   });
 });
+
+const SWEPT_OPS = [...WRITE_OPS, ...FLUSH_OPS];
+
+/**
+ * Overrides for every write and flush operation: the `k`-th such call (counting from 0) throws, as
+ * a stopped process makes no further call. In "half" mode a writeFile first writes the first half
+ * of its bytes with the caller's own options.
+ * @param {number} k @param {"before"|"half"} mode
+ */
+function stopAt(k, mode) {
+  let seen = 0;
+  return Object.fromEntries(
+    SWEPT_OPS.map((name) => [
+      name,
+      async (...args) => {
+        if (seen++ !== k) return REAL_IO[name](...args);
+        if (mode === "half" && name === "writeFile") {
+          const [path, bytes, options] = args;
+          await REAL_IO.writeFile(path, bytes.subarray(0, bytes.length >> 1), options);
+        }
+        throw Object.assign(new Error(`stopped at ${name}`), { code: "EIO" });
+      },
+    ]),
+  );
+}
+
+/** The write and flush operations of a log, by name. */
+const sweptOf = (log) => log.map(([name]) => name).filter((name) => SWEPT_OPS.includes(name));
+
+/**
+ * A clean run of `decision` from `start` in a fresh fixture: its write and flush operations, and
+ * what the reader answers before and after.
+ */
+async function steps(start, decision) {
+  const f = await fixture(start);
+  const before = await f.reader().read();
+  await f.make().publish(decision);
+  return { ops: sweptOf(f.counting.log), before, after: await f.reader().read() };
+}
+
+/** The bytes of every regular file directly in `folder`, by name; empty when it is missing. */
+async function allFileBytes(folder) {
+  const names = await fs.readdir(folder).catch((error) => {
+    if (error.code === "ENOENT") return [];
+    throw error;
+  });
+  const files = {};
+  for (const name of names.sort()) {
+    const path = join(folder, name);
+    if ((await fs.lstat(path)).isFile()) files[name] = new Uint8Array(await fs.readFile(path));
+  }
+  return files;
+}
+
+const fileOrNull = (path) =>
+  fs.readFile(path).then(
+    (bytes) => new Uint8Array(bytes),
+    (error) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    },
+  );
+
+const ALLOWED_UNDER_BOOT = new Set([
+  "",
+  "waitron-recovery",
+  join("waitron-recovery", "wifi.json"),
+  join("waitron-recovery", "wifi.json.next"),
+  join("waitron-recovery", "recovery.crt"),
+]);
+const expectOnlyKnownNames = async (f, label) => {
+  const names = (await snapshot(f.bootRoot)).map(([name]) => name);
+  expect(
+    names.filter((name) => !ALLOWED_UNDER_BOOT.has(name)),
+    label,
+  ).toEqual([]);
+};
+
+const halfB = Buffer.from(writeB.bytes).subarray(0, writeB.bytes.length >> 1);
+/** @type {Array<[string, Record<string, unknown>]>} */
+const SWEEP_STARTS = [
+  ["no folder", { folder: false }],
+  ["an empty folder", {}],
+  ["A", { record: "A" }],
+  ["A with half of B left in wifi.json.next", { record: "A", next: halfB }],
+  ["a corrupt wifi.json", { record: "{}\n" }],
+  ["B", { record: "B" }],
+];
+const SWEEP_DECISIONS = [
+  ["writeB", writeB, [writeB, removeCable]],
+  ["removeCable", removeCable, [removeCable, writeA]],
+  ["removeOpen", removeOpen, [removeOpen, writeA]],
+];
+const PASSWORD_OF = new Map([
+  [writeA, PASSWORD_A],
+  [writeB, PASSWORD_B],
+]);
+
+/** The repair's checks, over a fixture just stopped; `crt` is recovery.crt's bytes at the start. */
+async function expectRepairedBy(f, later, crt, label) {
+  const publisher = createWifiBootCopyPublisher({
+    bootRoot: f.bootRoot,
+    ownerUid: process.getuid(),
+    inspectBootMount: f.inspectBootMount,
+    io: countingIo().io,
+  });
+  const status = await publisher.publish(later);
+  expect(status.state, label).toBe(later.kind === "write" ? "current" : "absent");
+  expect(await fileOrNull(f.recordPath), label).toEqual(
+    later.kind === "write" ? new Uint8Array(later.bytes) : null,
+  );
+  expect(await fileOrNull(f.nextPath), label).toBeNull();
+  const texts = Object.values(await allFileBytes(f.folder)).map((bytes) =>
+    Buffer.from(bytes).toString("utf8"),
+  );
+  const own = PASSWORD_OF.get(later);
+  if (own !== undefined) expect(texts.join("\n"), label).toContain(own);
+  for (const password of [PASSWORD_A, PASSWORD_B]) {
+    if (password === own) continue;
+    for (const text of texts) {
+      for (const form of passwordForms(password)) expect(text, label).not.toContain(form);
+    }
+  }
+  expect(await fileOrNull(join(f.folder, "recovery.crt")), label).toEqual(crt);
+  await expectOnlyKnownNames(f, `${label}, after the repair`);
+
+  const again = countingIo();
+  await createWifiBootCopyPublisher({
+    bootRoot: f.bootRoot,
+    ownerUid: process.getuid(),
+    inspectBootMount: f.inspectBootMount,
+    io: again.io,
+  }).publish(later);
+  expect(
+    again.log.filter(([name]) => WRITE_OPS.includes(name)),
+    `${label}, published again`,
+  ).toEqual([]);
+}
+
+describe("a publication stopped after any step, and the next start", () => {
+  const pairs = SWEEP_STARTS.flatMap(([startName, start]) =>
+    SWEEP_DECISIONS.map(([decisionName, decision, laters]) => [
+      startName,
+      decisionName,
+      start,
+      decision,
+      laters,
+    ]),
+  );
+
+  it.each(pairs)(
+    "from %s, %s: preboot sees the old or the new answer, and the next start repairs it",
+    async (startName, decisionName, start, decision, laters) => {
+      const clean = await steps(start, decision);
+      const stops = clean.ops.flatMap((op, k) =>
+        op === "writeFile"
+          ? [
+              [k, "before"],
+              [k, "half"],
+            ]
+          : [[k, "before"]],
+      );
+      // A run with no step to stop (a removal with no folder) still gets the repair checks.
+      if (stops.length === 0) {
+        expect(clean.after).toEqual(clean.before);
+        stops.push([null, "no step"]);
+      }
+      for (const [k, mode] of stops) {
+        for (const later of laters) {
+          const label = `${startName}, ${decisionName}, stopped at ${k} (${clean.ops[k]}, ${mode})`;
+          const f = await fixture(start);
+          const crt = await fileOrNull(join(f.folder, "recovery.crt"));
+          if (k !== null) {
+            const stopped = countingIo(stopAt(k, mode));
+            const status = await f.make({ io: stopped.io }).publish(decision);
+            expect(status.state, label).toBe("failed");
+            expect(status.failure, label).toBe("io-failed");
+            expect(sweptOf(stopped.log), label).toEqual(clean.ops.slice(0, k + 1));
+          }
+          const seen = await f.reader().read();
+          expect([clean.before, clean.after], label).toContainEqual(seen);
+          await expectOnlyKnownNames(f, `${label}, after the stop`);
+          await expectRepairedBy(f, later, crt, label);
+        }
+      }
+    },
+  );
+
+  it("does not follow a link planted at wifi.json.next before the write", async () => {
+    const f = await fixture({ record: "A" });
+    const outside = join(f.parent, "outside.txt");
+    const writeFile = async (...args) => {
+      await fs.symlink(outside, f.nextPath);
+      return REAL_IO.writeFile(...args);
+    };
+    const status = await f.make({ io: countingIo({ writeFile }).io }).publish(writeB);
+    await expectMissing(outside);
+    await expectBytes(f.recordPath, writeA.bytes);
+    expectStatus(status, IO_FAILED_WRITE);
+  });
+});
