@@ -87,6 +87,7 @@ export interface AllocationOperationEvidence {
   readonly priorActivation: AllocationContext["priorActivation"];
   readonly incidentEvidence: string;
   readonly requiredBases?: SeriesBases;
+  readonly oldMachineRelinquished?: boolean;
 }
 
 export interface AllocationEvidenceRequest {
@@ -242,6 +243,7 @@ export async function activateModuleAllocation(
     softwareId: WAITRON_ID_SISTEMA,
     environment: stamp?.environment === "production" ? "production" : "preproduction",
     mode: binding.action === "setup" ? "initial-setup" : "recovery",
+    oldMachineRelinquished: heldEvidence.oldMachineRelinquished,
     eventId: binding.eventId,
     sourceId: binding.sourceId,
     targetNodeId: node.nodeId,

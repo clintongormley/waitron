@@ -48,6 +48,7 @@ export interface AllocationContext {
   readonly softwareId: string;
   readonly environment: "preproduction" | "production";
   readonly mode: "initial-setup" | "recovery";
+  readonly oldMachineRelinquished?: boolean;
   readonly eventId: string;
   readonly operatorId: OperationOperator;
   readonly sourceId: string;
@@ -189,22 +190,26 @@ function allocationShape(value: unknown): value is FiscalAllocation {
   );
 }
 
+const approvalKeys = [
+  "version",
+  "eventId",
+  "operatorId",
+  "sourceId",
+  "targetNodeId",
+  "oldMachineOffline",
+  "oldMachineAbsent",
+  "noParallelRecovery",
+  "confirmedAt",
+  "incidentEvidence",
+];
+
 function approvalShape(value: unknown): value is RecoveryApproval {
   return (
     record(value) &&
-    exact(value, [
-      "version",
-      "eventId",
-      "operatorId",
-      "sourceId",
-      "targetNodeId",
-      "oldMachineOffline",
-      "oldMachineAbsent",
-      "noParallelRecovery",
-      "confirmedAt",
-      "incidentEvidence",
-    ]) &&
-    value.version === 1 &&
+    ((exact(value, approvalKeys) && value.version === 1) ||
+      (exact(value, [...approvalKeys, "oldMachineRelinquished"]) &&
+        value.version === 2 &&
+        typeof value.oldMachineRelinquished === "boolean")) &&
     parseAllocationOperator(value.operatorId) !== null &&
     ["eventId", "sourceId", "targetNodeId", "incidentEvidence"].every((key) => text(value[key])) &&
     ["oldMachineOffline", "oldMachineAbsent", "noParallelRecovery"].every(
@@ -234,6 +239,7 @@ function freeze(value: unknown): void {
 interface HourAdmissionFacts {
   readonly requiredBases: AllocationContext["requiredBases"];
   readonly priorActivation: AllocationContext["priorActivation"];
+  readonly oldMachineRelinquished?: boolean;
 }
 
 const hourAdmissions = new WeakMap<
@@ -309,6 +315,7 @@ export async function withHourAdmission<T>(
       requiredBases: selectedFacts.requiredBases,
       priorActivation: selectedFacts.priorActivation,
       incidentEvidence: input.approval.incidentEvidence,
+      ...(selectedFacts.oldMachineRelinquished === true ? { oldMachineRelinquished: true } : {}),
     };
     const result = validateEnvelope(
       input.allocation,
@@ -319,6 +326,7 @@ export async function withHourAdmission<T>(
         softwareId: input.allocation.softwareId,
         environment: input.allocation.environment,
         mode: binding.action === "setup" ? "initial-setup" : "recovery",
+        oldMachineRelinquished: evidence.oldMachineRelinquished,
         operatorId: operator.operatorId,
         reauthentication: { operatorId: operator.operatorId, eventId: binding.eventId },
         priorActivation:
@@ -389,9 +397,17 @@ function validateEnvelope(
     )
   )
     return refuse("event_mismatch");
+  const relinquished = context.oldMachineRelinquished === true;
+  if (permission.version === 2 && !relinquished) return refuse("malformed_approval");
+  if (relinquished && (permission.version !== 2 || permission.oldMachineRelinquished !== true))
+    return refuse("event_mismatch");
   if ((context.mode === "initial-setup") !== permission.oldMachineAbsent)
     return refuse("old_machine_absence_unconfirmed");
-  if (context.mode === "recovery" && !permission.oldMachineOffline)
+  if (
+    context.mode === "recovery" &&
+    !permission.oldMachineOffline &&
+    !(permission.version === 2 && permission.oldMachineRelinquished)
+  )
     return refuse("old_machine_active");
   if (!permission.noParallelRecovery) return refuse("parallel_recovery");
   if (

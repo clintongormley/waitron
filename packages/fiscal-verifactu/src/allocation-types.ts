@@ -13,8 +13,18 @@ export interface FiscalAllocation {
   readonly issuedAt: string;
 }
 
-export interface RecoveryApproval {
+export type RecoveryApproval = RecoveryApprovalV1 | RecoveryApprovalV2;
+
+export interface RecoveryApprovalV1 extends RecoveryApprovalFields {
   readonly version: 1;
+}
+
+export interface RecoveryApprovalV2 extends RecoveryApprovalFields {
+  readonly version: 2;
+  readonly oldMachineRelinquished: boolean;
+}
+
+interface RecoveryApprovalFields {
   readonly eventId: string;
   readonly operatorId: OperationOperator;
   readonly sourceId: string;

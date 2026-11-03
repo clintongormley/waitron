@@ -77,10 +77,16 @@ async function activate(
   f = fixture(),
   priorActivation: "none" | "committed" | "uncertain" = "none",
   requiredBases = bases,
+  relinquished = false,
 ) {
+  const facts = {
+    requiredBases,
+    priorActivation,
+    ...(relinquished ? { oldMachineRelinquished: true } : {}),
+  };
   return withOperationAuthority(f.binding, f.operatorId, (authority) => {
     const operation = { binding: f.binding, authority, input: f.input };
-    return withHourAdmission(operation, { requiredBases, priorActivation }, (evidence) =>
+    return withHourAdmission(operation, facts, (evidence) =>
       withCollectedModuleAllocation(
         operation,
         async (request) => ({ ...request, evidence }),
@@ -438,4 +444,40 @@ it("refuses changed committed promotion input instead of issuing another identit
     params: { reason: "event_mismatch" },
   });
   expect(await snapshot()).toEqual(before);
+});
+
+function relinquishedFixture() {
+  const f = fixture();
+  return {
+    ...f,
+    input: {
+      ...f.input,
+      approval: {
+        ...f.input.approval,
+        version: 2,
+        oldMachineOffline: false,
+        oldMachineRelinquished: true,
+      },
+    },
+  };
+}
+
+it("a promotion admitted with oldMachineRelinquished activates and stores its version 2 approval", async () => {
+  const f = relinquishedFixture();
+  const result = await activate(f, "none", bases, true);
+  expect(result.activationEventId).toBe("promotion");
+  const [stored] = await suite.db
+    .select()
+    .from(fiscalAllocations)
+    .where(eq(fiscalAllocations.eventKey, "promotion"));
+  expect(stored!.approval).toEqual(f.input.approval);
+});
+
+it("a committed controlled activation, retried, is accepted", async () => {
+  const first = await activate(relinquishedFixture(), "none", bases, true);
+  const before = await snapshot();
+  expect(await activate(relinquishedFixture(), "committed", bases, true)).toEqual(first);
+  const after = await snapshot();
+  expect(after.allocations).toHaveLength(before.allocations.length);
+  expect(after).toEqual(before);
 });
