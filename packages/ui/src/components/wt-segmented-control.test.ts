@@ -199,6 +199,32 @@ async function setupNarrow(width: number, labels: string[]) {
   await el.updateComplete;
   return el;
 }
+const PASS_ES = ["Usar la configuración del perfil", "Mostrar", "Ocultar"];
+const group = (el: HTMLElement) =>
+  el.shadowRoot!.querySelector<HTMLElement>('[role="radiogroup"]')!;
+/** Whether the choices have given up whole words to fit their space. */
+const givenWay = (el: HTMLElement) => group(el).hasAttribute("data-squeezed");
+const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+/** The given-way state after each of several animation frames: one value means it has settled. */
+async function statesOverFrames(el: HTMLElement): Promise<boolean[]> {
+  const states: boolean[] = [];
+  for (let i = 0; i < 5; i++) {
+    await frame();
+    states.push(givenWay(el));
+  }
+  return states;
+}
+function expectInsideControl(el: HTMLElement): void {
+  expect(group(el).scrollWidth, "the row runs past the control").toBeLessThanOrEqual(
+    group(el).clientWidth,
+  );
+  const right = el.getBoundingClientRect().right;
+  for (const button of buttons(el)) {
+    expect(button.getBoundingClientRect().right, button.textContent!.trim()).toBeLessThanOrEqual(
+      right + 0.5,
+    );
+  }
+}
 function lineCount(button: HTMLButtonElement): number {
   const range = document.createRange();
   range.selectNodeContents(button);
@@ -212,8 +238,9 @@ test("a control too narrow for its labels on one line wraps them between words, 
   expect(wordLines(profile!)).toEqual({ Usar: 1, la: 1, configuración: 1, del: 1, perfil: 1 });
   expect(wordLines(show!)).toEqual({ Mostrar: 1 });
   expect(wordLines(hide!)).toEqual({ Ocultar: 1 });
-  const group = el.shadowRoot!.querySelector('[role="radiogroup"]')!.getBoundingClientRect();
-  expect(group.right).toBeLessThanOrEqual(el.getBoundingClientRect().right);
+  expect(group(el).scrollWidth).toBeLessThanOrEqual(group(el).clientWidth);
+  expect(group(el).getBoundingClientRect().width, "the row fills the control").toBe(300);
+  expect(givenWay(el), "whole words fit, so the choices have not given way").toBe(false);
 });
 
 test("a word wider than the whole control breaks inside itself rather than widen the control", async () => {
@@ -232,4 +259,129 @@ test("a one-letter choice in a host narrower than the tap target stays tap-targe
   for (const button of buttons(el)) {
     expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
   }
+});
+
+test("when whole words cannot fit side by side, the choices break inside words rather than run past the control", async () => {
+  const el = await setupNarrow(200, PASS_ES);
+  expect(givenWay(el)).toBe(true);
+  expectInsideControl(el);
+  expect(group(el).getBoundingClientRect().width, "the row fills the control").toBe(200);
+  for (const button of buttons(el)) {
+    expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test("widening the space back brings whole words back, and each state then holds", async () => {
+  const el = await setupNarrow(200, PASS_ES);
+  expect(givenWay(el)).toBe(true);
+  host.style.width = "300px";
+  await expect.poll(() => givenWay(el)).toBe(false);
+  expect(await statesOverFrames(el)).toEqual([false, false, false, false, false]);
+  for (const button of buttons(el)) {
+    expect(
+      Object.values(wordLines(button)).every((lines) => lines === 1),
+      button.textContent!,
+    ).toBe(true);
+  }
+  expectInsideControl(el);
+
+  host.style.width = "200px";
+  await expect.poll(() => givenWay(el)).toBe(true);
+  expect(await statesOverFrames(el)).toEqual([true, true, true, true, true]);
+  expectInsideControl(el);
+});
+
+test("new labels are measured again", async () => {
+  const el = await setupNarrow(220, ["Sí", "No", "Quizá"]);
+  expect(givenWay(el)).toBe(false);
+  el.options = PASS_ES.map((label, index) => ({ value: String(index), label }));
+  await el.updateComplete;
+  expect(givenWay(el)).toBe(true);
+  expectInsideControl(el);
+  el.options = ["Sí", "No", "Quizá"].map((label, index) => ({ value: String(index), label }));
+  await el.updateComplete;
+  expect(givenWay(el)).toBe(false);
+});
+
+test("a larger text size is measured again", async () => {
+  const el = await setupNarrow(300, PASS_ES);
+  expect(givenWay(el)).toBe(false);
+  host.style.setProperty("--wt-font-size-sm", "24px");
+  await expect.poll(() => givenWay(el)).toBe(true);
+  expectInsideControl(el);
+  host.style.removeProperty("--wt-font-size-sm");
+  await expect.poll(() => givenWay(el)).toBe(false);
+});
+
+test("a larger text size that leaves the control's height alone is measured again", async () => {
+  const el = await setupNarrow(400, ["Rectas", "Estándar", "Redondeadas"]);
+  el.label = "";
+  await el.updateComplete;
+  host.style.width = `${Math.ceil(group(el).getBoundingClientRect().width) + 2}px`;
+  expect(await statesOverFrames(el), "whole words fit").toEqual([
+    false,
+    false,
+    false,
+    false,
+    false,
+  ]);
+  const height = el.getBoundingClientRect().height;
+  host.style.setProperty("--wt-font-size-sm", "14px");
+  expect(el.getBoundingClientRect().height, "only the choices could report the change").toBe(
+    height,
+  );
+  await expect.poll(() => givenWay(el)).toBe(true);
+  expectInsideControl(el);
+});
+
+test("whole words do not widen a parent that sizes its column to its content", async () => {
+  const el = await setup();
+  host.style.display = "grid";
+  host.style.width = "200px";
+  el.options = PASS_ES.map((label, index) => ({ value: String(index), label }));
+  await el.updateComplete;
+  expect(givenWay(el)).toBe(true);
+  expect(el.getBoundingClientRect().right).toBeLessThanOrEqual(host.getBoundingClientRect().right);
+  expectInsideControl(el);
+  expect(await statesOverFrames(el)).toEqual([true, true, true, true, true]);
+});
+
+test("whole words that exactly fill the space stay whole, and one pixel less gives way", async () => {
+  const el = await setupNarrow(400, ["Rectas", "Estándar", "Redondeadas"]);
+  const exact = group(el).getBoundingClientRect().width;
+  host.style.width = `${exact}px`;
+  expect(await statesOverFrames(el)).toEqual([false, false, false, false, false]);
+  expectInsideControl(el);
+  host.style.width = `${exact - 1}px`;
+  await expect.poll(() => givenWay(el)).toBe(true);
+  expectInsideControl(el);
+});
+
+test("a control out of the page is left alone, and measured again when it comes back", async () => {
+  const el = await setupNarrow(200, PASS_ES);
+  expect(givenWay(el)).toBe(true);
+  el.remove();
+  expect(await statesOverFrames(el), "nothing is measured out of the page").toEqual([
+    true,
+    true,
+    true,
+    true,
+    true,
+  ]);
+  host.style.width = "400px";
+  host.append(el);
+  await expect.poll(() => givenWay(el)).toBe(false);
+  expectInsideControl(el);
+});
+
+test("choosing does not measure the row again", async () => {
+  const el = await setupNarrow(300, PASS_ES);
+  await statesOverFrames(el);
+  const measured = vi.spyOn(group(el), "getBoundingClientRect");
+  await userEvent.click(buttons(el)[2]!);
+  el.disabled = true;
+  await el.updateComplete;
+  await statesOverFrames(el);
+  expect(el.value).toBe("2");
+  expect(measured).not.toHaveBeenCalled();
 });

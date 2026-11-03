@@ -439,6 +439,39 @@ describe("A773 the pass's other-stations choice", () => {
     },
   );
 
+  it("at 320 px in Spanish at 130% the choices stay inside the window", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      await pageAt(320, 700, 130);
+      const { el } = await mount({
+        layout: passLayout(),
+        otherStations: { value: null, sending: false },
+      });
+      await control(el)!.updateComplete;
+      expect(radios(el).map((radio) => radio.textContent!.trim())).toEqual([
+        t("pass.use_profile"),
+        "Mostrar",
+        "Ocultar",
+      ]);
+      const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+      const body = dialog.shadowRoot!.querySelector<HTMLElement>(".body")!;
+      const group = control(el)!.shadowRoot!.querySelector<HTMLElement>('[role="radiogroup"]')!;
+      await expect.poll(() => group.scrollWidth <= group.clientWidth).toBe(true);
+      expect(body.scrollWidth, "the window scrolls sideways").toBeLessThanOrEqual(body.clientWidth);
+      const edge =
+        body.getBoundingClientRect().right - parseFloat(getComputedStyle(body).paddingRight);
+      for (const radio of radios(el)) {
+        expect(radio.getBoundingClientRect().right, radio.textContent!.trim()).toBeLessThanOrEqual(
+          edge + 0.5,
+        );
+      }
+    } finally {
+      setLocale(before);
+      await resetPage();
+    }
+  });
+
   it("reads the section in Spanish", async () => {
     const before = currentLocale();
     setLocale("es-ES");

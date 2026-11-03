@@ -831,9 +831,10 @@ this floor — removing the `min-width` regresses that guard.
 `disabled`, `hint` and `error` carry the group state. A different choice emits `wt-change` with
 `{ value }`. Tab reaches the selected choice, arrow keys move and select, and Home/End select
 the first/last choice. Enter and Space activate without reaching an enclosing form's save handler.
-A choice too wide for its share of the row wraps between words, never inside one; only a word wider
-than the whole control breaks. When the choices' longest words cannot all fit side by side, the
-control is wider than its space, as a tap-target floor is, rather than break a word.
+A choice too wide for its share of the row wraps between words, never inside one, while the
+choices' longest words fit side by side. When they do not, the choices shrink to the control's
+space and break inside words; each stays at least the tap target wide, so only choices too many for
+their tap targets run past the control's edge.
 
 A `wt-disclosure` with `ruled` draws a line under its title. Its named `summary` slot replaces
 the generated closed summary when assigned. The `section`, `header` and `summary` parts let

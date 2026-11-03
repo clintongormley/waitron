@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
@@ -39,12 +39,16 @@ export class WtSegmentedControl extends LitElement {
         display: inline-flex;
         max-width: 100%;
       }
-      /* No min-width: a set one would let a choice shrink below its longest word. Flex keeps each
-         choice at least as wide as that word (the strut below lifts it to the tap target), and the
-         max-width lets only a word wider than the whole control break. */
+      [role="radiogroup"][data-measuring] {
+        width: min-content;
+        max-width: none;
+      }
+      /* No min-width while whole words fit: a set one would let a choice shrink below its longest
+         word, where flex otherwise keeps it (the strut below lifts it to the tap target). When they
+         cannot fit side by side, data-squeezed sets one and breaks inside words, so the row can
+         shrink to its space. */
       button {
         flex: 1 1 auto;
-        max-width: max(100%, var(--wt-tap-min));
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
@@ -55,7 +59,10 @@ export class WtSegmentedControl extends LitElement {
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
         cursor: pointer;
-        overflow-wrap: break-word;
+      }
+      [data-squeezed] button {
+        min-width: var(--wt-tap-min);
+        overflow-wrap: anywhere;
       }
       button::before {
         content: "";
@@ -97,6 +104,52 @@ export class WtSegmentedControl extends LitElement {
   @property() hint = "";
   readonly #hintId = uniqueId("wt-segmented-hint");
   readonly #errorId = uniqueId("wt-segmented-error");
+  /** A frame later: a change of size made inside a resize callback would be reported as a loop. */
+  readonly #resized = new ResizeObserver(() => requestAnimationFrame(() => this.#fit()));
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    if (this.hasUpdated) this.#observe();
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#resized.disconnect();
+  }
+
+  protected override firstUpdated(): void {
+    this.#observe();
+  }
+
+  protected override updated(changed: PropertyValues<this>): void {
+    if (changed.has("options")) this.#fit();
+  }
+
+  #group(): HTMLElement {
+    return this.renderRoot.querySelector<HTMLElement>('[role="radiogroup"]')!;
+  }
+
+  /** The row changes size with both its space and its text size. */
+  #observe(): void {
+    this.#resized.observe(this.#group());
+  }
+
+  /**
+   * Squeezes the row when its whole words are wider than the space the control gets once squeezed.
+   * Both widths are measured in the same state whatever the current one, so the answer cannot flip
+   * back after it is applied; the space is read squeezed because whole words can widen a parent
+   * that sizes itself to its content.
+   */
+  #fit(): void {
+    const group = this.#group();
+    group.toggleAttribute("data-squeezed", true);
+    const space = this.getBoundingClientRect().width;
+    group.toggleAttribute("data-squeezed", false);
+    group.toggleAttribute("data-measuring", true);
+    const wholeWords = group.getBoundingClientRect().width;
+    group.toggleAttribute("data-measuring", false);
+    group.toggleAttribute("data-squeezed", wholeWords > space + 0.5);
+  }
 
   override focus(options?: FocusOptions): void {
     this.shadowRoot?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus(options);
