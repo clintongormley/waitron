@@ -179,10 +179,11 @@ dishes held or waiting for the pass after the **+**.
 A card's heading says what the waiter sent, **New order**, **Next course** or **Added** (a held
 card says none of them), then its order number, table and group. Its minutes count from when the
 waiter sent it; a **Ready** card shows **Ready 3 min**, counted from when its last dish was ready,
-and a held card shows none. The card's left edge takes the brand colour, then turns red, as its
-dishes wait, by their stations' late flags; a dish that waits too long says **Forgotten**, and the
-row above the columns counts the red cards (**2 overdue**). Each dish shows its state and station,
-such as **Preparing · Grill**.
+and a held card shows none. The card's left edge takes the brand colour, then turns red, as time
+passes since its dishes were sent, by their stations' late flags. A ready dish keeps counting, so a
+**Ready** card turns red too. A dish sent too long ago says **Forgotten**, and the row above the
+columns counts the red cards (**2 overdue**). Each dish shows its state and station, such as
+**Preparing · Grill**; a held dish shows neither.
 
 A dish whose station waits for the pass is not cooked until the pass fires it. When the waiter
 [requests cooking](kitchen-service.md#request-cooking), its card moves to **To fire** and the dish
@@ -199,9 +200,9 @@ instead, and **Fire** stays on.
 Until a station this pass covers waits for the pass, nothing it covers is dimmed. Once one does,
 its dishes that wait for this pass show in full, and the pass dims the dishes of its stations that
 do not wait and dishes sent before their station began waiting: they say, for example, **Preparing
-· Already at Bar**. A dish from a station or service zone this pass does not cover, on a card it
-shares with another pass, is always dimmed; while it waits for that pass it says **Bar: waiting for
-its pass**. Dimmed dishes are there for information only.
+· Already at Bar**. A dish from a station or service zone this pass does not cover shows only on a
+card that also holds a dish this pass covers, and is always dimmed; while it waits for its own pass
+it says **Bar: waiting for its pass**. Dimmed dishes are there for information only.
 
 On a card **In progress**, **Group ready** marks every sent dish of the table's group ready at every
 station, not only the ones this pass shows, and on a counter order **Course ready** does the same

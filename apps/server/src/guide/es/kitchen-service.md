@@ -205,10 +205,12 @@ La cabecera de una tarjeta dice qué envió el camarero, **Nuevo pedido**, **Sig
 **Añadido** (una tarjeta en espera no dice ninguno), y después su número de pedido, su mesa y su
 grupo. Sus minutos cuentan desde que el camarero lo envió; una tarjeta en **Listo** muestra **Listo
 3 min**, contados desde que su último plato estuvo listo, y una en espera no muestra ninguno. El
-borde izquierdo de la tarjeta toma el color de marca y luego pasa a rojo mientras sus platos
-esperan, según los avisos de demora de sus estaciones; un plato que espera demasiado dice
-**Olvidado**, y la fila encima de las columnas cuenta las tarjetas en rojo (**2 con retraso**).
-Cada plato muestra su estado y su estación, como **Preparando · Parrilla**.
+borde izquierdo de la tarjeta toma el color de marca y luego pasa a rojo a medida que pasa el tiempo
+desde que se enviaron sus platos, según los avisos de demora de sus estaciones. Un plato listo sigue
+contando, así que una tarjeta en **Listo** también pasa a rojo. Un plato enviado hace demasiado
+tiempo dice **Olvidado**, y la fila encima de las columnas cuenta las tarjetas en rojo (**2 con
+retraso**). Cada plato muestra su estado y su estación, como **Preparando · Parrilla**; un plato en
+espera no muestra ninguno de los dos.
 
 Un plato cuya estación espera al pase no se prepara hasta que el pase lo marcha. Cuando el camarero
 [pide la preparación](kitchen-service.md#request-cooking), su tarjeta pasa a **Por marchar** y el
@@ -226,8 +228,8 @@ Mientras ninguna estación que cubre este pase espere al pase, nada de lo que cu
 Cuando una espera, sus platos que esperan a este pase se ven enteros, y el pase atenúa los platos de
 sus estaciones que no esperan y los enviados antes de que su estación empezara a esperar: dicen, por
 ejemplo, **Preparando · Ya en Barra**. Un plato de una estación o zona de servicio que este pase no
-cubre, en una tarjeta que comparte con otro pase, siempre se atenúa; mientras espera a ese pase dice
-**Barra: esperando a su pase**. Los platos atenuados son solo información.
+cubre solo aparece en una tarjeta que también lleva un plato que este pase cubre, y siempre se
+atenúa; mientras espera a su propio pase dice **Barra: esperando a su pase**. Los platos atenuados son solo información.
 
 En una tarjeta en **En curso**, **Grupo listo** marca como listos todos los platos enviados del
 grupo de la mesa, en todas las estaciones, no solo los que muestra este pase, y en un pedido de
