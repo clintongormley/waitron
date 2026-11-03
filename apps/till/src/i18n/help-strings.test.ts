@@ -103,7 +103,7 @@ describe("the floor's help on service steps", () => {
   const sentences = (text: string) => text.split(/(?<=\.)\s+/).length;
   const doneWord = (word: string) => new RegExp(`(?<!\\p{L})${word}(?!\\p{L})`, "u");
 
-  it("the list says where Done is, by the button's word, and only where it shows", () => {
+  it("the list says where Done is, by the button's word", () => {
     expect(helpEn["help.floor.tables_list"]).toContain(
       `Tap ${en["floor.step_done"]} on a service step when the guests want nothing.`,
     );

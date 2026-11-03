@@ -23,7 +23,7 @@ export const helpEn = {
   "help.floor.tables_list":
     "Tap a card to seat guests at a free table, or to go back to a table in use. A card marked Needs clearing or Needs moving has its own button for that. Tap Done on a service step when the guests want nothing.",
   "help.floor.layout_due":
-    "Update layout moves this zone's free tables to the new plan now. Tables in use keep their place until they are free, then show Needs moving. Tables taken off today stay off.",
+    "Update layout moves this zone's free tables to the new plan now. Tables with guests or still to clear keep their place until they are free, then show Needs moving. Tables taken off today stay off.",
   "help.floor.needs_moving":
     "Nobody can be seated at this table until this is settled. Leave it here keeps the table where it stands until the floor is next laid out, so it can be used straight away.",
   "help.floor.ready_bar":
@@ -84,7 +84,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.floor.tables_list":
     "Toca una tarjeta para sentar a los clientes en una mesa libre o volver a una ocupada. Una tarjeta Por recoger o Por mover tiene su propio botón para ello. Toca Hecho en un paso de servicio cuando los clientes no quieran nada.",
   "help.floor.layout_due":
-    "Actualizar plano coloca ya las mesas libres de esta zona según el plano nuevo. Las mesas en uso se quedan donde están hasta quedar libres, y entonces aparecen Por mover. Las mesas quitadas hoy siguen quitadas.",
+    "Actualizar plano coloca ya las mesas libres de esta zona según el plano nuevo. Las mesas con clientes o por recoger se quedan donde están hasta quedar libres, y entonces aparecen Por mover. Las mesas quitadas hoy siguen quitadas.",
   "help.floor.needs_moving":
     "No se puede sentar a nadie en esta mesa hasta resolverlo. Dejar aquí mantiene la mesa donde está hasta la próxima vez que se prepare la sala, y así se puede usar ya.",
   "help.floor.ready_bar":
