@@ -27,7 +27,7 @@ import type { DeviceKind, FormFactor } from "@waitron/layouts";
 import type {
   DeviceKitchenScreen,
   KitchenScreenKind,
-  KitchenScreenScope,
+  ProfileKitchenScreen,
   ProfileKitchenScreens,
 } from "@waitron/module";
 import { settleDevice } from "./device-equipment.js";
@@ -376,13 +376,51 @@ export function parseKitchenScreens(value: unknown): DeviceKitchenScreen[] | und
   });
 }
 
+const KITCHEN_SCREEN_DISPLAY_FIELD = "kitchenScreenDisplay";
+
+/** A device request's `kitchenScreenDisplay`: each pass kind it names with true, false or null (the
+ * profile's); absent names none. */
+export function parseKitchenScreenDisplay(
+  value: unknown,
+): ["pass" | "pass_monitor", boolean | null][] {
+  if (value === undefined) return [];
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    throw new AppError("management.request_invalid", { field: KITCHEN_SCREEN_DISPLAY_FIELD });
+  return Object.entries(value).map(([kind, shown]) => {
+    if (
+      (kind !== "pass" && kind !== "pass_monitor") ||
+      (shown !== null && typeof shown !== "boolean")
+    )
+      throw new AppError("management.request_invalid", { field: KITCHEN_SCREEN_DISPLAY_FIELD });
+    return [kind, shown];
+  });
+}
+
+/** Sets each named kind's display value, after the device's screens are written. A kind its
+ * effective choice has no screen of is the request's fault, not the device's. */
+export async function setKitchenScreenDisplay(
+  tx: Transaction,
+  deviceId: string,
+  display: readonly ["pass" | "pass_monitor", boolean | null][],
+): Promise<void> {
+  for (const [kind, shown] of display) {
+    try {
+      await VENUE_SERVICE.setDeviceKitchenScreenDisplay(tx, deviceId, kind, shown);
+    } catch (error) {
+      if (error instanceof AppError && error.code === "device.unauthorized")
+        throw new AppError("management.request_invalid", { field: KITCHEN_SCREEN_DISPLAY_FIELD });
+      throw error;
+    }
+  }
+}
+
 /** A profile request's `kitchenScreens`: absent stays absent; anything else must map each offered
  * kind to its lists. */
 export function parseProfileKitchenScreens(value: unknown): ProfileKitchenScreens | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== "object" || value === null || Array.isArray(value))
     throw new AppError("management.request_invalid", { field: KITCHEN_SCREENS_FIELD });
-  const screens: Partial<Record<KitchenScreenKind, KitchenScreenScope>> = {};
+  const screens: Partial<Record<KitchenScreenKind, ProfileKitchenScreen>> = {};
   for (const [kind, scope] of Object.entries(value)) {
     if (
       !KITCHEN_SCREEN_KINDS.includes(kind as KitchenScreenKind) ||
@@ -391,9 +429,13 @@ export function parseProfileKitchenScreens(value: unknown): ProfileKitchenScreen
     )
       throw new AppError("management.request_invalid", { field: KITCHEN_SCREENS_FIELD });
     const lists = asRecord(scope);
+    const display = lists.showNonPassStations;
+    if (display !== undefined && (kind === "station" || typeof display !== "boolean"))
+      throw new AppError("management.request_invalid", { field: KITCHEN_SCREENS_FIELD });
     screens[kind as KitchenScreenKind] = {
       stationIds: screenIds(lists.stationIds),
       zoneIds: screenIds(lists.zoneIds),
+      ...(display === undefined ? {} : { showNonPassStations: display }),
     };
   }
   return screens;

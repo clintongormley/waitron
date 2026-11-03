@@ -2583,6 +2583,35 @@ describe("A773 pass display policy", () => {
     await expect(deviceValues(monitor)).resolves.toEqual({ pass_monitor: false });
   });
 
+  it("refuses through the seat a kind a narrowing took, whole or all its stations, keeping the stored value", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, passes(venue));
+    const whole = await seedDevice(venue.kds, "Taken whole");
+    const emptied = await seedDevice(venue.kds, "Emptied");
+    const partial = await seedDevice(venue.kds, "Partly narrowed");
+    for (const device of [whole, emptied, partial])
+      await choose(venue, device, venue.kds, [
+        { kind: "pass", stationIds: [venue.grill, venue.cold], zoneIds: null },
+      ]);
+    for (const device of [whole, emptied, partial]) await storeDeviceValue(device, "pass", false);
+    await recordRemoval(whole, "pass");
+    await recordRemoval(emptied, "pass", { stationId: venue.grill });
+    await recordRemoval(emptied, "pass", { stationId: venue.cold });
+    await recordRemoval(partial, "pass", { stationId: venue.cold });
+    const display = (deviceId: string, value: boolean | null) =>
+      scoped((tx) => setDeviceKitchenScreenDisplay(tx, deviceId, "pass", value));
+
+    for (const device of [whole, emptied]) {
+      await expect(outcome(display(device, true))).resolves.toEqual({
+        code: "device.unauthorized",
+        params: {},
+      });
+      await expect(deviceValues(device)).resolves.toEqual({ pass: false });
+    }
+    await display(partial, true);
+    await expect(deviceValues(partial)).resolves.toEqual({ pass: true });
+  });
+
   it("reads true and null for a station screen", async () => {
     const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { station: every });

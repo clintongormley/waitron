@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { personRole, roleHasPermission } from "@waitron/identity";
 import { deviceProfiles, floorZones, withTransaction } from "@waitron/db";
@@ -210,5 +211,65 @@ it("join approval refuses a zone the profile's pass screen does not offer with k
   expect(refused.status).toBe(400);
   expect(await refused.json()).toMatchObject({
     error: { code: "kitchen_screen.zone_not_allowed", params: { zoneId: other!.id } },
+  });
+});
+
+describe("A773 pass display policy", () => {
+  it("join approval cannot set a pass's display: a value in the body or inside a screen entry stores null", async () => {
+    const venue = await setupVenue(suite.db);
+    const app = new Hono();
+    const pairingMode = createPairingMode();
+    const { holdId } = pairingMode.open();
+    mountJoinApi(
+      app,
+      { db: suite.db, cfg: venue.cfg, pairingMode, deviceAddress: "https://waitron.local" },
+      () => {},
+    );
+    const [profile] = await suite.db
+      .insert(deviceProfiles)
+      .values({ name: "Pass KDS", formFactor: "kds", capabilities: [] })
+      .returning({ id: deviceProfiles.id });
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profile!.id, {
+        pass: { stationIds: null, zoneIds: null, showNonPassStations: false },
+      }),
+    );
+    const pass = { kind: "pass", stationIds: null, zoneIds: null };
+    for (const [label, extra] of [
+      ["Body value", { kitchenScreens: [pass], kitchenScreenDisplay: { pass: true } }],
+      ["Entry value", { kitchenScreens: [{ ...pass, showNonPassStations: true }] }],
+    ] as const) {
+      const made = await withTransaction(suite.db, (tx) =>
+        createJoinRequest(tx, venue.cfg, { kind: "device", label }),
+      );
+      const send = (verb: "check" | "accept", body: unknown) =>
+        app.request(`/management-api/device-join-requests/${made.joinId}/${verb}`, {
+          method: "POST",
+          headers: { cookie: venue.managerCookie, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      expect(
+        (
+          await send("check", {
+            choice: made.verificationNumber,
+            holdId,
+            createdAt: made.createdAt,
+          })
+        ).status,
+      ).toBe(204);
+      const accepted = await send("accept", { name: label, profileId: profile!.id, ...extra });
+      expect(accepted.status).toBe(200);
+      const { rows } = await suite.db.execute<{ screen: string; value: number | null }>(
+        sql`select screen, show_non_pass_stations as value from device_kitchen_screens where device_id = ${made.joinId}`,
+      );
+      expect({ label, rows }).toEqual({ label, rows: [{ screen: "pass", value: null }] });
+      expect(
+        await withTransaction(suite.db, (tx) =>
+          VENUE_SERVICE.readDeviceKitchenScreens(tx, venue.cfg, made.joinId),
+        ),
+      ).toMatchObject([
+        { kind: "pass", showNonPassStations: false, nonPassStationsOverride: null },
+      ]);
+    }
   });
 });

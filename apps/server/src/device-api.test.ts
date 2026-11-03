@@ -1873,6 +1873,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     invoicePrinterId?: string | null;
     madeHereStationIds: string[];
     kitchenScreens?: unknown;
+    kitchenScreenDisplay?: unknown;
   };
 
   /** The device's stored settings as an edit body, so a case changes only its own field. */
@@ -2789,6 +2790,242 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     const [shown] = await shownOn(venue, deviceId);
     expect(shown!.stations.map((station) => station.id)).not.toContain(off.id);
     expect(shown!.stations.map((station) => station.id)).toContain(venue.defaultStationId);
+  });
+
+  describe("A773 pass display policy", () => {
+    const every = { stationIds: null, zoneIds: null };
+    const DISPLAY_REFUSED = {
+      status: 400,
+      body: {
+        error: { code: "management.request_invalid", params: { field: "kitchenScreenDisplay" } },
+      },
+    };
+
+    /** A kitchen display profile offering a station screen, a pass and a pass monitor, the pass
+     * offered on Cocina and Grill; `passValue` is the profile's own choice for its pass. */
+    async function displayProfile(venue: Venue, passValue = true) {
+      const grill = (
+        await withTransaction(suite.db, (tx) => createStation(tx, venue.cfg, { name: "Grill" }))
+      ).id;
+      const profileId = await seedProfile("kds");
+      const offer = (passStations: string[] | null) =>
+        withTransaction(suite.db, (tx) =>
+          VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
+            station: every,
+            pass: { stationIds: passStations, zoneIds: null, showNonPassStations: passValue },
+            pass_monitor: every,
+          }),
+        );
+      await offer([venue.defaultStationId, grill]);
+      return { profileId, grill, offer };
+    }
+
+    async function joined(
+      app: Hono,
+      venue: Venue,
+      profileId: string,
+      screen: DeviceKitchenScreen,
+      name = "Pass",
+    ): Promise<string> {
+      return (await knockAndAccept(app, venue, { name, profileId, kitchenScreens: [screen] }))
+        .deviceId;
+    }
+
+    /** The device's screens as the management device list answers them. */
+    async function managed(app: Hono, venue: Venue, deviceId: string) {
+      const res = await send(app, "GET", "/management-api/devices", {
+        cookie: venue.managerCookie,
+      });
+      expect(res.status).toBe(200);
+      const row = ((await res.json()) as { id: string; kitchenScreens: ResolvedRead[] }[]).find(
+        (entry) => entry.id === deviceId,
+      );
+      return row!.kitchenScreens.map(({ kind, showNonPassStations, nonPassStationsOverride }) => ({
+        kind,
+        showNonPassStations,
+        nonPassStationsOverride,
+      }));
+    }
+    type ResolvedRead = {
+      kind: string;
+      showNonPassStations: boolean;
+      nonPassStationsOverride: boolean | null;
+    };
+
+    /** Each of the device's rows' stored value, as the table holds it. */
+    async function stored(deviceId: string): Promise<Record<string, boolean | null>> {
+      const { rows } = await suite.db.execute<{ screen: string; value: number | null }>(
+        sql`select screen, show_non_pass_stations as value from device_kitchen_screens where device_id = ${deviceId}`,
+      );
+      return Object.fromEntries(
+        rows.map((row) => [row.screen, row.value === null ? null : row.value === 1]),
+      );
+    }
+
+    it("stores true, false and null per kind, a key absent keeping that kind's value", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { profileId } = await displayProfile(venue, false);
+      const pass = await joined(app, venue, profileId, { kind: "pass", ...every });
+      const monitor = await joined(
+        app,
+        venue,
+        profileId,
+        { kind: "pass_monitor", ...every },
+        "Monitor",
+      );
+      const display = (deviceId: string, kitchenScreenDisplay: unknown) =>
+        edit(app, venue.managerCookie, deviceId, { kitchenScreenDisplay });
+
+      expect((await display(pass, { pass: true })).status).toBe(204);
+      expect(await managed(app, venue, pass)).toEqual([
+        { kind: "pass", showNonPassStations: true, nonPassStationsOverride: true },
+      ]);
+      expect((await display(monitor, { pass_monitor: false })).status).toBe(204);
+      expect(await managed(app, venue, monitor)).toEqual([
+        { kind: "pass_monitor", showNonPassStations: false, nonPassStationsOverride: false },
+      ]);
+      expect((await display(monitor, {})).status).toBe(204);
+      expect((await edit(app, venue.managerCookie, monitor, { name: "Pass monitor" })).status).toBe(
+        204,
+      );
+      expect(await stored(monitor)).toEqual({ pass_monitor: false });
+      expect((await display(pass, { pass: null })).status).toBe(204);
+      expect(await managed(app, venue, pass)).toEqual([
+        { kind: "pass", showNonPassStations: false, nonPassStationsOverride: null },
+      ]);
+      expect(await stored(pass)).toEqual({ pass: null });
+      expect(await stored(monitor)).toEqual({ pass_monitor: false });
+    });
+
+    it("refuses another key or type naming kitchenScreenDisplay, writing nothing of the request", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { profileId } = await displayProfile(venue);
+      const pass = await joined(app, venue, profileId, { kind: "pass", ...every });
+      expect(
+        (await edit(app, venue.managerCookie, pass, { kitchenScreenDisplay: { pass: false } }))
+          .status,
+      ).toBe(204);
+      for (const kitchenScreenDisplay of [
+        null,
+        "pass",
+        [],
+        true,
+        { station: true },
+        { elsewhere: false },
+        { pass: "false" },
+        { pass: 0 },
+        { pass: false, pass_monitor: "true" },
+      ]) {
+        const res = await edit(app, venue.managerCookie, pass, {
+          name: "Renamed",
+          kitchenScreenDisplay,
+        });
+        expect({ kitchenScreenDisplay, status: res.status, body: await res.json() }).toEqual({
+          kitchenScreenDisplay,
+          ...DISPLAY_REFUSED,
+        });
+      }
+      expect(await labelOf(pass)).toBe("Pass");
+      expect(await stored(pass)).toEqual({ pass: false });
+    });
+
+    it("refuses a kind the device has no screen of after the write, in one transaction with the rest", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { profileId } = await displayProfile(venue);
+      const pass = await joined(app, venue, profileId, { kind: "pass", ...every });
+
+      const unheld = await edit(app, venue.managerCookie, pass, {
+        name: "Renamed",
+        kitchenScreenDisplay: { pass_monitor: false },
+      });
+      expect({ status: unheld.status, body: await unheld.json() }).toEqual(DISPLAY_REFUSED);
+      const moved = await edit(app, venue.managerCookie, pass, {
+        name: "Renamed",
+        kitchenScreens: [{ kind: "pass_monitor", ...every }],
+        kitchenScreenDisplay: { pass: false },
+      });
+      expect({ status: moved.status, body: await moved.json() }).toEqual(DISPLAY_REFUSED);
+
+      expect(await labelOf(pass)).toBe("Pass");
+      expect(await stored(pass)).toEqual({ pass: null });
+    });
+
+    it("stores a pass screen and its value added in one request", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { profileId } = await displayProfile(venue);
+      const line = await joined(app, venue, profileId, { kind: "station", ...every });
+
+      const res = await edit(app, venue.managerCookie, line, {
+        kitchenScreens: [{ kind: "pass", ...every }],
+        kitchenScreenDisplay: { pass: false },
+      });
+
+      expect(res.status).toBe(204);
+      expect(await managed(app, venue, line)).toEqual([
+        { kind: "pass", showNonPassStations: false, nonPassStationsOverride: false },
+      ]);
+    });
+
+    it("a display-only change keeps a narrowing's removal, so a widening gives the station back; a kind taken whole has no choice to set", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { profileId, grill, offer } = await displayProfile(venue);
+      const pass = await joined(app, venue, profileId, {
+        kind: "pass",
+        stationIds: [venue.defaultStationId, grill],
+        zoneIds: null,
+      });
+      await offer([venue.defaultStationId]);
+      expect(await removalCount(pass)).toBe(1);
+
+      expect(
+        (await edit(app, venue.managerCookie, pass, { kitchenScreenDisplay: { pass: false } }))
+          .status,
+      ).toBe(204);
+      expect(await removalCount(pass)).toBe(1);
+      await offer([venue.defaultStationId, grill]);
+      const [widened] = await shownOn(venue, pass);
+      expect(widened).toMatchObject({
+        kind: "pass",
+        showNonPassStations: false,
+        nonPassStationsOverride: false,
+      });
+      expect(widened!.stations.map((station) => [station.id, station.available])).toEqual(
+        expect.arrayContaining([
+          [venue.defaultStationId, true],
+          [grill, true],
+        ]),
+      );
+
+      await withTransaction(suite.db, (tx) =>
+        VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, { station: every }),
+      );
+      const removals = await removalCount(pass);
+      expect(removals).toBeGreaterThan(0);
+      const taken = await edit(app, venue.managerCookie, pass, {
+        kitchenScreenDisplay: { pass: true },
+      });
+      expect({ status: taken.status, body: await taken.json() }).toEqual(DISPLAY_REFUSED);
+      expect(await stored(pass)).toEqual({ pass: false });
+      expect(await removalCount(pass)).toBe(removals);
+    });
+
+    it("refuses a staff session's change of a device's value 403, leaving it", async () => {
+      const venue = await setupVenue(suite.db);
+      const app = mountApp(venue.cfg);
+      const { profileId } = await displayProfile(venue);
+      const pass = await joined(app, venue, profileId, { kind: "pass", ...every });
+      const res = await edit(app, venue.staffCookie, pass, {
+        kitchenScreenDisplay: { pass: false },
+      });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+      expect(await stored(pass)).toEqual({ pass: null });
+    });
   });
 
   describe("a kitchen screen's station, chosen from its profile's", () => {

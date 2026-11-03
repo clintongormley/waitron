@@ -43,12 +43,14 @@ import {
   assertNoPaymentInProgress,
   endSessionsNotAdmitted,
   keepApprovedAfterSwitch,
+  parseKitchenScreenDisplay,
   parseKitchenScreens,
   readApprovedAlternatives,
   readApprovedProfiles,
   requireDeviceName,
   requireDeviceProfile,
   resolveDeviceKitchenScreens,
+  setKitchenScreenDisplay,
   switchActiveProfile,
   updateDeviceSettings,
 } from "./device.js";
@@ -844,6 +846,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         name?: unknown;
         profileId?: unknown;
         kitchenScreens?: unknown;
+        kitchenScreenDisplay?: unknown;
         receiptPrinterId?: unknown;
         paymentSlipPrinterId?: unknown;
         cashDrawerPrinterId?: unknown;
@@ -868,6 +871,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         const label = requireDeviceName(body.name);
         const profileId = requireBodyUuid(body.profileId, "profileId");
         const kitchenScreens = parseKitchenScreens(body.kitchenScreens);
+        const display = parseKitchenScreenDisplay(body.kitchenScreenDisplay);
         const chosen: Partial<Record<ProfilePrinterRole, string | null>> = {
           receipt: requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId"),
           payment_slip: requireNullableBodyUuid(body.paymentSlipPrinterId, "paymentSlipPrinterId"),
@@ -920,6 +924,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
             screens: kitchenScreens,
           });
         }
+        await setKitchenScreenDisplay(tx, id, display);
         // Only a choice that differs from the stored one is applied: a new choice must be switched
         // on, and a device may still hold a listed one since switched off.
         for (const role of ["receipt", "payment_slip", "cash_drawer", "invoice"] as const) {
