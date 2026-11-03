@@ -291,6 +291,48 @@ it.each([
   });
 });
 
+it("refuses an export whose outside binding carries the relinquished fact", async () => {
+  await fixture(async (files, args, out, err) => {
+    const current = JSON.parse(await readFile(files.confirmation!, "utf8"));
+    await writeFile(
+      files.confirmation!,
+      JSON.stringify({ ...current, binding: { ...binding, oldMachineRelinquished: true } }),
+    );
+    expect(
+      await runPaperCustodian(args, {
+        stdout: (line) => out.push(line),
+        stderr: (line) => err.push(line),
+      }),
+    ).toBe(1);
+    expect(existsSync(files.output!)).toBe(false);
+    expect(out).toEqual([]);
+    expect(err).toEqual(["Paper custodian command failed (AppError)"]);
+  });
+});
+
+it("refuses a version 2 approval saying the old machine relinquished filing", async () => {
+  await fixture(async (files, args, out, err) => {
+    await writeFile(
+      files.input!,
+      JSON.stringify({
+        ...approval,
+        version: 2,
+        oldMachineOffline: false,
+        oldMachineRelinquished: true,
+      }),
+    );
+    expect(
+      await runPaperCustodian(args, {
+        stdout: (line) => out.push(line),
+        stderr: (line) => err.push(line),
+      }),
+    ).toBe(1);
+    expect(existsSync(files.output!)).toBe(false);
+    expect(out).toEqual([]);
+    expect(err).toEqual(["Paper custodian command failed (RangeError)"]);
+  });
+});
+
 it.each(["block", "consumption", "input"])(
   "bounds and validates the public %s file before an export",
   async (name) => {

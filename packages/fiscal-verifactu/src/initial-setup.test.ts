@@ -627,3 +627,19 @@ it("gives first setup the database's newest fiscal record time as its floor", as
   );
   expect(source).toMatchObject({ timeFloorMs: Date.parse("2026-07-20T19:20:30+01:00") });
 });
+
+it("a version 2 approval is refused", () => {
+  const f = fixture();
+  expect(() => FISCAL_INITIAL_SETUP.inspect(f.held, f.input)).not.toThrow();
+  expect(() =>
+    FISCAL_INITIAL_SETUP.inspect(f.held, {
+      ...f.input,
+      approval: { ...f.input.approval, version: 2, oldMachineRelinquished: true },
+    }),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "malformed_approval" },
+    }),
+  );
+});

@@ -433,6 +433,20 @@ describe("a retained dormant reservation consumed for a separate takeover", () =
       expect(await activeRows()).toEqual(before);
     },
   );
+  it("a paper standby promotion given version 2 is refused", async () => {
+    const permission = {
+      ...approval,
+      version: 2,
+      oldMachineOffline: false,
+      oldMachineRelinquished: true,
+    };
+    const before = await activeRows();
+    await expect(takeover(consumed(candidate, approval), permission)).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "malformed_approval" },
+    });
+    expect(await activeRows()).toEqual(before);
+  });
   it("rolls back activation if its final audit write is refused", async () => {
     await suite.db.execute(
       sql`create trigger refuse_takeover before insert on fiscal_allocations begin select raise(abort, 'takeover audit refused'); end`,

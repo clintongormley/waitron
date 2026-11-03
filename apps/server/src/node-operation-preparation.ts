@@ -40,6 +40,7 @@ import type { PromotionOperationRunner } from "./promote.js";
 interface Context {
   readonly oldNodeNeutralised?: unknown;
   readonly noParallelRecovery?: unknown;
+  readonly oldMachineRelinquished?: unknown;
 }
 type Commit = <T>(body: (tx: Transaction) => Promise<T>) => Promise<T>;
 export function createNodeOperationPreparation(options: {
@@ -62,6 +63,9 @@ export function createNodeOperationPreparation(options: {
     authority: OperationAuthority;
     verifier: string | null | undefined;
     isolation?: Readonly<{ oldMachineOffline: boolean; noParallelRecovery: boolean }>;
+    // Kept apart from `isolation`: isolation makes `authorize` require a live primary, which a
+    // mirror being promoted never is.
+    promotion?: Readonly<{ oldMachineRelinquished: boolean }>;
   }>();
   const invalid = (binding: OperationBinding): never => {
     throw new AppError("module.operation_invalid", { module: binding.module });
@@ -112,11 +116,13 @@ export function createNodeOperationPreparation(options: {
       check();
       const keyName = await readRecoveryKeyName(options.nodeDb, node.nodeId);
       await authorize(binding);
-      const isolation = scopes.getStore()?.isolation;
+      const { isolation, promotion } = scopes.getStore() ?? {};
+      const relinquished = promotion?.oldMachineRelinquished ?? false;
       return {
         ...current,
         history: current.history,
-        oldMachineOffline: isolation?.oldMachineOffline ?? true,
+        oldMachineOffline: isolation?.oldMachineOffline ?? !relinquished,
+        oldMachineRelinquished: relinquished,
         oldMachineAbsent: false,
         noParallelRecovery: isolation?.noParallelRecovery ?? true,
         contextKey: JSON.stringify([
@@ -150,14 +156,23 @@ export function createNodeOperationPreparation(options: {
       if (heldContext.oldNodeNeutralised !== true)
         throw new AppError("promotion.fence_not_attested", {});
       if (heldContext.noParallelRecovery !== true) return invalid(binding);
+      if (
+        heldContext.oldMachineRelinquished !== undefined &&
+        typeof heldContext.oldMachineRelinquished !== "boolean"
+      )
+        return invalid(binding);
     }
+    const promotion =
+      binding.action === "promote"
+        ? Object.freeze({ oldMachineRelinquished: heldContext.oldMachineRelinquished === true })
+        : undefined;
     const key =
       typeof heldCredentials === "object" &&
       heldCredentials !== null &&
       "breakGlass" in heldCredentials;
     const verifier = key ? await readRecoveryKeyVerifier(options.nodeDb, node.nodeId) : undefined;
     const authenticated = async (authority: OperationAuthority, commit: Commit) => {
-      return scopes.run({ binding, authority, verifier }, () => run(authority, commit));
+      return scopes.run({ binding, authority, verifier, promotion }, () => run(authority, commit));
     };
     if (
       typeof heldCredentials === "object" &&

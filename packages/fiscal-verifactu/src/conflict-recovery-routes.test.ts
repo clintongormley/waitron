@@ -316,6 +316,7 @@ function actualOperations() {
       contextKey: JSON.stringify(binding),
       oldMachineOffline: true,
       oldMachineAbsent: false,
+      oldMachineRelinquished: false,
       noParallelRecovery: true,
     }),
   };

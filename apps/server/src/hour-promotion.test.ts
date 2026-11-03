@@ -597,6 +597,95 @@ it("serves clock, selection and authenticated promotion through the management r
   }
 });
 
+it("a promotion whose preparation and promote bodies both claim the old box relinquished stores a version 1 approval saying offline, with no oldMachineRelinquished key", async () => {
+  const s = await service();
+  await admit(s);
+  const app = new Hono();
+  mountPromoteApi(app, {
+    appDb: suite.db,
+    nodeDb: suite.node,
+    nodeId: standby.nodeId,
+    credentialKeyRing: TOTP_KEY_RING,
+    modules: ALL_MODULES.filter((module) => module.name === binding.module),
+    nodePreparation: s,
+    run: async (attestation, runner) => {
+      const result = await promoteMirrorToPrimary(
+        {
+          db: suite.db,
+          node: suite.node,
+          nodeId: standby.nodeId,
+          ring,
+          modules: ALL_MODULES.filter((module) => module.name === binding.module),
+          holders: createDeploymentHolders("mirror", "secondary"),
+          log: () => {},
+          persistTradingEnv: async () => {},
+          withModuleOperations: runner,
+        },
+        attestation,
+      );
+      return { ...result, restarting: !result.alreadyPrimary };
+    },
+  });
+  const socket = new TLSSocket(new Socket());
+  try {
+    const send = async (path: string, body: unknown) => {
+      const response = await app.request(
+        `https://box.test/management-api/promote${path}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        },
+        { incoming: { socket } },
+      );
+      const value = await response.json();
+      expect([response.status, value]).toEqual([200, expect.anything()]);
+      return value;
+    };
+    const body = {
+      ...context,
+      oldMachineRelinquished: true,
+      breakGlass: key.secret,
+      moduleOperation: { binding, input: null },
+    };
+    const challenge = await send("/preparation", {
+      ...body,
+      proposal: { action: "clock-challenge" },
+    });
+    const compared = await send("/preparation", {
+      ...body,
+      proposal: {
+        action: "compare-clocks",
+        browser: { challengeId: challenge.id, instantMs: Date.now() },
+      },
+    });
+    const selected = await send("/preparation", {
+      ...body,
+      proposal: { action: "select", comparisonId: compared.id },
+    });
+    expect(selected).toMatchObject({ status: "selected" });
+    const before = new Set((await rows()).allocations.map((row) => row.eventKey));
+    await send("", { ...body, moduleOperation: { binding, input: selected.input } });
+    const added = (await rows()).allocations.filter((row) => !before.has(row.eventKey));
+    expect(added).toHaveLength(1);
+    const [{ approval }] = added;
+    expect(approval).toStrictEqual({
+      version: 1,
+      eventId: approval.eventId,
+      operatorId: approval.operatorId,
+      sourceId: approval.sourceId,
+      targetNodeId: approval.targetNodeId,
+      oldMachineOffline: true,
+      oldMachineAbsent: false,
+      noParallelRecovery: true,
+      confirmedAt: approval.confirmedAt,
+      incidentEvidence: approval.incidentEvidence,
+    });
+  } finally {
+    socket.destroy();
+  }
+});
+
 it("a promotion beside a leftover start-again note file is not held back by the file's floor", async () => {
   const stateDir = join(root, "state");
   const s = await service();

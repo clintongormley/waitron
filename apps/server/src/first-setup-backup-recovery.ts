@@ -700,6 +700,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           oldMachineAbsent: false,
           oldMachineOffline: entry.request.context.oldBoxGone,
           noParallelRecovery: entry.request.context.soleRecovery,
+          oldMachineRelinquished: false,
           contextKey: JSON.stringify([
             binding,
             entry.originalsDigest,

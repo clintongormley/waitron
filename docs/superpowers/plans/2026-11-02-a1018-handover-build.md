@@ -596,7 +596,7 @@ and `git diff origin/main -- packages/fiscal-verifactu/src/write-path.e2e.test.t
 | 3 Boot check | **FISCAL** | decides, before the first filing pass, whether a box may file (A947 5a's place) |
 | 4 Final copy | **FISCAL** | new read-only code in `packages/fiscal-verifactu` (chain summary, whole-chain check) |
 | 4b Payment collection owner | no | payments only; full review for concurrency |
-| 5a The relinquished fact | **FISCAL — LOUD** | adds a version 2 approval, written only by a promotion, to the append-only `fiscal_allocations` (`packages/fiscal-verifactu/src/classification.ts:10`, `schema/allocations.ts:26`); version 1 stays readable; also changes the generic module operation contract (`ModuleRecoveryFacts`, `packages/module/src/operation-preparation.ts:15-26`) and the server's promotion path (`apps/server/src/node-operation-preparation.ts`), a cross-package contract |
+| 5a The relinquished fact | **FISCAL — LOUD** | adds a version 2 approval, written only by a promotion whose old box relinquished filing, to the append-only `fiscal_allocations` (`packages/fiscal-verifactu/src/classification.ts:10`, `schema/allocations.ts:26`); every other approval, including every other promotion's, stays version 1 byte for byte and stays readable; allocation validation and the activation context gain the fact (`packages/fiscal-verifactu/src/allocation-envelope.ts`, `allocation-operation.ts`); also changes the generic module operation contract (`ModuleRecoveryFacts`, `packages/module/src/operation-preparation.ts:15-28`) and the server's promotion path (`apps/server/src/node-operation-preparation.ts`), a cross-package contract |
 | 5 Controlled, server | **FISCAL** | activates a fresh fiscal identity on M2; M2 then files M1's copied records |
 | 6 Controlled, screens | no, unless Task 6.4 must change `packages/fiscal-verifactu/src/setup/` (then FISCAL) | screens and guides; lands after 5 |
 | 7 Emergency, server | **FISCAL** | as 5, under a declaration |
@@ -778,7 +778,7 @@ full path.
 | 3 | A returning box asks before it sells or files | **yes** | no | 9 | 2 | — |
 | 4 | The final copy and its indicator | **yes** | no | 8 | 2 | — |
 | 4b | Payment collection belongs to one box (A764) | no | no | 4 | 0 | — |
-| 5a | The relinquished fact (crosses the module operation contract) | **yes, loud** | no | 5 | 0 | — |
+| 5a | The relinquished fact (crosses the module operation contract) | **yes, loud** | no | 6 | 0 | — |
 | 5 | Controlled handover, server | **yes** | yes (`venue.db`, new `handover` set) | 14 | 3, 4, 4b, 5a (real boxes: A947 3b) | — |
 | 6 | Controlled handover, screens and guide | no | no | 6 | 5 | — |
 | 7 | Emergency handover, server | **yes** | yes (`venue.db`, `handover` set) | 7 | 5 (real boxes: A947 3b; continuous copy: 3c) | — |
@@ -1489,7 +1489,7 @@ there:
 | `POST /api/node/peer-status` | mirror, fenced | a `query` envelope signed by a key the held chart vouches for and does not evict; answers only signed status | Slice 3 |
 | `POST /api/node/membership` | mirror, fenced | none needed from the caller: the body is a signed chart, accepted only through `acceptMembershipDocument` against the stored trust set; the answer is one boolean | Slice 3 |
 | `POST /api/node/handover/offer` | mirror | a `stepdown` envelope signed by the binding's source with a key the chart vouches for, the binding's chart term and digest equal to M2's | Slice 5 |
-| `POST /api/node/handover/:operationId/preparation` | mirror | the same sign-in as `prepare` (`apps/server/src/node-operation-preparation.ts:227-241`, `node.promote`); the operation must be at `filing_assumed` or `emergency_declared`; its context comes from the operation's own record, never the body | Slice 5 (Task 5.7b) |
+| `POST /api/node/handover/:operationId/preparation` | mirror | the same sign-in as `prepare` (`apps/server/src/node-operation-preparation.ts:242-256`, `node.promote`); the operation must be at `filing_assumed` or `emergency_declared`; its context comes from the operation's own record, never the body | Slice 5 (Task 5.7b) |
 | `POST /api/node/handover/:operationId/activate` | mirror | email, password and code when enrolled, against the placed copy; `node.promote`; the operation's recorded state | Slice 5 |
 | `POST /api/node/handover/emergency/declare` | mirror | email, password and code when enrolled; `node.promote` | Slice 7 |
 
@@ -1970,156 +1970,363 @@ time is not built; one collection owner per payment is).
 ### Slice 5a — The relinquished fact
 
 **FISCAL — LOUD, and a cross-package contract change.** The owner lands it. A fresh-context review
-of these tasks, against A1018 design §§2 and 6, runs before the first implementer. No migration.
-It changes three packages: the generic module operation contract (`@waitron/module`), the server's
-operation host (`apps/server`) and the fiscal package. The PR discloses that a promotion's stored
-approval in `fiscal_allocations` gains a new shape (CLAUDE.md §3's disclosure for a stored-shape
-change).
+of these tasks ran on 2026-11-03 (`/Users/clintongormley/waitron-campaign/a1018/s5a-review-1.md`);
+all fifteen of its findings are folded in (Review round 7). No migration: the approval column is
+plain text with no check on its shape. It changes three packages: the generic module operation
+contract (`@waitron/module`), the server's operation host (`apps/server`) and the fiscal package;
+`@waitron/provisioning` and `@waitron/composition` gain only a fixture field in their tests. The
+PR discloses that a promotion's stored approval in `fiscal_allocations` can take a new shape.
 
-**Why.** Promotion's approval always records `oldMachineOffline: true`
-(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:91`), and the preparation refuses
-anything else (`:113-114`). That approval is stored in the append-only `fiscal_allocations`
+**Why.** Before this slice, a promotion's approval always recorded `oldMachineOffline: true`
+(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:91` on `c336372fae`), and the
+preparation refused anything else (`:113-114`). That approval is stored in the append-only `fiscal_allocations`
 (`packages/fiscal-verifactu/src/classification.ts:10`; `schema/allocations.ts:26`). In a controlled
 handover M1 is running, restricted, when M2 activates; recording "offline" would write a false
 fact into a record nobody can correct. The approval instead records what happened: M1 signed away
 filing to this box.
 
-**How old shapes stay readable.** The new fact goes in a **version 2** approval, written only by
-the promotion path. Version 1 — today's exact key set — is not changed and stays readable
-everywhere it is read today, meaning "not relinquished". This is not compatibility code for
-pre-live data (CLAUDE.md §3 forbids that): every other builder — paper, custody, conflict
-recovery, setup, throwaway — keeps writing version 1, and the fiscal package "still reads old
-Cloud receipts until their retirement" (`docs/backlog/fiscal.md:1078-1081`; no new ones arrive,
-since the Cloud registry that signed them was dropped, A1189). So no reader that accepts version 1
-today stops accepting it.
+**How old shapes stay readable.** The new fact goes in a **version 2** approval, built **only
+when a promotion's old box relinquished filing** (`oldMachineRelinquished: true`). Every other
+approval stays version 1, byte for byte as today: every promotion without the fact (an emergency
+handover, an ordinary promotion), and every paper, custody, conflict-recovery, setup and throwaway
+approval. Version 1 means "not relinquished". Allocation validation accepts version 2 only when
+the context it is judged in says relinquished, and only the hour promotion's admission sets that
+(Task 5a.2), so no other path can store one. This is not compatibility code for pre-live data
+(CLAUDE.md §3 forbids that): the fiscal package "still reads old Cloud receipts until their
+retirement" (`docs/backlog/fiscal.md:1078-1081`; no new ones arrive, since the Cloud registry that
+signed them was dropped, A1189). So no reader that accepts version 1 today stops accepting it.
+
+**Task order.** 5a.1 and 5a.1b carry the fact to the module and keep it out of request bodies.
+5a.2 teaches allocation validation the new shape **before** 5a.3 builds it: promotion's admission
+runs the validator (`packages/fiscal-verifactu/src/allocation-envelope.ts:296` and `:370`), which
+today refuses every version 2 `malformed_approval`, so a builder landed first could not pass its
+own tests. 5a.4 is the backup verifier and the guards on the readers that stay version 1 only.
+
+**Failing tests and guards.** In this slice a "failing test" is one that fails before its task's
+implementation and passes after it. A test that already passes before the implementation is
+called a **guard**; each guard is proved by a deletion control (a temporary edit, reverted) that
+makes it fail.
 
 #### Task 5a.1: The promotion path carries the fact to the module
 
-**How a promotion reaches the module today** (traced on `61bfdfe405`): `POST /management-api/promote`
-calls `nodePreparation.withPromotion(operation, body, body, …)` (`apps/server/src/promote-api.ts:116-125`);
+**How a promotion reaches the module today** (traced on `61bfdfe405`, re-checked on
+`c336372fae`): `POST /management-api/promote` calls
+`nodePreparation.withPromotion(operation, body, body, …)` (`apps/server/src/promote-api.ts:116-125`);
 `withPromotion` (`apps/server/src/node-operation-preparation.ts:259-280`) calls `invoke`
 (`:137-185`), which checks the held context — today only `oldNodeNeutralised` and
 `noParallelRecovery` (`Context`, `:40-43`; checks `:149-153`) — and opens the operation scope with
 **no isolation** (`:159-160`). The module's facts are then built by `readRecoveryFacts`
 (`:104-131`) with `oldMachineOffline: isolation?.oldMachineOffline ?? true` (`:119`). Isolation is
-set only by `withLiveRecovery` (`:187-210`), used for the conflict switch; and setting it makes
+set only by `withLiveRecovery` (`:187-226`), used for the conflict switch; and setting it makes
 `authorize` call `assertLive` (`:91`), which refuses `node.read_only` unless the box is already
 primary (`:69-77`) — so a mirror's promotion cannot use it.
 
 **Files:**
 - `apps/server/src/node-operation-preparation.ts`: `Context` gains `oldMachineRelinquished?: unknown`;
-  `invoke` refuses a promote whose value is present and not a boolean, and stores it in the scope
-  as a **new field, `promotion: { oldMachineRelinquished: boolean }`, not as `isolation`**, so
-  `assertLive` is never reached; `readRecoveryFacts` returns `oldMachineRelinquished` from that
-  field (default `false`) and `oldMachineOffline: isolation?.oldMachineOffline ?? !relinquished`.
-  `withLiveRecovery`'s isolation and its callers are unchanged.
+  `invoke` refuses a promote whose value is present and not a boolean with
+  `module.operation_invalid` (its existing `invalid(binding)`, `:66-68`), and stores it in the
+  scope (`:60-65`) as a **new field, `promotion: { oldMachineRelinquished: boolean }`, not as
+  `isolation`**, so `assertLive` is never reached; `readRecoveryFacts` returns
+  `oldMachineRelinquished` from that field (absent means `false`) and
+  `oldMachineOffline: isolation?.oldMachineOffline ?? !relinquished`. `withLiveRecovery`'s isolation
+  and its callers are unchanged.
 - `packages/module/src/operation-preparation.ts`: `ModuleRecoveryFacts` (`:15-26`) gains
-  `oldMachineRelinquished: boolean`. The host's `run(binding, key, isolation, body)` (`:125`, the
-  live-recovery entry) is unchanged. The name is regime-neutral, so the module boundary still
-  learns nothing about Veri*Factu (`scripts/module-seams.test.ts`).
-- The places that build recovery facts by hand set `oldMachineRelinquished: false`:
-  `apps/server/src/recovery-preparation.ts:73-76` (its `Pick` of the three facts), `:183-187`,
-  `:366-370`; `apps/server/src/first-setup-backup-recovery.ts:697-702`;
-  `apps/server/src/recovery-entry.ts:73-77`; and any further site the new required field's type
-  errors name.
+  `oldMachineRelinquished: boolean`, required. The host's `run(binding, key, isolation, body)`
+  (`:122-127`, the live-recovery entry) is unchanged. The name is regime-neutral, so the module
+  boundary still learns nothing about Veri*Factu (`scripts/module-seams.test.ts`).
+- The source objects that build recovery facts set `oldMachineRelinquished: false`:
+  `apps/server/src/recovery-preparation.ts:183-187` and
+  `apps/server/src/first-setup-backup-recovery.ts:697-702`. **The `Isolation` type
+  (`recovery-preparation.ts:73-76`, a `Pick` of three facts) is not extended**, so the isolation
+  answers stay as they are: `recovery-preparation.ts:365-369`, `apps/server/src/recovery-entry.ts:73-77`,
+  `apps/server/src/testing/staged-hour-crash.ts:226-230` and
+  `apps/server/src/testing/staged-hour-restore.ts:214-218`.
+- Test fixtures that build `ModuleRecoveryFacts` gain `oldMachineRelinquished: false` and nothing
+  else (fixture growth, no assertion changes). The review's typecheck named:
+  `packages/provisioning/src/recovery-preparation-host.test.ts` (at `:54`, `:113` and `:132`),
+  `packages/fiscal-verifactu/src/conflict-recovery-routes.test.ts:314`,
+  `packages/fiscal-verifactu/src/hosted-hour-recovery.test.ts:56`,
+  `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts:217`,
+  `packages/composition/src/allocation-configuration.test.ts:237`,
+  `apps/server/src/first-setup-backup-history.test.ts:293`,
+  `apps/server/src/hour-recovery-host.test.ts:244`,
+  `apps/server/src/testing/hour-test-clock.test.ts:67` and the shared helper
+  `apps/server/test/hour-recovery-host.ts:217-230`; add the field at any further site the
+  typechecks name.
 
-Tests in `packages/module/src/operation-preparation.test.ts` and a new
-`apps/server/src/node-operation-preparation.test.ts` (none exists on `61bfdfe405`).
+Tests in a new `apps/server/src/node-operation-preparation.test.ts` (none exists on
+`c336372fae`), built as `apps/server/src/live-module-operation.test.ts:80-90` builds
+`createNodeOperationPreparation`, with a stub module whose `recovery` records what
+`host.readRecoveryFacts` returns and whose `liveRecoveryActions` include `conflict-switch`.
+`@waitron/module` changes only a type, so its typecheck is its check.
 
 - [ ] **Step 1: Write the failing tests.** **"a promotion on a mirror with
   `oldMachineRelinquished: true` reaches the module as `oldMachineOffline: false,
-  oldMachineRelinquished: true`, and is not refused `node.read_only`"** (control: pass it as
-  isolation instead, and the call is refused `node.read_only` — the reason it is a separate
-  field); "a promotion without it reaches the module as offline `true`, relinquished `false`, as
-  today"; "a non-boolean value is refused"; "a conflict switch's facts are unchanged, with
-  relinquished `false`"; each hand-built site writes `false`.
-- [ ] **Step 2: Run** `pnpm --filter @waitron/module exec vitest run src/operation-preparation.test.ts` and `pnpm --filter @waitron/server exec vitest run src/node-operation-preparation.test.ts` — FAIL.
+  oldMachineRelinquished: true`, and is not refused `node.read_only`"**; "a promotion without it
+  reaches the module as `oldMachineOffline: true, oldMachineRelinquished: false`" (fails today:
+  the field is absent); "a promotion whose `oldMachineRelinquished` is `"yes"` is refused
+  `module.operation_invalid`"; "a conflict switch through `withLiveRecovery` reaches the module
+  with its isolation answers and `oldMachineRelinquished: false`" (fails today: the field is
+  absent). The hand-built source sites are checked by the typecheck, because the field is
+  required.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/node-operation-preparation.test.ts` — FAIL.
 - [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** them — PASS; then `pnpm --filter @waitron/server exec vitest run src/promote-api.test.ts src/recovery-preparation.test.ts src/recovery-entry.test.ts` (whichever exist; list them with `ls`), from the root `pnpm exec vitest run scripts/module-seams.test.ts`, and typecheck `@waitron/module`, `@waitron/server`, `@waitron/fiscal-verifactu` and `@waitron/composition`. Test files that type a `ModuleRecoveryFacts` fixture gain `oldMachineRelinquished: false` and nothing else (fixture growth, no assertion changes): `packages/fiscal-verifactu/src/hosted-hour-recovery.test.ts:56`, `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts:217`, `packages/composition/src/allocation-configuration.test.ts:236`, and any further file the typechecks name.
+- [ ] **Step 4: Run** it — PASS. **Control** (a temporary edit, reverted): in `invoke`, store the
+  fact as `isolation: { oldMachineOffline: false, noParallelRecovery: true }` instead of the new
+  field, and the mirror case is refused `node.read_only` — the reason it is a separate field.
+  Then run `pnpm --filter @waitron/server exec vitest run src/live-module-operation.test.ts src/promote-api.test.ts src/hour-promotion.test.ts src/hour-recovery-host.test.ts src/first-setup-backup-history.test.ts src/testing/hour-test-clock.test.ts`,
+  `pnpm --filter @waitron/provisioning exec vitest run src/recovery-preparation-host.test.ts`,
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/hosted-hour-recovery.test.ts src/minute-selection-unknown-name.test.ts src/conflict-recovery-routes.test.ts`,
+  `pnpm --filter @waitron/composition exec vitest run src/allocation-configuration.test.ts`,
+  from the root `pnpm exec vitest run scripts/module-seams.test.ts`, and typecheck
+  `@waitron/module`, `@waitron/server`, `@waitron/fiscal-verifactu`, `@waitron/composition` and
+  `@waitron/provisioning`.
 - [ ] **Step 5: Commit** `git commit -s -m "server: a promotion can say the old box relinquished its work, without the live-box check"`.
 
 #### Task 5a.1b: The existing promote routes cannot set the fact
 
-Both existing promote routes pass the whole request body as the context:
+Before this slice (on `c336372fae`), both promote routes passed the whole request body as the context:
 `nodePreparation.prepare(operation.binding, body, body, body.proposal, …)`
 (`apps/server/src/promote-api.ts:93`) and `withPromotion(operation, body, body, …)` (`:119-122`).
 After Task 5a.1 that would let any `node.promote` caller send `oldMachineRelinquished: true` and
 store a "relinquished" approval in the append-only `fiscal_allocations` with no relinquishment
-behind it.
+behind it. The third path, `withPromotionModuleOperation` (`:128-139`), opens no preparation scope
+and reads no context, so the fact cannot enter there; it is unchanged.
 
 **Files:** `apps/server/src/promote-api.ts`: both routes build the context from exactly
 `{ oldNodeNeutralised: body.oldNodeNeutralised, noParallelRecovery: body.noParallelRecovery }`.
-Only the handover activation (Task 5.8) sets `oldMachineRelinquished`, from its stored, verified
-relinquishment. Tests in `apps/server/src/promote-api.test.ts`.
+Only the handover's own routes set `oldMachineRelinquished` — Task 5.7b's preparation route and
+Tasks 5.8 and 7.4's activation, all through `handoverPromotionContext`, from the stored, verified
+relinquishment or declaration.
 
-- [ ] Failing tests: **"`/management-api/promote` with `oldMachineRelinquished: true` in its body
-  stores a version 1 approval saying offline, not relinquished"**; the same for
-  `/management-api/promote/preparation`'s prepared input; "both routes still pass
-  `oldNodeNeutralised` and `noParallelRecovery`" (their existing cases pass unedited). Implement;
-  PASS. `git commit -s -m "server: a promote request's body cannot claim the old box relinquished"`.
+Tests:
+- `apps/server/src/promote-api.test.ts` uses no database and doubles everything (`:7-8`), so it
+  cannot see what is stored. Its case checks what the routes hand on.
+- `apps/server/src/hour-promotion.test.ts` already mounts `mountPromoteApi` with a real
+  `nodePreparation` and database (the case at `:520-598`, mounting at `:524-548`, reading the
+  stored rows through `rows()`, `:258-265`). The end-to-end case goes there.
 
-#### Task 5a.2: The promotion preparation writes a version 2 approval
+- [ ] **Step 1: Write the failing tests.** In `promote-api.test.ts`: "both routes hand a stub
+  `nodePreparation` a context of exactly `{ oldNodeNeutralised, noParallelRecovery }`, although the
+  body also carries `oldMachineRelinquished: true` and the sign-in fields" (fails today: the
+  whole body is handed on). In `hour-promotion.test.ts`: **"a promotion whose preparation and
+  promote bodies both claim the old box relinquished stores a version 1 approval saying offline,
+  with no oldMachineRelinquished key"** (fails today, after Task 5a.1: the fact reaches the preparation, which refuses
+  `old_machine_active`, `packages/fiscal-verifactu/src/hour-recovery-preparation.ts:114`). The
+  existing cases of both files pass unedited (they are the guards that both routes still pass
+  `oldNodeNeutralised` and `noParallelRecovery`).
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/promote-api.test.ts src/hour-promotion.test.ts` — FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** them — PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "server: a promote request's body cannot claim the old box relinquished"`.
 
-**Files:** `packages/fiscal-verifactu/src/hour-recovery-preparation.ts` (`HourRecoveryFacts`,
-`:21-26`, gains the field; `checked`, `:113-114`, admits a **promotion** when `oldMachineOffline`
-or `oldMachineRelinquished` is true, and a recovery only when `oldMachineOffline` is; `inputFor`,
-`:69-97`, builds a version 2 approval for a promotion that records both facts as given, instead of
-a fixed `oldMachineOffline: true`, and keeps building version 1 for a recovery; the preparation
-already knows which it is, from `hourOperator`'s `promotion` flag, `:33-55`, and it puts the fact
-in the allocation context it hands validation);
-`allocation-types.ts:15-26` (`RecoveryApproval` becomes version 1 as today, or version 2 with
-`oldMachineRelinquished`). Test `packages/fiscal-verifactu/src/hour-recovery-preparation.relinquished.test.ts`.
+#### Task 5a.2: Allocation validation accepts version 2 only where a relinquished promotion is judged
+
+**Where the approval is judged** (re-checked on `c336372fae`): `approvalShape`
+(`packages/fiscal-verifactu/src/allocation-envelope.ts:192-215`) accepts version 1 only, and
+runs at admission (`withHourAdmission`, `:296`) and in `validateEnvelope` (`:370`). Activation
+judges the approval again with a context built at
+`packages/fiscal-verifactu/src/allocation-operation.ts:240-254` from the
+`AllocationOperationEvidence` (`:84-90`) that `withHourAdmission` hands on (`allocation-envelope.ts:306-312`):
+first through `validateForActivation` (`packages/fiscal-verifactu/src/allocation.ts:84-90`), and
+on a retry after commit through `validateAllocationReplay` (`allocation.ts:386-397`). Other
+paths judge outside approvals with contexts of their own: the emergency preparation
+(`emergency-preparation.ts:228-240`, storing the verdict's approval at `:250`), the paper
+recovery export (`paper-recovery-export.ts:86`), paper and dormant promotions (through
+`allocation.ts:84`) and old Cloud receipts (`cloud-evidence.ts:373-376`).
+
+**Files:**
+- `packages/fiscal-verifactu/src/allocation-types.ts`: `RecoveryApproval` (`:16-27`) becomes
+  version 1 as today, or version 2: version 1's fields with `version: 2` and
+  `oldMachineRelinquished: boolean`.
+- `packages/fiscal-verifactu/src/allocation-envelope.ts`:
+  - `AllocationContext` (`:46-89`) gains `oldMachineRelinquished?: boolean`, absent meaning not
+    relinquished. `mode` (`:50`, `"initial-setup" | "recovery"`) cannot tell a promotion from a
+    recovery, which is why the context carries the fact.
+  - `approvalShape` accepts version 1's exact keys with `version: 1`, or those keys plus a boolean
+    `oldMachineRelinquished` with `version: 2`.
+  - `validateEnvelope`, beside the event check (`:383-391`): a version 2 approval is refused
+    `malformed_approval` unless `context.oldMachineRelinquished === true` (so every context that
+    never sets the field refuses version 2 exactly as today); a version 1 approval is refused
+    `event_mismatch` when `context.oldMachineRelinquished === true`; a version 2 approval whose
+    `oldMachineRelinquished` is not `true` is refused `event_mismatch`. The offline rule
+    (`:394-395`) is met by `oldMachineOffline` or by a version 2 `oldMachineRelinquished`. A version
+    2 approval that also says `oldMachineOffline` or `oldMachineAbsent` is refused
+    `malformed_approval`.
+  - `HourAdmissionFacts` (`:234-237`) gains `oldMachineRelinquished?: boolean`;
+    `withHourAdmission` puts it in the context it validates with (`:316-329`) and in the evidence
+    it hands on (`:306-312`), adding the key only when it is `true`, so every existing caller's
+    evidence is unchanged.
+- `packages/fiscal-verifactu/src/allocation-operation.ts`: `AllocationOperationEvidence` (`:84-90`)
+  gains `oldMachineRelinquished?: boolean`, and the activation context (`:240-254`) copies it.
+  `snapshotAllocationEvidence` (`:153-171`) already spreads the evidence, so the field survives it.
+- Refusing version 2: the emergency, paper-export, paper and dormant promotion,
+  and Cloud contexts named above. Only the hour promotion's admission facts set the field
+  (Task 5a.3).
+
+Tests: new cases in `packages/fiscal-verifactu/src/allocation-envelope.test.ts`,
+`hour-standby-activation.test.ts` (which already admits through `withHourAdmission` and
+activates, `:83`), `emergency-preparation.test.ts` and `dormant-takeover.test.ts` (which drives a
+paper standby promotion through `allocation.ts`).
+
+- [ ] **Step 1: Write the failing tests.** Each fails today because `approvalShape` refuses
+  every version 2 `malformed_approval`, or because a version 1 approval passes whatever the
+  context says. In `allocation-envelope.test.ts`: "a version 2 approval saying
+  `oldMachineOffline: false, oldMachineRelinquished: true` passes when the context says
+  relinquished"; "a version 1 approval is refused `event_mismatch` when the context says
+  relinquished"; "a version 2 approval saying `oldMachineRelinquished: false` is refused
+  `event_mismatch` in a relinquished context". In `hour-standby-activation.test.ts`: "a promotion
+  admitted with `oldMachineRelinquished: true` activates and stores the version 2 approval it was
+  given"; **"a committed controlled activation, retried, is accepted"** (a lost answer, then a
+  retry with `priorActivation: "committed"`; the `fiscal_allocations` count is unchanged).
+- [ ] **Step 2: Write the guards.** They pass today, because every version 2 is refused today. In
+  `allocation-envelope.test.ts`: "a version 2 approval is refused `malformed_approval` when the
+  context does not say relinquished"; "a version 1 approval passes as today when the context does
+  not say relinquished". In `emergency-preparation.test.ts`: "an emergency preparation given a
+  version 2 approval is refused". In `dormant-takeover.test.ts`: "a paper standby promotion given
+  version 2 is refused".
+- [ ] **Step 3: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/allocation-envelope.test.ts src/hour-standby-activation.test.ts src/emergency-preparation.test.ts src/dormant-takeover.test.ts` — the Step 1 tests FAIL, the guards PASS.
+- [ ] **Step 4: Implement.**
+- [ ] **Step 5: Run** them — PASS. **Controls** (temporary edits, reverted): drop the copy at
+  `allocation-operation.ts:240-254`, and both `hour-standby-activation.test.ts` cases are refused
+  `malformed_approval` at activation — the reason the evidence carries the fact; delete the
+  "version 2 only in a relinquished context" refusal, and the three version-2 guards fail (if one
+  still passes, name what else refuses it in the commit message). Then run
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/hour-activation.test.ts src/allocation-operation.test.ts src/allocation.test.ts`
+  and typecheck `@waitron/fiscal-verifactu`.
+- [ ] **Step 6: Commit** `git commit -s -m "fiscal-verifactu: allocation validation accepts a version 2 approval only where a relinquished promotion is judged"`.
+
+#### Task 5a.3: The promotion preparation builds version 2 only when the old box relinquished
+
+**Where the approval is built** (re-checked on `c336372fae`):
+`packages/fiscal-verifactu/src/hour-recovery-preparation.ts`'s `inputFor` (`:68-98`) is called in
+three places: `:135` (a new intent, conflict switches only), `:166` (`select`) and `:197`
+(`prepare`). At `select` no facts are in scope: `engine.select` returns the stored intent without
+them (`hour-selection.ts:237-239`). `createPreparation` (`:111`) takes an operator function, not a
+promotion flag. If `select` built version 1 while `prepare` built version 2, `prepare` would refuse
+`event_mismatch` (`:197-198`).
+
+**Files:** `packages/fiscal-verifactu/src/hour-recovery-preparation.ts`:
+- `HourRecoveryFacts` (`:21-26`) gains `oldMachineRelinquished: boolean`, required
+  (`ModuleRecoveryFacts` carries it since Task 5a.1, and `hosted-hour-recovery.ts:50-67` spreads it
+  through).
+- `createPreparation` takes `promotion: boolean` instead of an operator function, and finds the
+  operator with `hourOperator(binding, authority, promotion)` (`:34-54`);
+  `createHourRecoveryPreparation` (`:105-107`) passes `false`, `createHourPromotionPreparation`
+  (`:108-110`) passes `true`.
+- `checked` (`:112-118`) admits relinquished only for a promotion: the offline rule (`:114`) is met
+  by `oldMachineOffline` or, for a promotion only, by `oldMachineRelinquished`; a recovery whose
+  facts say relinquished is refused `old_machine_active`, whatever its offline fact.
+- `inputFor` takes `relinquished: boolean`. When it is `true` it builds a version 2 approval with
+  `oldMachineOffline: false, oldMachineRelinquished: true`; when it is `false` it builds today's
+  version 1, byte for byte (fixed `oldMachineOffline: true`). Its callers: `:135` passes `false`;
+  `select` (`:160-168`), for a promotion, reads the fact inside `options.withState(binding, …)`,
+  as `within` does at `:145-148` — through `options.readContext` (`hosted-hour-recovery.ts:50-57`,
+  which takes no clock reading) and `checked`, falling back to `options.read(binding)` when a test
+  host gives no `readContext` — because the real host's `readRecoveryFacts` refuses
+  `setup.attempt_conflict` outside a preparation scope
+  (`packages/provisioning/src/recovery-preparation-host.ts:26-30`); for a recovery it passes
+  `false` without reading. Task 5a.3's `select` test drives the real `createHostedHourRecovery`
+  host, so a test host without that scope check cannot hide the refusal. `prepare` passes
+  `facts.oldMachineRelinquished` from `within`.
+- `prepare` hands the fact to admission: the facts at `:205-207` gain
+  `oldMachineRelinquished: facts.oldMachineRelinquished`, which Task 5a.2's `withHourAdmission`
+  reads.
+- Test fixtures typed `HourRecoveryFacts` gain `oldMachineRelinquished: false` and nothing else:
+  `hour-recovery-preparation.test.ts:123`, `conflict-hour-preparation.test.ts:37`,
+  `conflict-recovery.test.ts:202`, `minute-selection-unknown-name.test.ts:146-155` (named by the
+  typecheck at `:158`), and any further site the typecheck names.
+
+Test `packages/fiscal-verifactu/src/hour-recovery-preparation.relinquished.test.ts`, driving
+`createHourPromotionPreparation` through admission and activation.
 
 - [ ] **Step 1: Write the failing tests.** "a controlled promotion stores a version 2 approval
-  saying `oldMachineOffline: false, oldMachineRelinquished: true`"; "an emergency promotion stores
-  version 2 saying `oldMachineOffline: true, oldMachineRelinquished: false`"; "a recovery with only
-  `oldMachineRelinquished` is refused `old_machine_active`"; "a promotion with neither is refused
-  `old_machine_active`"; "a recovery still stores version 1, byte for byte as today" (control).
-- [ ] **Step 2: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/hour-recovery-preparation.relinquished.test.ts` — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** it — PASS.
-- [ ] **Step 5: Commit** `git commit -s -m "fiscal-verifactu: a promotion records that the old box relinquished filing, not that it was offline"`.
+  saying `oldMachineOffline: false, oldMachineRelinquished: true`" (fails today: `checked`
+  refuses `old_machine_active`); "`select` and `prepare` build the same version 2 input, so a
+  relinquished promotion is not refused `event_mismatch`" (fails today for the same reason); "a
+  recovery whose facts say both offline and relinquished is refused `old_machine_active`" (fails
+  today: nothing reads the fact).
+- [ ] **Step 2: Write the guards.** "a promotion without the fact stores version 1 exactly as
+  today" (compared with today's literal); "a recovery still stores version 1, byte for byte as
+  today"; "a promotion with neither fact is refused `old_machine_active`".
+- [ ] **Step 3: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/hour-recovery-preparation.relinquished.test.ts` — the Step 1 tests FAIL, the guards PASS.
+- [ ] **Step 4: Implement.**
+- [ ] **Step 5: Run** it — PASS. **Control** (a temporary edit, reverted): build version 2 for
+  every promotion, and the first guard fails. Then run
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/hour-recovery-preparation.test.ts src/conflict-hour-preparation.test.ts src/conflict-recovery.test.ts src/minute-selection-unknown-name.test.ts src/hosted-hour-recovery.test.ts`,
+  `pnpm --filter @waitron/server exec vitest run src/hour-promotion.test.ts` (Task 5a.1b's case
+  still stores version 1, because the body cannot carry the fact), and typecheck
+  `@waitron/fiscal-verifactu` and `@waitron/server`.
+- [ ] **Step 6: Commit** `git commit -s -m "fiscal-verifactu: a promotion whose old box relinquished filing records that, not that it was offline"`.
 
-#### Task 5a.3: Every approval reader knows both versions where a promotion can reach it
+#### Task 5a.4: Backup verification reads version 2, and the readers that stay version 1 are guarded
 
-**Files:** under `packages/fiscal-verifactu/src/`. The approval's exact key set is checked by
-these readers (found with `grep -rn oldMachineOffline` and `grep -rn "exact(" ` on `61bfdfe405`,
-test files aside; the task's first step re-runs both and adds any new one to this table):
+**Files:** under `packages/fiscal-verifactu/src/`. The approval is read by these places (found with
+`grep -rn oldMachineOffline` and `grep -rn "exact(" ` on `61bfdfe405`, test files aside, and
+re-checked on `c336372fae`; a `git grep` for `oldMachineOffline` and `approval.` under `apps/`
+finds nothing outside this package that parses the approval; the task's first step re-runs both
+greps and adds any new reader to this table):
 
-| Reader | Where | Accepts after this task |
+| Reader | Where | Accepts after this slice |
 | --- | --- | --- |
-| allocation validation | `allocation-envelope.ts:195-210`, its "old machine" rules `:392-395` | versions 1 and 2. The context cannot tell a promotion from a recovery today (`AllocationContext.mode` is `"initial-setup" \| "recovery"`, `:46-62`), so the context gains `oldMachineRelinquished`, set only by the promotion preparation (Task 5a.2), and the approval's value must equal the context's, as `eventId` and the others already must (`:383-390`); "relinquished" then satisfies the offline rule (`:394`) |
-| backup verification of stored allocations | `backup-verification-history.ts:125-145` (reads `fiscal_allocations.approval`, `:287`, `:465`), including its "absent or offline" refusal `:142` | versions 1 and 2, the refusal widened to "absent, offline or relinquished" |
-| declared paper evidence | `declared-paper-evidence.ts:185-204` | version 1 only, unchanged (paper approvals are never promotions) |
-| initial setup | `initial-setup.ts:193,234,243` | version 1 only, unchanged |
-| old Cloud receipts | `cloud-evidence.ts:271-290` | version 1 only, unchanged (Cloud never signs version 2) |
-| conflict recovery input | `conflict-recovery-contract.ts:74-110` (`parseConflictInput`) | version 1 only, unchanged |
+| allocation validation | `allocation-envelope.ts:192-215` (`approvalShape`), the event check `:383-391`, the "old machine" rules `:392-395` | Task 5a.2: version 1 always except in a relinquished context; version 2 only in one |
+| backup verification of stored allocations | `backup-verification-history.ts:125-159`, including its "absent, offline or version 2" refusal `:149`; the approval is read at `:294` and a version 2 approval refused off an `hour` row at `:300`, inside the table loop `:473-479` | version 1 as today; version 2 only in the shape a relinquished promotion writes (`oldMachineRelinquished: true`, `oldMachineOffline: false`, `oldMachineAbsent: false`) and only on an `hour` row (this task; fix round 1 narrowed it from "absent, offline or relinquished") |
+| declared paper evidence | `declared-paper-evidence.ts:181-205` (version check `:195`) | version 1 only, unchanged (paper approvals are never promotions); guarded |
+| initial setup | `initial-setup.ts:188-196` and `:224-245` (version check `:239`) | version 1 only, unchanged; guarded |
+| old Cloud receipts | `cloud-evidence.ts:270-290` (version check `:279`) | version 1 only, unchanged (Cloud never signs version 2); guarded |
+| conflict recovery input | `conflict-recovery-contract.ts:74-128` (`parseConflictInput`, version check `:111`) | version 1 only, unchanged; guarded |
+| conflict preparation result | `conflict-recovery-contract.ts:234-255` (`parseConflictPreparation`, which calls `parseConflictInput`) | version 1 only, unchanged: conflict switches only. **Task 6.4's page must not reuse it for a promotion's selected result**, which can be version 2 |
+| conflict recovery screen | `dashboard/conflict-recovery.ts:318-331` | conflict switches only, version 1; unchanged |
+| Cloud preparation and initial Cloud setup | `cloud-preparation.ts:141`, `initial-cloud-setup.ts:167` | read `oldMachineOffline` after `cloud-evidence.ts`'s version-1-only check; unchanged |
+| emergency preparation, paper recovery export | `emergency-preparation.ts:228-240`, `paper-recovery-export.ts:86` | through allocation validation, whose context there never says relinquished: version 1 only; guarded in Task 5a.2 |
+| single-field readers | `hour-history-reader.ts:135-175`, `backup-verification.ts:91-108`, `restore-committed.ts:23`, `hour-recovery-state.ts:80` | read only `eventId`, `targetNodeId`, `sourceId` or `confirmedAt`, which version 2 keeps; unchanged |
 
 Builders that keep writing version 1, unchanged: `hour-throwaway-allocation.ts:67`,
 `throwaway-allocation.ts:89`, `hour-preparation.ts:64`, `conflict-recovery-routes.ts:92,152`, and
-the custody state's typed literal (`custodian/custody-state.ts:93,613`). Tests in each changed
-reader's existing suite.
+the custody state's typed literal (`custodian/custody-state.ts:93,613`).
 
-- [ ] **Step 1: Write the failing tests.** Allocation validation: "a version 2 approval that says
-  relinquished passes when the context says the same"; "a version 2 relinquished approval whose
-  context does not say relinquished is refused"; "a version 1 approval passes as today". Backup verification: "a stored version 2 relinquished approval
-  verifies"; "a stored version 1 approval verifies as today". For each unchanged reader: "a
-  version 2 approval is refused" (so it cannot slip in where no promotion belongs).
-- [ ] **Step 2: Run** those suites with `pnpm --filter @waitron/fiscal-verifactu exec vitest run <files>` — FAIL.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run** them — PASS; then the golden and immutability suites unedited, and every
-  existing test of the six readers unedited (`git diff origin/main --stat -- packages/fiscal-verifactu/src/*.test.ts`
-  lists only new files).
-- [ ] **Step 5: Commit** `git commit -s -m "fiscal-verifactu: readers accept the version 2 approval only where a promotion can reach them"`.
+Tests in `backup-verification-history.test.ts`, `declared-paper-preparation.test.ts` (which calls
+`declared-paper-evidence.ts`), `initial-setup.test.ts`, `cloud-evidence.test.ts` and
+`conflict-recovery-contract.test.ts`.
 
-#### Task 5a.4: Final checks for Slice 5a
+- [ ] **Step 1: Write the failing test.** In `backup-verification-history.test.ts`: "a stored
+  version 2 relinquished approval verifies" (fails today: the reader accepts version 1 only).
+- [ ] **Step 2: Write the guards.** In `backup-verification-history.test.ts`: "a stored version 1
+  approval verifies as today"; "a stored version 2 approval saying neither offline, absent nor
+  relinquished is refused"; and (fix round 1) version 2 in any other shape (relinquished false with
+  offline true; a restore's or a first setup's approval relabelled version 2) or on an emergency row
+  is refused. For each unchanged reader, in its suite: "a version 2 approval is
+  refused" (so it cannot slip in where no promotion belongs).
+- [ ] **Step 3: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification-history.test.ts src/declared-paper-preparation.test.ts src/initial-setup.test.ts src/cloud-evidence.test.ts src/conflict-recovery-contract.test.ts` — the Step 1 test FAILS, the guards PASS.
+- [ ] **Step 4: Implement.**
+- [ ] **Step 5: Run** them — PASS. **Controls** (temporary edits, reverted): for each unchanged
+  reader, make it accept version 2's shape — add `oldMachineRelinquished` to its key list and drop
+  its `version !== 1` check — and its guard fails. Dropping the version check alone does not make
+  the guard fail, because each reader's key list is exact (for example `declared-paper-evidence.ts:77-81`
+  counts the object's own keys). Then the golden and immutability suites unedited, and the
+  existing cases of the readers' suites unedited:
+  `git diff origin/main -U0 -- packages/fiscal-verifactu/src/{allocation-envelope,backup-verification-history,declared-paper-preparation,initial-setup,cloud-evidence,conflict-recovery-contract}.test.ts | /usr/bin/grep '^-[^-]'`
+  prints nothing (new cases only add lines).
+- [ ] **Step 6: Commit** `git commit -s -m "fiscal-verifactu: backup verification reads a relinquished promotion's approval; the readers that stay version 1 are guarded"`.
 
-- [ ] As Task 2.8, plus `pnpm --filter @waitron/fiscal-verifactu exec vitest run`,
-  `pnpm --filter @waitron/fiscal-verifactu mutation`, and the typechecks of `@waitron/module` and
-  `@waitron/server`. Update CLAUDE.md §5 only if a line there states the approval's facts (grep
-  `oldMachine` and "offline" in CLAUDE.md first). PR first line: "FISCAL — a promotion's approval
-  gains a relinquished fact as version 2; version 1 is read as before; the module operation
-  contract gains the field".
+#### Task 5a.5: Final checks for Slice 5a
+
+- [ ] As Task 2.8, plus `pnpm --filter @waitron/fiscal-verifactu exec vitest run` and the
+  typechecks of `@waitron/module`, `@waitron/server`, `@waitron/fiscal-verifactu`,
+  `@waitron/composition` and `@waitron/provisioning`.
+- [ ] `@waitron/fiscal-verifactu` has no mutation script: the review ran
+  `pnpm --filter @waitron/fiscal-verifactu mutation`, which printed `None of the selected packages
+  has a "mutation" script` and exited 0. Instead, a hand deletion control (reverted): delete Task
+  5a.2's version 2 acceptance and its "relinquished must match the context" refusals, run
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/allocation-envelope.test.ts src/hour-standby-activation.test.ts src/hour-recovery-preparation.relinquished.test.ts`,
+  and see Task 5a.2's and Task 5a.3's failing tests fail. Paste the counts into the PR.
+- [ ] The fixture-only files changed nothing but the field:
+  `git diff origin/main -U0 -- <every fixture file Tasks 5a.1 and 5a.3 named> | /usr/bin/grep '^[-+][^-+]' | /usr/bin/grep -v 'oldMachineRelinquished: false'`
+  prints nothing.
+- [ ] Update CLAUDE.md §5 only if a line there states the approval's facts (grep `oldMachine` and
+  "offline" in CLAUDE.md first). PR first line: "FISCAL — a promotion whose old box relinquished
+  filing stores a version 2 approval saying so; every other approval stays version 1, byte for
+  byte; the module operation contract gains the field".
 
 ---
 
@@ -2360,8 +2567,8 @@ file. If Task 4.5's probe made the minute history a transferred item, the retain
 drives itself with `clock-challenge` and `compare-clocks` steps
 (`packages/fiscal-verifactu/src/conflict-recovery-contract.ts:14-15`); the box refuses its own
 machine as the second clock (`hour-setup-clock.ts:106-107`). Those steps reach the module only
-through `nodePreparation.prepare` (`apps/server/src/node-operation-preparation.ts:227-241`), whose
-one route today is `POST /management-api/promote/preparation` (`apps/server/src/promote-api.ts:93`).
+through `nodePreparation.prepare` (`apps/server/src/node-operation-preparation.ts:242-256`), whose
+one route today is `POST /management-api/promote/preparation` (`apps/server/src/promote-api.ts:102-108`).
 That route is refused while a handover is open (Task 5.2b) and cannot carry the relinquished fact
 (Task 5a.1b). So the handover has a route of its own.
 
@@ -2372,14 +2579,16 @@ That route is refused while a handover is open (Task 5.2b) and cannot carry the 
 `{ moduleOperation, signIn: { email, password, totp? }, proposal }`, is mounted on a mirror and
 added to `read-only-exemptions.ts` (Task 3.2's row). It first calls `requireNodeOperationHttps`
 (TLS and a same-origin request, `apps/server/src/node-operation-https.ts`), as both promote routes
-do (`promote-api.ts:71,118`). It refuses
+do (`promote-api.ts:80,131`). It refuses
 `handover.step_out_of_order` unless the operation is at `filing_assumed` or `emergency_declared`,
 and `module.operation_invalid` unless the binding's action is `promote` and its target is this
 box. It builds the context with one function, `handoverPromotionContext(operation)`, from the
 operation's own record — controlled: `{ oldNodeNeutralised: true, noParallelRecovery: true, oldMachineRelinquished: true }`;
 emergency: the same with `oldMachineRelinquished: false` — and never from the body; the onBox
-check is the existing one (`promote-api.ts:91`). Tasks 5.8 and 7.4 use the same function for
-`withPromotion`. Test `apps/server/src/handover-preparation.test.ts`.
+check is the existing one (`promote-api.ts:100`). Tasks 5.8 and 7.4 use the same function for
+`withPromotion`. `contextKey` (`apps/server/src/node-operation-preparation.ts`) does not include
+`oldMachineRelinquished`, so every step of one operation takes it only from
+`handoverPromotionContext(operation)`. Test `apps/server/src/handover-preparation.test.ts`.
 
 **Sign-in by email, without revealing whether the account exists** (CLAUDE.md §3: unknown and
 wrong-secret accounts answer `password.invalid` "after the same hashing work"). The pages ask for
@@ -2421,19 +2630,19 @@ exactly as Task 5.7b does.
 comparison and minute selection were prepared through Task 5.7b's route, which `comparisonId`
 names. It promotes through the same
 path the promote route uses — `nodePreparation.withPromotion(operation, signIn, context, …)`
-(`apps/server/src/promote-api.ts:116-125`) with `context = handoverPromotionContext(operation)` (Task 5.7b), here `{ oldNodeNeutralised: true,
+(`apps/server/src/promote-api.ts:129-138`) with `context = handoverPromotionContext(operation)` (Task 5.7b), here `{ oldNodeNeutralised: true,
 noParallelRecovery: true, oldMachineRelinquished: true }`, justified by the recorded
 relinquishment — so the module receives `oldMachineOffline: false, oldMachineRelinquished: true`
 (Task 5a.1) and `createHourPromotionPreparation`
-(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:108-110`) stores a version 2 approval
-(Task 5a.2); the next free minute (decision 7). The **same context** — built by one function
+(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:118-120`) stores a version 2 approval
+(Task 5a.3); the next free minute (decision 7). The **same context** — built by one function
 from the operation's own record, Task 5.7b — is passed to the `prepare` step behind Task 5.7b's
 route and to `withPromotion`: the approval is part of the prepared input, and the promotion refuses
 `event_mismatch` when the input it rebuilds differs from the one prepared
-(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:197`). Promotion's one venue
+(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:223-226`). Promotion's one venue
 transaction holds the module activation, `trading.env` and the new chart
 (`apps/server/src/promote.ts:268-284`), run by `withPromotion`'s runner as
-`commit((tx) => consume(tx, ready))` (`apps/server/src/node-operation-preparation.ts:276`). The
+`commit((tx) => consume(tx, ready))` (`apps/server/src/node-operation-preparation.ts:291`). The
 activation wraps the `consume` it hands that runner so the `handover_activations` row is written
 **in that same transaction, right after `consume`** — mandatory, never a later transaction. Then
 the role (`promote.ts:297-301`) and `activated` are recorded in node.db (venue first, node after);
@@ -2729,8 +2938,8 @@ transaction, as Task 5.8 writes it: the `handover_activations` row with the decl
 then `activated` in node.db. A restart between is finished by Task 5.8b.
 
 - [ ] **Step 1: Write the failing tests.** "takes the next free minute" (fake clock; the same as
-  a controlled activation in the same harness); "the stored approval says offline, not
-  relinquished"; "writes the activation and the unknown interval in the activation's own
+  a controlled activation in the same harness); "the stored approval is version 1,
+  `oldMachineOffline: true`, with no `oldMachineRelinquished` key"; "writes the activation and the unknown interval in the activation's own
   transaction"; "a crash after the activation commit and before the node.db record: the next
   start records `activated` once and sells" (Task 5.8b's repair); "a lost answer and a retry take no second
   name".
@@ -3688,3 +3897,46 @@ sits at the top of the plan.
 | 3 rule F counted a controlled operation still at `prepared` | read Task 3.1's status (no source field) against the M1-restarts-before-stepdown crash row | Applied. Task 3.1's status gains `sourceNodeId` and `destinationNodeId`; F counts an operation naming this box as source only at `emergency_declared` or later, or controlled at `copy_accepted` or later; tests for the `prepared` case (proceeds) and its control (`copy_accepted` supersedes) |
 | 5 decision 3 and Task 2.4 would stop backups and Litestream early | read the five early stops (`fiscal-certificate-diagnosis-runner.ts:324-325`, `menu-activation.ts:87-88`, `box-alert-email.ts:456-457`, `demo-printer.ts:227-228`, `clock-watch.ts:461-462`: each sets `stopped` before its first `await`) and design §2 step 2 (`2026-10-23-a1018-simple-handover-design.md:148`) | Applied. Decision 3 and Task 2.4's last sentence exempt backups and Litestream, citing design §2 step 2: they stop before the final snapshot, which is taken after the restart, in their own place in the normal close. Task 2.4 now cites all five early stops instead of asking the implementer to check four |
 
+
+---
+
+## Review round 7: what changed
+
+A fresh-context review of Slice 5a's tasks alone, on base `c336372fae`
+(`/Users/clintongormley/waitron-campaign/a1018/s5a-review-1.md`). Its reviewer ran a typecheck
+of the new required field and the version 1 or 2 type in a copy, a validator probe case, and the
+plan's mutation command; the rest is reading. The controller ruled to fold all fifteen findings.
+Every line cited in the rewritten slice was reopened on `c336372fae` before it was written. Owner
+questions are unchanged. Slice table: Slice 5a from 5 to 6 tasks (the final checks are now 5a.5);
+no FISCAL or migration mark changes. Slice 5a's row in the fiscal boundary table now says version 2
+is written only when the old box relinquished filing, and that allocation validation and the
+activation context gain the fact.
+
+| Finding | Checked by | What changed |
+| --- | --- | --- |
+| 1 (Critical) the builder cannot pass before the validator knows version 2 | read `allocation-envelope.ts:192-215` (`approvalShape`, version 1 only) and its two calls, `:296` and `:370` | Applied. New order: 5a.2 is allocation validation, 5a.3 the builder, 5a.4 backup verification and the guards |
+| 2 (Critical) Tasks 5a.1b and 5a.2 disagreed about what a promotion stores | read the old 5a.2 tests against 5a.1b's | Applied. Version 2 is built only when `oldMachineRelinquished` is true; every other promotion stores version 1 byte for byte. The old "emergency promotion stores version 2" test is replaced by the guard "a promotion without the fact stores version 1 exactly as today". Task 7.4's approval test is reworded to the exact version 1 shape (narrow check below) |
+| 3 the validator as worded let a non-promotion path store version 2 | read `emergency-preparation.ts:228-240,250`, `paper-recovery-export.ts:86`, `allocation.ts:84-90`, `cloud-evidence.ts:373-376` | Applied. Version 2 is accepted only when `context.oldMachineRelinquished === true`, and refused `malformed_approval` elsewhere, as today; version 1 is refused `event_mismatch` in a relinquished context. Only the hour promotion's admission facts set the field. Guards: an emergency preparation and a paper standby promotion given version 2 are refused |
+| 4 the activation-time check and a retry after commit judge their own context | read `allocation-operation.ts:84-90` (the evidence), `:153-171` (its snapshot spreads it), `:240-254` (the context), `allocation-envelope.ts:306-312` (the evidence is built there; the review's `:302-308` is a few lines off) and `allocation.ts:386-397` | Applied in Task 5a.2: `HourAdmissionFacts` (`allocation-envelope.ts:234-237`; the review said `:233-236`) and the evidence gain the field, and the activation context copies it. Test "a committed controlled activation, retried, is accepted", with dropping the copy as its control |
+| 5 three calls build the approval, and `select` has no facts | read `hour-recovery-preparation.ts:111,135,166,197` and `hour-selection.ts:237-239`, `hosted-hour-recovery.ts:50-57` | Applied in Task 5a.3: `createPreparation` takes `promotion: boolean`; `select` reads the fact through `readContext` (falling back to `read`, as `within` does at `:146-148`); `prepare` passes the facts' value; `checked` admits relinquished only for a promotion; the admission facts carry it to Task 5a.2's validator |
+| 6 Task 5a.1's site list was incomplete | read each cited line; the review's typecheck named the sites | Applied. The `Isolation` `Pick` (`recovery-preparation.ts:73-76`) is not extended; `false` is set only in the source objects at `recovery-preparation.ts:183-187` and `first-setup-backup-recovery.ts:697-702` (plus the scope-driven one in `node-operation-preparation.ts`); the isolation answers (`recovery-preparation.ts:365-369`, `recovery-entry.ts:73-77`, the two staged-hour helpers) are unchanged. Every test file the typecheck named is listed (`allocation-configuration.test.ts`'s fixture is at `:237`, not `:236`), and `@waitron/provisioning` joins the typechecks. The old Step 4's `recovery-preparation.test.ts` and `recovery-entry.test.ts` do not exist on `c336372fae` and are dropped |
+| 7 "lists only new files" could not hold | — | Applied. Task 5a.4 checks that the readers' existing suites lose no line (`git diff origin/main -U0 … \| /usr/bin/grep '^-[^-]'` prints nothing); Task 5a.5 checks that the fixture files change only by the field |
+| 8 `@waitron/fiscal-verifactu` has no mutation script | read `packages/fiscal-verifactu/package.json` (no `mutation` script) | Applied. Task 5a.5 replaces the command with a hand deletion control on Task 5a.2's checks |
+| 9 `promote-api.test.ts` cannot see what is stored | read `promote-api.test.ts:7-8` (no database), `hour-promotion.test.ts:520-598` (real preparation and database; `rows()` at `:258-265`), `promote-api.ts:128-139` | Applied in Task 5a.1b: the end-to-end "stores version 1" case goes in `hour-promotion.test.ts`; `promote-api.test.ts` checks that a stub `nodePreparation` receives exactly the two fields; `withPromotionModuleOperation` is named as unchanged |
+| 10 the "pass it as isolation" control would be refused before `assertLive` | read `node-operation-preparation.ts:197-203` (`module.operation_invalid` for an action outside `liveRecoveryActions`, before `assertLive`) | Applied. The control is now a temporary edit storing the fact as `isolation` in `invoke`; the non-boolean refusal is named `module.operation_invalid`; the new suite follows `live-module-operation.test.ts:80-90` |
+| 11 "version 2 is refused" already passes for the unchanged readers | read the version checks at `declared-paper-evidence.ts:195`, `initial-setup.ts:239`, `cloud-evidence.ts:279`, `conflict-recovery-contract.ts:111` | Applied, with one correction: these tests are guards. Their deletion control is to make the reader accept version 2's shape (add the key and drop the version check). Deleting the version check alone, as the review suggested, would not make them fail: each reader's key list is exact (`declared-paper-evidence.ts:77-81` counts own keys), and version 2 carries one more key. That is read from the code, not run; the implementer runs the control. The slice now defines "failing test" and "guard", and every test in it is labelled one or the other |
+| 12 the table missed readers and builders | read each cited site, and `git grep` for `oldMachineOffline` and `approval.` under `apps/` (nothing outside the fiscal package parses the approval) | Applied: rows for the conflict preparation result (with the note that Task 6.4's page must not reuse it for a promotion's selected result), the conflict recovery screen, Cloud preparation and initial Cloud setup, the emergency preparation and paper export, and the single-field readers. The two staged-hour test helpers are isolation answers, listed under Task 5a.1 as unchanged |
+| 13 moved lines | reopened each on `c336372fae` | Applied: `RecoveryApproval` `allocation-types.ts:16-27`; `approvalShape` `allocation-envelope.ts:192-215`; `AllocationContext` `:46-89` (`mode` `:50`); `withLiveRecovery` `node-operation-preparation.ts:187-226`; `inputFor` `hour-recovery-preparation.ts:68-98`; `parseConflictInput` `conflict-recovery-contract.ts:74-128`; the declared paper check `declared-paper-evidence.ts:181-205`; the backup verification table loop `backup-verification-history.ts:465-467` |
+| 14 no migration, protected core untouched | — | No change needed; the slice's opening now says why there is no migration |
+| 15 sizing | — | No change needed; each of the six tasks stays well under 100 tool calls, 5a.1 the largest |
+
+Other plan text: Task 5.8's pointer to the builder now names Task 5a.3 (it named 5a.2). The earlier
+rounds' tables keep the task numbers they used at the time.
+
+Narrow check of round 7 (fresh context, 2026-11-03): two more changes. Task 5a.3's `select` reads
+the fact inside `options.withState`, because the real host's `readRecoveryFacts` refuses
+`setup.attempt_conflict` outside a preparation scope (`recovery-preparation-host.ts:26-30`; read,
+not run), and its test drives the real host. Task 7.4's approval test is worded as the exact
+version 1 shape, since a version 1 approval carries no `oldMachineRelinquished` key. The check ran
+finding 11's control in a throwaway copy (`conflict-recovery-contract.ts:111`) and confirmed the
+round-7 correction, and typechecked the required fields against Tasks 5a.1 and 5a.3's file lists.

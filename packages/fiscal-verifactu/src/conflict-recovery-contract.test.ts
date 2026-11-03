@@ -283,3 +283,13 @@ it.each([
 ])("refuses incomplete or private result fields %j", (value) => {
   expect(parseConflictResult(value)).toBeNull();
 });
+
+it("a version 2 approval is refused", () => {
+  expect(parseConflictInput(input)).not.toBeNull();
+  expect(
+    parseConflictInput({
+      ...input,
+      approval: { ...input.approval, version: 2, oldMachineRelinquished: true },
+    }),
+  ).toBeNull();
+});

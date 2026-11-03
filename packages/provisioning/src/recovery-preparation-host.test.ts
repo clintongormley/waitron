@@ -27,6 +27,7 @@ const facts = {
   history: [],
   oldMachineOffline: true,
   oldMachineAbsent: false,
+  oldMachineRelinquished: false,
   noParallelRecovery: true,
   priorActivation: "none" as const,
 };

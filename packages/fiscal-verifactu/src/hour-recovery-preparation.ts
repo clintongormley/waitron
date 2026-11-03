@@ -21,6 +21,7 @@ import "./errors.js";
 export interface HourRecoveryFacts extends HourSelectionFacts {
   readonly oldMachineOffline: boolean;
   readonly oldMachineAbsent: boolean;
+  readonly oldMachineRelinquished: boolean;
   readonly noParallelRecovery: boolean;
   readonly priorActivation: "none" | "committed";
 }
@@ -65,7 +66,18 @@ export function promotionHourOperator(
   return hourOperator(binding, authority, true);
 }
 
-function inputFor(selected: Selection, operatorId: OperationOperator) {
+function inputFor(selected: Selection, operatorId: OperationOperator, relinquished: boolean) {
+  const common = {
+    eventId: selected.binding.eventId,
+    sourceId: selected.binding.sourceId,
+    targetNodeId: selected.binding.targetNodeId,
+    operatorId,
+  };
+  const closing = {
+    noParallelRecovery: true,
+    confirmedAt: selected.issuedAt,
+    incidentEvidence: `hour/${selected.binding.eventId}`,
+  };
   return {
     allocation: {
       version: 1,
@@ -82,18 +94,16 @@ function inputFor(selected: Selection, operatorId: OperationOperator) {
       reservationEvidence: null,
       issuedAt: selected.issuedAt,
     },
-    approval: {
-      version: 1,
-      eventId: selected.binding.eventId,
-      sourceId: selected.binding.sourceId,
-      targetNodeId: selected.binding.targetNodeId,
-      operatorId,
-      oldMachineOffline: true,
-      oldMachineAbsent: false,
-      noParallelRecovery: true,
-      confirmedAt: selected.issuedAt,
-      incidentEvidence: `hour/${selected.binding.eventId}`,
-    },
+    approval: relinquished
+      ? {
+          version: 2,
+          ...common,
+          oldMachineOffline: false,
+          oldMachineAbsent: false,
+          oldMachineRelinquished: true,
+          ...closing,
+        }
+      : { version: 1, ...common, oldMachineOffline: true, oldMachineAbsent: false, ...closing },
   } satisfies ConflictAllocationInput;
 }
 interface PreparationOptions {
@@ -103,15 +113,22 @@ interface PreparationOptions {
   monotonicNow(): number;
 }
 export function createHourRecoveryPreparation(options: PreparationOptions) {
-  return createPreparation(options, recoveryHourOperator);
+  return createPreparation(options, false);
 }
 export function createHourPromotionPreparation(options: PreparationOptions) {
-  return createPreparation(options, promotionHourOperator);
+  return createPreparation(options, true);
 }
-function createPreparation(options: PreparationOptions, operatorFor: typeof recoveryHourOperator) {
+function createPreparation(options: PreparationOptions, promotion: boolean) {
+  const operatorFor = (binding: OperationBinding, authority: OperationAuthority) =>
+    hourOperator(binding, authority, promotion);
   const checked = <T extends RecoveryContext>(current: T): T => {
     if (current.oldMachineAbsent !== false) return refuse("old_machine_absence_unconfirmed");
-    if (current.oldMachineOffline !== true) return refuse("old_machine_active");
+    if (current.oldMachineRelinquished !== false && !promotion) return refuse("old_machine_active");
+    if (
+      current.oldMachineOffline !== true &&
+      !(promotion && current.oldMachineRelinquished === true)
+    )
+      return refuse("old_machine_active");
     if (current.noParallelRecovery !== true) return refuse("parallel_recovery");
     if (!["none", "committed"].includes(current.priorActivation)) return refuse("event_mismatch");
     return current;
@@ -132,7 +149,7 @@ function createPreparation(options: PreparationOptions, operatorFor: typeof reco
     read,
     onNewIntent(selected) {
       if (selected.binding.action === "conflict-switch")
-        unused.set(eventKey(selected.binding), inputFor(selected, selected.operatorId));
+        unused.set(eventKey(selected.binding), inputFor(selected, selected.operatorId, false));
     },
   });
   const within = async <T>(
@@ -162,9 +179,18 @@ function createPreparation(options: PreparationOptions, operatorFor: typeof reco
       operatorFor(request.binding, request.authority);
       const selected = await engine.select(request);
       const operator = operatorFor(request.binding, request.authority);
-      return selected.status === "selected"
-        ? { ...selected, input: inputFor(selected, operator) }
-        : selected;
+      if (selected.status !== "selected") return selected;
+      // The real host refuses a facts read outside a preparation scope.
+      const relinquished =
+        promotion &&
+        (
+          await options.withState(request.binding, async () =>
+            options.readContext === undefined
+              ? read(request.binding)
+              : checked(await options.readContext(request.binding)),
+          )
+        ).oldMachineRelinquished;
+      return { ...selected, input: inputFor(selected, operator, relinquished) };
     },
     async preview(supplied: Omit<Request, "comparisonId">) {
       const request = { ...supplied, binding: { ...supplied.binding } };
@@ -194,7 +220,9 @@ function createPreparation(options: PreparationOptions, operatorFor: typeof reco
           binding: held.binding,
           authority: held.authority,
         });
-        if (!isDeepStrictEqual(inputFor(selected, operator), held.input))
+        if (
+          !isDeepStrictEqual(inputFor(selected, operator, facts.oldMachineRelinquished), held.input)
+        )
           return refuse("event_mismatch");
         if (held.binding.action === "conflict-switch" && facts.priorActivation !== "committed") {
           const key = eventKey(held.binding);
@@ -204,7 +232,11 @@ function createPreparation(options: PreparationOptions, operatorFor: typeof reco
         }
         return withHourAdmission(
           held,
-          { requiredBases: selected.bases, priorActivation: facts.priorActivation },
+          {
+            requiredBases: selected.bases,
+            priorActivation: facts.priorActivation,
+            oldMachineRelinquished: facts.oldMachineRelinquished,
+          },
           (evidence) =>
             createAllocationPreparation(async (scope) => ({ ...scope, evidence })).prepare(
               held,

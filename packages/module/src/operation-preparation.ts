@@ -21,6 +21,8 @@ export interface ModuleRecoveryFacts {
   readonly history: readonly unknown[];
   readonly oldMachineOffline: boolean;
   readonly oldMachineAbsent: boolean;
+  /** The old machine handed its work to this one, rather than being taken offline. */
+  readonly oldMachineRelinquished: boolean;
   readonly noParallelRecovery: boolean;
   readonly priorActivation: "none" | "committed";
 }

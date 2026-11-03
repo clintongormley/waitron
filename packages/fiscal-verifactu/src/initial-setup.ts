@@ -577,6 +577,7 @@ function createInitialSetup(
         environment: context.environment,
         mode: "initial-setup",
         ...context.binding,
+        oldMachineRelinquished: undefined,
         operatorId: context.administratorId,
         incidentEvidence: input.approval.incidentEvidence,
         requiredBases: context.bases,

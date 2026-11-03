@@ -77,10 +77,16 @@ async function activate(
   f = fixture(),
   priorActivation: "none" | "committed" | "uncertain" = "none",
   requiredBases = bases,
+  options: { readonly relinquished?: boolean } = {},
 ) {
+  const facts = {
+    requiredBases,
+    priorActivation,
+    ...(options.relinquished === true ? { oldMachineRelinquished: true } : {}),
+  };
   return withOperationAuthority(f.binding, f.operatorId, (authority) => {
     const operation = { binding: f.binding, authority, input: f.input };
-    return withHourAdmission(operation, { requiredBases, priorActivation }, (evidence) =>
+    return withHourAdmission(operation, facts, (evidence) =>
       withCollectedModuleAllocation(
         operation,
         async (request) => ({ ...request, evidence }),
@@ -434,6 +440,118 @@ it("refuses changed committed promotion input instead of issuing another identit
   f.input.approval.confirmedAt = "2026-10-16T12:01:00.000Z";
   const before = await snapshot();
   await expect(activate(f, "committed")).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "event_mismatch" },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
+function relinquishedFixture() {
+  const f = fixture();
+  return {
+    ...f,
+    input: {
+      ...f.input,
+      approval: {
+        ...f.input.approval,
+        version: 2,
+        oldMachineOffline: false,
+        oldMachineRelinquished: true,
+      },
+    },
+  };
+}
+
+it("a promotion admitted with oldMachineRelinquished activates and stores its version 2 approval", async () => {
+  const f = relinquishedFixture();
+  const result = await activate(f, "none", bases, { relinquished: true });
+  expect(result.activationEventId).toBe("promotion");
+  const [stored] = await suite.db
+    .select()
+    .from(fiscalAllocations)
+    .where(eq(fiscalAllocations.eventKey, "promotion"));
+  expect(stored!.approval).toEqual(f.input.approval);
+});
+
+it("refuses a relinquished promotion whose version 2 approval also says the old machine is offline", async () => {
+  const f = relinquishedFixture();
+  f.input.approval = { ...f.input.approval, oldMachineOffline: true };
+  const before = await snapshot();
+  await expect(activate(f, "none", bases, { relinquished: true })).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "malformed_approval" },
+  });
+  expect(
+    await suite.db
+      .select()
+      .from(fiscalAllocations)
+      .where(eq(fiscalAllocations.eventKey, "promotion")),
+  ).toEqual([]);
+  expect(await snapshot()).toEqual(before);
+});
+
+it("a committed controlled activation, retried, is accepted", async () => {
+  const first = await activate(relinquishedFixture(), "none", bases, { relinquished: true });
+  const before = await snapshot();
+  expect(await activate(relinquishedFixture(), "committed", bases, { relinquished: true })).toEqual(
+    first,
+  );
+  expect(await snapshot()).toEqual(before);
+});
+
+it("a committed relinquished activation retried without the relinquished fact is refused", async () => {
+  await activate(relinquishedFixture(), "none", bases, { relinquished: true });
+  const before = await snapshot();
+  await expect(activate(relinquishedFixture(), "committed")).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "malformed_approval" },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
+it("a committed relinquished activation retried with a version 1 approval is refused", async () => {
+  await activate(relinquishedFixture(), "none", bases, { relinquished: true });
+  const before = await snapshot();
+  await expect(
+    activate(fixture(), "committed", bases, { relinquished: true }),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "event_mismatch" },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
+it.each(["setup", "restore", "conflict-switch"])(
+  "refuses the relinquished fact at admission for a %s",
+  async (action) => {
+    const f = fixture(action);
+    f.input.approval = {
+      ...f.input.approval,
+      version: 2,
+      oldMachineOffline: false,
+      oldMachineRelinquished: true,
+    } as typeof f.input.approval;
+    const run = vi.fn();
+    await expect(
+      withOperationAuthority(f.binding, f.operatorId, (authority) =>
+        withHourAdmission(
+          { binding: f.binding, authority, input: f.input },
+          { requiredBases: bases, priorActivation: "none", oldMachineRelinquished: true },
+          run,
+        ),
+      ),
+    ).rejects.toMatchObject({
+      code: "sif.allocation_invalid",
+      params: { reason: "event_mismatch" },
+    });
+    expect(run).not.toHaveBeenCalled();
+  },
+);
+
+it("a committed relinquished activation retried with a version 1 approval and no relinquished fact is refused", async () => {
+  await activate(relinquishedFixture(), "none", bases, { relinquished: true });
+  const before = await snapshot();
+  await expect(activate(fixture(), "committed")).rejects.toMatchObject({
     code: "sif.allocation_invalid",
     params: { reason: "event_mismatch" },
   });

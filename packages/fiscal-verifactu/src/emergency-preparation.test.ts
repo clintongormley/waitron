@@ -274,6 +274,52 @@ it("refuses isolation answers before burning an identity", async () => {
   expect(await readdir(outside)).toEqual(["current.json"]);
 });
 
+it("an emergency preparation given a version 2 approval is refused", async () => {
+  const relinquished = {
+    ...approval,
+    version: 2,
+    oldMachineOffline: false,
+    oldMachineRelinquished: true,
+  };
+  await expect(
+    attempt({ emergency: { version: 1 }, approval: relinquished }),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "malformed_approval" },
+  });
+  expect(await readdir(outside)).toEqual(["current.json"]);
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+});
+
+it("refuses a binding carrying the relinquished fact with a version 2 approval", async () => {
+  const carrying = { ...binding, oldMachineRelinquished: true };
+  await writeFile(confirmationPath, JSON.stringify({ ...confirmation, binding: carrying }));
+  const relinquished = {
+    ...approval,
+    version: 2,
+    oldMachineOffline: false,
+    oldMachineRelinquished: true,
+  };
+  await expect(
+    withOperationAuthority(carrying, operator, (authority) =>
+      FISCAL_OPERATIONS.prepare(
+        {
+          binding: carrying,
+          authority,
+          input: { emergency: { version: 1 }, approval: relinquished },
+        },
+        (operation) =>
+          withTransaction(suite.db, (tx) => activatePreparedModuleAllocation(tx, node, operation)),
+      ),
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "malformed_approval" },
+  });
+  expect(await readdir(outside)).toEqual(["current.json"]);
+  expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+});
+
 it("cannot burn the same event again by reordering its binding or changing its source", async () => {
   await attempt();
   const retained = await incident();

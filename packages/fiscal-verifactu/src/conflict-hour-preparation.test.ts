@@ -41,6 +41,7 @@ function fixture() {
     history: [{ reference: "live", complete: true, records: [] }],
     oldMachineOffline: true,
     oldMachineAbsent: false,
+    oldMachineRelinquished: false,
     noParallelRecovery: true,
     priorActivation: "none",
     clock: compareHourClocks(

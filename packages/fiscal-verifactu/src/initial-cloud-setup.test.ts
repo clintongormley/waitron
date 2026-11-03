@@ -221,6 +221,13 @@ describe("synthetic signed Cloud first-setup admission", () => {
       prepareInitialCloudSetup({ ...f.held, request }, f.input, { trust: f.trust }),
     ).toThrowError(expect.objectContaining({ params: { reason: "event_mismatch" } }));
   });
+  it("refuses a setup binding that carries the relinquished fact", () => {
+    const f = fixture();
+    const binding = { ...f.held.binding, oldMachineRelinquished: true };
+    expect(() =>
+      prepareInitialCloudSetup({ ...f.held, binding }, f.input, { trust: f.trust }),
+    ).toThrowError(expect.objectContaining({ params: { reason: "event_mismatch" } }));
+  });
   it("refuses edited bytes, allocation substitution, extra fields and a changed frozen request", () => {
     const f = fixture();
     for (const input of [

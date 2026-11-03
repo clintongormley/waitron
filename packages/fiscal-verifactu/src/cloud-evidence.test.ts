@@ -398,3 +398,19 @@ describe("Cloud consumed evidence and independent local recovery authority", () 
     ).toEqual({ ok: false, reason: "event_mismatch" });
   });
 });
+
+it("a version 2 approval is refused", () => {
+  const plain = signed(() => {});
+  expect(verify(plain.receipt, context, plain.trust)).toMatchObject({ ok: true });
+  const input = signed((payload) => {
+    payload.approval = {
+      ...payload.approval,
+      version: 2,
+      oldMachineRelinquished: true,
+    } as fiscal.RecoveryApproval;
+  });
+  expect(verify(input.receipt, context, input.trust)).toEqual({
+    ok: false,
+    reason: "reservation_untrusted",
+  });
+});

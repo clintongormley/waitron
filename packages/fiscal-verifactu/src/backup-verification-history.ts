@@ -122,24 +122,31 @@ function allocation(
     timestamp(value.issuedAt)
   );
 }
+const APPROVAL = [
+  "version",
+  ...BINDING,
+  "oldMachineOffline",
+  "oldMachineAbsent",
+  "noParallelRecovery",
+  "confirmedAt",
+];
 function approval(value: unknown): value is RecordValue {
+  // Only a relinquished promotion writes version 2, and always in exactly this shape.
+  const v2 =
+    exact(value, [...APPROVAL, "oldMachineRelinquished"]) &&
+    value.version === 2 &&
+    value.oldMachineRelinquished === true &&
+    value.oldMachineAbsent === false &&
+    value.oldMachineOffline === false;
   if (
-    !exact(value, [
-      "version",
-      ...BINDING,
-      "oldMachineOffline",
-      "oldMachineAbsent",
-      "noParallelRecovery",
-      "confirmedAt",
-    ]) ||
-    value.version !== 1 ||
+    !(v2 || (exact(value, APPROVAL) && value.version === 1)) ||
     parseAllocationOperator(value.operatorId) === null ||
     !BINDING.filter((key) => key !== "operatorId").every((key) => text(value[key])) ||
     !timestamp(value.confirmedAt) ||
     typeof value.oldMachineAbsent !== "boolean" ||
     typeof value.oldMachineOffline !== "boolean" ||
     value.noParallelRecovery !== true ||
-    (!value.oldMachineAbsent && !value.oldMachineOffline)
+    (!value.oldMachineAbsent && !value.oldMachineOffline && !v2)
   )
     return false;
   return (
@@ -290,6 +297,7 @@ async function allocationRow(query: BackupQuery, row: BackupRow): Promise<Backup
   if (
     !allocation(a) ||
     !approval(p) ||
+    (p.version === 2 && a.source !== "hour") ||
     !bases(b) ||
     !SCOPE.every(([column, key]) => row[column] === a[key]) ||
     p.eventId !== row.event_key ||

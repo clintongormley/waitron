@@ -73,6 +73,7 @@ describe("createHourTestClock", () => {
           history: [],
           oldMachineOffline: true,
           oldMachineAbsent: false,
+          oldMachineRelinquished: false,
           noParallelRecovery: true,
           priorActivation: "none",
         }),

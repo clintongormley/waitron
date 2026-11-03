@@ -321,6 +321,81 @@ describe("an allocation and its independently authorised recovery", () => {
   });
 });
 
+describe("an approval saying the old machine relinquished filing", () => {
+  const relinquished = {
+    ...approval,
+    version: 2,
+    oldMachineOffline: false,
+    oldMachineRelinquished: true,
+  };
+  const relinquishedContext = { ...context, oldMachineRelinquished: true };
+
+  it("refuses a relinquished context whose authority is not the hour's", () => {
+    expect(validate(allocation, relinquished, relinquishedContext)).toEqual({
+      ok: false,
+      reason: "event_mismatch",
+    });
+  });
+  it("refuses a relinquished context for an initial setup", () => {
+    const initial = {
+      ...candidate,
+      source: "initial-paper",
+      installationIdentity: "S000042",
+      series: [
+        { code: "A-S000042", purpose: "standard" },
+        { code: "R-S000042", purpose: "rectificative" },
+      ],
+    };
+    const input = { ...initial, reservationEvidence: signedEvidence(initial) };
+    expect(
+      validate(
+        input,
+        { ...relinquished, oldMachineAbsent: true },
+        { ...relinquishedContext, mode: "initial-setup", authority: { kind: "hour", token: {} } },
+      ),
+    ).toEqual({ ok: false, reason: "event_mismatch" });
+  });
+  it.each([
+    ["offline", { oldMachineOffline: true }],
+    ["absent", { oldMachineAbsent: true }],
+  ])("refuses a version 2 approval that also says the old machine is %s", (_, contradiction) => {
+    expect(
+      validate(
+        allocation,
+        { ...relinquished, ...contradiction },
+        { ...relinquishedContext, authority: { kind: "hour", token: {} } },
+      ),
+    ).toEqual({ ok: false, reason: "malformed_approval" });
+  });
+  it("refuses a version 1 approval when the context says relinquished", () => {
+    expect(validate(allocation, approval, relinquishedContext)).toEqual({
+      ok: false,
+      reason: "event_mismatch",
+    });
+  });
+  it("refuses a version 2 approval saying not relinquished in a relinquished context", () => {
+    expect(
+      validate(allocation, { ...relinquished, oldMachineRelinquished: false }, relinquishedContext),
+    ).toEqual({ ok: false, reason: "event_mismatch" });
+  });
+  it.each([context, { ...context, oldMachineRelinquished: false }])(
+    "refuses a version 2 approval when the context does not say relinquished %#",
+    (expected) => {
+      expect(validate(allocation, relinquished, expected)).toEqual({
+        ok: false,
+        reason: "malformed_approval",
+      });
+    },
+  );
+  it("passes a version 1 approval as before when the context does not say relinquished", () => {
+    expect(validate(allocation, approval, { ...context, oldMachineRelinquished: false })).toEqual({
+      ok: true,
+      allocation,
+      approval,
+    });
+  });
+});
+
 describe("emergency allocation authority", () => {
   function emergency() {
     const api = fiscal as unknown as {

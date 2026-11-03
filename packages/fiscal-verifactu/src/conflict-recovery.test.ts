@@ -195,7 +195,12 @@ async function attempt(event = "conflict-switch-1") {
   const operator = { kind: "recovery-key" as const, nodeId: node.nodeId, eventId: event };
   const history = [await withTransaction(suite.db, (tx) => readHourHistory(tx, "preproduction"))];
   const state = store();
-  const isolation = { oldMachineOffline: true, oldMachineAbsent: false, noParallelRecovery: true };
+  const isolation = {
+    oldMachineOffline: true,
+    oldMachineAbsent: false,
+    oldMachineRelinquished: false,
+    noParallelRecovery: true,
+  };
   const preparation = createHourRecoveryPreparation({
     ...state,
     monotonicNow: () => monotonic,
