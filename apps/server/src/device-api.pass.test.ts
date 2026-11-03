@@ -100,7 +100,7 @@ async function fixture() {
 
 type Board = { board: PassBoard; stations: ScreenSlot[]; zones: ScreenSlot[] | null };
 
-/** The dishes the device's scope sees, as the old scoped reads listed them. */
+/** The dishes the device's scope sees. */
 function items(board: Board): string[] {
   return boardItems(board.board, { inView: true }).map((item) => item.id);
 }

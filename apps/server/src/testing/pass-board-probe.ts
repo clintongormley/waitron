@@ -15,11 +15,13 @@ export function boardItems(board: PassBoard, { inView = false } = {}): PassCardI
     .filter((item) => !inView || item.visible);
 }
 
-/** The ids of the orders the board's cards hold, sorted. */
-export function boardOrderIds(board: PassBoard): string[] {
-  return [
-    ...new Set(boardCards(board).flatMap((card) => card.orders.map((o) => o.orderId))),
-  ].sort();
+/** The ids of the orders the board's cards hold, sorted; `inView` keeps only the orders of the
+ *  dishes the board's scope sees, since a card split across bills names every bill. */
+export function boardOrderIds(board: PassBoard, { inView = false } = {}): string[] {
+  const ids = inView
+    ? boardItems(board, { inView }).map((item) => item.orderId)
+    : boardCards(board).flatMap((card) => card.orders.map((o) => o.orderId));
+  return [...new Set(ids)].sort();
 }
 
 /** The one card the predicate picks; throws when it picks none or several. */

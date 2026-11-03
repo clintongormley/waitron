@@ -52,7 +52,7 @@ async function passDevices(v: PartyVenue, count: number): Promise<string[]> {
   });
 }
 
-/** The dishes the board's scope sees, as the old scoped reads listed them. */
+/** The dishes the board's scope sees. */
 const names = (board: PassBoard) => boardItems(board, { inView: true }).map((i) => i.name);
 const ids = (board: PassBoard) => boardItems(board, { inView: true }).map((i) => i.id);
 const read = (v: PartyVenue, scope: PassScope) =>
@@ -161,7 +161,7 @@ describe("pass screen", () => {
     expect(boardOrderIds(every)).toEqual([outside.tabId, inside.tabId, counterId].sort());
     expect(names(every).sort()).toEqual(["BURG", "BURG", "BURG", "CANA"]);
     const terraceGrill = await read(v, { stationIds: [grill], zoneIds: [terrace] });
-    expect(boardOrderIds(terraceGrill)).toEqual([outside.tabId]);
+    expect(boardOrderIds(terraceGrill, { inView: true })).toEqual([outside.tabId]);
     expect(names(terraceGrill)).toEqual(["BURG"]);
     expect(boardCards(terraceGrill)[0]).toMatchObject({ allReady: false });
     expect(boardCards(await read(v, { stationIds: [], zoneIds: null }))).toEqual([]);
@@ -291,12 +291,14 @@ describe("a pass's sections", () => {
       ["BURG", true],
     ]);
     expect(groupCards(grillOnly).map(dishes)).toEqual([[["BURG", true]]]);
+    expect(boardCards(grillOnly)).toHaveLength(2);
     const everything = await read(v, EVERY);
     expect(dishes(billCard(everything, counterId))).toEqual([
       ["CANA", true],
       ["BURG", true],
     ]);
     expect(groupCards(everything).map(dishes)).toEqual([[["BURG", true]], [["CANA", true]]]);
+    expect(boardCards(everything)).toHaveLength(3);
   });
 
   it("a pass monitor keeps both of a bill's dishes after a legacy Away stamp", async () => {
@@ -389,10 +391,12 @@ describe("pass monitor", () => {
     const [device] = await passDevices(v, 1);
     const grillOnly: PassScope = { stationIds: [grill], zoneIds: null };
     const before = await read(v, grillOnly);
-    expect(boardOrderIds(before)).toEqual([outside.tabId, inside.tabId, counterId].sort());
+    expect(boardOrderIds(before, { inView: true })).toEqual(
+      [outside.tabId, inside.tabId, counterId].sort(),
+    );
     expect(names(before)).toEqual(["BURG", "BURG", "BURG"]);
     const terraceOnly = await read(v, { stationIds: null, zoneIds: [terrace] });
-    expect(boardOrderIds(terraceOnly)).toEqual([outside.tabId]);
+    expect(boardOrderIds(terraceOnly, { inView: true })).toEqual([outside.tabId]);
     expect(names(terraceOnly).sort()).toEqual(["BURG", "CANA"]);
 
     const [burger] = await inTx(v, (tx) =>
@@ -419,7 +423,7 @@ describe("pass monitor", () => {
         .where(eq(ticketItems.id, burger!.id)),
     );
     expect(boardOrderIds(await read(v, EVERY))).toContain(outside.tabId);
-    expect(boardOrderIds(await read(v, grillOnly))).toEqual(
+    expect(boardOrderIds(await read(v, grillOnly), { inView: true })).toEqual(
       [outside.tabId, inside.tabId, counterId].sort(),
     );
     expect(ids(await read(v, EVERY))).toContain(burger!.id);
@@ -428,7 +432,7 @@ describe("pass monitor", () => {
   it("limited to the counter's zone, lists the counter sale and no table's order", async () => {
     const { v, counterId } = await terraceVenue();
     const board = await read(v, { stationIds: null, zoneIds: [v.counter.zoneId] });
-    expect(boardOrderIds(board)).toEqual([counterId]);
+    expect(boardOrderIds(board, { inView: true })).toEqual([counterId]);
     expect(names(board)).toEqual(["BURG"]);
   });
 });
