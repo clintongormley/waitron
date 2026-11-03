@@ -1511,15 +1511,15 @@ is checked by nothing when the row is written, and its refusal moved to accept, 
 (`devices` or `print_agents`) still holds a key to `locations`. Never weaken a classification to make
 this guard pass — that is the one wrong answer §2.1 rules out.
 
-_2026-11-03 (A1301 S12b):_ `join_requests.location_id` is now stamped with the venue's id, and
-nothing reads it: accept stamps the venue on the new `devices` or `print_agents` row itself.
-
 _2026-09-24:_ five of the six keys were on identity tables that slice-2 Task 1b reclassified
 `state` (`sessions` to `persons` and `tills`; `management_sessions`, `totp_enrollments` and
 `google_oidc_states` to `persons`). Their keys were not restored; `docs/backlog.md` lists that as
 open under Task 1b. _2026-10-04 (A238):_ `tills` is gone; `sessions.device_id` now holds a
 `restrict` key to `devices`, and `sessions` still has none to `persons`
 (`packages/identity/src/schema/sessions.ts`).
+
+_2026-11-03 (A1301 S12b):_ `join_requests.location_id` is now stamped with the venue's id, and
+nothing reads it: accept stamps the venue on the new `devices` or `print_agents` row itself.
 
 **What ties a `local` row to its node, and which ties are pinned.** A `local` table's reason says
 which of three ties it uses: a `node_id` column every read and write names (`join_requests`,

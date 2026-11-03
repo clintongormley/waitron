@@ -3017,9 +3017,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   as part of walking the box with the printers; with the owner present, after 2 November (owner,
   2026-10-17).
 
-- **Location-consistency guard** — nothing enforces that a sale-capable device's own location
-  (`devices.location_id`) is the box's configured location. Guard at enrol or first sale.
-
 - **Maintain a route-to-profile-action table and qualify printer identity.** A guard that walks
   every route's profile action and the enrolment design's printer-identity work remain separate.
   [Detail](backlog/till.md#till-route-to-profile-checks-and-printer-identity).
