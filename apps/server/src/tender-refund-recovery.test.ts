@@ -473,4 +473,60 @@ describe("bill refund recovery stopping", () => {
       }
     },
   );
+  it.each([true, false])(
+    "a signal raised while the provider is being loaded asks it nothing (signalled: %s)",
+    async (signalled) => {
+      vi.spyOn(v.card, "sendRefund").mockResolvedValue({ kind: "uncertain", reason: "network" });
+      const t = await billRefund();
+      await refundBillPayment(
+        v.deps,
+        v.cfg,
+        t.id,
+        t.paymentId,
+        t.request,
+        v.operator,
+        "reader-card",
+      );
+      const waiting = (
+        await v.db
+          .select({ id: billPaymentRefunds.id })
+          .from(billPaymentRefunds)
+          .where(and(eq(billPaymentRefunds.state, "pending"), isNotNull(billPaymentRefunds.sentAt)))
+      ).map(({ id }) => id);
+      const controller = new AbortController();
+      const asked: string[] = [];
+      vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
+        asked.push(query.refundId);
+        return {
+          kind: "match",
+          providerRefundRef: randomUUID(),
+          outcome: "completed",
+          providerStatus: "completed",
+        };
+      });
+      const pass = await settlePendingBillPayments(
+        {
+          ...v.deps,
+          cfg: v.cfg,
+          refundProviderFor: async () => {
+            controller.abort();
+            return v.card;
+          },
+        },
+        signalled ? controller.signal : undefined,
+      );
+      expect(asked).toHaveLength(signalled ? 0 : waiting.length);
+      expect(pass.errors).toEqual([]);
+      const rows = await v.db
+        .select()
+        .from(billPaymentRefunds)
+        .where(eq(billPaymentRefunds.state, "pending"));
+      expect(rows.map((row) => row.id)).toEqual(signalled ? expect.arrayContaining(waiting) : []);
+      // Nothing of the stopped pass holds the refund: the next pass without a signal settles it.
+      if (signalled) {
+        await settlePendingBillPayments({ ...v.deps, cfg: v.cfg });
+        expect(asked).toEqual(expect.arrayContaining(waiting));
+      }
+    },
+  );
 });

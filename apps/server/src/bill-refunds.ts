@@ -413,16 +413,34 @@ async function lookUp(
   refund: RefundRow,
   processorRef: string,
   sentAt: string,
-): Promise<RefundLookup> {
+): Promise<RefundLookup>;
+async function lookUp(
+  deps: BillRefundDeps,
+  provider: PaymentProvider,
+  refund: RefundRow,
+  processorRef: string,
+  sentAt: string,
+  stopSignal: AbortSignal | undefined,
+): Promise<RefundLookup | "stopped">;
+async function lookUp(
+  deps: BillRefundDeps,
+  provider: PaymentProvider,
+  refund: RefundRow,
+  processorRef: string,
+  sentAt: string,
+  stopSignal?: AbortSignal,
+): Promise<RefundLookup | "stopped"> {
   deps.admission.require();
   if (provider.lookupRefund === undefined) return { kind: "unreachable" };
   try {
+    const excludeRefs = await withTransaction(deps.db, (tx) => attributedRefundRefs(tx, refund));
+    if (stopSignal?.aborted) return "stopped";
     return await provider.lookupRefund({
       processorRef,
       refundId: refund.id,
       amount: refundAmountOf(refund),
       sentAt: new Date(sentAt),
-      excludeRefs: await withTransaction(deps.db, (tx) => attributedRefundRefs(tx, refund)),
+      excludeRefs,
       ...(refund.refsBeforeSend === null ? {} : { refsBeforeSend: refund.refsBeforeSend }),
     });
   } catch {
@@ -446,8 +464,9 @@ async function providerOf(
  */
 export type RefundResolver = "retry" | "manager" | "loop";
 
-/** `claimed: false`: the refund was no longer pending, or another resolver in this process holds
- * it, so nothing was done. `lookup` is what the provider showed, when it was asked. */
+/** `claimed: false`: the refund was no longer pending, another resolver in this process holds it,
+ * or `stopSignal` was raised before the provider was asked, so nothing was done. `lookup` is what
+ * the provider showed, when it was asked. */
 export type ResumedRefund =
   | { claimed: false; refund: RefundRow }
   | { claimed: true; refund: RefundRow; lookup: RefundLookup | null; resent: boolean };
@@ -464,6 +483,7 @@ export async function resumeCardRefund(
   refundId: string,
   resolver: RefundResolver,
   raisedBy: AlertOrigin,
+  stopSignal?: AbortSignal,
 ): Promise<ResumedRefund> {
   const live = liveRefundsOf(deps.db);
   const target = await withTransaction(deps.db, async (tx) => {
@@ -488,10 +508,11 @@ export async function resumeCardRefund(
           : await sendCardRefund(deps, provider, refundId, raisedBy);
       return { claimed: true, refund: sent, lookup: null, resent: false };
     }
-    const lookup: RefundLookup =
+    const lookup =
       provider === undefined
-        ? { kind: "unreachable" }
-        : await lookUp(deps, provider, refund, provided!.processorRef, refund.sentAt);
+        ? ({ kind: "unreachable" } as const)
+        : await lookUp(deps, provider, refund, provided!.processorRef, refund.sentAt, stopSignal);
+    if (lookup === "stopped") return { claimed: false, refund };
     const window = provider?.refundResendWindowMs ?? null;
     const age = deps.clock.now().instant.getTime() - Date.parse(refund.sentAt);
     if (

@@ -284,7 +284,7 @@ async function settlePendingBillRefunds(
       let refund = found;
       const now = deps.clock.now().instant;
       if (lookupDue(found, lastLookups.get(id), now.getTime())) {
-        const resumed = await resumeCardRefund(deps, id, "loop", PAYMENT_CHECK);
+        const resumed = await resumeCardRefund(deps, id, "loop", PAYMENT_CHECK, signal);
         if (!resumed.claimed) continue;
         lastLookups.set(id, now.getTime());
         refund = resumed.refund;
