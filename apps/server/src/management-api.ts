@@ -11,6 +11,7 @@ import "@waitron/printing";
 import "@waitron/catalogue";
 import { parseStationTimingPatch } from "./kitchen-timing.js";
 import { stationPrintersDown, stationScreensDark } from "./station-outputs-down.js";
+import { readPassCoverage } from "./pass-coverage.js";
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -1630,6 +1631,15 @@ export function mountManagementApi(
         printersDown: await stationPrintersDown(tx, now),
         screensDark: await stationScreensDark(tx, now),
       }));
+      return c.json(result);
+    }),
+  );
+
+  app.get("/management-api/stations/pass-coverage", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const result = await withVenueAuth(deps, sessionId, (tx) => readPassCoverage(tx, cfg));
       return c.json(result);
     }),
   );

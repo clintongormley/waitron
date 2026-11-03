@@ -28,6 +28,15 @@ export interface OutputsDown {
   screensDark: { stationId: string; stationName: string; lastSeenAt: string | null }[];
 }
 
+/** A waiting station and zone no pass device could fire; `zoneId` is null when the venue has no
+ *  active zone. */
+export interface PassCoverageGap {
+  stationId: string;
+  stationName: string;
+  zoneId: string | null;
+  zoneName: string | null;
+}
+
 export interface PrepStation {
   id: string;
   name: string;
@@ -161,6 +170,14 @@ export class PrepStationsApi {
     return this.request<OutputsDown>("/management-api/stations/outputs-down", "GET", undefined, {
       passive: true,
     });
+  }
+  readPassCoverage(): Promise<PassCoverageGap[]> {
+    return this.request<PassCoverageGap[]>(
+      "/management-api/stations/pass-coverage",
+      "GET",
+      undefined,
+      { passive: true },
+    );
   }
   setDefaultStation(id: string): Promise<void> {
     return this.request(`/management-api/stations/${id}/default`, "POST");

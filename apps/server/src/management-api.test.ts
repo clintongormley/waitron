@@ -2,7 +2,7 @@ import { createZone as createTableZone } from "./testing/service-zone.js";
 import type { ModuleRouteContext, TableRemoval } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
@@ -40,6 +40,7 @@ import type { TradingContext } from "./trading-context.js";
 import { mountManagementApi } from "./management-api.js";
 import { generateSync } from "otplib";
 import { defaultLayout } from "./testing/floor-sets.js";
+import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { enrolAuthenticator, TOTP_KEY_RING, wrongTotpCode } from "./testing/authenticator.js";
 import { writerBesideRequest, whileSuspendingOnLockRequest } from "./testing/watched-scrypt.js";
 
@@ -2022,6 +2023,43 @@ describe("/management-api/stations (KDS-1 config)", () => {
       error: { code: "management.request_invalid", params: { field: "waitsForPass" } },
     });
     expect((await listStations()).some((station) => station.name === name)).toBe(false);
+  });
+
+  it("A773 station policy: a manager reads the pass coverage", async () => {
+    const stationName = unique("Grill");
+    const grill = await createStation(stationName);
+    await withTransaction(suite.db, (tx) => setStationsWaitForPass(tx, true, [grill]));
+    onTestFinished(() =>
+      withTransaction(suite.db, (tx) => setStationsWaitForPass(tx, false, [grill])),
+    );
+    const zones = await suite.db
+      .select({ id: floorZones.id, name: floorZones.name })
+      .from(floorZones)
+      .where(eq(floorZones.active, true))
+      .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
+    expect(zones.length).toBeGreaterThan(0);
+    const res = await req("/stations/pass-coverage", { method: "GET" }, managerCookie);
+    expect(res.status).toBe(200);
+    const gaps = (await res.json()) as { stationId: string }[];
+    expect(gaps.filter((gap) => gap.stationId === grill)).toEqual(
+      zones.map((zone) => ({
+        stationId: grill,
+        stationName,
+        zoneId: zone.id,
+        zoneName: zone.name,
+      })),
+    );
+  });
+
+  it("A773 station policy: pass coverage is refused without venue.configure", async () => {
+    for (const cookie of [supervisorCookie, staffCookie]) {
+      const res = await req("/stations/pass-coverage", { method: "GET" }, cookie);
+      expect(res.status).toBe(403);
+      expect(await res.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    }
+    const res = await req("/stations/pass-coverage", { method: "GET" }, undefined);
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: { code: "management_session.required" } });
   });
 
   it("PATCH body screens: array → body; non-string name; non-boolean active — the station is left as it was", async () => {
