@@ -552,6 +552,9 @@ describe("A773 pass board: release set", () => {
     const card = buildPassBoard(caseOneRows(), HOT).toFire[0]!;
     expect(card.releaseTicketItemIds).toEqual(["grill-1"]);
     expect(card.releaseContext).toBe(hot.context);
+    expect(buildPassBoard(caseOneRows(), HOT, { release: false }).toFire).toEqual([
+      { ...card, releaseTicketItemIds: [], releaseContext: null },
+    ]);
   });
 
   it("2. changes the context with each candidate fact", () => {
@@ -687,7 +690,10 @@ describe("A773 pass board: dimming", () => {
         cards(board).flatMap((card) => card.items.map((item) => [item.id, item.informational])),
       );
 
-    const calm = buildPassBoard(rows, scope, { showNonPassStations: true }, false);
+    const calm = buildPassBoard(rows, scope, {
+      showNonPassStations: true,
+      aStationInViewWaits: false,
+    });
     expect(informational(calm)).toEqual({
       "grill-1": false,
       "fryer-1": false,
@@ -695,7 +701,10 @@ describe("A773 pass board: dimming", () => {
       "cold-1": true,
     });
 
-    const waiting = buildPassBoard(rows, scope, { showNonPassStations: true }, true);
+    const waiting = buildPassBoard(rows, scope, {
+      showNonPassStations: true,
+      aStationInViewWaits: true,
+    });
     expect(informational(waiting)).toEqual({
       "grill-1": true,
       "fryer-1": true,
@@ -703,14 +712,20 @@ describe("A773 pass board: dimming", () => {
       "cold-1": true,
     });
 
-    const calmHidden = buildPassBoard(rows, scope, { showNonPassStations: false }, false);
+    const calmHidden = buildPassBoard(rows, scope, {
+      showNonPassStations: false,
+      aStationInViewWaits: false,
+    });
     expect(cards(calmHidden).flatMap((card) => card.items.map((item) => item.id))).toEqual([
       "grill-1",
       "fryer-1",
       "bar-1",
     ]);
 
-    const waitingHidden = buildPassBoard(rows, scope, { showNonPassStations: false }, true);
+    const waitingHidden = buildPassBoard(rows, scope, {
+      showNonPassStations: false,
+      aStationInViewWaits: true,
+    });
     expect(cards(waitingHidden).flatMap((card) => card.items)).toEqual([]);
     expect(waitingHidden.overview).toEqual([]);
 
@@ -731,7 +746,10 @@ describe("A773 pass board: dimming", () => {
         lineNo: 2,
       }),
     ];
-    const board = buildPassBoard(rows, EVERY, { showNonPassStations: true }, false);
+    const board = buildPassBoard(rows, EVERY, {
+      showNonPassStations: true,
+      aStationInViewWaits: false,
+    });
     expect(cards(board).flatMap((card) => card.items.map((item) => item.id))).toEqual(["bar-1"]);
     expect(itemOf(cards(board)[0]!, "bar-1").informational).toBe(false);
   });

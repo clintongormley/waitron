@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { parties, passItemMarks, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readScopedPassBoard, withoutRelease, type PassScope } from "./pass-board.js";
+import { readScopedPassBoard, type PassScope } from "./pass-board.js";
 import type { PassBoard } from "./pass-card.js";
 import { boardCards, boardItems, EVERY } from "./testing/pass-board-probe.js";
 import { advanceTicketItem, handOverOrder, markServed, unmarkServed } from "./working-order.js";
@@ -61,10 +61,7 @@ describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", 
       const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now());
       try {
         const read = () =>
-          inTx(v, async (tx) => {
-            const board = await readScopedPassBoard(tx, v.cfg, EVERY);
-            return reader === "pass" ? board : withoutRelease(board);
-          });
+          inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY, { release: reader === "pass" }));
         const before = await read();
         expect(counts(before)).toEqual([{ id: item.id, qty: "1.000" }]);
         expect(boardItems(before).map((dish) => dish.state)).toEqual(["ready"]);
@@ -105,8 +102,9 @@ describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", 
 
 async function boards(v: Pick<PartyVenue, "db" | "cfg">, scope: PassScope = EVERY) {
   return inTx(v, async (tx) => {
-    const board = await readScopedPassBoard(tx, v.cfg, scope);
-    return { screen: counts(board), monitor: counts(withoutRelease(board)) };
+    const screen = await readScopedPassBoard(tx, v.cfg, scope);
+    const monitor = await readScopedPassBoard(tx, v.cfg, scope, { release: false });
+    return { screen: counts(screen), monitor: counts(monitor) };
   });
 }
 

@@ -132,7 +132,7 @@ import {
   paysAfterSending,
   unsentDishLines,
 } from "./working-order.js";
-import { readScopedPassBoard, withoutRelease } from "./pass-board.js";
+import { readScopedPassBoard } from "./pass-board.js";
 import type { LineExtras, OrderLinePatch, TicketState, OrderAttendance } from "./working-order.js";
 import { listStationsToday } from "./kitchen.js";
 import {
@@ -2317,9 +2317,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       await requireSession(deps, c);
       const board = await withTransaction(deps.db, (tx) =>
-        readScopedPassBoard(tx, deps.cfg, { stationIds: null, zoneIds: null }),
+        readScopedPassBoard(tx, deps.cfg, { stationIds: null, zoneIds: null }, { release: false }),
       );
-      return c.json({ board: withoutRelease(board) });
+      return c.json({ board });
     }),
   );
 

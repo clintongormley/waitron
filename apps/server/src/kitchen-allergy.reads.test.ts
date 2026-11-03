@@ -15,7 +15,7 @@ import type { KitchenAllergyBlock } from "@waitron/module";
 import { readBillEditState } from "./bill-editing.js";
 import { submitGroups, type SubmitGroupsInput } from "./order-groups.js";
 import { listStationQueue, listStationQueues } from "./working-order.js";
-import { readScopedPassBoard, withoutRelease, type PassScope } from "./pass-board.js";
+import { readScopedPassBoard, type PassScope } from "./pass-board.js";
 import { boardItems, EVERY } from "./testing/pass-board-probe.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { ALLERGEN_NAMES } from "./i18n/kitchen-allergy.js";
@@ -115,7 +115,8 @@ async function sent(
 }
 
 const passBoard = (scope: PassScope) => inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, scope));
-const monitorBoard = async (scope: PassScope) => withoutRelease(await passBoard(scope));
+const monitorBoard = (scope: PassScope) =>
+  inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, scope, { release: false }));
 
 /** A Side product offered as an extra on the Burger and routed to its own station. */
 const routedExtra = () =>

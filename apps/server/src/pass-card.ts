@@ -215,6 +215,7 @@ function placeCard(
   cardRows: PassRow[],
   scope: PassScope,
   dims: boolean,
+  releases: boolean,
 ): Placed | null {
   cardRows.sort(itemOrder);
   const items = cardRows.map((row) => cardItem(row, scope, dims));
@@ -251,7 +252,9 @@ function placeCard(
     void openedAt;
     orders.set(row.orderId, { orderId: row.orderId, ...order });
   }
-  const release = passCardRelease(target, cardRows, scope);
+  const release = releases
+    ? passCardRelease(target, cardRows, scope)
+    : { ticketItemIds: [], context: null };
   const card: PassCard = {
     key,
     target,
@@ -283,11 +286,22 @@ function placeCard(
   return { card, column, heldOrder };
 }
 
+export interface PassBoardOptions {
+  showNonPassStations?: boolean;
+  /** Releasing needs a pass screen, so a monitor's and a till's All stations cards name nothing
+   *  to release. */
+  release?: boolean;
+  aStationInViewWaits?: boolean;
+}
+
 export function buildPassBoard(
   rows: readonly PassRow[],
   scope: PassScope,
-  display: { showNonPassStations: boolean } = { showNonPassStations: true },
-  aStationInViewWaits = false,
+  {
+    showNonPassStations = true,
+    release = true,
+    aStationInViewWaits = false,
+  }: PassBoardOptions = {},
 ): PassBoard {
   const live = rows.filter((row) => !row.recalled && row.remaining > 0);
   // Until the pass controls something in its view, nothing in view is dimmed (D89).
@@ -295,10 +309,12 @@ export function buildPassBoard(
   const byCard = new Map<string, PassRow[]>();
   for (const row of live) {
     const key = passCardKey(row);
-    byCard.set(key, [...(byCard.get(key) ?? []), row]);
+    const cardRows = byCard.get(key);
+    if (cardRows === undefined) byCard.set(key, [row]);
+    else cardRows.push(row);
   }
   const placed = [...byCard]
-    .map(([key, cardRows]) => placeCard(key, cardRows, scope, dims))
+    .map(([key, cardRows]) => placeCard(key, cardRows, scope, dims, release))
     .filter((entry): entry is Placed => entry !== null);
   const column = (name: Column, order: (a: Placed, b: Placed) => number) =>
     placed
@@ -321,7 +337,7 @@ export function buildPassBoard(
     overview: [],
   };
   for (const card of [...board.held, ...board.toFire, ...board.inProgress, ...board.ready]) {
-    if (!display.showNonPassStations) card.items = card.items.filter((item) => !item.informational);
+    if (!showNonPassStations) card.items = card.items.filter((item) => !item.informational);
     for (const item of card.items) {
       board.overview.push({
         lineId: item.lineId,

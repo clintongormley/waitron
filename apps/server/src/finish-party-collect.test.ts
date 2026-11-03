@@ -35,7 +35,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { splitBill } from "./bill-actions.js";
 import { completeBillPayment } from "./bill-payments.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { readScopedPassBoard, withoutRelease } from "./pass-board.js";
+import { readScopedPassBoard } from "./pass-board.js";
 import { boardItems, EVERY } from "./testing/pass-board-probe.js";
 import { readReceiptGuests } from "./receipt-guests.js";
 import {
@@ -768,11 +768,10 @@ async function get(path: string) {
 async function whereItShows(billId: string, itemId: string, label: string) {
   const boards = await inTx(venue, async (tx) => {
     const pass = await readScopedPassBoard(tx, venue.cfg, EVERY);
+    const monitor = await readScopedPassBoard(tx, venue.cfg, EVERY, { release: false });
     return {
       screen: boardItems(pass, { inView: true }).filter((item) => item.id === itemId),
-      monitor: boardItems(withoutRelease(pass), { inView: true }).filter(
-        (item) => item.id === itemId,
-      ),
+      monitor: boardItems(monitor, { inView: true }).filter((item) => item.id === itemId),
       station: (await listStationQueue(tx, venue.stationId)).filter(
         (group) => group.orderId === billId,
       ),

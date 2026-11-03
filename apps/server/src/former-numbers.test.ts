@@ -17,7 +17,7 @@ import { createStation } from "./kitchen.js";
 import { setMadeHereStations } from "./made-here.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { readScopedPassBoard, withoutRelease } from "./pass-board.js";
+import { readScopedPassBoard } from "./pass-board.js";
 import type { PassBoard } from "./pass-card.js";
 import { boardCards, EVERY } from "./testing/pass-board-probe.js";
 import {
@@ -290,7 +290,9 @@ describe("the numbers an order's sent dishes were sent under, on the kitchen rea
     const n28 = await numberOf(b28);
     await merge(partyId, b27, b28);
     const screen = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY));
-    const monitor = withoutRelease(screen);
+    const monitor = await inTx(v, (tx) =>
+      readScopedPassBoard(tx, v.cfg, EVERY, { release: false }),
+    );
 
     expect(boardOrder(screen, b27)).toMatchObject({ formerNumbers: [n28] });
     expect(boardOrder(monitor, b27)).toMatchObject({ formerNumbers: [n28] });

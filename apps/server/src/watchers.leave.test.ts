@@ -17,7 +17,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { listStationQueue, markCollected } from "./working-order.js";
-import { readScopedPassBoard, withoutRelease } from "./pass-board.js";
+import { readScopedPassBoard } from "./pass-board.js";
 import { boardOrderIds, EVERY } from "./testing/pass-board-probe.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { serveLine } from "./testing/serve-line.js";
@@ -42,7 +42,7 @@ async function onStationQueue(v: PartyVenue, stationId: string, billId: string):
 
 /** The till's All stations board, which names nothing to release. */
 async function onPass(v: PartyVenue, billId: string): Promise<boolean> {
-  const board = withoutRelease(await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY)));
+  const board = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY, { release: false }));
   return boardOrderIds(board).includes(billId);
 }
 

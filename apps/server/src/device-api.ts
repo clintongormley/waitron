@@ -88,7 +88,7 @@ import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
-import { passScopeOf, readScopedPassBoard, withoutRelease } from "./pass-board.js";
+import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
 import { mountDeviceLevers, requireKitchenDisplay } from "./device-levers.js";
 import { STATUS as TILL_STATUS, stationMoveRequest } from "./till-api.js";
 import { moveDishesToStation } from "./station-move.js";
@@ -571,8 +571,10 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass_monitor");
-          const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen));
-          return { board: withoutRelease(board), stations: screen.stations, zones: screen.zones };
+          const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen), {
+            release: false,
+          });
+          return { board, stations: screen.stations, zones: screen.zones };
         }),
       );
     }),
