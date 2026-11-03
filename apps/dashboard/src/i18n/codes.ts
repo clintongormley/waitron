@@ -1337,6 +1337,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This server no longer runs the venue, so it is not taking requests now. Nothing was changed.",
     es: "Este servidor ya no lleva el local, así que ahora no atiende solicitudes. No se ha cambiado nada.",
   },
+  "handover.peer_unknown": {
+    en: "This server does not know the server that asked for its state, so it did not answer. Nothing was changed.",
+    es: "Este servidor no conoce al servidor que preguntó por su estado, así que no ha respondido. No se ha cambiado nada.",
+  },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",
     es: "Este aviso ya no existe. Actualiza la lista.",

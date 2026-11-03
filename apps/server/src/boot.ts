@@ -202,6 +202,7 @@ import { restrictedPageRoute } from "./restricted-page.js";
 import { startRestricted } from "./restricted-start.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
+import { mountPeerStatusApi } from "./peer-status-api.js";
 import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
 import { clockStartUp, tillClockCheck } from "./clock-start-up.js";
 import {
@@ -1634,6 +1635,7 @@ async function bootServer(
   if (pendingAdoption !== null) {
     // Unauthenticated and deliberately minimal: no ambient viewer exists yet.
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
+    mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: config.node.nodeId }, log);
     const finishWorker = runFinishAdoption({
       ownerDb: db,
       stateDir: config.stateDir,
@@ -1693,6 +1695,12 @@ async function bootServer(
       readMembership: () => readNodeMembership(db),
       routes: [
         restrictedPageRoute({ venue: db, node: store.node, nodeId: config.node.nodeId, log }),
+        (restrictedApp) =>
+          mountPeerStatusApi(
+            restrictedApp,
+            { db, node: store.node, ring, nodeId: node.nodeId },
+            log,
+          ),
       ],
       log,
       listen: (restrictedApp) => {
@@ -2168,6 +2176,7 @@ async function bootServer(
     },
     log,
   );
+  mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
   let demoPrinterLoop: { stop(): Promise<void> } | undefined;
   // Outside the block below so the alert sources have it on every node.
   const testPages = createPageTestPages(now);
