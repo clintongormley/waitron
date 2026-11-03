@@ -4,7 +4,12 @@ import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { BOX_NAME, freezeLockedTarget } from "./preboot-locked.mjs";
+import {
+  BOX_NAME,
+  decideLockedRequest,
+  freezeLockedTarget,
+  selectLockedIdentity,
+} from "./preboot-locked.mjs";
 
 const RECOVERY_SAN = "DNS:unlock-a1b2.waitron.local";
 const LONG_ID = "a".repeat(56);
@@ -380,5 +385,386 @@ describe("freezeLockedTarget", () => {
         }),
       );
     });
+  });
+});
+
+const RECOVERY_HOST = READY.target.recoveryHost;
+const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "get"];
+const READS = new Set(["GET", "HEAD"]);
+const OTHER_HOSTS = [
+  "waitron.local:8080",
+  "192.168.1.5",
+  "[::1]",
+  "evil.example",
+  null,
+  "unlock-zz99.waitron.local",
+  "other.waitron.local",
+];
+const HTTP_MATCHING = [
+  "waitron.local",
+  "WAITRON.LOCAL",
+  "waitron.local:80",
+  RECOVERY_HOST,
+  RECOVERY_HOST.toUpperCase(),
+  `${RECOVERY_HOST}:80`,
+];
+const HTTP_OTHER = [...OTHER_HOSTS, "waitron.local:443", `${RECOVERY_HOST}:443`];
+const HTTPS_RECOVERY_MATCHING = [
+  RECOVERY_HOST,
+  RECOVERY_HOST.toUpperCase(),
+  `${RECOVERY_HOST}:443`,
+];
+const HTTPS_RECOVERY_OTHER = [
+  ...OTHER_HOSTS,
+  "waitron.local",
+  "WAITRON.LOCAL",
+  "waitron.local:443",
+  "waitron.local:80",
+  `${RECOVERY_HOST}:80`,
+];
+const ALL_HOSTS = [...HTTP_MATCHING, ...HTTP_OTHER, "waitron.local:443", `${RECOVERY_HOST}:443`];
+
+const REDIRECT = {
+  kind: "redirect",
+  status: 302,
+  headers: { location: READY.target.recoveryUrl, "cache-control": "no-store" },
+};
+const NOT_ALLOWED = {
+  kind: "refuse",
+  status: 405,
+  headers: { allow: "GET, HEAD", "cache-control": "no-store" },
+};
+const MISDIRECTED = { kind: "refuse", status: 421, headers: { "cache-control": "no-store" } };
+const UNLOCK = { kind: "unlock" };
+
+const ready = () => freezeLockedTarget(input());
+const redirectRefusedResult = () => freezeLockedTarget(input({ redirectCertificate: "garbage" }));
+
+/** @param {'http'|'https'} scheme @param {string|null} identity @param {string|null} host @param {string} method */
+const request = (scheme, identity, host, method) => ({ scheme, identity, host, method });
+
+/** @param {string} reason */
+const lockedError = (reason) => expect.objectContaining({ code: "locked_request.invalid", reason });
+
+/** @type {Array<[string, () => Record<string, unknown>]>} */
+const REFUSED_INPUTS = [
+  ["installation-id-invalid", () => input({ installationId: "" })],
+  ["certificate-unreadable", () => input({ caCertificate: "garbage" })],
+  ["ca-invalid", () => input({ caCertificate: cert("recovery") })],
+  ["recovery-not-ca-signed", () => input({ recoveryCertificate: cert("impostorRecovery") })],
+  ["recovery-is-ca", () => input({ recoveryCertificate: cert("leafAsCa") })],
+  ["recovery-same-key", () => input({ recoveryCertificate: cert("recoverySameKey") })],
+  ["recovery-names-wrong", () => input({ recoveryCertificate: cert("normal") })],
+  ["recovery-expired", () => input({ now: from("recovery") - 1000 })],
+  ["recovery-outlives-ca", () => input({ recoveryCertificate: cert("longLived") })],
+];
+
+/** @param {string} reason */
+function refusedResult(reason) {
+  const entry = REFUSED_INPUTS.find(([name]) => name === reason);
+  const result = freezeLockedTarget(/** @type {any} */ (entry)[1]());
+  expect(result).toEqual(refused(reason));
+  return result;
+}
+
+const NOT_GENUINE = [
+  ["a copy of a ready result", () => ({ ...ready() })],
+  ["a hand-built ready result", () => ({ kind: "ready", target: { ...READY.target } })],
+  [
+    "a hand-built frozen ready result",
+    () => Object.freeze({ kind: "ready", target: Object.freeze({ ...READY.target }) }),
+  ],
+  ["a hand-built refused result", () => ({ kind: "refused", reason: "ca-invalid" })],
+  ["null", () => null],
+];
+
+describe("selectLockedIdentity", () => {
+  it.each([RECOVERY_HOST, RECOVERY_HOST.toUpperCase()])("%j → recovery", (name) => {
+    expect(selectLockedIdentity(ready(), name)).toBe("recovery");
+  });
+
+  it.each(["waitron.local", "WAITRON.LOCAL"])("%j → redirect", (name) => {
+    expect(selectLockedIdentity(ready(), name)).toBe("redirect");
+  });
+
+  it('"waitron.local" with the redirect refused → null', () => {
+    expect(selectLockedIdentity(redirectRefusedResult(), "waitron.local")).toBeNull();
+  });
+
+  it("the recovery address with the redirect refused → recovery", () => {
+    expect(selectLockedIdentity(redirectRefusedResult(), RECOVERY_HOST)).toBe("recovery");
+  });
+
+  const OTHER_NAMES = [
+    undefined,
+    "",
+    "192.168.1.5",
+    "::1",
+    "waitron.local.",
+    `${RECOVERY_HOST}.`,
+    "other.waitron.local",
+    "unlock-zz99.waitron.local",
+  ];
+
+  it.each(OTHER_NAMES)("%j → null", (name) => {
+    expect(selectLockedIdentity(ready(), name)).toBeNull();
+  });
+
+  it.each(REFUSED_INPUTS.map(([reason]) => reason))(
+    "a refused result (%s), any name → null",
+    (reason) => {
+      const result = refusedResult(reason);
+      for (const name of [...OTHER_NAMES, RECOVERY_HOST, "waitron.local"]) {
+        expect(selectLockedIdentity(result, name)).toBeNull();
+      }
+    },
+  );
+
+  it.each(NOT_GENUINE)("%s → throws target-invalid", (_name, value) => {
+    expect(() => selectLockedIdentity(/** @type {any} */ (value()), RECOVERY_HOST)).toThrow(
+      lockedError("target-invalid"),
+    );
+  });
+});
+
+describe("decideLockedRequest on a ready result", () => {
+  /** @param {string} method @param {object} read */
+  const byMethod = (method, read) => (READS.has(method) ? read : NOT_ALLOWED);
+
+  const rows = [
+    ...HTTP_MATCHING.flatMap((host) =>
+      METHODS.map((method) => ["http", null, host, method, byMethod(method, REDIRECT)]),
+    ),
+    ...HTTP_OTHER.flatMap((host) =>
+      METHODS.map((method) => ["http", null, host, method, MISDIRECTED]),
+    ),
+    ...ALL_HOSTS.flatMap((host) =>
+      METHODS.map((method) => ["https", "redirect", host, method, byMethod(method, REDIRECT)]),
+    ),
+    ...HTTPS_RECOVERY_MATCHING.flatMap((host) =>
+      METHODS.map((method) => ["https", "recovery", host, method, UNLOCK]),
+    ),
+    ...HTTPS_RECOVERY_OTHER.flatMap((host) =>
+      METHODS.map((method) => ["https", "recovery", host, method, MISDIRECTED]),
+    ),
+  ];
+
+  it.each(rows)("%s, %s certificate, Host %j, %s → %o", (scheme, identity, host, method, want) => {
+    expect(
+      decideLockedRequest(
+        ready(),
+        request(/** @type {any} */ (scheme), identity, host, /** @type {string} */ (method)),
+      ),
+    ).toEqual(want);
+  });
+
+  it("https, redirect certificate, Host the recovery address: POST → 405, GET → 302, never unlock", () => {
+    expect(
+      decideLockedRequest(ready(), request("https", "redirect", RECOVERY_HOST, "POST")),
+    ).toEqual(NOT_ALLOWED);
+    expect(
+      decideLockedRequest(ready(), request("https", "redirect", RECOVERY_HOST, "GET")),
+    ).toEqual(REDIRECT);
+  });
+
+  it("http, waitron.local, POST → 405 with no location", () => {
+    const decision = decideLockedRequest(ready(), request("http", null, "waitron.local", "POST"));
+    expect(decision).toEqual(NOT_ALLOWED);
+    expect(/** @type {any} */ (decision).headers).not.toHaveProperty("location");
+  });
+
+  it("every redirect's location is target.recoveryUrl, over every host and both schemes", () => {
+    const result = freezeLockedTarget(
+      input({ installationId: LONG_ID, recoveryCertificate: cert("longId") }),
+    );
+    const url = /** @type {any} */ (result).target.recoveryUrl;
+    expect(url).toBe(`https://unlock-${LONG_ID}.waitron.local/`);
+    const longHost = `unlock-${LONG_ID}.waitron.local`;
+    let redirects = 0;
+    for (const host of [...ALL_HOSTS, longHost]) {
+      for (const [scheme, identity] of [
+        ["http", null],
+        ["https", "redirect"],
+      ]) {
+        const decision = /** @type {any} */ (
+          decideLockedRequest(result, request(/** @type {any} */ (scheme), identity, host, "GET"))
+        );
+        if (decision.kind === "redirect") {
+          redirects += 1;
+          expect(decision.headers.location).toBe(url);
+        }
+      }
+    }
+    expect(redirects).toBeGreaterThan(ALL_HOSTS.length);
+  });
+
+  it("https with identity redirect on a result whose redirect is refused → throws identity-unavailable", () => {
+    expect(() =>
+      decideLockedRequest(
+        redirectRefusedResult(),
+        request("https", "redirect", "waitron.local", "GET"),
+      ),
+    ).toThrow(lockedError("identity-unavailable"));
+  });
+
+  it("the recovery certificate still unlocks when the redirect is refused", () => {
+    expect(
+      decideLockedRequest(
+        redirectRefusedResult(),
+        request("https", "recovery", RECOVERY_HOST, "GET"),
+      ),
+    ).toEqual(UNLOCK);
+  });
+
+  it.each(NOT_GENUINE)("%s → throws target-invalid", (_name, value) => {
+    expect(() =>
+      decideLockedRequest(
+        /** @type {any} */ (value()),
+        request("https", "recovery", RECOVERY_HOST, "GET"),
+      ),
+    ).toThrow(lockedError("target-invalid"));
+  });
+});
+
+describe("decideLockedRequest refuses a request of any other shape", () => {
+  const good = () => request("http", null, "waitron.local", "GET");
+  /** @type {Array<[string, () => unknown]>} */
+  const shapes = [
+    ...["path", "query", "url", "body", "headers"].map(
+      (key) =>
+        /** @type {[string, () => unknown]} */ ([
+          `an extra ${key}`,
+          () => ({ ...good(), [key]: "/" }),
+        ]),
+    ),
+    ...["scheme", "identity", "host", "method"].map(
+      (key) =>
+        /** @type {[string, () => unknown]} */ ([
+          `missing ${key}`,
+          () => {
+            /** @type {Record<string, unknown>} */
+            const copy = { ...good() };
+            delete copy[key];
+            return copy;
+          },
+        ]),
+    ),
+    ["http with identity redirect", () => request("http", "redirect", "waitron.local", "GET")],
+    ["http with identity recovery", () => request("http", "recovery", "waitron.local", "GET")],
+    ["https with identity null", () => request("https", null, RECOVERY_HOST, "GET")],
+    ["https with identity other", () => request("https", "other", RECOVERY_HOST, "GET")],
+    ['scheme "ftp"', () => request(/** @type {any} */ ("ftp"), null, "waitron.local", "GET")],
+    ["a non-string host", () => ({ ...good(), host: 80 })],
+    ["a non-string method", () => ({ ...good(), method: null })],
+    ["null", () => null],
+    ["an array", () => []],
+  ];
+
+  it.each(shapes)("%s → throws request-invalid", (_name, value) => {
+    expect(() => decideLockedRequest(ready(), /** @type {any} */ (value()))).toThrow(
+      lockedError("request-invalid"),
+    );
+  });
+
+  it("each request value is read once: a Host getter cannot pass the check and then change", () => {
+    let reads = 0;
+    const tricky = {
+      scheme: "https",
+      identity: "recovery",
+      get host() {
+        reads += 1;
+        return reads === 1 ? RECOVERY_HOST : "evil.example";
+      },
+      method: "GET",
+    };
+    expect(decideLockedRequest(ready(), /** @type {any} */ (tricky))).toEqual(UNLOCK);
+    expect(reads).toBe(1);
+  });
+
+  it("a hand-built target is refused before the request is read", () => {
+    expect(() =>
+      decideLockedRequest(/** @type {any} */ ({ ...ready() }), /** @type {any} */ (null)),
+    ).toThrow(lockedError("target-invalid"));
+  });
+});
+
+describe("decideLockedRequest on a refused result", () => {
+  const reasons = REFUSED_INPUTS.map(([reason]) => reason);
+
+  it.each(reasons)("%s: http GET or HEAD, any host → explain", (reason) => {
+    const result = refusedResult(reason);
+    for (const host of ALL_HOSTS) {
+      for (const method of ["GET", "HEAD"]) {
+        expect(decideLockedRequest(result, request("http", null, host, method))).toEqual({
+          kind: "explain",
+          status: 503,
+          code: "unlock.remote_unavailable",
+          reason,
+          headers: { "cache-control": "no-store" },
+        });
+      }
+    }
+  });
+
+  it.each(reasons)("%s: http, any other method → 405", (reason) => {
+    const result = refusedResult(reason);
+    for (const method of METHODS.filter((name) => !READS.has(name))) {
+      expect(decideLockedRequest(result, request("http", null, "waitron.local", method))).toEqual(
+        NOT_ALLOWED,
+      );
+    }
+  });
+
+  it.each(
+    reasons.flatMap((reason) => [
+      [reason, "recovery"],
+      [reason, "redirect"],
+    ]),
+  )("%s: https with identity %s → throws identity-unavailable", (reason, identity) => {
+    expect(() =>
+      decideLockedRequest(refusedResult(reason), request("https", identity, RECOVERY_HOST, "GET")),
+    ).toThrow(lockedError("identity-unavailable"));
+  });
+});
+
+describe("decisions", () => {
+  it("every decision is frozen, and each kind has exactly the keys in its type", () => {
+    const decisions = [
+      decideLockedRequest(ready(), request("http", null, "waitron.local", "GET")),
+      decideLockedRequest(ready(), request("http", null, "waitron.local", "POST")),
+      decideLockedRequest(ready(), request("http", null, "evil.example", "GET")),
+      decideLockedRequest(ready(), request("https", "recovery", RECOVERY_HOST, "POST")),
+      decideLockedRequest(refusedResult("ca-invalid"), request("http", null, null, "GET")),
+    ];
+    /** @type {Record<string, string[]>} */
+    const keys = {
+      redirect: ["headers", "kind", "status"],
+      refuse: ["headers", "kind", "status"],
+      explain: ["code", "headers", "kind", "reason", "status"],
+      unlock: ["kind"],
+    };
+    /** @type {Record<number, string[]>} */
+    const headerKeys = {
+      302: ["cache-control", "location"],
+      405: ["allow", "cache-control"],
+      421: ["cache-control"],
+      503: ["cache-control"],
+    };
+    expect(decisions.map((d) => /** @type {any} */ (d).status ?? d.kind)).toEqual([
+      302,
+      405,
+      421,
+      "unlock",
+      503,
+    ]);
+    for (const decision of decisions) {
+      const d = /** @type {any} */ (decision);
+      expect(Object.isFrozen(d)).toBe(true);
+      expect(Object.keys(d).sort()).toEqual(keys[d.kind]);
+      if (d.headers) {
+        expect(Object.isFrozen(d.headers)).toBe(true);
+        expect(Object.keys(d.headers).sort()).toEqual(headerKeys[d.status]);
+      }
+    }
   });
 });

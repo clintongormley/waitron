@@ -32,9 +32,19 @@ const BEGIN = "-----BEGIN CERTIFICATE-----";
 const END = "-----END CERTIFICATE-----";
 const BASE64_LINE = /^[A-Za-z0-9+/=]+$/;
 
+// Only results this module built reach the request decisions, so a hand-built target cannot.
+/** @type {WeakSet<object>} */
+const GENUINE = new WeakSet();
+
+/** @template {object} T @param {T} result @returns {T} */
+function genuine(result) {
+  GENUINE.add(result);
+  return result;
+}
+
 /** @param {string} reason @returns {LockedTargetResult} */
 function refused(reason) {
-  return Object.freeze({ kind: "refused", reason });
+  return genuine(Object.freeze({ kind: "refused", reason }));
 }
 
 /**
@@ -72,7 +82,8 @@ function redirectRefusal(text, ca, recovery) {
   if (!redirect.verify(redirect.publicKey)) return "redirect-not-self-signed";
   if (redirect.ca) return "redirect-is-ca";
   if (redirect.subjectAltName !== `DNS:${BOX_NAME}`) return "redirect-names-wrong";
-  // A redirect certificate carrying the CA's key is already refused above, as CA-signed.
+  // A certificate carrying the CA's key never reaches here: it either verifies with the CA's key or
+  // is not self-signed.
   if (redirect.publicKey.equals(recovery.publicKey)) return "redirect-same-key";
   return null;
 }
@@ -119,17 +130,148 @@ export function freezeLockedTarget(input) {
 
   // The redirect certificate's dates are deliberately not checked: it is untrusted anyway.
   const refusal = redirectRefusal(redirectCertificate, ca, recovery);
-  return Object.freeze({
-    kind: "ready",
-    target: Object.freeze({
-      recoveryHost,
-      recoveryUrl: `https://${recoveryHost}/`,
-      redirect: refusal ? "refused" : "ready",
-      redirectRefusal: refusal,
+  return genuine(
+    Object.freeze({
+      kind: "ready",
+      target: Object.freeze({
+        recoveryHost,
+        recoveryUrl: `https://${recoveryHost}/`,
+        redirect: refusal ? "refused" : "ready",
+        redirectRefusal: refusal,
+      }),
     }),
-  });
+  );
 }
 
 function inputInvalid() {
   return Object.assign(new Error(INPUT_CODE), { code: INPUT_CODE, reason: "input-invalid" });
+}
+
+const REQUEST_CODE = "locked_request.invalid";
+const REQUEST_KEYS = ["scheme", "identity", "host", "method"];
+const DEFAULT_PORT = { http: ":80", https: ":443" };
+const READS = ["GET", "HEAD"];
+
+/**
+ * @typedef {object} LockedRequest  exactly these keys: no path, query, headers or body ever reaches the decision
+ * @property {'http'|'https'} scheme
+ * @property {'recovery'|'redirect'|null} identity  null for http; for https, what selectLockedIdentity chose
+ * @property {string|null} host  the request's Host header as received
+ * @property {string} method
+ * @typedef {{kind:'redirect', status:302, headers:{location:string, 'cache-control':'no-store'}}
+ *   | {kind:'refuse', status:405, headers:{allow:'GET, HEAD', 'cache-control':'no-store'}}
+ *   | {kind:'refuse', status:421, headers:{'cache-control':'no-store'}}
+ *   | {kind:'explain', status:503, code:'unlock.remote_unavailable', reason:string, headers:{'cache-control':'no-store'}}
+ *   | {kind:'unlock'}} LockedDecision  frozen; 'unlock' hands the request to the trusted key screen
+ */
+
+/** @param {string} reason */
+function requestInvalid(reason) {
+  return Object.assign(new Error(REQUEST_CODE), { code: REQUEST_CODE, reason });
+}
+
+/** @param {unknown} result @returns {LockedTargetResult} */
+function genuineResult(result) {
+  if (result === null || typeof result !== "object" || !GENUINE.has(result)) {
+    throw requestInvalid("target-invalid");
+  }
+  return /** @type {LockedTargetResult} */ (result);
+}
+
+/**
+ * For the TLS adapter's name callback; null means no certificate, so the handshake ends.
+ * @param {LockedTargetResult} result @param {string|undefined} serverName
+ * @returns {'recovery'|'redirect'|null}
+ */
+export function selectLockedIdentity(result, serverName) {
+  const checked = genuineResult(result);
+  if (checked.kind !== "ready" || typeof serverName !== "string") return null;
+  const name = serverName.toLowerCase();
+  if (name === checked.target.recoveryHost) return "recovery";
+  if (name === BOX_NAME && checked.target.redirect === "ready") return "redirect";
+  return null;
+}
+
+/** @param {unknown} request @returns {LockedRequest} */
+function checkedRequest(request) {
+  if (!exactRecord(request, REQUEST_KEYS)) throw requestInvalid("request-invalid");
+  const { scheme, identity, host, method } = /** @type {Record<string, unknown>} */ (request);
+  const identityFits =
+    scheme === "http"
+      ? identity === null
+      : scheme === "https" && (identity === "recovery" || identity === "redirect");
+  if (!identityFits || (host !== null && typeof host !== "string") || typeof method !== "string") {
+    throw requestInvalid("request-invalid");
+  }
+  return /** @type {LockedRequest} */ ({ scheme, identity, host, method });
+}
+
+/** @param {LockedRequest} request */
+function hostName(request) {
+  if (request.host === null) return null;
+  const host = request.host.toLowerCase();
+  const port = DEFAULT_PORT[request.scheme];
+  return host.endsWith(port) ? host.slice(0, -port.length) : host;
+}
+
+/** @template {object} T @param {T} headers @returns {Readonly<T & {'cache-control': 'no-store'}>} */
+function noStore(headers) {
+  return Object.freeze({ ...headers, "cache-control": "no-store" });
+}
+
+/** @returns {LockedDecision} */
+function notAllowed() {
+  return Object.freeze({ kind: "refuse", status: 405, headers: noStore({ allow: "GET, HEAD" }) });
+}
+
+/** @returns {LockedDecision} */
+function misdirected() {
+  return Object.freeze({ kind: "refuse", status: 421, headers: noStore({}) });
+}
+
+/** @param {LockedTarget} target @param {string} method @returns {LockedDecision} */
+function redirectOrRefuse(target, method) {
+  if (!READS.includes(method)) return notAllowed();
+  return Object.freeze({
+    kind: "redirect",
+    status: 302,
+    headers: noStore({ location: target.recoveryUrl }),
+  });
+}
+
+/**
+ * Neither redirect route ever offers a form: no decision has a body, and only the recovery
+ * certificate with its own name in Host reaches the key screen.
+ * @param {LockedTargetResult} result @param {LockedRequest} request @returns {LockedDecision}
+ */
+export function decideLockedRequest(result, request) {
+  const checked = genuineResult(result);
+  // Each value is read once, from the checked copy, so a getter cannot change its answer.
+  const fields = checkedRequest(request);
+  const { scheme, identity, method } = fields;
+
+  if (checked.kind === "refused") {
+    if (scheme === "https") throw requestInvalid("identity-unavailable");
+    if (!READS.includes(method)) return notAllowed();
+    return Object.freeze({
+      kind: "explain",
+      status: 503,
+      code: "unlock.remote_unavailable",
+      reason: checked.reason,
+      headers: noStore({}),
+    });
+  }
+
+  const { target } = checked;
+  const host = hostName(fields);
+  if (scheme === "http") {
+    if (host !== BOX_NAME && host !== target.recoveryHost) return misdirected();
+    return redirectOrRefuse(target, method);
+  }
+  if (identity === "redirect") {
+    if (target.redirect !== "ready") throw requestInvalid("identity-unavailable");
+    return redirectOrRefuse(target, method);
+  }
+  if (host !== target.recoveryHost) return misdirected();
+  return Object.freeze({ kind: "unlock" });
 }
