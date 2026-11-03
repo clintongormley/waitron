@@ -22,6 +22,7 @@ import { readHandoverRestriction } from "@waitron/node-db";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import type { PeerStatusBody } from "./peer-status-api.js";
+import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
@@ -289,7 +290,7 @@ describe("the start check on a real start", () => {
     expect(await readHandoverRestriction(suite.node, booted.nodeId)).toBeNull();
   }, 60_000);
 
-  it("a joined spare whose key the main box does not hold: its answer cannot be checked, so the check waits (and today the start goes on)", async () => {
+  it("a joined spare whose key the main box does not hold: its answer cannot be checked, so the box waits", async () => {
     let asked = 0;
     const url = await startPeer(() => {
       asked += 1;
@@ -303,9 +304,108 @@ describe("the start check on a real start", () => {
         peers: [{ nodeId: SPARE.nodeId, answer: "S", counted: true, why: "not_verified" }],
       },
     ]);
-    // Ruling R1: a wait goes on as before until the waiting start exists.
-    expect(booted.acceptingSales).toBe(true);
+    expect(booted.acceptingSales).toBe(false);
+    const page = await fetch(`http://127.0.0.1:${httpPort()}/`, {
+      headers: { "accept-language": "en-GB" },
+    });
+    expect(await page.text()).toContain("<h1>This box is waiting for Spare</h1>");
   }, 60_000);
+
+  describe("while it waits", () => {
+    const restart = vi.fn();
+    afterEach(() => restart.mockReset());
+    const waitThen = (...later: StartPeerCheckOutcome[]) => {
+      const peerCheck = vi.fn<() => Promise<StartPeerCheckOutcome>>().mockResolvedValueOnce({
+        result: "wait",
+        successorNodeId: null,
+        waitingOn: [SPARE.nodeId],
+      });
+      for (const outcome of later) peerCheck.mockResolvedValueOnce(outcome);
+      // Nothing further: a re-ask after the last answer the case gave would be a fault.
+      peerCheck.mockRejectedValue(new Error("asked after the wait ended"));
+      return peerCheck;
+    };
+    const seams = (peerCheck: () => Promise<StartPeerCheckOutcome>): StartServerSeams => ({
+      peerCheck,
+      waitingStart: { intervalMs: 5 },
+      stepdown: { mount: () => {}, restart },
+    });
+    const acceptingSales = async () =>
+      (
+        (await (await fetch(`http://127.0.0.1:${httpPort()}/api/node`)).json()) as {
+          acceptingSales: unknown;
+        }
+      ).acceptingSales;
+
+    it("restarts when a peer answers: the start goes on to sell, and the waiting page and timer are gone", async () => {
+      const peerCheck = waitThen(
+        { result: "wait", successorNodeId: null },
+        { result: "proceed", successorNodeId: null },
+      );
+      const booted = await boot(suite, {
+        spareUrl: OWN_URL,
+        joined: true,
+        seams: seams(peerCheck),
+      });
+      expect(booted.acceptingSales).toBe(false);
+      await vi.waitFor(async () => expect(await acceptingSales()).toBe(true), { timeout: 30_000 });
+      const page = await fetch(`http://127.0.0.1:${httpPort()}/`);
+      expect(await page.text()).not.toContain("This box is waiting for");
+      const health = (await (
+        await fetch(`http://127.0.0.1:${httpPort()}/health`)
+      ).json()) as Record<string, unknown>;
+      expect(health.tradingAvailable).toBeUndefined();
+      await new Promise((done) => setTimeout(done, 50));
+      expect(peerCheck).toHaveBeenCalledTimes(3);
+    }, 60_000);
+
+    it("a re-ask that answers superseded with a successor records the restriction and starts restricted", async () => {
+      const booted = await boot(suite, {
+        spareUrl: OWN_URL,
+        joined: true,
+        seams: seams(waitThen({ result: "superseded", successorNodeId: SPARE.nodeId })),
+      });
+      await vi.waitFor(
+        async () =>
+          expect(await readHandoverRestriction(suite.node, booted.nodeId)).toMatchObject({
+            kind: "superseded",
+            successorNodeId: SPARE.nodeId,
+          }),
+        { timeout: 30_000 },
+      );
+      await vi.waitFor(async () => {
+        const page = await fetch(`http://127.0.0.1:${httpPort()}/`);
+        expect(await page.text()).toContain("This box no longer runs the venue");
+      });
+      expect(await acceptingSales()).toBe(false);
+    }, 60_000);
+
+    it("a peer's newer chart that fences it, sent to the waiting start, records the restriction and restarts", async () => {
+      const booted = await boot(suite, {
+        spareUrl: OWN_URL,
+        joined: true,
+        seams: { ...seams(waitThen()), waitingStart: { intervalMs: 60_000 } },
+      });
+      expect(booted.acceptingSales).toBe(false);
+      const sent = await fetch(`http://127.0.0.1:${httpPort()}/api/node/membership`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          document: spareChart(2, [
+            [booted.nodeId, "sell-only", OWN_URL],
+            [SPARE.nodeId, "serving-primary", "https://spare.example"],
+          ]),
+        }),
+      });
+      expect(await sent.json()).toEqual({ accepted: true });
+      expect(await readHandoverRestriction(suite.node, booted.nodeId)).toMatchObject({
+        kind: "superseded",
+        successorNodeId: SPARE.nodeId,
+        membershipTerm: 2,
+      });
+      await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 30_000 });
+    }, 60_000);
+  });
 
   it("the seam's superseded with a successor takes the restricted start", async () => {
     const booted = await boot(suite, {

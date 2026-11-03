@@ -360,12 +360,17 @@ describe("returned-box membership reconciliation at boot", () => {
       }) as typeof process.stdout.write;
       let server: Awaited<ReturnType<typeof startServer>> | undefined;
       try {
-        server = await startServer({
-          ...KEY_ENV,
-          WAITRON_VENUE_DIR: venueDir,
-          WAITRON_HTTP_PORT: String(port),
-          WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        });
+        server = await startServer(
+          {
+            ...KEY_ENV,
+            WAITRON_VENUE_DIR: venueDir,
+            WAITRON_HTTP_PORT: String(port),
+            WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          },
+          {},
+          // The chart lists the seeded peer, which is not running; these cases test the reconcile.
+          { peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }) },
+        );
         const node = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
         expect(node.status).toBe(200);
         const { acceptingSales } = (await node.json()) as { acceptingSales: unknown };

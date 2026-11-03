@@ -122,6 +122,8 @@ export interface StartPeerCheckOutcome {
   result: StartCheckResult;
   /** For `superseded`, the box the restriction names, or `null` (see `successorAfterCheck`). */
   successorNodeId: string | null;
+  /** For `wait`, the joined boxes whose silence made this box wait. */
+  waitingOn?: readonly string[];
 }
 
 /** The start check on a non-mirror box, with the real transport, trust and stores. */
@@ -181,6 +183,9 @@ export async function runStartPeerCheck(deps: StartPeerCheckDeps): Promise<Start
   });
   return {
     result,
+    ...(result === "wait"
+      ? { waitingOn: answers.filter((a) => a.counted && a.answer === "S").map((a) => a.nodeId) }
+      : {}),
     successorNodeId:
       result === "superseded"
         ? successorAfterCheck(await readNodeMembership(db), nodeId, answers)

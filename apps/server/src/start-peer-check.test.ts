@@ -322,6 +322,20 @@ describe("the real start check's inputs", () => {
     expect((await check(suite, b, peerFetch("silent"))).result).toBe("wait");
   });
 
+  it("a wait names the joined boxes whose silence made the box wait", async () => {
+    const outcome = await check(suite, await box(suite), peerFetch("silent"));
+    expect(outcome).toMatchObject({ result: "wait", waitingOn: [PEER.nodeId] });
+  });
+
+  it("a wait with no counted peer names none", async () => {
+    const b = await box(suite, { joined: false });
+    await insertOperation(suite, b.nodeId, { role: "source", state: "source_stepped_down" });
+    expect(await check(suite, b, peerFetch("silent"))).toMatchObject({
+      result: "wait",
+      waitingOn: [],
+    });
+  });
+
   it("a box holding no chart asks nobody and proceeds", async () => {
     const venue = await setupVenue(suite.db);
     const fetch = peerFetch("silent");

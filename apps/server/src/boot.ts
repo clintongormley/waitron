@@ -210,6 +210,8 @@ import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
+import { readPeerNames } from "./waiting-page.js";
+import { startWaiting, WAIT_RECHECK_MS } from "./waiting-start.js";
 import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
 import { clockStartUp, tillClockCheck } from "./clock-start-up.js";
 import {
@@ -969,6 +971,8 @@ export interface StartServerSeams {
    * chart that fences this box stops it from selling.
    */
   peerCheck?: () => Promise<StartPeerCheckOutcome>;
+  /** How often a waiting start asks its peers again; defaults to `WAIT_RECHECK_MS`. */
+  waitingStart?: { intervalMs?: number };
 }
 
 /**
@@ -984,9 +988,13 @@ export async function startServer(
   seams: StartServerSeams = {},
 ): Promise<StartedServer> {
   const undoOnFailure: Array<() => Promise<void>> = [];
-  try {
-    return await bootServer(env, base, seams, undoOnFailure);
-  } catch (error) {
+  let waiting: WaitingAnnouncement | undefined;
+  let announced: () => void = () => {};
+  const waitBegan = new Promise<void>((resolve) => (announced = resolve));
+  const booted = bootServer(env, base, seams, undoOnFailure, (announcement) => {
+    waiting = announcement;
+    announced();
+  }).catch(async (error: unknown) => {
     // Newest first, so anything that runs on the venue store stops before the store closes. An undo
     // that fails is dropped: the boot's own error is the one the supervisor has to see.
     for (const undo of undoOnFailure.reverse()) {
@@ -997,7 +1005,30 @@ export async function startServer(
       }
     }
     throw error;
-  }
+  });
+  await Promise.race([booted, waitBegan]);
+  if (waiting === undefined) return await booted;
+  // A box that waits for its peers has started: it answers while the rest of its start waits.
+  const { server: whileWaiting, failedLater } = waiting;
+  let current: StartedServer = whileWaiting;
+  const continued = booted.then((server) => {
+    current = server;
+  }, failedLater);
+  return {
+    health: whileWaiting.health,
+    close: async () => {
+      await whileWaiting.close();
+      await continued;
+      await current.close();
+    },
+  };
+}
+
+/** Handed out by a start that waits for its peers, before the rest of the start goes on. */
+interface WaitingAnnouncement {
+  server: StartedServer;
+  /** Takes a failure in the part of the start that runs after the wait. */
+  failedLater: (error: unknown) => void;
 }
 
 /**
@@ -1009,6 +1040,7 @@ async function bootServer(
   base: NodeJS.ProcessEnv,
   seams: StartServerSeams,
   undoOnFailure: Array<() => Promise<void>>,
+  announceWaiting: (announcement: WaitingAnnouncement) => void,
 ): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
@@ -1755,17 +1787,86 @@ async function bootServer(
   // A mirror files nothing, so it has nothing to ask its peers before it starts.
   if (initialAxes.mode !== "mirror") {
     await repairAtStart({ node: store.node, nodeId: config.node.nodeId });
-    const outcome =
+    const checkPeers = () =>
       seams.peerCheck === undefined
-        ? await runStartPeerCheck({
+        ? runStartPeerCheck({
             db,
             node: store.node,
             ring,
-            nodeId: config.node.nodeId,
+            nodeId: node.nodeId,
             advertisedOrigin: config.advertisedOrigin,
             log,
           })
-        : await seams.peerCheck();
+        : seams.peerCheck();
+    let outcome = await checkPeers();
+    if (outcome.result === "wait") {
+      const restart = seams.stepdown?.restart ?? restartProcess;
+      const fencedAtWait = isFenced(await readNodeMembership(db), node.nodeId);
+      const waitingStart = startWaiting({
+        health,
+        now,
+        venueDir: config.venueDir,
+        nodeId: node.nodeId,
+        environment: config.environment,
+        readMembership: () => readNodeMembership(db),
+        waitingFor: await readPeerNames(db, outcome.waitingOn ?? []),
+        routes: [
+          (waitingApp) =>
+            mountPeerStatusApi(
+              waitingApp,
+              { db, node: store.node, ring, nodeId: node.nodeId },
+              log,
+            ),
+          (waitingApp, hooks) =>
+            mountNodeMembershipApi(
+              waitingApp,
+              {
+                db,
+                node: store.node,
+                nodeId: node.nodeId,
+                stepDown: hooks.stepDown,
+                // A box that waits sells once the wait ends, unless its held chart fences it.
+                selling: () => !fencedAtWait,
+              },
+              log,
+            ),
+        ],
+        node: store.node,
+        recheck: checkPeers,
+        intervalMs: seams.waitingStart?.intervalMs ?? WAIT_RECHECK_MS,
+        listen: (waitingApp) => {
+          const server = startTradingListener(config, waitingApp, now, log);
+          const mdns = startMdnsResponder({
+            hostname: BOX_HOSTNAME,
+            devMode: config.devMode,
+            httpHost: config.httpHost,
+            getAddresses: boxAddresses,
+            log,
+          });
+          const landing = startLandingListener(config, log);
+          return {
+            close: async () => {
+              await mdns.stop().catch(() => {});
+              await landing?.close().catch(() => {});
+              await closeListener(server);
+            },
+          };
+        },
+        closeStore: () => store.close(),
+        restart,
+        log,
+      });
+      announceWaiting({
+        server: waitingStart.server,
+        failedLater: (error) => {
+          log("error", "waiting_start.continue_failed", { errorCode: codeOf(error) });
+          restart();
+        },
+      });
+      const end = await waitingStart.ended;
+      if (end.kind === "stopped") return waitingStart.server;
+      outcome = end.kind === "checked" ? end.outcome : { result: "proceed", successorNodeId: null };
+    }
     if (outcome.result === "superseded" && outcome.successorNodeId !== null) {
       // The check saved any newer chart in venue.db first; the restriction goes to node.db after.
       const held = await readNodeMembership(db);
@@ -1777,7 +1878,6 @@ async function bootServer(
       return restrictedStart();
     }
     // `superseded` with no successor goes on: the chart it now holds fences it below (Ruling R7).
-    // `wait` goes on as today until the waiting start exists (Ruling R1).
   }
   // A returned box that died before it was fenced would otherwise boot with a stale chart and SELL
   // while the promoted cloud is also primary — two nodes filing under one NIF (CLAUDE.md §5). So a
