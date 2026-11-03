@@ -92,6 +92,7 @@ describe("stripe collect -> recordSale -> associate (the adapter seam, end to en
     const paid = await provider.collect({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("12.10"),
       readerRef: "reader_1",
     });
@@ -136,6 +137,7 @@ describe("stripe idempotency key is derived from the working order, decoupled fr
     const args = {
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("12.10"),
       readerRef: "reader_1",
     };

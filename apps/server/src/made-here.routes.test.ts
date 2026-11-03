@@ -1684,6 +1684,7 @@ describe("made-here route wiring", () => {
     await inTx(venue, (tx) =>
       insertCapturedPayment(tx, {
         origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
         workingOrderId: brandWorkingOrderId(orderId),
         provider: "fake",
         paymentRef: `background-${randomUUID()}`,

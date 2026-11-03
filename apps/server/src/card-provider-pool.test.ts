@@ -126,6 +126,7 @@ describe("createCardProviderPool", () => {
       .collect({
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: workingOrderId(seeded.workingOrderId),
+        nodeId: seeded.nodeId,
         amount: decimal("12.10"),
         readerRef: "reader_evicted",
       })

@@ -35,6 +35,7 @@ describe("concurrent reconcile sweeps", () => {
       insertCapturedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "race-1",
         externalRef: "ext-race-1",
@@ -105,6 +106,7 @@ describe("concurrent reconcile sweeps", () => {
       insertCapturedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "race-held",
         externalRef: "ext-race-held",
@@ -183,6 +185,7 @@ describe("a sweep overtaken between its read and its writes", () => {
       insertCapturedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: ref,
         externalRef: `ext-${ref}`,
@@ -297,6 +300,7 @@ describe("an outcome recorded while a sweep fetches its report", () => {
       insertCapturedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: ref,
         externalRef: `ext-${ref}`,

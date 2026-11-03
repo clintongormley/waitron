@@ -119,6 +119,7 @@ describe("two simultaneous deliveries of the same settlement", () => {
     const minted = await provider.initiate({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("12.10"),
       paymentRef: "pay-1",
     });

@@ -594,6 +594,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     await inTx(v, (tx) =>
       insertCapturedPayment(tx, {
         origin: v.cfg.origin,
+        nodeId: v.cfg.nodeId,
         workingOrderId: id,
         provider: provider.provider,
         paymentRef: `sim-${randomUUID()}`,
@@ -783,6 +784,7 @@ describe("paying a pay-first order, or an open counter order in a zone that send
       await inTx(v, (tx) =>
         insertCapturedPayment(tx, {
           origin: v.cfg.origin,
+          nodeId: v.cfg.nodeId,
           workingOrderId: id,
           provider: provider.provider,
           paymentRef: `sim-${randomUUID()}`,

@@ -38,6 +38,7 @@ async function heldPayment(paymentRef: string, settledAt: Date): Promise<Settlem
     insertCapturedPayment(tx, {
       origin: deviceOrigin(seeded.deviceId),
       workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
       provider: "fake",
       paymentRef,
       externalRef: `ext-${paymentRef}`,

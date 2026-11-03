@@ -91,6 +91,7 @@ export class StripeOnDeviceProvider implements PaymentProvider {
     const common = {
       origin: params.origin,
       workingOrderId: params.workingOrderId,
+      nodeId: params.nodeId,
       provider: PROVIDER,
       paymentRef,
       amount: params.amount,

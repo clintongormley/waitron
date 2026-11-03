@@ -61,6 +61,7 @@ beforeEach(async () => {
       .returning();
     await insertCapturedPayment(tx, {
       origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
       workingOrderId: workingOrderId(billId),
       provider: "fake",
       paymentRef: randomUUID(),

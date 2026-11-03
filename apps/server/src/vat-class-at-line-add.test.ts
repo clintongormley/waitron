@@ -309,6 +309,7 @@ function stubProvider(onCollect: () => Promise<void>): PaymentProvider {
       await withTransaction(suite.db, (tx) =>
         insertCapturedPayment(tx, {
           origin: params.origin,
+          nodeId: params.nodeId,
           workingOrderId: params.workingOrderId,
           provider: "stripe",
           paymentRef,
@@ -487,6 +488,7 @@ describe("a product's VAT class changed with no new publish: the sale files the 
       });
       await insertCapturedPayment(tx, {
         origin: v.cfg.origin,
+        nodeId: v.cfg.nodeId,
         workingOrderId: id,
         provider: "stripe",
         paymentRef: `pi-${randomUUID()}`,

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { nodeId as brandNodeId, stringToCents } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import {
   billPayments,
   invoiceSeries,
@@ -27,7 +28,7 @@ export interface Seeded {
   locationId: string;
   /** A till device at that location: where the seeded order's payments are started. */
   deviceId: string;
-  nodeId: string;
+  nodeId: NodeId;
   workingOrderId: string;
 }
 

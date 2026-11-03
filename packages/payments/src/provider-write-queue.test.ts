@@ -87,6 +87,7 @@ describe("simulator writes behind an unrelated rollback", () => {
     const params = {
       origin: deviceOrigin(seed.deviceId),
       workingOrderId: workingOrderId(seed.workingOrderId),
+      nodeId: seed.nodeId,
       amount: decimal("10.00"),
     };
     const provider = new SimulatorPaymentProvider(suite.db);
@@ -136,6 +137,7 @@ describe("fake reader writes behind an unrelated rollback", () => {
     const params = {
       origin: deviceOrigin(seed.deviceId),
       workingOrderId: workingOrderId(seed.workingOrderId),
+      nodeId: seed.nodeId,
       amount: decimal("10.00"),
       allowOffline: true,
     };
@@ -219,6 +221,7 @@ describe("hosted fake writes behind an unrelated rollback", () => {
       provider.initiate({
         origin: deviceOrigin(seed.deviceId),
         workingOrderId: workingOrderId(seed.workingOrderId),
+        nodeId: seed.nodeId,
         amount: decimal("10.00"),
         paymentRef: "queued-hosted",
       }),

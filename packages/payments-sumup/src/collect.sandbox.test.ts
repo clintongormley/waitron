@@ -66,6 +66,7 @@ d("SumUp live sandbox: collect against the paired Solo", () => {
     const result = await provider.collect({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("1.00"),
       readerRef: READER_ID!,
     });

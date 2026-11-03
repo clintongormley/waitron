@@ -25,6 +25,7 @@ export class FakeAsyncProvider implements AsyncPaymentProvider {
       insertInitiated(tx, {
         origin: params.origin,
         workingOrderId: params.workingOrderId,
+        nodeId: params.nodeId,
         provider: this.provider,
         paymentRef: params.paymentRef,
         externalRef,

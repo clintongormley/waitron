@@ -62,6 +62,7 @@ async function seed() {
     .returning({ id: cardReaders.id });
   return {
     workingOrderId: s.workingOrderId,
+    nodeId: s.nodeId,
     profileId,
     otherProfileId,
     deviceA: s.deviceId as string,
@@ -116,6 +117,7 @@ function attempting(s: Seeded, readerId: string, paymentRef: string) {
     insertAttempting(tx, {
       origin: deviceOrigin(s.deviceA),
       workingOrderId: s.workingOrderId,
+      nodeId: s.nodeId,
       provider: "fake",
       paymentRef,
       amount: decimal("10.00"),

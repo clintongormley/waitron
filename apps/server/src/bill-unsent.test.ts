@@ -123,6 +123,7 @@ describe("payment reservations and previously received money", () => {
     await inTx(venue, (tx) =>
       insertCapturedPayment(tx, {
         origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
         workingOrderId: billId,
         provider: venue.card.provider,
         paymentRef: randomUUID(),

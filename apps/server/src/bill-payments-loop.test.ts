@@ -152,6 +152,7 @@ async function capturedPending(
   await inTx(venue, (tx) =>
     insertCapturedPayment(tx, {
       origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
       workingOrderId: brandWorkingOrderId(billId),
       provider: "fake",
       paymentRef: `captured-${randomUUID()}`,
@@ -217,6 +218,7 @@ async function mismatchedPending(billId: string, device?: { deviceId: string }):
   await inTx(venue, (tx) =>
     insertCapturedPayment(tx, {
       origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
       workingOrderId: brandWorkingOrderId(billId),
       provider: "fake",
       paymentRef: `mismatch-${randomUUID()}`,
@@ -351,6 +353,7 @@ describe("the loop's own edges", () => {
       await inTx(venue, async (tx) => {
         await insertFailedPayment(tx, {
           origin: venue.cfg.origin,
+          nodeId: venue.cfg.nodeId,
           workingOrderId: brandWorkingOrderId(billId),
           provider: "stripe",
           paymentRef,
@@ -387,6 +390,7 @@ describe("the loop's own edges", () => {
     await inTx(venue, (tx) =>
       insertCapturedPayment(tx, {
         origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
         workingOrderId: brandWorkingOrderId(billId),
         provider: "fake",
         paymentRef,
@@ -634,6 +638,7 @@ describe("a pending card with no provider row (design §8 test 16)", () => {
     await inTx(venue, (tx) =>
       insertFailedPayment(tx, {
         origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
         workingOrderId: brandWorkingOrderId(billId),
         provider: "fake",
         paymentRef: `failed-${randomUUID()}`,

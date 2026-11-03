@@ -37,6 +37,7 @@ export class StripeHostedProvider implements AsyncPaymentProvider {
       insertInitiated(tx, {
         origin: params.origin,
         workingOrderId: params.workingOrderId,
+        nodeId: params.nodeId,
         provider: PROVIDER,
         paymentRef: params.paymentRef,
         externalRef: session.id,

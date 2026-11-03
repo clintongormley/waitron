@@ -597,6 +597,7 @@ describe("/api/pay keeps the guests its receipt prints", () => {
       });
       await insertCapturedPayment(tx, {
         origin: v.cfg.origin,
+        nodeId: v.cfg.nodeId,
         workingOrderId: id,
         provider: "simulator",
         paymentRef: `sim-ref-${randomUUID()}`,
@@ -647,6 +648,7 @@ async function lostCapture(v: Venue, id: string): Promise<void> {
   await withTransaction(v.db, (tx) =>
     insertCapturedPayment(tx, {
       origin: v.cfg.origin,
+      nodeId: v.cfg.nodeId,
       workingOrderId: id,
       provider: "simulator",
       paymentRef: `sim-ref-${randomUUID()}`,

@@ -216,6 +216,7 @@ it("recovery files the current department description without charging the card 
   await withTransaction(venue.db, (tx) =>
     insertCapturedPayment(tx, {
       origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
       workingOrderId: id,
       provider: "simulator",
       paymentRef: randomUUID(),
@@ -571,6 +572,7 @@ it("missing description leaves an unfiled capture recoverable without touching t
   await withTransaction(venue.db, (tx) =>
     insertCapturedPayment(tx, {
       origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
       workingOrderId: id,
       provider: "simulator",
       paymentRef: randomUUID(),

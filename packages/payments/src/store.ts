@@ -8,7 +8,7 @@ import {
   decimalToCents,
   sumDecimals,
 } from "@waitron/shared";
-import type { Decimal, DeviceOrigin } from "@waitron/shared";
+import type { Decimal, DeviceOrigin, NodeId } from "@waitron/shared";
 import type { Database, Transaction } from "@waitron/db";
 import { devices, nowIso, workingOrders } from "@waitron/db";
 import "./errors.js";
@@ -41,6 +41,8 @@ interface NewPayment {
   /** The device the payment was started on. */
   origin: DeviceOrigin;
   workingOrderId: string;
+  /** The box that started the payment: its collection owner. */
+  nodeId: NodeId;
   provider: string;
   paymentRef: string;
   amount: Decimal;
@@ -82,6 +84,7 @@ async function insertPayment(
     source: params.origin.source,
     deviceId: params.origin.deviceId,
     workingOrderId: params.workingOrderId,
+    nodeId: params.nodeId,
     provider: params.provider,
     paymentRef: params.paymentRef,
     amount: decimalToCents(params.amount),

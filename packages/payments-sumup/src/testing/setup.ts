@@ -28,6 +28,7 @@ export async function setup(suite: { readonly db: Database }, tune?: (f: FakeSum
   const params = {
     origin: deviceOrigin(t.deviceId),
     workingOrderId: brandWorkingOrderId(t.workingOrderId),
+    nodeId: t.nodeId,
     amount: decimal("12.50"),
     readerRef: "rdr_1",
   };

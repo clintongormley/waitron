@@ -245,6 +245,7 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
       const row = {
         origin: params.origin,
         workingOrderId: params.workingOrderId,
+        nodeId: params.nodeId,
         provider: venue.card.provider,
         paymentRef: randomUUID(),
         amount: params.amount,
@@ -379,6 +380,40 @@ describe("a card on a reader: the three phases (design §5.3)", () => {
     expect(paid.json).toMatchObject({ code: "device.unauthorized" });
     expect(venue.card.collectCalls).toHaveLength(calls);
     expect(await paymentRows(venue, billId)).toEqual([]);
+  });
+});
+
+describe("the box that started a card payment", () => {
+  async function nodeOf(billPaymentId: string) {
+    return inTx(venue, (tx) =>
+      tx
+        .select({ nodeId: payments.nodeId })
+        .from(payments)
+        .where(eq(payments.billPaymentId, billPaymentId)),
+    );
+  }
+
+  it("records a reader card under this box's node id", async () => {
+    const billId = await tabWithDishes("Paella");
+    const paid = await cardContribution(billId, "10.00");
+    expect(paid.status).toBe(200);
+    const [row] = await paymentRows(venue, billId);
+    expect(await nodeOf(row!.id)).toEqual([{ nodeId: venue.cfg.nodeId }]);
+  });
+
+  it("records a hand-keyed card under this box's node id", async () => {
+    const billId = await tabWithDishes("Paella");
+    const paid = await pay(billId, {
+      kind: "contribution",
+      amount: "10.00",
+      method: "card",
+      entry: "manual",
+      applied: "10.00",
+      tip: "0.00",
+    });
+    expect(paid.status).toBe(200);
+    const [row] = await paymentRows(venue, billId);
+    expect(await nodeOf(row!.id)).toEqual([{ nodeId: venue.cfg.nodeId }]);
   });
 });
 

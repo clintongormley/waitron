@@ -43,6 +43,7 @@ async function setup(incidentRecorded = true) {
       insertAttempting(tx, {
         origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
+        nodeId: t.nodeId,
         provider: "sumup",
         paymentRef,
         amount: decimal("7.00"),
@@ -132,6 +133,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
       insertAttempting(tx, {
         origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
+        nodeId: t.nodeId,
         provider: "sumup",
         paymentRef: "ghost",
         amount: decimal("7.00"),
@@ -161,6 +163,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
       insertAttempting(tx, {
         origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
+        nodeId: t.nodeId,
         provider: "sumup",
         paymentRef: "ghost-dup",
         amount: decimal("7.00"),
@@ -205,6 +208,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
       insertAttempting(tx, {
         origin: deviceOrigin(other.deviceId),
         workingOrderId: other.workingOrderId,
+        nodeId: other.nodeId,
         provider: "sumup",
         paymentRef: "second",
         amount: decimal("7.00"),

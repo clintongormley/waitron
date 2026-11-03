@@ -35,6 +35,7 @@ describe("the orphan backstop, end to end", () => {
     const captured = await provider.collect({
       origin: deviceOrigin(seeded.deviceId),
       workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
+      nodeId: seeded.nodeId,
       amount: decimal("12.50"),
     });
     expect(captured.state).toBe("captured");

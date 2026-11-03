@@ -50,6 +50,7 @@ async function retained(venue: BillVenue, manual = false, issued = false, placed
   await withTransaction(venue.db, async (tx) => {
     await insertCapturedPayment(tx, {
       origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
       workingOrderId: id,
       provider: "stripe",
       paymentRef,

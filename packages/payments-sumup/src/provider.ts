@@ -176,6 +176,7 @@ export class SumUpCloudProvider implements PaymentProvider {
       insertAttempting(tx, {
         origin: params.origin,
         workingOrderId: params.workingOrderId,
+        nodeId: params.nodeId,
         provider: SUMUP_PROVIDER,
         paymentRef,
         amount: params.amount,

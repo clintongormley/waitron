@@ -35,6 +35,7 @@ async function params() {
   return {
     origin: deviceOrigin(seeded.deviceId),
     workingOrderId: workingOrderId(seeded.workingOrderId),
+    nodeId: seeded.nodeId,
     amount: decimal("12.10"),
     readerRef: "reader_activity",
   };
@@ -78,6 +79,7 @@ describe("Stripe resolution ownership", () => {
         insertAttempting(tx, {
           origin: deviceOrigin(other.deviceId),
           workingOrderId: other.workingOrderId,
+          nodeId: other.nodeId,
           provider: "stripe",
           paymentRef,
           externalRef: "pi_other_venue",

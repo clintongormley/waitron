@@ -324,6 +324,7 @@ function chargedThenFiledBySecondPay(cfg: DeviceRequestConfig) {
       await withTransaction(suite.db, (tx) =>
         insertCapturedPayment(tx, {
           origin: params.origin,
+          nodeId: params.nodeId,
           workingOrderId: params.workingOrderId,
           provider: "stripe",
           paymentRef,
@@ -1713,6 +1714,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       });
       await insertCapturedPayment(tx, {
         origin: cfg.origin,
+        nodeId: cfg.nodeId,
         workingOrderId: id,
         provider: "stripe",
         paymentRef: `pi-ref-${randomUUID()}`,
@@ -1754,6 +1756,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
         const insert = state === "captured" ? insertCapturedPayment : insertAcceptedOffline;
         await insert(tx, {
           origin: cfg.origin,
+          nodeId: cfg.nodeId,
           workingOrderId: id,
           provider: "stripe",
           paymentRef: `pi-ref-${randomUUID()}`,
@@ -1870,6 +1873,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       );
       await insertCapturedPayment(tx, {
         origin: cfg.origin,
+        nodeId: cfg.nodeId,
         workingOrderId: id,
         provider: "stripe",
         paymentRef: `pi-ref-${randomUUID()}`,
@@ -1970,6 +1974,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     await withTransaction(suite.db, async (tx) => {
       await insertCapturedPayment(tx, {
         origin: cfg.origin,
+        nodeId: cfg.nodeId,
         workingOrderId: id,
         provider: "stripe",
         paymentRef: `pi-ref-${randomUUID()}`,
@@ -2392,13 +2397,18 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
   });
 
   describe("lost-T2 recovery settles (never re-files)", () => {
-    async function seedLostCaptureOnPlaced(id: string, capturedAmount: string): Promise<string> {
+    async function seedLostCaptureOnPlaced(
+      cfg: DeviceRequestConfig,
+      id: string,
+      capturedAmount: string,
+    ): Promise<string> {
       const externalRef = `pi_lost_${randomUUID()}`;
       const origin = await orderDeviceOrigin(suite.db, id);
       await withTransaction(suite.db, async (tx) => {
         await insertCapturedPayment(tx, {
           origin,
           workingOrderId: id,
+          nodeId: cfg.nodeId,
           provider: "stripe",
           paymentRef: `pi-ref-${randomUUID()}`,
           amount: decimal(capturedAmount),
@@ -2414,7 +2424,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       const station = await defaultStationId(cfg);
       const app = suite.db;
       const { id } = await placedIssuedBill(cfg, cafe); // placing fires the ticket item to the station
-      const externalRef = await seedLostCaptureOnPlaced(id, "1.50"); // charged exactly the total
+      const externalRef = await seedLostCaptureOnPlaced(cfg, id, "1.50"); // charged exactly the total
       expect(await stationQueueOrderIds(station)).toEqual([id]);
       expect(await collectedAtSet(id)).toBe(false);
 
@@ -2443,7 +2453,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       const { cfg, cafe } = await modeVenue("ticket_then_pay");
       const app = suite.db;
       const { id } = await placedIssuedBill(cfg, cafe);
-      await seedLostCaptureOnPlaced(id, "1.80"); // amount due 1.50 → tip reconstructed as 0.30
+      await seedLostCaptureOnPlaced(cfg, id, "1.80"); // amount due 1.50 → tip reconstructed as 0.30
 
       const { deps, client } = integratedDeps(cfg, app);
       const out = await payWorkingOrderIntegrated(deps, cfg, { id, lines: [] });
@@ -2461,7 +2471,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
       const { cfg, cafe } = await modeVenue("ticket_then_pay");
       const app = suite.db;
       const { id, saleId } = await placedIssuedBill(cfg, cafe);
-      await seedLostCaptureOnPlaced(id, "1.00"); // below the 1.50 amount due — cannot even cover it
+      await seedLostCaptureOnPlaced(cfg, id, "1.00"); // below the 1.50 amount due — cannot even cover it
 
       const { deps, client } = integratedDeps(cfg, app);
       await expect(payWorkingOrderIntegrated(deps, cfg, { id, lines: [] })).rejects.toBeDefined();
@@ -2477,7 +2487,7 @@ describe("payWorkingOrderIntegrated — already-issued bill settlement", () => {
     it("two concurrent recoveries settle the invoice ONCE; the loser replays", async () => {
       const { cfg, cafe } = await modeVenue("ticket_then_pay");
       const { id } = await placedIssuedBill(cfg, cafe);
-      await seedLostCaptureOnPlaced(id, "1.50");
+      await seedLostCaptureOnPlaced(cfg, id, "1.50");
 
       // ONE lost capture, TWO retries: one settles, and the other's transaction runs after that
       // commit, reads `settled`, and replays — one settlement, no second association.
@@ -2948,6 +2958,7 @@ describe("an order being paid by card cannot be changed from another device (pla
       await withTransaction(suite.db, (tx) =>
         insertCapturedPayment(tx, {
           origin: t.cfg.origin,
+          nodeId: t.cfg.nodeId,
           workingOrderId: t.tabId,
           provider: "stripe",
           paymentRef: `pi-ref-${randomUUID()}`,
@@ -3011,6 +3022,7 @@ describe("an order being paid by card cannot be changed from another device (pla
       const payment = (workingOrderId: string) => ({
         origin: t.cfg.origin,
         workingOrderId,
+        nodeId: t.cfg.nodeId,
         provider: "sumup",
         paymentRef: randomUUID(),
         amount: decimal("1.50"),
@@ -3128,12 +3140,13 @@ describe("a party's bill request goes when a card or collect settles its last ow
   }
 
   /** A captured card payment of the tab's 1.50 that no sale was filed for. */
-  async function lostCapture(tabId: string): Promise<void> {
+  async function lostCapture(cfg: DeviceRequestConfig, tabId: string): Promise<void> {
     const origin = await orderDeviceOrigin(suite.db, tabId);
     await withTransaction(suite.db, (tx) =>
       insertCapturedPayment(tx, {
         origin,
         workingOrderId: tabId,
+        nodeId: cfg.nodeId,
         provider: "stripe",
         paymentRef: `pi-ref-${randomUUID()}`,
         amount: decimal("1.50"),
@@ -3214,7 +3227,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
       "the recovery of a card capture never filed",
       "table_tab",
       async (cfg, tabId, log) => {
-        await lostCapture(tabId);
+        await lostCapture(cfg, tabId);
         await payByCard(cfg, tabId, log);
       },
     ],
@@ -3231,7 +3244,7 @@ describe("a party's bill request goes when a card or collect settles its last ow
       "ticket_then_pay",
       async (cfg, tabId, log) => {
         await placed(cfg, tabId);
-        await lostCapture(tabId);
+        await lostCapture(cfg, tabId);
         await payByCard(cfg, tabId, log);
       },
     ],
@@ -3441,6 +3454,7 @@ describe("receipt presentation across invoice-first and recovery paths", () => {
         await withTransaction(suite.db, (tx) =>
           insertCapturedPayment(tx, {
             origin: cfg.origin,
+            nodeId: cfg.nodeId,
             workingOrderId: id,
             provider: "stripe",
             paymentRef: randomUUID(),

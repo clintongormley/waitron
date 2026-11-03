@@ -24,6 +24,7 @@ describe("recordManualCardPayment", () => {
       recordManualCardPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         amount: decimal("12.10"),
         settledAt: SETTLED,
       }),
@@ -40,6 +41,7 @@ describe("recordManualCardPayment", () => {
       recordManualCardPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         amount: decimal("12.10"),
         settledAt: SETTLED,
         externalRef: "OP-000123",
@@ -76,6 +78,7 @@ describe("recordManualCardPayment", () => {
       recordManualCardPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         amount: decimal("5.00"),
         settledAt: SETTLED,
       }),
@@ -95,6 +98,7 @@ describe("recordManualRefund", () => {
       recordManualCardPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         amount: decimal("20.00"),
         settledAt: SETTLED,
       }),
@@ -152,6 +156,7 @@ describe("recordManualCardPayment for a bill payment", () => {
       recordManualCardPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         amount: decimal("12.10"),
         settledAt: SETTLED,
         billPaymentId: bill!.id,

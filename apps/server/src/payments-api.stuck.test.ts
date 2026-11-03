@@ -322,6 +322,7 @@ async function strandPayment(
     await insertAttempting(tx, {
       origin: deviceOrigin(opts.deviceId ?? v.deviceId),
       workingOrderId: brandWorkingOrderId(orderId),
+      nodeId: v.cfg.nodeId,
       provider: "stripe",
       paymentRef,
       amount: decimal(amount),
@@ -341,13 +342,14 @@ async function strandPayment(
 }
 
 /** An `attempting` payment of `provider` on a marked order, with no PaymentIntent. */
-async function strandBarePayment(orderId: string, provider: string): Promise<string> {
+async function strandBarePayment(v: Venue, orderId: string, provider: string): Promise<string> {
   const paymentRef = randomUUID();
   const origin = await orderDeviceOrigin(suite.db, orderId);
   await withTransaction(suite.db, (tx) =>
     insertAttempting(tx, {
       origin,
       workingOrderId: brandWorkingOrderId(orderId),
+      nodeId: v.cfg.nodeId,
       provider,
       paymentRef,
       amount: decimal("1.50"),
@@ -773,7 +775,7 @@ describe("POST /management-api/payments/stuck/:id/resolve", () => {
     });
     const v = await setup({ extra: misreporting });
     const orderId = await openOrder(v);
-    const paymentId = await strandBarePayment(orderId, fake.provider);
+    const paymentId = await strandBarePayment(v, orderId, fake.provider);
 
     const res = await send(v, "POST", resolvePath(paymentId));
 
@@ -1132,6 +1134,7 @@ async function strandBillPayment(
     ...key,
     origin: deviceOrigin(v.deviceId),
     workingOrderId: brandWorkingOrderId(orderId),
+    nodeId: v.cfg.nodeId,
     amount: decimal(amount),
     billPaymentId,
   };

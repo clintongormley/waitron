@@ -58,6 +58,7 @@ describe("unknown Stripe payments through the installed HTTP client", () => {
         const result = await provider.collect({
           origin: deviceOrigin(seeded.deviceId),
           workingOrderId: workingOrderId(seeded.workingOrderId),
+          nodeId: seeded.nodeId,
           amount: decimal("12.10"),
           readerRef: "reader_http",
         });

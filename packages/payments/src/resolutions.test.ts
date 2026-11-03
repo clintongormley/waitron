@@ -14,6 +14,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import {
   countProviderCancelledResolutions,
@@ -33,20 +34,27 @@ let refCounter = 0;
 /** An `attempting` payment on a fresh working order, or on `on`'s, as a crash would leave it. */
 async function stuckPayment(
   provider = "stripe",
-  on?: { workingOrderId: string; deviceId: string },
-): Promise<{ paymentId: string; workingOrderId: string; deviceId: string; paymentRef: string }> {
-  const { workingOrderId, deviceId } = on ?? (await seedWorkingOrder(suite.db, freshNif()));
+  on?: { workingOrderId: string; deviceId: string; nodeId: NodeId },
+): Promise<{
+  paymentId: string;
+  workingOrderId: string;
+  deviceId: string;
+  nodeId: NodeId;
+  paymentRef: string;
+}> {
+  const { workingOrderId, deviceId, nodeId } = on ?? (await seedWorkingOrder(suite.db, freshNif()));
   const paymentRef = `stuck-${++refCounter}`;
   return withTransaction(suite.db, async (tx) => {
     await insertAttempting(tx, {
       origin: deviceOrigin(deviceId),
       workingOrderId,
+      nodeId,
       provider,
       paymentRef,
       amount: decimal("12.10"),
     });
     const row = await getPaymentByRef(tx, { provider, paymentRef });
-    return { paymentId: row!.id, workingOrderId, deviceId, paymentRef };
+    return { paymentId: row!.id, workingOrderId, deviceId, nodeId, paymentRef };
   });
 }
 

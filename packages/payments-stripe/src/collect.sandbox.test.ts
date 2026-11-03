@@ -74,6 +74,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     const collecting = provider.collect({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("12.10"),
       readerRef: readerId,
     });
@@ -98,6 +99,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
     const collecting = provider.collect({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("12.10"),
       readerRef: readerId,
     });
@@ -139,6 +141,7 @@ d("Stripe test-mode sandbox: collect against a simulated reader", () => {
         origin: deviceOrigin(s.deviceId),
         ...key,
         workingOrderId: s.workingOrderId,
+        nodeId: s.nodeId,
         amount: decimal("12.10"),
       });
       await stampAttemptingRef(tx, key, intent.id);

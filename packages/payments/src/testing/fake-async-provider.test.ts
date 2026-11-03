@@ -23,6 +23,7 @@ describe("FakeAsyncProvider", () => {
     const res = await provider.initiate({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("12.10"),
       paymentRef: "pay-1",
     });

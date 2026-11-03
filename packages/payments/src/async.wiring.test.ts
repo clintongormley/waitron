@@ -119,6 +119,7 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     const minted = await provider.initiate({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("12.10"),
       paymentRef: "pay-1",
     });
@@ -146,6 +147,7 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     const minted = await provider.initiate({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("12.10"),
       paymentRef: "pay-1",
     });
@@ -175,6 +177,7 @@ describe("initiate -> webhook -> settle -> recordSale -> associate (Mode 3, end 
     const minted = await provider.initiate({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("12.10"),
       paymentRef: "pay-1",
     });

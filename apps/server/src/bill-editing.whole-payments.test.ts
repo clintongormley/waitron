@@ -310,6 +310,7 @@ describe.each(["reader", "reader-placed"] as const)("%s captured recovery", (mod
     await inTx(venue, (tx) =>
       insertCapturedPayment(tx, {
         origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
         provider: "fake",
         workingOrderId: p.id,
         paymentRef,

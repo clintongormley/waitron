@@ -89,6 +89,7 @@ describe("stripe hosted: initiate -> webhook -> settle -> recordSale -> associat
     const init = await provider.initiate({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("12.10"),
       paymentRef,
     });

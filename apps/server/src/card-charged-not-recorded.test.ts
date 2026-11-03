@@ -165,6 +165,7 @@ function strandCapturedPayment(id: string) {
   return withTransaction(venue.db, (tx) =>
     insertCapturedPayment(tx, {
       origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
       workingOrderId: id,
       provider: "fake",
       paymentRef: `fake-${randomUUID()}`,

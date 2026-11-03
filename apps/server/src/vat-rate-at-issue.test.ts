@@ -289,6 +289,7 @@ function stubProvider(onCollect: () => void): PaymentProvider {
       await withTransaction(suite.db, (tx) =>
         insertCapturedPayment(tx, {
           origin: params.origin,
+          nodeId: params.nodeId,
           workingOrderId: params.workingOrderId,
           provider: "stripe",
           paymentRef,

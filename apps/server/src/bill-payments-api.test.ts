@@ -3661,6 +3661,7 @@ describe("the single-payment routes on a bill holding bill payments (design §7)
       insertCapturedPayment(tx, {
         origin: deviceOrigin(venue.deviceId),
         workingOrderId: billId,
+        nodeId: venue.cfg.nodeId,
         provider: "simulator",
         paymentRef: randomUUID(),
         amount: decimal("50.00"),

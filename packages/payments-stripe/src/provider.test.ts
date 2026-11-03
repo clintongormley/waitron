@@ -39,7 +39,7 @@ import {
   seedHeldReader,
   seedWorkingOrder,
 } from "@waitron/payments/test/seed.js";
-import type { DeviceOrigin } from "@waitron/shared";
+import type { DeviceOrigin, NodeId } from "@waitron/shared";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
@@ -67,6 +67,7 @@ async function collectParams(nif = freshNif()) {
   return {
     origin: deviceOrigin(s.deviceId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
+    nodeId: s.nodeId,
     amount: decimal("12.10"),
     readerRef: "reader_1",
     _seeded: s,
@@ -84,6 +85,7 @@ async function capturedPayment(externalRef: string): Promise<{ paymentRef: strin
     insertCapturedPayment(tx, {
       origin: deviceOrigin(seeded.deviceId),
       workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
       provider: "stripe",
       paymentRef,
       externalRef,
@@ -678,15 +680,22 @@ const AUDIT = { personId: MANAGER };
 /** An `attempting` stripe row as a crash leaves it, optionally stamped with a PaymentIntent. */
 async function abandonedRow(
   externalRef: string | null,
-  on?: { workingOrderId: string; origin: DeviceOrigin },
+  on?: { workingOrderId: string; origin: DeviceOrigin; nodeId: NodeId },
 ): Promise<{ paymentRef: string; paymentId: string; workingOrderId: string }> {
   const seeded = on === undefined ? await seedWorkingOrder(suite.db, freshNif()) : undefined;
   const woId = on?.workingOrderId ?? seeded!.workingOrderId;
   const origin = on?.origin ?? deviceOrigin(seeded!.deviceId);
+  const nodeId = on?.nodeId ?? seeded!.nodeId;
   const paymentRef = `abandoned-${externalRef ?? "unstamped"}-${Math.random()}`;
   const key = { provider: "stripe", paymentRef };
   return withTransaction(suite.db, async (tx) => {
-    await insertAttempting(tx, { ...key, origin, workingOrderId: woId, amount: decimal("12.10") });
+    await insertAttempting(tx, {
+      ...key,
+      origin,
+      workingOrderId: woId,
+      nodeId,
+      amount: decimal("12.10"),
+    });
     if (externalRef !== null) await stampAttemptingRef(tx, key, externalRef);
     const row = await getPaymentByRef(tx, key);
     return { paymentRef, paymentId: row!.id, workingOrderId: woId };
@@ -1087,6 +1096,7 @@ describe("the Stripe idempotency key after a PaymentIntent was cancelled at Stri
         origin: p.origin,
         ...key,
         workingOrderId: p.workingOrderId,
+        nodeId: p.nodeId,
         amount: decimal("12.10"),
       });
       return (await getPaymentByRef(tx, key))!.id;

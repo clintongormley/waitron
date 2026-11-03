@@ -158,6 +158,7 @@ export class StripeTerminalProvider implements PaymentProvider {
       await insertAttempting(tx, {
         origin: params.origin,
         workingOrderId: params.workingOrderId,
+        nodeId: params.nodeId,
         provider: PROVIDER,
         paymentRef,
         amount: params.amount,
