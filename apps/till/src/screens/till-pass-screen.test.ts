@@ -1396,6 +1396,80 @@ describe("A773 pass screen", () => {
         expect(words(el)).toBeUndefined();
       }));
 
+    it("a read after an accepted choice shows the read's value, such as a change made on the dashboard", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          setDeviceKitchenScreenDisplay: vi.fn().mockResolvedValue(undefined),
+          getDevicePassBoard: vi
+            .fn()
+            .mockResolvedValueOnce({ ...deviceBoard(), display: display(true) })
+            .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+        });
+        const el = await mount({
+          deviceMode: true,
+          api,
+          initialBoard: { ...deviceBoard(), display: display(null) },
+        });
+        await open(el);
+        await choose(el, 1);
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+      }));
+
+    const movesToMonitorWhileSending = (monitorRead: Promise<DevicePassBoard>) => {
+      const sent = deferred<void>();
+      const api = fakeApi({
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValueOnce(identity([chosen("pass")]))
+          .mockResolvedValue(identity([chosen("pass_monitor")])),
+        getDevicePassBoard: vi
+          .fn()
+          .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+        getDevicePassMonitorBoard: vi.fn().mockReturnValue(monitorRead),
+        setDeviceKitchenScreenDisplay: vi.fn().mockReturnValue(sent.promise),
+      });
+      return { api, sent };
+    };
+
+    it("at a till whose choice moves to the monitor while a pass choice is out, the monitor's first read is kept", () =>
+      withFakeTimers(async () => {
+        const monitorRead = deferred<DevicePassBoard>();
+        const { api, sent } = movesToMonitorWhileSending(monitorRead.promise);
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(api.getDevicePassMonitorBoard).toHaveBeenCalledTimes(1);
+        sent.resolve();
+        await settle(el);
+        monitorRead.resolve({ ...deviceBoard(boardB), display: display(null) });
+        await settle(el);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+        expect(el.display).toEqual(display(null));
+      }));
+
+    it("at a till whose choice moves to the monitor while a pass choice is out, the monitor's window does not show the pass's choice", () =>
+      withFakeTimers(async () => {
+        const { api, sent } = movesToMonitorWhileSending(
+          Promise.resolve({ ...deviceBoard(boardB), display: display(null) }),
+        );
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+        sent.resolve();
+        await settle(el);
+        await open(el);
+        expect(checked(el)).toEqual(["true", "false", "false"]);
+      }));
+
     it("on a kitchen display, drops the section when a refresh says a narrowing took every station", () =>
       withFakeTimers(async () => {
         const api = fakeApi({

@@ -464,9 +464,11 @@ export class TillPassScreen extends LitElement {
         boardId === "pass" ? "pass" : "pass_monitor",
         value,
       );
-      this.#acceptedChoice = value;
-      // Counts as an answer newer than any board read already out, so none of those can undo it.
-      this.#appliedRequest = ++this.#request;
+      if (this.#isCurrent(boardId)) {
+        this.#acceptedChoice = value;
+        // Counts as an answer newer than any board read already out, so none of those can undo it.
+        this.#appliedRequest = ++this.#request;
+      }
     } catch (error) {
       reload = null;
       const code = (error as { code?: string } | null)?.code ?? "server.internal";

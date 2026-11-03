@@ -5314,15 +5314,26 @@ describe("A773 held column", () => {
     expect(shadow(el).querySelector("[data-held-part]")).toBeNull();
   });
 
-  it("draws the held part in the small, muted words", async () => {
+  it("draws the held part in the small, muted, uppercase words, spaced by the space tokens", async () => {
     const { el } = await mountBoard(scene());
     el.style.setProperty("--wt-font-size-sm", "13px");
     el.style.setProperty("--wt-color-text-muted", "rgb(21, 22, 23)");
+    el.style.setProperty("--wt-font-weight-medium", "300");
+    el.style.setProperty("--wt-space-3", "17px");
+    el.style.setProperty("--wt-space-1", "5px");
     const style = getComputedStyle(heldPart(el)!);
     expect(parseFloat(style.fontSize)).toBe(
       parseFloat(getComputedStyle(el).getPropertyValue("--wt-font-size-sm")),
     );
     expect(style.color).toBe("rgb(21, 22, 23)");
+    expect(style.fontWeight).toBe("300");
+    expect(style.textTransform).toBe("uppercase");
+    expect([style.marginTop, style.marginRight, style.marginBottom, style.marginLeft]).toEqual([
+      "17px",
+      "0px",
+      "5px",
+      "0px",
+    ]);
   });
 
   it("at a 1024 px tablet the default columns stay columns, held card or not; Waiting and Held apart turn it to tabs, held card or not", async () => {
