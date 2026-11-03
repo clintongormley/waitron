@@ -124,6 +124,21 @@ it("explains a release into a closed station in English and Spanish", () => {
   );
 });
 
+it("explains dishes waiting for the pass at a closed station in English and Spanish", () => {
+  const params = {
+    station: "Fryer",
+    dishes: "Chips, Onion rings",
+    workingOrderId: "w1",
+    orderNumber: 42,
+  };
+  expect(alertMessage("route.waiting_at_closed_station", params, "en")).toBe(
+    "Order 42: Chips, Onion rings are waiting for the pass at Fryer, which is closed or disabled, and the prep station rules sent them nowhere else. Before the pass fires them, move the dishes to another station from the till (Move to station…), or open Fryer for today on the Prep stations page. Sides that go with a dish cannot be moved: the pass's Fire sends them to Fryer. Dishes left at a closed station later do not add to this alert while it is open, so there may be more.",
+  );
+  expect(alertMessage("route.waiting_at_closed_station", params, "es")).toBe(
+    "Pedido 42: Chips, Onion rings están esperando al pase en Fryer, que está cerrada o deshabilitada, y las reglas de las estaciones de preparación no los enviaron a ningún otro sitio. Antes de que el pase los marche, pasa los platos a otra estación desde el TPV (Cambiar de estación…) o abre Fryer por hoy en la página de Estaciones de preparación. Las guarniciones que acompañan a un plato no se pueden mover: al marcharlas, el pase las envía a Fryer. Los platos que queden más tarde en una estación cerrada no se añaden a esta alerta mientras esté abierta, así que puede haber más.",
+  );
+});
+
 it("marks every amount slot in the alert wording as money", () => {
   const unmarked = Object.entries(ALERT_MESSAGES).flatMap(([code, entry]) =>
     [entry, entry.one, ...Object.values(entry.variants ?? {})]

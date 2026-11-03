@@ -58,6 +58,7 @@ import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { passReleaseAsk, releasePassItems, type PassActor } from "./pass-release.js";
+import * as kitchenRelease from "./kitchen-release.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { addTabRound, moveDishesToStation } from "./testing/order-writer-fixture.js";
@@ -808,7 +809,15 @@ const nothing = { grill: [], fryer: [], kitchen: [], bar: [], pass: [] };
 async function closedStationAlerts(orderId: string) {
   return (
     await withTransaction(db, (tx) =>
-      tx.select().from(incidents).where(eq(incidents.code, "route.released_at_closed_station")),
+      tx
+        .select()
+        .from(incidents)
+        .where(
+          inArray(incidents.code, [
+            "route.released_at_closed_station",
+            "route.waiting_at_closed_station",
+          ]),
+        ),
     )
   ).filter((alert) => alert.params.workingOrderId === orderId);
 }
@@ -1168,6 +1177,7 @@ describe("A773 pass release: paper", () => {
     const fireAlerts = await closedStationAlerts(venue.party.tabId);
     expect(fireAlerts).toEqual([
       expect.objectContaining({
+        code: "route.waiting_at_closed_station",
         params: expect.objectContaining({ station: "Fryer", dishes: "Chips" }),
       }),
     ]);
@@ -1235,7 +1245,11 @@ describe("A773 pass release: paper", () => {
         firedAt: waits ? null : AT,
       });
       const alerts = await closedStationAlerts(venue.party.tabId);
-      expect(alerts).toHaveLength(1);
+      expect(alerts).toEqual([
+        expect.objectContaining({
+          code: waits ? "route.waiting_at_closed_station" : "route.released_at_closed_station",
+        }),
+      ]);
       if (!waits) return;
       const every = await passOn(venue, "Every pass", null);
       const card = await cardOf(venue, every, placed.groupId);
@@ -1250,6 +1264,95 @@ describe("A773 pass release: paper", () => {
       expect(await closedStationAlerts(venue.party.tabId)).toEqual(alerts);
     },
   );
+
+  it.each([
+    [true, "route.waiting_at_closed_station"],
+    [false, "route.released_at_closed_station"],
+  ] as const)(
+    "names the extras a closed Fryer keeps under one alert code (Fryer waits: %s)",
+    async (waits, code) => {
+      vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+      const venue = await setupSplitExtrasVenue();
+      await withTransaction(db, async (tx) => {
+        const group = (
+          await placeGroups(tx, venue.cfg, venue.party.partyId, {
+            operatorId: OPERATOR,
+            groups: [{ lines: [dish(venue, "burger", true)], release: "hold" }],
+          })
+        ).groups[0]!;
+        if (waits) await setStationsWaitForPass(tx, true, [venue.stations.fryer]);
+        await setStationToday(tx, venue.cfg, venue.stations.fryer, "closed", new Date(AT));
+        await fireGroup(tx, venue.cfg, venue.party.partyId, group.id, {
+          operatorId: OPERATOR,
+          submissionId: randomUUID(),
+          expectedPartyRevision: await partyRevisionOf(tx, venue.party.partyId),
+        });
+      });
+      const [order] = await withTransaction(db, (tx) =>
+        tx
+          .select({ orderNumber: workingOrders.orderNumber, label: workingOrders.label })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, venue.party.tabId)),
+      );
+      const alerts = await closedStationAlerts(venue.party.tabId);
+      expect(alerts.map((alert) => ({ code: alert.code, params: alert.params }))).toEqual([
+        {
+          code,
+          params: {
+            station: "Fryer",
+            dishes: "Chips",
+            workingOrderId: venue.party.tabId,
+            orderNumber: order!.orderNumber,
+            ...(waits ? {} : { orderLabel: order!.label }),
+          },
+        },
+      ]);
+    },
+  );
+
+  it("raises one alert of each code when a waiting and a non-waiting closed station keep dishes", async () => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await tx
+        .update(kitchenStations)
+        .set({ isDefault: false })
+        .where(eq(kitchenStations.id, venue.stations.kitchen));
+      const group = (
+        await placeGroups(tx, venue.cfg, venue.party.partyId, {
+          operatorId: OPERATOR,
+          groups: [{ lines: [dish(venue, "burger", true)], release: "hold" }],
+        })
+      ).groups[0]!;
+      await setStationsWaitForPass(tx, true, [venue.stations.grill]);
+      await setStationToday(tx, venue.cfg, venue.stations.grill, "closed", new Date(AT));
+      await setStationToday(tx, venue.cfg, venue.stations.fryer, "closed", new Date(AT));
+      const waitingReads = vi.spyOn(kitchenRelease, "passWaitingStations");
+      try {
+        await fireGroup(tx, venue.cfg, venue.party.partyId, group.id, {
+          operatorId: OPERATOR,
+          submissionId: randomUUID(),
+          expectedPartyRevision: await partyRevisionOf(tx, venue.party.partyId),
+        });
+        expect(waitingReads).toHaveBeenCalledTimes(1);
+      } finally {
+        waitingReads.mockRestore();
+      }
+    });
+    const alerts = await closedStationAlerts(venue.party.tabId);
+    expect(
+      alerts
+        .map((alert) => ({
+          code: alert.code,
+          station: alert.params.station,
+          dishes: alert.params.dishes,
+        }))
+        .sort((a, b) => a.code.localeCompare(b.code)),
+    ).toEqual([
+      { code: "route.released_at_closed_station", station: "Fryer", dishes: "Chips" },
+      { code: "route.waiting_at_closed_station", station: "Grill", dishes: "Burger" },
+    ]);
+  });
 
   it("prints a moved dish under its current bill's number", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
