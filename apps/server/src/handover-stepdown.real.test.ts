@@ -196,7 +196,6 @@ interface Observed {
   sale: { status: number; body: Record<string, unknown> };
   salesForOrder: number;
   restarts: number;
-  stepdownAt: number;
   submitsBeforeStepdown: number;
   reconcilesBeforeStepdown: number;
   sweepsBeforeStepdown: number;
@@ -390,7 +389,6 @@ describe("a card sale in flight when the box steps down", () => {
       reconcilesBeforeStepdown: outside.reconciles.length,
       sweepsBeforeStepdown: outside.sweeps.length,
     };
-    const stepdownAt = Date.now();
     const asked = await fetch(`${base}/test/stepdown`, { method: "POST" });
     const stepdown = { status: asked.status, body: await asked.json() };
     const afterBegan = await fetch(`${base}/api/pay`, {
@@ -424,7 +422,6 @@ describe("a card sale in flight when the box steps down", () => {
       sale,
       salesForOrder: n,
       restarts,
-      stepdownAt,
       ...before,
     };
   }, 120_000);
@@ -469,15 +466,15 @@ describe("a card sale in flight when the box steps down", () => {
   });
 
   // Control, run locally and not committed: with `signalDuties(deps.duties)` in `stepDown` made a
-  // no-op, this case fails with
-  //   expected [ 1793667767103, 1793667767309 ] to deeply equal []
-  // (times vary) on the reconcile line: the held drain pass goes on to reconcile a due gap. With
-  // that line removed, the sweep line fails the same way.
+  // no-op, this case fails on the reconcile line with
+  //   expected [ 1793701429314, 1793701429520 ] to deeply equal []
+  // (the later calls' recorded times, which vary). With that line removed, the sweep line fails
+  // with five later sweeps: expected [ 1793701439387, 1793701439440, …(3) ] to deeply equal [].
   it("the Stripe reconcile and the card sweep are not called after the stepdown began", () => {
     expect(seen().reconcilesBeforeStepdown).toBeGreaterThan(0);
     expect(seen().sweepsBeforeStepdown).toBeGreaterThan(0);
-    expect(outside.reconciles.filter((at) => at >= seen().stepdownAt)).toEqual([]);
-    expect(outside.sweeps.filter((at) => at >= seen().stepdownAt)).toEqual([]);
+    expect(outside.reconciles.slice(seen().reconcilesBeforeStepdown)).toEqual([]);
+    expect(outside.sweeps.slice(seen().sweepsBeforeStepdown)).toEqual([]);
   });
 
   it("the request that asked for the stepdown received its answer, and the box restarts once", () => {
