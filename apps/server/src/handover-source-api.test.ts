@@ -299,15 +299,19 @@ describe("the final copy and its indicator, served to the selected box only", ()
     await rm(copyPath());
     const realOpen = files.open.getMockImplementation()!;
     const realRm = files.rm.getMockImplementation()!;
-    // The second request is sent while the first holds its retake unopened, which waits until
-    // something removes the retake or a fifth of a second has passed.
+    // Once the first request's retake is written, the second request is sent and the first
+    // holds the retake unopened until something removes it or a fifth of a second has passed.
+    // The working `.partial` file archiveTo clears is not the retake, so its removal does not
+    // count. While the retakes take turns the second request waits and the timer ends the hold;
+    // without the turn the second removes the first's retake and the first is refused.
     let second: Promise<Response> | undefined;
     let removedRetake: () => void = () => {};
     const removed = new Promise<void>((resolve) => (removedRetake = resolve));
     let held = false;
+    const archives = vi.spyOn(deps.venue, "archiveTo");
     files.rm.mockImplementation(async (path: string, ...rest: unknown[]) => {
       await realRm(path, ...rest);
-      if (path.includes(".retake-")) removedRetake();
+      if (path.includes(".retake-") && !path.endsWith(".partial")) removedRetake();
     });
     files.open.mockImplementation(async (path: string, ...rest: unknown[]) => {
       if (!held && path.includes(".retake-")) {
@@ -318,12 +322,15 @@ describe("the final copy and its indicator, served to the selected box only", ()
       return realOpen(path, ...rest);
     });
     let responses: Response[];
+    let copiesTaken: number;
     try {
       const first = await ask(app, "final-copy", destination);
       responses = [first, await second!];
+      copiesTaken = archives.mock.calls.length;
     } finally {
       files.open.mockImplementation(realOpen);
       files.rm.mockImplementation(realRm);
+      archives.mockRestore();
     }
     for (const response of responses) {
       expect(response.status).toBe(200);
@@ -331,6 +338,8 @@ describe("the final copy and its indicator, served to the selected box only", ()
         indicator.body.snapshot.sha256,
       );
     }
+    // The waiting request finds the first's copy in place and takes none of its own.
+    expect(copiesTaken).toBe(1);
     expect(await readdir(join(stateDir, "handover", OP))).toEqual(["venue.db"]);
   });
 
@@ -372,6 +381,28 @@ describe("the final copy and its indicator, served to the selected box only", ()
     const bytes = new Uint8Array(await response.arrayBuffer());
     expect(sha256(bytes)).toBe(indicator.body.snapshot.sha256);
     expect(sha256(await readFile(copyPath()))).toBe(indicator.body.snapshot.sha256);
+  });
+
+  it("a copy folder that went missing is made again and the copy taken again and served", async () => {
+    const { app, deps, destination } = await boxes();
+    const indicator = await captureFinalCopy(deps, OP);
+    await rm(join(stateDir, "handover", OP), { recursive: true });
+    const response = await ask(app, "final-copy", destination);
+    expect(response.status).toBe(200);
+    expect(sha256(new Uint8Array(await response.arrayBuffer()))).toBe(
+      indicator.body.snapshot.sha256,
+    );
+    expect(await readdir(join(stateDir, "handover", OP))).toEqual(["venue.db"]);
+  });
+
+  it("a copy folder that went missing after venue.db changed is refused, not served", async () => {
+    const { app, deps, destination } = await boxes();
+    await captureFinalCopy(deps, OP);
+    await rm(join(stateDir, "handover", OP), { recursive: true });
+    suite.db.run(sql`insert into handover_probe (n) values (1)`);
+    const response = await ask(app, "final-copy", destination);
+    expect(response.status).toBe(409);
+    expect(await errorCode(response)).toBe("handover.final_copy_changed");
   });
 
   it("a copy file that went missing after venue.db changed is refused, not served", async () => {

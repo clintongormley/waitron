@@ -2610,6 +2610,11 @@ Slice 4 notes (2026-11-03):
   state folder before copying, and a path it cannot read fails; it does not detect an existing
   folder that is the wrong one. When M2 builds its own manifest to compare, the same holds unless
   this task adds a check.
+- When M2 recomputes the summaries from the copy it received, a module whose summary throws
+  surfaces as `handover.summary_failed` (`collectHandoverSummaries`, `packages/module/src/handover.ts`).
+  That code's text (`apps/dashboard/src/i18n/codes.ts`) speaks of the old box failing to read its
+  own final copy and sending nothing (Ruling R11), which is false on M2. This task gives M2's
+  failure its own code or wording rather than reusing `handover.summary_failed`.
 
 - [ ] **Step 1: Write the failing tests.** One per check, built from a real capture (Task 4.7) and
   then altered: "one row written after capture" (`handover.copy_mismatch`); "a copy whose bytes

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { open, readdir, rename, rm, type FileHandle } from "node:fs/promises";
+import { mkdir, open, readdir, rename, rm, type FileHandle } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import type { Context, Hono } from "hono";
@@ -97,8 +97,9 @@ async function openFinalCopy(
   return inRetakeTurn(path, async () => {
     const retaken = await openIfMatching(path, snapshot);
     if (retaken !== null) return retaken;
-    // One process owns the venue folder and its retakes take turns, so any retake file found
+    // One process owns the state folder and its retakes take turns, so any retake file found
     // here was left by a run that stopped part way.
+    await mkdir(dirname(path), { recursive: true });
     await removeLeftoverRetakes(path);
     return retake(deps, operationId, path, snapshot);
   });
