@@ -581,7 +581,7 @@ export function withPendingSweep(
 /** The pending-card loop's pass: the card sweep, then automatic card recovery, the release of
  * stale payment marks and the settling of pending bill payments, in that order. Once `signal` is
  * aborted no later step starts, and the settle step asks the card provider about no further bill
- * refund: work left open is picked up by the next start. Exported for a direct test
+ * refund. Exported for a direct test
  * (`boot-pending-sweep.test.ts`). */
 export function pendingCardPass(
   parts: {

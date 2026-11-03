@@ -1432,8 +1432,8 @@ The build departed from the task texts above in these ways; the task texts are l
   the restriction in one node transaction. Only then does it answer, and the wait, close and restart
   follow as in steps 4–5. A write that fails is the caller's answer, and the box restarts as a
   normal box with no restriction. A second call made while the first call's write is running waits
-  for that write (kept in memory, per server). Only the refusal at the first check leaves the gate
-  open; every other throw comes after the gate closed and the box restarts, so Task 5.3's route
+  for that write (kept in memory, per server). Only a throw at the first check of the first call leaves the
+  gate open; every other throw comes after the gate closed and the box restarts, so Task 5.3's route
   tells the two apart before recording `abandoned`.
 
 ---

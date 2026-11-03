@@ -77,7 +77,7 @@ export type BillRefundDeps = Pick<TillSaleDeps, "db" | "backend" | "clock" | "ad
   cfg: TradingContext;
   refundProviderFor?: RefundProviderFor;
   attendance?: AttendanceRecorder;
-  /** Once aborted, no provider lookup starts; the refund stays pending for a later pass. */
+  /** Once aborted, no provider lookup starts and the refund stays pending. */
   stopSignal?: AbortSignal;
 };
 
@@ -450,7 +450,7 @@ async function providerOf(
 export type RefundResolver = "retry" | "manager" | "loop";
 
 /** `claimed: false`: the refund was no longer pending, another resolver in this process holds it,
- * or `deps.stopSignal` was raised before the provider was asked, so nothing was done. `lookup` is what
+ * or `deps.stopSignal` was raised before a sent refund's lookup, so nothing was done. `lookup` is what
  * the provider showed, when it was asked. */
 export type ResumedRefund =
   | { claimed: false; refund: RefundRow }
