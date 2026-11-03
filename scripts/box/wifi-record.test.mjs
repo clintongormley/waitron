@@ -872,7 +872,7 @@ describe("createWifiRecordReader answers absent or refused", () => {
     expect(handles.closed).toBe(handles.opened);
   });
 
-  it("the cases that open the record open at least one handle, so the close check above can fail", async () => {
+  it("the cases that open the record open more than five handles between them, so the close check above can fail", async () => {
     handles.opened = handles.closed = 0;
     for (const [, run] of nonLoadedCases) await run();
     expect(handles.opened).toBeGreaterThan(5);
