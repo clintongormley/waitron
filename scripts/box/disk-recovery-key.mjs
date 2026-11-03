@@ -65,3 +65,50 @@ export function formatDiskRecoveryKey(key) {
 export function diskRecoveryKeyPassphrase(key) {
   return formattedCodes(key);
 }
+
+/** Far above any sensible typing (71 characters plus whitespace), so a pasted page is not scanned. */
+export const DISK_KEY_TEXT_MAX = 4096;
+
+const SEPARATORS = new Set(["-", " ", "\t", "\r", "\n"]);
+const HALF_BYTES = DISK_KEY_BYTES * 2;
+
+/**
+ * Only ASCII is lower-cased: `toLowerCase()` turns the Kelvin sign U+212A into `k`, and Turkish
+ * lower-casing turns U+0130 into `i`, so a stray character could read as a key letter.
+ * @param {string} character @returns {number} the half-byte, or -1
+ */
+function halfByte(character) {
+  const code = character.charCodeAt(0);
+  const lower = code >= 0x41 && code <= 0x5a ? String.fromCharCode(code + 0x20) : character;
+  return DISK_KEY_LETTERS.indexOf(lower);
+}
+
+/**
+ * Reads what a person typed or pasted. Letters in either case; hyphens, spaces, tabs and line
+ * breaks are ignored anywhere; any other character is refused. No answer holds a typed character.
+ * @param {string} text
+ * @returns {{ ok: true, key: Uint8Array } | { ok: false, reason: "letter", position: number } | { ok: false, reason: "length", letters: number | null }}
+ */
+export function parseDiskRecoveryKey(text) {
+  if (typeof text !== "string") throw refusal("disk_recovery_key.invalid", "not-text");
+  if (text.length > DISK_KEY_TEXT_MAX) return { ok: false, reason: "length", letters: null };
+  const halves = new Uint8Array(HALF_BYTES);
+  try {
+    let letters = 0;
+    let position = 0;
+    for (const character of text) {
+      position++;
+      if (SEPARATORS.has(character)) continue;
+      const value = character.length === 1 ? halfByte(character) : -1;
+      if (value < 0) return { ok: false, reason: "letter", position };
+      if (letters < HALF_BYTES) halves[letters] = value;
+      letters++;
+    }
+    if (letters !== HALF_BYTES) return { ok: false, reason: "length", letters };
+    const key = new Uint8Array(DISK_KEY_BYTES);
+    for (let i = 0; i < DISK_KEY_BYTES; i++) key[i] = (halves[2 * i] << 4) | halves[2 * i + 1];
+    return { ok: true, key };
+  } finally {
+    halves.fill(0);
+  }
+}
