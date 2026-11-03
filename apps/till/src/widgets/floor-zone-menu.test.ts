@@ -210,7 +210,7 @@ it("asks before resetting the zone, and sends nothing on Cancel", async () => {
   expect(dialog.open).toBe(true);
   expect(dialog.heading).toBe("Reset Terrace?");
   expect(text(dialog.querySelector("[data-reset-body]"))).toBe(
-    "Free tables go back now; occupied ones show Needs moving once free.",
+    "Free tables go back now; tables with guests or still to clear show Needs moving once free.",
   );
   const confirm = dialog.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-reset-confirm]")!;
   expect(text(confirm)).toBe("Reset");
@@ -271,7 +271,7 @@ it("speaks Spanish", async () => {
   await choose(el, "reset");
   expect(dialogOf(el, "reset").heading).toBe("¿Restablecer Terrace?");
   expect(text(dialogOf(el, "reset").querySelector("[data-reset-body]"))).toBe(
-    "Las libres vuelven ya; las ocupadas quedan por mover al quedar libres.",
+    "Las libres vuelven ya; las que tienen clientes o están por recoger aparecen Por mover al quedar libres.",
   );
   expect(text(dialogOf(el, "reset").querySelector("[data-reset-confirm]"))).toBe("Restablecer");
   expect(text(dialogOf(el, "reset").querySelector("[data-cancel]"))).toBe("Cancelar");

@@ -1045,7 +1045,8 @@ export const en = {
   "floor.put_back": "Put back",
   "floor.reset_plan": "Reset to {set} plan",
   "floor.reset_title": "Reset {zone}?",
-  "floor.reset_body": "Free tables go back now; occupied ones show Needs moving once free.",
+  "floor.reset_body":
+    "Free tables go back now; tables with guests or still to clear show Needs moving once free.",
   "floor.reset_confirm": "Reset",
   // A seated party. Guests and bills read as "Guests: 3" and "Bills: 2".
   "floor.guests": "Guests",
@@ -2901,7 +2902,8 @@ export const es: Record<StringKey, string> = {
   "floor.put_back": "Volver a poner",
   "floor.reset_plan": "Volver al plano {set}",
   "floor.reset_title": "¿Restablecer {zone}?",
-  "floor.reset_body": "Las libres vuelven ya; las ocupadas quedan por mover al quedar libres.",
+  "floor.reset_body":
+    "Las libres vuelven ya; las que tienen clientes o están por recoger aparecen Por mover al quedar libres.",
   "floor.reset_confirm": "Restablecer",
   "floor.guests": "Comensales",
   "floor.bills": "Cuentas",

@@ -4325,17 +4325,12 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   #1871).** It is started from `apps/server/src/node-entry.ts`, outside `bootServer`.
 
 - **A1315. Bring every help bubble down to orientation, one area per PR** (dashboard, till, server
-  pages; English and Spanish). The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients):
-  read the code a bubble describes first, move each dropped fact into its linked guide section, and
-  list every changed text before and after. Done: setup (#2435) and the till's counter, floor, menu
-  and order help (#2437). Left: the till's More menu, person and kitchen notices/merge help (its
-  kitchen card, columns and pass help are lane C's B4b), the dashboard, and server pages.
-  Points #2437's review left open, for the next till PR: the Spanish Waiting orders title says «del
-  mostrador» where the other help says «de mostrador»; the reset dialog (`floor.reset_body` in
-  `apps/till/src/i18n/strings.ts`) still calls the tables that wait "occupied", though a table still
-  to clear waits too (two tests pin that A504 wording); the Send help links the guide's
-  `#after-period` section, and `#request-cooking` may suit it better. For the dashboard PR: the
-  dashboard's Spanish says «Barra» for the counter, the till «Mostrador».
+  pages; English and Spanish). The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients).
+  Done: setup (#2435) and the till's counter, floor, menu, order, More menu, person and kitchen
+  notices/merge help (#2437, #2439), but for an owner choice on the Transfers help. Left: the
+  dashboard and server pages; lane C's B4b rewrites the kitchen card, columns, pass and More menu
+  Pass help.
+  [Detail](backlog/dashboard.md#a1315-bring-every-help-bubble-down-to-orientation-one-area-per-pr)
 
 - **`wt-combobox` without a search box never exposes `aria-required`**
   [Detail](backlog/dashboard.md#wt-combobox-without-a-search-box-never-exposes-aria-required)

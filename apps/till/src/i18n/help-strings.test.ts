@@ -56,6 +56,13 @@ describe("the till's help strings", () => {
     const saysRetenido = Object.entries(helpEs).filter(([, text]) => /retenid/i.test(text));
     expect(saysRetenido).toEqual([]);
   });
+
+  it("no Spanish help text says «pedido del mostrador»", () => {
+    const saysDel = Object.entries(helpEs).filter(([, text]) =>
+      /(?<!\p{L})pedidos? del mostrador(?!\p{L})/iu.test(text),
+    );
+    expect(saysDel).toEqual([]);
+  });
 });
 
 describe("the order screen's help", () => {
@@ -96,6 +103,15 @@ describe("the order lists' help", () => {
     const sentences = (text: string) => text.split(/(?<=\.)\s+/).length;
     expect(sentences(helpEs["help.more.transfers"])).toBe(sentences(helpEn["help.more.transfers"]));
     expect(sentences(helpEn["help.more.transfers"])).toBe(3);
+  });
+});
+
+describe("the person menu's help", () => {
+  it("Fix my hours offers another day, and no place, as its dialog does", () => {
+    expect(helpEn["help.person.fix_hours"]).toContain("another day you choose");
+    expect(helpEn["help.person.fix_hours"]).not.toMatch(/(?<!\p{L})place(?!\p{L})/u);
+    expect(helpEs["help.person.fix_hours"]).toContain("otro día que elijas");
+    expect(helpEs["help.person.fix_hours"]).not.toMatch(/(?<!\p{L})lugar(?!\p{L})/u);
   });
 });
 

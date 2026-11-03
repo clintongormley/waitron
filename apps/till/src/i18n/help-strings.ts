@@ -45,7 +45,7 @@ export const helpEn = {
   "help.more.pass":
     "Opens the pass: a card for each group a table sends, or each counter order, in columns from held to ready.",
   "help.person.fix_hours":
-    "Opens your clock record for today, or for another day or place you choose, to fix a time or add a missing clock-in and clock-out or break. A supervisor, manager or admin other than you approves the change with their PIN; an admin may approve their own.",
+    "Opens your clock record for today, or for another day you choose, to fix a time or add a missing clock-in and clock-out or break. A supervisor, manager or admin other than you approves the change with their PIN; an admin may approve their own.",
   "help.kitchen.card":
     "Each card is a group a table sent, or a counter order, in the column of its least advanced dish; its minutes count from when its first dish was sent to this station to be cooked, or moved here. Tap a dish to move it on one step (on a Whole ticket card, with every dish at its step), or the card's heading to move on the dishes holding it back. Its top edge turns from green to amber, then its whole border red, as the card waits, by the station's late flags. A card with a dashed border is held until a waiter requests cooking.",
   "help.kitchen.cards_part": "Cards",
@@ -74,7 +74,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.counter.parked_orders":
     "Pedidos abiertos y sin cobrar del todo, de las zonas que atiende este dispositivo. Recuperar lo pone en la cesta para terminarlo o cobrarlo; Descartar lo borra en el acto. Cada pedido muestra cuántos artículos tiene y cuántos están sin enviar, en espera, esperando o listos.",
   "help.counter.waiting_orders":
-    "Pedidos del mostrador de las zonas que atiende este dispositivo enviados sin cobrar, o cobrados con platos aún por entregar. Cobrar cobra el pedido; Entregar anota que el cliente se lo ha llevado. Cada pedido muestra cuántos artículos tiene y cuántos están sin enviar, en espera, esperando o listos.",
+    "Pedidos de mostrador de las zonas que atiende este dispositivo enviados sin cobrar, o cobrados con platos aún por entregar. Cobrar cobra el pedido; Entregar anota que el cliente se lo ha llevado. Cada pedido muestra cuántos artículos tiene y cuántos están sin enviar, en espera, esperando o listos.",
   "help.counter.guests":
     "Déjalo vacío para que no salga la línea de comensales. Con un número, el ticket muestra los comensales y lo que paga cada persona.",
   "help.floor.tables_map":
@@ -106,7 +106,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.more.pass":
     "Abre el pase: una tarjeta por cada grupo que envía una mesa, o por cada pedido de mostrador, en columnas de en espera a listo.",
   "help.person.fix_hours":
-    "Abre tu registro de fichajes de hoy, o de otro día o lugar que elijas, para corregir una hora o añadir una entrada y salida o un descanso que faltan. Un supervisor, encargado o administrador que no seas tú aprueba el cambio con su PIN; un administrador puede aprobar el suyo.",
+    "Abre tu registro de fichajes de hoy, o de otro día que elijas, para corregir una hora o añadir una entrada y salida o un descanso que faltan. Un supervisor, encargado o administrador que no seas tú aprueba el cambio con su PIN; un administrador puede aprobar el suyo.",
   "help.kitchen.card":
     "Cada tarjeta es un grupo que envió una mesa, o un pedido de mostrador, en la columna de su plato menos avanzado; sus minutos cuentan desde que su primer plato se mandó a preparar a esta estación, o se movió aquí. Toca un plato para avanzarlo un paso (en una tarjeta que dice Toda la comanda, con todos los platos de su paso), o la cabecera de la tarjeta para avanzar los platos que la retienen. Su borde superior pasa de verde a ámbar, y después todo el borde a rojo, mientras la tarjeta espera, según los avisos de demora de la estación. Una tarjeta con el borde discontinuo está en espera hasta que un camarero pida la preparación.",
   "help.kitchen.cards_part": "Tarjetas",
