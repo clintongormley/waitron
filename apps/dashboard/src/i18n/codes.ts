@@ -1334,8 +1334,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este servidor ya registró que pasó su trabajo a otro, con otros datos, así que el registro no se ha cambiado. Es un fallo de Waitron.",
   },
   "handover.stepping_down": {
-    en: "This server is handing its work over to another server, so it is not taking requests now. Nothing was changed.",
-    es: "Este servidor está pasando su trabajo a otro servidor, así que ahora no atiende solicitudes. No se ha cambiado nada.",
+    en: "This server no longer runs the venue, so it is not taking requests now. Nothing was changed.",
+    es: "Este servidor ya no lleva el local, así que ahora no atiende solicitudes. No se ha cambiado nada.",
   },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",

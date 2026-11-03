@@ -278,8 +278,8 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
   [testing-guide.md](../developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down));
   and nothing proves `startServer` itself survives a backup duty that cannot start — only
   `backup-supervisor.test.ts` covers that, at the supervisor. Left open by A39 (#671): each stop is written twice, once in the failed-start unwind
-  list and once in the mode's `stopWork`; sharing one list was declined because it would change
-  the normal shutdown order, which no test pins either.
+  list (`undoOnFailure`, `boot.ts`) and once in the background-duties table
+  (`background-duties.ts`), whose order `background-duties.test.ts` pins.
   Test titles #653 could not touch in `boot.test.ts` carry the history tags
   "(SP-1a)", "(SP-1b)", "(SP-1b spec §3)", "(SP-1c)", "(slice 3)" and "SP-C dev override".
 

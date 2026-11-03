@@ -1411,8 +1411,7 @@ The build departed from the task texts above in these ways; the task texts are l
 - The pending-card pass skips its later steps once it has been signalled.
 - The restricted page's title is "This box no longer runs the venue" for both kinds of restriction
   (handed over and superseded), and the page carries no closing line about sending records back or
-  becoming the spare. No later task adds those sentences yet: the slice that builds sending records
-  back, or becoming the spare, must add its sentence to the page and to both guides.
+  becoming the spare. Tasks 10.3 and 13.4b add those sentences to the page and to both guides.
 - A superseded stepdown records no handover operation; Task 10.3 begins one.
 
 ---
@@ -2923,7 +2922,9 @@ transaction — the other order is refused by the one-open-operation index (Form
 
 **Interfaces — Produces:** the batch envelope stored at `<state>/handover/<operationId>/return-<sequence>.json`
 keyed by the request digest; the same request answers the same bytes; a request with other heads
-is a new sequence. M1 records `return_pending`.
+is a new sequence. M1 records `return_pending`. Add the sentence that the box sends its invoice
+records back to the restricted page (`restricted-page.ts`) and to `servers.md` `{#handed-over}`,
+both languages (see "Slice 2 as built").
 
 - [ ] **Step 1: Write the failing tests.** "the same request twice answers identical bytes";
   "another destination is refused"; "a box that is not restricted refuses
@@ -3289,7 +3290,7 @@ receipt matches (huella exact; filing rows not behind); per-chain counts and hea
 record has a filing row on M2; per chain, the sums of `importe_total` and `cuota_total` of the
 transferred records equal; M2's health passes (five-minute and fifteen-minute bounds, starting
 values); the archive is verified. After a controlled handover the receipt is the empty-records
-batch's (Task 10.7), so the same gates apply. Shown on M1's restricted page and M2's Servers
+batch's (Task 10.7), so the same gates apply. Shown on M1's restricted page (see "Slice 2 as built") and M2's Servers
 screen; retried every minute. A manager may override the health gate only, after a fresh sign-in
 on M1's page. Test `handover-wipe-gates.test.ts`.
 
@@ -3337,7 +3338,8 @@ the box's operator has no terminal to run a command. **Files:** `apps/server/src
 as the command (`wipeVenueDatabases` and the steps around it, `rejoin-command.ts:133-139`) **before
 the store opens**, as a staged restore runs before it (`apps/server/src/restore-request.ts:344-642`),
 then continues into setup mode, where the box re-adopts. The same start finishes a wipe a crash
-interrupted. Guide: `servers.md` `{#old-box-becomes-spare}`, both languages. Test
+interrupted. Guide: `servers.md` `{#old-box-becomes-spare}`, both languages, and the restricted
+page's sentence that the box becomes the spare (`restricted-page.ts`, English and Spanish). Test
 `apps/server/src/handover-self-wipe.test.ts`.
 
 - [ ] Failing tests: "gates passing record `wipe_started` and restart"; "a start with

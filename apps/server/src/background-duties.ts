@@ -79,18 +79,20 @@ function once(close: () => unknown): () => unknown {
 
 const LOOP_WAIT =
   "waits for a loop the aborts already signalled; a pass already running continues until it ends";
+const SIGNALLED_LOOP_WAIT =
+  "waits for a loop the aborts already signalled; its running pass stops at its next check of the signal";
 
 export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
   const closers: BackgroundCloser[] = [
     {
       name: "pendingCardLoop",
       close: () => h.pendingCardLoop,
-      reason: LOOP_WAIT,
+      reason: SIGNALLED_LOOP_WAIT,
     },
     {
       name: "tenderRefundLoop",
       close: () => h.tenderRefundLoop,
-      reason: LOOP_WAIT,
+      reason: SIGNALLED_LOOP_WAIT,
     },
     {
       name: "attendanceLoop",

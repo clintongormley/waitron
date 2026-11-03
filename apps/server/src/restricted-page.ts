@@ -47,12 +47,18 @@ const PAGE_TEXT: Readonly<
 > = {
   "en-GB": {
     title: "This box no longer runs the venue",
-    body: ["It takes no sales and sends nothing to the tax agency. The venue now runs on ", "."],
+    body: [
+      "It takes no sales and sends nothing to the tax agency. The box taking over the venue is ",
+      ".",
+    ],
     progress: "Progress",
   },
   "es-ES": {
     title: "El local ya no funciona con este equipo",
-    body: ["No hace ventas ni envía nada a Hacienda. El local funciona ahora con ", "."],
+    body: [
+      "No hace ventas ni envía nada a Hacienda. El equipo que pasa a llevar el local es ",
+      ".",
+    ],
     progress: "Progreso",
   },
 };

@@ -87,7 +87,7 @@ describe("the restricted box's own page", () => {
     expect(english.html).toContain('<html lang="en-GB">');
     inOrder(english.html, [
       "<h1>This box no longer runs the venue</h1>",
-      "It takes no sales and sends nothing to the tax agency. The venue now runs on <strong>Bar counter box</strong>.",
+      "It takes no sales and sends nothing to the tax agency. The box taking over the venue is <strong>Bar counter box</strong>.",
       "Handover begun",
       "Stopped taking sales",
     ]);
@@ -98,7 +98,7 @@ describe("the restricted box's own page", () => {
     expect(spanish.html).toContain('<html lang="es-ES">');
     inOrder(spanish.html, [
       "<h1>El local ya no funciona con este equipo</h1>",
-      "No hace ventas ni envía nada a Hacienda. El local funciona ahora con <strong>Bar counter box</strong>.",
+      "No hace ventas ni envía nada a Hacienda. El equipo que pasa a llevar el local es <strong>Bar counter box</strong>.",
       "Traspaso iniciado",
       "Ha dejado de vender",
     ]);
@@ -109,7 +109,7 @@ describe("the restricted box's own page", () => {
     const { html } = await page("en-GB");
     expect(html).not.toContain("<script>");
     expect(html).toContain(
-      "The venue now runs on <strong>&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;Co&#39;</strong>.",
+      "The box taking over the venue is <strong>&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;Co&#39;</strong>.",
     );
   });
 
@@ -126,14 +126,14 @@ describe("the restricted box's own page", () => {
     const successor = await seedSuccessor(null);
     await handOver(successor);
     const { html } = await page("en-GB");
-    expect(html).toContain(`The venue now runs on <strong>${successor}</strong>.`);
+    expect(html).toContain(`The box taking over the venue is <strong>${successor}</strong>.`);
   });
 
   it("names the successor by its id when its recorded name is empty", async () => {
     const successor = await seedSuccessor("");
     await handOver(successor);
     const { html } = await page("en-GB");
-    expect(html).toContain(`The venue now runs on <strong>${successor}</strong>.`);
+    expect(html).toContain(`The box taking over the venue is <strong>${successor}</strong>.`);
   });
 
   it("lists the steps in the order they were recorded, whatever their recorded times", async () => {
@@ -205,7 +205,7 @@ describe("the restricted box's own page", () => {
       }),
     );
     const { html } = await page("en-GB");
-    expect(html).toContain("The venue now runs on <strong>Bar counter box</strong>.");
+    expect(html).toContain("The box taking over the venue is <strong>Bar counter box</strong>.");
     expect(html).not.toContain("<li>");
   });
 
