@@ -1,3 +1,4 @@
+import { types } from "node:util";
 import { WAITRON_LAYOUTS, classifyDisk } from "./disk-state.mjs";
 import { exactRecord } from "./upgrades/contracts.mjs";
 
@@ -8,7 +9,7 @@ import { exactRecord } from "./upgrades/contracts.mjs";
  * @property {import("./disk-state.mjs").MachineObservation} machine  PR 1's whole-machine observation
  * @typedef {{ diskId: string, diskUuid: string, layoutVersion: number }} UnlockHandle  frozen
  * @typedef {{ kind: 'ready', handle: UnlockHandle } | { kind: 'refused', reason: UnlockTargetRefusal }} UnlockTarget  frozen
- * @typedef {'observation-invalid'|'disk-missing'|'disk-multiple'|'disk-not-waitron'|'disk-mismatch'|'disk-duplicate'|'first-start-pending'} UnlockTargetRefusal
+ * @typedef {'observation-invalid'|'disk-missing'|'disk-multiple'|'disk-not-waitron'|'disk-mismatch'|'disk-duplicate'|'first-start-pending'|'adapter-missing'} UnlockTargetRefusal
  */
 
 const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -101,7 +102,7 @@ const OPTIONS_CODE = "unlock.options_invalid";
  * @property {'ready'|'waiting'|'verifying'|'opened'|'closed'|'refused'} state  'verifying' while verify or open runs
  * @property {number|null} retryAt  waiting only
  * @property {string|null} reason  refused only
- * @typedef {{ submit(key: unknown): Promise<UnlockResult>, status(): UnlockStatus }} UnlockGate
+ * @typedef {{ submit(key: unknown): Promise<UnlockResult>, status(): UnlockStatus, close(): void }} UnlockGate
  */
 
 /** @param {UnlockResult['kind']} kind @param {number|null} retryAt @param {string|null} reason */
@@ -109,29 +110,41 @@ function result(kind, retryAt = null, reason = null) {
   return Object.freeze({ kind, retryAt, reason });
 }
 
+// Read through the built-in getter, never the key's own `length`, which a subclass or proxy can fake.
+const typedArrayLength = /** @type {(this: Uint8Array) => number} */ (
+  /** @type {PropertyDescriptor} */ (
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), "length")
+  ).get
+);
+
+/** @param {unknown} key @returns {number|null} null when the key is not a genuine Uint8Array */
+function genuineLength(key) {
+  return types.isUint8Array(key) ? typedArrayLength.call(key) : null;
+}
+
+/** @param {Uint8Array} bytes */
+function wipe(bytes) {
+  Uint8Array.prototype.fill.call(bytes, 0);
+}
+
 /**
- * Every route that accepts a key must hold the same gate, so the wait is shared; a new gate
- * (a restart) starts the wait afresh.
- * @param {UnlockGateOptions} options @returns {UnlockGate}
+ * @param {() => UnlockTarget} resolveTarget  called once
+ * @param {UnlockGateOptions['now']} [now]  unused, like verify and open, when the target is refused
+ * @param {UnlockGateOptions['verify']} [verify]
+ * @param {UnlockGateOptions['open']} [open]
+ * @returns {UnlockGate}
  */
-export function createUnlockGate(options) {
-  if (
-    !exactRecord(options, ["observation", "now", "verify", "open"]) ||
-    typeof options.now !== "function" ||
-    typeof options.verify !== "function" ||
-    typeof options.open !== "function"
-  )
-    throw Object.assign(new Error(OPTIONS_CODE), {
-      code: OPTIONS_CODE,
-      reason: "options-invalid",
-    });
-  const { observation, now, verify, open } = options;
-  const target = freezeUnlockTarget(observation);
+function buildGate(resolveTarget, now, verify, open) {
+  const target = resolveTarget();
   // Null only when the target is refused, and then `ended` stops every submission first.
   const handle = /** @type {UnlockHandle} */ (target.kind === "ready" ? target.handle : null);
+  const clockNow = /** @type {() => number} */ (now);
+  const check = /** @type {NonNullable<UnlockGateOptions['verify']>} */ (verify);
+  const unlock = /** @type {NonNullable<UnlockGateOptions['open']>} */ (open);
 
-  /** @type {{ state: 'opened'|'closed'|'refused', reason: string } | null} */
+  /** @type {{ state: 'opened'|'refused', reason: string } | null} */
   let ended = target.kind === "refused" ? { state: "refused", reason: target.reason } : null;
+  let closed = false;
   let running = false;
   let failures = 0;
   /** @type {number|null} */
@@ -143,26 +156,56 @@ export function createUnlockGate(options) {
     return result("refused-state", null, reason);
   }
 
+  /** The clock's own error never leaves the gate. @returns {number|null} null when it failed */
+  function reading() {
+    let value;
+    try {
+      value = clockNow();
+    } catch {
+      return null;
+    }
+    return Number.isFinite(value) ? value : null;
+  }
+
   function fail() {
+    const time = reading();
+    if (time === null) return refuse("clock-failed");
     failures += 1;
-    retryAt = now() + UNLOCK_DELAYS_MS[Math.min(failures, UNLOCK_DELAYS_MS.length) - 1];
+    retryAt = time + UNLOCK_DELAYS_MS[Math.min(failures, UNLOCK_DELAYS_MS.length) - 1];
     return result("wrong-key", retryAt);
   }
 
-  /** @param {Uint8Array} key */
-  async function check(key) {
+  /** @param {number|null} length @returns {UnlockResult|null} null when the key goes to verify */
+  function admit(length) {
+    if (ended) return result("refused-state", null, ended.reason);
+    if (closed) return result("refused-state", null, "closed");
+    if (running) return result("wait");
+    if (retryAt !== null) {
+      const time = reading();
+      if (time === null) return refuse("clock-failed");
+      if (time < retryAt) return result("wait", retryAt);
+    }
+    if (length !== KEY_BYTES) return fail();
+    return null;
+  }
+
+  /** @param {Uint8Array} key  the gate's own copy */
+  async function attempt(key) {
+    /** @type {unknown} */
     let accepted;
     try {
-      accepted = await verify(handle, key);
+      accepted = await check(handle, key);
     } catch {
-      return refuse("verifier-failed");
+      accepted = undefined;
     }
+    if (closed) return result("refused-state", null, "closed");
     if (accepted === false) return fail();
     if (accepted !== true) return refuse("verifier-failed");
     try {
-      await open(handle, key);
+      await unlock(handle, key);
     } catch {
-      return refuse("open-failed");
+      // After close() the gate reports closed, but this submission still learns the open failed.
+      return closed ? result("refused-state", null, "open-failed") : refuse("open-failed");
     }
     ended = { state: "opened", reason: "opened" };
     return result("opened");
@@ -171,14 +214,21 @@ export function createUnlockGate(options) {
   return Object.freeze({
     /** @param {unknown} key */
     async submit(key) {
-      if (ended) return result("refused-state", null, ended.reason);
-      if (running) return result("wait");
-      if (retryAt !== null && now() < retryAt) return result("wait", retryAt);
-      if (!(key instanceof Uint8Array) || key.length !== KEY_BYTES) return fail();
+      const length = genuineLength(key);
+      const bytes = /** @type {Uint8Array} */ (key);
+      const refusal = admit(length);
+      if (refusal) {
+        if (length !== null) wipe(bytes);
+        return refusal;
+      }
+      // The one copy, made only for a key that goes to verify, and before the caller's is wiped.
+      const copy = Uint8Array.from({ length: KEY_BYTES }, (_, i) => bytes[i]);
+      wipe(bytes);
       running = true;
       try {
-        return await check(key);
+        return await attempt(copy);
       } finally {
+        wipe(copy);
         running = false;
       }
     },
@@ -190,9 +240,42 @@ export function createUnlockGate(options) {
           reason: ended.state === "refused" ? ended.reason : null,
         });
       if (running) return Object.freeze({ state: "verifying", retryAt: null, reason: null });
-      if (retryAt !== null && now() < retryAt)
-        return Object.freeze({ state: "waiting", retryAt, reason: null });
+      if (closed) return Object.freeze({ state: "closed", retryAt: null, reason: null });
+      if (retryAt !== null) {
+        const time = reading();
+        if (time === null) {
+          refuse("clock-failed");
+          return Object.freeze({ state: "refused", retryAt: null, reason: "clock-failed" });
+        }
+        if (time < retryAt) return Object.freeze({ state: "waiting", retryAt, reason: null });
+      }
       return Object.freeze({ state: "ready", retryAt: null, reason: null });
     },
+    /** For the preboot service's shutdown only: a closed gate stays closed until a restart. */
+    close() {
+      if (!ended) closed = true;
+    },
   });
+}
+
+/**
+ * Every route that accepts a key must hold the same gate, so the wait is shared; a new gate
+ * (a restart) starts the wait afresh.
+ * @param {UnlockGateOptions} options @returns {UnlockGate}
+ */
+export function createUnlockGate(options) {
+  const invalid = () =>
+    Object.assign(new Error(OPTIONS_CODE), { code: OPTIONS_CODE, reason: "options-invalid" });
+  if (!exactRecord(options, ["observation", "now", "verify", "open"])) throw invalid();
+  const { observation, now, verify, open } = options;
+  if (typeof now !== "function" || typeof verify !== "function" || typeof open !== "function")
+    throw invalid();
+  return buildGate(() => freezeUnlockTarget(observation), now, verify, open);
+}
+
+const fixedGate = buildGate(() => refused("adapter-missing"));
+
+/** The one gate for this process. No verify or open adapter exists yet, so it is refused "adapter-missing". @returns {UnlockGate} */
+export function prebootUnlockGate() {
+  return fixedGate;
 }

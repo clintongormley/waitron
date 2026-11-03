@@ -1,6 +1,11 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WAITRON_LAYOUTS } from "./disk-state.mjs";
-import { UNLOCK_DELAYS_MS, createUnlockGate, freezeUnlockTarget } from "./preboot.mjs";
+import {
+  UNLOCK_DELAYS_MS,
+  createUnlockGate,
+  freezeUnlockTarget,
+  prebootUnlockGate,
+} from "./preboot.mjs";
 
 const EFI_TYPE = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b";
 const XBOOTLDR_TYPE = "bc13c2ff-59e6-4262-a352-b275fd6f7172";
@@ -227,7 +232,9 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
-const goodKey = () => new Uint8Array(32).fill(7);
+const KEY_BYTES = Array.from({ length: 32 }, (_, i) => (i * 7 + 3) % 256);
+const goodKey = () => Uint8Array.from(KEY_BYTES);
+const isZeros = (bytes) => bytes.every((byte) => byte === 0);
 const answer = (kind, retryAt = null, reason = null) => ({ kind, retryAt, reason });
 const status = (state, retryAt = null, reason = null) => ({ state, retryAt, reason });
 
@@ -400,7 +407,7 @@ describe("createUnlockGate outcomes", () => {
     const [openHandle, openKey] = h.open.mock.calls[0];
     expect(openHandle).toBe(verifyHandle);
     expect(openKey).toBe(verifyKey);
-    expect(openKey).toBe(key);
+    expect(openKey).not.toBe(key);
     expect(h.gate.status()).toEqual(status("opened"));
   });
 
@@ -442,6 +449,8 @@ describe("createUnlockGate outcomes", () => {
     const h = harness({ verify });
     expect(await h.at(0)).toEqual(answer("refused-state", null, "verifier-failed"));
     expect(h.open).not.toHaveBeenCalled();
+    expect(await h.at(5000)).toEqual(answer("refused-state", null, "verifier-failed"));
+    expect(h.gate.status()).toEqual(status("refused", null, "verifier-failed"));
   });
 
   it("refuses with open-failed when the opener throws, and never opens again", async () => {
@@ -570,5 +579,442 @@ describe("createUnlockGate options", () => {
     expect(() => createUnlockGate(options)).toThrow(
       expect.objectContaining({ code: "unlock.options_invalid", reason: "options-invalid" }),
     );
+  });
+});
+
+describe("createUnlockGate options are read once", () => {
+  it("reads each option once", () => {
+    const reads = { observation: 0, now: 0, verify: 0, open: 0 };
+    const values = {
+      observation: observation(),
+      now: () => 0,
+      verify: async () => false,
+      open: async () => {},
+    };
+    const options = {};
+    for (const name of Object.keys(values))
+      Object.defineProperty(options, name, {
+        enumerable: true,
+        get() {
+          reads[name] += 1;
+          return values[name];
+        },
+      });
+    createUnlockGate(options);
+    expect(reads).toEqual({ observation: 1, now: 1, verify: 1, open: 1 });
+  });
+});
+
+describe("createUnlockGate key shape", () => {
+  class LyingLength extends Uint8Array {
+    get length() {
+      return 32;
+    }
+  }
+  const forged = () => {
+    const fake = Object.setPrototypeOf({ length: 32 }, Uint8Array.prototype);
+    return fake;
+  };
+  it.each([
+    ["an object with Uint8Array's prototype", forged],
+    ["a subclass claiming 32 bytes over 31", () => LyingLength.from(KEY_BYTES.slice(0, 31))],
+    ["a subclass claiming 32 bytes over 64", () => LyingLength.from([...KEY_BYTES, ...KEY_BYTES])],
+    ["a proxy over a 32-byte array", () => new Proxy(goodKey(), {})],
+  ])("answers wrong-key without checking for %s", async (_name, make) => {
+    const h = harness({ verify: async () => true });
+    expect(await h.at(0, make())).toEqual(answer("wrong-key", 2000));
+    expect(h.verify).not.toHaveBeenCalled();
+  });
+
+  it("clears a subclass whose length lies, through the built-in fill", async () => {
+    class NoFill extends LyingLength {
+      fill() {
+        return this;
+      }
+    }
+    const key = NoFill.from(KEY_BYTES.slice(0, 31));
+    const h = harness();
+    const pending = h.at(0, key);
+    expect(isZeros(Uint8Array.from(new Uint8Array(key.buffer)))).toBe(true);
+    await pending;
+  });
+
+  it("copies the real bytes of a genuine subclass whose iterator lies", async () => {
+    class LyingIterator extends Uint8Array {
+      *[Symbol.iterator]() {
+        for (let i = 0; i < 32; i += 1) yield 0;
+      }
+    }
+    let received = [];
+    const h = harness({
+      verify: async (_handle, key) => {
+        received = [...new Uint8Array(key.buffer, key.byteOffset, 32)];
+        return false;
+      },
+    });
+    await h.at(0, LyingIterator.from(goodKey().values()));
+    expect(received).toEqual(KEY_BYTES);
+  });
+});
+
+describe("createUnlockGate clock", () => {
+  function clockHarness() {
+    const c = { mode: "ok", clock: 0 };
+    c.verify = vi.fn(async () => false);
+    c.gate = createUnlockGate({
+      observation: observation(),
+      now: () => {
+        if (c.mode === "throw") throw new Error("clock broke");
+        if (c.mode === "ok") return c.clock;
+        return c.mode;
+      },
+      verify: c.verify,
+      open: async () => {},
+    });
+    return c;
+  }
+
+  it.each([
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["-Infinity", Number.NEGATIVE_INFINITY],
+    ["a throw", "throw"],
+  ])("refuses with clock-failed when the clock answers %s after a wrong key", async (_n, mode) => {
+    const c = clockHarness();
+    c.mode = mode;
+    expect(await c.gate.submit(goodKey())).toEqual(answer("refused-state", null, "clock-failed"));
+    expect(await c.gate.submit(goodKey())).toEqual(answer("refused-state", null, "clock-failed"));
+    expect(c.verify).toHaveBeenCalledTimes(1);
+    expect(c.gate.status()).toEqual(status("refused", null, "clock-failed"));
+  });
+
+  it.each([
+    ["NaN", Number.NaN],
+    ["a throw", "throw"],
+  ])("refuses with clock-failed when the clock answers %s during a wait", async (_n, mode) => {
+    const c = clockHarness();
+    await c.gate.submit(goodKey());
+    c.mode = mode;
+    const key = goodKey();
+    expect(await c.gate.submit(key)).toEqual(answer("refused-state", null, "clock-failed"));
+    expect(isZeros(key)).toBe(true);
+    expect(c.verify).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers status refused clock-failed when the clock throws while waiting", async () => {
+    const c = clockHarness();
+    await c.gate.submit(goodKey());
+    c.mode = "throw";
+    expect(c.gate.status()).toEqual(status("refused", null, "clock-failed"));
+    c.mode = "ok";
+    expect(await c.gate.submit(goodKey())).toEqual(answer("refused-state", null, "clock-failed"));
+  });
+
+  it("refuses with clock-failed for a malformed key when the clock throws", async () => {
+    const c = clockHarness();
+    c.mode = "throw";
+    const key = new Uint8Array(31).fill(9);
+    expect(await c.gate.submit(key)).toEqual(answer("refused-state", null, "clock-failed"));
+    expect(isZeros(key)).toBe(true);
+    expect(c.verify).not.toHaveBeenCalled();
+  });
+});
+
+const REFUSED_OBS = () => observation({ firstStart: "pending" });
+
+/** Each sets a gate up and answers the submission under test; `after` lets a held check finish. */
+const paths = {
+  opened: () => {
+    const h = harness({ verify: async () => true });
+    return { submit: (key) => h.at(0, key) };
+  },
+  "wrong-key": () => {
+    const h = harness();
+    return { submit: (key) => h.at(0, key) };
+  },
+  "wait during a delay": async () => {
+    const h = harness();
+    await h.at(0);
+    return { submit: (key) => h.at(1000, key) };
+  },
+  "wait while verify runs": () => {
+    const check = deferred();
+    const h = harness({ verify: () => check.promise });
+    const first = h.at(0);
+    return {
+      submit: (key) => h.at(0, key),
+      after: async () => {
+        check.resolve(false);
+        await first;
+      },
+    };
+  },
+  "wait while open runs": async () => {
+    const opening = deferred();
+    const opened = deferred();
+    const h = harness({
+      verify: async () => true,
+      open: () => {
+        opening.resolve();
+        return opened.promise;
+      },
+    });
+    const first = h.at(0);
+    await opening.promise;
+    return {
+      submit: (key) => h.at(0, key),
+      after: async () => {
+        opened.resolve();
+        await first;
+      },
+    };
+  },
+  "refused-state": () => {
+    const h = harness({ obs: REFUSED_OBS() });
+    return { submit: (key) => h.at(0, key) };
+  },
+  closed: () => {
+    const h = harness();
+    h.gate.close();
+    return { submit: (key) => h.at(0, key) };
+  },
+  "a 31-byte array": () => {
+    const h = harness();
+    return { submit: (key) => h.at(0, key), key: () => Uint8Array.from(KEY_BYTES.slice(0, 31)) };
+  },
+};
+paths.malformed = paths["a 31-byte array"];
+
+describe("createUnlockGate key buffers", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    "opened",
+    "wrong-key",
+    "wait during a delay",
+    "wait while verify runs",
+    "wait while open runs",
+    "refused-state",
+    "closed",
+    "a 31-byte array",
+  ])(
+    "%s: the caller's array is all zeros as soon as submit returns its promise, before it is awaited",
+    async (name) => {
+      const path = await paths[name]();
+      const key = path.key ? path.key() : goodKey();
+      const pending = path.submit(key);
+      expect(isZeros(key)).toBe(true);
+      await pending;
+      await path.after?.();
+    },
+  );
+
+  it.each([
+    "wait during a delay",
+    "wait while verify runs",
+    "refused-state",
+    "closed",
+    "malformed",
+  ])("%s: no copy is made", async (name) => {
+    const path = await paths[name]();
+    const key = path.key ? path.key() : goodKey();
+    const from = vi.spyOn(Uint8Array, "from");
+    await path.submit(key);
+    expect(from).not.toHaveBeenCalled();
+    from.mockRestore();
+    await path.after?.();
+  });
+
+  it("every array Uint8Array.from returned during a verify-path submission is zeros once submit settles", async () => {
+    for (const name of ["opened", "wrong-key"]) {
+      const path = await paths[name]();
+      const key = goodKey();
+      const from = vi.spyOn(Uint8Array, "from");
+      await path.submit(key);
+      const made = from.mock.results.map((r) => r.value);
+      from.mockRestore();
+      expect(made.length).toBeGreaterThan(0);
+      for (const array of made) expect(isZeros(array)).toBe(true);
+    }
+  });
+
+  it("the checker receives the original bytes in an array that is not the caller's, and the opener that same array", async () => {
+    const seen = {};
+    const h = harness({
+      verify: async (_handle, key) => {
+        seen.verifyKey = key;
+        seen.verifyBytes = [...key];
+        return true;
+      },
+      open: async (_handle, key) => {
+        seen.openKey = key;
+        seen.openBytes = [...key];
+      },
+    });
+    const key = goodKey();
+    expect(await h.at(0, key)).toEqual(answer("opened"));
+    expect(seen.verifyKey).not.toBe(key);
+    expect(seen.verifyKey).toBeInstanceOf(Uint8Array);
+    expect(seen.verifyBytes).toEqual(KEY_BYTES);
+    expect(seen.openKey).toBe(seen.verifyKey);
+    expect(seen.openBytes).toEqual(KEY_BYTES);
+  });
+
+  const boom = () => {
+    throw new Error("boom");
+  };
+  it.each([
+    ["opened", async () => true, async () => {}],
+    ["wrong-key", async () => false, async () => {}],
+    ["checker throws", boom, async () => {}],
+    ["opener throws", async () => true, boom],
+  ])(
+    "%s: the array the checker received is all zeros once submit settles",
+    async (_name, verify, open) => {
+      let held = null;
+      const h = harness({
+        verify: (handle, key) => {
+          held = key;
+          return verify();
+        },
+        open: () => open(),
+      });
+      await h.at(0);
+      expect(held).not.toBeNull();
+      expect(isZeros(held)).toBe(true);
+    },
+  );
+});
+
+describe("createUnlockGate close", () => {
+  function heldHarness() {
+    const c = { check: deferred(), opening: deferred(), opened: deferred(), held: null };
+    c.h = harness({
+      verify: (_handle, key) => {
+        c.held = key;
+        return c.check.promise;
+      },
+      open: () => {
+        c.opening.resolve();
+        return c.opened.promise;
+      },
+    });
+    return c;
+  }
+
+  it("close while the checker is pending: keeps the bytes until it answers, never opens, answers closed", async () => {
+    const c = heldHarness();
+    c.opened.resolve();
+    const pending = c.h.at(0);
+    c.h.gate.close();
+    expect([...c.held]).toEqual(KEY_BYTES);
+    expect(c.h.gate.status()).toEqual(status("verifying"));
+    c.check.resolve(true);
+    expect(await pending).toEqual(answer("refused-state", null, "closed"));
+    expect(c.h.open).not.toHaveBeenCalled();
+    expect(isZeros(c.held)).toBe(true);
+    expect(c.h.gate.status()).toEqual(status("closed"));
+  });
+
+  it("close while the checker is pending, and the checker then rejects: answers closed", async () => {
+    const c = heldHarness();
+    const pending = c.h.at(0);
+    c.h.gate.close();
+    c.check.reject(new Error("boom"));
+    expect(await pending).toEqual(answer("refused-state", null, "closed"));
+    expect(c.h.gate.status()).toEqual(status("closed"));
+    expect(isZeros(c.held)).toBe(true);
+  });
+
+  it("close while the opener is pending: the open finishes and is reported", async () => {
+    const c = heldHarness();
+    const pending = c.h.at(0);
+    c.check.resolve(true);
+    await c.opening.promise;
+    c.h.gate.close();
+    expect([...c.held]).toEqual(KEY_BYTES);
+    expect(c.h.gate.status()).toEqual(status("verifying"));
+    c.opened.resolve();
+    expect(await pending).toEqual(answer("opened"));
+    expect(c.h.gate.status()).toEqual(status("opened"));
+    expect(isZeros(c.held)).toBe(true);
+  });
+
+  it("close while the opener is pending, and the opener then throws: answers open-failed, status closed", async () => {
+    const c = heldHarness();
+    const pending = c.h.at(0);
+    c.check.resolve(true);
+    await c.opening.promise;
+    c.h.gate.close();
+    c.opened.reject(new Error("boom"));
+    expect(await pending).toEqual(answer("refused-state", null, "open-failed"));
+    expect(c.h.gate.status()).toEqual(status("closed"));
+    expect(await c.h.at(0)).toEqual(answer("refused-state", null, "closed"));
+  });
+
+  it("close while the opener is pending, then a second submission: answers closed", async () => {
+    const c = heldHarness();
+    const pending = c.h.at(0);
+    c.check.resolve(true);
+    await c.opening.promise;
+    c.h.gate.close();
+    expect(await c.h.at(0)).toEqual(answer("refused-state", null, "closed"));
+    expect(c.h.verify).toHaveBeenCalledTimes(1);
+    expect(c.h.open).toHaveBeenCalledTimes(1);
+    c.opened.resolve();
+    await pending;
+  });
+
+  it("close on a gate whose target was refused keeps it refused with its reason", () => {
+    const h = harness({ obs: REFUSED_OBS() });
+    h.gate.close();
+    expect(h.gate.status()).toEqual(status("refused", null, "first-start-pending"));
+  });
+
+  it("close on prebootUnlockGate() keeps it refused adapter-missing", () => {
+    prebootUnlockGate().close();
+    expect(prebootUnlockGate().status()).toEqual(status("refused", null, "adapter-missing"));
+  });
+
+  it("close, then submit: answers closed without checking", async () => {
+    const h = harness();
+    h.gate.close();
+    expect(await h.at(0)).toEqual(answer("refused-state", null, "closed"));
+    expect(h.verify).not.toHaveBeenCalled();
+  });
+
+  it("close twice: status closed", () => {
+    const h = harness();
+    h.gate.close();
+    h.gate.close();
+    expect(h.gate.status()).toEqual(status("closed"));
+  });
+
+  it("close after opened: status still opened", async () => {
+    const h = harness({ verify: async () => true });
+    await h.at(0);
+    h.gate.close();
+    expect(h.gate.status()).toEqual(status("opened"));
+    expect(await h.at(0)).toEqual(answer("refused-state", null, "opened"));
+  });
+});
+
+describe("prebootUnlockGate", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("is one gate, refused adapter-missing, that clears the key and copies nothing", async () => {
+    const gate = prebootUnlockGate();
+    expect(prebootUnlockGate()).toBe(gate);
+    expect(gate.status()).toEqual(status("refused", null, "adapter-missing"));
+    const key = goodKey();
+    const from = vi.spyOn(Uint8Array, "from");
+    const pending = gate.submit(key);
+    expect(isZeros(key)).toBe(true);
+    expect(await pending).toEqual(answer("refused-state", null, "adapter-missing"));
+    expect(from).not.toHaveBeenCalled();
   });
 });
