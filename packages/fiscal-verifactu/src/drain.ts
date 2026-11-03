@@ -210,6 +210,12 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
   return result;
 }
 
+/** A call, not an inline read: the compiler would otherwise narrow `aborted` to false after the
+ * round's first check, though the signal can be raised while a claim runs. */
+function stopRequested(signal: AbortSignal | undefined): boolean {
+  return signal?.aborted === true;
+}
+
 /**
  * Each chunk is claimed in its own short transaction (T1) that commits before the network call,
  * so the venue file's single writer slot is not held across an AEAT round trip. `client.submit`
@@ -265,10 +271,10 @@ async function drainDue(
   // later chunk does not re-discover (and re-incident) them. Fresh each pass, so a chain is
   // re-examined next time rather than assumed still blocked.
   const blockedSifIds = new Set<string>();
-  while (dueCount > 0) {
+  rounds: while (dueCount > 0) {
     // Before any send, return: storing `now + t` would move AEAT's wait later for a send that
     // never happened. After one, break, so the wait AEAT set is stored.
-    if (signal?.aborted === true) {
+    if (stopRequested(signal)) {
       if (result.batchesSent === 0) return;
       break;
     }
@@ -335,6 +341,11 @@ async function drainDue(
         claimed = { sendable: [], rawCount: 0, deferred: true };
       }
       if (claimed.deferred || claimed.sendable.length > 0 || claimed.rawCount === 0) break;
+      // The same rule as the round's first check: a retry is a fresh claim.
+      if (stopRequested(signal)) {
+        if (result.batchesSent === 0) return;
+        break rounds;
+      }
     }
     if (claimed.deferred) {
       if (result.batchesSent === 0) {

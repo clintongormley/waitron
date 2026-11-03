@@ -5,7 +5,7 @@ import type { VerifactuClient } from "@waitron/verifactu";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedPendingEnvios } from "../test/drain-fixtures.js";
+import { seedIndependentChain, seedPendingEnvios } from "../test/drain-fixtures.js";
 import { staticResolver } from "../test/write-path-fixtures.js";
 import { DEFAULT_SKIP_RETRY_MS, drain, type DrainDeps } from "./drain.js";
 
@@ -127,6 +127,125 @@ describe("drain — told to stop", () => {
     expect(await estados()).toEqual({ pendiente: 9 });
     expect(await flujo()).toEqual([
       { proximo_envio_en: EARLIER_GATE.toISOString(), tiempo_espera_seg: 120 },
+    ]);
+  });
+});
+
+describe("drain — told to stop between a claim that found nothing sendable and its retry", () => {
+  /**
+   * Three rows the environment guard refuses fill the cap-3 claim window, and a healthy row on
+   * another chain sorts after them, so only the retry inside one round reaches it.
+   */
+  beforeEach(async () => {
+    await seedPendingEnvios(suite.db, { count: 3, entorno: null });
+    await seedIndependentChain(suite.db, {
+      sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      secuencia: 1,
+      entorno: "production",
+    });
+    await suite.db.execute(sql`
+      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      values (1, ${EARLIER_GATE.toISOString()}, 120)
+    `);
+  });
+
+  it("control: with no signal, the retry reaches and sends the healthy row", async () => {
+    const result = await drain(deps(client()), NOW);
+
+    expect(result.recordsSubmitted).toBe(1);
+  });
+
+  it("claims and sends nothing more, and leaves envio_flujo unchanged", async () => {
+    // Reads false at the round's first check only: aborted from then on, as a signal raised while
+    // the first claim ran would be.
+    let reads = 0;
+    const signal = {
+      get aborted() {
+        reads += 1;
+        return reads > 1;
+      },
+    } as AbortSignal;
+    let submits = 0;
+
+    const result = await drain(
+      deps(
+        client(() => (submits += 1)),
+        signal,
+      ),
+      NOW,
+    );
+
+    expect(submits).toBe(0);
+    expect(result.batchesSent).toBe(0);
+    expect(await estados()).toEqual({ pendiente: 4 });
+    expect(await flujo()).toEqual([
+      { proximo_envio_en: EARLIER_GATE.toISOString(), tiempo_espera_seg: 120 },
+    ]);
+  });
+});
+
+describe("drain — told to stop at a retry after a batch was sent", () => {
+  /** At a cap of one: a healthy row sorting first, one the environment guard refuses, then the
+   * healthy row sorting last that only a retry reaches. */
+  beforeEach(async () => {
+    await seedPendingEnvios(suite.db, { count: 1, entorno: null });
+    await seedIndependentChain(suite.db, {
+      sifId: "00000000-0000-4000-8000-000000000000",
+      secuencia: 1,
+      entorno: "production",
+    });
+    await seedIndependentChain(suite.db, {
+      sifId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
+      secuencia: 1,
+      entorno: "production",
+    });
+    await suite.db.execute(sql`
+      insert into envio_flujo (id, proximo_envio_en, tiempo_espera_seg)
+      values (1, ${EARLIER_GATE.toISOString()}, 120)
+    `);
+  });
+
+  function capOne(resolved: VerifactuClient, signal?: AbortSignal): DrainDeps {
+    return { ...deps(resolved, signal), maxRegistrosPorEnvio: 1 };
+  }
+
+  it("control: with no signal, both healthy rows are sent", async () => {
+    const result = await drain(capOne(client()), NOW);
+
+    expect(result.batchesSent).toBe(2);
+  });
+
+  it("sends nothing more and stores the wait AEAT set", async () => {
+    // Aborted from the second read after a send: the next round's first check passes, and the
+    // retry inside that round is the first to see it.
+    let submits = 0;
+    let readsSinceSubmit = 0;
+    const signal = {
+      get aborted() {
+        readsSinceSubmit += 1;
+        return submits > 0 && readsSinceSubmit > 1;
+      },
+    } as AbortSignal;
+
+    const result = await drain(
+      capOne(
+        client(() => {
+          submits += 1;
+          readsSinceSubmit = 0;
+        }),
+        signal,
+      ),
+      NOW,
+    );
+
+    expect(submits).toBe(1);
+    expect(result.batchesSent).toBe(1);
+    expect(await estados()).toEqual({ aceptado: 1, pendiente: 2 });
+    expect(await flujo()).toEqual([
+      {
+        proximo_envio_en: new Date(NOW.getTime() + AEAT_WAIT_SEG * 1000).toISOString(),
+        tiempo_espera_seg: AEAT_WAIT_SEG,
+      },
     ]);
   });
 });
