@@ -91,6 +91,23 @@ describe("Order's help badge on Fire and Send all", () => {
     expect(isOpen(tip)).toBe(true);
   });
 
+  it.each([
+    ["en", helpEn],
+    ["es", helpEs],
+  ] as const)(
+    "its box links to the guide's section on a dish sent after its period (%s)",
+    async (lang, text) => {
+      setLocale(lang);
+      const { el } = await mountWithLines();
+      const tip = await helpOn(el);
+      await userEvent.click(tip.shadowRoot!.querySelector("button")!);
+      expect(isOpen(tip)).toBe(true);
+      const link = tip.shadowRoot!.querySelector<HTMLAnchorElement>('[part="guide"]')!;
+      expect(link.getAttribute("href")).toBe(`/help/${lang}/kitchen-service#after-period`);
+      expect(link.textContent).toBe(text["help.guide_link"]);
+    },
+  );
+
   it("Send all still sends with help on", async () => {
     const { el } = await mountWithLines();
     await helpOn(el);

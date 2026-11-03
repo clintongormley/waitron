@@ -175,6 +175,36 @@ describe("Floor's help badges", () => {
     expect(toolbarBadge(el)!.textContent).toBe(helpEs["help.floor.tables_map_view"]);
   });
 
+  it.each([
+    { lang: "en", text: helpEn },
+    { lang: "es", text: helpEs },
+  ] as const)(
+    "the toolbar's box links to the guide's service steps section, in list and map views ($lang)",
+    async ({ lang, text }) => {
+      setLocale(lang);
+      const views: [boolean, boolean, HelpKey][] = [
+        [false, true, "help.floor.tables_map"],
+        [false, false, "help.floor.tables_map_view"],
+        [true, true, "help.floor.tables_list"],
+      ];
+      for (const [list, canChangeToday, key] of views) {
+        const { el } = await mount({ canChangeToday });
+        if (list) await toggleFloorView(el);
+        await helpOn(el);
+        const badge = toolbarBadge(el)!;
+        expect(badge.textContent).toBe(text[key]);
+        await userEvent.click(badge.shadowRoot!.querySelector("button")!);
+        expect(isOpen(badge)).toBe(true);
+        const link = badge.shadowRoot!.querySelector<HTMLAnchorElement>('[part="guide"]')!;
+        expect(link.getAttribute("href")).toBe(`/help/${lang}/table-service#service-steps`);
+        expect(link.textContent).toBe(text["help.guide_link"]);
+        await userEvent.keyboard("{Escape}");
+        setHelpMode(false);
+        cleanupWidgets();
+      }
+    },
+  );
+
   it("at 390 the toolbar's badge is there and inside the window", async () => {
     await page.viewport(390, 844);
     const { el } = await mount();

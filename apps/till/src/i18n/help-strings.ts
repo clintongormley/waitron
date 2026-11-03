@@ -21,7 +21,7 @@ export const helpEn = {
   "help.floor.tables_map_view":
     "Tap a free table to seat guests, or a table in use to go back to its order. Hold a table and let go to see its details. Its details show a service step.",
   "help.floor.tables_list":
-    "Tap a card to seat guests at a free table, or to go back to a table in use. A card marked Needs clearing or Needs moving has its own button for that. Tap Done on a service step when the guests want nothing.",
+    "Tap a card to seat guests at a free table, or to go back to a table in use. A card marked Needs clearing has a button for that; one marked Needs moving has buttons too, if you may take orders. Tap Done on a service step when the guests want nothing.",
   "help.floor.layout_due":
     "Update layout moves this zone's free tables to the new plan now. Tables with guests or still to clear keep their place until they are free, then show Needs moving. Tables taken off today stay off.",
   "help.floor.needs_moving":
@@ -31,7 +31,7 @@ export const helpEn = {
   "help.menu.dishes":
     "Tap a dish to add it. Hold it down, or press Shift+F10 on it, to see its allergens and diet labels first. A search also lists matches on the other menus you can order from.",
   "help.order.send":
-    "Fire sends the lines you ticked to the kitchen to be made now, as one group. Send all sends every line: those under Fire now are made at once, and each Group reaches the kitchen held until it is fired.",
+    "Fire sends the ticked lines that can go to the kitchen, to be made now, as one group. Send all sends every line that can go: those under Fire now are made at once, and each Group reaches the kitchen held until it is fired.",
   "help.more.profile":
     "Switches this device to another profile it is approved for. Park or clear the order in progress first.",
   "help.more.settings":
@@ -82,7 +82,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.floor.tables_map_view":
     "Toca una mesa libre para sentar a los clientes, o una ocupada para volver a su pedido. Mantén pulsada una mesa y suéltala para ver sus detalles. Sus detalles muestran el paso de servicio.",
   "help.floor.tables_list":
-    "Toca una tarjeta para sentar a los clientes en una mesa libre o volver a una ocupada. Una tarjeta Por recoger o Por mover tiene su propio botón para ello. Toca Hecho en un paso de servicio cuando los clientes no quieran nada.",
+    "Toca una tarjeta para sentar a los clientes en una mesa libre o volver a una ocupada. Una tarjeta Por recoger tiene un botón para ello; una Por mover también tiene botones, si puedes tomar pedidos. Toca Hecho en un paso de servicio cuando los clientes no quieran nada.",
   "help.floor.layout_due":
     "Actualizar plano coloca ya las mesas libres de esta zona según el plano nuevo. Las mesas con clientes o por recoger se quedan donde están hasta quedar libres, y entonces aparecen Por mover. Las mesas quitadas hoy siguen quitadas.",
   "help.floor.needs_moving":
@@ -92,7 +92,7 @@ export const helpEs: Record<HelpKey, string> = {
   "help.menu.dishes":
     "Toca un plato para añadirlo. Mantenlo pulsado, o pulsa Mayús+F10 sobre él, para ver antes sus alérgenos y etiquetas de dieta. Una búsqueda también muestra coincidencias en las otras cartas de las que puedes pedir.",
   "help.order.send":
-    "Marchar envía a cocina las líneas marcadas para hacerlas ya, como un grupo. Enviar todo envía todas las líneas: las de Marchar ya se hacen enseguida, y cada Grupo llega a cocina en espera hasta que se marcha.",
+    "Marchar envía a cocina las líneas marcadas que pueden salir, para hacerlas ya, como un grupo. Enviar todo envía todas las líneas que pueden salir: las de Marchar ya se hacen enseguida, y cada Grupo llega a cocina en espera hasta que se marcha.",
   "help.more.profile":
     "Cambia este dispositivo a otro perfil para el que está aprobado. Antes, aparca o vacía el pedido en curso.",
   "help.more.settings":

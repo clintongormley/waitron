@@ -2450,6 +2450,7 @@ export class TillFloorScreen extends LitElement {
                   ? "help.floor.tables_map"
                   : "help.floor.tables_map_view",
               t("floor.map_label"),
+              { guide: "table-service.service-steps" },
             )}
           </div>
         </div>
