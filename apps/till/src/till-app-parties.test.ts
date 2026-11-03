@@ -10009,7 +10009,12 @@ describe("till-app: Current orders", () => {
         id: "g2",
         state: "held" as const,
         firedAt: null,
-        rows: orders.groups[0]!.rows.map((row) => ({ ...row, released: false, requestedAt: null })),
+        rows: orders.groups[0]!.rows.map((row) => ({
+          ...row,
+          released: false,
+          requestedAt: null,
+          firedAt: null,
+        })),
       };
       const group: OrderGroup = { ...held, courseIds: [], lineIds: ["line-1"], summary: "Vino ×1" };
       const { el } = await mountApp({

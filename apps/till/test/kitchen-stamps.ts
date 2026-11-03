@@ -16,11 +16,15 @@ export function kitchenStamps(item: Pick<StationQueueItem, "state" | "firedAt">)
   };
 }
 
-/** Fills the kitchen request fields an item fixture leaves out from {@link kitchenStamps}. */
+/** Fills the kitchen request fields an item fixture leaves out from {@link kitchenStamps}; a
+ *  requested item is pass-controlled, as the server sets it, unless the fixture says otherwise. */
 export function withKitchenStamps(
   item: Omit<StationQueueItem, keyof KitchenStamps> & Partial<KitchenStamps>,
 ): StationQueueItem {
-  return { ...kitchenStamps(item), ...item };
+  const stamped = { ...kitchenStamps(item), ...item };
+  return item.passControlled === undefined && stamped.phase === "requested"
+    ? { ...stamped, passControlled: true }
+    : stamped;
 }
 
 type CurrentKitchenStamps = Pick<CurrentOrderKitchen, "phase" | "requestedAt">;
@@ -34,12 +38,18 @@ export function withCurrentKitchenStamps(
   return { phase, requestedAt, ...kitchen };
 }
 
-/** A current order row whose request time follows its stamps unless the fixture states one: its
- *  fire time once released, null while held. */
+/** A current order row's request time as the server derives it: its kitchen's request time, or
+ *  the row's fire time when it has no kitchen. */
+export function rowRequestedAt(row: Pick<CurrentOrderRow, "firedAt" | "kitchen">): string | null {
+  return row.kitchen === null ? row.firedAt : row.kitchen.requestedAt;
+}
+
+/** A current order row whose request time is {@link rowRequestedAt} unless the fixture states one. */
 export function withRowRequestedAt(
   row: Omit<CurrentOrderRow, "requestedAt"> & Partial<Pick<CurrentOrderRow, "requestedAt">>,
 ): CurrentOrderRow {
-  const requestedAt =
-    row.requestedAt === undefined ? (row.released ? row.firedAt : null) : row.requestedAt;
-  return { ...row, requestedAt };
+  return {
+    ...row,
+    requestedAt: row.requestedAt === undefined ? rowRequestedAt(row) : row.requestedAt,
+  };
 }

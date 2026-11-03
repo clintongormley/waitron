@@ -2797,7 +2797,7 @@ describe("the board's cards", () => {
       queuedAt: firedAt ?? "2026-08-17T10:00:00.000Z",
       ...extra,
     };
-    return { ...item, ...kitchenStamps(item) };
+    return { ...item, ...kitchenStamps(item), ...extra };
   };
   const bill = (
     orderId: string,
@@ -3934,7 +3934,7 @@ describe("the board's columns", () => {
       queuedAt: firedAt ?? "2026-08-17T10:00:00.000Z",
       ...extra,
     };
-    return { ...item, ...kitchenStamps(item) };
+    return { ...item, ...kitchenStamps(item), ...extra };
   };
   const bill = (
     orderId: string,

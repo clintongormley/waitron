@@ -6,7 +6,7 @@ import type {
   CurrentOrders,
   OrderGroup,
 } from "../api/client.js";
-import { withCurrentKitchenStamps } from "../../test/kitchen-stamps.js";
+import { rowRequestedAt, withCurrentKitchenStamps } from "../../test/kitchen-stamps.js";
 
 export const fired = "2026-09-28T19:50:00.000Z";
 /** 20:15, when group 3's reminder falls due. */
@@ -15,11 +15,10 @@ export const now = Date.parse("2026-09-28T20:15:00.000Z");
 /** A row fixture's overrides; a kitchen may leave out its request fields, which follow its stamps. */
 export type RowOverrides = Partial<RowFixture>;
 type RowFixture = Omit<CurrentOrderRow, "kitchen" | "requestedAt"> & {
-  requestedAt?: string | null;
   kitchen: Parameters<typeof withCurrentKitchenStamps>[0] | null;
 };
 
-/** A dish row whose request time is its fire time unless `over` states one. */
+/** A dish row whose request time is {@link rowRequestedAt}. */
 export function row(lineId: string, name: string, quantity: string, over: RowOverrides = {}) {
   const shaped: RowFixture = {
     billStatus: "open",
@@ -41,10 +40,11 @@ export function row(lineId: string, name: string, quantity: string, over: RowOve
     extras: [],
     ...over,
   };
+  const kitchen = shaped.kitchen === null ? null : withCurrentKitchenStamps(shaped.kitchen);
   return {
     ...shaped,
-    requestedAt: shaped.requestedAt === undefined ? shaped.firedAt : shaped.requestedAt,
-    kitchen: shaped.kitchen === null ? null : withCurrentKitchenStamps(shaped.kitchen),
+    kitchen,
+    requestedAt: rowRequestedAt({ firedAt: shaped.firedAt, kitchen }),
   } satisfies CurrentOrderRow;
 }
 
