@@ -51,7 +51,9 @@ function assertCanonical(value: unknown, field: string): void {
   if (value === null || typeof value === "string" || typeof value === "boolean") return;
   if (Number.isFinite(value)) return;
   if (Array.isArray(value)) {
-    value.forEach((child, index) => assertCanonical(child, `${field}.${index}`));
+    for (let index = 0; index < value.length; index++) {
+      assertCanonical(value[index], `${field}.${index}`);
+    }
     return;
   }
   if (typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
@@ -101,10 +103,12 @@ export function assembleIndicator(facts: FinalStateFacts): FinalStateIndicator {
   };
 }
 
+/** Assembles before signing, so only the canonical body is ever signed. */
 export function signIndicator(
-  indicator: FinalStateIndicator,
+  facts: FinalStateFacts,
   signer: { nodeId: string; privateKey: string },
 ): SignedHandoverEnvelope<FinalStateIndicator> {
-  const envelope = signEnvelope("final-state", indicator as unknown as CanonicalValue, signer);
+  const body = assembleIndicator(facts) as unknown as CanonicalValue;
+  const envelope = signEnvelope("final-state", body, signer);
   return envelope as unknown as SignedHandoverEnvelope<FinalStateIndicator>;
 }

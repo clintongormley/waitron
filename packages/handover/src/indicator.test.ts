@@ -42,7 +42,7 @@ function facts(): FinalStateFacts {
         class: "transferred",
         treatment: "kept",
         sha256: "f".repeat(64),
-        ringVersions: [3, 1, 2],
+        ringVersions: [10, 2, 9],
       },
       { item: "node_mode", where: "node.db", class: "destination-owned", treatment: "own" },
       {
@@ -75,7 +75,7 @@ function reversed(input: FinalStateFacts): FinalStateFacts {
     },
     nodeLocal: [...input.nodeLocal]
       .reverse()
-      .map((row) => (row.ringVersions === undefined ? row : { ...row, ringVersions: [2, 3, 1] })),
+      .map((row) => (row.ringVersions === undefined ? row : { ...row, ringVersions: [9, 10, 2] })),
     modulesSummary: summary,
   };
 }
@@ -113,7 +113,7 @@ describe("assembleIndicator", () => {
       "node.db/node_signing_key",
       "state/venue-keys.json",
     ]);
-    expect(indicator.nodeLocal[2].ringVersions).toEqual([1, 2, 3]);
+    expect(indicator.nodeLocal[2].ringVersions).toEqual([2, 9, 10]);
   });
 
   it("gives byte-identical bodies for the same facts given in a different order", () => {
@@ -158,7 +158,7 @@ describe("assembleIndicator", () => {
           class: "transferred",
           treatment: "kept",
           sha256: "f".repeat(64),
-          ringVersions: [1, 2, 3],
+          ringVersions: [2, 9, 10],
         },
       ],
       modulesSummary: input.modulesSummary,
@@ -204,6 +204,8 @@ describe("assembleIndicator", () => {
     const cases: [CanonicalValue | unknown, string][] = [
       [{ count: 4n }, "modulesSummary.payments.count"],
       [{ list: [1, undefined] }, "modulesSummary.payments.list.1"],
+      // eslint-disable-next-line no-sparse-arrays
+      [{ list: [1, , 3] }, "modulesSummary.payments.list.1"],
       [{ at: new Date(0) }, "modulesSummary.payments.at"],
       [{ n: Number.NaN }, "modulesSummary.payments.n"],
       [{ f: () => 1 }, "modulesSummary.payments.f"],
@@ -273,6 +275,28 @@ describe("signIndicator", () => {
       valid: false,
       reason: "bad_signature",
     });
+  });
+
+  it("signs the assembled body when handed facts that were never assembled", () => {
+    const input = facts();
+    const raw: FinalStateFacts = {
+      ...input,
+      snapshot: { ...input.snapshot, schema: [...input.snapshot.schema].reverse() },
+      nodeLocal: [
+        {
+          item: "node_mode",
+          where: "node.db",
+          class: "destination-owned",
+          treatment: "own",
+          sha256: undefined,
+        },
+      ],
+    };
+    const envelope = signIndicator(raw, m1);
+    expect(envelope.body).toEqual(assembleIndicator(raw));
+    expect(Object.keys(envelope.body.nodeLocal[0])).not.toContain("sha256");
+    const sent = JSON.parse(JSON.stringify(envelope)) as unknown;
+    expect(verifyEnvelope(sent, "final-state", () => m1.publicKey).valid).toBe(true);
   });
 
   it("gives a different digest when any one fact changes", () => {
