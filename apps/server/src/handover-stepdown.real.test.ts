@@ -197,6 +197,7 @@ interface Observed {
   salesForOrder: number;
   restarts: number;
   recordedAt: number;
+  stepdownAt: number;
   submitsBeforeStepdown: number;
   reconcilesBeforeStepdown: number;
   sweepsBeforeStepdown: number;
@@ -378,7 +379,7 @@ describe("a card sale in flight when the box steps down", () => {
       }),
     });
     await vi.waitFor(() => expect(card!.collectCalls).toHaveLength(1), { timeout: 10_000 });
-    // A sweep held across the stepdown: its pass began before the restriction, so any later sweep
+    // A sweep held across the stepdown: its pass began before the stepdown, so any later sweep
     // is a pass the stopped loop should never have started.
     const sweep = hold();
     releases.push(sweep.release);
@@ -390,6 +391,7 @@ describe("a card sale in flight when the box steps down", () => {
       reconcilesBeforeStepdown: outside.reconciles.length,
       sweepsBeforeStepdown: outside.sweeps.length,
     };
+    const stepdownAt = Date.now();
     const asked = await fetch(`${base}/test/stepdown`, { method: "POST" });
     const stepdown = { status: asked.status, body: await asked.json() };
     const afterBegan = await fetch(`${base}/api/pay`, {
@@ -424,6 +426,7 @@ describe("a card sale in flight when the box steps down", () => {
       salesForOrder: n,
       restarts,
       recordedAt: restriction!.recordedAt.getTime(),
+      stepdownAt,
       ...before,
     };
   }, 120_000);
@@ -473,11 +476,11 @@ describe("a card sale in flight when the box steps down", () => {
   //   expected [ 1793667767103, 1793667767309 ] to deeply equal []
   // (times vary) on the reconcile line: the held drain pass goes on to reconcile a due gap. With
   // that line removed, the sweep line fails the same way.
-  it("the Stripe reconcile and the card sweep are not called after the restriction is recorded", () => {
+  it("the Stripe reconcile and the card sweep are not called after the stepdown began", () => {
     expect(seen().reconcilesBeforeStepdown).toBeGreaterThan(0);
     expect(seen().sweepsBeforeStepdown).toBeGreaterThan(0);
-    expect(outside.reconciles.filter((at) => at >= seen().recordedAt)).toEqual([]);
-    expect(outside.sweeps.filter((at) => at >= seen().recordedAt)).toEqual([]);
+    expect(outside.reconciles.filter((at) => at >= seen().stepdownAt)).toEqual([]);
+    expect(outside.sweeps.filter((at) => at >= seen().stepdownAt)).toEqual([]);
   });
 
   it("the request that asked for the stepdown received its answer, and the box restarts once", () => {
