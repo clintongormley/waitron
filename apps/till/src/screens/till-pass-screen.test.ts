@@ -1057,6 +1057,90 @@ describe("A773 pass screen", () => {
       expect(boardOf(el)!.columns).toEqual(changed);
       expect(storedColumnKeys()).toEqual([]);
     });
+
+    describe("D95 the pass's Columns choices", () => {
+      const heldCard = passCard({
+        key: "bill:order-6",
+        target: { kind: "bill", workingOrderId: "order-6" },
+        kind: "held",
+        requestedAt: null,
+        orders: [{ orderId: "order-6", orderNumber: 17, tableLabel: "T9", kitchenNote: null }],
+        items: [passItem({ id: "held-1", orderId: "order-6", phase: "held", firedAt: null })],
+      });
+      const toFireCard = passCard({
+        key: "bill:order-2",
+        target: { kind: "bill", workingOrderId: "order-2" },
+        orders: [{ orderId: "order-2", orderNumber: 13, tableLabel: "T5", kitchenNote: null }],
+        items: [passItem({ id: "req-1", orderId: "order-2", phase: "requested", firedAt: null })],
+        releaseTicketItemIds: ["req-1"],
+        releaseContext: "ctx-1",
+      });
+      const board = passBoard({ held: [heldCard], toFire: [toFireCard] });
+      const section = (el: TillPassScreen, key: string) =>
+        boardOf(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-column="${key}"]`)!;
+      const sections = (el: TillPassScreen) =>
+        [...boardOf(el)!.shadowRoot!.querySelectorAll<HTMLElement>("[data-column]")].map(
+          (column) => column.dataset.column,
+        );
+      const cardsIn = (el: TillPassScreen, key: string) =>
+        [...section(el, key).querySelectorAll("[data-card]")].map((card) =>
+          card.getAttribute("data-card"),
+        );
+      async function openColumns(el: TillPassScreen) {
+        await userEvent.click(
+          boardOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-columns-open]")!,
+        );
+        await flush(el);
+      }
+
+      it("with Held and To fire switched on and Held + To fire off, draws each apart and keeps it", async () => {
+        await pageAt(1280, 800);
+        try {
+          const el = await mount({ deviceMode: true, initialBoard: deviceBoard(board) });
+          await openColumns(el);
+          await press(el, '[data-column-show="held"]');
+          await press(el, '[data-column-show="toFireOnly"]');
+          await press(el, '[data-column-show="toFire"]');
+          const drawsApart = (on: TillPassScreen) => {
+            expect(sections(on)).toEqual(["held", "toFireOnly", "inProgress", "ready"]);
+            expect(cardsIn(on, "held")).toEqual([heldCard.key]);
+            expect(cardsIn(on, "toFireOnly")).toEqual([toFireCard.key]);
+            expect(section(on, "toFireOnly").querySelector("[data-held-part]")).toBeNull();
+            expect(boardOf(on)!.shadowRoot!.querySelector("[data-held-part]")).toBeNull();
+            const heading = section(on, "held").querySelector(".column-heading")!.textContent;
+            expect(heading).toContain(t("pass.column.held"));
+            expect(heading).not.toContain(t("pass.column.to_fire"));
+          };
+          drawsApart(el);
+          expect(stored("pass").hidden).toEqual(["overview", "toFire"]);
+          el.remove();
+          const again = await mount({ deviceMode: true, initialBoard: deviceBoard(board) });
+          expect(boardOf(again)!.columns.hidden).toEqual(["overview", "toFire"]);
+          drawsApart(again);
+        } finally {
+          await resetPage();
+        }
+      });
+
+      it("switching Held on leaves Held + To fire shown, so the held card is drawn in both", async () => {
+        await pageAt(1280, 800);
+        try {
+          const el = await mount({ deviceMode: true, initialBoard: deviceBoard(board) });
+          await openColumns(el);
+          await press(el, '[data-column-show="held"]');
+          expect(stored("pass").hidden).toEqual(["overview", "toFireOnly"]);
+          expect(cardsIn(el, "held")).toEqual([heldCard.key]);
+          const toFire = section(el, "toFire");
+          const part = toFire.querySelector("[data-held-part]")!;
+          const drawnHeld = toFire.querySelector(`[data-card="${heldCard.key}"]`)!;
+          expect(
+            part.compareDocumentPosition(drawnHeld) & Node.DOCUMENT_POSITION_FOLLOWING,
+          ).not.toBe(0);
+        } finally {
+          await resetPage();
+        }
+      });
+    });
   });
 
   describe("the device's other-stations choice", () => {
@@ -2359,6 +2443,7 @@ describe("D95 the pass on a 1024 px tablet", () => {
       cleanupWidgets();
     }
     const el = await mount({ deviceMode: true, initialBoard: deviceBoard(withHeld) });
+    expect(drawn(el)).toMatchObject({ kanban: false, list: true });
     await pageAt(1280, 800);
     await vi.waitFor(() => expect(drawn(el)).toMatchObject({ kanban: true, list: false }));
   });

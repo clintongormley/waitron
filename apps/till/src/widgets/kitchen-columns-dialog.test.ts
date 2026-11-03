@@ -2,8 +2,14 @@ import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { STATION_COLUMNS, type ColumnKey, type ColumnState } from "../state/kitchen-columns.js";
+import {
+  PASS_COLUMNS,
+  STATION_COLUMNS,
+  type ColumnKey,
+  type ColumnState,
+} from "../state/kitchen-columns.js";
 import { cleanupWidgets, mountWidget, pageAt, resetPage, textRects } from "./test-helpers.js";
+import { passColumnNames } from "./pass-board.js";
 import { stationColumnNames } from "./station-queue.js";
 import { TillKitchenColumnsDialog } from "./kitchen-columns-dialog.js";
 
@@ -250,6 +256,54 @@ describe("A773 held column", () => {
       try {
         await pageAt(390, 844);
         const { el } = await mount({ layout: stationDefaults() });
+        const drawnRows = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-column-row]");
+        expect(drawnRows).toHaveLength(6);
+        for (const row of drawnRows) {
+          const name = row.querySelector("[data-column-name]")!;
+          const lineTops = new Set(textRects(name).map((line) => Math.round(line.top)));
+          expect(lineTops.size, name.textContent!).toBe(1);
+          expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+        }
+      } finally {
+        setLocale(before);
+        await resetPage();
+      }
+    },
+  );
+});
+
+describe("D95 the pass's columns", () => {
+  const passDefaults = (): ColumnState => ({
+    order: [...PASS_COLUMNS.order],
+    hidden: [...PASS_COLUMNS.hidden],
+    collapsed: [...PASS_COLUMNS.collapsed],
+  });
+
+  it("offers the pass's six columns, Held + To fire shown and the separate Held and To fire not", async () => {
+    const { el } = await mount({ layout: passDefaults(), names: passColumnNames() });
+    expect(rows(el)).toEqual([
+      ["1", t("station.overview")],
+      ["2", t("pass.columns_held_to_fire")],
+      ["3", t("pass.column.held")],
+      ["4", t("pass.column.to_fire")],
+      ["5", t("pass.column.in_progress")],
+      ["6", t("pass.column.ready")],
+    ]);
+    const shown = PASS_COLUMNS.order.map((key) => part(el, `[data-column-show="${key}"]`).checked);
+    expect(shown).toEqual([false, true, false, false, true, true]);
+    const shows = heard<{ key: ColumnKey; visible: boolean }>(el, "column-show");
+    await userEvent.click(part(el, '[data-column-show="held"]'));
+    expect(shows).toEqual([{ key: "held", visible: true }]);
+  });
+
+  it.each(["en-GB", "es-ES"])(
+    "at 390 px each of the pass's six names is drawn whole on one line, its row inside the window (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        await page.viewport(390, 844);
+        const { el } = await mount({ layout: passDefaults(), names: passColumnNames() });
         const drawnRows = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-column-row]");
         expect(drawnRows).toHaveLength(6);
         for (const row of drawnRows) {

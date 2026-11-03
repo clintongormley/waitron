@@ -168,6 +168,7 @@ describe("A773 pass board widget: accessibility", () => {
         expect(
           el.shadowRoot!.querySelector('[data-column="toFire"] [data-held-part]'),
         ).not.toBeNull();
+        expect(el.shadowRoot!.querySelector(width === 1024 ? ".kanban" : ".list")).not.toBeNull();
         await expectNoA11yViolations(host);
       });
     }

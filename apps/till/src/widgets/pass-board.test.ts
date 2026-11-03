@@ -1046,6 +1046,69 @@ describe("A773 pass board widget", () => {
       }
     });
 
+    it("draws what each shown column's name says, so overlapping columns draw a card twice", async () => {
+      await page.viewport(1920, 900);
+      expect(window.innerWidth).toBe(1920);
+      const el = await mountBoard({
+        board: fourCards,
+        columns: { order: [...PASS_COLUMNS.order], hidden: [], collapsed: [] },
+      });
+      const column = (key: string) =>
+        root(el).querySelector<HTMLElement>(`[data-column="${key}"]`)!;
+      const toFire = column("toFire");
+      const part = toFire.querySelector("[data-held-part]")!;
+      expect(before(part, toFire.querySelector(`[data-card="${heldCard.key}"]`)!)).toBe(true);
+      expect(column("held").querySelector(`[data-card="${heldCard.key}"]`)).not.toBeNull();
+      expect(toFire.querySelector(`[data-card="${toFireCard.key}"]`)).not.toBeNull();
+      expect(column("toFireOnly").querySelector(`[data-card="${toFireCard.key}"]`)).not.toBeNull();
+      for (const key of ["toFire", "toFireOnly"]) {
+        expect(column(key).querySelector(".column-heading")!.textContent).toContain(
+          t("pass.column.to_fire"),
+        );
+      }
+      const fires = () => [
+        ...root(el).querySelectorAll<HTMLButtonElement>(`[data-pass-fire="${toFireCard.key}"]`),
+      ];
+      expect(fires()).toHaveLength(2);
+      const fired = eventsOf(el, "pass-fire");
+      await userEvent.click(fires()[1]!);
+      expect(fired).toEqual([{ key: toFireCard.key }]);
+      el.sending = new Set([toFireCard.key]);
+      await el.updateComplete;
+      expect(fires().map((fire) => fire.disabled)).toEqual([true, true]);
+    });
+
+    it("draws held cards on no column when neither Held + To fire nor Held is shown, and Overview still counts them", async () => {
+      await page.viewport(1920, 900);
+      const el = await mountBoard({
+        board: passBoard({
+          ...fourCards,
+          overview: [
+            {
+              lineId: "held-1",
+              stationId: "st-grill",
+              name: "Paella",
+              qty: "1",
+              phase: "held",
+              informational: false,
+            },
+          ],
+        }),
+        columns: {
+          order: ["overview", "toFireOnly", "inProgress", "ready"],
+          hidden: [],
+          collapsed: [],
+        },
+      });
+      expect(cardOf(el, heldCard.key)).toBeNull();
+      expect(root(el).querySelector("[data-held-part]")).toBeNull();
+      const row = root(el).querySelector<HTMLElement>(
+        '[data-column="overview"] [data-overview-row]',
+      )!;
+      expect(row.querySelector(".overview-name")!.textContent).toBe("Paella");
+      expect(row.querySelector("[data-overview-held]")!.textContent).toBe("+1");
+    });
+
     it("names Held + To fire, Held and To fire apart in the Columns window", () => {
       expect([...passColumnNames()]).toEqual([
         ["overview", t("station.overview")],
