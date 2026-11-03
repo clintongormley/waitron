@@ -31,9 +31,9 @@ openssl genrsa -out rsaCa.key 2048
 openssl genrsa -out rsaRecovery.key 2048
 
 CA_EXT="-addext basicConstraints=critical,CA:TRUE"
-# The impostor copies the CA's key identifier as well as its name. OpenSSL 3.5.7 stamped leaves
-# with their issuer's identifier and checkIssued compares it, so without the copy the impostor's
-# leaf was refused before the signature check was reached.
+# The impostor copies the CA's key identifier as well as its name. OpenSSL 3.0.13 (Ubuntu 24.04)
+# and 3.5.7 stamped leaves with their issuer's identifier and checkIssued compares it, so without
+# the copy the impostor's leaf was refused before the signature check was reached.
 SAME_ID="-addext subjectKeyIdentifier=5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
 self ca ca 30 "/CN=Waitron box CA" $CA_EXT $SAME_ID -addext "nameConstraints=critical,permitted;DNS:waitron.local"
 self impostorCa impostorCa 30 "/CN=Waitron box CA" $CA_EXT $SAME_ID
@@ -58,6 +58,7 @@ self redirect redirect 30 "/CN=waitron.local" $NOT_CA -addext subjectAltName=DNS
 self redirectAsCa redirect 30 "/CN=waitron.local" $CA_EXT -addext subjectAltName=DNS:waitron.local
 self redirectShort redirect 1 "/CN=waitron.local" $NOT_CA -addext subjectAltName=DNS:waitron.local
 self redirectWrongName redirect 30 "/CN=example.test" $NOT_CA -addext subjectAltName=DNS:example.test
+self redirectCaKey ca 30 "/CN=waitron.local" $NOT_CA -addext subjectAltName=DNS:waitron.local
 self redirectSameKey recovery 30 "/CN=waitron.local" $NOT_CA -addext subjectAltName=DNS:waitron.local
 `;
 
@@ -309,7 +310,7 @@ describe("freezeLockedTarget", () => {
   });
 
   describe("the redirect certificate", () => {
-    it.each(["normal", "recovery", "ca"])(
+    it.each(["normal", "recovery", "ca", "redirectCaKey"])(
       "%s as the redirect certificate → redirect-ca-signed",
       (name) => {
         expect(freezeLockedTarget(input({ redirectCertificate: cert(name) }))).toEqual(

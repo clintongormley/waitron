@@ -72,10 +72,8 @@ function redirectRefusal(text, ca, recovery) {
   if (!redirect.verify(redirect.publicKey)) return "redirect-not-self-signed";
   if (redirect.ca) return "redirect-is-ca";
   if (redirect.subjectAltName !== `DNS:${BOX_NAME}`) return "redirect-names-wrong";
-  const key = redirect.publicKey;
-  if ([recovery.publicKey, ca.publicKey].some((other) => other.equals(key))) {
-    return "redirect-same-key";
-  }
+  // A redirect certificate carrying the CA's key is already refused above, as CA-signed.
+  if (redirect.publicKey.equals(recovery.publicKey)) return "redirect-same-key";
   return null;
 }
 
@@ -103,7 +101,8 @@ export function freezeLockedTarget(input) {
   const recovery = parse(recoveryCertificate);
   if (!ca || !recovery) return refused("certificate-unreadable");
   if (!ca.ca || !ca.verify(ca.publicKey)) return refused("ca-invalid");
-  // checkIssued compares names only; the signature check is what ties the leaf to this CA's key.
+  // checkIssued matches the issuer's name and key identifier, both of which another CA can copy;
+  // only the signature check ties the leaf to this CA's key.
   if (!recovery.checkIssued(ca) || !recovery.verify(ca.publicKey)) {
     return refused("recovery-not-ca-signed");
   }
