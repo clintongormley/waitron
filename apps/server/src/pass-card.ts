@@ -92,6 +92,9 @@ export interface PassCard {
   }[];
   group?: { displayNumber: number; numberPartyLabel?: string; position: number };
   items: PassCardItem[];
+  /** The dimmed dishes the pass's display choice hides: not drawn, but still counted for the
+   *  card's lateness and its course Ready levers (D73). Absent when none are hidden. */
+  hiddenItems?: PassCardItem[];
   releaseTicketItemIds: string[];
   releaseContext: string | null;
 }
@@ -337,7 +340,13 @@ export function buildPassBoard(
     overview: [],
   };
   for (const card of [...board.held, ...board.toFire, ...board.inProgress, ...board.ready]) {
-    if (!showNonPassStations) card.items = card.items.filter((item) => !item.informational);
+    if (!showNonPassStations) {
+      const hidden = card.items.filter((item) => item.informational);
+      if (hidden.length > 0) {
+        card.items = card.items.filter((item) => !item.informational);
+        card.hiddenItems = hidden;
+      }
+    }
     for (const item of card.items) {
       board.overview.push({
         lineId: item.lineId,

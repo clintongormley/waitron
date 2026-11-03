@@ -719,6 +719,12 @@ describe("A773 pass display policy", () => {
       VENUE_SERVICE.setDeviceKitchenScreenDisplay(tx, deviceId, kind, value),
     );
 
+  /** The dishes Hide keeps on their cards without drawing them. */
+  const hiddenIds = (board: PassBoard) =>
+    boardCards(board)
+      .flatMap((card) => card.hiddenItems ?? [])
+      .map((item) => item.id);
+
   /** What the setting must never change on a card (B3 D46). */
   const facts = (board: PassBoard) =>
     boardCards(board).map((card) => ({
@@ -731,7 +737,7 @@ describe("A773 pass display policy", () => {
       releaseContext: card.releaseContext,
     }));
 
-  it("drops a pass's dimmed dishes and their overview facts when its device hides them, leaving every card's column and release as shown", async () => {
+  it("moves a pass's dimmed dishes to their card's hidden dishes and drops their overview facts when its device hides them, leaving every card's column and release as shown", async () => {
     const f = await fixture();
     const { burger, paella } = await burgerAndPaella(f, true);
     /** The board shown, then hidden, by the device's own choice. */
@@ -753,6 +759,8 @@ describe("A773 pass display policy", () => {
     );
     expect(requestedPair.before.board.overview.map((fact) => fact.informational)).toContain(true);
     expect(boardItems(requestedPair.after.board).map((item) => item.id)).toEqual([burger]);
+    expect(hiddenIds(requestedPair.before.board)).toEqual([]);
+    expect(hiddenIds(requestedPair.after.board)).toEqual([paella]);
     expect(requestedPair.after.board.overview.map((fact) => fact.informational)).toEqual([false]);
     expect(facts(requestedPair.after.board)).toEqual(facts(requestedPair.before.board));
     expect(requestedPair.after.display).toEqual({
@@ -786,6 +794,7 @@ describe("A773 pass display policy", () => {
     expect(readyPair.before.board.inProgress).toHaveLength(1);
     expect(readyPair.before.board.inProgress[0]!.allReady).toBe(false);
     expect(boardItems(readyPair.after.board).map((item) => item.id)).toEqual([burger]);
+    expect(hiddenIds(readyPair.after.board)).toEqual([paella]);
     expect(facts(readyPair.after.board)).toEqual(facts(readyPair.before.board));
   });
 
@@ -795,12 +804,13 @@ describe("A773 pass display policy", () => {
     await choose(f.a.id, "pass", false);
     const read = await shown(f, f.a.cookie, "/api/device/pass-board");
     expect(items(read).sort()).toEqual([burger, paella].sort());
+    expect(hiddenIds(read.board)).toEqual([]);
     expect(read.display).toEqual({ showNonPassStations: false, nonPassStationsOverride: false });
   });
 
   it("applies a pass monitor's own choice and still names nothing to release", async () => {
     const f = await fixture();
-    const { burger } = await burgerAndPaella(f, true);
+    const { burger, paella } = await burgerAndPaella(f, true);
     const monitor = await f.device("Pass monitor", f.kds, {
       kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: null },
     });
@@ -812,12 +822,28 @@ describe("A773 pass display policy", () => {
     await choose(monitor.id, "pass_monitor", false);
     const after = await shown(f, monitor.cookie, "/api/device/pass-monitor-board");
     expect(boardItems(after.board).map((item) => item.id)).toEqual([burger]);
+    expect(hiddenIds(after.board)).toEqual([paella]);
     expect(facts(after.board)).toEqual(facts(before.board));
     for (const card of boardCards(after.board)) {
       expect(card.releaseTicketItemIds).toEqual([]);
       expect(card.releaseContext).toBeNull();
     }
     expect(after.display).toEqual({ showNonPassStations: false, nonPassStationsOverride: false });
+  });
+
+  it("hides by the profile's choice when the device's own is cleared", async () => {
+    const f = await fixture();
+    const { burger, paella } = await burgerAndPaella(f, true);
+    await inTx(f.v, (tx) =>
+      VENUE_SERVICE.setProfileKitchenScreens(tx, f.v.cfg, f.kds, {
+        pass: { stationIds: null, zoneIds: null, showNonPassStations: false },
+      }),
+    );
+    await choose(f.a.id, "pass", null);
+    const read = await shown(f, f.a.cookie, "/api/device/pass-board");
+    expect(boardItems(read.board).map((item) => item.id)).toEqual([burger]);
+    expect(hiddenIds(read.board)).toEqual([paella]);
+    expect(read.display).toEqual({ showNonPassStations: false, nonPassStationsOverride: null });
   });
 
   it("answers the device's own choice, and the profile's once the device clears it", async () => {

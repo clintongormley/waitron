@@ -2005,6 +2005,8 @@ export interface PassCard {
   }[];
   group?: { displayNumber: number; numberPartyLabel?: string; position: number };
   items: PassCardItem[];
+  /** Dimmed dishes the pass's display choice hides: never drawn, still counted. */
+  hiddenItems?: PassCardItem[];
   /** Empty, with a null context, on the pass monitor's board. */
   releaseTicketItemIds: string[];
   releaseContext: string | null;

@@ -334,6 +334,37 @@ describe("A773 pass board widget", () => {
     expect(card.querySelectorAll("[data-item]")).toHaveLength(0);
   });
 
+  it("draws no line for a dish Hide hid, yet keeps its lateness, the overdue count and its course Ready (D73)", async () => {
+    const hidden = passCard({
+      ...billInProgress,
+      requestedAt: minutesAgo(50),
+      items: [],
+      hiddenItems: [
+        passItem({
+          id: "cold-late",
+          orderId: "order-5",
+          stationName: "Cold",
+          stationId: "st-cold",
+          state: "preparing",
+          phase: "preparing",
+          queuedAt: minutesAgo(50),
+          informational: true,
+          passControlled: false,
+        }),
+      ],
+    });
+    const el = await mountBoard({ board: passBoard({ inProgress: [hidden] }) });
+    const card = cardOf(el, hidden.key);
+    expect(card.querySelectorAll("[data-item]")).toHaveLength(0);
+    expect(card.classList.contains("age-forgotten")).toBe(true);
+    expect(root(el).querySelector("[data-overdue-count]")!.textContent!.trim()).toBe(
+      `1 ${t("station.overdue_count")}`,
+    );
+    expect(card.querySelector('[data-ready="course-mains"]')!.textContent!.trim()).toBe(
+      `${t("expo.ready")} Mains`,
+    );
+  });
+
   it("draws a held card dashed, untimed and without buttons, its dishes held", async () => {
     const el = await mountBoard({ board: passBoard({ held: [heldCard] }), showReprint: true });
     const card = cardOf(el, heldCard.key);

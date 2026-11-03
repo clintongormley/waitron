@@ -747,9 +747,40 @@ describe("A773 pass board: dimming", () => {
     const card = cards(shown)[0]!;
     expect(card.items.every((item) => item.informational)).toBe(true);
     expect(card.party).toEqual({ id: party, revision: 7 });
-    expect(hidden.inProgress).toEqual([{ ...card, items: [] }]);
+    expect(hidden.inProgress).toEqual([{ ...card, items: [], hiddenItems: card.items }]);
     expect(columnOf(hidden, card.key)).toBe(columnOf(shown, card.key));
     expect(hidden.overview).toEqual([]);
+  });
+
+  it("5d. keeps the dishes Hide hides on their card, apart from the dishes it draws (D73)", () => {
+    const rows = [
+      released({ id: "grill-1", state: "ready", lineNo: 1, course: mains }),
+      released({
+        id: "cold-1",
+        stationId: cold,
+        state: "preparing",
+        passControlled: false,
+        firedAt: at("11:30"),
+        lineNo: 2,
+        course: mains,
+      }),
+    ];
+    const options = { aStationInViewWaits: true };
+    const shown = buildPassBoard(rows, EVERY, { ...options, showNonPassStations: true });
+    const hidden = buildPassBoard(rows, EVERY, { ...options, showNonPassStations: false });
+    const [card] = cards(shown);
+    expect(cards(shown)).toHaveLength(1);
+    expect(card).not.toHaveProperty("hiddenItems");
+    const { items, ...rest } = card!;
+    expect(cards(hidden)).toEqual([
+      {
+        ...rest,
+        items: items.filter((item) => item.id === "grill-1"),
+        hiddenItems: items.filter((item) => item.id === "cold-1"),
+      },
+    ]);
+    expect(itemOf(card!, "cold-1").informational).toBe(true);
+    expect(hidden.overview.map((fact) => fact.lineId)).toEqual(["line-grill-1"]);
   });
 
   it("5b. lets no recalled pass work dim the board", () => {
