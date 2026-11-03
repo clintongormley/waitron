@@ -479,7 +479,7 @@ export class TillPassBoard extends LitElement {
       )}${this.#reprints(view)}${
         badge
           ? helpBadge("help.pass.card", helpText("help.kitchen.cards_part"), {
-              guide: "kitchen-service.service-lifetime",
+              guide: "kitchen-service.pass-screen",
             })
           : nothing
       }

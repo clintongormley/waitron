@@ -2480,21 +2480,23 @@ part that stops the event still counts; `till-guide-sheet` relays a same-origin 
 leaving the page stops it, and a redraw never restarts it. On a till or a handheld help still goes
 off only at the lock screen. The station board (`till-station-queue`) marks its first card drawn,
 Columns, and the Changes to orders heading while there are changes; the station screen marks
-Merged / Stacked, drawn only on a kitchen screen with more than one station; the pass and its
-monitor mark the first order card, and the pass also the first Course ready or Group ready, whose
-wrapper is drawn whether help is on or off. One card and one lever per board carry a badge, so a busy
+Merged / Stacked, drawn only on a kitchen screen with more than one station; the pass board
+(`till-pass-board`, on the pass, its monitor and a till's Pass) marks its first card drawn and
+Columns, and the first Course ready or Group ready, whose wrapper is drawn only while help is on.
+One card and one lever per board carry a badge, so a busy
 board does not fill with identical "?" marks and Tab stops. These badges show on a till's Kitchen and
 Pass screens too. On these boards the cards, Columns and the first lever carry `help-inset`
 (`kitchenHelpStyles` in `help-badge.ts`), which keeps the badge inside the part's trailing edge:
 at phone width the boards have no side padding, and a badge hung past a full-width card or the
 right-aligned Columns would make the screen scroll sideways. Merged / Stacked sits at the leading
 edge, so its badge hangs outward; the notices heading keeps half a badge's target of room after
-its words, help on or off, so its badge starts where the words end. `till-expo-screen` draws its
+its words, help on or off, so its badge starts where the words end. `till-pass-board` draws its
 badges only while help is on (a `HelpModeController`), because a pass monitor is pinned to have no
-button at all while help is off, and a help-mode badge's inner button is in the page even while
-the badge is hidden. Tests: `help-idle.test.ts`, `till-shell.kitchen-help.test.ts`,
-`station-queue.help.test.ts`, `till-station-screen.help.test.ts` and `till-expo-screen.help.test.ts`
-(the board, station-screen and pass suites keep their axe cases in a `*.help.a11y.test.ts` beside each).
+help badge, so no badge button, while help is off, and a help-mode badge's inner button is in the
+page even while the badge is hidden. Tests: `help-idle.test.ts`, `till-shell.kitchen-help.test.ts`,
+`station-queue.help.test.ts`, `till-station-screen.help.test.ts` and `till-pass-screen.help.test.ts`
+(the board and station-screen suites keep their axe cases in a `*.help.a11y.test.ts` beside each;
+the pass's are in `till-pass-screen.a11y.test.ts`).
 
 - A help badge is `<wt-help-tooltip mode="help-mode">` placed in a primitive's `help` slot, or
   drawn by a primitive from its own `help` (a `wt-menu-row`, a `wt-data-table` column, a `wt-tabs`

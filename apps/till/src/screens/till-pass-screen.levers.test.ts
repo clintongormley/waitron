@@ -428,7 +428,7 @@ describe("A773 pass screen: levers", () => {
     expect(withBadge).toEqual([cards[0]]);
     const card = badgeFor(el, helpText("help.kitchen.cards_part"))!;
     expect(card.textContent).toBe(helpText("help.pass.card"));
-    expect(card.getAttribute("guide-href")).toBe("/help/en/kitchen-service#service-lifetime");
+    expect(card.getAttribute("guide-href")).toBe("/help/en/kitchen-service#pass-screen");
 
     const ready = badges(el).filter((badge) => badge.textContent === helpText("help.pass.ready"));
     expect(ready).toHaveLength(1);

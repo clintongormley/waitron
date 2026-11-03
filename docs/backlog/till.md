@@ -68,8 +68,10 @@ their full text.
 - Found by #618 (`apps/till` `src/api` + `src/state` + `src/i18n`), not fixable in a
   comments-only change. Test titles repeat claims the branch corrected:
   `apps/till/src/state/working-order.test.ts` "previews the total via priceBasket" (the preview
-  sums line totals) and `apps/till/src/api/client.test.ts` "getExpoQueue GETs this node's
-  cross-station pass queue" (the queue is venue-wide and includes placed orders).
+  sums line totals). The till client's old all-stations pass read had a title of the same kind
+  ("this node's" for a venue-wide read); it retires with that read (A773-2 B4, D76), and its
+  replacement's case in `apps/till/src/api/client.test.ts` ("getExpoBoard GETs every station's
+  board…") names no node.
 
 ## Test titles repeat claims the branch corrected (#616)
 
@@ -77,8 +79,9 @@ their full text.
   repeat claims the branch corrected: `apps/server/src/working-order.test.ts` "lists the node's open
   orders" (the list is venue-wide); `station-queue.test.ts` "(nothing to release)" is false for a
   held line with no course, and several `station-queue`, `tender-pay` and `modifier-picker` test
-  titles carry task numbers. `css` comments in `apps/till/src/widgets/station-queue.ts` and
-  `screens/till-expo-screen.ts` still call the courseless group "auto-fired". `apps/till/README.md`
+  titles carry task numbers. The old pass screen's `css` comment calling the courseless group
+  "auto-fired" retires with that screen (A773-2 B4, D76); `apps/till/src/widgets/station-queue.ts`
+  and the new pass (`apps/till/src/widgets/pass-board.ts`) no longer say it. `apps/till/README.md`
   says the held list is shared across the registers "on a node". Read, not run: a courseless
   section the server held shows its lines greyed with no fire button (`#fireAction` in
   `station-queue.ts`, from #131); `GET /api/till` never sends `stripe_on_device`, so the
@@ -874,8 +877,8 @@ Open:
   the captured amount with all of it recorded as tip; the below-zero case with a capture was not
   run.
 - **Task 4 (#832, every paper names all of a party's tables).** At 390 px a pass card whose
-  label wraps also wraps its "2 min" onto two lines (`apps/till/src/screens/till-expo-screen.ts`);
-  nothing overflows. **DECIDED (owner, 2026-09-29): leave it** — after payment, the station queue
+  label wraps also wrapped its "2 min" onto two lines, on the pass screen A773-2 B4 retired (D76);
+  nothing overflowed. Not yet looked at on the new pass card (`apps/till/src/widgets/pass-board.ts`). **DECIDED (owner, 2026-09-29): leave it** — after payment, the station queue
   card, later kitchen notices and the till's list of a party's bills keep showing the frozen
   receipt label with the party's name ("Ana · Mesa 4, 5"). Not yet checked: the payment API's
   `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
@@ -926,7 +929,7 @@ original finding; its four-surface count and five-entry list no longer describe 
   `packages/ui-core/src/tokens/colors.css` is `--wt-color-warning` (with `--wt-color-on-warning`),
   which `wt-count-badge` uses. Each of the four call sites writes the fallback form
   `color: var(--wt-color-warning-text, var(--wt-color-text))` — `apps/till/src/widgets/basket.ts`,
-  `station-queue.ts`, `diet-badges.ts` and `apps/till/src/screens/till-expo-screen.ts` — so the
+  `station-queue.ts`, `diet-badges.ts` and the old pass screen (since retired, A773-2 B4) — so the
   emphasis those rows were written to carry never appears. `diet-badges.ts` also reads
   `--wt-color-success-text`, declared nowhere, the same way. **Next action:** whoever takes the till
   layout pass below decides whether these four want `--wt-color-warning`, a new
@@ -2540,11 +2543,6 @@ its own as the table's first food, its pass card says «Nuevo pedido» / New ord
 held course; B3 still says «Siguiente pase» / Next course there. B4 changes the test on main that
 pins «Siguiente pase» and names it in its PR.
 
-**Before PR C:** the expo board (`listExpoQueue`) measures a dish waiting for the pass from
-`queued_at`, which firing a held group does not move, so the dish reads overdue the moment it is
-asked for. Measure it from `requested_at`, or stamp `queued_at` when it is asked for (B3's plan,
-"Left for B4 (and later)").
-
 **An edit that adds an extra at a waiting station.** If the dish's own station fires at once
 (Grill) while the extra's waits for the pass (Fryer), an edit adding onion rings to a burger
 already sent prints no `+1.000 x RINGS` on Fryer's HOLD paper; the pass's release ticket lists
@@ -2900,12 +2898,12 @@ alone); their last screen or widget user went in A773-1 (#1897, `c9ad7a634`). De
 English and Spanish; three screen test files (`.test.ts`, `.empty-drawer.a11y`,
 `.populated-drawer.a11y`) check the screen does not show them.
 
-## A1250. The pass marks a late order in the brand colour where the station board marks it amber
+## A1250. The pass marks a late card in the brand colour where the station board marks it amber
 
-**A1250. The pass marks a late order in the brand colour where the station board marks it amber
+**A1250. The pass marks a late card in the brand colour where the station board marks it amber
 (question for the owner).** A late card's edge is `--wt-color-warning` on the station board
 (`apps/till/src/widgets/station-queue.ts`, `.ticket.age-warm`) and `--wt-color-primary` on the
-pass (`apps/till/src/screens/till-expo-screen.ts`, `.order.age-warm`); both then turn red. Should
+pass (`apps/till/src/widgets/pass-board.ts`, `.ticket.age-warm`); both then turn red. Should
 the pass use amber too? The help texts describe each as it is today.
 
 ## A1253. A help badge on a button in the brand colour reads as part of the button

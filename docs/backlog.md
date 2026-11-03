@@ -1975,9 +1975,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   #1911).** The guide sheet closes on lock only because a lock draws a new shell; on a kitchen
   screen it also closes when help goes off after two idle minutes.
 
-- **A1250. The pass marks a late order in the brand colour where the station board marks it amber
+- **A1250. The pass marks a late card in the brand colour where the station board marks it amber
   (question for the owner).** Should the pass use amber too?
-  [Detail](backlog/till.md#a1250-the-pass-marks-a-late-order-in-the-brand-colour-where-the-station-board-marks-it-amber)
+  [Detail](backlog/till.md#a1250-the-pass-marks-a-late-card-in-the-brand-colour-where-the-station-board-marks-it-amber)
 
 - **A1253. A help badge on a button in the brand colour reads as part of the button (question for
   the owner, A582 slice 5's look check).** One answer: a thin ring of page colour round every badge

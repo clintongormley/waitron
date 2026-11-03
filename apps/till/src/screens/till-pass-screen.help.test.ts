@@ -285,7 +285,7 @@ describe("A773 pass screen: help badges", () => {
     { lang: "en", text: helpEn },
     { lang: "es", text: helpEs },
   ])(
-    "the card's box says the card's text and links to /help/<language>/kitchen-service#service-lifetime ($lang)",
+    "the card's box says the card's text and links to /help/<language>/kitchen-service#pass-screen ($lang)",
     async ({ lang, text }) => {
       setLocale(lang);
       const { el } = await mountPass();
@@ -296,7 +296,7 @@ describe("A773 pass screen: help badges", () => {
       await userEvent.click(badge.shadowRoot!.querySelector("button")!);
       expect(isOpen(badge)).toBe(true);
       const link = badge.shadowRoot!.querySelector<HTMLAnchorElement>('[part="guide"]')!;
-      expect(link.getAttribute("href")).toBe(`/help/${lang}/kitchen-service#service-lifetime`);
+      expect(link.getAttribute("href")).toBe(`/help/${lang}/kitchen-service#pass-screen`);
       expect(link.textContent).toBe(text["help.guide_link"]);
     },
   );

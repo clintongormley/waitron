@@ -96,8 +96,8 @@ comida hasta que la marques como servida o termines el servicio de la mesa; la c
 cerrada pasa al mostrador sigue hasta que se entrega el pedido (más abajo). El pase no tiene una
 acción Hecho ni En camino aparte. Los platos listos conservan su estado Listo y los avisos de
 demora mientras esperan a que los sirvas. Si las mesas se han
-unido a otro grupo de comensales, sus cuentas cobradas siguen visibles hasta que termine el grupo
-que las reúne.
+unido a otro grupo de comensales, la comida de sus cuentas cobradas sigue en el pase hasta que
+termine el grupo que las reúne.
 
 En la mesa, un plato listo sigue como **Listo** en su ventana de detalle hasta que lo marques
 como servido. La lista Enviado conserva el tiempo que lleva listo para que veas qué falta servir.
@@ -190,14 +190,69 @@ terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pe
 pendiente de recoger; una pantalla de cocina en la que nadie inicia sesión no muestra ninguno de los
 dos.
 
+## Trabaja en el pase {#pass-screen}
+
+El pase muestra una tarjeta por cada grupo de platos que envía una mesa, en todas sus cuentas, y una
+por cada pedido de mostrador. Sus columnas son **En espera**, **Por marchar**, **En curso** y
+**Listo**, y una tarjeta avanza por ellas como sus platos: está en **En espera** mientras todos sus
+platos están en espera, en **Por marchar** mientras tiene platos que esperan a que este pase los
+marche, en **En curso** mientras sus platos están en sus estaciones y en **Listo** cuando todos
+están listos. **Resumen** está oculta hasta que la muestras en **Columnas**, y entonces va primero.
+
+La cabecera de una tarjeta dice qué envió el camarero, **Nuevo pedido**, **Siguiente pase** o
+**Añadido** (una tarjeta en espera no dice ninguno), y después su número de pedido, su mesa y su
+grupo. Sus minutos cuentan desde que el camarero lo envió; una tarjeta en **Listo** muestra **Listo
+3 min**, contados desde que su último plato estuvo listo, y una en espera no muestra ninguno. El
+borde izquierdo de la tarjeta toma el color de marca y luego pasa a rojo mientras sus platos
+esperan, según los avisos de demora de sus estaciones; un plato que espera demasiado dice
+**Olvidado**, y la fila encima de las columnas cuenta las tarjetas con retraso (**2 con retraso**).
+Cada plato muestra su estado y su estación, como **Preparando · Parrilla**.
+
+Un plato cuya estación espera al pase no se prepara hasta que el pase lo marcha. Cuando el camarero
+[pide la preparación](kitchen-service.md#request-cooking), su tarjeta pasa a **Por marchar** y el
+plato dice **Esperando al pase · Parrilla**. Toca **Marchar** en la tarjeta para enviar a sus
+estaciones los platos que esperan a este pase; la tarjeta pasa entonces a **En curso**. Si la mesa
+ha cambiado desde la última lectura de la pantalla, no se envía nada y la pantalla dice **La
+pantalla se ha actualizado: revísala y vuelve a pulsar.**
+
+Si la estación de un plato está cerrada, el plato dice **Parrilla está cerrada: cambia el plato de
+estación desde el TPV o abre Parrilla por hoy**, y **Marchar** sigue desactivado hasta que se haga
+una de las dos cosas. Un extra que va a su propia estación cerrada dice en cambio **Parrilla está
+cerrada: Marchar lo envía allí igualmente**, y **Marchar** sigue activo.
+
+Mientras ninguna estación que cubre este pase espere al pase, nada de lo que cubre se atenúa.
+Cuando una espera, sus platos que esperan a este pase se ven enteros, y el pase atenúa los platos de
+sus estaciones que no esperan y los enviados antes de que su estación empezara a esperar: dicen, por
+ejemplo, **Preparando · Ya en Barra**. Un plato de una estación o zona de servicio que este pase no
+cubre, en una tarjeta que comparte con otro pase, siempre se atenúa; mientras espera a ese pase dice
+**Barra: esperando a su pase**. Los platos atenuados son solo información. **Resumen** no los cuenta
+y cuenta los demás como el de la pantalla de cocina, con los que están en espera o esperan al pase
+tras el **+**.
+
+En una tarjeta en **En curso**, **Grupo listo** marca como listos todos los platos enviados del
+grupo de la mesa, en todas las estaciones, no solo los que muestra este pase, y en un pedido de
+mostrador **Curso listo** hace lo mismo con un curso. **Marchar** y estos botones solo aparecen en
+un dispositivo cuyo perfil **Lleva el pase**. En un terminal, una tarjeta que no está en espera
+ofrece además **Reimprimir** por cada una de sus cuentas.
+
+Un monitor de pase muestra el mismo tablero para mirarlo, sin **Marchar**, botones de listo ni
+**Reimprimir**. Un terminal cuyo dispositivo no tiene pantalla de pase ni monitor de pase abre
+**Pase** con todas las estaciones y zonas de servicio, con los botones de listo pero sin
+**Marchar**: solo marcha una pantalla de pase.
+
+Toca la cabecera de una columna para plegarla, y usa **Columnas**, al final de la fila encima de las
+columnas, para mover u ocultar columnas, como en la [pantalla de cocina](kitchen-service.md#kitchen-screen);
+este dispositivo guarda la disposición de cada tablero. Donde la pantalla es demasiado estrecha para
+sus columnas, el pase las muestra como secciones de una sola lista, en el mismo orden, y una sección
+se pliega tocando su cabecera.
+
 ## Ayuda en la pantalla de cocina {#kitchen-help}
 
 Toca **?** arriba a la derecha de una pantalla de cocina, antes de los botones de tema e idioma,
 para activar la ayuda. Aparecen marcas **?** en la primera tarjeta y en **Columnas** de cada
 tablero, en **Cambios en los pedidos** mientras haya cambios por leer, y en **Todo junto** o **Por
-estación** en una pantalla con más de una estación. En el pase aparecen en la primera tarjeta de
-pedido y en el primer **Curso listo** o **Grupo listo**; un monitor del pase solo marca su primera
-tarjeta de pedido. Toca una marca para leer una nota breve sobre esa parte; algunas notas enlazan
+estación** en una pantalla con más de una estación. En el pase aparecen también en el primer **Curso
+listo** o **Grupo listo**. Toca una marca para leer una nota breve sobre esa parte; algunas notas enlazan
 con esta guía. El resto de la pantalla funciona como siempre mientras la ayuda está activa.
 
 La ayuda se desactiva sola dos minutos después de la última vez que se tocó la pantalla, y una
@@ -243,7 +298,8 @@ quien envía no es encargado, el terminal pide el PIN de un encargado tras **La 
 ## Pide la preparación desde el terminal {#request-cooking}
 
 Pide los platos en espera desde el pedido de la mesa. Las colas de las estaciones y el pase muestran los pases
-y grupos en espera sin botón Marchar. Esos platos se muestran atenuados y no avanzan al tocarlos.
+y grupos en espera sin botón Marchar. Un plato cuya estación espera al pase va en cambio a la columna
+**Por marchar** del pase: consulta [Trabaja en el pase](kitchen-service.md#pass-screen). Esos platos se muestran atenuados y no avanzan al tocarlos.
 Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estación.
 Si el equipo no tiene espacio en disco, no se puede avanzar un plato. La estación dice
 **No se ha guardado: el equipo no tiene espacio en disco. Avisa al encargado.** y el plato se
