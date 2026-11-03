@@ -28,7 +28,7 @@ let opened: ReturnType<typeof openSmallDisk> | undefined;
 let disk: SmallDisk | undefined;
 
 beforeAll(() => {
-  opened = openSmallDisk("WAITRON_FULL_DISK_DIR_BACKUP_ROOM");
+  opened = openSmallDisk("WAITRON_FULL_DISK_DIR_BACKUP_ROOM", 32);
   if (opened.ok) disk = opened.disk;
   else if (!REQUIRE_FULL_DISK)
     console.warn(`backup-room full-disk tests SKIPPED: ${opened.reason}`);

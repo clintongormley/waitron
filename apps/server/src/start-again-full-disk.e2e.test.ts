@@ -39,7 +39,7 @@ let disk: SmallDisk | undefined;
 // Runs after useVenueDb's own beforeAll, registered when the fixture is imported, so the suite's
 // database stays off the small disk and only each case's folders land on it.
 beforeAll(() => {
-  opened = openSmallDisk("WAITRON_FULL_DISK_DIR_START_AGAIN");
+  opened = openSmallDisk("WAITRON_FULL_DISK_DIR_START_AGAIN", 32);
   if (!opened.ok) {
     if (!REQUIRE_FULL_DISK) console.warn(`start-again-full-disk tests SKIPPED: ${opened.reason}`);
     return;
