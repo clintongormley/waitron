@@ -180,6 +180,21 @@ export function formatWifiRecord(network) {
  *   frozen; remove: no copy should exist, so any copy present is obsolete
  */
 
+/** Every reason decideWifiBootCopy gives for no copy. Frozen. */
+export const WIFI_NO_COPY_REASONS = Object.freeze([
+  "cable-only",
+  "open",
+  "open-or-wep",
+  "dynamic-wep",
+  "owe",
+  "enterprise",
+  "unsupported-security",
+  "password-unavailable",
+  "password-not-printable",
+  "password-too-long",
+  "password-invalid",
+]);
+
 const SETTINGS_CODE = "wifi_record.settings_invalid";
 const WIFI_SETTINGS_KEYS = ["kind", "ssidHex", "keyMgmt", "psk", "hidden"];
 /** @type {Map<string, WifiNoCopyReason>} NetworkManager's key-mgmt values that have no copy */
@@ -256,8 +271,9 @@ export function decideWifiBootCopy(settings) {
  *   being equal to its realpath is the caller's duty, not checked
  * @property {number} ownerUid  0 in production; tests pass process.getuid()
  * @property {() => Promise<BootMountIdentity>} inspectBootMount
- * @property {{ lstat: typeof fs.lstat, open: typeof fs.open }} [io]  test-only override; the reader
- *   has no other file operation
+ * @property {{ lstat: typeof fs.lstat, open: typeof fs.open }} [io]  the publisher passes its own,
+ *   and tests pass one to count or fail calls; leave the key out for node:fs/promises. The reader
+ *   has no other file operation.
  * @typedef {{kind:'loaded', network: WifiNetwork} | {kind:'absent'}
  *   | {kind:'refused', reason: string}} WifiReadResult  frozen
  */

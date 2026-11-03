@@ -9,6 +9,7 @@ import { TextDecoder, TextEncoder, inspect } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BOOT_ROOT,
+  WIFI_NO_COPY_REASONS,
   WIFI_RECORD_MAX_BYTES,
   createWifiRecordReader,
   decideWifiBootCopy,
@@ -1588,5 +1589,27 @@ describe("decideWifiBootCopy never lets the password out except in a write", () 
     const decision = /** @type {any} */ (decideWifiBootCopy(wifi({ psk: "CANARY-pass" })));
     expect(decision.kind).toBe("write");
     expect(new TextDecoder().decode(decision.bytes)).toContain("CANARY");
+  });
+});
+
+describe("WIFI_NO_COPY_REASONS", () => {
+  it("lists the eleven reasons in order, frozen, each the reason of some remove case", () => {
+    expect(WIFI_NO_COPY_REASONS).toEqual([
+      "cable-only",
+      "open",
+      "open-or-wep",
+      "dynamic-wep",
+      "owe",
+      "enterprise",
+      "unsupported-security",
+      "password-unavailable",
+      "password-not-printable",
+      "password-too-long",
+      "password-invalid",
+    ]);
+    expect(Object.isFrozen(WIFI_NO_COPY_REASONS)).toBe(true);
+    const caseReasons = new Set(removeCases.map(([, reason]) => reason));
+    for (const reason of caseReasons) expect(WIFI_NO_COPY_REASONS).toContain(reason);
+    for (const reason of WIFI_NO_COPY_REASONS) expect(caseReasons.has(reason)).toBe(true);
   });
 });

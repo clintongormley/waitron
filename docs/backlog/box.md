@@ -910,8 +910,8 @@ preboot rig cases; and the key-memory measurements.
 PR 3 left for later, from its plan's "Out", among them: the installer's screens, words, `LEEME`, printed card
 and progress figures; typing the recovery key on the reinstall screen to see the disk's last sale
 and unsent records; the real in-memory, stick, keyboard, clock, download, write, boot and hotspot
-adapters and the `waitron-instalar.local` status page; joining Wi-Fi and staging the first Wi-Fi
-boot copy; and the source-history floor on reinstall, still gated on A1042.
+adapters and the `waitron-instalar.local` status page; joining Wi-Fi and calling PR 5's publisher
+for the first Wi-Fi boot copy; and the source-history floor on reinstall, still gated on A1042.
 
 **Built so far (2026-11-03), PR 4.** [PR 4](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md)
 (#2430) adds one host library under `scripts/box/` and extends PR 2's Wi-Fi record module, none of
@@ -944,6 +944,35 @@ folder or NetworkManager.
   reader would refuse (`password-invalid`). The reader's three refusals are what become password
   reasons; an error the reader throws is not caught and reaches the caller.
 
+**Built so far (2026-11-03), PR 5.** [PR 5](../superpowers/plans/2026-11-03-b3-5-wifi-publication.md)
+(#2432) adds one host library under `scripts/box/`, none of it called yet. Unlike PR 4's, it writes
+and removes real files, through file operations a test can replace.
+
+- `disk-key.mjs` exports its default file operations as `hostFileIo`, so both modules share one
+  set of default file operations; nothing else in it changed.
+- `wifi-boot-copy.mjs`: `createWifiBootCopyPublisher` takes `decideWifiBootCopy`'s answer (PR 4)
+  and checks it first: a copy whose bytes `parseWifiRecord` does not load, a reason not on
+  `WIFI_NO_COPY_REASONS` (now exported by `wifi-record.mjs`), or any other shape is rejected with
+  `wifi_copy.decision_invalid`, before any file call. It runs PR 2's reader first, so the boot
+  mount, folder and record rules are the reader's; a copy the reader finds damaged (corrupt,
+  unsupported or oversized) is replaced or removed, not refused. It then checks the folder again
+  and the staging name `wifi.json.next`. Anything but a regular single-link file at `wifi.json` or
+  `wifi.json.next` (a symbolic link, folder, named pipe or second hard link), a symbolic link or
+  non-folder at the folder, or a wrong owner or wrong permissions at any of the three refuses with
+  no write (`failed`, with the reason), for a removal as for a write. A copy is written to
+  `wifi.json.next` with the `wx` flag (fail if the name exists) and mode `0600`, flushed, renamed
+  to `wifi.json`, the folder flushed, and read back; a missing folder is made with mode `0700`
+  first. An unchanged copy with no leftover staging file is not rewritten, only the two folders
+  flushed. Every "no copy" answer, not only cable-only, removes `wifi.json` and any
+  `wifi.json.next`, flushes the folder and checks both are gone; with no folder it answers `absent`
+  with no write. The folder is never removed, and no other name in it is touched. A failed step
+  stops there with no clean-up, and the next publication removes what it left (tested after a stop
+  at every step). `status()` answers `pending`, `current`, `absent` or `failed`, with the "no copy"
+  reason and the failure, and nothing about whether the box is connected; it is `pending` until the
+  first publication finishes and while one runs. Publications run one at a time, in call order.
+  The fixed `publishWifiBootCopy` answers a valid decision with `failed` / `mount-unverified` and no
+  file call until the Linux pull request adds the boot-mount check.
+
 **A box that already holds Waitron, with its TPM or Secure Boot switched off:** the owner decided on 2026-11-03; see [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 **For later slices, from PR 1's re-map against main:**
@@ -964,8 +993,7 @@ folder or NetworkManager.
 
 - The installation id in the recovery address must be a new per-disk value made at first start,
   never Waitron Cloud's `installationId` or the fiscal `installationIdentity` (re-map finding 7).
-- Task 3.1's publication writes `decideWifiBootCopy`'s bytes (built in PR 4) and removes the copy
-  on every "no copy" answer; it shows the answer's reason with the copy state, because open, WEP,
+- Task 3.1's host service shows the publisher's state (PR 5) with its reason, because open, WEP,
   OWE and enterprise networks and the password cases get no Wi-Fi unlock in version 1.
 - The address fallback widens `freezeLockedTarget`'s one-name rule for the recovery certificate
   and `decideLockedRequest`'s host rule together.
@@ -1047,6 +1075,45 @@ folder or NetworkManager.
 - Decisions recorded for review: a name the tag cannot hold gets no tag, never a cut-down one
   (D4); a power cut while removing a doubled tag can leave one old tag readable until the next
   write (D7).
+
+**For later slices, from PR 5's [re-map against main](../superpowers/plans/2026-11-03-b3-5-wifi-publication.md#re-map-against-main-on-2026-11-03):**
+
+- Slice 3's host service publishes at every unlocked start, before it reports the copy state, and
+  after every Wi-Fi change it applies or sees, with `decideWifiBootCopy` of NetworkManager's
+  current settings; slice 2's installer publishes the first copy at handoff. Until then the state
+  is `pending`.
+- The durable pending intent on `@host-state` (the separate host mount inside the encrypted disk)
+  is slice 3's, beside the live NetworkManager change it covers. Proposed (D11): it records only
+  that a change began and ended, with no password, so it cannot replay an obsolete one and needs no
+  key beyond the disk encryption that already holds `@host-state`. Its shape waits for the live
+  NetworkManager change it covers, not for a way to test it: PR 1's store shows an `@host-state`
+  record can be built and tested with an injected mount check.
+- The host reports a live-network change and the copy's state as two outcomes, with recovery
+  availability separately (spec §7.5), and treats Wi-Fi unlock as available only when the state is
+  `current` (proposed).
+- Rig checks: that the flushes keep a new copy and a removal through a power cut on the boot
+  partition's real ext4; that no boot-loader-measured byte changes across publications; preboot
+  with old, new, missing and corrupt copies after a cut at every step.
+- `unlink` of a folder answered `EPERM` on macOS and `EISDIR` on Linux in the plan's probe
+  (2026-11-03), so no box code may read a folder from `unlink`'s error.
+- Decisions recorded for review: a `wifi.json.next` that is a symbolic link or not a regular file
+  refuses with no write, where PR 1's store removes a leftover link, and an unsafe `wifi.json` or
+  `wifi.json.next` refuses a removal too, so after a switch to cable-only an obsolete password can
+  stay where preboot reads it until root clears the fault (D4); a file operation that throws while
+  writing, flushing or removing is `io-failed`, before or after the rename, and any failure or
+  mismatch during the read-back or the removal check, its own reads included, is
+  `publication-unverified` (D8); every "no copy" answer removes the active copy, not only
+  cable-only (D7); a failed step makes no clean-up (D8).
+- The publisher works on paths, and `node:fs` on Node 26.13 offers no folder-relative calls
+  (`openat`, `renameat`, `unlinkat`). So another process able to write in the boot root (root, on
+  a box) that swaps `waitron-recovery` for a link or another folder between the publisher's checks
+  and its writes redirects the write or removal there; a redirected removal can then answer
+  `absent` with the old copy still under the boot root, and an unchanged copy answers `current`
+  without reading the copy again. The finish-branch run-it review reproduced all four on real files
+  with the swap injected into a file operation (2026-11-03): the new password written outside the
+  boot root, an outside file removed, `current` over a different copy, and `absent` with the old
+  password left under the boot root. Slice 3 must keep every other writer out of the boot root
+  while it publishes, or the Linux adapter must use folder-relative calls.
 
 **Left open by PR 1's review (#2370):**
 
