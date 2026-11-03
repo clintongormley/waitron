@@ -122,24 +122,28 @@ function allocation(
     timestamp(value.issuedAt)
   );
 }
+const APPROVAL = [
+  "version",
+  ...BINDING,
+  "oldMachineOffline",
+  "oldMachineAbsent",
+  "noParallelRecovery",
+  "confirmedAt",
+];
 function approval(value: unknown): value is RecordValue {
+  const v2 =
+    exact(value, [...APPROVAL, "oldMachineRelinquished"]) &&
+    value.version === 2 &&
+    typeof value.oldMachineRelinquished === "boolean";
   if (
-    !exact(value, [
-      "version",
-      ...BINDING,
-      "oldMachineOffline",
-      "oldMachineAbsent",
-      "noParallelRecovery",
-      "confirmedAt",
-    ]) ||
-    value.version !== 1 ||
+    !(v2 || (exact(value, APPROVAL) && value.version === 1)) ||
     parseAllocationOperator(value.operatorId) === null ||
     !BINDING.filter((key) => key !== "operatorId").every((key) => text(value[key])) ||
     !timestamp(value.confirmedAt) ||
     typeof value.oldMachineAbsent !== "boolean" ||
     typeof value.oldMachineOffline !== "boolean" ||
     value.noParallelRecovery !== true ||
-    (!value.oldMachineAbsent && !value.oldMachineOffline)
+    (!value.oldMachineAbsent && !value.oldMachineOffline && !(v2 && value.oldMachineRelinquished))
   )
     return false;
   return (

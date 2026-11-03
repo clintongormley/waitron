@@ -981,3 +981,115 @@ it("retains captured conflict observations", async () => {
   edit("after", (db) => db.exec("delete from fiscal_conflict_evidence"));
   expect(await verify()).toEqual(result("invalid"));
 });
+
+async function relinquishedPromotion(hour: number) {
+  const issuedAt = new Date(Date.parse(time) + hour * 3600000).toISOString();
+  const identity = encodeMinuteIdentity(Date.parse(issuedAt));
+  const allocation: FiscalAllocation = {
+    version: 1,
+    allocationId: `hour-${hour}`,
+    taxpayerNif: "89890001K",
+    softwareId: "W1",
+    environment: "preproduction",
+    installationIdentity: identity,
+    series: bases.map((b) => ({ ...b, code: `${b.code}-${identity}` })),
+    source: "hour",
+    reservationEvidence: null,
+    issuedAt,
+  };
+  const approval: RecoveryApproval = {
+    version: 2,
+    eventId: `event-${hour}`,
+    operatorId: "administrator",
+    sourceId: "promotion:original",
+    targetNodeId: node.nodeId,
+    oldMachineOffline: false,
+    oldMachineAbsent: false,
+    oldMachineRelinquished: true,
+    noParallelRecovery: true,
+    confirmedAt: issuedAt,
+    incidentEvidence: `incident-${hour}`,
+  };
+  const binding = {
+    module: "fiscal-verifactu",
+    action: "promote",
+    eventId: approval.eventId,
+    sourceId: approval.sourceId,
+    targetNodeId: node.nodeId,
+  };
+  return withOperationAuthority(binding, approval.operatorId, (authority) =>
+    withHourAdmission(
+      { binding, authority, input: { allocation, approval } },
+      { requiredBases: bases, priorActivation: "none", oldMachineRelinquished: true },
+      (evidence) =>
+        withTransaction(suite.db, (tx) =>
+          activateAllocation(tx, node, allocation, approval, {
+            ...binding,
+            taxpayerNif: allocation.taxpayerNif,
+            softwareId: allocation.softwareId,
+            environment: allocation.environment,
+            mode: "recovery",
+            oldMachineRelinquished: evidence.oldMachineRelinquished,
+            operatorId: approval.operatorId,
+            incidentEvidence: approval.incidentEvidence,
+            requiredBases: bases,
+            reauthentication: { operatorId: approval.operatorId, eventId: approval.eventId },
+            priorActivation: "none",
+            authority: evidence.authority,
+          }),
+        ),
+    ),
+  );
+}
+async function captureWithPromotion() {
+  await capture();
+  // The sold record's series is not an allocated base, so a later activation would refuse series_mismatch.
+  await suite.db.execute(
+    sql`update invoice_series set retired_at=${time} where code='S1' and retired_at is null`,
+  );
+  await relinquishedPromotion(2);
+  await rm(directory!, { recursive: true, force: true });
+  await capture(false);
+}
+function storedApproval(eventKey: string) {
+  const db = new DatabaseSync(join(directory!, "after.db"), { readOnly: true });
+  try {
+    const row = db
+      .prepare("select approval from fiscal_allocations where event_key=?")
+      .get(eventKey)!;
+    return JSON.parse(String(row.approval)) as Record<string, unknown>;
+  } finally {
+    db.close();
+  }
+}
+
+it("a stored version 2 relinquished approval verifies", async () => {
+  await captureWithPromotion();
+  expect(storedApproval("event-2")).toMatchObject({
+    version: 2,
+    oldMachineOffline: false,
+    oldMachineAbsent: false,
+    oldMachineRelinquished: true,
+  });
+  expect(await verify()).toEqual(result("passed"));
+});
+
+it("a stored version 1 approval verifies as today", async () => {
+  await capture();
+  expect(storedApproval("event-0")).toMatchObject({ version: 1, oldMachineAbsent: true });
+  expect(storedApproval("event-1")).toMatchObject({ version: 1, oldMachineOffline: true });
+  expect(await verify()).toEqual(result("passed"));
+});
+
+it("a stored version 2 approval saying neither offline, absent nor relinquished is refused", async () => {
+  await captureWithPromotion();
+  both((db) => {
+    const row = db
+      .prepare("select approval from fiscal_allocations where event_key='event-2'")
+      .get()!;
+    db.prepare("update fiscal_allocations set approval=? where event_key='event-2'").run(
+      JSON.stringify({ ...JSON.parse(String(row.approval)), oldMachineRelinquished: false }),
+    );
+  });
+  expect(await verify()).toEqual(result("invalid"));
+});

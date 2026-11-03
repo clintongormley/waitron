@@ -951,3 +951,20 @@ it("does not project retained declared evidence with an unrecognised known-histo
     }),
   );
 });
+
+it("a version 2 approval is refused", async () => {
+  const { readDeclaredPaperInput } = await admission();
+  const f = fixture("P");
+  expect(() => readDeclaredPaperInput(f.input)).not.toThrow();
+  expect(() =>
+    readDeclaredPaperInput({
+      ...f.input,
+      approval: { ...f.input.approval, version: 2, oldMachineRelinquished: true },
+    }),
+  ).toThrowError(
+    expect.objectContaining({
+      code: "sif.allocation_invalid",
+      params: { reason: "malformed_approval" },
+    }),
+  );
+});
