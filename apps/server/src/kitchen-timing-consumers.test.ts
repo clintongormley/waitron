@@ -20,7 +20,9 @@ import {
   setupPartyVenue,
 } from "./testing/party-venue.js";
 import { routeProductTo } from "./testing/zone-offers.js";
-import { listExpoQueue, listStationQueue } from "./working-order.js";
+import { listStationQueue } from "./working-order.js";
+import { readScopedPassBoard } from "./pass-board.js";
+import { boardItems, EVERY } from "./testing/pass-board-probe.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -87,9 +89,11 @@ describe("each station's own minutes across consumers", () => {
           const [queue] = await listStationQueue(tx, stationId);
           expect.soft(queue!.thresholds).toEqual(thresholds);
           expect.soft(queue!.items[0]!.band).toBe(band);
-          const expo = (await listExpoQueue(tx)).find((row) => row.orderId === billId)!;
-          expect.soft(expo.worstBand).toBe(band);
-          expect.soft(expo.groups[0]!.items[0]!.thresholds).toEqual(thresholds);
+          const passItems = boardItems(await readScopedPassBoard(tx, v.cfg, EVERY)).filter(
+            (item) => item.orderId === billId,
+          );
+          expect.soft(passItems.map((item) => item.band)).toEqual([band]);
+          expect.soft(passItems[0]!.thresholds).toEqual(thresholds);
           const signals = await readBillSignals(tx, [billId], now);
           expect
             .soft(signals.get(billId))
@@ -135,7 +139,9 @@ describe("each station's own minutes across consumers", () => {
     const reads = async () => {
       const readers = await inTx(v, async (tx) => ({
         queue: (await listStationQueue(tx, station!.id))[0]!.items[0]!.band,
-        pass: (await listExpoQueue(tx)).find((row) => row.orderId === tabId)!.worstBand,
+        pass: boardItems(await readScopedPassBoard(tx, v.cfg, EVERY))
+          .filter((item) => item.orderId === tabId)
+          .map((item) => item.band),
         signals: (await readBillSignals(tx, [tabId], now)).get(tabId),
         overdue: (await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).map((row) => ({
           id: row.orderId,
@@ -146,7 +152,7 @@ describe("each station's own minutes across consumers", () => {
     };
     expect(await reads()).toEqual({
       queue: "warm",
-      pass: "warm",
+      pass: ["warm"],
       signals: [{ kind: "long_wait", band: "warm" }],
       overdue: [],
       floor: "warm",
@@ -159,7 +165,7 @@ describe("each station's own minutes across consumers", () => {
     );
     expect(await reads()).toEqual({
       queue: "forgotten",
-      pass: "forgotten",
+      pass: ["forgotten"],
       signals: [{ kind: "long_wait", band: "forgotten" }],
       overdue: [{ id: tabId, band: "forgotten" }],
       floor: "forgotten",
@@ -190,7 +196,9 @@ describe("each station's own minutes across consumers", () => {
       const [card] = await listStationQueue(tx, kitchen!.id);
       expect(card!.queuedAt > heldAt).toBe(true);
       expect(card!.items.map((item) => item.band)).toEqual(["fresh"]);
-      expect((await listExpoQueue(tx)).map((row) => row.worstBand)).toEqual(["fresh"]);
+      expect(
+        boardItems(await readScopedPassBoard(tx, v.cfg, EVERY)).map((item) => item.band),
+      ).toEqual(["fresh"]);
       expect(await computeOverdueOrders(tx, { nodeId: v.cfg.nodeId })).toEqual([]);
     });
   });

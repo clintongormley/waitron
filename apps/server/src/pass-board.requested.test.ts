@@ -17,7 +17,7 @@ import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { OPERATOR } from "./testing/party-venue.js";
-import { readPassBoard, readPassRows } from "./working-order.js";
+import { readPassRows } from "./working-order.js";
 import { readPassCardRows, readScopedPassBoard, type PassScope } from "./pass-board.js";
 import type { PassBoard, PassCard } from "./pass-card.js";
 import { fireNewOrder } from "./testing/split-extras-venue.js";
@@ -148,42 +148,41 @@ describe("A773 pass board: reads", () => {
         thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
         band: "fresh",
       };
-      expect(await readPassBoard(tx, onOrder(venue.party.tabId))).toEqual([
-        {
-          orderId: venue.party.tabId,
-          kitchenNote: null,
-          orderNumber: 1,
-          openedMinutes: 0,
-          party: { id: venue.party.partyId, revision: 0 },
-          courses: [],
-          groups: [
-            {
-              groupId: placed.groupId,
-              position: 1,
-              displayNumber: 1,
-              numberPartyId: venue.party.partyId,
-              state: "fired",
-              fired: false,
-              items: [
-                {
-                  ...item,
-                  id: placed.burgerItem,
-                  name: "BURG",
-                  stationName: "Grill",
-                  firedAt: null,
-                },
-                { ...item, id: placed.waterItem, name: "H2O", stationName: "Bar", firedAt: AT },
-              ],
-            },
-          ],
-          tableLabel: "Split extras",
-          worstBand: "fresh",
-        },
-      ]);
+      const [card, ...others] = cards(await readScopedPassBoard(tx, venue.cfg, EVERY));
+      expect(others).toEqual([]);
+      expect(card).toMatchObject({
+        target: { kind: "group", partyId: venue.party.partyId, groupId: placed.groupId },
+        party: { id: venue.party.partyId, revision: 0 },
+        group: { displayNumber: 1, position: 1 },
+        orders: [
+          {
+            orderId: venue.party.tabId,
+            orderNumber: 1,
+            kitchenNote: null,
+            tableLabel: "Split extras",
+          },
+        ],
+      });
+      expect(card!.items).toHaveLength(2);
+      const items = new Map(card!.items.map((dish) => [dish.id, dish]));
+      expect(items.get(placed.burgerItem)).toMatchObject({
+        ...item,
+        id: placed.burgerItem,
+        name: "BURG",
+        stationName: "Grill",
+        firedAt: null,
+      });
+      expect(items.get(placed.waterItem)).toMatchObject({
+        ...item,
+        id: placed.waterItem,
+        name: "H2O",
+        stationName: "Bar",
+        firedAt: AT,
+      });
     });
   });
 
-  it("ages an order and its dishes against one reading of the clock", async () => {
+  it("ages a card's dishes against one reading of the clock", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
@@ -194,9 +193,13 @@ describe("A773 pass board: reads", () => {
         .mockReturnValueOnce(tenMinutes - 1)
         .mockReturnValue(tenMinutes);
       try {
-        const [order] = await readPassBoard(tx, onOrder(venue.party.tabId));
-        const burger = order!.groups[0]!.items.find((item) => item.id === placed.burgerItem)!;
-        expect([order!.openedMinutes, burger.band]).toEqual([9, "warm"]);
+        const [card] = cards(await readScopedPassBoard(tx, venue.cfg, EVERY));
+        const bands = new Map(card!.items.map((dish) => [dish.id, dish.band]));
+        // Ten minutes is Overdue, so a second reading of the clock would tip either dish over.
+        expect([bands.get(placed.burgerItem), bands.get(placed.waterItem)]).toEqual([
+          "warm",
+          "warm",
+        ]);
       } finally {
         now.mockRestore();
       }

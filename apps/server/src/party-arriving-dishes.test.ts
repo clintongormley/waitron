@@ -32,7 +32,9 @@ import {
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
-import { fireOrderLines, listExpoQueue, parkOrder } from "./working-order.js";
+import { fireOrderLines, parkOrder } from "./working-order.js";
+import { readScopedPassBoard } from "./pass-board.js";
+import { boardCards, EVERY } from "./testing/pass-board-probe.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -162,6 +164,14 @@ async function firedTicketsOf(billId: string) {
       .from(ticketItems)
       .where(and(eq(ticketItems.workingOrderId, billId), isNotNull(ticketItems.firedAt))),
   );
+}
+
+/** The groups of the pass cards holding a bill's dishes; null for a card that is the bill's own. */
+async function passGroupsOf(billId: string) {
+  const board = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY));
+  return boardCards(board)
+    .filter((card) => card.items.some((item) => item.orderId === billId))
+    .map((card) => (card.target.kind === "group" ? card.target.groupId : null));
 }
 
 async function eventsOf(groupId: string) {
@@ -322,9 +332,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     await move(b2, { tableId: m7 });
 
     const made = (await groupsOf(luis.partyId)).at(-1)!.id;
-    const board = await inTx(v, (tx) => listExpoQueue(tx));
-    const entry = board.find((o) => o.orderId === b2);
-    expect(entry?.groups.map((g) => g.groupId)).toEqual([made]);
+    expect(await passGroupsOf(b2)).toEqual([made]);
     const ready = await command(luis.partyId);
     await inTx(v, (tx) => bumpGroupReady(tx, v.cfg, luis.partyId, made, ready));
     expect(await firedTicketsOf(b2)).toEqual([{ lineId: expect.any(String), state: "ready" }]);
@@ -600,8 +608,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     expect(group).toMatchObject({ state: "fired", position: 1 });
     expect((await billRow(v, id)).status).toBe("placed");
     expect(await lineRows(id)).toEqual(before.map((l) => ({ ...l, groupId: group!.id })));
-    const entry = (await inTx(v, (tx) => listExpoQueue(tx))).find((o) => o.orderId === id);
-    expect(entry?.groups.map((g) => g.groupId)).toEqual([group!.id]);
+    expect(await passGroupsOf(id)).toEqual([group!.id]);
   });
 
   it("gives a bill moved to a free table its new party's first group", async () => {
