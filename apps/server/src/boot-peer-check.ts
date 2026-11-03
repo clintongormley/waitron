@@ -1,7 +1,6 @@
 import { randomBytes } from "node:crypto";
 import {
   HANDOVER_STATES,
-  isOpen,
   verifyEnvelope,
   type HandoverState,
   type SignedHandoverEnvelope,
@@ -9,6 +8,7 @@ import {
 import {
   acceptMembershipDocument,
   isFencedStanding,
+  isMembershipDocument,
   standingOf,
   type AcceptResult,
   type CanonicalValue,
@@ -67,16 +67,20 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([work.catch(() => null), timeout]).finally(() => clearTimeout(timer));
 }
 
-function stateAtOrAfter(state: HandoverState, floor: HandoverState): boolean {
-  return HANDOVER_STATES.indexOf(state) >= HANDOVER_STATES.indexOf(floor);
-}
+/**
+ * A destination's open states past the point where its source could still be selling safely:
+ * `copy_accepted` or later for a controlled operation, `emergency_declared` or later for an
+ * emergency one (`packages/handover/src/states.ts`'s destination steps).
+ */
+const FENCING_STATES: Readonly<Record<"controlled" | "emergency", readonly HandoverState[]>> = {
+  controlled: ["copy_accepted", "filing_assumed", "activated", "return_pending"],
+  emergency: ["emergency_declared", "activated", "return_pending"],
+};
 
-/** Past the point where this box, as the operation's source, could still be selling safely. */
 function operationFences(op: PeerOperationStatus | null, nodeId: string): boolean {
-  if (op === null || op.sourceNodeId !== nodeId || !isOpen(op.state)) return false;
-  return op.scenario === "emergency"
-    ? stateAtOrAfter(op.state, "emergency_declared")
-    : stateAtOrAfter(op.state, "copy_accepted");
+  if (!isOperationStatus(op) || op === null) return false;
+  if (op.role !== "destination" || op.sourceNodeId !== nodeId) return false;
+  return FENCING_STATES[op.scenario].includes(op.state);
 }
 
 /**
@@ -112,7 +116,9 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
   const verdicts = new Map<number, AcceptResult>();
   const charted = statuses
     .map((status, index) => ({ chart: status?.heldMembership ?? null, index }))
-    .filter((c): c is { chart: SignedMembershipDocument; index: number } => c.chart !== null)
+    .filter((c): c is { chart: SignedMembershipDocument; index: number } =>
+      isMembershipDocument(c.chart),
+    )
     .sort((a, b) => b.chart.body.term - a.chart.body.term);
   for (const { chart, index } of charted) verdicts.set(index, await deps.accept(chart));
 
@@ -174,7 +180,7 @@ function isObjectOrNull(value: unknown): boolean {
   return value === null || (typeof value === "object" && !Array.isArray(value));
 }
 
-function isOperationStatus(value: unknown): boolean {
+function isOperationStatus(value: unknown): value is PeerOperationStatus | null {
   if (value === null) return true;
   if (typeof value !== "object" || Array.isArray(value)) return false;
   const op = value as Record<string, unknown>;
@@ -185,16 +191,24 @@ function isOperationStatus(value: unknown): boolean {
   );
 }
 
-function isStatusBody(value: unknown, nonce: string): value is PeerStatusBody {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+/**
+ * A part in a shape this box does not read is dropped, never the whole answer: a malformed chart
+ * must not hide the peer's signed operation.
+ */
+function statusBodyOf(value: unknown, nonce: string): PeerStatusBody | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   const body = value as Record<string, unknown>;
-  return (
-    body.nonce === nonce &&
-    isObjectOrNull(body.heldMembership) &&
-    isObjectOrNull(body.restriction) &&
-    isOperationStatus(body.openOperation) &&
-    isOperationStatus(body.requestedOperation)
-  );
+  if (body.nonce !== nonce) return null;
+  const operation = (v: unknown) => (isOperationStatus(v) ? v : null);
+  return {
+    heldMembership: isMembershipDocument(body.heldMembership) ? body.heldMembership : null,
+    restriction: isObjectOrNull(body.restriction)
+      ? (body.restriction as PeerStatusBody["restriction"])
+      : null,
+    openOperation: operation(body.openOperation),
+    requestedOperation: operation(body.requestedOperation),
+    nonce,
+  };
 }
 
 /**
@@ -222,7 +236,7 @@ export function askPeerStatus(
       if (!res.ok) return null;
       const verdict = verifyEnvelope<unknown>(await res.json(), "status", deps.publicKeyOf);
       if (!verdict.valid || verdict.signerNodeId !== peer.nodeId) return null;
-      return isStatusBody(verdict.body, nonce) ? verdict.body : null;
+      return statusBodyOf(verdict.body, nonce);
     } catch {
       return null;
     }

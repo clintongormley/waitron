@@ -212,6 +212,24 @@ describe("checkPeersAtStart — how the contributions combine", () => {
     expect(await checkPeersAtStart(d)).toBe("wait");
   });
 
+  it("counted S with asked-only N waits, and the newer chart is held", async () => {
+    const newer = chart(6, [
+      [OLD, "sell-only"],
+      [SELF, "serving-primary", OWN_ORIGIN],
+      [SPARE, "serving-secondary"],
+    ]);
+    const store = heldStore(both);
+    const d = deps({
+      held: both,
+      activatedFrom: new Set([OLD]),
+      joinedIds: [OLD, SPARE],
+      accept: store.accept,
+      answers: { [OLD]: status(newer), [SPARE]: null },
+    });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+    expect(store.held()).toBe(newer);
+  });
+
   it("counted = with asked-only F is superseded (rule 1)", async () => {
     const fencing = chart(6, [
       [OLD, "serving-primary"],
@@ -477,6 +495,59 @@ describe("checkPeersAtStart — the review's cases", () => {
     expect(await checkPeersAtStart(d)).toBe("superseded");
   });
 
+  it.each<["controlled" | "emergency", HandoverState]>([
+    ["controlled", "activated"],
+    ["controlled", "return_pending"],
+    ["emergency", "activated"],
+    ["emergency", "return_pending"],
+  ])(
+    "a %s operation at %s naming this box as source is F, with the peer's chart unchanged",
+    async (scenario, state) => {
+      const d = deps({ answers: { [SPARE]: status(SAME, operation(scenario, state)) } });
+      expect(await checkPeersAtStart(d)).toBe("superseded");
+    },
+  );
+
+  it("a peer's own source operation naming this box as source is not F", async () => {
+    const d = deps({
+      answers: {
+        [SPARE]: status(SAME, { ...operation("controlled", "return_pending"), role: "source" }),
+      },
+    });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+  });
+
+  it("two peers with charts in a shape this box does not read count as S, and the check does not throw", async () => {
+    const three = chart(3, [
+      [SELF, "serving-primary", OWN_ORIGIN],
+      [SPARE, "serving-secondary"],
+      ["m3", "serving-secondary"],
+    ]);
+    const malformed = { body: {} } as unknown as SignedMembershipDocument;
+    const d = deps({
+      held: three,
+      joinedIds: [SPARE, "m3"],
+      answers: { [SPARE]: status({} as SignedMembershipDocument), m3: status(malformed) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("a malformed chart with an operation naming this box at copy_accepted is F", async () => {
+    const d = deps({
+      answers: {
+        [SPARE]: status({} as SignedMembershipDocument, operation("controlled", "copy_accepted")),
+      },
+    });
+    expect(await checkPeersAtStart(d)).toBe("superseded");
+  });
+
+  it("a malformed operation is ignored and the answer's chart still counts", async () => {
+    const d = deps({
+      answers: { [SPARE]: status(SAME, "x" as unknown as PeerOperationStatus) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+  });
+
   it("an emergency operation still at prepared naming this box is not F", async () => {
     const d = deps({ answers: { [SPARE]: status(SAME, operation("emergency", "prepared")) } });
     expect(await checkPeersAtStart(d)).toBe("proceed");
@@ -673,36 +744,38 @@ describe("askPeerStatus", () => {
     expect(await ask(fetchFn)(PEER)).toBeNull();
   });
 
-  it("an answer whose body is not a status is null", async () => {
+  it("a signed answer whose parts are not the shapes this box reads keeps none of them", async () => {
     const { fetchFn } = answerWith((q) =>
       signEnvelope("status", { nonce: q.nonce, heldMembership: "nope" } as never, {
         nodeId: SPARE,
         privateKey: peerKeys.privateKey,
       }),
     );
-    expect(await ask(fetchFn)(PEER)).toBeNull();
+    expect(await ask(fetchFn)(PEER)).toEqual({ ...body(NONCE), heldMembership: null });
+  });
+
+  it("a signed answer with a malformed chart keeps its operation and drops the chart", async () => {
+    const op = operation("controlled", "copy_accepted");
+    for (const malformed of [{}, { body: {} }, { ...HELD, body: { term: "4", nodes: [] } }]) {
+      const { fetchFn } = answerWith((q) =>
+        signEnvelope(
+          "status",
+          { ...body(q.nonce), heldMembership: malformed, openOperation: op } as never,
+          { nodeId: SPARE, privateKey: peerKeys.privateKey },
+        ),
+      );
+      expect(await ask(fetchFn)(PEER)).toEqual({
+        ...body(NONCE),
+        heldMembership: null,
+        openOperation: op,
+      });
+    }
   });
 
   const op = operation("controlled", "copy_accepted");
   it.each<[string, (nonce: string) => unknown]>([
     ["a body that is a string", () => "status"],
     ["a body that is a list", () => []],
-    ["a restriction that is a list", (n) => ({ ...body(n), restriction: [] })],
-    ["an open operation that is a string", (n) => ({ ...body(n), openOperation: "x" })],
-    ["an open operation that is a list", (n) => ({ ...body(n), openOperation: [] })],
-    [
-      "an open operation with no source",
-      (n) => ({ ...body(n), openOperation: { ...op, sourceNodeId: 1 } }),
-    ],
-    [
-      "an open operation with an unknown scenario",
-      (n) => ({ ...body(n), openOperation: { ...op, scenario: "x" } }),
-    ],
-    [
-      "an open operation with an unknown state",
-      (n) => ({ ...body(n), openOperation: { ...op, state: "x" } }),
-    ],
-    ["a requested operation that is a string", (n) => ({ ...body(n), requestedOperation: "x" })],
   ])("a signed answer carrying %s is null", async (_label, make) => {
     const { fetchFn } = answerWith((q) =>
       signEnvelope("status", make(q.nonce) as never, {
@@ -712,6 +785,51 @@ describe("askPeerStatus", () => {
     );
     expect(await ask(fetchFn)(PEER)).toBeNull();
   });
+
+  it.each<[string, (nonce: string) => unknown, keyof PeerStatusBody]>([
+    ["a restriction that is a list", (n) => ({ ...body(n), restriction: [] }), "restriction"],
+    [
+      "an open operation that is a string",
+      (n) => ({ ...body(n), openOperation: "x" }),
+      "openOperation",
+    ],
+    [
+      "an open operation that is a list",
+      (n) => ({ ...body(n), openOperation: [] }),
+      "openOperation",
+    ],
+    [
+      "an open operation with no source",
+      (n) => ({ ...body(n), openOperation: { ...op, sourceNodeId: 1 } }),
+      "openOperation",
+    ],
+    [
+      "an open operation with an unknown scenario",
+      (n) => ({ ...body(n), openOperation: { ...op, scenario: "x" } }),
+      "openOperation",
+    ],
+    [
+      "an open operation with an unknown state",
+      (n) => ({ ...body(n), openOperation: { ...op, state: "x" } }),
+      "openOperation",
+    ],
+    [
+      "a requested operation that is a string",
+      (n) => ({ ...body(n), requestedOperation: "x" }),
+      "requestedOperation",
+    ],
+  ])(
+    "a signed answer carrying %s keeps the answer without that part",
+    async (_label, make, part) => {
+      const { fetchFn } = answerWith((q) =>
+        signEnvelope("status", make(q.nonce) as never, {
+          nodeId: SPARE,
+          privateKey: peerKeys.privateKey,
+        }),
+      );
+      expect(await ask(fetchFn)(PEER)).toEqual({ ...body(NONCE), [part]: null });
+    },
+  );
 
   it("a signed answer carrying an operation in either scenario is kept", async () => {
     for (const scenario of ["controlled", "emergency"] as const) {
