@@ -180,7 +180,7 @@ export function formatWifiRecord(network) {
  *   frozen; remove: no copy should exist, so any copy present is obsolete
  */
 
-/** Every reason decideWifiBootCopy gives for no copy. */
+/** Every reason decideWifiBootCopy gives for no copy. Frozen. */
 export const WIFI_NO_COPY_REASONS = Object.freeze([
   "cable-only",
   "open",

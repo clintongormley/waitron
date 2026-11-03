@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { hostFileIo } from "./disk-key.mjs";
 import { exactRecord, safeInteger } from "./upgrades/contracts.mjs";
 import {
@@ -41,8 +41,8 @@ const IO_OPS = [
   "syncFile",
   "syncDirectory",
 ];
-// The reader's refusals that say the starting state is unsafe; its refusals about the bytes
-// describe a damaged copy, which a publication replaces or removes.
+// The reader's refusals that end a publication with no write. Its other refusals are about the
+// bytes of a regular, root-only file, so they do not.
 const UNSAFE = new Set([
   "mount-unverified",
   "root-changed",
@@ -50,6 +50,22 @@ const UNSAFE = new Set([
   "permissions-unsafe",
   "io-failed",
 ]);
+
+// Only refusals built here end a publication with their own failure; anything else thrown is
+// io-failed, so an injected io's error that merely carries a failure's name cannot pass through.
+const refusals = new WeakSet();
+
+/** @param {WifiCopyFailure} failure */
+function refusal(failure) {
+  const answer = { state: /** @type {WifiCopyState} */ ("failed"), failure };
+  refusals.add(answer);
+  return answer;
+}
+
+/** @param {unknown} error */
+function errnoCode(error) {
+  return Object(error).code;
+}
 
 /** @param {string} code @param {string} reason */
 function programmingError(code, reason) {
@@ -97,7 +113,7 @@ function checkDecision(decision) {
       return kind === "remove" && WIFI_NO_COPY_REASONS.includes(reason) ? { kind, reason } : null;
     }
   } catch {
-    // Falls through to the refusal.
+    return null;
   }
   return null;
 }
@@ -122,6 +138,8 @@ function statusOf(state, reason, failure) {
 export function createWifiBootCopyPublisher(deps) {
   if (!validDeps(deps)) throw programmingError(DEPS_CODE, "deps-invalid");
   const { bootRoot, ownerUid, inspectBootMount } = deps;
+  const folder = join(bootRoot, "waitron-recovery");
+  const nextPath = join(folder, "wifi.json.next");
   const io = Object.hasOwn(deps, "io") ? /** @type {WifiCopyIo} */ (deps.io) : hostFileIo;
   const reader = createWifiRecordReader({
     bootRoot,
@@ -147,11 +165,57 @@ export function createWifiBootCopyPublisher(deps) {
     return result;
   }
 
+  /** @param {{uid:number|bigint, mode:number|bigint}} stats */
+  function owned(stats) {
+    return Number(stats.uid) === ownerUid && (Number(stats.mode) & 0o077) === 0;
+  }
+
+  /** @param {string} path @returns {Promise<import("node:fs").BigIntStats | null>} null when absent */
+  async function lstatIfPresent(path) {
+    try {
+      return await io.lstat(path, { bigint: true });
+    } catch (error) {
+      if (errnoCode(error) === "ENOENT") return null;
+      throw error;
+    }
+  }
+
+  /**
+   * Checked on every publication, not only after a mkdir: the folder may have changed since the
+   * reader's check. @returns {Promise<boolean>} whether the folder exists
+   */
+  async function checkFolder() {
+    const stats = await lstatIfPresent(folder);
+    if (stats === null) return false;
+    if (stats.isSymbolicLink() || !stats.isDirectory()) throw refusal("path-unsafe");
+    if (!owned(stats)) throw refusal("permissions-unsafe");
+    return true;
+  }
+
+  // Only root can put a name in a root-only folder, so a staging name that is not the writer's
+  // own regular file is a fault, refused before any write rather than removed.
+  /** @returns {Promise<boolean>} whether a leftover staging file exists */
+  async function checkNext() {
+    const stats = await lstatIfPresent(nextPath);
+    if (stats === null) return false;
+    if (stats.isSymbolicLink() || !stats.isFile() || stats.nlink !== 1n) {
+      throw refusal("path-unsafe");
+    }
+    if (!owned(stats)) throw refusal("permissions-unsafe");
+    return true;
+  }
+
   /** @returns {Promise<{state: WifiCopyState, failure: WifiCopyFailure|null}>} */
   async function publishChecked() {
     const found = await reader.read();
     if (found.kind === "refused" && UNSAFE.has(found.reason)) {
       return { state: "failed", failure: /** @type {WifiCopyFailure} */ (found.reason) };
+    }
+    try {
+      if (await checkFolder()) await checkNext();
+    } catch (error) {
+      if (refusals.has(/** @type {object} */ (error))) return /** @type {any} */ (error);
+      throw error;
     }
     throw new Error("not implemented");
   }

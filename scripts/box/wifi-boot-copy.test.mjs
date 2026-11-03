@@ -1,8 +1,10 @@
 import { Buffer } from "node:buffer";
+import { execFileSync } from "node:child_process";
 import { constants } from "node:fs";
 import * as fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { clearTimeout, setTimeout } from "node:timers";
 import { TextEncoder, inspect } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -219,6 +221,81 @@ const errorTexts = (error) => [
   inspect(error, { depth: 10, showHidden: true }),
 ];
 
+const WRITE_OPS = ["mkdir", "writeFile", "rename", "unlink"];
+const FLUSH_OPS = ["syncFile", "syncDirectory"];
+
+const mkfifo = (path) => execFileSync("mkfifo", ["-m", "600", path], { stdio: "ignore" });
+
+/**
+ * Settles `promise`, or, if it has not settled within `ms`, reports it hung and keeps opening each
+ * FIFO in `fifos` for writing until it does: an open waiting for a writer never times out on its
+ * own, and it would hold the test process open.
+ */
+async function settleOrRelease(promise, fifos, ms = 2000) {
+  const outcome = promise.then(
+    (value) => ({ fulfilled: true, value }),
+    (error) => ({ error }),
+  );
+  let settled = false;
+  void outcome.then(() => (settled = true));
+  let timer;
+  await Promise.race([outcome, new Promise((resolve) => (timer = setTimeout(resolve, ms)))]);
+  clearTimeout(timer);
+  const hung = !settled;
+  while (!settled) {
+    for (const fifo of fifos) {
+      await fs
+        .open(fifo, constants.O_WRONLY | constants.O_NONBLOCK)
+        .then((writer) => writer.close())
+        .catch(() => {});
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  return { hung, ...(await outcome) };
+}
+
+/** Wraps `fs.open` so each handle answers the named methods through `handleOverrides`. */
+const openWith =
+  (handleOverrides) =>
+  async (...args) => {
+    const handle = await fs.open(...args);
+    return new Proxy(handle, {
+      get(target, key) {
+        if (Object.hasOwn(handleOverrides, key)) return handleOverrides[key](target);
+        const value = Reflect.get(target, key);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  };
+
+/** Stats that answer `overrides` for the named keys, everything else unchanged. */
+const statsWith = (stats, overrides) =>
+  new Proxy(stats, {
+    get(target, key) {
+      if (Object.hasOwn(overrides, key)) return overrides[key](target[key]);
+      const value = Reflect.get(target, key);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+const foreignOwner = (stats) =>
+  statsWith(stats, { uid: (uid) => (typeof uid === "bigint" ? uid + 1n : uid + 1) });
+
+const lstatAt = (path, change) => async (target, options) => {
+  if (target !== path) return fs.lstat(target, options);
+  return change(await fs.lstat(target, options));
+};
+
+/** Like lstatAt, but only the `nth` lstat of `path` (counting from 1) goes through `change`. */
+const nthLstatAt = (path, nth, change) => {
+  let seen = 0;
+  return async (target, options) => {
+    if (target !== path || ++seen !== nth) return fs.lstat(target, options);
+    return change(await fs.lstat(target, options));
+  };
+};
+
+const ioError = (code) => Object.assign(new Error(`${code}: ${PASSWORD_A}`), { code });
+
 /** @param {unknown} status @param {unknown} expected */
 function expectStatus(status, expected) {
   expect(status).toEqual(expected);
@@ -240,8 +317,8 @@ const thrown = (run) => {
 };
 
 describe("createWifiBootCopyPublisher refuses deps that are not exactly right", () => {
-  const ioWithout = (name) => {
-    const { io } = countingIo();
+  const ioWithout = (f, name) => {
+    const io = { ...f.counting.io };
     delete io[name];
     return io;
   };
@@ -252,7 +329,7 @@ describe("createWifiBootCopyPublisher refuses deps that are not exactly right", 
     ["ownerUid -1", () => ({ ownerUid: -1 })],
     ["ownerUid 1.5", () => ({ ownerUid: 1.5 })],
     ["an extra key", () => ({ extra: 1 })],
-    ...IO_OPS.map((name) => [`io without ${name}`, () => ({ io: ioWithout(name) })]),
+    ...IO_OPS.map((name) => [`io without ${name}`, (f) => ({ io: ioWithout(f, name) })]),
     ["io whose rename is a string", (f) => ({ io: { ...f.counting.io, rename: "x" } })],
     ["io: undefined", () => ({ io: undefined })],
   ];
@@ -458,6 +535,263 @@ describe("publish refuses the boot root after one lstat", () => {
       status.failure,
     );
   });
+});
+
+// Each row: [name, failure, arrange(f) → io overrides, options]. Options: `fixture` (fixture
+// arguments, over record A), `fifos(f)` (paths to release if the publication hangs), `lastCall(f)`
+// (the log's last entry), `after(f)` (more checks).
+/** @type {Array<[string, string, (f: any) => Promise<object|void>, any?]>} */
+const unsafeFolderAndRecordRows = [
+  [
+    "the folder is a symlink to a real folder holding a valid record",
+    "path-unsafe",
+    async (f) => {
+      const real = join(f.parent, "elsewhere");
+      await fs.rename(f.folder, real);
+      await fs.symlink(real, f.folder);
+    },
+  ],
+  [
+    "the folder is a regular file",
+    "path-unsafe",
+    async (f) => {
+      await fs.rm(f.folder, { recursive: true });
+      await fs.writeFile(f.folder, "not a folder");
+    },
+  ],
+  ["the folder is 0o750", "permissions-unsafe", (f) => fs.chmod(f.folder, 0o750)],
+  [
+    "the folder's owner reads as another",
+    "permissions-unsafe",
+    async (f) => ({ lstat: lstatAt(f.folder, foreignOwner) }),
+  ],
+  [
+    "wifi.json is a symlink to a valid record elsewhere",
+    "path-unsafe",
+    async (f) => {
+      const real = join(f.parent, "elsewhere.json");
+      await fs.rename(f.recordPath, real);
+      await fs.symlink(real, f.recordPath);
+    },
+  ],
+  [
+    "wifi.json is a symlink to nothing",
+    "path-unsafe",
+    async (f) => {
+      await fs.rm(f.recordPath);
+      await fs.symlink(join(f.parent, "nothing.json"), f.recordPath);
+    },
+  ],
+  [
+    "wifi.json is a folder",
+    "path-unsafe",
+    async (f) => {
+      await fs.rm(f.recordPath);
+      await fs.mkdir(f.recordPath, { mode: 0o700 });
+    },
+  ],
+  [
+    "wifi.json is a FIFO",
+    "path-unsafe",
+    async (f) => {
+      await fs.rm(f.recordPath);
+      mkfifo(f.recordPath);
+    },
+    { fifos: (f) => [f.recordPath] },
+  ],
+  [
+    "wifi.json has a second hard link",
+    "path-unsafe",
+    (f) => fs.link(f.recordPath, join(f.folder, "wifi.json.other")),
+  ],
+  ["wifi.json is 0o640", "permissions-unsafe", (f) => fs.chmod(f.recordPath, 0o640)],
+  [
+    "wifi.json's owner reads as another",
+    "permissions-unsafe",
+    async () => ({
+      open: openWith({
+        stat: (target) => async (options) => foreignOwner(await target.stat(options)),
+      }),
+    }),
+  ],
+];
+
+/** The `.next` rows, on a fixture whose wifi.json is `record`. @param {"A"|null} record */
+const unsafeNextRows = (record) => {
+  const fixtureArgs = { record };
+  /** @type {Array<[string, string, (f: any) => Promise<object|void>, any?]>} */
+  const rows = [
+    [
+      "wifi.json.next is a symlink to a regular file",
+      "path-unsafe",
+      async (f) => {
+        const target = join(f.parent, "target");
+        await fs.writeFile(target, "target bytes");
+        await fs.symlink(target, f.nextPath);
+      },
+      {
+        after: async (f) =>
+          expect(await fs.readFile(join(f.parent, "target"), "utf8")).toBe("target bytes"),
+      },
+    ],
+    [
+      "wifi.json.next is a symlink to nothing",
+      "path-unsafe",
+      (f) => fs.symlink(join(f.parent, "nothing"), f.nextPath),
+      {
+        after: async (f) =>
+          await expect(fs.lstat(join(f.parent, "nothing"))).rejects.toMatchObject({
+            code: "ENOENT",
+          }),
+      },
+    ],
+    ["wifi.json.next is a folder", "path-unsafe", (f) => fs.mkdir(f.nextPath, { mode: 0o700 })],
+    [
+      "wifi.json.next is a FIFO",
+      "path-unsafe",
+      async (f) => mkfifo(f.nextPath),
+      { fifos: (f) => [f.nextPath] },
+    ],
+    [
+      "wifi.json.next has a second hard link",
+      "path-unsafe",
+      async (f) => {
+        await fs.writeFile(f.nextPath, writeA.bytes);
+        await fs.chmod(f.nextPath, 0o600);
+        await fs.link(f.nextPath, join(f.folder, "wifi.json.next.other"));
+      },
+    ],
+    [
+      "wifi.json.next is 0o640",
+      "permissions-unsafe",
+      async (f) => {
+        await fs.writeFile(f.nextPath, writeA.bytes);
+        await fs.chmod(f.nextPath, 0o640);
+      },
+    ],
+    [
+      "wifi.json.next's owner reads as another",
+      "permissions-unsafe",
+      async (f) => {
+        await fs.writeFile(f.nextPath, writeA.bytes);
+        await fs.chmod(f.nextPath, 0o600);
+        return { lstat: lstatAt(f.nextPath, foreignOwner) };
+      },
+    ],
+  ];
+  return rows.map(([name, failure, arrange, options = {}]) => [
+    record === null ? `${name}, with no wifi.json` : name,
+    failure,
+    arrange,
+    { ...options, fixture: fixtureArgs },
+  ]);
+};
+
+/** @type {Array<[string, string, (f: any) => Promise<object|void>, any?]>} */
+const ioFailedRows = [
+  [
+    "the reader's open of wifi.json throws EACCES",
+    "io-failed",
+    async (f) => ({
+      open: async (path, ...rest) => {
+        if (path === f.recordPath) throw ioError("EACCES");
+        return fs.open(path, ...rest);
+      },
+    }),
+    { lastCall: (f) => ["open", f.recordPath] },
+  ],
+  [
+    "the publisher's own lstat of the folder throws EIO",
+    "io-failed",
+    async (f) => ({
+      lstat: nthLstatAt(f.folder, 2, () => {
+        throw ioError("EIO");
+      }),
+    }),
+    { lastCall: (f) => ["lstat", f.folder] },
+  ],
+  [
+    "the lstat of wifi.json.next throws EIO",
+    "io-failed",
+    async (f) => ({
+      lstat: lstatAt(f.nextPath, () => {
+        throw ioError("EIO");
+      }),
+    }),
+    { lastCall: (f) => ["lstat", f.nextPath] },
+  ],
+];
+
+/** @type {Array<[string, string, (f: any) => Promise<object|void>, any?]>} */
+const changedFolderRows = [
+  [
+    "the folder's owner reads as another at the publisher's own lstat",
+    "permissions-unsafe",
+    async (f) => ({ lstat: nthLstatAt(f.folder, 2, foreignOwner) }),
+  ],
+  [
+    "the folder reads as a symlink at the publisher's own lstat",
+    "path-unsafe",
+    async (f) => ({
+      lstat: nthLstatAt(f.folder, 2, (stats) =>
+        statsWith(stats, { isSymbolicLink: () => () => true }),
+      ),
+    }),
+  ],
+];
+
+describe("publish refuses an unsafe folder or fixed name with no write", () => {
+  const rows = [
+    ...unsafeFolderAndRecordRows,
+    ...unsafeNextRows("A"),
+    ...unsafeNextRows(null),
+    ...ioFailedRows,
+    ...changedFolderRows,
+  ];
+  const decisions = [
+    ["writeB", writeB, null],
+    ["removeCable", removeCable, "cable-only"],
+  ];
+
+  for (const [decisionName, decision, reason] of decisions) {
+    it.each(rows)(
+      `${decisionName}: %s → failed, %s`,
+      async (_name, failure, arrange, options = {}) => {
+        const f = await fixture({ record: "A", ...options.fixture });
+        const counting = countingIo((await arrange(f)) ?? {});
+        const publisher = f.make({ io: counting.io });
+        const before = await snapshot(f.parent);
+        const outcome = await settleOrRelease(
+          publisher.publish(decision),
+          options.fifos?.(f) ?? [],
+        );
+        expect(outcome.hung).toBe(false);
+        expectStatus(outcome.value, { state: "failed", reason, failure });
+        const names = counting.log.map(([name]) => name);
+        for (const name of [...WRITE_OPS, ...FLUSH_OPS]) expect(names).not.toContain(name);
+        expect(await snapshot(f.parent)).toEqual(before);
+        if (options.lastCall) expect(counting.log.at(-1)).toEqual(options.lastCall(f));
+        await options.after?.(f);
+      },
+    );
+  }
+});
+
+describe("publish does not refuse a safe leftover or a damaged copy (the positive controls)", () => {
+  const cases = [
+    ["a regular 0o600 leftover wifi.json.next", { record: "A", next: "B" }],
+    ["a wifi.json holding a corrupt record", { record: "{}\n" }],
+    ["a wifi.json of 1025 bytes", { record: "x".repeat(1025) }],
+    ["no waitron-recovery folder", { folder: false }],
+  ];
+  for (const decision of [writeB, removeCable]) {
+    it.each(cases)(`${decision.kind}: %s`, async (_name, fixtureArgs) => {
+      const f = await fixture(fixtureArgs);
+      const status = await f.make().publish(decision);
+      expect(status.state).toBe("failed");
+      expect(["path-unsafe", "permissions-unsafe"]).not.toContain(status.failure);
+    });
+  }
 });
 
 describe("the fixed entry points", () => {
