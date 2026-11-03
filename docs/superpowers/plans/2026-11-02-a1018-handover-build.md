@@ -2885,6 +2885,11 @@ built").
   `git commit -s -m "docs: S2 passes with A1018's return batch; its controls fail as they should"`.
   **If S2 does not pass, Slices 10 and 11 are not built**; stop and report.
 
+**2026-11-03, Slice 9 built:** Parts F and G pass and the three controls fail, but S2's row still
+reads FAIL on the old Parts D and E (the unfenced tail ship). The third control reports a record
+never filed rather than a second filing. Whether the gate is read off F and G alone waits for the
+owner; see the [research note](../../research/2026-09-16-sqlite-failover-prototype.md#s2-re-run-with-a1018s-return-batch-2026-11-03).
+
 ---
 
 ### Slice 10 — Return batch: evidence, and the exchange both scenarios use
