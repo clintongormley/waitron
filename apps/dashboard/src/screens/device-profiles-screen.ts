@@ -245,7 +245,7 @@ function switchedOnScreens(
     if (scope === undefined) continue;
     const stationIds = scope.stationIds === null ? null : scope.stationIds.filter(stationOn);
     const zoneIds = scope.zoneIds === null ? null : scope.zoneIds.filter(zoneOn);
-    out[kind] = { ...scope, stationIds, zoneIds };
+    out[kind] = { stationIds, zoneIds };
   }
   return out;
 }

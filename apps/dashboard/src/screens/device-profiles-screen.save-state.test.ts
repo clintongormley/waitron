@@ -676,12 +676,19 @@ describe("the device profile editor's Save", () => {
   });
 
   it("on a till, wakes on the pass screen's other-stations switch and goes quiet when it is back on", async () => {
-    const { el } = await openEdit();
-    await change(el, "cap-show-expo", true);
+    const passTill: DeviceProfile = { ...till, capabilities: [...till.capabilities, "show-expo"] };
+    const { el } = await openEdit(
+      "p1",
+      stubApi({
+        listDeviceProfiles: vi.fn().mockResolvedValue([passTill, kds]),
+        getDeviceProfile: vi.fn(async (id: string) => (id === "p2" ? kds : passTill)),
+      }),
+    );
+    expect(checked(el, "profile-pass-screen-other-stations")).toBe(true);
+    expect(await state(el)).toEqual(quiet);
     await change(el, "profile-pass-screen-other-stations", false);
     expect(await state(el)).toEqual(ready);
     await change(el, "profile-pass-screen-other-stations", true);
-    await change(el, "cap-show-expo", false);
     expect(await state(el)).toEqual(quiet);
   });
 
