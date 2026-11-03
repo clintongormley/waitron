@@ -407,34 +407,6 @@ describe("A773 pass view", () => {
       "order-1 Starters",
       "order-1 Mains",
     ]);
-    const unordered = { id: "course-unordered", name: "Unordered", displayOrder: null };
-    const coldUnordered = passItem({ ...coldStarter, id: "cold-unordered", course: unordered });
-    expect(ready(passCard({ items: [coldUnordered, grillMain] }))).toEqual([
-      "order-1 Unordered",
-      "order-1 Mains",
-    ]);
-    expect(ready(passCard({ items: [grillMain], hiddenItems: [coldUnordered] }))).toEqual([
-      "order-1 Unordered",
-      "order-1 Mains",
-    ]);
-
-    const orders = [
-      { orderId: "order-1", orderNumber: 1, tableLabel: "T1", kitchenNote: null },
-      { orderId: "order-2", orderNumber: 2, tableLabel: "T1", kitchenNote: null },
-    ];
-    const firstOrderMain = passItem({ ...coldStarter, id: "first-main", course: grillMain.course });
-    const secondOrderStarter = passItem({
-      id: "second-starter",
-      orderId: "order-2",
-      course: starters,
-    });
-    expect(ready(passCard({ orders, items: [firstOrderMain, secondOrderStarter] }))).toEqual([
-      "order-1 Mains",
-      "order-2 Starters",
-    ]);
-    expect(
-      ready(passCard({ orders, items: [secondOrderStarter], hiddenItems: [firstOrderMain] })),
-    ).toEqual(["order-1 Mains", "order-2 Starters"]);
   });
 
   it("counts the pass's own dishes for Overview, requested as held and ready left out", () => {

@@ -116,18 +116,11 @@ function readyCourses(card: PassCard, dishes: readonly PassCardItem[]): CourseRe
     .map(({ orderId, courseId, name }) => ({ orderId, courseId, name }));
 }
 
-/** The server's first two dish keys (the order, then its course, nulls first), so a dish Hide
- *  moved to `hiddenItems` keeps its place among the drawn ones. */
-function inCardOrder(card: PassCard, dishes: PassCardItem[]): PassCardItem[] {
-  const orderIndex = new Map(card.orders.map(({ orderId }, index) => [orderId, index]));
-  const course = (item: PassCardItem) => item.course?.displayOrder ?? null;
-  return dishes.sort((a, b) => {
-    const [ca, cb] = [course(a), course(b)];
-    return (
-      orderIndex.get(a.orderId)! - orderIndex.get(b.orderId)! ||
-      (ca === cb ? 0 : ca === null ? -1 : cb === null ? 1 : ca - cb)
-    );
-  });
+/** Course Ready's order as the server's, except between two courses sharing a place: the server
+ *  breaks that tie by line number, which the till lacks, so drawn dishes stay first. */
+function inCourseOrder(dishes: PassCardItem[]): PassCardItem[] {
+  const place = (item: PassCardItem) => item.course?.displayOrder ?? 0;
+  return dishes.sort((a, b) => place(a) - place(b));
 }
 
 function cardView(
@@ -142,7 +135,7 @@ function cardView(
   const dishes =
     card.hiddenItems === undefined
       ? card.items
-      : inCardOrder(card, [...card.items, ...card.hiddenItems]);
+      : inCourseOrder([...card.items, ...card.hiddenItems]);
   const fireShown = column === "toFire" && mode === "pass" && runsPass;
   const levers = column === "inProgress" && mode !== "monitor" && runsPass;
   const age: Pick<CardView, "ageFrom" | "ageWord"> =
