@@ -49,14 +49,13 @@ export function usableVenueName(value) {
   return length >= 1 && length <= NAME_TAG_MAX_CODE_POINTS ? name : null;
 }
 
-/** Throws name_tag.tag_invalid (tag-invalid) unless tag is exactly {name: string, live: boolean}. */
-function assertTagShape(/** @type {unknown} */ tag) {
-  if (
-    !exactRecord(tag, ["name", "live"]) ||
-    typeof (/** @type {VenueTag} */ (tag).name) !== "string" ||
-    typeof (/** @type {VenueTag} */ (tag).live) !== "boolean"
-  )
+/** Each field is read once, so what is checked is what gets encoded. */
+function readTag(/** @type {unknown} */ tag) {
+  if (!exactRecord(tag, ["name", "live"])) throw refusal("name_tag.tag_invalid", "tag-invalid");
+  const { name, live } = /** @type {VenueTag} */ (tag);
+  if (typeof name !== "string" || typeof live !== "boolean")
     throw refusal("name_tag.tag_invalid", "tag-invalid");
+  return { name, live };
 }
 
 /**
@@ -66,10 +65,10 @@ function assertTagShape(/** @type {unknown} */ tag) {
  * @param {VenueTag} tag @returns {Uint8Array} a fresh array
  */
 export function encodeNameTag(tag) {
-  assertTagShape(tag);
-  const name = usableVenueName(tag.name);
-  if (name === null) throw refusal("name_tag.tag_invalid", "name-unusable");
-  return canonicalBytes(name, tag.live);
+  const { name, live } = readTag(tag);
+  const usable = usableVenueName(name);
+  if (usable === null) throw refusal("name_tag.tag_invalid", "name-unusable");
+  return canonicalBytes(usable, live);
 }
 
 /**
@@ -163,7 +162,7 @@ export function findNameTag(metadata) {
  * @param {Uint8Array} metadata @param {VenueTag|null} tag @returns {NameTagWritePlan}
  */
 export function planNameTagWrite(metadata, tag) {
-  if (tag !== null) assertTagShape(tag);
+  const wanted = tag === null ? null : readTag(tag);
   const tokens = readTokens(metadata);
   const numbers = tokens === null ? null : Object.keys(tokens).map(tokenNumber);
   if (numbers === null || numbers.includes(null)) return plan("refused", "metadata-unreadable", []);
@@ -172,15 +171,14 @@ export function planNameTagWrite(metadata, tag) {
     .filter(([, token]) => isWaitronToken(token))
     .map(([key]) => Number(key))
     .sort((a, b) => a - b);
-  const name = tag === null ? null : usableVenueName(tag.name);
-  const reason = tag !== null && name === null ? "name-unusable" : null;
-
-  if (name === null) {
+  const name = wanted === null ? null : usableVenueName(wanted.name);
+  if (wanted === null || name === null) {
+    const reason = wanted === null ? null : "name-unusable";
     return ours.length === 0
       ? plan("unchanged", reason, [])
       : plan("remove", reason, ours.map(removeStep));
   }
-  const json = encodeNameTag({ name, live: tag.live });
+  const json = canonicalBytes(name, wanted.live);
   if (ours.length === 0) {
     const free = Array.from({ length: LUKS2_TOKENS_MAX }, (_, i) => i).find(
       (n) => !numbers.includes(n),

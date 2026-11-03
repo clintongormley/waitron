@@ -75,6 +75,19 @@ describe("usableVenueName", () => {
   });
 });
 
+/** A tag whose fields answer "Bar" and true on the first read and something else after. */
+const shiftingTag = () => {
+  const reads = { name: 0, live: 0 };
+  return /** @type {any} */ ({
+    get name() {
+      return ++reads.name === 1 ? "Bar" : "Other";
+    },
+    get live() {
+      return ++reads.live === 1 ? true : "unexpected";
+    },
+  });
+};
+
 describe("encodeNameTag", () => {
   it("writes the one canonical byte form", () => {
     expect(encodeNameTag({ name: "Bar \u00C0ngels", live: true })).toEqual(
@@ -124,6 +137,10 @@ describe("encodeNameTag", () => {
     expect(() => encodeNameTag(/** @type {any} */ (tag))).toThrow(
       expect.objectContaining({ code: "name_tag.tag_invalid", reason: "tag-invalid" }),
     );
+  });
+
+  it("encodes the values it checked when a field changes on a second read", () => {
+    expect(decodeNameTag(encodeNameTag(shiftingTag()))).toEqual({ name: "Bar", live: true });
   });
 });
 
@@ -627,6 +644,12 @@ describe("planNameTagWrite input", () => {
     expect(() => planNameTagWrite(header({}), /** @type {any} */ (tag))).toThrow(
       expect.objectContaining({ code: "name_tag.tag_invalid", reason: "tag-invalid" }),
     );
+  });
+
+  it("writes the values it checked when a field changes on a second read", () => {
+    const [step] = planNameTagWrite(header({}), shiftingTag()).steps;
+    if (step.op === "remove") throw new Error("expected an import");
+    expect(decodeNameTag(step.json)).toEqual({ name: "Bar", live: true });
   });
 
   it("checks the tag before the metadata", () => {
