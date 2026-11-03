@@ -260,7 +260,7 @@ const REAL_DUMP = `{
       "type":"waitron-name-tag",
       "keyslots":[],
       "version":1,
-      "name":"Bar Àngels",
+      "name":"Bar \u00C0ngels",
       "live":true
     }
   },
@@ -309,13 +309,13 @@ const tagObject = (name, live) => JSON.parse(canonicalText(name, live));
 describe("findNameTag finds the one tag", () => {
   it("in a real cryptsetup 2.7.5 dump", () => {
     const bytes = findNameTag(utf8(REAL_DUMP));
-    expect(bytes).toEqual(encodeNameTag({ name: "Bar Àngels", live: true }));
-    expect(decodeNameTag(bytes)).toEqual({ name: "Bar Àngels", live: true });
+    expect(bytes).toEqual(encodeNameTag({ name: "Bar \u00C0ngels", live: true }));
+    expect(decodeNameTag(bytes)).toEqual({ name: "Bar \u00C0ngels", live: true });
   });
 
   it("in the same dump compacted", () => {
     expect(findNameTag(header(REAL_TOKENS))).toEqual(
-      encodeNameTag({ name: "Bar Àngels", live: true }),
+      encodeNameTag({ name: "Bar \u00C0ngels", live: true }),
     );
   });
 
@@ -343,7 +343,7 @@ describe("findNameTag finds the one tag", () => {
     const input = utf8(REAL_DUMP);
     const first = findNameTag(input);
     first?.fill(0);
-    expect(decodeNameTag(findNameTag(input))).toEqual({ name: "Bar Àngels", live: true });
+    expect(decodeNameTag(findNameTag(input))).toEqual({ name: "Bar \u00C0ngels", live: true });
   });
 });
 
@@ -362,7 +362,7 @@ describe("findNameTag answers null", () => {
     ["a token that is a string", header({ 0: NAME_TAG_TYPE })],
     ["type Waitron-name-tag", header({ 0: { type: "Waitron-name-tag", keyslots: [] } })],
     ["a 0xFF byte", withFF],
-    ["a byte-order mark first", utf8("﻿" + REAL_DUMP)],
+    ["a byte-order mark first", utf8("\uFEFF" + REAL_DUMP)],
     ["not json", utf8("not json")],
     ["an array", utf8("[]")],
     ["null", utf8("null")],
@@ -378,10 +378,19 @@ describe("findNameTag answers null", () => {
     try {
       const big = new Uint8Array(NAME_TAG_METADATA_MAX_BYTES + 1).fill(0x20);
       expect(findNameTag(big)).toBeNull();
-      expect(parse).not.toHaveBeenCalled();
+      expect(parse.mock.calls.length).toBe(0);
     } finally {
       parse.mockRestore();
     }
+  });
+});
+
+describe("findNameTag at the size limit", () => {
+  it("finds the tag in a header padded to exactly NAME_TAG_METADATA_MAX_BYTES", () => {
+    const text = REAL_DUMP + " ".repeat(NAME_TAG_METADATA_MAX_BYTES - utf8(REAL_DUMP).length);
+    const metadata = utf8(text);
+    expect(metadata.length).toBe(NAME_TAG_METADATA_MAX_BYTES);
+    expect(findNameTag(metadata)).toEqual(encodeNameTag({ name: "Bar \u00C0ngels", live: true }));
   });
 });
 

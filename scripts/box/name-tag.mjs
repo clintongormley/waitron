@@ -17,7 +17,6 @@ export const LUKS2_TOKENS_MAX = 32;
 export const NAME_TAG_METADATA_MAX_BYTES = 16 * 1024 * 1024;
 
 const KEYS = ["type", "keyslots", "version", "name", "live"];
-/** U+0000-U+001F and U+007F-U+009F. */
 // eslint-disable-next-line no-control-regex
 export const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F]/;
 
