@@ -521,15 +521,16 @@ export function withPendingSweep(
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
     const report = await inner(now);
-    const owned = owners();
-    // An enumeration failure is a sweep failure and never propagates: the fiscal `report` must be
-    // returned whatever the card backstop does.
+    // An owners or enumeration failure is a sweep failure and never propagates: the fiscal `report`
+    // must be returned whatever the card backstop does.
+    let owned: CollectionOwners;
     let providers: readonly PaymentProvider[];
     try {
+      owned = owners();
       providers = await sweepProviders();
     } catch (error) {
       log("warn", "resolve_pending.failed", { error: String(error) });
-      providers = [];
+      return report;
     }
     for (const provider of providers) {
       try {

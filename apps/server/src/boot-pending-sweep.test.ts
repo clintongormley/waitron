@@ -130,7 +130,7 @@ describe("withPendingSweep", () => {
 
     expect(report).toBe(REPORT);
     expect(resolvePending).toHaveBeenCalledTimes(1);
-    expect(resolvePending).toHaveBeenCalledWith(now);
+    expect(resolvePending).toHaveBeenCalledWith(now, OWNERS);
     expect(log).toHaveBeenCalledWith("info", "resolve_pending.complete", {
       provider: "sumup",
       captured: 2,
@@ -262,6 +262,29 @@ describe("withPendingSweep", () => {
     expect(report).toBe(REPORT);
     expect(log).toHaveBeenCalledWith("warn", "resolve_pending.failed", {
       error: "Error: sync boom",
+    });
+  });
+
+  it("contains a throwing owners reader: no provider is swept and the inner report is returned", async () => {
+    const resolvePending = vi.fn(async () => ({
+      nextDueAt: null,
+      forwarded: 0,
+      declined: 0,
+      incidentsRaised: 0,
+    }));
+    const log = vi.fn();
+    const report = await withPendingSweep(
+      async () => REPORT,
+      async () => [fakeProvider("sumup", resolvePending)],
+      () => {
+        throw new Error("owners boom");
+      },
+      log,
+    )(new Date());
+    expect(report).toBe(REPORT);
+    expect(resolvePending).not.toHaveBeenCalled();
+    expect(log).toHaveBeenCalledWith("warn", "resolve_pending.failed", {
+      error: "Error: owners boom",
     });
   });
 });
