@@ -728,6 +728,128 @@ function applyShippedTail(
 }
 
 /**
+ * The model of a stepdown's "files nothing": a fenced node's `drainPass` returns at once. Held in
+ * memory rather than in the node's database because no scenario restarts a node.
+ */
+const fencedNodes = new WeakSet<NodeDb>();
+
+export function fence(db: NodeDb): void {
+  fencedNodes.add(db);
+}
+
+/**
+ * MODEL of A1018's fiscal-only return batch (plan, Formats → "Return batch"): what a returning box
+ * sends the box that replaced it. There is no field for sales, sale lines or supplier invoices, so
+ * the batch cannot carry a business row. `acks` are folded into `envios.acked`, as everywhere in
+ * this model. `returnedFromEnviando` names the rows the builder carried as `pendiente` that the
+ * sender held `enviando`.
+ */
+export type ReturnBatch = {
+  records: RecordRow[];
+  envios: EnvioRow[];
+  returnedFromEnviando: number[];
+};
+
+/**
+ * How the batch is cut. Only the first is the design; the other two exist to be S2's controls.
+ *
+ *  - `full-state` — records after the receiver's reported head, EVERY `envios` row the sender
+ *    holds for its chain, and each `enviando` row carried as `pendiente`.
+ *  - `missing-only` — records after the head and only THEIR `envios` rows, the `pendiente` return
+ *    kept: what `diffTail` ships, without the business rows.
+ *  - `keeps-enviando` — every `envios` row, with `estado` carried verbatim.
+ */
+type ReturnRule = "full-state" | "missing-only" | "keeps-enviando";
+
+function buildReturn(
+  sender: NodeDb,
+  reportedHeads: Readonly<Record<string, number>>,
+  rule: ReturnRule,
+): ReturnBatch {
+  const head = Number(reportedHeads[sender.nodeId] ?? 0);
+  const records = sender.handle
+    .prepare(
+      `SELECT node_id, secuencia, huella, huella_anterior, payload FROM records
+       WHERE node_id = ? AND secuencia > ? ORDER BY secuencia`,
+    )
+    .all(sender.nodeId, head) as unknown as RecordRow[];
+  const held = sender.handle
+    .prepare(
+      `SELECT node_id, secuencia, estado, acked FROM envios
+       WHERE node_id = ? AND secuencia > ? ORDER BY secuencia`,
+    )
+    .all(sender.nodeId, rule === "missing-only" ? head : 0) as unknown as EnvioRow[];
+  const returnedFromEnviando: number[] = [];
+  const envios = held.map((row): EnvioRow => {
+    const copy: EnvioRow = {
+      node_id: String(row.node_id),
+      secuencia: Number(row.secuencia),
+      estado: row.estado,
+      acked: Number(row.acked),
+    };
+    if (rule !== "keeps-enviando" && copy.estado === "enviando") {
+      returnedFromEnviando.push(copy.secuencia);
+      copy.estado = "pendiente";
+    }
+    return copy;
+  });
+  return {
+    records: records.map((row) => ({
+      node_id: String(row.node_id),
+      secuencia: Number(row.secuencia),
+      huella: String(row.huella),
+      huella_anterior: row.huella_anterior === null ? null : String(row.huella_anterior),
+      payload: String(row.payload),
+    })),
+    envios,
+    returnedFromEnviando,
+  };
+}
+
+export function buildReturnBatch(
+  sender: NodeDb,
+  reportedHeads: Readonly<Record<string, number>>,
+): ReturnBatch {
+  return buildReturn(sender, reportedHeads, "full-state");
+}
+
+/** S2's control: the batch cut back to the records the receiver lacks — see `ReturnRule`. */
+export function buildReturnBatchMissingOnly(
+  sender: NodeDb,
+  reportedHeads: Readonly<Record<string, number>>,
+): ReturnBatch {
+  return buildReturn(sender, reportedHeads, "missing-only");
+}
+
+/** S2's control: the batch built without the `enviando` → `pendiente` return — see `ReturnRule`. */
+export function buildReturnBatchKeepingEnviando(
+  sender: NodeDb,
+  reportedHeads: Readonly<Record<string, number>>,
+): ReturnBatch {
+  return buildReturn(sender, reportedHeads, "keeps-enviando");
+}
+
+/** The chains a batch touches, which the receiver pauses while it applies. */
+export function chainsOf(batch: ReturnBatch): string[] {
+  return [...new Set([...batch.records, ...batch.envios].map((row) => row.node_id))].sort();
+}
+
+/** Apply a return batch under the same rules as a tail ship (`applyTail`), with no business rows. */
+export function applyReturnBatch(
+  receiver: NodeDb,
+  senderNodeId: string,
+  batch: ReturnBatch,
+): ApplyResult {
+  return applyTail(receiver, senderNodeId, {
+    records: batch.records,
+    envios: batch.envios,
+    sales: [],
+    saleLines: [],
+    supplierInvoices: [],
+  });
+}
+
+/**
  * One drain pass over every pending submission this node holds. Two SHAPES are borrowed from the
  * real drain; what triggers the second is the model's own stand-in, not a mirror:
  *
@@ -752,8 +874,17 @@ function applyShippedTail(
  *
  * `submit` stands in for the AEAT call. A throw returns the row to `pendiente`, so the pass records
  * a refusal rather than losing the row.
+ *
+ * Two inputs from outside, both for S2's return batch (A947 §7.1 as amended by A1018): a fenced
+ * node's pass files nothing, and `paused` names chains the pass skips, as `blockedChains` does, for
+ * as long as the caller keeps them in the set.
  */
-export function drainPass(db: NodeDb, submit: (nodeId: string, secuencia: number) => void): void {
+export function drainPass(
+  db: NodeDb,
+  submit: (nodeId: string, secuencia: number) => void,
+  paused: ReadonlySet<string> = new Set(),
+): void {
+  if (fencedNodes.has(db)) return;
   const blockedChains = new Set<string>();
   const due = db.handle
     .prepare(
@@ -774,7 +905,9 @@ export function drainPass(db: NodeDb, submit: (nodeId: string, secuencia: number
   for (const row of due) {
     const nodeId = String(row.node_id);
     const secuencia = Number(row.secuencia);
-    if (blockedChains.has(nodeId)) continue;
+    // `paused` is read per row, not copied at the top, so a pause lifted mid-pass takes effect for
+    // the rows after it.
+    if (blockedChains.has(nodeId) || paused.has(nodeId)) continue;
     if (changed(claim.run(nodeId, secuencia)) === 0) continue;
     try {
       submit(nodeId, secuencia);

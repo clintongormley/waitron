@@ -18,6 +18,10 @@
 //   Part E — spec §4's third assertion: a ship for a chain that is sitting in the drain's blocked
 //     set, issued from inside a later `submit` callback in the same pass; and what a tail taken
 //     while the SENDER's own drain holds a row `enviando` leaves on the receiver.
+//   Part F — A1018's fiscal-only full-state return batch from a FENCED sender (A947 §7.1 as
+//     amended): every record of both chains is filed exactly once, and no sale travels.
+//   Part G — that batch replayed: built again from the same reported heads it is the same bytes,
+//     and applied again it changes nothing and files nothing.
 //
 // The verdict is a measurement, not a decision taken here: it is PASS when no part filed any record
 // twice and FAIL when one did. Today it is FAIL, for two separate reasons — see the README section
@@ -34,16 +38,20 @@
 import assert from "node:assert";
 import type { ScenarioResult } from "../scenarios.ts";
 import {
+  applyReturnBatch,
   applyTail,
   applyTailInsertOnly,
   applyTailRegressing,
+  buildReturnBatch,
+  chainsOf,
   diffTail,
   drainPass,
+  fence,
   openNode,
   recordSale,
   summarise,
 } from "../model.ts";
-import type { ApplyResult, EnvioRow, NodeDb, TailBatch } from "../model.ts";
+import type { ApplyResult, EnvioRow, NodeDb, ReturnBatch, TailBatch } from "../model.ts";
 
 /**
  * What the stub standing in for the tax agency was handed, across the WHOLE scenario.
@@ -484,6 +492,12 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     const stuckF = receiverFAfterDrain.filter((row) => row.includes("enviando"));
     const doubledF = doubleFilings(ledgerF);
 
+    // ---- Part F: A1018's fiscal-only full-state batch from a fenced sender -------------------
+    // ---- Part G: that batch replayed, and built again from the same reported heads ----------
+    // Both are one sequence, `runReturnSequence` below; G is the end of it. Measured, not asserted,
+    // because these two parts are the gate A947 §7.1 names and their result is the finding.
+    const returned = runReturnSequence(open, "returned", { fenced: true, build: buildReturnBatch });
+
     // ---- Control for Part A: the guard removed, so a terminal row is regressed ----------------
     // Each control runs the same sequence over its own nodes and its own ledger — a control is
     // meant to file twice, and mixing that into the ledger above would destroy the assertion that
@@ -530,11 +544,15 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
       ...doubledD,
       ...doubleFilings(ledgerE),
       ...doubledF,
+      ...returned.filedTwice,
+      ...returned.neverFiled,
     ];
+    const replayClean =
+      returned.sameBytes && returned.replayApplied === 0 && returned.filedAfterReplay === 0;
     return {
       id: "S2",
       title: "no second tax-agency filing on a re-sent or recomputed tail ship",
-      verdict: measuredDoubles.length === 0 ? "PASS" : "FAIL",
+      verdict: measuredDoubles.length === 0 && replayClean ? "PASS" : "FAIL",
       critical: true,
       detail:
         `RETRIED-IN-FULL ship safe: filed=${ledger.filed.length} double=${doubleFilings(ledger).length} ` +
@@ -549,6 +567,11 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
         `${receiverFAfterShip.join(", ")}, and its own drain claims no enviando row, so ` +
         `${stuckF.length ? stuckF.join(", ") : "nothing"} is stuck against that drain and ` +
         `${doubledF.length ? doubledF.join(",") : "nothing"} is filed twice. ` +
+        `F RETURN BATCH from a fenced sender: ${describeReturn(returned)} ` +
+        `returned-from-enviando=[${returned.returnedFromEnviando.join(",")}] ` +
+        `sales-carried=${returned.salesGained}. ` +
+        `G REPLAY: same-bytes=${returned.sameBytes} replay-applied=${returned.replayApplied} ` +
+        `filed-after-replay=${returned.filedAfterReplay}. ` +
         `Controls double-file: regressing=${regressed.doubled.length} ` +
         `insert-only=${dropped.doubled.length}`,
     };
@@ -608,4 +631,142 @@ function runPartBSequence(
   const statesAfterRetry = envioStates(receiver, senderId);
   drainPass(receiver, submit);
   return { statesAfterRetry, doubled: doubleFilings(ledger) };
+}
+
+type BuildReturn = typeof buildReturnBatch;
+
+type ReturnOutcome = {
+  /** Every record of both chains filed more than once. */
+  filedTwice: string[];
+  /** Every record of both chains never filed at all. */
+  neverFiled: string[];
+  /** The sender's chain as the receiver holds it after its last drain pass. */
+  receiverStates: string[];
+  returnedFromEnviando: number[];
+  /** Whether the batch built again from the same reported heads is the same bytes. */
+  sameBytes: boolean;
+  replayApplied: number;
+  filedAfterReplay: number;
+  /** Sales of the sender's the receiver gained from the batch — none may arrive. */
+  salesGained: number;
+};
+
+/**
+ * A947 §7.1's return, as A1018 amends it: the old box (`m1`) comes back after its replacement
+ * (`m2`) took over, and hands back what it holds of its own chain. The four records are chosen so
+ * each one needs a different part of the batch to be filed exactly once:
+ *
+ *   1 — in m2's copy as `pendiente`; m1 filed it after that copy was taken. Only m1's filing row
+ *       for it, which is not a missing record, tells m2.
+ *   2 — in m2's copy as `pendiente`; m1's one attempt was refused, so nobody has filed it.
+ *   3 — not in m2's copy; m1's drain had claimed it (`enviando`) when the power went, before the
+ *       request left — so the stub never saw it.
+ *   4 — not in m2's copy; never attempted.
+ *
+ * m2 also sells one record of its own, so its drain pass has a row to call `submit` on while m1's
+ * chain is paused, and the batch is applied from inside that call: the apply lands mid-pass.
+ *
+ * `fenced: false` and the two other builders are the controls. A record whose submit was cut after
+ * the request reached AEAT is not modelled: against the real endpoint the receiver's resend is a
+ * same-identity repeat AEAT refuses (README → "What the FAIL means against the real system").
+ */
+function runReturnSequence(
+  open: (nodeId: string) => NodeDb,
+  slug: string,
+  options: { fenced: boolean; build: BuildReturn },
+): ReturnOutcome {
+  const ledger = newLedger();
+  const m1Id = `${slug}-m1`;
+  const m2Id = `${slug}-m2`;
+  const m1 = open(m1Id);
+  const m2 = open(m2Id);
+
+  recordSale(m1, 800);
+  recordSale(m1, 801);
+  // m2's copy of m1, taken before m1 filed anything. It is a whole-database copy, so it carries
+  // m1's sales too; the return batch afterwards must add none.
+  applyTail(m2, m1Id, diffTail(m1, summarise(m2)));
+  drainPass(m1, makeSubmit(ledger, `${m1Id}:2`));
+  recordSale(m1, 802);
+  recordSale(m1, 803);
+  m1.handle
+    .prepare(`UPDATE envios SET estado = 'enviando' WHERE node_id = ? AND secuencia = 3`)
+    .run(m1Id);
+  assert.deepEqual(
+    envioStates(m1, m1Id),
+    ["1 enviado acked=1", "2 pendiente acked=0", "3 enviando acked=0", "4 pendiente acked=0"],
+    `${slug}: precondition — m1's chain when it comes back`,
+  );
+  assert.deepEqual(
+    envioStates(m2, m1Id),
+    ["1 pendiente acked=0", "2 pendiente acked=0"],
+    `${slug}: precondition — m2's copy of m1's chain`,
+  );
+  recordSale(m2, 900);
+  const salesBefore = countSales(m2, m1Id);
+
+  if (options.fenced) fence(m1);
+  const reportedHeads = summarise(m2).contiguousTo;
+  const batch = options.build(m1, reportedHeads);
+  const batchBytes = JSON.stringify(batch);
+
+  // m1's own filing duty comes round after the batch is cut. Fenced, it files nothing.
+  drainPass(m1, makeSubmit(ledger));
+
+  const paused = new Set(chainsOf(batch));
+  let applied: ApplyResult | undefined;
+  const submit = makeSubmit(ledger);
+  drainPass(
+    m2,
+    (nodeId, secuencia) => {
+      submit(nodeId, secuencia);
+      if (!applied) {
+        applied = applyReturnBatch(m2, m1Id, batch);
+        paused.clear();
+      }
+    },
+    paused,
+  );
+  assert.ok(applied, `${slug}: the batch was applied from inside m2's drain pass`);
+  drainPass(m2, submit);
+  const receiverStates = envioStates(m2, m1Id);
+  const salesGained = countSales(m2, m1Id) - salesBefore;
+
+  // The replay: m1's duty comes round again, the batch is built again from the same reported
+  // heads, and the batch first sent is applied a second time.
+  drainPass(m1, makeSubmit(ledger));
+  const sameBytes = JSON.stringify(options.build(m1, reportedHeads)) === batchBytes;
+  const filedBeforeReplay = ledger.filed.length;
+  const replayApplied = applyReturnBatch(m2, m1Id, JSON.parse(batchBytes) as ReturnBatch).applied;
+  drainPass(m2, submit);
+
+  const expected = [
+    ...[1, 2, 3, 4].map((secuencia) => submissionKey(m1Id, secuencia)),
+    submissionKey(m2Id, 1),
+  ];
+  return {
+    filedTwice: doubleFilings(ledger),
+    neverFiled: expected.filter((key) => !ledger.filed.includes(key)),
+    receiverStates,
+    returnedFromEnviando: batch.returnedFromEnviando,
+    sameBytes,
+    replayApplied,
+    filedAfterReplay: ledger.filed.length - filedBeforeReplay,
+    salesGained,
+  };
+}
+
+function countSales(db: NodeDb, nodeId: string): number {
+  const row = db.handle
+    .prepare(`SELECT count(*) AS n FROM sales WHERE node_id = ?`)
+    .get(nodeId) as { n: number };
+  return Number(row.n);
+}
+
+function describeReturn(outcome: ReturnOutcome): string {
+  const list = (keys: string[]): string => (keys.length ? keys.join(",") : "none");
+  return (
+    `filed-twice=${list(outcome.filedTwice)} never-filed=${list(outcome.neverFiled)} ` +
+    `receiver-left=[${outcome.receiverStates.join(", ")}]`
+  );
 }
