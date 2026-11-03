@@ -41,7 +41,7 @@ decir **Comprobar la hora** en su lugar, como se explica más abajo.
 rojo. El reloj del equipo marca más de un minuto antes que la última venta que registró. Hasta que
 marque como mucho un minuto antes, o hasta que se confirme la hora del equipo, el equipo rechaza
 los cobros, las devoluciones y todo lo que registraría una venta o movería dinero: cobros en
-efectivo o con tarjeta, en la barra o en una mesa, devoluciones y reintentos de devoluciones, una
+efectivo o con tarjeta, en el mostrador o en una mesa, devoluciones y reintentos de devoluciones, una
 mesa que se va sin pagar, anular un pedido que ya tiene factura, y un cambio o un envío a cocina que
 terminaría de pagar una cuenta ya pagada en parte. En el panel, los encargados tampoco pueden
 resolver cobros ni devoluciones atascados o retenidos.
@@ -58,7 +58,7 @@ Si el terminal dice que se ha cobrado con tarjeta pero la venta no se ha registr
 cobrar. Puede pasar cuando un lector de tarjetas cobra una tarjeta justo cuando se paran los cobros.
 Lo que hay que hacer después depende de cómo se cobró la tarjeta:
 
-- **En la barra, o la cuenta de una mesa cobrada de una vez desde la cuenta presentada:** cuando se
+- **En el mostrador, o la cuenta de una mesa cobrada de una vez desde la cuenta presentada:** cuando se
   pueda volver a cobrar, cobra ese pedido otra vez de la misma forma. El pago se registra sin cobrar
   la tarjeta otra vez.
 - **Desde las opciones de pago de la cuenta (Toda la cuenta, Pagar artículos, Aportar una cantidad o

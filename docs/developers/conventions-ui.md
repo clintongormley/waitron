@@ -353,8 +353,7 @@ passes it.
 ### How the till links a guide, and the sheet it opens in
 
 A till link to a guide goes through `apps/till/src/help-guide.ts`, which works as the dashboard's
-does: `GUIDE_LINKS` names each section the till links to (today one, the Products page's
-`nutrition-at-the-till`, from the dishes' badge on Counter and Order), and `guideHref(key)` returns
+does: `GUIDE_LINKS` names each section the till links to, and `guideHref(key)` returns
 `/help/<en|es>/<page>#<section>` in the till's current language. A screen builds its badge with
 `helpBadge(key, part, { guide })` (`apps/till/src/widgets/help-badge.ts`), which fills in `guide-href`
 and the "Read more in the guide" words. The same guard, `scripts/guide-links.test.ts`, runs its two

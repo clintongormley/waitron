@@ -2458,9 +2458,11 @@ with its text from `apps/till/src/i18n/help-strings.ts`. Counter: Park, the Gues
 Parked orders and Waiting orders headings (the Waiting heading, and so its badge, is not drawn while
 the list is empty). Counter and Order: the dishes' search field, whose box links to the Products
 guide. Floor: the tables toolbar (its text follows the map or list view and whether today's floor
-may be changed), the layout banner, and the Needs moving window when it offers Leave it here.
-Order: the Fire / Send all group, drawn only as wide as its buttons so the badge sits on Send all's
-corner. Counter's payment buttons carry none yet. At phone width the Floor's toolbar and banner keep
+may be changed), whose box links to the Table service guide's service steps section; the layout
+banner; the Needs moving window when it offers Leave it here; and, on a handheld, the Ready bar,
+whose box links to the Table service guide's Ready bar section. Order: the Fire / Send all group,
+whose box links to the Kitchen service guide's section on a dish sent after its period ended; the
+group is drawn only as wide as its buttons so the badge sits on Send all's corner. Counter's payment buttons carry none yet. At phone width the Floor's toolbar and banner keep
 room on their trailing side for half the badge, whether help is on or off, so a badge stays inside
 the window and turning help on moves nothing; the layout banner is only as wide as its words and
 Update layout, so while they fit on one line its badge hangs on that button's corner. On a till wider than a phone, Counter's
