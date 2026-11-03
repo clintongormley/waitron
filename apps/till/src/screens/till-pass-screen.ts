@@ -184,6 +184,8 @@ export class TillPassScreen extends LitElement {
    * choice, its success is not taken as the newest answer, and its failure is not acted on.
    */
   #otherStationsSend = 0;
+  /** The send the server accepted; the next board read to answer ends its sending. */
+  #acceptedSend = 0;
   /** A refusal of that choice, shown in the window until the next choice or a change of board. */
   @state() private otherStationsError?: string;
   /** A read of the device's choice has answered; until one does, All stations shows. */
@@ -286,13 +288,17 @@ export class TillPassScreen extends LitElement {
   }
 
   async #refresh(): Promise<void> {
+    await this.#bounded((signal) =>
+      this.#followsChoice() ? this.#loadChoice(signal) : this.#reload(signal, true),
+    );
+  }
+
+  async #bounded(run: (signal: AbortSignal) => Promise<void>): Promise<void> {
     const read = new AbortController();
     const limit = setTimeout(() => read.abort(), READ_LIMIT_MS);
     this.#refreshReads.add(read);
     try {
-      await (this.#followsChoice()
-        ? this.#loadChoice(read.signal)
-        : this.#reload(read.signal, true));
+      await run(read.signal);
     } finally {
       clearTimeout(limit);
       this.#refreshReads.delete(read);
@@ -352,6 +358,7 @@ export class TillPassScreen extends LitElement {
     this.board = read.board;
     this.#display = read.display;
     this.#acceptedChoice = undefined;
+    if (this.#acceptedSend === this.#otherStationsSend) this.otherStationsSending = undefined;
     this.lostLines = lostLines(read);
     this.nothingLeft = nothingLeft(read);
     for (const key of this.#asks.keys()) if (!this.sending.has(key)) this.#dropAskIfChanged(key);
@@ -474,22 +481,24 @@ export class TillPassScreen extends LitElement {
       );
       if (send === this.#otherStationsSend && this.#isCurrent(boardId)) {
         this.#acceptedChoice = value;
+        this.#acceptedSend = send;
         // Counts as an answer newer than any board read already out, so none of those can undo it.
         this.#appliedRequest = ++this.#request;
       }
     } catch (error) {
       reload = null;
-      const code = (error as { code?: string } | null)?.code ?? "server.internal";
-      if (send !== this.#otherStationsSend) {
-        // Sent before the last change of board.
-      } else if (this.#switched(error)) this.columnsWindow = null;
-      else if (code === "device.unauthorized" && this.#followsChoice()) {
-        this.columnsWindow = null;
-        this.#tableChangedNext = {};
-        reload = "choice";
-      } else this.otherStationsError = code;
+      if (send === this.#otherStationsSend) {
+        const code = (error as { code?: string } | null)?.code ?? "server.internal";
+        if (this.#switched(error)) this.columnsWindow = null;
+        else if (code === "device.unauthorized" && this.#followsChoice()) {
+          this.columnsWindow = null;
+          this.#tableChangedNext = {};
+          reload = "choice";
+        } else this.otherStationsError = code;
+      }
     }
-    if (reload === "board" && this.#isCurrent(boardId)) await this.#reload();
+    if (reload === "board" && this.#isCurrent(boardId))
+      await this.#bounded((signal) => this.#reload(signal));
     if (send === this.#otherStationsSend) this.otherStationsSending = undefined;
     if (reload === "choice" && this.#isCurrent(boardId)) await this.#loadChoice();
   }

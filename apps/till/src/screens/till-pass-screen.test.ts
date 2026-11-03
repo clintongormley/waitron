@@ -1503,6 +1503,56 @@ describe("A773 pass screen", () => {
         expect(checked(el)).toEqual(["false", "false", "true"]);
       }));
 
+    it("after an accepted choice whose board read stalls, a later read that answers frees the choices", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          setDeviceKitchenScreenDisplay: vi.fn().mockResolvedValue(undefined),
+          getDevicePassBoard: vi
+            .fn()
+            .mockReturnValueOnce(new Promise(() => {}))
+            .mockResolvedValue({ ...deviceBoard(boardB), display: display(false) }),
+        });
+        const el = await mount({
+          deviceMode: true,
+          api,
+          initialBoard: { ...deviceBoard(), display: display(null) },
+        });
+        await open(el);
+        await choose(el, 2);
+        expect(control(el)!.disabled).toBe(true);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+        expect(control(el)!.disabled).toBe(false);
+      }));
+
+    it("after an accepted choice, a board read that never answers is given up after the read limit, freeing the choices", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          setDeviceKitchenScreenDisplay: vi.fn().mockResolvedValue(undefined),
+          getDevicePassBoard: vi
+            .fn()
+            .mockImplementationOnce(hangUntilAborted)
+            .mockRejectedValue(new Error("offline")),
+        });
+        const el = await mount({
+          deviceMode: true,
+          api,
+          initialBoard: { ...deviceBoard(), display: display(null) },
+        });
+        await open(el);
+        await choose(el, 2);
+        await vi.advanceTimersByTimeAsync(24_000);
+        await settle(el);
+        expect(control(el)!.disabled).toBe(true);
+        await vi.advanceTimersByTimeAsync(1_000);
+        await settle(el);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+        expect(control(el)!.disabled).toBe(false);
+      }));
+
     const movesToMonitorWhileSending = (monitorRead: Promise<DevicePassBoard>) => {
       const sent = deferred<void>();
       const api = fakeApi({
