@@ -1898,7 +1898,8 @@ async function bootServer(
       );
       return restrictedStart();
     }
-    // `superseded` with no successor goes on: the chart it now holds fences it below (Ruling R7).
+    // `superseded` with no successor comes only from a newer chart that fences this box, which the
+    // check handed to `saveVerifiedMembership`; once saved, the chart read below fences it (Ruling R7).
   }
   // A returned box that died before it was fenced would otherwise boot with a stale chart and SELL
   // while the promoted cloud is also primary — two nodes filing under one NIF (CLAUDE.md §5). So a

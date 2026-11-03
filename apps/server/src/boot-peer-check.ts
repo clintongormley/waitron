@@ -11,8 +11,10 @@ import {
 } from "@waitron/handover";
 import {
   acceptMembershipDocument,
+  canonicalize,
   isFencedStanding,
   isMembershipDocument,
+  servingPrimaryNodeId,
   standingOf,
   type AcceptResult,
   type CanonicalValue,
@@ -41,8 +43,9 @@ export interface CheckPeersDeps {
   /** A verified status, or `null` for any refusal, error or answer that does not verify. */
   ask: (peer: RoutableServer) => Promise<PeerStatusBody | null>;
   /**
-   * Verifies the chart and, when it is newer than the one held, PERSISTS it: `accepted: true`
-   * means it is now the held chart (`persistingAccept` builds the real one).
+   * Verifies the chart against `held`, the chart held before the check, and persists it when it
+   * also verifies against, and is newer than, the chart held at that moment. The verdict never depends on whether it was saved,
+   * and `not_newer` is only ever a chart that verified (`persistingAccept` builds the real one).
    */
   accept: (doc: SignedMembershipDocument) => Promise<AcceptResult>;
   /** An open operation in which this box is the source. */
@@ -155,16 +158,39 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
     }),
   );
 
-  // Newest first, so an older chart that is still newer than the held one is judged against the
-  // newest already persisted, never in place of it.
+  const fences = (chart: SignedMembershipDocument) => isFencedStanding(standingOf(chart, nodeId));
+  // Newest first, and at one term a chart fencing this box first, so the chart saved is the newest
+  // and, of two charts at that term, the one that stops this box.
   const verdicts = new Map<number, AcceptResult>();
   const charted = statuses
     .map((status, index) => ({ chart: status?.heldMembership ?? null, index }))
     .filter((c): c is { chart: SignedMembershipDocument; index: number } =>
       isMembershipDocument(c.chart),
     )
-    .sort((a, b) => b.chart.body.term - a.chart.body.term);
+    .sort(
+      (a, b) =>
+        b.chart.body.term - a.chart.body.term || Number(fences(b.chart)) - Number(fences(a.chart)),
+    );
   for (const { chart, index } of charted) verdicts.set(index, await deps.accept(chart));
+  const heldTerm = held?.body.term ?? 0;
+  let newest = heldTerm;
+  for (const v of verdicts.values())
+    if (v.accepted) newest = Math.max(newest, v.document.body.term);
+  // A chart older than the newest verified one is overtaken by it, so it cannot stop this box. At
+  // the held term, a verified chart with another body was minted for that term apart from the held
+  // one; it is never saved, so it stops this box only when it names another box as serving primary.
+  const decides = (verdict: AcceptResult, chart: SignedMembershipDocument) => {
+    if (chart.body.term !== newest) return false;
+    if (verdict.accepted) return true;
+    const primary = servingPrimaryNodeId(chart);
+    return (
+      verdict.reason === "not_newer" &&
+      primary !== undefined &&
+      primary !== nodeId &&
+      canonicalize(chart.body as unknown as CanonicalValue) !==
+        canonicalize(held!.body as unknown as CanonicalValue)
+    );
+  };
 
   const answers: PeerAnswer[] = statuses.map((status, index) => {
     const { server, counted } = peers[index]!;
@@ -179,13 +205,13 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
     // Read from the signed status itself, whatever its chart: stopping is the safe side.
     if (operationFences(status.openOperation, nodeId)) return of("F", true);
     const verdict = verdicts.get(index);
-    if (verdict?.accepted === true && isFencedStanding(standingOf(verdict.document, nodeId)))
-      return of("F");
+    const chart = status.heldMembership!;
+    if (verdict !== undefined && decides(verdict, chart) && fences(chart)) return of("F");
     // A part this box cannot read may report a takeover, so it cannot clear a wait. Nor can no
     // chart, or one this box cannot trust: neither vouches that no handover happened.
     if (!partsReadable(status)) return silent("unreadable_part");
     if (verdict === undefined) return silent("no_chart");
-    if (verdict.accepted) return of("N");
+    if (verdict.accepted) return of(chart.body.term === newest ? "N" : "=");
     return verdict.reason === "invalid" ? silent("untrusted_chart") : of("=");
   });
   deps.onAnswers?.(answers);
@@ -200,13 +226,13 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
 
 /**
  * The real `accept`: verify against the stored trust set, judged against the chart held before
- * the check (a retirement chart is signed by the node it evicts), then `persist` — which saves
- * only a chart strictly newer than the one held at that moment, so a `false` is `not_newer`.
+ * the check (a retirement chart is signed by the node it evicts), then hand an accepted chart to
+ * `persist`, which judges it again against what is held at that moment before it saves it.
  */
 export function persistingAccept(deps: {
   held: SignedMembershipDocument | null;
   trustSet: TrustSet;
-  persist: (doc: SignedMembershipDocument) => Promise<boolean>;
+  persist: (doc: SignedMembershipDocument) => Promise<unknown>;
 }): (doc: SignedMembershipDocument) => Promise<AcceptResult> {
   return async (doc) => {
     const verdict = acceptMembershipDocument(
@@ -215,8 +241,8 @@ export function persistingAccept(deps: {
       deps.trustSet,
       deps.held,
     );
-    if (!verdict.accepted) return verdict;
-    return (await deps.persist(doc)) ? verdict : { accepted: false, reason: "not_newer" };
+    if (verdict.accepted) await deps.persist(doc);
+    return verdict;
   };
 }
 
@@ -227,7 +253,10 @@ export type SilentReason =
 export interface AskPeerStatusDeps {
   /** Signs a query envelope with this box's node key (`signAsThisBox(deps, "query", body)`). */
   sign: (body: PeerQueryBody & CanonicalValue) => Promise<SignedHandoverEnvelope<unknown>>;
-  /** The key this box stores for a node or its held chart vouches for (`peerKeyOf`). */
+  /**
+   * A key this box stores for that node or the held chart vouches for, from a node the held chart
+   * neither evicts nor clears (`peerKeyOf`).
+   */
   publicKeyOf: (nodeId: string) => string | undefined;
   /** The authority certificate this box holds for a peer; pinned when there is one. */
   authorityOf?: (nodeId: string) => string | undefined;

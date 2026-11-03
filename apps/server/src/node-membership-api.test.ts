@@ -4,7 +4,9 @@ import {
   CORE_MIGRATIONS,
   readNodeMembership,
   withNodeTransaction,
+  withTransaction,
   writeNodeMembership,
+  writeNodeMembershipTx,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -161,6 +163,72 @@ describe("POST /api/node/membership", () => {
     });
     expect(stepDown).not.toHaveBeenCalled();
     expect(await readNodeMembership(db)).toEqual(held);
+  });
+
+  it("a chart from a signer that a transaction committing while the request waits evicts is not held", async () => {
+    const { app, self, peer, peerSigner, stepDown, db } = await boxes();
+    const selfSigner = {
+      nodeId: self,
+      privateKey: await readNodeIdentityKey(suite.node, RING, self),
+    };
+    const eviction = chart(5, selfSigner, [
+      [self, "serving-primary"],
+      [peer, "evicted"],
+    ]);
+    const incoming = chart(6, peerSigner, [
+      [self, "sell-only"],
+      [peer, "serving-primary"],
+    ]);
+    let opened!: () => void;
+    const evicting = new Promise<void>((resolve) => (opened = resolve));
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
+    const writer = withTransaction(db, async (tx) => {
+      await writeNodeMembershipTx(tx, eviction);
+      opened();
+      await released;
+    });
+    await evicting;
+    let queued!: () => void;
+    const waiting = new Promise<void>((resolve) => (queued = resolve));
+    const lock = db.withWriteLock.bind(db);
+    const spy = vi.spyOn(db, "withWriteLock").mockImplementation((work) => {
+      queued();
+      return lock(work);
+    });
+    try {
+      const posting = hand(app, { document: incoming });
+      await waiting;
+      release();
+      await writer;
+      expect(await posting).toEqual({ status: 200, body: { accepted: false } });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(stepDown).not.toHaveBeenCalled();
+    expect(await readNodeMembership(db)).toEqual(eviction);
+  });
+
+  it("control: with that eviction already committed, the same chart is not held", async () => {
+    const { app, self, peer, peerSigner, db } = await boxes();
+    const selfSigner = {
+      nodeId: self,
+      privateKey: await readNodeIdentityKey(suite.node, RING, self),
+    };
+    const eviction = chart(5, selfSigner, [
+      [self, "serving-primary"],
+      [peer, "evicted"],
+    ]);
+    await writeNodeMembership(db, eviction);
+    const incoming = chart(6, peerSigner, [
+      [self, "sell-only"],
+      [peer, "serving-primary"],
+    ]);
+    expect(await hand(app, { document: incoming })).toEqual({
+      status: 200,
+      body: { accepted: false },
+    });
+    expect(await readNodeMembership(db)).toEqual(eviction);
   });
 
   it("a body that is no chart answers only that it was not accepted", async () => {

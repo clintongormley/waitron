@@ -2,7 +2,6 @@ import { and, eq, inArray } from "drizzle-orm";
 import type { KeyRing } from "@waitron/credentials";
 import {
   nodes,
-  persistNodeMembershipIfNewer,
   readMembershipTrustSet,
   readNodeMembership,
   withNodeTransaction,
@@ -30,6 +29,7 @@ import {
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import { advanceHandover } from "./handover-store.js";
 import type { Logger } from "./logger.js";
+import { saveVerifiedMembership } from "./node-membership-api.js";
 
 const START_CHECK_TIMEOUT_MS = 5000;
 
@@ -117,16 +117,27 @@ async function joined(db: Database, nodeId: string): Promise<boolean> {
 /**
  * Whom a superseded box names: the serving primary of the chart it now holds, unless that is this
  * box (a peer's takeover can arrive before its chart), then the first peer whose own operation
- * stopped this box. `null` takes Ruling R7's path: no restriction, and the held chart decides.
+ * stopped this box, then the serving primary of a peer's chart that stopped it (`chartOf`), which
+ * the box does not hold when it is at the held term. `null` comes only from a newer chart that
+ * fences this box and names no other serving primary, which the check handed to be saved: boot
+ * then takes Ruling R7's path, with no restriction, and the held chart decides.
  */
 export function successorAfterCheck(
   held: SignedMembershipDocument | null,
   nodeId: string,
   answers: readonly PeerAnswer[],
+  chartOf: (peerId: string) => SignedMembershipDocument | undefined = () => undefined,
 ): string | null {
   const primary = held === null ? undefined : servingPrimaryNodeId(held);
   if (primary !== undefined && primary !== nodeId) return primary;
-  return answers.find((a) => a.answer === "F" && a.byOperation)?.nodeId ?? null;
+  const byOperation = answers.find((a) => a.answer === "F" && a.byOperation);
+  if (byOperation !== undefined) return byOperation.nodeId;
+  for (const a of answers) {
+    const chart = a.answer === "F" ? chartOf(a.nodeId) : undefined;
+    const named = chart === undefined ? undefined : servingPrimaryNodeId(chart);
+    if (named !== undefined && named !== nodeId) return named;
+  }
+  return null;
 }
 
 export interface StartPeerCheckDeps {
@@ -164,6 +175,7 @@ export async function runStartPeerCheck(deps: StartPeerCheckDeps): Promise<Start
   let keyOf: Promise<(id: string) => string | undefined> | undefined;
   let link: ReturnType<typeof readMirrorLink> | undefined;
   const askWhy = new Map<string, SilentReason>();
+  const charts = new Map<string, SignedMembershipDocument>();
   const result = await checkPeersAtStart({
     held,
     nodeId,
@@ -176,7 +188,7 @@ export async function runStartPeerCheck(deps: StartPeerCheckDeps): Promise<Start
       link ??= readMirrorLink(node, nodeId);
       // A spare holds its main box's authority from adoption (`adopt.ts`, `writeMirrorLinkTx`).
       const pinned = await link;
-      return askPeerStatus({
+      const status = await askPeerStatus({
         sign: (body) => signAsThisBox({ node, ring, nodeId }, "query", body),
         publicKeyOf: await keyOf,
         authorityOf: (id) =>
@@ -185,11 +197,13 @@ export async function runStartPeerCheck(deps: StartPeerCheckDeps): Promise<Start
         ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
         timeoutMs,
       })(peer);
+      if (status?.heldMembership != null) charts.set(peer.nodeId, status.heldMembership);
+      return status;
     },
     accept: persistingAccept({
       held,
       trustSet,
-      persist: (doc) => persistNodeMembershipIfNewer(db, doc),
+      persist: (doc) => saveVerifiedMembership(db, doc),
     }),
     openOperation: isOpenSourceOperation(open),
     timeoutMs,
@@ -211,7 +225,7 @@ export async function runStartPeerCheck(deps: StartPeerCheckDeps): Promise<Start
       : {}),
     successorNodeId:
       result === "superseded"
-        ? successorAfterCheck(await readNodeMembership(db), nodeId, answers)
+        ? successorAfterCheck(await readNodeMembership(db), nodeId, answers, (id) => charts.get(id))
         : null,
   };
 }

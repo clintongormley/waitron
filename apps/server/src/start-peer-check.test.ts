@@ -373,6 +373,31 @@ describe("the real start check's inputs", () => {
     expect(await readNodeMembership(suite.db)).toEqual(newer);
   });
 
+  it("a peer's newer chart is not held when a chart evicting its signer was saved while the box asked", async () => {
+    const b = await box(suite);
+    const eviction = b.chart(2, [
+      [b.nodeId, "serving-primary", OWN_URL],
+      [PEER.nodeId, "evicted", PEER_URL],
+    ]);
+    const body = b.chart(3, [
+      [b.nodeId, "serving-primary", OWN_URL],
+      [PEER.nodeId, "serving-secondary", PEER_URL],
+    ]).body;
+    const peerChart = {
+      body,
+      signerNodeId: PEER.nodeId,
+      signature: signDocumentBody(body, PEER.privateKey),
+      endorsements: [],
+    };
+    const answer = peerFetch(() => ({ heldMembership: peerChart }));
+    const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      await writeNodeMembership(suite.db, eviction);
+      return answer(url, init);
+    });
+    expect((await check(suite, b, fetch)).result).toBe("proceed");
+    expect(await readNodeMembership(suite.db)).toEqual(eviction);
+  });
+
   it("logs each peer's answer kind by node id, and the result", async () => {
     const b = await box(suite);
     const log = vi.fn();
@@ -437,6 +462,27 @@ describe("whom a superseded box names as its successor", () => {
       peerFetch(() => ({ heldMembership: newer })),
     );
     expect(outcome).toMatchObject({ result: "superseded", successorNodeId: null });
+  });
+
+  it("a peer's own chart at the held term that fences this box names its serving primary, and the held chart stays", async () => {
+    const b = await box(suite);
+    const body = b.chart(1, [
+      [b.nodeId, "sell-only", OWN_URL],
+      [PEER.nodeId, "serving-primary", PEER_URL],
+    ]).body;
+    const fork = {
+      body,
+      signerNodeId: PEER.nodeId,
+      signature: signDocumentBody(body, PEER.privateKey),
+      endorsements: [],
+    };
+    const outcome = await check(
+      suite,
+      b,
+      peerFetch(() => ({ heldMembership: fork })),
+    );
+    expect(outcome).toMatchObject({ result: "superseded", successorNodeId: PEER.nodeId });
+    expect(await readNodeMembership(suite.db)).toEqual(b.held);
   });
 
   it("holding no chart, it names nobody", () => {

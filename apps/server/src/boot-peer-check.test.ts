@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { signEnvelope, type HandoverState } from "@waitron/handover";
 import {
+  acceptMembershipDocument,
   generateNodeKeyPair,
   signDocumentBody,
   type AcceptResult,
@@ -79,15 +80,18 @@ function operation(
   };
 }
 
-/** A stand-in for the real verify-and-persist: the term decides, and an accepted chart is held. */
+/**
+ * A stand-in for the real verify-and-persist: the term decides against the chart held before the
+ * check, and an accepted chart is held when it is newer than the one held at that moment.
+ */
 function heldStore(initial: SignedMembershipDocument | null, untrusted = new Set<number>()) {
   let current = initial;
   const accept = vi.fn(async (doc: SignedMembershipDocument): Promise<AcceptResult> => {
     if (untrusted.has(doc.body.term))
       return { accepted: false, reason: "invalid", failure: "untrusted_signer" };
-    if (current !== null && doc.body.term <= current.body.term)
+    if (initial !== null && doc.body.term <= initial.body.term)
       return { accepted: false, reason: "not_newer" };
-    current = doc;
+    if (current === null || doc.body.term > current.body.term) current = doc;
     return { accepted: true, document: doc };
   });
   return { accept, held: () => current };
@@ -852,13 +856,12 @@ describe("persistingAccept", () => {
     expect(persist).toHaveBeenCalledTimes(1);
   });
 
-  it("reports not_newer when the store already holds a chart at least as new", async () => {
-    const accept = persistingAccept({
-      held: signed(3),
-      trustSet: trust,
-      persist: async () => false,
-    });
-    expect(await accept(signed(4))).toEqual({ accepted: false, reason: "not_newer" });
+  it("reports a chart newer than the one held before the check accepted, though the store did not save it", async () => {
+    const persist = vi.fn(async () => false);
+    const accept = persistingAccept({ held: signed(3), trustSet: trust, persist });
+    const doc = signed(4);
+    expect(await accept(doc)).toEqual({ accepted: true, document: doc });
+    expect(persist).toHaveBeenCalledWith(doc);
   });
 
   it("refuses a chart signed by a key it does not trust, persisting nothing", async () => {
@@ -881,6 +884,144 @@ describe("persistingAccept", () => {
     const accept = persistingAccept({ held: signed(3), trustSet: trust, persist });
     expect(await accept(signed(3))).toEqual({ accepted: false, reason: "not_newer" });
     expect(persist).not.toHaveBeenCalled();
+  });
+});
+
+describe("checkPeersAtStart with real signatures — charts that disagree at one term", () => {
+  const selfPair = generateNodeKeyPair();
+  const sparePair = generateNodeKeyPair();
+  const trustSet: TrustSet = { [SELF]: selfPair.publicKey, [SPARE]: sparePair.publicKey };
+  const signedBy = (
+    signer: string,
+    privateKey: string,
+    doc: SignedMembershipDocument,
+  ): SignedMembershipDocument => ({
+    ...doc,
+    signerNodeId: signer,
+    signature: signDocumentBody(doc.body, privateKey),
+  });
+  const bySelf = (doc: SignedMembershipDocument) => signedBy(SELF, selfPair.privateKey, doc);
+  const bySpare = (doc: SignedMembershipDocument) => signedBy(SPARE, sparePair.privateKey, doc);
+  const serving = (term: number) =>
+    chart(term, [
+      [SELF, "serving-primary", OWN_ORIGIN],
+      [SPARE, "serving-secondary"],
+      [OLD, "serving-secondary"],
+    ]);
+  const fencing = (term: number) =>
+    chart(term, [
+      [SELF, "sell-only", OWN_ORIGIN],
+      [SPARE, "serving-primary"],
+      [OLD, "serving-secondary"],
+    ]);
+
+  async function run(
+    held: SignedMembershipDocument,
+    spareChart: SignedMembershipDocument,
+    oldChart: SignedMembershipDocument,
+  ) {
+    let saved = held;
+    const onAnswers = vi.fn();
+    const accept = persistingAccept({
+      held,
+      trustSet,
+      persist: async (doc) => {
+        if (doc.body.term <= saved.body.term) return false;
+        saved = doc;
+        return true;
+      },
+    });
+    const result = await checkPeersAtStart(
+      deps({
+        held,
+        joinedIds: [SPARE, OLD],
+        accept,
+        answers: { [SPARE]: status(spareChart), [OLD]: status(oldChart) },
+        onAnswers,
+      }),
+    );
+    const answers = (onAnswers.mock.calls[0]![0] as { nodeId: string; answer: string }[]).map(
+      (a) => `${a.nodeId}:${a.answer}`,
+    );
+    return { result, answers, saved };
+  }
+
+  it("two verified charts at the same newer term: the one fencing this box is F and is the one saved, whichever peer holds it", async () => {
+    const held = bySelf(serving(3));
+    const servingNewer = bySelf(serving(4));
+    const fencingNewer = bySpare(fencing(4));
+    const forward = await run(held, servingNewer, fencingNewer);
+    const reverse = await run(held, fencingNewer, servingNewer);
+    expect(forward).toEqual({
+      result: "superseded",
+      answers: [`${SPARE}:N`, `${OLD}:F`],
+      saved: fencingNewer,
+    });
+    expect(reverse).toEqual({
+      result: "superseded",
+      answers: [`${SPARE}:F`, `${OLD}:N`],
+      saved: fencingNewer,
+    });
+  });
+
+  it("a verified chart at the held term with another body that fences this box and names another serving primary is F", async () => {
+    // This box minted term 4 while cut off; the spare minted its own term 4 promoting itself.
+    const held = bySelf(serving(4));
+    const fork = bySpare(fencing(4));
+    expect(acceptMembershipDocument(fork, 4, trustSet, held)).toEqual({
+      accepted: false,
+      reason: "not_newer",
+    });
+    expect(await run(held, fork, held)).toMatchObject({
+      result: "superseded",
+      answers: [`${SPARE}:F`, `${OLD}:=`],
+      saved: held,
+    });
+  });
+
+  it("a verified chart at the held term that fences this box but names no serving primary is =", async () => {
+    const held = bySelf(serving(4));
+    const fork = bySpare(
+      chart(4, [
+        [SELF, "sell-only", OWN_ORIGIN],
+        [SPARE, "serving-secondary"],
+        [OLD, "serving-secondary"],
+      ]),
+    );
+    expect(acceptMembershipDocument(fork, 4, trustSet, held)).toEqual({
+      accepted: false,
+      reason: "not_newer",
+    });
+    expect(await run(held, fork, held)).toEqual({
+      result: "proceed",
+      answers: [`${SPARE}:=`, `${OLD}:=`],
+      saved: held,
+    });
+  });
+
+  it("control: the held chart itself, which fences this box, stays =", async () => {
+    const held = bySpare(fencing(4));
+    expect(await run(held, held, held)).toMatchObject({
+      result: "proceed",
+      answers: [`${SPARE}:=`, `${OLD}:=`],
+    });
+  });
+
+  it("control: a fencing chart at the held term signed by a key this box does not trust is S", async () => {
+    const held = bySelf(serving(4));
+    const forged = signedBy(SPARE, generateNodeKeyPair().privateKey, fencing(4));
+    expect(await run(held, forged, held)).toMatchObject({
+      result: "proceed",
+      answers: [`${SPARE}:S`, `${OLD}:=`],
+    });
+  });
+
+  it("a fencing chart older than the newest verified chart is still not F", async () => {
+    const held = bySelf(serving(3));
+    expect(await run(held, bySpare(fencing(4)), bySelf(serving(5)))).toMatchObject({
+      result: "proceed",
+      answers: [`${SPARE}:=`, `${OLD}:N`],
+    });
   });
 });
 
