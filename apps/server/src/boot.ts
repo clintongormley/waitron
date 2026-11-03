@@ -976,8 +976,11 @@ export interface StartServerSeams {
    * chart that fences this box stops it from selling.
    */
   peerCheck?: () => Promise<StartPeerCheckOutcome>;
-  /** How often a waiting start asks its peers again; defaults to `WAIT_RECHECK_MS`. */
-  waitingStart?: { intervalMs?: number };
+  /**
+   * How often a waiting start asks its peers again (defaults to `WAIT_RECHECK_MS`), and whether a
+   * carry-on request counts as reaching it over HTTPS (tests serve plain HTTP).
+   */
+  waitingStart?: { intervalMs?: number; secure?: (c: Context) => boolean };
 }
 
 /**
@@ -1812,6 +1815,13 @@ async function bootServer(
         readMembership: () => readNodeMembership(db),
         waitingOn: outcome.waitingOn ?? [],
         namesOf: (ids) => readPeerNames(db, ids),
+        carryOn: {
+          db,
+          credentialKeyRing: totpKeyRing,
+          ...(seams.waitingStart?.secure === undefined
+            ? {}
+            : { secure: seams.waitingStart.secure }),
+        },
         routes: [
           (waitingApp) =>
             mountPeerStatusApi(

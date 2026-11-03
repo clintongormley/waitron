@@ -8,6 +8,7 @@ import {
   withNodeTransaction,
   type Database,
   type NodeDatabase,
+  type NodeTransaction,
 } from "@waitron/db";
 import { servingPrimaryNodeId, type SignedMembershipDocument } from "@waitron/membership";
 import {
@@ -16,6 +17,7 @@ import {
   readMirrorLink,
   readOpenHandoverOperation,
   recordHandoverRestrictionTx,
+  type HandoverOperation,
 } from "@waitron/node-db";
 import {
   askPeerStatus,
@@ -66,6 +68,27 @@ export async function repairAtStart(deps: NodeDeps): Promise<void> {
       reason: "restarted_before_stepdown",
     });
   await finishInterruptedActivation(deps);
+}
+
+/** Whether `open`, this box's open operation, is one in which this box is the source. */
+export function isOpenSourceOperation(
+  open: HandoverOperation | null,
+): open is HandoverOperation & { role: "source" } {
+  return open !== null && open.role === "source";
+}
+
+/**
+ * The box this one knows it handed over to: its restriction's successor, else the destination of
+ * an open operation in which it is the source; `null` when it knows of no handover.
+ */
+export async function knownHandoverSuccessor(
+  node: NodeDatabase | NodeTransaction,
+  nodeId: string,
+): Promise<string | null> {
+  const restriction = await readHandoverRestriction(node, nodeId);
+  if (restriction !== null) return restriction.successorNodeId;
+  const open = await readOpenHandoverOperation(node, nodeId);
+  return isOpenSourceOperation(open) ? open.destinationNodeId : null;
 }
 
 /** The source of every operation this box activated as destination, open or closed. */
@@ -168,7 +191,7 @@ export async function runStartPeerCheck(deps: StartPeerCheckDeps): Promise<Start
       trustSet,
       persist: (doc) => persistNodeMembershipIfNewer(db, doc),
     }),
-    openOperation: open !== null && open.role === "source",
+    openOperation: isOpenSourceOperation(open),
     timeoutMs,
     onAnswers: (a) => (answers = a),
   });

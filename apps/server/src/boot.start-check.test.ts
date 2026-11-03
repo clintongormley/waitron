@@ -18,7 +18,7 @@ import {
 } from "@waitron/membership";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readHandoverRestriction } from "@waitron/node-db";
+import { nodeHandoverEvents, readHandoverRestriction } from "@waitron/node-db";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import type { PeerStatusBody } from "./peer-status-api.js";
@@ -104,6 +104,8 @@ async function startPeer(answer: (box: string) => Partial<PeerStatusBody>) {
 
 interface Booted {
   nodeId: string;
+  /** The environment the box started with, to start the same box again. */
+  env: Record<string, string>;
   lines: Record<string, unknown>[];
   acceptingSales: unknown;
 }
@@ -208,7 +210,7 @@ async function boot(
     fetch(`http://127.0.0.1:${options.port ?? httpPort()}/api/node`),
   );
   const { acceptingSales } = (await answer.json()) as { acceptingSales: unknown };
-  return { nodeId, lines, acceptingSales };
+  return { nodeId, env, lines, acceptingSales };
 }
 
 function startChecks(lines: Record<string, unknown>[]) {
@@ -378,6 +380,50 @@ describe("the start check on a real start", () => {
       expect(health.tradingAvailable).toBeUndefined();
       await new Promise((done) => setTimeout(done, 50));
       expect(peerCheck).toHaveBeenCalledTimes(3);
+    }, 60_000);
+
+    it("the next start asks the peers again", async () => {
+      const wait: StartPeerCheckOutcome = {
+        result: "wait",
+        successorNodeId: null,
+        waitingOn: [SPARE.nodeId],
+      };
+      const first = vi.fn(() => Promise.resolve(wait));
+      const booted = await boot(suite, {
+        spareUrl: OWN_URL,
+        joined: true,
+        seams: { ...seams(first), waitingStart: { intervalMs: 60_000, secure: () => true } },
+      });
+      expect(booted.acceptingSales).toBe(false);
+      const carried = await fetch(`http://127.0.0.1:${httpPort()}/carry-on`, {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          email: "owner@example.test",
+          password: "dashPass123",
+          switchedOff: "yes",
+          noOtherRecovery: "yes",
+        }),
+      });
+      expect(carried.status).toBe(200);
+      await vi.waitFor(async () => expect(await acceptingSales()).toBe(true), { timeout: 30_000 });
+      expect(first).toHaveBeenCalledTimes(1);
+      expect(await suite.node.select().from(nodeHandoverEvents)).toMatchObject([
+        { kind: "carried_on_without_peer", detail: { peerNodeIds: [SPARE.nodeId], chartTerm: 1 } },
+      ]);
+
+      await server!.close();
+      server = undefined;
+      const second = vi.fn(() => Promise.resolve(wait));
+      beforeServerStarts();
+      server = await startServer(booted.env, booted.env, {
+        ...seams(second),
+        waitingStart: { intervalMs: 60_000 },
+      });
+      expect(second).toHaveBeenCalledTimes(1);
+      expect(await acceptingSales()).toBe(false);
+      const page = await fetch(`http://127.0.0.1:${httpPort()}/`);
+      expect(await page.text()).toContain("This box is waiting for Spare");
     }, 60_000);
 
     it("on a fixed port, the normal start binds the port the waiting start released", async () => {

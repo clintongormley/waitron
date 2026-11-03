@@ -1,8 +1,11 @@
 import type { Hono } from "hono";
-import type { NodeDatabase } from "@waitron/db";
+import type { Context } from "hono";
+import type { Database, NodeDatabase } from "@waitron/db";
+import type { TotpKeyRing } from "@waitron/identity";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { codeOf } from "@waitron/server-kit";
 import type { StartedServer } from "./boot.js";
+import { mountCarryOn } from "./carry-on.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { stepDown, type StepDownRequest, type StepDownResult } from "./handover-stepdown.js";
@@ -35,6 +38,13 @@ export interface WaitingStartDeps {
   waitingOn: readonly string[];
   /** The page's name for each box, or `null` where it has none. */
   namesOf: (ids: readonly string[]) => Promise<readonly (string | null)[]>;
+  /** Signs in the person who carries on as the main box; without it the page offers no form. */
+  carryOn?: {
+    db: Database;
+    credentialKeyRing: TotpKeyRing;
+    /** Whether a request reached the box over HTTPS from the page; tests replace it. */
+    secure?: (c: Context) => boolean;
+  };
   /** The peer routes, mounted on the waiting start's own app. */
   routes: ((app: Hono, hooks: WaitingHooks) => void)[];
   node: NodeDatabase;
@@ -84,7 +94,20 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     log,
   );
   let waitingOn = deps.waitingOn;
-  waitingPageRoute(() => deps.namesOf(waitingOn), log)(app);
+  const section =
+    deps.carryOn === undefined
+      ? undefined
+      : mountCarryOn(app, {
+          ...deps.carryOn,
+          node: deps.node,
+          nodeId: deps.nodeId,
+          peerNodeIds: () => waitingOn,
+          namesOf: deps.namesOf,
+          chartTerm: async () => (await deps.readMembership())?.body.term ?? 0,
+          carryOn: () => hooks.carryOn(),
+          log,
+        });
+  waitingPageRoute(() => deps.namesOf(waitingOn), log, section)(app);
 
   let resolveEnd: (end: WaitEnd) => void = () => {};
   const ended = new Promise<WaitEnd>((resolve) => (resolveEnd = resolve));

@@ -1,9 +1,23 @@
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
+import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
-import { describe, expect, it, vi } from "vitest";
+import { generateSync } from "otplib";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { withNodeTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { persons } from "@waitron/identity";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { readHandoverRestriction } from "@waitron/node-db";
+import {
+  beginHandoverOperationTx,
+  nodeHandoverEvents,
+  readHandoverRestriction,
+  recordHandoverRestrictionTx,
+} from "@waitron/node-db";
+import { TOTP_KEY_RING, enrolAuthenticator } from "./testing/authenticator.js";
+import { fixturePasswordHash } from "./testing/known-secret-hashes.js";
+import { setupVenue } from "./testing/venue-fixtures.js";
 import { createHealthState } from "./health.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { startWaiting, type WaitingStartDeps } from "./waiting-start.js";
@@ -200,6 +214,226 @@ describe("the waiting start", () => {
       await vi.waitFor(() => expect(h.restart).toHaveBeenCalledTimes(1));
       expect(h.closeStore).toHaveBeenCalledTimes(1);
       expect(h.closeListeners).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("carrying on as the main box", () => {
+    const suite = useVenueDb({ migrations });
+    const sockets: TLSSocket[] = [];
+    let adminId: string;
+    let h: ReturnType<typeof harness>;
+
+    beforeEach(async () => {
+      await setupVenue(suite.db);
+      const [admin] = await suite.db
+        .select({ id: persons.id })
+        .from(persons)
+        .where(eq(persons.role, "admin"));
+      adminId = admin!.id;
+      h = harness(() => new Promise(() => {}), {
+        node: suite.node,
+        intervalMs: 60_000,
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+      });
+    });
+    afterEach(async () => {
+      await h.waiting.server.close();
+      for (const socket of sockets.splice(0)) socket.destroy();
+    });
+
+    const tls = () => {
+      const socket = new TLSSocket(new Socket());
+      sockets.push(socket);
+      return { incoming: { socket } };
+    };
+    const page = async (secure = true) =>
+      (
+        await h
+          .app()
+          .request(
+            "https://box.test/",
+            { headers: { "accept-language": "en-GB" } },
+            secure ? tls() : {},
+          )
+      ).text();
+    const post = (fields: Record<string, string>, secure = true) =>
+      h.app().request(
+        "https://box.test/carry-on",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/x-www-form-urlencoded",
+            "accept-language": "en-GB",
+          },
+          body: new URLSearchParams(fields).toString(),
+        },
+        secure ? tls() : {},
+      );
+    const BOTH = { switchedOff: "yes", noOtherRecovery: "yes" };
+    const ADMIN = { email: "owner@example.test", password: "dashPass123" };
+    const events = () => suite.node.select().from(nodeHandoverEvents);
+    const stillWaiting = async () =>
+      expect(
+        await Promise.race([
+          h.waiting.ended,
+          new Promise((done) => setTimeout(() => done("waiting"), 20)),
+        ]),
+      ).toBe("waiting");
+
+    it("carry on with a correct sign-in and both statements restarts normally and records the decision", async () => {
+      const answer = await post({ ...ADMIN, ...BOTH });
+      expect(answer.status).toBe(200);
+      expect(await answer.text()).toContain("<h1>This box is carrying on as the main box</h1>");
+      expect(await h.waiting.ended).toEqual({ kind: "carried-on" });
+      expect(h.closeListeners).toHaveBeenCalledTimes(1);
+      expect(h.closeStore).not.toHaveBeenCalled();
+      expect(h.health.takesNoSales).toBe(false);
+      expect(await events()).toMatchObject([
+        {
+          nodeId: NODE_ID,
+          operationId: null,
+          kind: "carried_on_without_peer",
+          detail: { personId: adminId, peerNodeIds: [SPARE_ID], chartTerm: 3 },
+          envelope: null,
+        },
+      ]);
+    });
+
+    it("a person without `node.promote` is refused with the role sentence", async () => {
+      await suite.db.insert(persons).values({
+        displayName: "Signed-in Manager",
+        role: "manager",
+        email: "manager@example.test",
+        passwordHash: fixturePasswordHash("managerPass1"),
+      });
+      const answer = await post({
+        email: "manager@example.test",
+        password: "managerPass1",
+        ...BOTH,
+      });
+      expect(answer.status).toBe(403);
+      expect(await answer.text()).toContain(
+        "Your role does not let you choose which box runs the venue. Sign in here as an administrator to carry on.",
+      );
+      await stillWaiting();
+      expect(await events()).toEqual([]);
+    });
+
+    it("a wrong password answers `password.invalid`", async () => {
+      const wrong = await post({ ...ADMIN, password: "notThePassword", ...BOTH });
+      const unknown = await post({ ...ADMIN, email: "nobody@example.test", ...BOTH });
+      expect([wrong.status, unknown.status]).toEqual([401, 401]);
+      const [wrongPage, unknownPage] = [await wrong.text(), await unknown.text()];
+      expect(wrongPage).toContain(
+        "That email and password do not match an account here. Check them and try again.",
+      );
+      expect(unknownPage.replace("nobody@example.test", "owner@example.test")).toBe(wrongPage);
+      // A sign-in's refusal marks no field.
+      expect(wrongPage).not.toContain("aria-invalid");
+      await stillWaiting();
+      expect(await events()).toEqual([]);
+    });
+
+    it("an account with an authenticator is asked for its code, then carries on", async () => {
+      const secret = await enrolAuthenticator(suite.db, adminId, ADMIN.password, TOTP_KEY_RING);
+      const asked = await post({ ...ADMIN, ...BOTH });
+      expect(asked.status).toBe(401);
+      const askedPage = await asked.text();
+      expect(askedPage).toContain('name="totp"');
+      expect(askedPage).toContain(
+        "Enter your password again and the code from your authenticator app.",
+      );
+      await stillWaiting();
+      const answer = await post({ ...ADMIN, totp: generateSync({ secret }), ...BOTH });
+      expect(answer.status).toBe(200);
+      expect(await h.waiting.ended).toEqual({ kind: "carried-on" });
+      expect(await events()).toHaveLength(1);
+    });
+
+    it("either statement unticked keeps the action disabled", async () => {
+      const blank = await page();
+      expect(blank).toContain('<button type="submit" disabled>Carry on as the main box</button>');
+      expect(blank).toContain(
+        '<input type="checkbox" id="carry-on-switched-off" name="switchedOff" value="yes" required>',
+      );
+      expect(blank).toContain("<strong>Spare</strong> is switched off");
+      expect(blank).toContain("No other recovery of this venue is in progress");
+      // After a refusal with both ticked the action works; with one unticked it stays disabled.
+      const ticked = await (await post({ ...ADMIN, password: "wrong", ...BOTH })).text();
+      expect(ticked).toContain('<button type="submit">Carry on as the main box</button>');
+      for (const missing of ["switchedOff", "noOtherRecovery"] as const) {
+        const one: Record<string, string> = { ...BOTH };
+        delete one[missing];
+        const answer = await post({ ...ADMIN, ...one });
+        expect(answer.status).toBe(400);
+        const html = await answer.text();
+        expect(html).toContain('<button type="submit" disabled>Carry on as the main box</button>');
+        expect(html).toContain("Tick this to confirm it.");
+        expect(html).toContain("Correct the highlighted fields to continue.");
+      }
+      await stillWaiting();
+      expect(await events()).toEqual([]);
+    });
+
+    it("a box with a restriction refuses `handover.known_handover`", async () => {
+      await withNodeTransaction(suite.node, (tx) =>
+        recordHandoverRestrictionTx(tx, {
+          nodeId: NODE_ID,
+          operationId: null,
+          kind: "superseded",
+          successorNodeId: SPARE_ID,
+          membershipTerm: 4,
+        }),
+      );
+      const sentence =
+        "This box has already handed over to <strong>Spare</strong>. It cannot carry on as the main box.";
+      const shown = await page();
+      expect(shown).toContain(sentence);
+      expect(shown).not.toContain("<form");
+      const answer = await post({ ...ADMIN, ...BOTH });
+      expect(answer.status).toBe(409);
+      const refused = await answer.text();
+      expect(refused).toContain(sentence);
+      expect(refused).not.toContain("<form");
+      expect(refused).toContain('<a href="/">Back to this box&#39;s status</a>');
+      await stillWaiting();
+      expect(await events()).toEqual([]);
+    });
+
+    it("a box that is the source of an open handover refuses `handover.known_handover`", async () => {
+      await withNodeTransaction(suite.node, (tx) =>
+        beginHandoverOperationTx(tx, {
+          nodeId: NODE_ID,
+          operationId: "00000000-0000-4000-8000-0000000000ee",
+          role: "source",
+          scenario: "controlled",
+          sourceNodeId: NODE_ID,
+          destinationNodeId: TERRACE_ID,
+          binding: {},
+          fingerprint: "f",
+          state: "source_stepped_down",
+          waitingReason: null,
+        }),
+      );
+      const answer = await post({ ...ADMIN, ...BOTH });
+      expect(answer.status).toBe(409);
+      expect(await answer.text()).toContain(
+        "This box has already handed over to <strong>Terrace</strong>. It cannot carry on as the main box.",
+      );
+      await stillWaiting();
+      expect(await events()).toEqual([]);
+    });
+
+    it("over plain HTTP the page offers no form, and a sign-in is refused", async () => {
+      const shown = await page(false);
+      expect(shown).not.toContain("<form");
+      expect(shown).toContain(
+        "To carry on as the main box, open this page at its https:// address.",
+      );
+      const answer = await post({ ...ADMIN, ...BOTH }, false);
+      expect(answer.status).toBe(403);
+      await stillWaiting();
+      expect(await events()).toEqual([]);
     });
   });
 });

@@ -158,6 +158,11 @@ declare module "@waitron/shared" {
     "node.read_only": Record<string, never>;
     /** The box is stepping down: it takes no new request beyond the few that report its state. */
     "handover.stepping_down": Record<string, never>;
+    /**
+     * A box that holds a restriction, or is the source of an open handover, was asked to carry on
+     * as the main box: it cannot undo a handover it knows of.
+     */
+    "handover.known_handover": { successorNodeId: string };
     /** A box's signed query came from a key this box's stored keys and held chart do not vouch for. */
     "handover.peer_unknown": Record<string, never>;
     /**
