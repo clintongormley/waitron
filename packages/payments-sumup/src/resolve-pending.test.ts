@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -96,6 +96,34 @@ describe("SumUpCloudProvider.resolvePending", () => {
         .forwarded,
     ).toBe(1);
   });
+
+  it.each([
+    { signalled: true, settled: 1 },
+    { signalled: false, settled: 2 },
+  ])(
+    "a signal raised after the first payment settles no second (signalled: $signalled)",
+    async ({ signalled, settled }) => {
+      const { fake, provider, attempting, state } = await setup();
+      await attempting("first", { status: "SUCCESSFUL" });
+      await attempting("second", { status: "SUCCESSFUL" });
+      const controller = new AbortController();
+      const find = fake.findTransaction.bind(fake);
+      const reads = vi.spyOn(fake, "findTransaction").mockImplementation(async (query) => {
+        controller.abort();
+        return find(query);
+      });
+      const sweep = await provider.resolvePending(
+        T0,
+        await ownsEveryPayment(suite.db),
+        signalled ? controller.signal : undefined,
+      );
+      expect(sweep.forwarded).toBe(settled);
+      expect(reads).toHaveBeenCalledTimes(settled);
+      expect((await state("first")).state).toBe("captured");
+      expect((await state("second")).state).toBe(signalled ? "attempting" : "captured");
+      expect(sweep.nextDueAt).toEqual(signalled ? new Date(T0.getTime() + RESOLVE_RETRY_MS) : null);
+    },
+  );
 
   it("carries the card block onto the payments row it captures", async () => {
     const { provider, attempting, state } = await setup();

@@ -22,10 +22,11 @@ qualification on real boxes remains the owner's, after A947 3b/3c
 ([owner task](../superpowers/plans/2026-11-02-a1018-handover-build.md#owner-task-physical-qualification-on-real-boxes)).
 
 **Built so far:** Slice 0 (docs, main `b0e22a9feb`), Slice 1 (#2417: `@waitron/handover`, the
-handover tables in `node.db`, the server's handover store and signer) and Slice 4b (A764: every
+handover tables in `node.db`, the server's handover store and signer), Slice 2 (the stepdown and
+the restricted start; no production route reaches `stepDown` yet) and Slice 4b (A764: every
 payment records the box that started it, and each box's card sweep resolves only the payments it
 owns; what it leaves open is under _Payments and card readers_ in [the backlog](../backlog.md)).
-Nothing calls Slice 1's code yet. Left for the slices that add the callers:
+Left for the slices that add the callers:
 - `beginHandover` stores the role it is given even when the binding names this box as the other
   side; the first caller must check the role against the binding.
 - A delayed `waitHandover` can overwrite the waiting reason a later step recorded.
@@ -35,6 +36,32 @@ Nothing calls Slice 1's code yet. Left for the slices that add the callers:
   and Task 10.3 skip the write when one exists.
 - `@waitron/membership` checks the endorsement count twice (`src/verify.ts`); deleting either
   check alone fails no test.
+
+Left by Slice 2:
+- `stepDown`'s replay check reads only this process's in-memory record of its first call, a
+  restricted box never builds a `stepDown`, and nothing checks the binding's `sourceNodeId`
+  against this box: the first route to reach `stepDown` (Slice 3's Task 3.3) must decide each,
+  and whether `handover.operation_conflict`'s wording fits a stepdown's refusal.
+- `stepDown` throws the same error codes whether it threw at the first check of the first call (nothing stopped)
+  or after the gate closed (the box is restarting): a route must tell the two apart before acting
+  on the refusal, and Task 5.3's recording of `abandoned` depends on it.
+- A restricted box's `/health` body is the same as a box whose trading is not admitted yet, so an
+  operator reading it cannot tell the two apart.
+- The `handover.stepping_down` refusal names no next step.
+- A streamed download leaves the gate's count when its response returns, before its body ends.
+- The close-deadline log does not name the step still running.
+- A drain stopped early reads as a successful pass to `/health`'s last-success time.
+- Boot passes `pendingCardController.signal` to both `pendingCardPass` and its loop; the compiler
+  requires a signal there, but nothing checks it is the loop's own.
+- `withPendingSweep` never reads the stop signal itself: it hands it to each provider's
+  `resolvePending` and still calls the remaining providers after it is raised.
+- The four new server-starting test files (`boot.restricted*.test.ts`,
+  `handover-stepdown.real.test.ts`, `handover-stepdown.crash.test.ts`) each rebuild the boot
+  setup by hand; three carry their own clock-watch mock (`boot.restricted-quiet`,
+  `handover-stepdown.real`, `handover-stepdown.crash`) and three their own drain stand-in
+  (`boot.restricted`'s files nothing; the two `handover-stepdown` files fake AEAT's transport),
+  instead of sharing them through `apps/server/src/testing/` (`copyMigrationsRoot` already exists
+  there).
 
 **Amended Cloud agreement published, 2026-10-23 (D133):**
 [Cloud #323](https://github.com/waitron-io/waitron-cloud/pull/323), signed

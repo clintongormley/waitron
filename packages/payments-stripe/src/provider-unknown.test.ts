@@ -164,6 +164,49 @@ describe("Stripe unknown outcomes", () => {
     );
   });
 
+  it.each([
+    { signalled: true, settled: 1 },
+    { signalled: false, settled: 2 },
+  ])(
+    "a signal raised after the first payment settles no second (signalled: $signalled)",
+    async ({ signalled, settled }) => {
+      const client = new FakeStripe();
+      const refs = [randomUUID(), randomUUID()];
+      for (const [index, paymentRef] of refs.entries()) {
+        const p = await params();
+        client.setIntent(`pi_stop_${index}`, {
+          status: "succeeded",
+          amount: 1210,
+          amountReceived: 1210,
+        });
+        await withTransaction(suite.db, (tx) =>
+          insertAttempting(tx, {
+            ...p,
+            provider: "stripe",
+            paymentRef,
+            externalRef: `pi_stop_${index}`,
+          }),
+        );
+      }
+      const controller = new AbortController();
+      const retrieve = client.retrievePaymentIntent.bind(client);
+      const reads = vi.spyOn(client, "retrievePaymentIntent").mockImplementation(async (id) => {
+        controller.abort();
+        return retrieve(id);
+      });
+      const sweep = await provider(client).resolvePending(
+        now,
+        await ownsEveryPayment(suite.db),
+        signalled ? controller.signal : undefined,
+      );
+      expect(sweep.forwarded).toBe(settled);
+      expect(reads).toHaveBeenCalledTimes(settled);
+      expect((await row(refs[0]!))?.state).toBe("captured");
+      expect((await row(refs[1]!))?.state).toBe(signalled ? "attempting" : "captured");
+      expect(sweep.nextDueAt).toEqual(signalled ? new Date(now.getTime() + 60_000) : null);
+    },
+  );
+
   it("keeps an unreachable result unknown and captures a cancellation race on the next pass", async () => {
     const client = new FakeStripe();
     const p = await params();

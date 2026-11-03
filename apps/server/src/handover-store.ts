@@ -1,5 +1,5 @@
 import { canonicalize, type CanonicalValue } from "@waitron/membership";
-import { withNodeTransaction, type NodeDatabase } from "@waitron/db";
+import { withNodeTransaction, type NodeDatabase, type NodeTransaction } from "@waitron/db";
 import {
   bindingFingerprint,
   initialState,
@@ -53,20 +53,32 @@ export function advanceHandover(
   detail: CanonicalValue,
   envelope?: SignedHandoverEnvelope<unknown>,
 ): Promise<void> {
-  return withNodeTransaction(deps.node, async (tx) => {
-    const row = await readHandoverOperation(tx, deps.nodeId, operationId);
-    if (row === null) throw new AppError("handover.step_out_of_order", { from: null, to });
-    if (row.state === to) return;
-    nextState(row.role, row.scenario, row.state, to);
-    await appendHandoverEventTx(tx, {
-      nodeId: deps.nodeId,
-      operationId,
-      kind: to,
-      detail: detail as Readonly<Record<string, unknown>>,
-      envelope: envelope === undefined ? null : canonicalize(envelope as unknown as CanonicalValue),
-    });
-    await advanceHandoverOperationTx(tx, deps.nodeId, operationId, to, null);
+  return withNodeTransaction(deps.node, (tx) =>
+    advanceHandoverTx(tx, deps.nodeId, operationId, to, detail, envelope),
+  );
+}
+
+/** `advanceHandover` inside a node transaction the caller holds. */
+export async function advanceHandoverTx(
+  tx: NodeTransaction,
+  nodeId: string,
+  operationId: string,
+  to: HandoverState,
+  detail: CanonicalValue,
+  envelope?: SignedHandoverEnvelope<unknown>,
+): Promise<void> {
+  const row = await readHandoverOperation(tx, nodeId, operationId);
+  if (row === null) throw new AppError("handover.step_out_of_order", { from: null, to });
+  if (row.state === to) return;
+  nextState(row.role, row.scenario, row.state, to);
+  await appendHandoverEventTx(tx, {
+    nodeId,
+    operationId,
+    kind: to,
+    detail: detail as Readonly<Record<string, unknown>>,
+    envelope: envelope === undefined ? null : canonicalize(envelope as unknown as CanonicalValue),
   });
+  await advanceHandoverOperationTx(tx, nodeId, operationId, to, null);
 }
 
 /** Records why this box is waiting at its current step, beside the state it keeps. */

@@ -62,11 +62,23 @@ import {
   type Database,
   type SingletonRole,
 } from "@waitron/db";
-import { readMirrorLink, readNodeMode, setSingletonRole } from "@waitron/node-db";
+import {
+  readHandoverRestriction,
+  readMirrorLink,
+  readNodeMode,
+  setSingletonRole,
+} from "@waitron/node-db";
 import { finishPromotedRole } from "./promoted-role.js";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
+import { backgroundDuties, stopBackgroundDuties } from "./background-duties.js";
+import {
+  stepDown,
+  type StepDownDeps,
+  type StepDownRequest,
+  type StepDownResult,
+} from "./handover-stepdown.js";
 import { closeAll } from "./close-all.js";
 import { runDue } from "@waitron/scheduler";
 import type { TickResult } from "@waitron/scheduler";
@@ -186,6 +198,9 @@ import {
   startFreeSpaceWatch,
 } from "./free-space-watch.js";
 import { mountNodeApi } from "./node-api.js";
+import { restrictedPageRoute } from "./restricted-page.js";
+import { startRestricted } from "./restricted-start.js";
+import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
 import { clockStartUp, tillClockCheck } from "./clock-start-up.js";
@@ -527,6 +542,7 @@ export function withPendingSweep(
   sweepProviders: () => Promise<readonly PaymentProvider[]>,
   owners: () => CollectionOwners,
   log: Logger,
+  signal?: AbortSignal,
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
     const report = await inner(now);
@@ -543,7 +559,7 @@ export function withPendingSweep(
     }
     for (const provider of providers) {
       try {
-        const r = await provider.resolvePending(now, owned);
+        const r = await provider.resolvePending(now, owned, signal);
         log("info", "resolve_pending.complete", {
           provider: provider.provider,
           captured: r.forwarded,
@@ -562,15 +578,60 @@ export function withPendingSweep(
   };
 }
 
+/** The pending-card loop's pass: the card sweep, then automatic card recovery, the release of
+ * stale payment marks and the settling of pending bill payments, in that order. Once `signal` is
+ * aborted no later step starts, and the settle step asks the card provider about no further bill
+ * refund. Exported for a direct test
+ * (`boot-pending-sweep.test.ts`). */
+export function pendingCardPass(
+  parts: {
+    sweepProviders: () => Promise<readonly PaymentProvider[]>;
+    owners: () => CollectionOwners;
+    recover: () => ReturnType<typeof recoverAutomaticCardPayments>;
+    release: () => Promise<number>;
+    settle: (signal?: AbortSignal) => Promise<BillPaymentsPass>;
+    getRole: () => SingletonRole;
+    log: Logger;
+  },
+  signal: AbortSignal,
+): (now: Date) => Promise<PassReport> {
+  const { getRole, log } = parts;
+  return withPendingBillPayments(
+    withStalePaymentRelease(
+      withAutomaticCardRecovery(
+        withPendingSweep(
+          async () => ({ duties: [], nextDueAt: null }),
+          parts.sweepProviders,
+          parts.owners,
+          log,
+          signal,
+        ),
+        parts.recover,
+        getRole,
+        log,
+        signal,
+      ),
+      parts.release,
+      log,
+      signal,
+    ),
+    parts.settle,
+    getRole,
+    log,
+    signal,
+  );
+}
+
 export function withAutomaticCardRecovery(
   inner: (now: Date) => Promise<PassReport>,
   recover: () => ReturnType<typeof recoverAutomaticCardPayments>,
   getRole: () => SingletonRole,
   log: Logger,
+  signal?: AbortSignal,
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
     const report = await inner(now);
-    if (getRole() !== "primary") return report;
+    if (signal?.aborted || getRole() !== "primary") return report;
     try {
       const result = await recover();
       if (result.filed > 0) log("info", "payment.automatic_recovery", { filed: result.filed });
@@ -593,9 +654,11 @@ export function withStalePaymentRelease(
   inner: (now: Date) => Promise<PassReport>,
   release: () => Promise<number>,
   log: Logger,
+  signal?: AbortSignal,
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
     const report = await inner(now);
+    if (signal?.aborted) return report;
     try {
       const released = await release();
       if (released > 0) log("info", "payment_attempt.released", { released });
@@ -620,15 +683,16 @@ const BILL_PENDING_RECHECK_MS = 60_000;
  */
 export function withPendingBillPayments(
   inner: (now: Date) => Promise<PassReport>,
-  settle: () => Promise<BillPaymentsPass>,
+  settle: (signal?: AbortSignal) => Promise<BillPaymentsPass>,
   getRole: () => SingletonRole,
   log: Logger,
+  signal?: AbortSignal,
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
     const report = await inner(now);
-    if (getRole() !== "primary") return report;
+    if (signal?.aborted || getRole() !== "primary") return report;
     try {
-      const { errors, pending, ...counts } = await settle();
+      const { errors, pending, ...counts } = await settle(signal);
       const settled =
         counts.received + counts.failed + counts.refundsCompleted + counts.refundsFailed;
       if (settled > 0) {
@@ -862,6 +926,11 @@ function makeStartedServer(
   };
 }
 
+/** Docker restarts the box once it exits (`deploy/compose.yml`). */
+function restartProcess(): void {
+  process.kill(process.pid, "SIGTERM");
+}
+
 /** Test seams; production leaves them unset. */
 export interface StartServerSeams {
   stream?: Pick<StreamHostDeps, "walLimitBytes" | "spawn" | "store">;
@@ -874,6 +943,16 @@ export interface StartServerSeams {
   requestFromBox?: (c: Context) => boolean;
   /** The box's clock service; unset, the server talks to the host's socket. */
   boxHost?: BoxHostClient;
+  /** Every card provider the till and the card sweeps reach, built on the server's own handle. */
+  cardPool?: (deps: { db: Database }) => CardProviderPool;
+  /**
+   * The full start's stepdown, handed to a test that mounts its own route behind the handover gate
+   * (no production route asks for a stepdown yet); `restart` stands in for the SIGTERM.
+   */
+  stepdown?: {
+    mount(app: Hono, stepDown: (request: StepDownRequest) => Promise<StepDownResult>): void;
+    restart(): void;
+  };
 }
 
 /**
@@ -1102,6 +1181,14 @@ async function bootServer(
   const build = applicationVersion(process.env);
   const health = createHealthState(now());
   const app = healthApp(health, now, { venueDir: config.venueDir });
+  const handoverGate = createHandoverGate();
+  // Ahead of every other middleware, so once a stepdown closes it nothing behind it runs.
+  app.use("*", handoverGate.middleware);
+  // Filled in only when the full start finishes; a fault in Waitron if called before then or on a
+  // start that never fills it.
+  let stepDownHere: (request: StepDownRequest) => Promise<StepDownResult> = () =>
+    Promise.reject(new Error("stepdown called on a start that has not provided one"));
+  seams.stepdown?.mount(app, (request) => stepDownHere(request));
   const normalSetupRequests = new Set<Promise<void>>();
   // Ahead of the gate below, so a running backup recovery is named rather than "not ready".
   let ownerWriteFence: MiddlewareHandler = (_c, next) => next();
@@ -1594,6 +1681,46 @@ async function bootServer(
   // Not a self-promotion: it applies a promotion this box already committed and signed with its own
   // key, whose role write was lost. Before the peer reconciliation, which stays demote-only.
   await finishPromotedRole({ venue: db, node: store.node, ring, nodeId: config.node.nodeId, log });
+  // Before every worker, the first start, the stream host and the backup supervisor: a box that
+  // has handed over or been superseded starts nothing that sells, files or writes beside its
+  // successor.
+  if ((await readHandoverRestriction(store.node, config.node.nodeId)) !== null) {
+    health.takesNoSales = true;
+    return startRestricted({
+      app,
+      nodeId: config.node.nodeId,
+      environment: config.environment,
+      readMembership: () => readNodeMembership(db),
+      routes: [
+        restrictedPageRoute({ venue: db, node: store.node, nodeId: config.node.nodeId, log }),
+      ],
+      log,
+      listen: (restrictedApp) => {
+        const server = startTradingListener(config, restrictedApp, now, log);
+        undoOnFailure.push(() => closeListener(server));
+        const mdns = startMdnsResponder({
+          hostname: BOX_HOSTNAME,
+          devMode: config.devMode,
+          httpHost: config.httpHost,
+          getAddresses: boxAddresses,
+          log,
+        });
+        undoOnFailure.push(() => mdns.stop());
+        return makeStartedServer(
+          server,
+          health,
+          log,
+          {
+            stopWork: () => Promise.resolve(),
+            settleRequests: () => Promise.resolve(),
+            closePools: () => store.close(),
+          },
+          mdns,
+          startLandingListener(config, log),
+        );
+      },
+    });
+  }
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
   // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
   const initialAxes = await readNodeMode(store.node, config.node.nodeId);
@@ -1946,13 +2073,15 @@ async function bootServer(
   );
   // One pool, shared by the pay route and the payments management surface below, so a reader added
   // or a credential rotated there evicts the exact provider the next sale uses.
-  const cardPool = createCardProviderPool({
-    providers: CARD_PROVIDERS,
-    db,
-    ring,
-    environment: config.environment,
-    incidents: recordIncidentOnce,
-  });
+  const cardPool =
+    seams.cardPool?.({ db }) ??
+    createCardProviderPool({
+      providers: CARD_PROVIDERS,
+      db,
+      ring,
+      environment: config.environment,
+      incidents: recordIncidentOnce,
+    });
   const tillClock = systemClock();
   const boxHost = seams.boxHost ?? boxHostClient();
   // Before the tills' routes, which set the clock through it.
@@ -3090,7 +3219,7 @@ async function bootServer(
         );
       } finally {
         // On the NEXT tick, so the in-process caller's result is returned first.
-        setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
+        setTimeout(restartProcess, 0);
       }
     }
     return result;
@@ -3176,6 +3305,7 @@ async function bootServer(
   });
   undoOnFailure.push(() => menuActivation.stop());
 
+  const controller = new AbortController();
   // `config.environment` is the value `assertDeploymentMatches` pinned against the database at boot.
   //
   // The restart reset runs only on a node that files: the pass below calls this drain behind both
@@ -3191,6 +3321,7 @@ async function bootServer(
           skipRetryMs: config.skipRetryMs,
           log,
           observeAuthorityTime: authorityClock.observe,
+          signal: controller.signal,
         },
         at,
       ),
@@ -3198,7 +3329,6 @@ async function bootServer(
     log,
   });
 
-  const controller = new AbortController();
   const loop = runLoop({
     // Drain and reconcile run ONLY on the node holding `singleton_role = 'primary'`, read per pass so
     // a promotion starts them on the next tick; any other node gets an empty pass that still advances
@@ -3231,6 +3361,7 @@ async function bootServer(
             awaitingCert: awaitingFiscalCert,
             monotonicMs: () => performance.now(),
             log,
+            signal: controller.signal,
           },
           at,
         ),
@@ -3251,49 +3382,44 @@ async function bootServer(
   const pendingCardController = new AbortController();
   const pendingCardLoop = runPendingCardLoop({
     admission: tradingAdmission,
-    pass: withPendingBillPayments(
-      withStalePaymentRelease(
-        withAutomaticCardRecovery(
-          withPendingSweep(
-            async () => ({ duties: [], nextDueAt: null }),
-            connectedCardProviderSweep({
-              db,
-              pool: cardPool,
-              contributions: CARD_PROVIDERS,
-              simulator: cardProvider,
-            }),
-            () => sweepOwners(tradingContext.nodeId, holders.singletonRole.current),
+    pass: pendingCardPass(
+      {
+        sweepProviders: connectedCardProviderSweep({
+          db,
+          pool: cardPool,
+          contributions: CARD_PROVIDERS,
+          simulator: cardProvider,
+        }),
+        owners: () => sweepOwners(tradingContext.nodeId, holders.singletonRole.current),
+        recover: () =>
+          recoverAutomaticCardPayments({
+            db,
+            backend: nodeBackend,
+            admission: tradingAdmission,
+            clock: tillClock,
+            cfg: tradingContext,
+            pool: cardPool,
+            attendance: attendanceRecorder,
             log,
-          ),
-          () =>
-            recoverAutomaticCardPayments({
+          }),
+        release: () => releaseStalePaymentAttempts(db),
+        settle: (signal) =>
+          settlePendingBillPayments(
+            {
               db,
               backend: nodeBackend,
               admission: tradingAdmission,
               clock: tillClock,
               cfg: tradingContext,
-              pool: cardPool,
-              attendance: attendanceRecorder,
+              refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
               log,
-            }),
-          () => holders.singletonRole.current,
-          log,
-        ),
-        () => releaseStalePaymentAttempts(db),
+            },
+            signal,
+          ),
+        getRole: () => holders.singletonRole.current,
         log,
-      ),
-      () =>
-        settlePendingBillPayments({
-          db,
-          backend: nodeBackend,
-          admission: tradingAdmission,
-          clock: tillClock,
-          cfg: tradingContext,
-          refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
-          log,
-        }),
-      () => holders.singletonRole.current,
-      log,
+      },
+      pendingCardController.signal,
     ),
     now,
     signal: pendingCardController.signal,
@@ -3395,49 +3521,46 @@ async function bootServer(
     cloudController.abort();
     await suggestionLoop;
   });
-  return makeStartedServer(
+  const duties = backgroundDuties({
+    controller,
+    pendingCardController,
+    cloudController,
+    invoiceEmailController,
+    attendanceController,
+    certificateReminderController,
+    tenderRefundController,
+    pendingCardLoop,
+    tenderRefundLoop,
+    attendanceLoop,
+    attendanceEmailLoop,
+    certificateReminderLoop,
+    certificateDiagnosis,
+    invoiceEmailLoop,
+    cloudWorker,
+    cloudSnapshots,
+    suggestionLoop,
+    unsubscribeFromChanges,
+    stopSealingNodeCommits,
+    sealedState,
+    menuActivation,
+    appendOnlyWatch,
+    freeSpaceWatch,
+    boxEmails,
+    liveEvents,
+    tunnelController,
+    loop,
+    tunnelWorker,
+    backupSupervisor,
+    demoPrinterLoop,
+    clockWatch,
+    streamHost,
+  });
+  const started = makeStartedServer(
     server,
     health,
     log,
     {
-      stopWork: async () => {
-        controller.abort();
-        pendingCardController.abort();
-        cloudController.abort();
-        invoiceEmailController.abort();
-        attendanceController.abort();
-        certificateReminderController?.abort();
-        tenderRefundController.abort();
-        await closeAll([
-          () => pendingCardLoop,
-          () => tenderRefundLoop,
-          () => attendanceLoop,
-          () => attendanceEmailLoop,
-          () => certificateReminderLoop,
-          () => certificateDiagnosis?.stop(),
-          () => invoiceEmailLoop,
-          () => cloudWorker,
-          () => cloudSnapshots,
-          () => suggestionLoop,
-          unsubscribeFromChanges,
-          stopSealingNodeCommits,
-          // A refresh still running would otherwise run against the closed store and log a failure.
-          () => sealedState.settled(),
-          () => menuActivation.stop(),
-          () => appendOnlyWatch.stop(),
-          () => freeSpaceWatch.stop(),
-          () => boxEmails.stop(),
-          () => liveEvents.close(),
-          () => tunnelController.abort(),
-          () => loop,
-          () => tunnelWorker?.catch(() => {}),
-          () => backupSupervisor.stop(),
-          () => demoPrinterLoop?.stop(),
-          () => clockWatch.stop(),
-          // Litestream writes venue.db, so its stop is awaited before the store closes.
-          () => streamHost.stop(),
-        ]);
-      },
+      stopWork: () => stopBackgroundDuties(duties),
       settleRequests: settleManagementRequests,
       closePools: () => store.close(),
     },
@@ -3452,4 +3575,15 @@ async function bootServer(
             promoteLocalSecondaryToPrimary(promoteDeps, attestation),
         },
   );
+  const stepDownDeps: StepDownDeps = {
+    node: store.node,
+    nodeId: config.node.nodeId,
+    gate: handoverGate,
+    duties,
+    close: () => started.close(),
+    restart: seams.stepdown?.restart ?? restartProcess,
+    log,
+  };
+  stepDownHere = (request) => stepDown(stepDownDeps, request);
+  return started;
 }

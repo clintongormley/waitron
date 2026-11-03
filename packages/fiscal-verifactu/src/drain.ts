@@ -118,6 +118,8 @@ export interface DrainDeps {
    * A test seam, so a suite can exercise the over-the-cap split without seeding 1000+ rows.
    */
   maxRegistrosPorEnvio?: number;
+  /** Once aborted, the pass claims no further batch. */
+  signal?: AbortSignal;
 }
 
 /** A due `envios` row joined to enough of its registro to rebuild and order it. `probe` marks a
@@ -174,7 +176,16 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
     try {
       await flushTechnicalFailure(deps.db, deps.environment);
       const client = await deps.resolveClient();
-      await drainDue(deps.db, client, deps.environment, now, result, maxPorEnvio, deps.skipRetryMs);
+      await drainDue(
+        deps.db,
+        client,
+        deps.environment,
+        now,
+        result,
+        maxPorEnvio,
+        deps.skipRetryMs,
+        deps.signal,
+      );
       bumpNextDue(result, await nextProbeAt(deps.db, now, deps.environment));
     } catch (error) {
       rememberTechnicalFailure(deps.db, deps.environment, now, []);
@@ -216,6 +227,7 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
  *     full envío nor past the wait, so it is deferred to a later pass gated on `t`.
  *   - An envío carries one taxpayer name (see `claimBatch`). Before the wait has passed, and after
  *     a chunk has gone, a chunk a name change would cut short is not sent; the pass ends there.
+ *   - Once `signal` is aborted no further chunk is claimed; a chunk already claimed is still sent.
  */
 async function drainDue(
   db: Database,
@@ -225,6 +237,7 @@ async function drainDue(
   result: DrainResult,
   maxPorEnvio: number,
   skipRetryMs: number,
+  signal: AbortSignal | undefined,
 ): Promise<void> {
   // Commits before anything else in this pass reads `envios`, so a recovered row is an ordinary
   // `pendiente` row to the later transactions.
@@ -262,12 +275,17 @@ async function drainDue(
       sendable: DueRow[];
       rawCount: number;
       deferred: boolean;
+      stopped?: true;
       incidentToken?: string | null;
     };
     for (;;) {
       try {
         let flushedFailure: TechnicalFailure | undefined;
         claimed = await countOnCommit(db, result, async (tx, counts) => {
+          // Read once this claim holds the write lock, so a stop raised while it waited claims nothing.
+          if (signal?.aborted === true) {
+            return { sendable: [], rawCount: 0, deferred: false, stopped: true };
+          }
           flushedFailure = technicalFailures.get(db)?.get(environment);
           if (flushedFailure !== undefined) {
             await openTechnicalIncident(tx, environment, flushedFailure.now, flushedFailure.ids);
@@ -317,6 +335,12 @@ async function drainDue(
         claimed = { sendable: [], rawCount: 0, deferred: true };
       }
       if (claimed.deferred || claimed.sendable.length > 0 || claimed.rawCount === 0) break;
+    }
+    if (claimed.stopped === true) {
+      // Before any send, return: storing `now + t` would move AEAT's wait later for a send that
+      // never happened. After one, break, so the wait AEAT set is stored.
+      if (result.batchesSent === 0) return;
+      break;
     }
     if (claimed.deferred) {
       if (result.batchesSent === 0) {

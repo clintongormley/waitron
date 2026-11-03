@@ -45,9 +45,9 @@ Revised after a fresh-context review on 2026-11-02; what changed is in the last 
 ## Words used in this plan
 
 - **M1, M2**: the old box and the selected replacement, as in the design.
-- **Stepdown**: M1 writes, on its own disk, that it has handed over, closes its doors to new
-  requests, stops every background duty that reaches outside or files, lets requests already
-  admitted finish, then restarts into a *restricted start*: it sells nothing, files nothing,
+- **Stepdown**: M1 closes its doors to new requests, tells every background duty that reaches
+  outside or files to stop, writes, on its own disk, that it has handed over, lets requests already
+  admitted finish and those duties end, then restarts into a *restricted start*: it sells nothing, files nothing,
   contacts AEAT in no way, and serves only its status page and the handover routes.
 - **Handover gate**: the request filter that does the "closes its doors" part of a stepdown. It
   refuses every new request except a short list, and counts the requests already inside so the
@@ -224,8 +224,8 @@ the owner.
 
 ## Decisions this plan makes (builder's choices, open to the owner)
 
-1. **Stepdown is a restart, not a live switch.** M1 writes its restriction to `node.db`, closes
-   the handover gate, stops its outside-facing background duties, lets admitted requests finish,
+1. **Stepdown is a restart, not a live switch.** M1 closes the handover gate, tells its
+   outside-facing background duties to stop, writes its restriction to `node.db`, lets admitted requests finish,
    and restarts into the restricted start (Slice 2). Why: no live way to close every writer
    exists — the read-only gate is mounted only on a box that boots as a mirror or fenced
    (`boot.ts:1699-1718`) — while the restricted start can refuse to start each writer, which a
@@ -248,10 +248,10 @@ the owner.
    `:2662`, `:2731`, `:2891`, `:2973`, `:3170`) and this plan has not traced which of them a
    request reaches; stopping the named duties is enough and changes nothing a request reads.
    The 180 seconds is a starting value, to be measured in the owner's rehearsal. **The request
-   that asks for the stepdown gets its answer first**: inside that request the stepdown records
-   the restriction, closes the gate and signals the outside-facing duties to stop (decision 3);
-   the waiting — for those duties, for admitted requests — the close and the restart run after the
-   answer is sent, as promotion
+   that asks for the stepdown gets its answer first**: inside that request the stepdown closes
+   the gate, signals the outside-facing duties to stop (decision 3) and records the restriction;
+   the waiting — for admitted requests, then for those duties in the close — the close and the
+   restart run after the answer is sent, as promotion
    answers first and signals itself on the next tick (`boot.ts:3089-3091`). Run inside the
    request, the close would cut the requester's own connection 500 ms in
    (`apps/server/src/close-listener.ts:28,44`) and its answer would be lost.
@@ -406,7 +406,7 @@ An operation is **open** until `return_complete`, `return_abandoned`, `replaced`
 a box holds at most one open operation. The two early closings:
 
 - **`abandoned`** — a controlled operation in which the source never stepped down. On M1: the
-  offer failed (Task 5.3 records it at once), or the box restarted between recording `prepared`
+  offer failed or the stepdown refused at its first check (Task 5.3 records it at once), or the box restarted between recording `prepared`
   and the stepdown's node transaction (the next start records it, Task 3.4). Nothing can have
   relied on such an operation: M1 captures no final copy unless it holds the restriction
   (`handover.not_stepped_down`, Task 4.7), so M2 can never accept one. On M2: only when M1's
@@ -549,8 +549,9 @@ same shape.
 | Step | Restart or lost answer at… | What happens | Test |
 | --- | --- | --- | --- |
 | M1 starts a controlled handover (Task 5.3): `node.db` `prepared` → offer to M2 → stepdown's node transaction | after `prepared`, before the stepdown's node transaction (offer unsent, unanswered or answered) | M1's next start moves it to `abandoned`, then the start check runs: it sells once M2 answers = (rule 4), and waits if M2 is silent (rule 5), as any box with a joined peer does (Task 3.4); M2, if it recorded `prepared`, closes when M1's status reports `abandoned` (Task 5.4) | 3.4 "a source operation left at `prepared`…"; 5.3 "a stepdown that throws…"; 5.4 "M1's status reporting… `abandoned`" |
-| | the offer was refused, or the stepdown threw | M1 records `abandoned` at once and keeps selling | 5.3 |
-| Stepdown (Task 2.4): restriction → gate → signal duties → answer → await duties → admitted requests → close → restart | anywhere after the restriction's node transaction, or the answer is lost | M1 starts restricted; a repeated request is answered from the stored operation by the restricted start | 2.6; 5.3 "a retry after the restart…"; 2.4 "the caller… receives its full answer body" |
+| | the offer was refused, or the stepdown refused at its first check | M1 records `abandoned` at once and keeps selling | 5.3 |
+| | the stepdown's write failed | M1 restarts as a normal box, and its next start moves the operation to `abandoned` (first row) | 5.3 |
+| Stepdown (Task 2.4, as built): read-only check → gate → signal duties → restriction → answer → admitted requests → close (awaits the duties first) → restart | anywhere after the restriction's node transaction, or the answer is lost | M1 starts restricted; a repeated request is answered from the stored operation by the restricted start | 2.6; 5.3 "a retry after the restart…"; 2.4 "the caller… receives its full answer body" |
 | Capture (Task 4.7): copy file → `final_state` event | after the file, before the event | the next request captures again from an unchanged `venue.db` (a restricted start writes nothing to it, Task 2.2) and records one event | 4.7 "a crash between the copy and the event…" |
 | M2 fetches the copy (Task 5.4) | any point | the duty retries every 5 s while M2 is at `prepared`; partial files are discarded | 5.4 |
 | M2 accepts (Task 5.5): `node.db` `copy_accepted` → post acceptance → M1 records `filing_relinquished` → answer → M2 records `filing_assumed` | M2 restarts after `copy_accepted`, or the answer is lost | the posting duty re-posts the same stored acceptance; M1 answers its stored relinquishment byte for byte | 5.5 "M2 restarted at `copy_accepted`…"; 5.6 "a repeated acceptance…"; 5.8 "a reboot of M1 between relinquishment and M2's assumption…" |
@@ -676,7 +677,7 @@ Task 5.10's simulation runs it against a stand-in AEAT, and Slice 5 changes no d
 ## Review Focus
 
 1. **A card sale admitted before a stepdown completes and keeps its sale**, while a request that
-   arrives after the restriction is refused `handover.stepping_down`, and the drain, the card sweep
+   arrives after the gate closes is refused `handover.stepping_down`, and the drain, the card sweep
    and AEAT's clock reading start nothing new. Test: Task 2.5, with the real card route and a real
    drain loop.
 2. **A stepped-down box that loses power mid-capture** comes back restricted, sells nothing and
@@ -1350,13 +1351,15 @@ the box restarts after. Tests: one case in each adapter's suite and in
 
 **Files:** Test `apps/server/src/handover-stepdown.crash.test.ts` (Review Focus 2).
 
-- [ ] **Step 1: Write the tests.** For each crash point — after the node transaction, during the
-  quiesce, during the admitted-work wait, during close — stop the process's store without the
-  graceful close, then `startServer` on the same folder: "comes back restricted,
+- [ ] **Step 1: Write the tests.** For each crash point after the node transaction — after it
+  commits and before the answer, during the admitted-work wait, during close — stop the process's
+  store without the graceful close, then `startServer` on the same folder: "comes back restricted,
   `acceptingSales: false`, no AEAT request" (stand-in counts zero); "the operation reads
-  `source_stepped_down`". Control: a crash before the node transaction comes back as a normal
-  primary (the failing case prints `acceptingSales: true` for the first four).
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-stepdown.crash.test.ts` — PASS (it pins Tasks 2.1–2.4); if a case passes for the wrong reason, the control shows it.
+  `source_stepped_down`". For each crash point before it — before the stepdown begins, as the gate
+  closes, during the quiesce (the duties are told to stop before the write) — the box comes back
+  as a normal primary that files: `acceptingSales: true`, no restriction, an AEAT submission
+  arrives.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-stepdown.crash.test.ts` — PASS (it pins Tasks 2.1–2.4).
 - [ ] **Step 3: Commit** `git commit -s -m "server: a stepdown interrupted at any point comes back restricted"`.
 
 #### Task 2.7: The restricted box's own page, and its guide
@@ -1390,6 +1393,48 @@ is meant to be in; CLAUDE.md §3).
   `pnpm --filter @waitron/node-db typecheck`, the fiscal golden and immutability suites with the
   unedited-diff check (Fiscal boundary), and from the root `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts scripts/personal-log-params.test.ts`.
   Then `/finish-branch` (full). The PR says FISCAL in its first line.
+
+#### Slice 2 as built (2026-11-03)
+
+The build departed from the task texts above in these ways; the task texts are left as written.
+
+- `createHandoverGate` takes no argument. An open event stream is never counted as admitted work,
+  because its handler returns its response at once (measured while building the gate).
+- A restricted box's `/health` answers 200 with `{ ok: true, tradingAvailable: false }`, so the
+  install and update health checks still pass on a box that has stepped down.
+- `stepDown` returns `{ restarting: true, replayed: boolean }`; a replayed call schedules no second
+  restart.
+- No production route reaches `stepDown` in Slice 2. `boot.ts` exposes it only through a test seam.
+  The first production route to reach it is Slice 3's Task 3.3 membership route
+  (`POST /api/node/membership`), which steps a box down as `superseded` when a signed, newer chart
+  fences it; Slice 5's Task 5.3 adds the signed-in management route (`POST /management-api/handover`)
+  that starts a controlled handover.
+- The stepdown's close is bounded by the same shutdown deadline a SIGTERM has, so a close that never
+  settles still restarts the box.
+- The pending-card pass skips its later steps once it has been signalled, and hands the signal to
+  its last step: `settlePendingBillPayments` asks the card provider about no further bill refund,
+  and `resumeCardRefund` checks the signal just before its provider lookup, leaving that refund
+  pending.
+- The restricted page's title is "This box no longer runs the venue" for both kinds of restriction
+  (handed over and superseded); its body says "The box taking over the venue is {successor}." rather
+  than Task 2.7's "The venue now runs on {successor}.", which is false at `source_stepped_down` and
+  for a superseded box; and the page carries no closing line about sending records back or
+  becoming the spare. Tasks 10.3 and 13.4b add those sentences to the page and to both guides.
+- A superseded stepdown records no handover operation; Task 10.3 begins one.
+- The page's English and Spanish words are in `apps/server/src/i18n/restricted-page.ts`
+  (`RESTRICTED_PAGE_WORDS`, `RESTRICTED_STEP_WORDS`), beside the guide pages' and the recovery
+  page's words that A968 moved there, rather than in `apps/server/src/restricted-page.ts`, the file
+  Task 2.7 creates. Tasks 10.3 and 13.4b put their sentences' words in that catalogue and the lines
+  that show them in `apps/server/src/restricted-page.ts`.
+- `stepDown` runs in a different order from Task 2.4's steps 1–3, by the owner's answer (c) on
+  PR #2420. It first checks the binding (for a handover) and any stored restriction without writing, refusing with
+  nothing stopped. Then it closes the gate, tells the duties to stop, and writes the operation and
+  the restriction in one node transaction. Only then does it answer, and the wait, close and restart
+  follow as in steps 4–5. A write that fails is the caller's answer, and the box restarts as a
+  normal box with no restriction. A second call made while the first call's write is running waits
+  for that write (kept in memory, per server). Only a throw at the first check of the first call leaves the
+  gate open; every other throw comes after the gate closed and the box restarts, so Task 5.3's route
+  tells the two apart before recording `abandoned`.
 
 ---
 
@@ -2166,18 +2211,24 @@ chart (`handover.destination_not_spare`); its `contactUrl` is non-empty and diff
 box's advertised origin (`handover.destination_unaddressable`, the case every real venue is in
 until A947 3b); it answers a signed peer query within 5 s (`handover.destination_unreachable`).
 Then it begins its own operation (role source, `prepared`), posts the offer, and calls `stepDown`
-with this request as `self`. If the offer is refused or not answered, **or `stepDown` throws
-before its node transaction commits**, it records `abandoned` with the reason and answers that
-refusal; the box keeps selling, because it never stepped down. On
+with this request as `self`. If the offer is refused or not answered, **or `stepDown` refuses
+at its first check**, it records `abandoned` with the reason and answers that refusal; the box keeps
+selling, because nothing was stopped. If `stepDown`'s write fails, it answers that refusal and the
+box restarts as a normal box; its next start moves the operation to `abandoned`. `stepDown`
+can also throw after the gate has closed in other ways (telling the duties to stop failed though
+the write committed, which restarts the box restricted; or a replayed call fails), so the route
+must tell a first-check refusal apart from the rest before recording `abandoned` (see "Slice 2 as
+built"). On
 success it answers `{ handoverPage: "<M2 contactUrl>/handover/<operationId>" }` — sent before the
-quiesce and the restart (Task 2.4). The same operation id and inputs return the stored answer; changed inputs
+wait for admitted work and the restart (Task 2.4). The same operation id and inputs return the stored answer; changed inputs
 refuse `handover.operation_conflict`.
 
 - [ ] **Step 1: Write the failing tests.** One per refusal (each also asserts no node.db row and
   no restart); "a person without `node.promote` is refused"; "an offer M2 refuses leaves the
-  operation `abandoned`, the box selling, and a new handover allowed"; "a stepdown that throws
-  before its node transaction leaves the operation `abandoned` and M2's next status read sees
-  it"; "a valid start records
+  operation `abandoned`, the box selling, and a new handover allowed"; "a stepdown refused at its
+  first check leaves the operation `abandoned` and the box selling"; "a stepdown whose write fails
+  restarts the box, and its next start leaves the operation `abandoned`, which M2's next status
+  read sees"; "a valid start records
   `prepared`, offers, steps down and the caller receives the page address"; "a retry after the restart is answered by the
   restricted start from the stored operation" (Task 2.1's `routes` gains this read).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-source-start-api.test.ts` — FAIL.
@@ -2197,7 +2248,8 @@ While it waits, each attempt also reads M1's signed status for this operation (T
 M1 at `prepared` is not enough: M2 answers the offer before M1's stepdown starts, so M2's first
 status read can land while M1 is still `prepared` and about to step down (review round 3, C2).
 M1 itself turns a `prepared` it will never step down for into `abandoned` — on a failed offer or
-a failed stepdown (Task 5.3) and at its next start (Task 3.4) — so the abandon M2 waits for always
+a stepdown refused at its first check (Task 5.3), and at its next start (Task 3.4), including after
+a stepdown whose write failed — so the abandon M2 waits for always
 comes while M1 runs. A stepped-down M1 never reports `abandoned` (Task 1.3), so it is never left
 behind.
 
@@ -2456,14 +2508,15 @@ boxes in one process, not physical qualification.
   table and one `attempting` card payment; M2 a mirror seeded from M1; the handover from Task 5.3
   through activation with a browser clock sample from the test. Assert: M2 `acceptingSales: true`
   with a new series; M1 answers `acceptingSales: false`, holds M2's chart (so the rejoin's fence
-  check will pass later), and makes **no** AEAT request after its stepdown; M2 files M1's
+  check will pass later), and starts no new filing after its stepdown; a batch already being sent
+  when the stepdown starts finishes, and its answer is in the final copy; M2 files M1's
   `pendiente` record with **M1's** identity and its own first sale with **its own**; the open
   table is on M2; M2's sweep, not M1's, resolves the card payment; a till router pointed at both
   moves to M2; **M1 is then switched off and M2 restarted: M2 starts selling, without waiting**
   (it does not count M1 as a peer, Task 3.4); and what M2's certificate card shows (the manifest's open row: if it shows no
   certificate, the test records that as `it.fails` with a comment naming the follow-up, and the
   PR reports it).
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-controlled.e2e.test.ts` — PASS (it pins Tasks 5.2–5.9). Control: comment out the restricted start's early return and the "no AEAT request from M1" assertion fails.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-controlled.e2e.test.ts` — PASS (it pins Tasks 5.2–5.9). Control: comment out the restricted start's early return and the assertion that M1 starts no new filing after its stepdown fails.
 - [ ] **Step 3: Commit** `git commit -s -m "server: a controlled handover between two simulated boxes, end to end"`.
 
 #### Task 5.11: Final checks for Slice 5
@@ -2899,7 +2952,9 @@ transaction — the other order is refused by the one-open-operation index (Form
 
 **Interfaces — Produces:** the batch envelope stored at `<state>/handover/<operationId>/return-<sequence>.json`
 keyed by the request digest; the same request answers the same bytes; a request with other heads
-is a new sequence. M1 records `return_pending`.
+is a new sequence. M1 records `return_pending`. Add the sentence that the box sends its invoice
+records back to the restricted page (`restricted-page.ts`) and to `servers.md` `{#handed-over}`,
+both languages (see "Slice 2 as built").
 
 - [ ] **Step 1: Write the failing tests.** "the same request twice answers identical bytes";
   "another destination is refused"; "a box that is not restricted refuses
@@ -3265,7 +3320,7 @@ receipt matches (huella exact; filing rows not behind); per-chain counts and hea
 record has a filing row on M2; per chain, the sums of `importe_total` and `cuota_total` of the
 transferred records equal; M2's health passes (five-minute and fifteen-minute bounds, starting
 values); the archive is verified. After a controlled handover the receipt is the empty-records
-batch's (Task 10.7), so the same gates apply. Shown on M1's restricted page and M2's Servers
+batch's (Task 10.7), so the same gates apply. Shown on M1's restricted page (see "Slice 2 as built") and M2's Servers
 screen; retried every minute. A manager may override the health gate only, after a fresh sign-in
 on M1's page. Test `handover-wipe-gates.test.ts`.
 
@@ -3313,7 +3368,8 @@ the box's operator has no terminal to run a command. **Files:** `apps/server/src
 as the command (`wipeVenueDatabases` and the steps around it, `rejoin-command.ts:133-139`) **before
 the store opens**, as a staged restore runs before it (`apps/server/src/restore-request.ts:344-642`),
 then continues into setup mode, where the box re-adopts. The same start finishes a wipe a crash
-interrupted. Guide: `servers.md` `{#old-box-becomes-spare}`, both languages. Test
+interrupted. Guide: `servers.md` `{#old-box-becomes-spare}`, both languages, and the restricted
+page's sentence that the box becomes the spare (`restricted-page.ts`, English and Spanish). Test
 `apps/server/src/handover-self-wipe.test.ts`.
 
 - [ ] Failing tests: "gates passing record `wipe_started` and restart"; "a start with

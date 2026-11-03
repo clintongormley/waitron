@@ -314,7 +314,11 @@ export class SumUpCloudProvider implements PaymentProvider {
    * `incidentsRaised` undercounts. Accepted: one open alert is enough to send a human to the
    * payments screen; the count is a log field, not a per-row guarantee.
    */
-  async resolvePending(now: Date, owners: CollectionOwners): Promise<ForwardResult> {
+  async resolvePending(
+    now: Date,
+    owners: CollectionOwners,
+    signal?: AbortSignal,
+  ): Promise<ForwardResult> {
     const rows = await this.inTransaction((tx) => listAttempting(tx, SUMUP_PROVIDER, owners));
     if (rows.length === 0) {
       return { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
@@ -344,6 +348,10 @@ export class SumUpCloudProvider implements PaymentProvider {
         });
       });
     for (const row of rows) {
+      if (signal?.aborted) {
+        deferred = true;
+        break;
+      }
       const key = { provider: SUMUP_PROVIDER, paymentRef: row.paymentRef };
       let t: SumUpTransaction | null;
       try {

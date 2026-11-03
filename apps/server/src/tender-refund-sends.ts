@@ -271,6 +271,7 @@ async function lookup(
   const excludeRefs = await withTransaction(deps.db, (tx) => excludedRefs(tx, refund));
   await withTransaction(deps.db, async (tx) => {
     signal.throwIfAborted();
+    deps.stopSignal?.throwIfAborted();
     await requireEconomicWrite(tx, deps.cfg, deps.admission);
     const current = await read(tx, refund.id);
     if (current.state === "pending")
@@ -279,6 +280,8 @@ async function lookup(
         .set({ lastLookupAt: deps.clock.now().instant.toISOString() })
         .where(eq(tenderRefunds.id, refund.id));
   });
+  // Refunds of one pass run side by side, so the stop can arrive while this one's stamp commits.
+  deps.stopSignal?.throwIfAborted();
   try {
     return await providerResult(signal, () =>
       provider.lookupRefund!({
@@ -434,6 +437,7 @@ export async function resolveClaimedTenderRefund(
         return await resolve(deps, refund, resolver, () => expired, controller.signal);
       } catch (error) {
         if (controller.signal.aborted) return refund;
+        if (deps.stopSignal?.aborted && error === deps.stopSignal.reason) return refund;
         throw error;
       }
     })

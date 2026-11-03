@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { billPaymentRefunds, tenderRefunds, tenders, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -17,6 +17,7 @@ import {
 } from "./tender-refund-sends.js";
 import { recoverTenderRefunds, runTenderRefundRecoveryLoop } from "./tender-refund-recovery.js";
 import { TradingAdmission } from "./trading-admission.js";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
 
 let v: Awaited<ReturnType<typeof zonePaymentVenue>>;
 useVenueDb({
@@ -238,6 +239,115 @@ describe("settled tender recovery admission", () => {
   });
 });
 
+describe("settled tender recovery stopping", () => {
+  it.each([true, false])(
+    "a signal stops before the next refund (signalled: %s)",
+    async (signalled) => {
+      await retained(true);
+      await retained(true);
+      const pending = async () =>
+        (
+          await v.db
+            .select({ id: tenderRefunds.id })
+            .from(tenderRefunds)
+            .where(and(eq(tenderRefunds.state, "pending"), eq(tenderRefunds.method, "card")))
+        ).map(({ id }) => id);
+      // Sent and due: each one this pass would put to the provider.
+      const waiting = (
+        await v.db
+          .select({ id: tenderRefunds.id })
+          .from(tenderRefunds)
+          .where(
+            and(
+              eq(tenderRefunds.state, "pending"),
+              eq(tenderRefunds.method, "card"),
+              isNotNull(tenderRefunds.sentAt),
+              isNull(tenderRefunds.nextRetryAt),
+            ),
+          )
+      ).map(({ id }) => id);
+      const controller = new AbortController();
+      const lookups = v.card.lookupCalls.length;
+      const ask = v.card.lookupRefund.bind(v.card);
+      vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
+        controller.abort();
+        await ask(query);
+        return {
+          kind: "match",
+          providerRefundRef: randomUUID(),
+          outcome: "completed",
+          providerStatus: "completed",
+        };
+      });
+      await recoverTenderRefunds({
+        ...v.deps,
+        ...(signalled ? { stopSignal: controller.signal } : {}),
+      });
+      const asked = v.card.lookupCalls.slice(lookups).map((q) => q.refundId);
+      expect(asked).toHaveLength(signalled ? 1 : waiting.length);
+      const stillPending = await pending();
+      expect(stillPending).toEqual(
+        expect.arrayContaining(waiting.filter((id) => !asked.includes(id))),
+      );
+      for (const id of asked) {
+        const [row] = await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
+        expect(row!.state).toBe("completed");
+      }
+    },
+  );
+  it("a signal already raised asks about no refund and leaves its lookup time unwritten", async () => {
+    const t = await retained(true);
+    const lookups = v.card.lookupCalls.length;
+    await recoverTenderRefunds({ ...v.deps, stopSignal: AbortSignal.abort() });
+    expect(v.card.lookupCalls).toHaveLength(lookups);
+    const [row] = await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, t.refund.id));
+    expect(row).toMatchObject({ state: "pending", lastLookupAt: null, sendCount: 1 });
+  });
+  it("the loop hands its own signal to its pass", async () => {
+    await retained(true);
+    await retained(true);
+    const controller = new AbortController();
+    const lookups = v.card.lookupCalls.length;
+    const ask = v.card.lookupRefund.bind(v.card);
+    vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
+      controller.abort();
+      return ask(query);
+    });
+    const errors: unknown[] = [];
+    await runTenderRefundRecoveryLoop({
+      ...v.deps,
+      signal: controller.signal,
+      isPrimary: () => true,
+      onError: (error) => errors.push(error),
+      sleep: async () => {},
+    });
+    expect(errors).toEqual([]);
+    expect(v.card.lookupCalls.slice(lookups)).toHaveLength(1);
+  });
+  it("an error other than the stop is still raised while stopping", async () => {
+    const t = await retained(true);
+    const controller = new AbortController();
+    const admission = new TradingAdmission();
+    admission.admit();
+    vi.spyOn(v.card, "lookupRefund").mockImplementation(async () => {
+      controller.abort();
+      admission.repairOnly("invalid");
+      return {
+        kind: "match",
+        providerRefundRef: randomUUID(),
+        outcome: "completed",
+        providerStatus: "completed",
+      };
+    });
+    await expect(
+      resumeTenderRefund(
+        { ...v.deps, admission, stopSignal: controller.signal },
+        t.refund.id,
+        "loop",
+      ),
+    ).rejects.toMatchObject({ code: "venue.time_zone_not_ready" });
+  });
+});
 describe("bill refund admission", () => {
   it("refuses initial connected refund before reservation or provider call", async () => {
     const t = await billRefund(),
@@ -306,5 +416,158 @@ describe("bill refund admission", () => {
     const saved = v.snapshot();
     await resumeCardRefund(v.deps, refund!.id, "loop", "stored");
     expect(v.snapshot()).toEqual(saved);
+  });
+});
+describe("bill refund recovery stopping", () => {
+  it.each([true, false])(
+    "a signal stops before the next bill refund's lookup (signalled: %s)",
+    async (signalled) => {
+      vi.spyOn(v.card, "sendRefund").mockResolvedValue({ kind: "uncertain", reason: "network" });
+      for (let i = 0; i < 2; i++) {
+        const t = await billRefund();
+        await refundBillPayment(
+          v.deps,
+          v.cfg,
+          t.id,
+          t.paymentId,
+          t.request,
+          v.operator,
+          "reader-card",
+        );
+      }
+      const stateOf = async (id: string) =>
+        (
+          await v.db
+            .select({ state: billPaymentRefunds.state })
+            .from(billPaymentRefunds)
+            .where(eq(billPaymentRefunds.id, id))
+        )[0]!.state;
+      // Sent and pending: each one this pass would ask its provider about.
+      const waiting = (
+        await v.db
+          .select({ id: billPaymentRefunds.id })
+          .from(billPaymentRefunds)
+          .where(and(eq(billPaymentRefunds.state, "pending"), isNotNull(billPaymentRefunds.sentAt)))
+      ).map(({ id }) => id);
+      expect(waiting.length).toBeGreaterThanOrEqual(2);
+      const controller = new AbortController();
+      const asked: string[] = [];
+      vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
+        asked.push(query.refundId);
+        controller.abort();
+        return {
+          kind: "match",
+          providerRefundRef: randomUUID(),
+          outcome: "completed",
+          providerStatus: "completed",
+        };
+      });
+      await settlePendingBillPayments(
+        { ...v.deps, cfg: v.cfg },
+        signalled ? controller.signal : undefined,
+      );
+      expect(asked).toHaveLength(signalled ? 1 : waiting.length);
+      expect(waiting).toEqual(expect.arrayContaining(asked));
+      for (const id of waiting) {
+        expect(await stateOf(id)).toBe(asked.includes(id) ? "completed" : "pending");
+      }
+    },
+  );
+  it.each([true, false])(
+    "a signal raised while the provider is being loaded asks it nothing (signalled: %s)",
+    async (signalled) => {
+      vi.spyOn(v.card, "sendRefund").mockResolvedValue({ kind: "uncertain", reason: "network" });
+      const t = await billRefund();
+      await refundBillPayment(
+        v.deps,
+        v.cfg,
+        t.id,
+        t.paymentId,
+        t.request,
+        v.operator,
+        "reader-card",
+      );
+      const waiting = (
+        await v.db
+          .select({ id: billPaymentRefunds.id })
+          .from(billPaymentRefunds)
+          .where(and(eq(billPaymentRefunds.state, "pending"), isNotNull(billPaymentRefunds.sentAt)))
+      ).map(({ id }) => id);
+      const controller = new AbortController();
+      const asked: string[] = [];
+      vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
+        asked.push(query.refundId);
+        return {
+          kind: "match",
+          providerRefundRef: randomUUID(),
+          outcome: "completed",
+          providerStatus: "completed",
+        };
+      });
+      const pass = await settlePendingBillPayments(
+        {
+          ...v.deps,
+          cfg: v.cfg,
+          refundProviderFor: async () => {
+            controller.abort();
+            return v.card;
+          },
+        },
+        signalled ? controller.signal : undefined,
+      );
+      expect(asked).toHaveLength(signalled ? 0 : waiting.length);
+      expect(pass.errors).toEqual([]);
+      const rows = await v.db
+        .select()
+        .from(billPaymentRefunds)
+        .where(eq(billPaymentRefunds.state, "pending"));
+      expect(rows.map((row) => row.id)).toEqual(signalled ? expect.arrayContaining(waiting) : []);
+      // Nothing of the stopped pass holds the refund: the next pass without a signal settles it.
+      if (signalled) {
+        await settlePendingBillPayments({ ...v.deps, cfg: v.cfg });
+        expect(asked).toEqual(expect.arrayContaining(waiting));
+      }
+    },
+  );
+  it("a signal raised during a send the provider accepted leaves the refund sent and pending, unasked", async () => {
+    const t = await billRefund();
+    const controller = new AbortController();
+    vi.spyOn(v.card, "sendRefund").mockImplementation(async () => {
+      controller.abort();
+      return { kind: "accepted" };
+    });
+    const asked: string[] = [];
+    vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
+      asked.push(query.refundId);
+      return {
+        kind: "match",
+        providerRefundRef: randomUUID(),
+        outcome: "completed",
+        providerStatus: "completed",
+      };
+    });
+    await refundBillPayment(
+      { ...v.deps, stopSignal: controller.signal },
+      v.cfg,
+      t.id,
+      t.paymentId,
+      t.request,
+      v.operator,
+      "reader-card",
+    );
+    const [saved] = await v.db
+      .select()
+      .from(billPaymentRefunds)
+      .where(eq(billPaymentRefunds.billPaymentId, t.paymentId));
+    expect(asked).toEqual([]);
+    expect(saved).toMatchObject({ state: "pending", sendCount: 1 });
+    expect(saved!.sentAt).not.toBeNull();
+    await resumeCardRefund(v.deps, saved!.id, "loop", "stored");
+    expect(asked).toEqual([saved!.id]);
+    const [settled] = await v.db
+      .select({ state: billPaymentRefunds.state })
+      .from(billPaymentRefunds)
+      .where(eq(billPaymentRefunds.id, saved!.id));
+    expect(settled!.state).toBe("completed");
   });
 });

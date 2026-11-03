@@ -13,7 +13,7 @@ completion run only on the primary. It also serves several HTTP routes on one Ho
 This document is written for whoever deploys this process, not whoever reads its source.
 
 **The one thing worth remembering before anything else:** `drain` carries a legal, hourly submission
-duty under Spain's Veri\*Factu regulation (art. 16.4). A `/health` that reports `200` is a claim that
+duty under Spain's Veri\*Factu regulation (art. 16.4). A `/health` that reports `200` with a `duties` object is a claim that
 the pass was not wholesale abandoned and each duty had a clean pass within its budget; a parked
 Stripe settlement-audit period is not in the status code, and the body's `parked` count shows it
 only until the next recorded pass replaces it. The error-level `reconcile.run_parked` log line,
@@ -594,6 +594,10 @@ otherwise:
   }
 }
 ```
+
+A box that takes no sales answers `200` with only `{ "ok": true, "tradingAvailable": false }`:
+trading is not admitted yet, or the box has stepped down and started restricted
+(`src/restricted-start.ts`).
 
 `venueHolder` is read from `venue.holder.json`, the file a monitored venue holder
 keeps beside `venue.lock`. It gives the holder's kind, when it took the folder, its last heartbeat,
