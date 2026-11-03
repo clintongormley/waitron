@@ -11,6 +11,7 @@ and no promotion).
 **Reproducer:** [`bench/sqlite-failover`](../../bench/sqlite-failover/README.md). The rig is the
 evidence; this note is the product.
 **2026-09-23:** slice 2's five measurements are appended under [Slice 2 measurements](#slice-2-measurements).
+**2026-11-03:** S2 re-run with A1018's return batch, appended under [S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03): its new Parts F and G pass and their three controls fail; the row is still FAIL on Part D and Part E's second half.
 
 ---
 
@@ -29,6 +30,8 @@ does a hand-over taken while the sender is part-way through filing. That is the 
 it is recorded rather than fixed. Against the real tax agency it costs a refused call rather than a
 duplicate record, for reasons set out under S2; it also leaves one piece of work this repository now
 owns, named under "What this gate leaves to be built".
+**2026-11-03:** S2 now has seven parts; the two added, F and G, pass — see
+[S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03).
 
 | id | what it had to show | critical | verdict |
 | --- | --- | --- | --- |
@@ -204,7 +207,7 @@ accept: `winners=2/2 store-keys=5`. So the assertion tests the fence and not an 
 
 ### S2 — no second tax-agency filing · critical · **FAIL**
 
-**2026-11-03:** re-run with A1018's return batch — see [S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03).
+**2026-11-03:** re-run with A1018's return batch: the new Parts F and G pass and their three controls fail; the row is still FAIL on Part D and Part E's second half — see [S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03).
 
 **This is the gate's negative result.** The rig found a way the loop as modelled here submits one sale
 to the tax agency twice. Nothing here proposes a fix, and the scenario records the failure rather than
@@ -255,7 +258,7 @@ promote the secondary (topology design §5.2, owner 2026-09-17), so two nodes ne
 fenced sender cannot file after it has started handing over — and that is what Parts B and D and the
 second half of Part E all depend on, which is every shape above. **That is an argument from the design,
 not a measurement**: nothing in this rig fences a sender, so no run here shows the fence removing
-them.
+them. **2026-11-03:** S2's Part F fences a sender's filing (`fence`, `src/model.ts`); nothing fences selling — see [S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03).
 
 **Why the obvious follow-up was dropped.** "Make the stub refuse a repeat the way AEAT does" measures
 nothing: such a stub is idempotent by construction, so the double counter reads zero whichever way the
@@ -510,7 +513,7 @@ Stated together, because each is something a reader would otherwise assume the g
   that follows `current.json`, are exercised by `apps/server/src/stream-loop.e2e.test.ts` against
   versitygw 1.8.0, not against a production store. A promoted node's generation is still unowned.
 - **Fencing a returning node.** No scenario stops a node selling or filing; the decommission-then-promote
-  rule the topology design §5.2 states is unmodelled.
+  rule the topology design §5.2 states is unmodelled. **2026-11-03:** S2's Part F fences a sender's filing (`fence`, `src/model.ts`); nothing fences selling — see [S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03).
 - **Whether litestream ever writes different bytes under a key it has already used** (S3).
 - **Elapsed time, and anything that turns on it** (S4).
 - **Two branches of the litestream wrapper** — the sweep that kills a stray daemon if the runner dies,
@@ -560,7 +563,7 @@ Two design decisions this measurement hands to slice 2:
   ([testing-guide.md](../developers/testing-guide.md), "A copy behind, the side file's bound, and the guards").
 - **The fence-before-ship rule removes S2's failing sequences** — an argument from the design, since
   nothing here fences a sender — so whichever slice turns promotion on owns it, together with the
-  restart reset above. **2026-09-23:** the restart reset is built — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`), see `docs/backlog.md`.
+  restart reset above. **2026-09-23:** the restart reset is built — `resetInFlightClaims` (`packages/fiscal-verifactu/src/drain.ts`), see `docs/backlog.md`. **2026-11-03:** S2's Part F fences a sender's filing (`fence`, `src/model.ts`); nothing fences selling — see [S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03).
 
 ## Slice 2 measurements
 
@@ -939,9 +942,14 @@ first native amd64 confirmation is the first CI job that runs the pinned binary.
 
 ## S2 re-run with A1018's return batch (2026-11-03)
 
+**Pins:** [the pins table](#the-pins--every-result-below-holds-on-these-and-no-others), except Node
+v26.13.0 and SQLite 3.54.1.
+
 A947 §7.1, as A1018 amends it, made a re-run of S2 the gate for building the return batch: model
 the fence and the fiscal-only full-state batch, add the replay as a part of its own, and see it
-pass, with three controls that must fail. That re-run was added to S2 as Parts F and G.
+pass, with three controls that must fail (the A1018 plan's Task 9.2: the fence removed, the batch
+cut back to missing records only, and the batch built without turning "being sent" back to
+"waiting"). That re-run was added to S2 as Parts F and G.
 
 **What the new parts model.** The old box comes back holding four records of its own chain, and
 the box that replaced it holds a copy with the first two, both waiting to be filed:
@@ -959,9 +967,8 @@ replacement pauses filing for the old box's chain, the batch arrives in the midd
 filing runs, and it then files what is left. Part G then builds the batch again from the same
 heads and applies the first batch a second time.
 
-**The result.** Parts F and G pass: every record of both chains is filed exactly once, no sale
-travelled, the batch built again is the same bytes, and the replay changes nothing and files
-nothing. Each control fails:
+**The result.** Parts F and G pass: every record of both chains is filed exactly once, the batch
+built again is the same bytes, and the replay changes nothing and files nothing. Each control fails:
 
 - **Fence removed:** records 2 and 4 are filed twice — once by the old box after the batch was
   cut, once by the replacement. Its rebuilt batch is no longer the same bytes.
@@ -971,11 +978,14 @@ nothing. Each control fails:
   This is not a second filing, which is what the A1018 plan's Task 9.2 expected of all three. The
   record arrives marked "being sent", and this rig's filing run picks up only waiting rows; the
   real drain resets such a row after five minutes (`recoverStaleClaims`, the model gap the S2
-  section above names — read there, not run here). So this control shows what the turning-back buys in this rig: the record is filed
-  at all, without waiting on that reset.
+  section above names — read there, not run here). So this control shows what the turning-back
+  buys in this rig: the record is filed at all, without waiting on that reset.
 
-What each control would print was written into the scenario's comment before the controls were
-first run, and each printed it.
+Part F's `sales-carried` and Part G's `replay-applied` and `filed-after-replay` were driven by no
+control, and the verdict does not read `sales-carried`.
+
+Each control's segment of S2's row holds what the scenario's comment gives for it; the scenario
+asserts those values.
 
 **S2's row is still FAIL**, for the same two reasons as on 2026-09-18: Parts D and E's second half
 still measure the old tail ship from an unfenced sender, and their text in the row below is
@@ -986,7 +996,8 @@ alone is not decided here.
 filing run's pause ignored, Part F filed record 1 twice (`returned-m1:1`): the batch arrived while
 the replacement was sending its copy of record 1. No control in the scenario drives the pause.
 
-The run, on the tree committed as `95d0ee3452`, Docker running, node v26.13.0:
+The run, 2026-11-03, on the branch that added this section, Docker running, node v26.13.0 (which
+bundles SQLite 3.54.1: `node -p process.versions.sqlite`):
 
 ```
 TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sqlite-failover scenarios
@@ -1024,6 +1035,6 @@ pnpm --silent --filter @waitron/bench-sqlite-failover scenarios --json   # the s
 Docker must be running. No scenario runs in CI, by design — the package has no test script, so the
 evidence for a result is its recorded run in the pull request that produced it, never a green CI job.
 `bench/sqlite-failover/README.md` carries, for most scenarios, the mutations that prove its assertions
-and the assertions that no mutation drives. It has such a section for S0, S2, S3, S4, S5, `LS` and
+and the assertions that no mutation drives. It has such a section for S0, S2's Parts A to E, S3, S4, S5, `LS` and
 `RUNNER`. **S1, S6 and `smoke` have none** — S1's section states what it does and does not model but
 records no mutation — so what drives those three scenarios' assertions is not written down anywhere.

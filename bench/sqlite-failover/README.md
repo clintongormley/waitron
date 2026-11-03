@@ -1073,7 +1073,8 @@ is not the measurement, and it may differ from run to run.
 > `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sqlite-failover scenarios`, and
 > read the `F` and `G` segments of S2's row. The result and what each control prints are in
 > `docs/research/2026-09-16-sqlite-failover-prototype.md` → "S2 re-run with A1018's return batch".
-> The rest of this section is about Parts A to E and is left as it was written.
+> S2's verdict now also reads FAIL when Part F leaves a record never filed or Part G's replay is not
+> clean. The rest of this section is about Parts A to E and is left as it was written.
 
 **S2's verdict is FAIL, and that is a result rather than a broken harness.** The rig found a way the
 loop as modelled here submits one sale to the tax agency twice. The scenario records it instead of

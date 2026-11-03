@@ -23,9 +23,11 @@ qualification on real boxes remains the owner's, after A947 3b/3c
 
 **Built so far:** Slice 0 (docs, main `b0e22a9feb`), Slice 1 (#2417: `@waitron/handover`, the
 handover tables in `node.db`, the server's handover store and signer), Slice 2 (the stepdown and
-the restricted start; no production route reaches `stepDown` yet) and Slice 4b (A764: every
-payment records the box that started it, and each box's card sweep resolves only the payments it
-owns; what it leaves open is under _Payments and card readers_ in [the backlog](../backlog.md)).
+the restricted start; no production route reaches `stepDown` yet), Slice 4b (A764: every payment
+records the box that started it, and each box's card sweep resolves only the payments it owns; what
+it leaves open is under _Payments and card readers_ in [the backlog](../backlog.md)) and Slice 9
+(S2's Parts F and G and three controls in `bench/sqlite-failover`; S2's row still reads FAIL, see
+below).
 Left for the slices that add the callers:
 - `beginHandover` stores the role it is given even when the binding names this box as the other
   side; the first caller must check the role against the binding.

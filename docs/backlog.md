@@ -5668,7 +5668,9 @@ Not in any track until the standalone primary is done.
   The [build plan](superpowers/plans/2026-11-02-a1018-handover-build.md) cuts the work into slices.
   The owner answered (a) to both its questions (returned invoices in modelo 303; the emergency
   minute wait) on 2026-11-02: Slice 12b is built on that answer, landed by the owner and marked
-  pending the venue's tax adviser, and Task 7.4b is not built.
+  pending the venue's tax adviser, and Task 7.4b is not built. Slice 9's S2 re-run leaves one owner
+  question: whether S2's verdict is read off its new Parts F and G alone; Slices 10 and 11 wait on
+  it.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
 - **A1185: a venue not yet connected sees no prices.** Left open by A1185.
