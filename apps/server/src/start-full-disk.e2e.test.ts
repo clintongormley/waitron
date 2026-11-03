@@ -113,7 +113,7 @@ let opened: ReturnType<typeof openSmallDisk> | undefined;
 let disk: SmallDisk | undefined;
 
 beforeAll(() => {
-  opened = openSmallDisk();
+  opened = openSmallDisk("WAITRON_FULL_DISK_DIR", 32);
   if (opened.ok) disk = opened.disk;
   else if (!REQUIRE_FULL_DISK) console.warn(`start-full-disk tests SKIPPED: ${opened.reason}`);
 });

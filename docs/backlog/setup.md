@@ -464,7 +464,7 @@ not run (A1127's design, "Accepted limits", and the Task 5a/5b review).
 ## The spare file's size is measured on HFS+ and Linux tmpfs only
 
 A1127 measured the room a lock, the emptying and the Start-again flow need on a 32 MiB HFS+ image,
-and CI runs the real-disk cases on 32 MiB Linux tmpfs mounts. Not measured: ext4 (the box's likely
+and CI runs the real-disk cases on Linux tmpfs mounts of 32 MiB (48 MiB for `start-from-spare.e2e.test.ts`). Not measured: ext4 (the box's likely
 filesystem: 4 KiB blocks, its journal, root-reserved blocks), copy-on-write filesystems with
 snapshots or compression (btrfs, zfs), and whether the `logs` volume shares the state folder's disk
 on every box, which the repair-stage log clean-up assumes when it deletes logs to make room. Detail:

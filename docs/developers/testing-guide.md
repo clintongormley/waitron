@@ -1411,9 +1411,11 @@ fill in a second.
   holds more than 64 MiB (`blocks × frsize` from `statfs`), so a typo naming a large disk is
   refused, and they work inside a fresh `wt-full-disk-*` folder there that they remove at the end.
   The limit refuses a large filesystem; it does not check that the folder is the one you meant.
-- Without it, on macOS, they make their own: a 32 MiB HFS+ image, `disk.dmg`, in a fresh
-  `wt-full-disk-*` folder under the system's temporary folder, created with `hdiutil create -size
-  32m -fs HFS+ -volname wt-full-disk -layout NONE` and attached at `mnt` beside it with
+- Without it, on macOS, they make their own: an HFS+ image, `disk.dmg`, of the size the file passes
+  as `openSmallDisk`'s second argument (32 MiB for every file but `start-from-spare.e2e.test.ts`,
+  which passes 48), in a fresh `wt-full-disk-*` folder under the system's temporary folder, created
+  with `hdiutil create -size 32m -fs HFS+ -volname wt-full-disk -layout NONE` (`-size 48m` for
+  `start-from-spare.e2e.test.ts`) and attached at `mnt` beside it with
   `hdiutil attach -nobrowse -noautoopen`. No `sudo` is needed (F1 below). At the end they detach it
   with `-force` and remove the folder. HFS+ rather than APFS because APFS refused writes while
   reporting about 1.2 MB free, and let a new `recovery.json` through on a full disk (F1, F2), where
@@ -1430,7 +1432,8 @@ fill in a second.
 The tests fill the filesystem with one file, `filler`, written in 64 KiB, then 512-byte, then
 1-byte writes until the system refuses with `ENOSPC` (any other refusal throws), and `fill(leave)`
 then gives back `leave` bytes by shortening it. The free-space floor in these tests is 8 MiB, set
-through `freeSpaceFloor`, because a 32 MiB filesystem can never have the product's 256 MiB free.
+through `freeSpaceFloor`, because a filesystem of 64 MiB or less can never have the product's
+256 MiB free.
 
 **In CI** the file runs in `test-server-stream`, which already uses `sudo` for loopback's packet
 size. A step before the tests mounts a 32 MiB tmpfs at `$RUNNER_TEMP/full-disk` and gives it to the
@@ -1452,7 +1455,7 @@ spare is not released, so the summary and Start again answer `507 storage.disk_f
 nothing. It builds its stopped recovery from the A731 fixture, whose module-level
 hooks must not run in `start-full-disk.e2e.test.ts`, so it is a file of its own, and two files filling
 one filesystem at once could fail each other: the server's test files run up to four at once
-(`maxWorkers: 4`, `apps/server/vitest.config.ts`). It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_START_AGAIN")`,
+(`maxWorkers: 4`, `apps/server/vitest.config.ts`). It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_START_AGAIN", 32)`,
 and CI mounts a second 32 MiB tmpfs at `$RUNNER_TEMP/full-disk-start-again` for it in the same
 `test-server-stream` step. On macOS each file makes its own image. While it runs, the file points
 `TMPDIR` at the small disk's `tmp` folder, so each case's folders land on the small disk (the suite's
@@ -1465,11 +1468,18 @@ passes `spareBytes: 0` for none, as the discarded-recovery case without a spare 
 boots and the tills are stopped; without one the full-disk page is served; after a release the
 stop holds across a restart; and the running box writes the spare back and lifts it. It needs the
 `@hono/node-server` module mock, which must not reach the other two files, so it is a file of its
-own. It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_FROM_SPARE")`, and CI mounts a third 32 MiB tmpfs
-at `$RUNNER_TEMP/full-disk-from-spare` in the same step. The boot-from-zero case uses the real 8 MiB
+own. It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_FROM_SPARE", 48)`, and CI mounts a third tmpfs
+at `$RUNNER_TEMP/full-disk-from-spare` in the same step. CI's tmpfs and the macOS image are 48 MiB
+for this file, not 32 (a folder named in `WAITRON_FULL_DISK_DIR_FROM_SPARE` is whatever size its
+filesystem is): on 2026-11-03 (A1313) a 32 MiB macOS image held the migrated venue (4374528 bytes)
+and the 6 MiB spare with only 21987328 bytes free, less than the no-release case's 21.5 MiB, so its fill
+wrote nothing and the case failed. The boot-from-zero case uses the real 8 MiB
 spare (a boot of its venue with 8 MiB free resolved with about 4 MiB left; 4 MiB was refused). The
-restart, no-release and write-back cases use a 6 MiB spare, because on a 32 MiB image a booted server holding
-its 4 MiB change log leaves about 23.18 MiB free, so the real 24 MiB write-back rule cannot be met.
+restart, no-release and write-back cases use a 6 MiB spare, chosen while this file ran on a 32 MiB
+image, where a booted server holding its 4 MiB change log left about 23.18 MiB free, so the real
+24 MiB write-back rule could not be met. On the 48 MiB image the write-back case also passed with
+the real 8 MiB spare, in one macOS run during A1313's review; the restart and no-release cases were
+not tried with it.
 The two cases that rest on free space being above 16 MiB (the restart and the no-release case)
 assert it while the server is up, so a run on the edge fails rather than passing on free space alone. Two cases (A1167) give a box a 1 MiB spare and a backup folder on the small disk, fill to 6 MiB free, and check that the start deletes the oldest archive and keeps the spare, and that after `venue.db` is replaced it deletes none and releases the spare. These figures are HFS+; CI's tmpfs is the first Linux run.
 
@@ -1478,7 +1488,7 @@ assert it while the server is up, so a run on the edge fails rather than passing
 two and three copies it deletes the older archive and stores; when even every deletable archive
 cannot meet the need it deletes nothing and is refused before copying; and a copy larger than the
 estimate is refused before the folder copy. It fills its disk, so it has one of its own: it calls
-`openSmallDisk("WAITRON_FULL_DISK_DIR_BACKUP_ROOM")`, and CI mounts a fourth 32 MiB tmpfs at
+`openSmallDisk("WAITRON_FULL_DISK_DIR_BACKUP_ROOM", 32)`, and CI mounts a fourth 32 MiB tmpfs at
 `$RUNNER_TEMP/full-disk-backup-room` in the same step. On a 32 MiB disk the product's 256 MiB floor
 and 2 GiB aim can never be met, so the file passes `spaceFloorBytes` 1 MiB and `spaceAimBytes`
 4 MiB with a 6 MiB estimate. Its measured figures are HFS+; CI's tmpfs is its first Linux run.
