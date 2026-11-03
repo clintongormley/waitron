@@ -2113,6 +2113,27 @@ describe("the Text size slider", () => {
         )
         .map(([name, box]) => `${name} ${box.left},${box.top},${box.right},${box.bottom}`);
     }
+    /** Names each segmented choice drawn past the card's border or its own row's edge. */
+    function choicesOutsideCard(el: Card): string[] {
+      const card = q(el, "section.settings-card")!.getBoundingClientRect();
+      const out: string[] = [];
+      for (const [name, count] of [
+        ["background", 2],
+        ["corners", 3],
+      ] as const) {
+        const group = segmented(el, name).shadowRoot!.querySelector('[role="radiogroup"]')!;
+        const choices = [...group.querySelectorAll("button")];
+        expect(choices, name).toHaveLength(count);
+        if (group.scrollWidth > group.clientWidth) out.push(`${name} row overflows`);
+        for (const choice of choices) {
+          const box = choice.getBoundingClientRect();
+          if (box.left < card.left - 0.5 || box.right > card.right + 0.5) {
+            out.push(`${name} «${choice.textContent!.trim()}» ${box.left},${box.right}`);
+          }
+        }
+      }
+      return out;
+    }
     async function settled(el: Card): Promise<void> {
       await document.fonts.ready;
       await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -2140,6 +2161,25 @@ describe("the Text size slider", () => {
         "18px",
       ]);
       expect(outsideCard(el), "at 130%").toEqual([]);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+      expect(choicesOutsideCard(el), "the choices at 130%").toEqual([]);
+      cleanupWidgets();
+
+      setLocale("es-ES");
+      const spanish = (await mountEditing(inUse(big))).el;
+      // The real page's padding around the card: index.html's body and the shell's .body.
+      spanish.parentElement!.style.paddingInline = "calc(var(--wt-space-5) + var(--wt-space-4))";
+      await settled(spanish);
+      // The choices refit a frame after they are resized, so the narrower card needs two more.
+      for (let i = 0; i < 2; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
+      const card = q(spanish, "section.settings-card")!.getBoundingClientRect();
+      expect([card.left, card.right], "the card where the real page puts it").toEqual([40, 350]);
+      expect(
+        segmented(spanish, "corners").options.map((option) => option.label),
+        "the corners read in Spanish",
+      ).toEqual(["Rectas", "Estándar", "Redondeadas"]);
+      expect(outsideCard(spanish), "in Spanish at 130%").toEqual([]);
+      expect(choicesOutsideCard(spanish), "the choices in Spanish at 130%").toEqual([]);
       expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
     } finally {
       document.adoptedStyleSheets = document.adoptedStyleSheets.filter(

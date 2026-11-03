@@ -65,6 +65,7 @@ export type {
   DepartmentTransferReceiver,
   KitchenScreenKind,
   KitchenScreenScope,
+  ProfileKitchenScreen,
   ProfileKitchenScreens,
   DeviceKitchenScreen,
   DeviceZoneSelection,

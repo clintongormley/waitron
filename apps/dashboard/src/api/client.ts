@@ -917,6 +917,7 @@ export interface ProfileScopeChoices {
 
 export const KITCHEN_SCREEN_KINDS = ["station", "pass", "pass_monitor"] as const;
 export type KitchenScreenKind = (typeof KITCHEN_SCREEN_KINDS)[number];
+export type PassKind = Exclude<KitchenScreenKind, "station">;
 
 /** null is every station or every zone; a station screen has no zones and is always null. */
 export interface KitchenScreenScope {
@@ -929,7 +930,13 @@ export interface KitchenScreenScope {
  * kinds listed; on a till or handheld a missing station or pass screen bounds nothing, while a pass
  * monitor is offered only when listed.
  */
-export type ProfileKitchenScreens = Partial<Record<KitchenScreenKind, KitchenScreenScope>>;
+export type ProfileKitchenScreens = Partial<Record<KitchenScreenKind, ProfileKitchenScreen>>;
+
+/** A pass or pass monitor entry carries whether the pass shows other stations' dishes; absent on
+ * a write keeps what is stored, or true for a new entry. A station entry never carries it. */
+export interface ProfileKitchenScreen extends KitchenScreenScope {
+  showNonPassStations?: boolean;
+}
 
 export interface DeviceKitchenScreen extends KitchenScreenScope {
   kind: KitchenScreenKind;
@@ -958,6 +965,11 @@ export interface ResolvedKitchenScreen {
   stations: ScreenSlot[];
   /** null: no zone filter. */
   zones: ScreenSlot[] | null;
+  /** The device's own stored choice of showing other stations' dishes; null when it holds none
+   *  (or no choice of this kind), and always null on a station screen. */
+  nonPassStationsOverride: boolean | null;
+  /** `nonPassStationsOverride`, else the profile's row of this kind, else true. */
+  showNonPassStations: boolean;
 }
 
 /** A device a profile save narrowed, and what it lost. */
@@ -3932,6 +3944,9 @@ export class DashboardApi {
       profileId: string;
       /** Replaces the device's kitchen screens and clears what narrowings took; absent leaves them. */
       kitchenScreens?: DeviceKitchenScreen[];
+      /** Whether each pass kind shows other stations' dishes; null is the profile's setting, an
+       *  absent kind keeps what is stored. */
+      kitchenScreenDisplay?: Partial<Record<PassKind, boolean | null>>;
       /** Null puts the role on Use default. */
       receiptPrinterId: string | null;
       paymentSlipPrinterId: string | null;

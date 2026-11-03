@@ -81,7 +81,14 @@ const saleResult: TillSaleResult = {
 };
 
 function kitchenScreen(kind: KitchenScreenKind, available = true): ResolvedKitchenScreen {
-  return { kind, available, stations: [], zones: null };
+  return {
+    kind,
+    available,
+    stations: [],
+    zones: null,
+    nonPassStationsOverride: null,
+    showNonPassStations: true,
+  };
 }
 
 const till = {
@@ -3901,6 +3908,7 @@ describe("department transfers across operator lifetimes", () => {
         note: "No salt",
         firedAt: null,
         courseId: null,
+        requestedAt: null,
       },
     ],
   };

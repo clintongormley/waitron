@@ -43,12 +43,14 @@ import {
   assertNoPaymentInProgress,
   endSessionsNotAdmitted,
   keepApprovedAfterSwitch,
+  parseKitchenScreenDisplay,
   parseKitchenScreens,
   readApprovedAlternatives,
   readApprovedProfiles,
   requireDeviceName,
   requireDeviceProfile,
   resolveDeviceKitchenScreens,
+  setKitchenScreenDisplay,
   switchActiveProfile,
   updateDeviceSettings,
 } from "./device.js";
@@ -89,6 +91,7 @@ import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
 import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
+import type { PassBoard } from "./pass-card.js";
 import { mountDeviceLevers, requireKitchenDisplay } from "./device-levers.js";
 import { STATUS as TILL_STATUS, stationMoveRequest } from "./till-api.js";
 import { moveDishesToStation } from "./station-move.js";
@@ -552,14 +555,30 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
+  // Presentation only, so no cooking action is asked (master Contract 12).
+  app.put("/api/device/kitchen-screen-display", (c) =>
+    leverRun(c, log, async () => {
+      const proof = await requireDeviceProof({ db: deps.db, devMode: deps.devMode }, c);
+      const { kind, value } = parseOwnKitchenScreenDisplay(await readJsonBody<unknown>(c));
+      await withTransaction(deps.db, async (tx) => {
+        const device = await assertDeviceStillProven(tx, proof);
+        await kitchenScreenOf(tx, c, deps.cfg, device, kind);
+        await VENUE_SERVICE.setDeviceKitchenScreenDisplay(tx, device.deviceId, kind, value);
+      });
+      return c.body(null, 204);
+    }),
+  );
+
   app.get("/api/device/pass-board", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass");
-          const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen));
-          return { board, stations: screen.stations, zones: screen.zones };
+          const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen), {
+            showNonPassStations: screen.showNonPassStations,
+          });
+          return passBoardAnswer(board, screen);
         }),
       );
     }),
@@ -573,8 +592,9 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
           const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass_monitor");
           const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen), {
             release: false,
+            showNonPassStations: screen.showNonPassStations,
           });
-          return { board, stations: screen.stations, zones: screen.zones };
+          return passBoardAnswer(board, screen);
         }),
       );
     }),
@@ -840,6 +860,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         name?: unknown;
         profileId?: unknown;
         kitchenScreens?: unknown;
+        kitchenScreenDisplay?: unknown;
         receiptPrinterId?: unknown;
         paymentSlipPrinterId?: unknown;
         cashDrawerPrinterId?: unknown;
@@ -864,6 +885,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         const label = requireDeviceName(body.name);
         const profileId = requireBodyUuid(body.profileId, "profileId");
         const kitchenScreens = parseKitchenScreens(body.kitchenScreens);
+        const display = parseKitchenScreenDisplay(body.kitchenScreenDisplay);
         const chosen: Partial<Record<ProfilePrinterRole, string | null>> = {
           receipt: requireNullableBodyUuid(body.receiptPrinterId, "receiptPrinterId"),
           payment_slip: requireNullableBodyUuid(body.paymentSlipPrinterId, "paymentSlipPrinterId"),
@@ -916,6 +938,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
             screens: kitchenScreens,
           });
         }
+        await setKitchenScreenDisplay(tx, id, display);
         // Only a choice that differs from the stored one is applied: a new choice must be switched
         // on, and a device may still hold a listed one since switched off.
         for (const role of ["receipt", "payment_slip", "cash_drawer", "invoice"] as const) {
@@ -981,6 +1004,24 @@ const EQUIPMENT_ROLES: readonly EquipmentRole[] = [
   "card_terminal",
 ];
 
+/** `PUT /api/device/kitchen-screen-display`'s body: a pass kind and a choice, null for the profile's. */
+function parseOwnKitchenScreenDisplay(body: unknown): {
+  kind: "pass" | "pass_monitor";
+  value: boolean | null;
+} {
+  const fields: Record<string, unknown> =
+    typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : {};
+  const kind = fields.kind;
+  if (kind !== "pass" && kind !== "pass_monitor")
+    throw new AppError("management.request_invalid", { field: "kind" });
+  const value = fields.showNonPassStations;
+  if (typeof value !== "boolean" && value !== null)
+    throw new AppError("management.request_invalid", { field: "showNonPassStations" });
+  return { kind, value };
+}
+
 /** `PUT /api/device/equipment`'s body, each field checked for shape. */
 function parseEquipmentChoice(
   body: Record<string, unknown>,
@@ -1031,6 +1072,19 @@ async function stationScreenOf(
   device: DeviceBinding,
 ): Promise<ResolvedKitchenScreen> {
   return (await kitchenScreenOf(tx, c, cfg, device, "station")).screen;
+}
+
+/** A pass board's answer: the board, the screen's stations and zones, and its display choice. */
+function passBoardAnswer(board: PassBoard, screen: ResolvedKitchenScreen) {
+  return {
+    board,
+    stations: screen.stations,
+    zones: screen.zones,
+    display: {
+      showNonPassStations: screen.showNonPassStations,
+      nonPassStationsOverride: screen.nonPassStationsOverride,
+    },
+  };
 }
 
 /**

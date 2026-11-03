@@ -89,9 +89,11 @@ Everything not listed here needs more spec work first.
    [reviewed plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) for the remaining
    kitchen and pass work, following A773-1's Sent and New order panel. PR B is cut into four
    ([slice plan](superpowers/plans/2026-11-01-a773-2b-requested-release.md)), and its B4 into two
-   ([B4 plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)): B4a, the pass on the new
-   board, landed (#2425); B4b (the station's Held column, "at the pass" and the display setting) remains,
-   then PRs C–D.
+   ([B4 plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)). PR B is complete: B4a put
+   the pass on the new board (#2425) and B4b gave the station and the pass their held cards and
+   column choices, the waiter's "at the pass" and a pass's choice to show other stations' dishes.
+   Next is PR C (the station editor's "Waits for the pass", its import check and the coverage
+   warning), then PR D.
    **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
    slices wait for A773-2.
 2. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
@@ -2461,17 +2463,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A773-2. Firing and the pass.** The [reviewed implementation
   plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) leaves PRs B–D: Requested, scoped
   pass release, station settings and coverage warnings, ticket presentation and physical
-  schema/configuration retirement. No station can be set to wait for the pass until PR C. The pass
-  runs on the new board (B4a, #2425). Next: B4b, the station's Held column, "at the pass" and the display
-  setting ([B4 plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md), tasks B1a1–B13).
-  [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
+  schema/configuration retirement. PR B is complete (B4a #2425, then B4b; [B4
+  plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)). Next: PR C, the station editor's
+  "Waits for the pass", its import check and the coverage warning; no station can be set to wait
+  for the pass until then. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **The pass board and the station board still carry copies of each other's code (left open by
-  A773-2 B4a's finish review).** Three copies remain: the width watcher that switches between columns
+  A773-2 B4a's finish review).** Two copies remain: the width watcher that switches between columns
   and one list, with the age colours (`apps/till/src/widgets/pass-board.ts` and `station-queue.ts`);
-  the styles of the dish lines both now draw through `kitchen-board-parts.ts`; and the saved column
-  layouts (`till-pass-screen.ts` and `till-station-screen.ts`). B4b changes the column layouts again,
-  so join them there. Also from that review: when a newer refresh of the pass fails and an older one
+  and the styles of the dish lines both now draw through `kitchen-board-parts.ts`. Also from that
+  review: when a newer refresh of the pass fails and an older one
   then answers, the screen clears its stale line (the old pass screen did the same);
   the server still works out each pass dish's age colour, which no screen reads (D68 keeps it); and
   the pass screen's `operatorSession` property is never read.
@@ -2517,6 +2518,39 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   can change between runs (left open by A773-2 B3's reviews; predates it).** `moveDishesToStation`
   groups dishes by station from a select with no `orderBy`. Order it, so tests can compare slips
   in order.
+
+- **Help badges for the pass's columns, To fire and Fire, and the station's held cards (left for
+  later by A773-2 B4).** Each needs new words. Since B4b the pass card's help names Fire.
+
+- **Department transfers call a held dish "Waiting" (left open by A773-2 B4b, its plan's D81).**
+  Since B4b a dish waiting for the pass says "Waiting for the pass"; a held dish still says
+  "Waiting", though nothing is cooking it (`apps/till/src/widgets/department-transfers.ts`).
+
+- **A card holding both held dishes and dishes asked for says "Held, not released", and the
+  asked-for dish carries no mark (left open by A773-2 B4b, its plan's D78).** It can happen once a
+  station waits for the pass (PR C), when a waiter fires one held dish of a held group.
+
+- **The table screen's sent list puts "at the pass" under a "Fired" heading (seen in A773-2 B4b's
+  review; the owner's call).** «en el pase» rows sit under «Marchado», and "at the pass" is lower
+  case beside capitalised status words. Also: a dish asked for whose extra was recalled says
+  Fired in the sent list and Held in the dish window, which the review believed predates the
+  branch.
+
+- **The till's `ScreenSlot` lacks the server's `switchedOff` (left open by A773-2 B3).** Nothing on
+  the till needs it yet: the pass reads `available` (`apps/till/src/api/client.ts`).
+
+- **Segmented choices still break words when whole words cannot fit (left by A773-2 B4b).**
+  `wt-segmented-control` keeps words whole while they fit and otherwise breaks inside them to stay
+  in its space: the dashboard's Corners choice at 390 px in Spanish at 130% text and the till's
+  other-stations choice at 320 px in Spanish at 130% still break mid-word. Decide whether such a
+  control should stack its choices instead. [Design system](developers/design-system.md)
+
+- **Look at what A773-2 B4b's look at the running app did not reach.** The table screen's «en el
+  pase», department transfers' "Waiting for the pass", the closed-station alert on the dashboard's
+  alerts page, a pass card whose dishes Hide has all taken off, the pair dialog's accept form, the
+  pass monitor's and All stations' own layouts, a board switching between columns and tabs live when
+  a course is fired, and a pass layout saved before B4b. That look also found a held card's dashed
+  border faint in the dark theme.
 
 - **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
   headings on a physical till. Keep drag only if it works reliably; Move to… and the held heading's

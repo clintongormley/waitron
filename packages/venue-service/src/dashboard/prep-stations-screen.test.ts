@@ -2628,6 +2628,8 @@ const stationScreen = (
   everyStation: false,
   everyZone: true,
   profileEveryStation: true,
+  showNonPassStations: true,
+  nonPassStationsOverride: null,
   stations,
   zones: null,
 });

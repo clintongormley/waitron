@@ -100,11 +100,25 @@ const identity = (kind: "pass" | "pass_monitor"): DeviceIdentity => ({
   deviceId: "dev-1",
   formFactor: "till",
   name: "Till 1",
-  kitchenScreens: [{ kind, available: true, stations: [], zones: null }],
+  kitchenScreens: [
+    {
+      kind,
+      available: true,
+      stations: [],
+      zones: null,
+      nonPassStationsOverride: null,
+      showNonPassStations: true,
+    },
+  ],
 });
 
 function stubApi(board: PassBoard, overrides: Record<string, unknown> = {}) {
-  const read = { board, stations: [], zones: null };
+  const read = {
+    board,
+    stations: [],
+    zones: null,
+    display: { showNonPassStations: true, nonPassStationsOverride: null },
+  };
   return {
     getExpoBoard: vi.fn().mockResolvedValue({ board }),
     getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity("pass"), kitchenScreens: [] }),
@@ -150,7 +164,12 @@ const mountPass = (board: PassBoard = courseBoard()) => {
     deviceMode: true,
     deviceName: "Pase",
     runsPass: true,
-    initialBoard: { board, stations: [], zones: null },
+    initialBoard: {
+      board,
+      stations: [],
+      zones: null,
+      display: { showNonPassStations: true, nonPassStationsOverride: null },
+    },
   }).then((mounted) => ({ ...mounted, api }));
 };
 
@@ -162,7 +181,12 @@ const mountMonitor = (board: PassBoard = courseBoard()) =>
     monitor: true,
     deviceName: "Pared",
     runsPass: true,
-    initialBoard: { board, stations: [], zones: null },
+    initialBoard: {
+      board,
+      stations: [],
+      zones: null,
+      display: { showNonPassStations: true, nonPassStationsOverride: null },
+    },
   });
 
 /** A till's or handheld's Pass, inside its card host. */
@@ -298,6 +322,30 @@ describe("A773 pass screen: help badges", () => {
       const link = badge.shadowRoot!.querySelector<HTMLAnchorElement>('[part="guide"]')!;
       expect(link.getAttribute("href")).toBe(`/help/${lang}/kitchen-service#pass-screen`);
       expect(link.textContent).toBe(text["help.guide_link"]);
+    },
+  );
+
+  it.each([
+    { lang: "en", text: helpEn },
+    { lang: "es", text: helpEs },
+  ])(
+    "the first Ready lever's and Columns' boxes link to /help/<language>/kitchen-service#pass-screen ($lang)",
+    async ({ lang, text }) => {
+      setLocale(lang);
+      const { el } = await mountPass();
+      await helpOn(el);
+      for (const [badge, key] of [
+        [badgeFor(el, t("expo.ready"))!, "help.pass.ready"],
+        [columnsBadge(el)!, "help.kitchen.columns"],
+      ] as const) {
+        expect(badge.mode).toBe("help-mode");
+        expect(badge.textContent).toBe(text[key]);
+        await userEvent.click(badge.shadowRoot!.querySelector("button")!);
+        expect(isOpen(badge)).toBe(true);
+        const link = badge.shadowRoot!.querySelector<HTMLAnchorElement>('[part="guide"]');
+        expect(link?.getAttribute("href")).toBe(`/help/${lang}/kitchen-service#pass-screen`);
+        expect(link?.textContent).toBe(text["help.guide_link"]);
+      }
     },
   );
 

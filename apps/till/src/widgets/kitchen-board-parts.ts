@@ -139,6 +139,14 @@ export const kitchenBoardStyles = css`
   .column:not(.collapsed) .column-count {
     margin-inline-start: auto;
   }
+
+  .held-part {
+    margin: var(--wt-space-3) 0 var(--wt-space-1);
+    font-size: var(--wt-font-size-sm);
+    font-weight: var(--wt-font-weight-medium);
+    color: var(--wt-color-text-muted);
+    text-transform: uppercase;
+  }
 `;
 
 /** The host's width and sizes, read before a drawing so the first is already the right layout. */
@@ -216,6 +224,14 @@ export function columnHeading(
       >${lateWords(count, late)}${collapsed ? nothing : html`<wt-icon name="column-open" aria-hidden="true"></wt-icon>`}
     </button>
   </h2>`;
+}
+
+/** The heading over a column's held cards, below its other cards. */
+export function heldPart(count: number): TemplateResult {
+  return html`<h3 class="held-part" data-held-part>
+    ${t("pass.column.held")}<span aria-hidden="true"> ·</span>
+    <span data-held-count>${count}</span>
+  </h3>`;
 }
 
 /** What a dish's sub-lines read, on the station's items and the pass's alike. */

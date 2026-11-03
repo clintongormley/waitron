@@ -11,8 +11,26 @@ describe("a kitchen display's notice in place of a queue", () => {
     name: "Pantalla Pase",
     kitchenScreens,
   });
-  const passGone = identity([{ kind: "pass", available: false, stations: [], zones: null }]);
-  const passBack = identity([{ kind: "pass", available: true, stations: [], zones: null }]);
+  const passGone = identity([
+    {
+      kind: "pass",
+      available: false,
+      stations: [],
+      zones: null,
+      nonPassStationsOverride: null,
+      showNonPassStations: true,
+    },
+  ]);
+  const passBack = identity([
+    {
+      kind: "pass",
+      available: true,
+      stations: [],
+      zones: null,
+      nonPassStationsOverride: null,
+      showNonPassStations: true,
+    },
+  ]);
 
   const listening: [string, EventListener][] = [];
   const listen = (type: string) => {
@@ -60,11 +78,18 @@ describe("a kitchen display's notice in place of a queue", () => {
 
   it("asks for a re-boot when a different screen is chosen in place of the one taken", () =>
     withFakeTimers(async () => {
-      const getDeviceIdentity = vi
-        .fn()
-        .mockResolvedValue(
-          identity([{ kind: "station", available: false, stations: [], zones: null }]),
-        );
+      const getDeviceIdentity = vi.fn().mockResolvedValue(
+        identity([
+          {
+            kind: "station",
+            available: false,
+            stations: [],
+            zones: null,
+            nonPassStationsOverride: null,
+            showNonPassStations: true,
+          },
+        ]),
+      );
       const { changed } = await mountNotice(getDeviceIdentity);
       await vi.advanceTimersByTimeAsync(15_000);
       expect(changed).toHaveBeenCalledTimes(1);

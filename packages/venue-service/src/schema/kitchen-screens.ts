@@ -30,6 +30,8 @@ export const deviceProfileKitchenScreens = table(
     screen: kitchenScreenKind("screen").notNull(),
     everyStation: flag("every_station").notNull().default(false),
     everyZone: flag("every_zone").notNull().default(false),
+    /** Read only on `pass` and `pass_monitor` rows. */
+    showNonPassStations: flag("show_non_pass_stations").notNull().default(true),
   },
   (t) => [
     primaryKey({
@@ -120,6 +122,8 @@ export const deviceKitchenScreens = table(
     screen: kitchenScreenKind("screen").notNull(),
     everyStation: flag("every_station").notNull().default(false),
     everyZone: flag("every_zone").notNull().default(false),
+    /** Null: the profile's value applies. Read only on `pass` and `pass_monitor` rows. */
+    showNonPassStations: flag("show_non_pass_stations"),
   },
   (t) => [
     primaryKey({ columns: [t.deviceId, t.screen], name: "device_kitchen_screens_pk" }),

@@ -293,6 +293,7 @@ export function mountDepartmentTransferApi(
             stationName: kitchenStations.name,
             state: ticketItems.state,
             note: ticketItems.note,
+            requestedAt: ticketItems.requestedAt,
             firedAt: ticketItems.firedAt,
             courseId: ticketItems.courseId,
           })

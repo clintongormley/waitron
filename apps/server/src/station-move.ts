@@ -21,6 +21,7 @@ import type { TicketState, CorrectionItem, FiredItem } from "./kitchen-print.js"
 import { notifyKitchenAllergyDestination } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { heldItem } from "./kitchen-phase.js";
+import { passWaitingStations } from "./kitchen-release.js";
 import {
   heldPaperStations,
   holdPaperFor,
@@ -100,6 +101,10 @@ export async function rerouteHeldAtRelease(
   const stranded = unchosen.filter((row) => row.parentLineId !== null || row.productId === null);
   const alertStranded = async () => {
     if (stranded.length === 0) return;
+    const waiting = await passWaitingStations(
+      tx,
+      stranded.map((row) => row.stationId),
+    );
     const byStation = new Map<
       string,
       { stationId: string; stationName: string; lineIds: string[] }
@@ -113,7 +118,15 @@ export async function rerouteHeldAtRelease(
       station.lineIds.push(row.lineId);
       byStation.set(row.stationId, station);
     }
-    await raiseReleasedAtClosedStation(tx, cfg, orderId, routing.at, [...byStation.values()]);
+    const stations = [...byStation.values()];
+    await raiseReleasedAtClosedStation(
+      tx,
+      cfg,
+      orderId,
+      routing.at,
+      stations.filter((station) => !waiting.has(station.stationId)),
+      stations.filter((station) => waiting.has(station.stationId)),
+    );
   };
   if (dishes.length === 0) {
     await alertStranded();

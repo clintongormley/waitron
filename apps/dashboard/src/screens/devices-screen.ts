@@ -57,6 +57,7 @@ import type {
   JoinRequestRow,
   KitchenScreenKind,
   KitchenScreenScope,
+  PassKind,
   PairingModeState,
   PagePrinterRow,
   Printer,
@@ -257,6 +258,8 @@ interface EditForm {
   madeHere: string[];
   /** Ticked profiles staff may switch to; only those {@link DevicesScreen} offers are sent. */
   approved: string[];
+  /** Whether each pass kind shows other stations' dishes; null is the profile's setting. */
+  display: Partial<Record<PassKind, boolean | null>>;
 }
 
 /** A returning device goes by the name it had, which Enable keeps, not the one its browser asked with. */
@@ -575,6 +578,7 @@ export class DevicesScreen extends LitElement {
     invoicePrinterId: "",
     madeHere: [],
     approved: [],
+    display: {},
   };
   /** The open device's stored invoice choice, which its row carries only in `equipment`. */
   #editInvoiceId: string | null = null;
@@ -582,6 +586,8 @@ export class DevicesScreen extends LitElement {
   @state() private editGone: GoneEntry[] = [];
   /** The kitchen screens the dialog opened with or last saved, as a request carries them. */
   #editSavedScreens = "[]";
+  /** Each pass kind's stored choice of other stations' dishes, as opened or last saved. */
+  #editSavedDisplay: Partial<Record<PassKind, boolean | null>> = {};
   #editOpenProfileId = "";
   @state() private editAttempted = false;
   @state() private editRefusal: FieldRefusal = null;
@@ -622,6 +628,7 @@ export class DevicesScreen extends LitElement {
       name: form.name.trim(),
       profileId: form.profileId,
       ...(this.#sendScreens() ? { kitchenScreens: this.#screensPayload(form.screens) } : {}),
+      ...this.#displayToSend(),
       receiptPrinterId: form.receiptPrinterId === "" ? null : form.receiptPrinterId,
       paymentSlipPrinterId: form.paymentSlipPrinterId === "" ? null : form.paymentSlipPrinterId,
       // Absent leaves the stored drawer and invoice choices alone, so only a changed one is sent.
@@ -648,6 +655,7 @@ export class DevicesScreen extends LitElement {
     return {
       ...this.#editPayload(),
       kitchenScreens: this.#screensPayload(this.editForm.screens),
+      kitchenScreenDisplay: this.#displayDraft(),
       cashDrawerPrinterId: drawer === "" ? null : drawer,
       invoicePrinterId: invoice === "" ? null : invoice,
       approvedProfileIds: this.#approvedOf(this.editForm.approved),
@@ -663,6 +671,7 @@ export class DevicesScreen extends LitElement {
         a.name === b.name &&
         a.profileId === b.profileId &&
         sameValue(a.kitchenScreens, b.kitchenScreens) &&
+        sameValue(a.kitchenScreenDisplay, b.kitchenScreenDisplay) &&
         a.receiptPrinterId === b.receiptPrinterId &&
         a.paymentSlipPrinterId === b.paymentSlipPrinterId &&
         a.cashDrawerPrinterId === b.cashDrawerPrinterId &&
@@ -678,6 +687,30 @@ export class DevicesScreen extends LitElement {
     });
     this.#editLeave = coordinator;
     this.#editScope = scope;
+  }
+
+  /** The pass kind the draft holds, whose choice of other stations' dishes the dialog shows. None
+   * when its station or zone list is empty: the server refuses the choice for a kind a narrowing
+   * emptied. A list whose every entry is switched off also reads empty here, and hides it too. */
+  #displayKind(): PassKind | undefined {
+    const kind = PASS_KINDS.find((kind) => this.editForm.screens[kind] !== undefined);
+    const scope = kind === undefined ? undefined : this.editForm.screens[kind];
+    return scope?.stationIds?.length !== 0 && scope?.zoneIds?.length !== 0 ? kind : undefined;
+  }
+
+  #displayDraft(): Partial<Record<PassKind, boolean | null>> {
+    const kind = this.#displayKind();
+    return kind === undefined ? {} : { [kind]: this.editForm.display[kind] ?? null };
+  }
+
+  /** Sent apart from the kitchen screens, and only when changed: absent keeps what is stored. */
+  #displayToSend(): { kitchenScreenDisplay?: Partial<Record<PassKind, boolean | null>> } {
+    const kind = this.#displayKind();
+    if (kind === undefined) return {};
+    const value = this.editForm.display[kind] ?? null;
+    return value === (this.#editSavedDisplay[kind] ?? null)
+      ? {}
+      : { kitchenScreenDisplay: { [kind]: value } };
   }
 
   /** One Save covers the device and, once it has loaded, its card reader. */
@@ -1201,6 +1234,11 @@ export class DevicesScreen extends LitElement {
     const screens = this.#draftFromRead(device.kitchenScreens, profileId, true);
     this.editGone = goneFromRead(device.kitchenScreens);
     this.#editSavedScreens = JSON.stringify(this.#screensPayload(screens));
+    this.#editSavedDisplay = Object.fromEntries(
+      device.kitchenScreens
+        .filter((screen) => screen.available && screen.kind !== "station")
+        .map((screen) => [screen.kind, screen.nonPassStationsOverride]),
+    );
     this.#editOpenProfileId = profileId;
     this.#editInvoiceId =
       device.equipment.find((entry) => entry.role === "invoice")?.chosenId ?? null;
@@ -1214,6 +1252,7 @@ export class DevicesScreen extends LitElement {
       invoicePrinterId: this.#editInvoiceId ?? "",
       madeHere: device.madeHereStationIds,
       approved: device.approvedProfileIds,
+      display: { ...this.#editSavedDisplay },
     };
     this.editAttempted = false;
     this.editRefusal = null;
@@ -1594,6 +1633,8 @@ export class DevicesScreen extends LitElement {
       this.editGone = [];
       this.#editSavedScreens = JSON.stringify(sent.kitchenScreens);
     }
+    if (sent.kitchenScreenDisplay !== undefined)
+      this.#editSavedDisplay = { ...this.#editSavedDisplay, ...sent.kitchenScreenDisplay };
     // The reader save below can fail and keep the dialog open, which then edits what was just saved.
     const { name: label, profileId: deviceProfileId, approvedProfileIds } = sent;
     this.editing = {
@@ -2577,6 +2618,31 @@ export class DevicesScreen extends LitElement {
     return html`${tillStations}${choice}${lists}`;
   }
 
+  /** The Edit dialog's choice for the draft's pass screen; joins cannot set it (D83). */
+  #renderOtherStations(): TemplateResult | typeof nothing {
+    const kind = this.#displayKind();
+    if (kind === undefined) return nothing;
+    const stored = this.editForm.display[kind] ?? null;
+    const epoch = this.#editEpoch;
+    return html`<wt-combobox
+      data-test="edit-other-stations"
+      name="showNonPassStations"
+      label=${t("device_profiles.show_other_stations")}
+      .options=${[
+        { value: "profile", label: t("devices.use_profile_setting") },
+        { value: "show", label: t("devices.other_stations_show") },
+        { value: "hide", label: t("devices.other_stations_hide") },
+      ]}
+      .value=${stored === null ? "profile" : stored ? "show" : "hide"}
+      ?disabled=${this.editSaving}
+      @wt-change=${(e: CustomEvent<{ value: string }>) => {
+        if (!this.isConnected || epoch !== this.#editEpoch) return;
+        const value = e.detail.value === "profile" ? null : e.detail.value === "show";
+        this.#setEdit({ display: { ...this.editForm.display, [kind]: value } });
+      }}
+    ></wt-combobox>`;
+  }
+
   /** Each entry the read marks no longer available, outside the draft. */
   #renderGone(): TemplateResult | typeof nothing {
     if (this.editGone.length === 0) return nothing;
@@ -2726,7 +2792,7 @@ export class DevicesScreen extends LitElement {
           },
           this.editSaving,
         )}
-        ${this.#renderGone()}
+        ${this.#renderOtherStations()} ${this.#renderGone()}
         ${PRINTER_ROLES.map(
           (role) =>
             html`<wt-combobox

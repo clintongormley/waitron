@@ -231,6 +231,38 @@ it("A366 a till's pass monitor is protected, and leaving with it asks", async ()
   expect(unload()).toBe(false);
 });
 
+it("A773 a pass monitor's other-stations switch is protected, leaving with it changed asks, and Discard leaves nothing unsaved", async () => {
+  const { app, screen } = await mount(
+    {
+      listProfileKitchenScreens: async () => [
+        {
+          profileId: "p1",
+          screens: {
+            pass_monitor: { stationIds: null, zoneIds: null, showNonPassStations: true },
+          },
+        },
+      ],
+    },
+    { ...profile, formFactor: "kds", capabilities: [], startingScreen: null },
+  );
+  const other = () =>
+    q(screen, "profile-pass-monitor-other-stations") as HTMLElementTagNameMap["wt-switch"];
+  await expect.poll(() => other()?.checked).toBe(true);
+  change(screen, "profile-pass-monitor-other-stations", false);
+  expect(unload()).toBe(true);
+  change(screen, "profile-pass-monitor-other-stations", true);
+  expect(unload()).toBe(false);
+  change(screen, "profile-pass-monitor-other-stations", false);
+  q(screen, "profile-cancel")!.click();
+  await choose(app, "keep");
+  await screen.updateComplete;
+  expect(other().checked).toBe(false);
+  q(screen, "profile-cancel")!.click();
+  await choose(app, "discard");
+  await expect.poll(() => q(screen, "editor-form")).toBeNull();
+  expect(unload()).toBe(false);
+});
+
 it("A366 reconnect: a departed save's narrowed devices stay off the screen, and a kitchen screen changed after it still asks", async () => {
   let finish!: () => void;
   const kds = { ...profile, formFactor: "kds" as const, capabilities: [], startingScreen: null };

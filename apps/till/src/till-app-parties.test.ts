@@ -8,6 +8,7 @@ import {
   switchToBill,
 } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
+import { withCurrentKitchenStamps } from "../test/kitchen-stamps.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { page, userEvent } from "vitest/browser";
@@ -7379,6 +7380,7 @@ describe("till-app: the order's groups", () => {
                 billStatus: "open",
                 netAmount: grossOf(line.unitPriceGross, line.quantity),
                 readyAt: null,
+                requestedAt: group.state === "fired" ? line.firedAt : null,
                 firedAt: line.firedAt,
                 lineId: line.id,
                 workingOrderId: "wo-4",
@@ -7393,12 +7395,12 @@ describe("till-app: the order's groups", () => {
                 kitchen:
                   line.state === null
                     ? null
-                    : {
+                    : withCurrentKitchenStamps({
                         stationId: line.stationId,
                         movable: line.movable,
                         state: line.state,
                         firedAt: line.firedAt,
-                      },
+                      }),
                 note: line.note,
                 extras: [],
               })),
@@ -9136,6 +9138,7 @@ describe("till-app: Current orders", () => {
             billStatus: "open",
             netAmount: "30.00",
             readyAt: null,
+            requestedAt: "2026-09-28T19:50:00.000Z",
             firedAt: "2026-09-28T19:50:00.000Z",
             lineId: "line-1",
             workingOrderId: "wo-4",
@@ -9911,6 +9914,7 @@ describe("till-app: Current orders", () => {
             lineId: `${id}-food`,
             workingOrderId: billId,
             released: false,
+            requestedAt: null,
             firedAt: null,
           })),
         });
@@ -10005,7 +10009,12 @@ describe("till-app: Current orders", () => {
         id: "g2",
         state: "held" as const,
         firedAt: null,
-        rows: orders.groups[0]!.rows.map((row) => ({ ...row, released: false })),
+        rows: orders.groups[0]!.rows.map((row) => ({
+          ...row,
+          released: false,
+          requestedAt: null,
+          firedAt: null,
+        })),
       };
       const group: OrderGroup = { ...held, courseIds: [], lineIds: ["line-1"], summary: "Vino ×1" };
       const { el } = await mountApp({
@@ -10360,6 +10369,7 @@ describe("till-app: Current orders", () => {
               billStatus: "open",
               netAmount: "12.00",
               readyAt: null,
+              requestedAt: null,
               firedAt: null,
               lineId: "line-9",
               workingOrderId: "wo-check",

@@ -518,6 +518,9 @@ export class TillSentOrders extends LitElement {
       );
       return t("table.row_ready_ago").replace("{n}", String(minutes));
     }
+    if (slice.row.released && slice.row.firedAt === null && slice.row.requestedAt !== null) {
+      return t("table.at_the_pass");
+    }
     return slice.row.firedAt === null
       ? t("table.group_fired")
       : html`<till-fired-ago

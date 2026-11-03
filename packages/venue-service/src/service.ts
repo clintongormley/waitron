@@ -125,6 +125,7 @@ import {
   readStationScreens,
   removeDeviceKitchenScreens,
   setDeviceKitchenScreens,
+  setDeviceKitchenScreenDisplay,
   setProfileKitchenScreens,
 } from "./kitchen-screens.js";
 
@@ -231,6 +232,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   readDeviceKitchenScreens,
   readDevicesKitchenScreens,
   setDeviceKitchenScreens,
+  setDeviceKitchenScreenDisplay,
   countDeviceKitchenScreens,
   readDeviceZoneSelection,
   setDeviceZoneSelection,

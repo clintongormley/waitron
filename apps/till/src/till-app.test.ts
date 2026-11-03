@@ -270,6 +270,8 @@ const stationScreen: ResolvedKitchenScreen = {
   available: true,
   stations: [],
   zones: null,
+  nonPassStationsOverride: null,
+  showNonPassStations: true,
 };
 
 const kdsFormFactor: FormFactor = "kds";

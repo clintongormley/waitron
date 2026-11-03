@@ -49,6 +49,7 @@ const detail: DepartmentTransferDetail = {
       stationName: "Kitchen / Cocina",
       state: "preparing",
       note: "No salt / Sin sal",
+      requestedAt: null,
       firedAt: null,
       courseId: null,
     },

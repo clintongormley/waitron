@@ -5001,6 +5001,7 @@ describe("till-app: a guest leaving early pays for a held dish", () => {
               billStatus: "open",
               netAmount: tiramisu.unitPriceGross,
               readyAt: null,
+              requestedAt: null,
               firedAt: null,
               lineId: tiramisu.id,
               workingOrderId: "wo-4",

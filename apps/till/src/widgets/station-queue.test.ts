@@ -1,14 +1,17 @@
 import { commands, page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setContentLanguages } from "@waitron/ui";
+import { setContentLanguages, setHelpMode } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, pageAt, resetPage, textRects } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
+import { helpBadgeLabel, helpEn, helpEs, helpText } from "../i18n/help-strings.js";
+import { es } from "../i18n/strings.js";
 import { TillStationQueue, stationColumnNames } from "./station-queue.js";
 import { type ColumnKey, STATION_COLUMNS } from "../state/kitchen-columns.js";
 import { CARD_COLUMN_TEXT_WIDTHS, OVERVIEW_COLUMN_REMS } from "../state/kitchen-board-fit.js";
 import type { KitchenNotice, StationQueueGroup, StationQueueItem } from "../api/client.js";
+import { kitchenStamps, withKitchenStamps } from "../../test/kitchen-stamps.js";
 
 // The shipped DB defaults.
 const DEFAULT_THRESHOLDS: StationThresholds = {
@@ -38,6 +41,10 @@ const groupA: StationQueueGroup = {
       quantity: "2.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      phase: "waiting",
+      requestedAt: "2026-08-17T10:00:00.000Z",
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -49,6 +56,10 @@ const groupA: StationQueueGroup = {
       quantity: "1.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      phase: "preparing",
+      requestedAt: "2026-08-17T10:00:00.000Z",
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
@@ -73,6 +84,10 @@ const groupB: StationQueueGroup = {
       quantity: "3.000",
       course: null,
       firedAt: "2026-08-17T10:05:00.000Z",
+      phase: "ready",
+      requestedAt: "2026-08-17T10:05:00.000Z",
+      readyAt: "2026-08-17T10:05:00.000Z",
+      passControlled: false,
       queuedAt: "2026-08-17T10:05:00.000Z",
     },
   ],
@@ -405,6 +420,10 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          phase: "waiting",
+          requestedAt: "2026-08-17T10:00:00.000Z",
+          readyAt: null,
+          passControlled: false,
           queuedAt: "2026-08-17T10:00:00.000Z",
         },
       ],
@@ -436,6 +455,10 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          phase: "waiting",
+          requestedAt: "2026-08-17T10:00:00.000Z",
+          readyAt: null,
+          passControlled: false,
           queuedAt: "2026-08-17T10:00:00.000Z",
           modifiers: [
             { descriptions: { "es-ES": "Grande" } },
@@ -525,6 +548,10 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          phase: "waiting",
+          requestedAt: "2026-08-17T10:00:00.000Z",
+          readyAt: null,
+          passControlled: false,
           queuedAt: "2026-08-17T10:00:00.000Z",
           note: "sin sal",
         },
@@ -597,6 +624,10 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          phase: "waiting",
+          requestedAt: "2026-08-17T10:00:00.000Z",
+          readyAt: null,
+          passControlled: false,
           queuedAt: "2026-08-17T10:00:00.000Z",
           asServed: { allergens: { milk: {} }, pending: false },
         },
@@ -622,6 +653,10 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          phase: "waiting",
+          requestedAt: "2026-08-17T10:00:00.000Z",
+          readyAt: null,
+          passControlled: false,
           queuedAt: "2026-08-17T10:00:00.000Z",
           asServed: { allergens: {}, pending: true },
         },
@@ -703,6 +738,10 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          phase: "waiting",
+          requestedAt: "2026-08-17T10:00:00.000Z",
+          readyAt: null,
+          passControlled: false,
           queuedAt: "2026-08-17T10:00:00.000Z",
           asServedDiet: { vegan: "yes", vegetarian: "yes", contains: [] },
         },
@@ -845,7 +884,14 @@ describe("till-station-queue", () => {
         {
           ...groupB,
           stationId: "st-2",
-          items: [{ ...groupB.items[0]!, id: "ti-4", state: "queued" as const }],
+          items: [
+            {
+              ...groupB.items[0]!,
+              id: "ti-4",
+              state: "queued" as const,
+              ...kitchenStamps({ state: "queued", firedAt: groupB.items[0]!.firedAt }),
+            },
+          ],
         },
       ],
       stationId: "st-9",
@@ -1055,6 +1101,10 @@ const coursedOrder: StationQueueGroup = {
       // Principales — HELD (fired_at null), display_order 2: must render LAST despite being listed first.
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
       firedAt: null,
+      phase: "held",
+      requestedAt: null,
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -1067,6 +1117,10 @@ const coursedOrder: StationQueueGroup = {
       // Entrantes — FIRED, display_order 1: renders after the null course, before Principales.
       course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
       firedAt: "2026-08-17T10:00:00.000Z",
+      phase: "preparing",
+      requestedAt: "2026-08-17T10:00:00.000Z",
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -1079,6 +1133,10 @@ const coursedOrder: StationQueueGroup = {
       // The null course must render FIRST, and carries no header.
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      phase: "waiting",
+      requestedAt: "2026-08-17T10:00:00.000Z",
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
@@ -1711,6 +1769,10 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
       group: { id: "g-3", position: 3, displayNumber: 3, numberPartyId: "v-4", state: "held" },
       firedAt: null,
+      phase: "held",
+      requestedAt: null,
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -1723,6 +1785,10 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
       group: { id: "g-2", position: 2, displayNumber: 2, numberPartyId: "v-4", state: "fired" },
       firedAt: "2026-08-17T10:00:00.000Z",
+      phase: "preparing",
+      requestedAt: "2026-08-17T10:00:00.000Z",
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -1734,6 +1800,10 @@ const partyOrder: StationQueueGroup = {
       quantity: "1.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      phase: "waiting",
+      requestedAt: "2026-08-17T10:00:00.000Z",
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -1746,6 +1816,10 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-dessert", name: "Postres", displayOrder: 3 },
       group: { id: "g-4", position: 4, displayNumber: 4, numberPartyId: "v-4", state: "held" },
       firedAt: null,
+      phase: "held",
+      requestedAt: null,
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -1758,6 +1832,10 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
       group: { id: "g-3", position: 3, displayNumber: 3, numberPartyId: "v-4", state: "held" },
       firedAt: null,
+      phase: "held",
+      requestedAt: null,
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
@@ -2072,7 +2150,14 @@ describe("till-station-queue — a merged queue's station labels", () => {
   it("a merged queue bumps each order by its own station's mode", async () => {
     const queuedAtBar = {
       ...groupB,
-      items: [{ ...groupB.items[0]!, id: "ti-4", state: "queued" as const }],
+      items: [
+        {
+          ...groupB.items[0]!,
+          id: "ti-4",
+          state: "queued" as const,
+          ...kitchenStamps({ state: "queued", firedAt: groupB.items[0]!.firedAt }),
+        },
+      ],
     };
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [
@@ -2102,7 +2187,14 @@ describe("till-station-queue — a merged queue's station labels", () => {
   describe("a whole-ticket order is marked so a cook sees it before tapping", () => {
     const queuedAtBar = {
       ...groupB,
-      items: [{ ...groupB.items[0]!, id: "ti-4", state: "queued" as const }],
+      items: [
+        {
+          ...groupB.items[0]!,
+          id: "ti-4",
+          state: "queued" as const,
+          ...kitchenStamps({ state: "queued", firedAt: groupB.items[0]!.firedAt }),
+        },
+      ],
     };
     const readyAtKitchen = { ...groupB.items[0]!, id: "ti-5", state: "ready" as const };
     const mixed = [
@@ -2155,7 +2247,12 @@ describe("till-station-queue — a merged queue's station labels", () => {
     });
 
     it("a ticket-mode order whose only unfinished dish is held shows no mark", async () => {
-      const held = { ...groupA.items[0]!, id: "ti-held", firedAt: null };
+      const held = {
+        ...groupA.items[0]!,
+        id: "ti-held",
+        firedAt: null,
+        ...kitchenStamps({ state: "queued", firedAt: null }),
+      };
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [
           {
@@ -2270,6 +2367,10 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "2.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        phase: "waiting",
+        requestedAt: "2026-08-17T10:00:00.000Z",
+        readyAt: null,
+        passControlled: false,
         queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
@@ -2281,6 +2382,10 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "1.000",
         course: { id: "co-main", name: "Principales", displayOrder: 2 },
         firedAt: null,
+        phase: "held",
+        requestedAt: null,
+        readyAt: null,
+        passControlled: false,
         queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
@@ -2292,6 +2397,10 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        phase: "preparing",
+        requestedAt: "2026-08-17T10:00:00.000Z",
+        readyAt: null,
+        passControlled: false,
         queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
@@ -2303,6 +2412,10 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        phase: "ready",
+        requestedAt: "2026-08-17T10:00:00.000Z",
+        readyAt: "2026-08-17T10:00:00.000Z",
+        passControlled: false,
         queuedAt: "2026-08-17T10:00:00.000Z",
       },
       // An extra prepared at its own station is its own queue item, named "for" its dish
@@ -2316,6 +2429,10 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "2.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        phase: "waiting",
+        requestedAt: "2026-08-17T10:00:00.000Z",
+        readyAt: null,
+        passControlled: false,
         queuedAt: "2026-08-17T10:00:00.000Z",
         crossRefs: [{ kind: "for", name: "BURG", stationName: "Grill" }],
       },
@@ -2400,6 +2517,10 @@ describe("till-station-queue — where Move sits", () => {
     quantity: "1.000",
     course: null,
     firedAt: "2026-08-17T10:00:00.000Z",
+    phase: "waiting",
+    requestedAt: "2026-08-17T10:00:00.000Z",
+    readyAt: null,
+    passControlled: false,
     queuedAt: "2026-08-17T10:00:00.000Z",
   });
   const order: StationQueueGroup = {
@@ -2656,15 +2777,18 @@ describe("the board's cards", () => {
     id: string,
     firedAt: string | null,
     extra: Partial<StationQueueItem> = {},
-  ): StationQueueItem => ({
-    ...groupA.items[0]!,
-    id,
-    workingOrderLineId: `wol-${id}`,
-    name: `Dish ${id}`,
-    firedAt,
-    queuedAt: firedAt ?? "2026-08-17T10:00:00.000Z",
-    ...extra,
-  });
+  ): StationQueueItem => {
+    const item = {
+      ...groupA.items[0]!,
+      id,
+      workingOrderLineId: `wol-${id}`,
+      name: `Dish ${id}`,
+      firedAt,
+      queuedAt: firedAt ?? "2026-08-17T10:00:00.000Z",
+      ...extra,
+    };
+    return { ...item, ...kitchenStamps(item), ...extra };
+  };
   const bill = (
     orderId: string,
     orderNumber: number,
@@ -3091,7 +3215,11 @@ describe("the board's cards", () => {
           },
         ],
         stationId: "st-1",
-        columns: { order: [...STATION_COLUMNS.order], hidden, collapsed: [] },
+        columns: {
+          order: [...STATION_COLUMNS.order],
+          hidden: [...STATION_COLUMNS.hidden, ...hidden],
+          collapsed: [],
+        },
       });
       // The station screen's own padding, inside the page's.
       host.style.paddingInline = "var(--wt-space-4)";
@@ -3129,7 +3257,7 @@ function ageDish(
   minute: number,
   overrides: Partial<StationQueueItem> = {},
 ): StationQueueItem {
-  return {
+  return withKitchenStamps({
     allergy: null,
     id,
     workingOrderLineId: `line-${id}`,
@@ -3140,7 +3268,7 @@ function ageDish(
     firedAt: ageAt(minute),
     queuedAt: ageAt(minute),
     ...overrides,
-  };
+  });
 }
 
 function ageBill(
@@ -3784,15 +3912,18 @@ describe("the board's columns", () => {
     id: string,
     firedAt: string | null,
     extra: Partial<StationQueueItem> = {},
-  ): StationQueueItem => ({
-    ...groupA.items[0]!,
-    id,
-    workingOrderLineId: `wol-${id}`,
-    name: `Dish ${id}`,
-    firedAt,
-    queuedAt: firedAt ?? "2026-08-17T10:00:00.000Z",
-    ...extra,
-  });
+  ): StationQueueItem => {
+    const item = {
+      ...groupA.items[0]!,
+      id,
+      workingOrderLineId: `wol-${id}`,
+      name: `Dish ${id}`,
+      firedAt,
+      queuedAt: firedAt ?? "2026-08-17T10:00:00.000Z",
+      ...extra,
+    };
+    return { ...item, ...kitchenStamps(item), ...extra };
+  };
   const bill = (
     orderId: string,
     orderNumber: number,
@@ -3844,7 +3975,7 @@ describe("the board's columns", () => {
       groups,
       stationId: "st-1",
       columns: {
-        order: ["overview", "held", "waiting", "preparing", "ready"],
+        order: ["overview", "toFire", "waiting", "preparing", "ready"],
         hidden: [],
         collapsed: [],
       },
@@ -4437,7 +4568,6 @@ describe("the board's narrow tabs", () => {
     const english = { overview: t("station.overview"), waiting: t("station.state.queued") };
     const dish = (name: string, minute: number, extra: Partial<StationQueueItem> = {}) =>
       ageDish(`${name}-${minute}`, minute, { name, ...extra });
-    // Picture 03's scene (plan slice 9c); its two held cards sit in Waiting until a Held column.
     const scene = [
       ageBill(2, [
         dish("Sirloin", 0, { state: "preparing" }),
@@ -4581,7 +4711,7 @@ describe("the board's header row and hidden columns", () => {
     expect(asked[0]!.detail.opener).toBe(columnsButton(el));
     expect(el.columns).toBe(columns);
     expect(columns).toEqual({
-      order: ["overview", "waiting", "preparing", "ready"],
+      order: ["overview", "waiting", "waitingOnly", "held", "preparing", "ready"],
       hidden: [],
       collapsed: [],
     });
@@ -4621,7 +4751,9 @@ describe("the board's header row and hidden columns", () => {
     expect(STATION_COLUMNS.order.every((key) => names.has(key))).toBe(true);
     expect([...names]).toEqual([
       ["overview", t("station.overview")],
-      ["waiting", t("station.state.queued")],
+      ["waiting", t("station.columns_waiting_held")],
+      ["waitingOnly", t("station.state.queued")],
+      ["held", t("pass.column.held")],
       ["preparing", t("station.state.preparing")],
       ["ready", t("station.state.ready")],
     ]);
@@ -4783,21 +4915,22 @@ describe("the late bar", () => {
 });
 
 describe("A803 portion grouping: the station queue", () => {
-  const portion = (id: string, overrides: Partial<StationQueueItem> = {}): StationQueueItem => ({
-    allergy: null,
-    id,
-    workingOrderLineId: `wol-${id}`,
-    state: "queued",
-    name: "Burger",
-    quantity: "1.000",
-    unitName: null,
-    unitPrecision: 0,
-    soldInEach: true,
-    course: null,
-    firedAt: "2026-08-17T10:00:00.000Z",
-    queuedAt: "2026-08-17T10:00:00.000Z",
-    ...overrides,
-  });
+  const portion = (id: string, overrides: Partial<StationQueueItem> = {}): StationQueueItem =>
+    withKitchenStamps({
+      allergy: null,
+      id,
+      workingOrderLineId: `wol-${id}`,
+      state: "queued",
+      name: "Burger",
+      quantity: "1.000",
+      unitName: null,
+      unitPrecision: 0,
+      soldInEach: true,
+      course: null,
+      firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
+      ...overrides,
+    });
   const order = (items: StationQueueItem[], bumpMode: "line" | "ticket" = "line") => ({
     ...groupA,
     orderId: "wo-p",
@@ -4900,5 +5033,432 @@ describe("A803 portion grouping: the station queue", () => {
         },
       ],
     ]);
+  });
+});
+
+describe("A773 held column", () => {
+  const heldDish = (id: string, minute: number, extra: Partial<StationQueueItem> = {}) =>
+    ageDish(id, minute, { firedAt: null, ...extra });
+  const requestedDish = (id: string, minute: number) =>
+    ageDish(id, minute, { firedAt: null, phase: "requested", requestedAt: ageAt(minute) });
+  const heldGroup = { id: "g-2", position: 2, displayNumber: 2, numberPartyId: "pa-1" };
+  // A held group's card, a Requested bill's card, and a bill with one dish released.
+  const scene = () => [
+    ageBill(1, [heldDish("held-1", 3, { group: { ...heldGroup, state: "held" } })]),
+    ageBill(2, [requestedDish("asked-1", 4)]),
+    ageBill(3, [ageDish("sent-1", 18), heldDish("kept-1", 18)]),
+  ];
+  const released = () => [
+    ageBill(1, [ageDish("held-1", 3, { group: { ...heldGroup, state: "fired" } })]),
+  ];
+  const mountBoard = (
+    groups: StationQueueGroup[],
+    columns: { order: ColumnKey[]; hidden: ColumnKey[]; collapsed: ColumnKey[] } = {
+      order: [...STATION_COLUMNS.order],
+      hidden: [...STATION_COLUMNS.hidden],
+      collapsed: [],
+    },
+  ) =>
+    mountWidget<TillStationQueue>("till-station-queue", {
+      groups,
+      stationId: "st-1",
+      now: AGE_NOW,
+      columns,
+    });
+  const APART: { order: ColumnKey[]; hidden: ColumnKey[]; collapsed: ColumnKey[] } = {
+    order: ["overview", "held", "waitingOnly", "preparing", "ready"],
+    hidden: [],
+    collapsed: [],
+  };
+  const shadow = (el: TillStationQueue) => el.shadowRoot!;
+  const column = (el: TillStationQueue, name: string) =>
+    shadow(el).querySelector<HTMLElement>(`[data-column="${name}"]`);
+  const ordersIn = (el: TillStationQueue, name: string) =>
+    [...column(el, name)!.querySelectorAll<HTMLElement>("[data-card]")].map(
+      (card) => card.dataset.order,
+    );
+  const drawn = (el: TillStationQueue) =>
+    [...shadow(el).querySelectorAll<HTMLElement>(".kanban > [data-column]")].map(
+      (section) => section.dataset.column,
+    );
+  const tabKeys = (el: TillStationQueue) =>
+    [...shadow(el).querySelectorAll<HTMLElement>("[data-column-tab]")].map(
+      (button) => button.dataset.columnTab,
+    );
+  const tab = (el: TillStationQueue, key: string) =>
+    shadow(el).querySelector<HTMLButtonElement>(`[data-column-tab="${key}"]`);
+  const flat = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
+
+  it("by default draws held cards in Waiting after the timed ones, dashed and untimed, with no Held or separate Waiting column", async () => {
+    const { el } = await mountBoard(scene());
+    expect(drawn(el)).toEqual(["overview", "queued", "preparing", "ready"]);
+    expect(ordersIn(el, "queued")).toEqual(["3", "1", "2"]);
+    for (const order of ["1", "2"]) {
+      const card = column(el, "queued")!.querySelector<HTMLElement>(`[data-order="${order}"]`)!;
+      expect(card.classList.contains("held")).toBe(true);
+      expect(getComputedStyle(card).borderTopStyle).toBe("dashed");
+      expect(card.querySelector(".age")).toBeNull();
+    }
+    expect(column(el, "held")).toBeNull();
+    expect(column(el, "waiting-only")).toBeNull();
+  });
+
+  it("draws a held card and a Requested card in Held, dashed and untimed; a card with a released dish stays in its column", async () => {
+    const { el } = await mountBoard(scene(), APART);
+    expect(drawn(el)).toEqual(["overview", "held", "waiting-only", "preparing", "ready"]);
+    expect(ordersIn(el, "held")).toEqual(["1", "2"]);
+    expect(ordersIn(el, "waiting-only")).toEqual(["3"]);
+    for (const card of column(el, "held")!.querySelectorAll<HTMLElement>("[data-card]")) {
+      expect(card.classList.contains("held")).toBe(true);
+      expect(getComputedStyle(card).borderTopStyle).toBe("dashed");
+      expect(card.querySelector(".age")).toBeNull();
+    }
+    expect(column(el, "held")!.querySelector(".column-title")!.textContent).toBe(
+      t("pass.column.held"),
+    );
+    expect(column(el, "waiting-only")!.querySelector(".column-title")!.textContent).toBe(
+      t("station.state.queued"),
+    );
+    cleanupWidgets();
+
+    const empty = await mountBoard(released(), APART);
+    expect(drawn(empty.el)).toEqual(["overview", "held", "waiting-only", "preparing", "ready"]);
+    expect(flat(column(empty.el, "held")!.querySelector("[data-column-count]")!)).toBe("0");
+    expect(ordersIn(empty.el, "held")).toEqual([]);
+  });
+
+  it("narrow tabs: Held has its tab in the layout's order with its count, and shows the held cards", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard(scene(), APART);
+    expect(tabKeys(el)).toEqual(["overview", "held", "waitingOnly", "preparing", "ready"]);
+    expect(flat(tab(el, "held")!)).toBe(`${t("pass.column.held")} · 2`);
+    expect(flat(tab(el, "waitingOnly")!)).toBe(`${t("station.state.queued")} · 1`);
+    await userEvent.click(tab(el, "held")!);
+    await el.updateComplete;
+    const panel = shadow(el).querySelector<HTMLElement>("[data-tab-panel]")!;
+    expect(panel.dataset.tabPanel).toBe("held");
+    expect(panel.dataset.column).toBe("held");
+    expect(
+      [...panel.querySelectorAll<HTMLElement>("[data-card]")].map((card) => card.dataset.order),
+    ).toEqual(["1", "2"]);
+    cleanupWidgets();
+
+    const byDefault = await mountBoard(scene());
+    expect(tabKeys(byDefault.el)).toEqual(["overview", "waiting", "preparing", "ready"]);
+    expect(flat(tab(byDefault.el, "waiting")!)).toBe(`${t("station.state.queued")} · 3`);
+  });
+
+  it("a hidden Held draws neither the held cards nor a Held tab, and the Columns window still lists it", async () => {
+    const hidden = {
+      order: [...APART.order],
+      hidden: ["held" as ColumnKey],
+      collapsed: [],
+    };
+    const wide = await mountBoard(scene(), hidden);
+    expect(drawn(wide.el)).toEqual(["overview", "waiting-only", "preparing", "ready"]);
+    expect(shadow(wide.el).querySelector('[data-order="1"]')).toBeNull();
+    expect(shadow(wide.el).querySelector('[data-order="2"]')).toBeNull();
+    cleanupWidgets();
+
+    await pageAt(390, 844);
+    const { el } = await mountBoard(scene(), hidden);
+    expect(tabKeys(el)).toEqual(["overview", "waitingOnly", "preparing", "ready"]);
+    expect(tab(el, "held")).toBeNull();
+    expect(shadow(el).querySelector('[data-order="1"]')).toBeNull();
+    expect(shadow(el).querySelector('[data-order="2"]')).toBeNull();
+    expect(stationColumnNames().get("held")).toBe(t("pass.column.held"));
+  });
+
+  // A requested group's card, a card mixing a requested and a held dish, and a released card
+  // carrying one requested dish and one held dish.
+  const asked = (id: string, name: string) => ({ ...requestedDish(id, 4), name });
+  const kept = (id: string, name: string) => heldDish(id, 4, { name });
+  const wordsScene = () => [
+    ageBill(1, [
+      { ...asked("asked-a", "Squid"), group: { ...heldGroup, state: "held" as const } },
+      { ...asked("asked-b", "Prawns"), group: { ...heldGroup, state: "held" as const } },
+    ]),
+    ageBill(2, [asked("mixed-asked", "Clams"), kept("mixed-kept", "Mussels")]),
+    ageBill(3, [
+      { ...ageDish("sent", 18), name: "Octopus" },
+      asked("line-asked", "Cockles"),
+      kept("line-kept", "Razor clams"),
+    ]),
+  ];
+  const note = (el: TillStationQueue, order: number) =>
+    shadow(el)
+      .querySelector(`[data-card][data-order="${order}"] [data-group-held]`)
+      ?.textContent?.trim();
+  const lineWord = (el: TillStationQueue, id: string) =>
+    shadow(el).querySelector(`[data-item="${id}"] .line-state`)?.textContent?.trim();
+
+  it("a card in Held says Waiting for the pass when every dish on it is Requested, else Held, not released", async () => {
+    const { el } = await mountBoard(wordsScene(), APART);
+    expect(ordersIn(el, "held")).toEqual(["1", "2"]);
+    expect(note(el, 1)).toBe(t("pass.waiting_for_pass"));
+    expect(note(el, 2)).toBe(t("station.group_held"));
+  });
+
+  it("on a released card a Requested dish says Waiting for the pass and a held one Held, not released; a dish in Held says nothing", async () => {
+    const { el } = await mountBoard(wordsScene(), APART);
+    expect(ordersIn(el, "waiting-only")).toEqual(["3"]);
+    expect(lineWord(el, "line-asked")).toBe(t("pass.waiting_for_pass"));
+    expect(lineWord(el, "line-kept")).toBe(t("station.group_held"));
+    expect(lineWord(el, "sent")).toBeUndefined();
+    for (const id of ["asked-a", "asked-b", "mixed-asked", "mixed-kept"]) {
+      expect(shadow(el).querySelector(`[data-item="${id}"]`)).not.toBeNull();
+      expect(lineWord(el, id)).toBeUndefined();
+    }
+  });
+
+  it("Overview counts a Requested dish after the +, as it counts a held one", async () => {
+    const { el } = await mountBoard([ageBill(1, [asked("asked-a", "Squid")])], APART);
+    const row = shadow(el).querySelector<HTMLElement>("[data-overview-row]")!;
+    expect(row.querySelector("[data-overview-making]")?.textContent?.trim() ?? "0").toBe("0");
+    expect(row.querySelector("[data-overview-held]")!.textContent!.trim()).toBe("+1");
+  });
+
+  it("in Spanish, Held's heading and the Waiting for the pass note and marker read the catalogue", async () => {
+    const previousLocale = currentLocale();
+    setLocale("es");
+    try {
+      const { el } = await mountBoard(wordsScene(), APART);
+      expect(column(el, "held")!.querySelector(".column-title")!.textContent).toBe(
+        es["pass.column.held"],
+      );
+      expect(note(el, 1)).toBe(es["pass.waiting_for_pass"]);
+      expect(note(el, 2)).toBe(es["station.group_held"]);
+      expect(lineWord(el, "line-asked")).toBe(es["pass.waiting_for_pass"]);
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
+  it.each([
+    { lang: "en", text: helpEn },
+    { lang: "es", text: helpEs },
+  ])(
+    "with help on, the first card's help is the owner's station-card text ($lang)",
+    async ({ lang, text }) => {
+      const previousLocale = currentLocale();
+      setLocale(lang);
+      try {
+        const { el } = await mountBoard(wordsScene(), APART);
+        setHelpMode(true);
+        await el.updateComplete;
+        const cards = [...shadow(el).querySelectorAll<HTMLElement>("[data-card]")];
+        const badge = cards[0]!.querySelector<HTMLElement>(":scope > wt-help-tooltip")!;
+        expect(badge.getAttribute("aria-label")).toBe(
+          helpBadgeLabel(helpText("help.kitchen.cards_part")),
+        );
+        expect(badge.textContent).toBe(text["help.kitchen.card"]);
+        if (lang === "en") {
+          expect(badge.textContent).toBe(
+            "Each card is an order from a table or the counter. Tap a dish to move it on a step, or the card's heading to move the whole card to the next column. On a Whole ticket card, the dishes move together. A dashed card is held: it hasn't been sent to cook yet. Cards turn amber, then red, the longer they wait.",
+          );
+        } else {
+          expect(badge.textContent).toBe(
+            "Cada tarjeta es un pedido de una mesa o del mostrador. Toca un plato para avanzarlo un paso, o la cabecera de la tarjeta para pasar toda la tarjeta a la siguiente columna. En una tarjeta de Toda la comanda, los platos avanzan juntos. Una tarjeta con borde discontinuo está en espera: aún no se ha mandado a preparar. Las tarjetas pasan a ámbar y luego a rojo cuanto más esperan.",
+          );
+        }
+      } finally {
+        setHelpMode(false);
+        setLocale(previousLocale);
+      }
+    },
+  );
+
+  const heldPart = (el: TillStationQueue) =>
+    column(el, "queued")!.querySelector<HTMLElement>("[data-held-part]");
+  const ALL_SIX = () => ({ order: [...STATION_COLUMNS.order], hidden: [], collapsed: [] });
+  const DEFAULT = () => ({
+    order: [...STATION_COLUMNS.order],
+    hidden: [...STATION_COLUMNS.hidden],
+    collapsed: [],
+  });
+  /** The 1024 px case's board: the station screen's padding inside the page's, 944 px wide. */
+  const atTablet = async (
+    groups: StationQueueGroup[],
+    columns: { order: ColumnKey[]; hidden: ColumnKey[]; collapsed: ColumnKey[] } = DEFAULT(),
+  ) => {
+    await pageAt(1024, 844);
+    const { el, host } = await mountBoard(groups, columns);
+    host.style.paddingInline = "var(--wt-space-4)";
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(el.getBoundingClientRect().width).toBe(944);
+    return el;
+  };
+  const tabbed = (el: TillStationQueue) => shadow(el).querySelector("[data-column-tabs]") !== null;
+
+  it("by default Waiting draws its cards with a released dish, then a Held part over the held cards, only while one is held", async () => {
+    const { el } = await mountBoard(scene());
+    const queued = column(el, "queued")!;
+    expect(heldPart(el)).not.toBeNull();
+    const part = heldPart(el)!;
+    expect(part.tagName).toBe("H3");
+    expect(flat(part)).toBe(`${t("pass.column.held")} · 2`);
+    const separator = [...part.querySelectorAll("span")].find((span) => span.textContent === " ·");
+    expect(separator?.getAttribute("aria-hidden")).toBe("true");
+    expect(part.querySelector("[data-held-count]")!.textContent).toBe("2");
+    const [three, one, two] = ["3", "1", "2"].map((order) =>
+      queued.querySelector<HTMLElement>(`[data-card][data-order="${order}"]`)!,
+    );
+    const follows = (a: Node, b: Node) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    expect(follows(three!, part)).toBe(true);
+    expect(follows(part, one!)).toBe(true);
+    expect(follows(one!, two!)).toBe(true);
+    expect(flat(queued.querySelector("[data-column-count]")!)).toBe("3");
+
+    el.groups = released();
+    await el.updateComplete;
+    expect(shadow(el).querySelector("[data-held-part]")).toBeNull();
+  });
+
+  it("draws the held part in the small, muted, uppercase words, spaced by the space tokens", async () => {
+    const { el } = await mountBoard(scene());
+    el.style.setProperty("--wt-font-size-sm", "13px");
+    el.style.setProperty("--wt-color-text-muted", "rgb(21, 22, 23)");
+    el.style.setProperty("--wt-font-weight-medium", "300");
+    el.style.setProperty("--wt-space-3", "17px");
+    el.style.setProperty("--wt-space-1", "5px");
+    const style = getComputedStyle(heldPart(el)!);
+    expect(parseFloat(style.fontSize)).toBe(
+      parseFloat(getComputedStyle(el).getPropertyValue("--wt-font-size-sm")),
+    );
+    expect(style.color).toBe("rgb(21, 22, 23)");
+    expect(style.fontWeight).toBe("300");
+    expect(style.textTransform).toBe("uppercase");
+    expect([style.marginTop, style.marginRight, style.marginBottom, style.marginLeft]).toEqual([
+      "17px",
+      "0px",
+      "5px",
+      "0px",
+    ]);
+  });
+
+  it("at a 1024 px tablet the default columns stay columns, held card or not; Waiting and Held apart turn it to tabs, held card or not", async () => {
+    const el = await atTablet(scene());
+    expect(shadow(el).querySelector(".kanban")).not.toBeNull();
+    expect(tabbed(el)).toBe(false);
+    expect(drawn(el)).toHaveLength(4);
+    el.groups = released();
+    await el.updateComplete;
+    expect(shadow(el).querySelector(".kanban")).not.toBeNull();
+    el.groups = scene();
+    await el.updateComplete;
+    expect(shadow(el).querySelector(".kanban")).not.toBeNull();
+    cleanupWidgets();
+
+    const apart = {
+      order: ["overview", "waitingOnly", "held", "preparing", "ready"] as ColumnKey[],
+      hidden: [],
+      collapsed: [],
+    };
+    const split = await atTablet(released(), apart);
+    expect(tabbed(split)).toBe(true);
+    split.groups = scene();
+    await split.updateComplete;
+    expect(tabbed(split)).toBe(true);
+  });
+
+  it("narrow tabs: Waiting's panel holds its cards with a released dish, the Held part and the held cards", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard(scene());
+    expect(flat(tab(el, "waiting")!)).toBe(`${t("station.state.queued")} · 3`);
+    await userEvent.click(tab(el, "waiting")!);
+    await el.updateComplete;
+    const panel = shadow(el).querySelector<HTMLElement>("[data-tab-panel]")!;
+    expect(panel.dataset.tabPanel).toBe("waiting");
+    expect(
+      [...panel.querySelectorAll<HTMLElement>("[data-card], [data-held-part]")].map(
+        (node) => node.dataset.order ?? "held-part",
+      ),
+    ).toEqual(["3", "held-part", "1", "2"]);
+  });
+
+  it("a collapsed Waiting draws neither its cards nor the Held part, and still counts every card", async () => {
+    const { el } = await mountBoard(scene(), { ...DEFAULT(), collapsed: ["waiting"] });
+    const queued = column(el, "queued")!;
+    expect(queued.querySelector("[data-held-part]")).toBeNull();
+    expect(queued.querySelector("[data-card]")).toBeNull();
+    expect(flat(queued.querySelector("[data-column-count]")!)).toBe("3");
+  });
+
+  it("in Spanish, the Held part and Waiting's title read the catalogue", async () => {
+    const previousLocale = currentLocale();
+    setLocale("es");
+    try {
+      const { el } = await mountBoard(scene());
+      expect(heldPart(el)).not.toBeNull();
+      expect(flat(heldPart(el)!)).toBe(`${es["pass.column.held"]} · 2`);
+      expect(column(el, "queued")!.querySelector(".column-title")!.textContent).toBe(
+        es["station.state.queued"],
+      );
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
+  it("the focus follows a focused heading when the columns shown turn the board to tabs and back", async () => {
+    const el = await atTablet(released());
+    shadow(el).querySelector<HTMLElement>('[data-column-toggle="waiting"]')!.focus();
+    el.columns = ALL_SIX();
+    await el.updateComplete;
+    expect(tabbed(el)).toBe(true);
+    expect(shadow(el).activeElement).toBe(tab(el, "waiting"));
+
+    el.columns = DEFAULT();
+    await el.updateComplete;
+    expect(tabbed(el)).toBe(false);
+    expect(shadow(el).activeElement).toBe(
+      shadow(el).querySelector('[data-column-toggle="waiting"]'),
+    );
+
+    el.columns = ALL_SIX();
+    await el.updateComplete;
+    tab(el, "held")!.focus();
+    el.columns = DEFAULT();
+    await el.updateComplete;
+    expect(shadow(el).querySelector('[data-column-toggle="held"]')).toBeNull();
+    expect(shadow(el).activeElement).toBe(
+      shadow(el).querySelector('[data-column-toggle="overview"]'),
+    );
+  });
+
+  it("the late bar: a separate Held's tab never carries it, however long its card has waited", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard(
+      [ageBill(5, [ageDish("held-dish", 0, { firedAt: null })])],
+      APART,
+    );
+    expect(tab(el, "held")).not.toBeNull();
+    expect(tab(el, "held")!.hasAttribute("data-late")).toBe(false);
+  });
+
+  // Owner question 6 (a): each column draws what its name says, whatever else is shown.
+  it("overlapping columns each draw their own cards, and with neither held column shown held cards are drawn nowhere but counted in Overview", async () => {
+    // Six columns need more than a 1280 px board; this case is about what each draws, not the fit.
+    await pageAt(1600, 900);
+    const { el } = await mountBoard(scene(), ALL_SIX());
+    expect(tabbed(el)).toBe(false);
+    expect(ordersIn(el, "queued")).toEqual(["3", "1", "2"]);
+    expect(heldPart(el)).not.toBeNull();
+    expect(ordersIn(el, "held")).toEqual(["1", "2"]);
+    expect(ordersIn(el, "waiting-only")).toEqual(["3"]);
+    cleanupWidgets();
+
+    const neither = await mountBoard(scene(), {
+      order: ["overview", "waitingOnly", "preparing", "ready"],
+      hidden: [],
+      collapsed: [],
+    });
+    expect(drawn(neither.el)).toEqual(["overview", "waiting-only", "preparing", "ready"]);
+    expect(shadow(neither.el).querySelector('[data-card][data-order="1"]')).toBeNull();
+    expect(shadow(neither.el).querySelector('[data-card][data-order="2"]')).toBeNull();
+    expect(ordersIn(neither.el, "waiting-only")).toEqual(["3"]);
+    const held = shadow(neither.el).querySelector("[data-overview-row] [data-overview-held]");
+    expect(held?.textContent?.trim()).toBe("+3");
   });
 });

@@ -15,6 +15,7 @@ import {
 } from "./kitchen-cards.js";
 import { overviewRows } from "./kitchen-overview.js";
 import { allergyBlock } from "../../test/kitchen-allergy-fixtures.js";
+import { withKitchenStamps } from "../../test/kitchen-stamps.js";
 
 const THRESHOLDS: StationThresholds = {
   warmAfterMinutes: 5,
@@ -33,7 +34,7 @@ function dish(
   time: string,
   overrides: Partial<StationQueueItem> = {},
 ): StationQueueItem {
-  return {
+  return withKitchenStamps({
     allergy: null,
     id,
     workingOrderLineId: `line-${id}`,
@@ -44,7 +45,7 @@ function dish(
     firedAt: at(time),
     queuedAt: at(time),
     ...overrides,
-  };
+  });
 }
 
 function held(

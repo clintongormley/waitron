@@ -5,6 +5,7 @@ import {
   cleanupWidgets,
   expectNoA11yViolations,
   mountWidget,
+  pageAt,
   resetPage,
 } from "./test-helpers.js";
 import { type ColumnState, PASS_COLUMNS } from "../state/kitchen-columns.js";
@@ -104,7 +105,11 @@ const board = passBoard({
   overview,
 });
 
-const allShown: ColumnState = { order: PASS_COLUMNS.order, hidden: [], collapsed: [] };
+const withOverview: ColumnState = {
+  order: [...PASS_COLUMNS.order],
+  hidden: ["held", "toFireOnly"],
+  collapsed: [],
+};
 
 async function mountBoard(theme: Theme, columns: ColumnState) {
   const { el, host } = await mountWidget<TillPassBoard>(
@@ -145,7 +150,7 @@ describe("A773 pass board widget: accessibility", () => {
       it(`has no axe violations ${layout} in the ${theme} theme, Overview shown`, async () => {
         await page.viewport(width, 900);
         expect(window.innerWidth).toBe(width);
-        const { el, host } = await mountBoard(theme, allShown);
+        const { el, host } = await mountBoard(theme, withOverview);
         expect(el.shadowRoot!.querySelector("[data-overview]")).not.toBeNull();
         expect(el.shadowRoot!.querySelector("[data-dimmed]")).not.toBeNull();
         if (layout === "wide") expectSideBySide(el);
@@ -153,9 +158,24 @@ describe("A773 pass board widget: accessibility", () => {
       });
     }
 
+    for (const [width, height] of [
+      [1024, 768],
+      [390, 844],
+    ] as const) {
+      it(`has no axe violations at ${width} × ${height} in the ${theme} theme, the default layout drawing the held part`, async () => {
+        await pageAt(width, height);
+        const { el, host } = await mountBoard(theme, PASS_COLUMNS);
+        expect(
+          el.shadowRoot!.querySelector('[data-column="toFire"] [data-held-part]'),
+        ).not.toBeNull();
+        expect(el.shadowRoot!.querySelector(width === 1024 ? ".kanban" : ".list")).not.toBeNull();
+        await expectNoA11yViolations(host);
+      });
+    }
+
     it(`has no axe violations with a collapsed column in the ${theme} theme`, async () => {
       await page.viewport(1280, 900);
-      const { el, host } = await mountBoard(theme, { ...allShown, collapsed: ["toFire"] });
+      const { el, host } = await mountBoard(theme, { ...withOverview, collapsed: ["toFire"] });
       expectSideBySide(el);
       expect(
         el

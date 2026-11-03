@@ -21,6 +21,7 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
 import {
   addProfileKitchenScreen,
+  copyProfileKitchenScreens,
   assertDeviceKitchenScreens,
   assertKitchenDisplayHasScreen,
   assertPassScreenZone,
@@ -31,6 +32,7 @@ import {
   readProfileKitchenScreens,
   readStationScreens,
   removeDeviceKitchenScreens,
+  setDeviceKitchenScreenDisplay,
   setDeviceKitchenScreens,
   setProfileKitchenScreens,
 } from "./kitchen-screens.js";
@@ -41,6 +43,7 @@ import {
   deviceProfileKitchenScreenStations,
   deviceProfileKitchenScreenZones,
   deviceKitchenScreenZones,
+  deviceKitchenScreenStations,
 } from "./schema/kitchen-screens.js";
 
 const suite = useVenueDb({
@@ -163,8 +166,16 @@ describe("a profile's kitchen screens", () => {
     ).resolves.toEqual([]);
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
       station: { stationIds: [venue.cold, venue.grill], zoneIds: null },
-      pass: { stationIds: null, zoneIds: [venue.terrace, venue.counter] },
-      pass_monitor: { stationIds: [venue.cold, venue.pastry], zoneIds: null },
+      pass: {
+        stationIds: null,
+        zoneIds: [venue.terrace, venue.counter],
+        showNonPassStations: true,
+      },
+      pass_monitor: {
+        stationIds: [venue.cold, venue.pastry],
+        zoneIds: null,
+        showNonPassStations: true,
+      },
     });
     expect(
       await db
@@ -182,7 +193,7 @@ describe("a profile's kitchen screens", () => {
     });
     await expect(screensOf(venue, venue.till)).resolves.toEqual({
       station: { stationIds: null, zoneIds: null },
-      pass: { stationIds: [venue.grill], zoneIds: [venue.dining] },
+      pass: { stationIds: [venue.grill], zoneIds: [venue.dining], showNonPassStations: true },
     });
   });
 
@@ -212,7 +223,7 @@ describe("a profile's kitchen screens", () => {
       .where(eq(kitchenStations.id, venue.cold));
     await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, venue.terrace));
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.grill], zoneIds: [venue.dining] },
+      pass: { stationIds: [venue.grill], zoneIds: [venue.dining], showNonPassStations: true },
     });
   });
 
@@ -240,7 +251,11 @@ describe("a profile's kitchen screens", () => {
         }),
       ).resolves.toEqual([]);
       await expect(screensOf(venue, profileId)).resolves.toEqual({
-        pass_monitor: { stationIds: [venue.grill, venue.pastry], zoneIds: [venue.counter] },
+        pass_monitor: {
+          stationIds: [venue.grill, venue.pastry],
+          zoneIds: [venue.counter],
+          showNonPassStations: true,
+        },
       });
     }
   });
@@ -319,7 +334,7 @@ describe("a profile's kitchen screens", () => {
       ),
     ).resolves.toEqual(refused("passScreenZones", "not_found"));
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.cold], zoneIds: [] },
+      pass: { stationIds: [venue.cold], zoneIds: [], showNonPassStations: true },
     });
     await expect(
       outcome(
@@ -373,9 +388,13 @@ describe("a profile whose form factor changes", () => {
       .update(deviceProfiles)
       .set({ formFactor: "till" })
       .where(eq(deviceProfiles.id, venue.kds));
-    await expect(screensOf(venue, venue.kds)).resolves.toEqual(screens);
+    const read = {
+      ...screens,
+      pass_monitor: { ...screens.pass_monitor, showNonPassStations: true },
+    };
+    await expect(screensOf(venue, venue.kds)).resolves.toEqual(read);
     await expect(outcome(set(venue, venue.kds, screens))).resolves.toEqual({ resolved: [] });
-    await expect(screensOf(venue, venue.kds)).resolves.toEqual(screens);
+    await expect(screensOf(venue, venue.kds)).resolves.toEqual(read);
   });
 });
 
@@ -396,7 +415,7 @@ describe("a kitchen screen added to a profile", () => {
     });
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
       station: { stationIds: [venue.grill], zoneIds: null },
-      pass: { stationIds: null, zoneIds: [venue.dining] },
+      pass: { stationIds: null, zoneIds: [venue.dining], showNonPassStations: true },
     });
   });
 
@@ -411,7 +430,11 @@ describe("a kitchen screen added to a profile", () => {
       zoneIds: [venue.terrace],
     });
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.cold, venue.grill], zoneIds: [venue.terrace, venue.dining] },
+      pass: {
+        stationIds: [venue.cold, venue.grill],
+        zoneIds: [venue.terrace, venue.dining],
+        showNonPassStations: true,
+      },
     });
   });
 
@@ -422,7 +445,7 @@ describe("a kitchen screen added to a profile", () => {
     });
     await add(venue, venue.kds, { kind: "pass", stationIds: null, zoneIds: null });
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: null, zoneIds: null },
+      pass: { stationIds: null, zoneIds: null, showNonPassStations: true },
     });
   });
 
@@ -435,7 +458,7 @@ describe("a kitchen screen added to a profile", () => {
     await add(venue, venue.kds, { kind: "station", stationIds: [venue.cold], zoneIds: null });
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
       station: { stationIds: null, zoneIds: null },
-      pass_monitor: { stationIds: [venue.grill], zoneIds: null },
+      pass_monitor: { stationIds: [venue.grill], zoneIds: null, showNonPassStations: true },
     });
     expect(
       await db
@@ -560,6 +583,8 @@ describe("the kitchen screens a device chooses", () => {
           everyStation: false,
           everyZone: false,
           profileEveryStation: false,
+          showNonPassStations: true,
+          nonPassStationsOverride: null,
           stations: [{ id: venue.grill, name: "Grill", available: true, switchedOff: false }],
           zones: [{ id: venue.terrace, name: "Terrace", available: true, switchedOff: false }],
         },
@@ -759,6 +784,8 @@ describe("the kitchen screens a device chooses", () => {
         everyStation: false,
         everyZone: true,
         profileEveryStation: true,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [{ id: venue.cold, name: "Cold", available: true, switchedOff: false }],
         zones: null,
       },
@@ -857,6 +884,8 @@ describe("what a device's kitchen screens show", () => {
         everyStation: true,
         everyZone: true,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [
           slot(venue.cold, "Cold"),
           slot(venue.grill, "Grill", false),
@@ -882,6 +911,8 @@ describe("what a device's kitchen screens show", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: true,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [
           slot(venue.cold, "Cold"),
           slot(venue.grill, "Grill", false),
@@ -910,6 +941,8 @@ describe("what a device's kitchen screens show", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: true,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.grill, "Grill")],
         zones: [],
       },
@@ -922,6 +955,8 @@ describe("what a device's kitchen screens show", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: true,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.cold, "Cold"), slot(venue.grill, "Grill")],
         zones: [slot(venue.dining, "Dining room")],
       },
@@ -957,6 +992,8 @@ describe("what a device's kitchen screens show", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: true,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.grill, "Grill", false)],
         zones: [slot(venue.terrace, "Terrace", false)],
       },
@@ -982,6 +1019,8 @@ describe("what a device's kitchen screens show", () => {
         everyStation: true,
         everyZone: true,
         profileEveryStation: true,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations,
         zones: null,
       },
@@ -991,6 +1030,8 @@ describe("what a device's kitchen screens show", () => {
         everyStation: true,
         everyZone: true,
         profileEveryStation: true,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations,
         zones: null,
       },
@@ -1012,6 +1053,8 @@ describe("what a device's kitchen screens show", () => {
         everyStation: true,
         everyZone: true,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.grill, "Grill")],
         zones: [slot(venue.dining, "Dining room"), slot(venue.counter, "Counter", false)],
       },
@@ -1035,6 +1078,8 @@ describe("what a device's kitchen screens show", () => {
         everyStation: false,
         everyZone: true,
         profileEveryStation: true,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.grill, "Grill")],
         zones: null,
       },
@@ -1044,6 +1089,8 @@ describe("what a device's kitchen screens show", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.cold, "Cold", false)],
         zones: null,
       },
@@ -1055,6 +1102,8 @@ describe("what a device's kitchen screens show", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.grill, "Grill", false)],
         zones: null,
       },
@@ -1072,6 +1121,8 @@ describe("what a device's kitchen screens show", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [],
         zones: [slot(venue.counter, "Counter", false)],
       },
@@ -1275,6 +1326,8 @@ describe("what the read says is every", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [],
         zones: null,
       },
@@ -1434,6 +1487,8 @@ describe("a profile save narrowing its devices", () => {
         everyStation: false,
         everyZone: true,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.grill, "Grill"), slot(venue.pastry, "Pastry", false)],
         zones: null,
       },
@@ -1445,6 +1500,8 @@ describe("a profile save narrowing its devices", () => {
         everyStation: true,
         everyZone: true,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [
           slot(venue.cold, "Cold"),
           slot(venue.grill, "Grill"),
@@ -1534,6 +1591,8 @@ describe("a profile save narrowing its devices", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.pastry, "Pastry", false)],
         zones: null,
       },
@@ -1580,6 +1639,8 @@ describe("a profile save narrowing its devices", () => {
         everyStation: false,
         everyZone: true,
         profileEveryStation: true,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.cold, "Cold")],
         zones: null,
       },
@@ -1589,6 +1650,8 @@ describe("a profile save narrowing its devices", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: true,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.grill, "Grill")],
         zones: [slot(venue.terrace, "Terrace", false), slot(venue.dining, "Dining room")],
       },
@@ -1617,6 +1680,8 @@ describe("a profile save narrowing its devices", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [],
         zones: [slot(venue.counter, "Counter", false)],
       },
@@ -1641,6 +1706,8 @@ describe("a profile save narrowing its devices", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [],
         zones: null,
       },
@@ -1668,6 +1735,8 @@ describe("a profile save narrowing its devices", () => {
         everyStation: false,
         everyZone: true,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.grill, "Grill"), slot(venue.pastry, "Pastry")],
         zones: null,
       },
@@ -1704,6 +1773,8 @@ describe("a profile save narrowing its devices", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: true,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.grill, "Grill")],
         zones: [slot(venue.terrace, "Terrace")],
       },
@@ -1743,6 +1814,8 @@ describe("a profile save narrowing its devices", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [slot(venue.cold, "Cold"), slot(venue.grill, "Grill", false)],
         zones: [slot(venue.terrace, "Terrace")],
       },
@@ -1885,6 +1958,8 @@ describe("a device narrowed against another profile", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [],
         zones: null,
       },
@@ -2077,7 +2152,7 @@ describe("deleted zone bounds", () => {
       set(venue, venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [] } }),
     ).resolves.toEqual([]);
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.grill], zoneIds: [] },
+      pass: { stationIds: [venue.grill], zoneIds: [], showNonPassStations: true },
     });
     const [parent] = await db
       .select()
@@ -2138,6 +2213,8 @@ describe("deleted zone bounds", () => {
         everyStation: true,
         everyZone: true,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [{ id: venue.grill, name: "Grill", available: true, switchedOff: false }],
         zones: [],
       },
@@ -2162,4 +2239,411 @@ it("A725 profile and device station choices use names and preserve removed slots
   const rows = (await shown(v, device))[0]!.stations;
   expect(rows.map(({ id }) => id)).toEqual([v.cold, v.grill, v.pastry]);
   expect(rows.map(({ available }) => available)).toEqual([true, true, false]);
+});
+
+describe("A773 pass display policy", () => {
+  const passes = (venue: Venue) => ({
+    pass: { stationIds: [venue.grill, venue.cold], zoneIds: null },
+    pass_monitor: every,
+  });
+
+  const deviceValues = async (deviceId: string) =>
+    Object.fromEntries(
+      (
+        await db
+          .select({
+            screen: deviceKitchenScreens.screen,
+            value: deviceKitchenScreens.showNonPassStations,
+          })
+          .from(deviceKitchenScreens)
+          .where(eq(deviceKitchenScreens.deviceId, deviceId))
+      ).map((row) => [row.screen, row.value]),
+    );
+
+  const storeDeviceValue = (deviceId: string, kind: DeviceKitchenScreen["kind"], value: boolean) =>
+    db
+      .update(deviceKitchenScreens)
+      .set({ showNonPassStations: value })
+      .where(
+        sql`${deviceKitchenScreens.deviceId} = ${deviceId} and ${deviceKitchenScreens.screen} = ${kind}`,
+      );
+
+  it("reads a new profile's pass entry as showing other stations, and reads back a saved false", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, { pass: every });
+    expect((await screensOf(venue, venue.kds))!.pass).toEqual({
+      ...every,
+      showNonPassStations: true,
+    });
+    await set(venue, venue.kds, { pass: { ...every, showNonPassStations: false } });
+    expect((await screensOf(venue, venue.kds))!.pass).toEqual({
+      ...every,
+      showNonPassStations: false,
+    });
+  });
+
+  it("keeps each kind's stored value when a save omits it, and starts an added kind true", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, {
+      pass: { ...every, showNonPassStations: false },
+      pass_monitor: { ...every, showNonPassStations: true },
+    });
+    await set(venue, venue.kds, {
+      pass: { stationIds: [venue.grill], zoneIds: null },
+      pass_monitor: { stationIds: [venue.cold], zoneIds: null },
+    });
+    await expect(screensOf(venue, venue.kds)).resolves.toEqual({
+      pass: { stationIds: [venue.grill], zoneIds: null, showNonPassStations: false },
+      pass_monitor: { stationIds: [venue.cold], zoneIds: null, showNonPassStations: true },
+    });
+
+    await set(venue, venue.till, { pass: { ...every, showNonPassStations: false } });
+    await set(venue, venue.till, { pass: every, pass_monitor: every });
+    await expect(screensOf(venue, venue.till)).resolves.toEqual({
+      pass: { ...every, showNonPassStations: false },
+      pass_monitor: { ...every, showNonPassStations: true },
+    });
+  });
+
+  it("copies each kind's value to the copy", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, {
+      station: every,
+      pass: { ...every, showNonPassStations: true },
+      pass_monitor: { ...every, showNonPassStations: false },
+    });
+    const copy = await seedProfile("kds");
+    await scoped((tx) => copyProfileKitchenScreens(tx, venue.cfg, venue.kds, copy));
+    await expect(screensOf(venue, copy)).resolves.toEqual({
+      station: every,
+      pass: { ...every, showNonPassStations: true },
+      pass_monitor: { ...every, showNonPassStations: false },
+    });
+  });
+
+  it("keeps a device's stored value for each kind a new pick keeps, and starts a re-added kind null", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.till, { station: every, ...passes(venue) });
+    const till = await seedDevice(venue.till, "Till");
+    await choose(venue, till, venue.till, [
+      { kind: "station", ...every },
+      { kind: "pass", ...every },
+    ]);
+    await storeDeviceValue(till, "station", true);
+    await storeDeviceValue(till, "pass", false);
+    const other = await seedDevice(venue.till, "Other till");
+    await choose(venue, other, venue.till, [
+      { kind: "station", ...every },
+      { kind: "pass", ...every },
+    ]);
+    await storeDeviceValue(other, "station", false);
+    await storeDeviceValue(other, "pass", true);
+
+    await choose(venue, till, venue.till, [
+      { kind: "station", stationIds: [venue.grill], zoneIds: null },
+      { kind: "pass", stationIds: [venue.cold], zoneIds: null },
+    ]);
+    await expect(deviceValues(till)).resolves.toEqual({ station: true, pass: false });
+    await choose(venue, other, venue.till, [
+      { kind: "station", stationIds: [venue.cold], zoneIds: null },
+      { kind: "pass", stationIds: [venue.grill], zoneIds: null },
+    ]);
+    await expect(deviceValues(other)).resolves.toEqual({ station: false, pass: true });
+
+    await choose(venue, till, venue.till, [{ kind: "station", ...every }]);
+    await choose(venue, till, venue.till, [
+      { kind: "station", ...every },
+      { kind: "pass", ...every },
+    ]);
+    await expect(deviceValues(till)).resolves.toEqual({ station: true, pass: null });
+
+    await storeDeviceValue(till, "pass", false);
+    await set(venue, venue.till, {
+      station: every,
+      pass: { ...passes(venue).pass, showNonPassStations: true },
+      pass_monitor: { ...every, showNonPassStations: true },
+    });
+    await expect(deviceValues(till)).resolves.toEqual({ station: true, pass: false });
+  });
+
+  it("leaves a narrowed device's stored value alone and records no removal for it", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, { pass: { stationIds: [venue.grill, venue.cold], zoneIds: null } });
+    const pass = await seedDevice(venue.kds, "Pass");
+    await choose(venue, pass, venue.kds, [
+      { kind: "pass", stationIds: [venue.grill, venue.cold], zoneIds: null },
+    ]);
+    await storeDeviceValue(pass, "pass", false);
+
+    await expect(
+      set(venue, venue.kds, {
+        pass: { stationIds: [venue.grill], zoneIds: null, showNonPassStations: true },
+      }),
+    ).resolves.toEqual([
+      {
+        deviceId: pass,
+        deviceName: "Pass",
+        lost: { screens: [], stations: [{ id: venue.cold, name: "Cold" }], zones: [] },
+      },
+    ]);
+    await expect(deviceValues(pass)).resolves.toEqual({ pass: false });
+    expect(
+      (await removalsOf(pass)).map(({ screen, stationId, zoneId }) => ({
+        screen,
+        stationId,
+        zoneId,
+      })),
+    ).toEqual([{ screen: "pass", stationId: venue.cold, zoneId: null }]);
+
+    await expect(
+      set(venue, venue.kds, {
+        pass: { stationIds: [venue.grill], zoneIds: null, showNonPassStations: false },
+      }),
+    ).resolves.toEqual([]);
+    expect(await removalsOf(pass)).toHaveLength(1);
+  });
+
+  it("stores the profile's value in its column, and reads a row inserted without it as true", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, { pass: { ...every, showNonPassStations: false } });
+    const exported = await db.all<Record<string, unknown>>(
+      sql`select * from device_profile_kitchen_screens where device_profile_id = ${venue.kds}`,
+    );
+    expect(exported).toEqual([expect.objectContaining({ show_non_pass_stations: 0 })]);
+
+    await db.run(sql`
+      insert into device_profile_kitchen_screens (device_profile_id, screen, every_station, every_zone)
+      values (${venue.till}, 'pass', 1, 1)
+    `);
+    expect((await screensOf(venue, venue.till))!.pass).toEqual({
+      ...every,
+      showNonPassStations: true,
+    });
+  });
+
+  it("puts the key on a profile's pass and pass-monitor entries and never on its station entry", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, { station: every, pass: every, pass_monitor: every });
+    const screens = (await screensOf(venue, venue.kds))!;
+    expect(screens.station).not.toHaveProperty("showNonPassStations");
+    expect(screens.pass).toHaveProperty("showNonPassStations", true);
+    expect(screens.pass_monitor).toHaveProperty("showNonPassStations", true);
+  });
+
+  const displayOf = async (venue: Venue, deviceId: string, kind: DeviceKitchenScreen["kind"]) => {
+    const screen = (await scoped((tx) => readDeviceKitchenScreens(tx, venue.cfg, deviceId))).find(
+      (entry) => entry.kind === kind,
+    )!;
+    return {
+      showNonPassStations: screen.showNonPassStations,
+      nonPassStationsOverride: screen.nonPassStationsOverride,
+    };
+  };
+
+  it("resolves a device's choice from its own stored value, else its profile's row", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, { pass: { ...every, showNonPassStations: false } });
+    const pass = await seedDevice(venue.kds, "Pass");
+    await choose(venue, pass, venue.kds, [{ kind: "pass", ...every }]);
+    await expect(displayOf(venue, pass, "pass")).resolves.toEqual({
+      showNonPassStations: false,
+      nonPassStationsOverride: null,
+    });
+
+    await storeDeviceValue(pass, "pass", true);
+    await expect(displayOf(venue, pass, "pass")).resolves.toEqual({
+      showNonPassStations: true,
+      nonPassStationsOverride: true,
+    });
+
+    await set(venue, venue.kds, { pass: { ...every, showNonPassStations: true } });
+    await storeDeviceValue(pass, "pass", false);
+    await expect(displayOf(venue, pass, "pass")).resolves.toEqual({
+      showNonPassStations: false,
+      nonPassStationsOverride: false,
+    });
+  });
+
+  it("carries a later profile change to a device with no stored value only", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, { pass_monitor: every });
+    const following = await seedDevice(venue.kds, "Following");
+    const own = await seedDevice(venue.kds, "Own");
+    for (const device of [following, own]) {
+      await choose(venue, device, venue.kds, [{ kind: "pass_monitor", ...every }]);
+    }
+    await storeDeviceValue(own, "pass_monitor", true);
+
+    await set(venue, venue.kds, { pass_monitor: { ...every, showNonPassStations: false } });
+    await expect(displayOf(venue, following, "pass_monitor")).resolves.toEqual({
+      showNonPassStations: false,
+      nonPassStationsOverride: null,
+    });
+    await expect(displayOf(venue, own, "pass_monitor")).resolves.toEqual({
+      showNonPassStations: true,
+      nonPassStationsOverride: true,
+    });
+  });
+
+  it("reads true and null for a till's pass under a profile with no pass row", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.till, { station: every });
+    const till = await seedDevice(venue.till, "Till");
+    await choose(venue, till, venue.till, [{ kind: "pass", ...every }]);
+    await expect(displayOf(venue, till, "pass")).resolves.toEqual({
+      showNonPassStations: true,
+      nonPassStationsOverride: null,
+    });
+  });
+
+  it("reads the profile's value and null for a kind a narrowing took, whatever the device stored", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, {
+      pass: { stationIds: [venue.grill, venue.cold], zoneIds: null, showNonPassStations: false },
+    });
+    const pass = await seedDevice(venue.kds, "Pass");
+    await choose(venue, pass, venue.kds, [
+      { kind: "pass", stationIds: [venue.cold], zoneIds: null },
+    ]);
+    await storeDeviceValue(pass, "pass", true);
+    await set(venue, venue.kds, { pass: { stationIds: [venue.grill], zoneIds: null } });
+
+    await expect(displayOf(venue, pass, "pass")).resolves.toEqual({
+      showNonPassStations: false,
+      nonPassStationsOverride: null,
+    });
+  });
+
+  it("keeps a device's own choice through a narrowing that takes only some of its stations", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, {
+      pass: { stationIds: [venue.grill, venue.cold], zoneIds: null, showNonPassStations: true },
+    });
+    const pass = await seedDevice(venue.kds, "Pass");
+    await choose(venue, pass, venue.kds, [
+      { kind: "pass", stationIds: [venue.grill, venue.cold], zoneIds: null },
+    ]);
+    await storeDeviceValue(pass, "pass", false);
+    await set(venue, venue.kds, { pass: { stationIds: [venue.grill], zoneIds: null } });
+
+    expect(await removalsOf(pass)).toHaveLength(1);
+    await expect(displayOf(venue, pass, "pass")).resolves.toEqual({
+      showNonPassStations: false,
+      nonPassStationsOverride: false,
+    });
+  });
+
+  it("sets and clears a device's own choice through the seat, touching no scope or removal", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, passes(venue));
+    const pass = await seedDevice(venue.kds, "Pass");
+    const monitor = await seedDevice(venue.kds, "Monitor");
+    const other = await seedDevice(venue.kds, "Other pass");
+    await choose(venue, pass, venue.kds, [
+      { kind: "pass", stationIds: [venue.grill, venue.cold], zoneIds: null },
+    ]);
+    await choose(venue, monitor, venue.kds, [{ kind: "pass_monitor", ...every }]);
+    await choose(venue, other, venue.kds, [
+      { kind: "pass", stationIds: [venue.grill], zoneIds: null },
+    ]);
+    await recordRemoval(pass, "pass", { stationId: venue.cold });
+    const scopes = async () => ({
+      screens: await db
+        .select({
+          deviceId: deviceKitchenScreens.deviceId,
+          screen: deviceKitchenScreens.screen,
+          everyStation: deviceKitchenScreens.everyStation,
+          everyZone: deviceKitchenScreens.everyZone,
+        })
+        .from(deviceKitchenScreens),
+      stations: await db.select().from(deviceKitchenScreenStations),
+      zones: await db.select().from(deviceKitchenScreenZones),
+      removals: await db.select().from(deviceKitchenScreenRemovals),
+    });
+    const before = await scopes();
+    const display = (deviceId: string, kind: "pass" | "pass_monitor", value: boolean | null) =>
+      scoped((tx) => setDeviceKitchenScreenDisplay(tx, deviceId, kind, value));
+
+    await display(pass, "pass", false);
+    await display(monitor, "pass_monitor", true);
+    await expect(deviceValues(pass)).resolves.toEqual({ pass: false });
+    await expect(deviceValues(monitor)).resolves.toEqual({ pass_monitor: true });
+    await expect(deviceValues(other)).resolves.toEqual({ pass: null });
+    await display(pass, "pass", null);
+    await display(monitor, "pass_monitor", false);
+    await expect(deviceValues(pass)).resolves.toEqual({ pass: null });
+    await expect(deviceValues(monitor)).resolves.toEqual({ pass_monitor: false });
+    await expect(scopes()).resolves.toEqual(before);
+
+    await expect(outcome(display(pass, "pass_monitor", true))).resolves.toEqual({
+      code: "device.unauthorized",
+      params: {},
+    });
+    await expect(deviceValues(pass)).resolves.toEqual({ pass: null });
+    await expect(deviceValues(monitor)).resolves.toEqual({ pass_monitor: false });
+  });
+
+  it("refuses through the seat a kind a narrowing took, whole or all its stations, keeping the stored value", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, passes(venue));
+    const whole = await seedDevice(venue.kds, "Taken whole");
+    const emptied = await seedDevice(venue.kds, "Emptied");
+    const partial = await seedDevice(venue.kds, "Partly narrowed");
+    for (const device of [whole, emptied, partial])
+      await choose(venue, device, venue.kds, [
+        { kind: "pass", stationIds: [venue.grill, venue.cold], zoneIds: null },
+      ]);
+    for (const device of [whole, emptied, partial]) await storeDeviceValue(device, "pass", false);
+    await recordRemoval(whole, "pass");
+    await recordRemoval(emptied, "pass", { stationId: venue.grill });
+    await recordRemoval(emptied, "pass", { stationId: venue.cold });
+    await recordRemoval(partial, "pass", { stationId: venue.cold });
+    const display = (deviceId: string, value: boolean | null) =>
+      scoped((tx) => setDeviceKitchenScreenDisplay(tx, deviceId, "pass", value));
+
+    for (const device of [whole, emptied]) {
+      await expect(outcome(display(device, true))).resolves.toEqual({
+        code: "device.unauthorized",
+        params: {},
+      });
+      await expect(deviceValues(device)).resolves.toEqual({ pass: false });
+    }
+    await display(partial, true);
+    await expect(deviceValues(partial)).resolves.toEqual({ pass: true });
+  });
+
+  it("refuses through the seat a station screen's value, writing nothing", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, { station: every });
+    const line = await seedDevice(venue.kds, "Line");
+    await choose(venue, line, venue.kds, [{ kind: "station", ...every }]);
+    await expect(
+      outcome(scoped((tx) => setDeviceKitchenScreenDisplay(tx, line, "station" as never, false))),
+    ).resolves.toEqual({ code: "device.unauthorized", params: {} });
+    await expect(deviceValues(line)).resolves.toEqual({ station: null });
+  });
+
+  it("writes only the kind it names on a device holding a station screen and a pass", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.till, { station: every, pass: every });
+    const till = await seedDevice(venue.till, "Till");
+    await choose(venue, till, venue.till, [
+      { kind: "station", ...every },
+      { kind: "pass", ...every },
+    ]);
+    await scoped((tx) => setDeviceKitchenScreenDisplay(tx, till, "pass", false));
+    await expect(deviceValues(till)).resolves.toEqual({ station: null, pass: false });
+  });
+
+  it("reads true and null for a station screen", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, { station: every });
+    const line = await seedDevice(venue.kds, "Line");
+    await choose(venue, line, venue.kds, [{ kind: "station", ...every }]);
+    await storeDeviceValue(line, "station", false);
+    await expect(displayOf(venue, line, "station")).resolves.toEqual({
+      showNonPassStations: true,
+      nonPassStationsOverride: null,
+    });
+  });
 });

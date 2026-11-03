@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CurrentOrderRow, TabLine } from "../api/client.js";
 import type { SentSlice } from "./sent-panel.js";
 import { portionGroups, sentSlicePortionKey, tabLinePortionKey } from "./portion-groups.js";
+import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
 
 function line(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine {
   return {
@@ -171,7 +172,7 @@ describe("A803 portion grouping: bill lines", () => {
 
 describe("A803 portion grouping: Sent panel rows", () => {
   function row(id: string, lineNo: number, over: Partial<CurrentOrderRow> = {}): CurrentOrderRow {
-    return {
+    return withRowRequestedAt({
       billStatus: "open",
       netAmount: "9.50",
       readyAt: null,
@@ -191,11 +192,13 @@ describe("A803 portion grouping: Sent panel rows", () => {
         firedAt: "2026-10-28T12:00:00.000Z",
         stationId: "grill",
         movable: true,
+        phase: "waiting",
+        requestedAt: "2026-10-28T12:00:00.000Z",
       },
       note: null,
       extras: [],
       ...over,
-    };
+    });
   }
   const slice = (of: CurrentOrderRow, over: Partial<Omit<SentSlice, "row">> = {}): SentSlice => ({
     row: of,

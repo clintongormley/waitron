@@ -4,6 +4,7 @@ import { setHelpMode } from "@waitron/ui";
 import type { WtHelpTooltip } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import type { KitchenNotice, StationQueueGroup } from "../api/client.js";
+import { kitchenStamps } from "../../test/kitchen-stamps.js";
 import { helpBadgeLabel, helpText } from "../i18n/help-strings.js";
 import {
   cleanupWidgets,
@@ -32,6 +33,7 @@ const dish = (id: string, state: "queued" | "preparing", name: string) => ({
   course: null,
   firedAt: SENT,
   queuedAt: SENT,
+  ...kitchenStamps({ state, firedAt: SENT }),
 });
 
 const groups: StationQueueGroup[] = [

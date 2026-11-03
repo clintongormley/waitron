@@ -125,3 +125,110 @@ it("does not mistake an unrelated 1811 refusal for an expected alert constraint"
     await suite.db.execute(sql`drop trigger refuse_station_alert`);
   }
 });
+
+it("records the waiting-for-the-pass alert under its own code, without the order's label", async () => {
+  const venue = await setupPartyVenue(suite.db);
+  const station = await inTx(venue, (tx) =>
+    createStation(tx, venue.cfg, { name: "Fryer", isDefault: true }),
+  );
+  const tableId = await venue.table(`A-${randomUUID().slice(0, 8)}`);
+  const { partyId, tabId } = await seat(venue, tableId);
+  await orderForParty(venue, partyId, ["Burger"], tabId);
+  const [line] = await inTx(venue, (tx) =>
+    tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId)),
+  );
+  const [order] = await inTx(venue, (tx) =>
+    tx
+      .select({ number: workingOrders.orderNumber })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, tabId)),
+  );
+  const at = new Date("2026-10-02T18:45:00.000Z");
+  await inTx(venue, (tx) =>
+    raiseReleasedAtClosedStation(
+      tx,
+      venue.cfg,
+      tabId,
+      at,
+      [],
+      [{ stationId: station.id, stationName: "Fryer", lineIds: [line!.id] }],
+    ),
+  );
+  const alerts = await inTx(venue, (tx) =>
+    tx
+      .select()
+      .from(incidents)
+      .then((rows) => rows.filter((row) => row.params.workingOrderId === tabId)),
+  );
+  expect(alerts).toHaveLength(1);
+  expect(alerts[0]).toMatchObject({
+    code: "route.waiting_at_closed_station",
+    severity: "error",
+    detectedAt: at.toISOString(),
+  });
+  expect(alerts[0]!.params).toEqual({
+    station: "Fryer",
+    dishes: "Burger",
+    workingOrderId: tabId,
+    orderNumber: order!.number,
+  });
+});
+
+it("raises both alerts from one call, each naming only its own stations and dishes", async () => {
+  const venue = await setupPartyVenue(suite.db);
+  const bar = await inTx(venue, (tx) =>
+    createStation(tx, venue.cfg, { name: "Upstairs bar", isDefault: true }),
+  );
+  const fryer = await inTx(venue, (tx) => createStation(tx, venue.cfg, { name: "Fryer" }));
+  const tableId = await venue.table(`A-${randomUUID().slice(0, 8)}`);
+  const { partyId, tabId } = await seat(venue, tableId);
+  await orderForParty(venue, partyId, ["Burger", "Vino", "Paella"], tabId);
+  const lines = await inTx(venue, (tx) =>
+    tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo),
+  );
+  const [order] = await inTx(venue, (tx) =>
+    tx
+      .select({ number: workingOrders.orderNumber, label: workingOrders.label })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, tabId)),
+  );
+  await inTx(venue, (tx) =>
+    raiseReleasedAtClosedStation(
+      tx,
+      venue.cfg,
+      tabId,
+      new Date("2026-10-02T18:45:00.000Z"),
+      [{ stationId: bar.id, stationName: "Upstairs bar", lineIds: [lines[1]!.id] }],
+      [{ stationId: fryer.id, stationName: "Fryer", lineIds: [lines[2]!.id, lines[0]!.id] }],
+    ),
+  );
+  const alerts = await inTx(venue, (tx) =>
+    tx
+      .select()
+      .from(incidents)
+      .then((rows) => rows.filter((row) => row.params.workingOrderId === tabId)),
+  );
+  expect(alerts).toHaveLength(2);
+  expect(Object.fromEntries(alerts.map((alert) => [alert.code, alert.params]))).toEqual({
+    "route.released_at_closed_station": {
+      station: "Upstairs bar",
+      dishes: "Vino",
+      workingOrderId: tabId,
+      orderNumber: order!.number,
+      orderLabel: order!.label,
+    },
+    "route.waiting_at_closed_station": {
+      station: "Fryer",
+      dishes: "Burger, Paella",
+      workingOrderId: tabId,
+      orderNumber: order!.number,
+    },
+  });
+});

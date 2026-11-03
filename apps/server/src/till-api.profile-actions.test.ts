@@ -138,12 +138,15 @@ import {
  * A management reprint (`POST /management-api/orders/:id/reprint`) checks `print-receipt` on the
  * device cookie it carries, if any (`orders-reprint.test.ts`).
  *
- * Not action-gated, so a signed-in person (or, for a display's reads, the device) is enough: every
+ * Not action-gated, so a signed-in person (or, for a display's reads and its own display choice,
+ * the device) is enough: every
  * read, including a display's `GET /api/device/stations`, `GET /api/device/pass-board` and
  * `GET /api/device/pass-monitor-board`, and the till's All stations board `GET /api/expo/board`
  * and `GET /api/invoice-delivery-options`, the POST previews (`/payments/preview`,
  * `/adjustments/preview`) and the dead-end checks (`/api/dead-ends/*`); the session, locale, schedule, profile-switch and device-equipment
- * routes (choosing equipment is not printing, paying or opening the drawer). Left ungated by
+ * routes (choosing equipment is not printing, paying or opening the drawer), and a pass's own
+ * `PUT /api/device/kitchen-screen-display` (what the pass shows is no cooking action; "A773 pass
+ * display policy: the device's own route" in `device-api.pass.test.ts`). Left ungated by
  * decision, each with its reason:
  * - `GET /api/service-day/authorizers`, `GET /api/stations/:stationId/today` and
  *   `PUT /api/stations/:stationId/today`: a decision about the venue's day; reads require a session,

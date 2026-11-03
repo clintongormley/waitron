@@ -276,7 +276,9 @@ it.each([
             ...dish,
             kitchen: {
               ...dish.kitchen!,
-              ...(change === "preparing" ? { state: "preparing" } : { movable: false }),
+              ...(change === "preparing"
+                ? { state: "preparing", phase: "preparing" }
+                : { movable: false }),
             },
           },
         ],

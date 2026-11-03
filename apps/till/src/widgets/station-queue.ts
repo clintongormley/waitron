@@ -35,6 +35,7 @@ import {
   dishAllergens,
   dishModifiers,
   dishNote,
+  heldPart,
   kitchenBoardStyles,
   lateWords,
   measureBoard,
@@ -78,10 +79,52 @@ const NEXT: Record<TicketState, Exclude<TicketState, "queued"> | undefined> = {
 /** Kitchen-state order, which a dish's state word compares; the drawn order is {@link TillStationQueue.columns}. */
 const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
 
-const DRAWN: Partial<Record<ColumnKey, TicketState>> = {
-  waiting: "queued",
-  preparing: "preparing",
-  ready: "ready",
+interface DrawnColumn {
+  /** The section's `data-column`. */
+  column: TicketState | "held" | "waiting-only";
+  title: () => string;
+  /** The Columns window's name, which tells the combined Waiting from the separate one. */
+  name: () => string;
+  holds: (card: KitchenCard) => boolean;
+  /** Its held cards go last, under a Held heading drawn only while one is held. */
+  heldPart?: true;
+}
+
+/** Its key order sets only the order of {@link stationColumnNames}; the board and the Columns window
+ * follow the layout's order. `waiting` keeps held cards (D94), which sort after the timed ones;
+ * `waitingOnly` and `held` split it apart. */
+const DRAWN: Partial<Record<ColumnKey, DrawnColumn>> = {
+  waiting: {
+    column: "queued",
+    title: () => t("station.state.queued"),
+    name: () => t("station.columns_waiting_held"),
+    holds: (card) => card.column === "queued",
+    heldPart: true,
+  },
+  waitingOnly: {
+    column: "waiting-only",
+    title: () => t("station.state.queued"),
+    name: () => t("station.state.queued"),
+    holds: (card) => card.column === "queued" && card.since !== null,
+  },
+  held: {
+    column: "held",
+    title: () => t("pass.column.held"),
+    name: () => t("pass.column.held"),
+    holds: (card) => card.since === null,
+  },
+  preparing: {
+    column: "preparing",
+    title: () => t("station.state.preparing"),
+    name: () => t("station.state.preparing"),
+    holds: (card) => card.column === "preparing",
+  },
+  ready: {
+    column: "ready",
+    title: () => t("station.state.ready"),
+    name: () => t("station.state.ready"),
+    holds: (card) => card.column === "ready",
+  },
 };
 
 export type { MergedQueueGroup } from "../state/kitchen-cards.js";
@@ -90,9 +133,7 @@ export type { MergedQueueGroup } from "../state/kitchen-cards.js";
 export function stationColumnNames(): Map<ColumnKey, string> {
   return new Map([
     ["overview", t("station.overview")],
-    ...Object.entries(DRAWN).map(
-      ([key, state]) => [key as ColumnKey, t(`station.state.${state}` as const)] as const,
-    ),
+    ...Object.entries(DRAWN).map(([key, drawn]) => [key as ColumnKey, drawn.name()] as const),
   ]);
 }
 
@@ -693,8 +734,8 @@ export class TillStationQueue extends LitElement {
   @state() private chosenTab?: ColumnKey;
   /** A collapsed column whose heading was just tapped: chosen if opening it turns the board to tabs. */
   #opening?: ColumnKey;
-  /** The tab that takes the focus from the heading its column was opened with, which the tabs remove. */
-  #focusTab?: ColumnKey;
+  /** The column whose tab or heading takes the focus from a heading or tab the next drawing removes. */
+  #refocus?: ColumnKey;
   #drewTabs = false;
 
   override connectedCallback(): void {
@@ -724,25 +765,28 @@ export class TillStationQueue extends LitElement {
   override willUpdate(): void {
     this.#measured = measureBoard(this);
     const tabs = this.groups.length > 0 && !this.#fits();
-    if (this.#opening !== undefined && tabs && !this.#drewTabs) {
-      this.chosenTab = this.#opening;
-      const focused = (this.renderRoot as ShadowRoot).activeElement;
-      if (focused instanceof HTMLElement && focused.dataset.columnToggle === this.#opening) {
-        this.#focusTab = this.#opening;
-      }
-    }
+    if (this.#opening !== undefined && tabs && !this.#drewTabs) this.chosenTab = this.#opening;
     this.#opening = undefined;
-    this.#drewTabs = tabs;
     const shown = this.#shown();
+    const focused = (this.renderRoot as ShadowRoot).activeElement;
+    const focusedKey =
+      focused instanceof HTMLElement
+        ? ((focused.dataset.columnToggle ?? focused.dataset.columnTab) as ColumnKey | undefined)
+        : undefined;
+    if (focusedKey !== undefined && (tabs !== this.#drewTabs || !shown.includes(focusedKey))) {
+      this.#refocus = shown.includes(focusedKey) ? focusedKey : shown[0];
+    }
+    this.#drewTabs = tabs;
     if (tabs && this.chosenTab !== undefined && !shown.includes(this.chosenTab)) {
       this.chosenTab = shown[0]!;
     }
   }
 
   override updated(): void {
-    if (this.#focusTab === undefined) return;
-    this.renderRoot.querySelector<HTMLElement>(`[data-column-tab="${this.#focusTab}"]`)!.focus();
-    this.#focusTab = undefined;
+    if (this.#refocus === undefined) return;
+    const target = this.#drewTabs ? "data-column-tab" : "data-column-toggle";
+    this.renderRoot.querySelector<HTMLElement>(`[${target}="${this.#refocus}"]`)?.focus();
+    this.#refocus = undefined;
   }
 
   /** The columns this board can draw that are not hidden, in the layout's order. */
@@ -1106,9 +1150,9 @@ export class TillStationQueue extends LitElement {
     const chosen =
       this.chosenTab !== undefined && shown.includes(this.chosenTab) ? this.chosenTab : shown[0]!;
     const rows = overviewRows(overviewDishes(cards));
-    const inColumn = (state: TicketState) => cards.filter((card) => card.column === state);
+    const inColumn = (drawn: DrawnColumn) => cards.filter(drawn.holds);
     const now = this.#clockNow();
-    const chosenState = DRAWN[chosen];
+    const chosenDrawn = DRAWN[chosen];
     return html`<div
         class="column-tabs"
         data-column-tabs
@@ -1116,11 +1160,10 @@ export class TillStationQueue extends LitElement {
         aria-label=${t("station.columns")}
       >
         ${shown.map((key) => {
-          const state = DRAWN[key];
-          const title =
-            state === undefined ? t("station.overview") : t(`station.state.${state}` as const);
-          const count = state === undefined ? rowsToMake(rows) : inColumn(state).length;
-          const late = state === undefined ? 0 : lateCards(inColumn(state), now);
+          const drawn = DRAWN[key];
+          const title = drawn === undefined ? t("station.overview") : drawn.title();
+          const count = drawn === undefined ? rowsToMake(rows) : inColumn(drawn).length;
+          const late = drawn === undefined ? 0 : lateCards(inColumn(drawn), now);
           return html`<button
             type="button"
             class="option column-tab"
@@ -1137,11 +1180,15 @@ export class TillStationQueue extends LitElement {
           </button>`;
         })}
       </div>
-      <section class="tab-panel" data-tab-panel=${chosen} data-column=${chosenState ?? "overview"}>
+      <section
+        class="tab-panel"
+        data-tab-panel=${chosen}
+        data-column=${chosenDrawn?.column ?? "overview"}
+      >
         ${
-          chosenState === undefined
+          chosenDrawn === undefined
             ? overviewList(rows)
-            : inColumn(chosenState).map((card) => this.#card(card))
+            : this.#columnCards(chosenDrawn, inColumn(chosenDrawn))
         }
       </section>`;
   }
@@ -1151,8 +1198,8 @@ export class TillStationQueue extends LitElement {
     return html`<div class="kanban">
       ${shown.map((key) => {
         const collapsed = this.columns.collapsed.includes(key);
-        const state = DRAWN[key];
-        if (state === undefined) {
+        const drawn = DRAWN[key];
+        if (drawn === undefined) {
           const rows = overviewRows(overviewDishes(cards));
           return html`<section
             class="column column-overview ${collapsed ? "collapsed" : ""}"
@@ -1164,24 +1211,31 @@ export class TillStationQueue extends LitElement {
             ${collapsed ? nothing : overviewList(rows)}
           </section>`;
         }
-        const inColumn = cards.filter((card) => card.column === state);
+        const inColumn = cards.filter(drawn.holds);
         const late = collapsed ? lateCards(inColumn, this.#clockNow()) : 0;
         return html`<section
-          class="column column-${state} ${collapsed ? "collapsed" : ""}"
-          data-column=${state}
+          class="column column-${drawn.column} ${collapsed ? "collapsed" : ""}"
+          data-column=${drawn.column}
         >
           ${columnHeading(
             key,
-            t(`station.state.${state}` as const),
+            drawn.title(),
             inColumn.length,
             collapsed,
             () => this.#toggleColumn(key),
             late,
           )}
-          ${collapsed ? nothing : inColumn.map((card) => this.#card(card))}
+          ${collapsed ? nothing : this.#columnCards(drawn, inColumn)}
         </section>`;
       })}
     </div>`;
+  }
+
+  #columnCards(drawn: DrawnColumn, inColumn: readonly KitchenCard[]): TemplateResult {
+    if (drawn.heldPart === undefined) return html`${inColumn.map((card) => this.#card(card))}`;
+    const held = inColumn.filter((card) => card.since === null);
+    return html`${inColumn.filter((card) => card.since !== null).map((card) => this.#card(card))}
+    ${held.length === 0 ? nothing : heldPart(held.length)} ${held.map((card) => this.#card(card))}`;
   }
 
   /** A card with no fired dish is held: dashed, untimed and saying so, whatever its group (D3). */
@@ -1222,7 +1276,13 @@ export class TillStationQueue extends LitElement {
     ${sharedCourse === null ? nothing : html`<span class="course-name">${sharedCourse.name}</span>`}
     ${
       group?.state === "held" || since === null
-        ? html`<span class="held-note" data-group-held>${t("station.group_held")}</span>`
+        ? html`<span class="held-note" data-group-held
+            >${t(
+              since === null && card.items.every((item) => item.phase === "requested")
+                ? "pass.waiting_for_pass"
+                : "station.group_held",
+            )}</span
+          >`
         : nothing
     }
     ${
@@ -1292,7 +1352,9 @@ export class TillStationQueue extends LitElement {
   #stateWord(card: KitchenCard, item: StationQueueItem): TemplateResult | typeof nothing {
     let word: string | undefined;
     if (item.firedAt === null) {
-      if (card.since !== null) word = t("station.group_held");
+      if (card.since !== null) {
+        word = t(item.phase === "requested" ? "pass.waiting_for_pass" : "station.group_held");
+      }
     } else if (COLUMNS.indexOf(item.state) > COLUMNS.indexOf(card.column)) {
       word = t(`station.state.${item.state}` as const);
     }

@@ -4,7 +4,8 @@ import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { page, userEvent } from "vitest/browser";
 import type { WtDialog } from "@waitron/ui";
-import { cleanupWidgets, mountWidget, resetPage } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
+import { STATION_COLUMNS } from "../state/kitchen-columns.js";
 import type { TillKitchenColumnsDialog } from "../widgets/kitchen-columns-dialog.js";
 import { TillStationScreen } from "./till-station-screen.js";
 import type {
@@ -73,6 +74,10 @@ const kitchenQueue: StationQueueGroup[] = [
         quantity: "2.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        phase: "waiting",
+        requestedAt: "2026-08-17T10:00:00.000Z",
+        readyAt: null,
+        passControlled: false,
         queuedAt: "2026-08-17T10:00:00.000Z",
       },
     ],
@@ -99,6 +104,10 @@ const barQueue: StationQueueGroup[] = [
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:05:00.000Z",
+        phase: "preparing",
+        requestedAt: "2026-08-17T10:05:00.000Z",
+        readyAt: null,
+        passControlled: false,
         queuedAt: "2026-08-17T10:05:00.000Z",
       },
     ],
@@ -1032,6 +1041,10 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
             // A HELD later course — normally fireable under `fire_control = 'kitchen'`.
             course: { id: "co-h", name: "Principales", displayOrder: 2 },
             firedAt: null,
+            phase: "held",
+            requestedAt: null,
+            readyAt: null,
+            passControlled: false,
             queuedAt: "2026-08-17T10:00:00.000Z",
           },
         ],
@@ -1174,6 +1187,10 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
             quantity: "1.000",
             course: null,
             firedAt: "2026-08-17T10:00:00.000Z",
+            phase: "waiting",
+            requestedAt: "2026-08-17T10:00:00.000Z",
+            readyAt: null,
+            passControlled: false,
             queuedAt: "2026-08-17T10:00:00.000Z",
           },
           {
@@ -1185,6 +1202,10 @@ describe("till-station-screen device mode (device-identity-1 §5a)", () => {
             quantity: "1.000",
             course: null,
             firedAt: "2026-08-17T10:00:00.000Z",
+            phase: "waiting",
+            requestedAt: "2026-08-17T10:00:00.000Z",
+            readyAt: null,
+            passControlled: false,
             queuedAt: "2026-08-17T10:00:00.000Z",
           },
         ],
@@ -1768,17 +1789,17 @@ describe("till-station-screen device mode with several stations (A366 decision 7
       const barBoard = () => sectionQueue(sections(el)[2]!)!;
       await openColumns(el, kitchenBoard());
       await pressInWindow(el, '[data-column-show="ready"]');
-      expect(kitchenBoard().columns.hidden).toEqual(["ready"]);
-      expect(barBoard().columns.hidden).toEqual([]);
+      expect(kitchenBoard().columns.hidden).toEqual([...STATION_COLUMNS.hidden, "ready"]);
+      expect(barBoard().columns.hidden).toEqual(STATION_COLUMNS.hidden);
       await pressInWindow(el, "[data-columns-done]");
       await vi.waitFor(() => expect(columnsWindow(el)).toBeNull());
       await merge(el);
-      expect(queueWidget(el)!.columns.hidden).toEqual([]);
+      expect(queueWidget(el)!.columns.hidden).toEqual(STATION_COLUMNS.hidden);
       await merge(el);
-      expect(kitchenBoard().columns.hidden).toEqual(["ready"]);
+      expect(kitchenBoard().columns.hidden).toEqual([...STATION_COLUMNS.hidden, "ready"]);
       await openColumns(el, kitchenBoard());
       await pressInWindow(el, '[data-column-show="ready"]');
-      expect(kitchenBoard().columns.hidden).toEqual([]);
+      expect(kitchenBoard().columns.hidden).toEqual(STATION_COLUMNS.hidden);
     });
 
     it("offers the switch with two stations, in the actions row, and opens stacked", async () => {
@@ -2078,7 +2099,14 @@ describe("till-station-screen follows its device's station screen choice (A366 d
   });
   const stationScreen = (
     slots: { id: string; name: string; available: boolean }[],
-  ): ResolvedKitchenScreen => ({ kind: "station", available: true, stations: slots, zones: null });
+  ): ResolvedKitchenScreen => ({
+    kind: "station",
+    available: true,
+    stations: slots,
+    zones: null,
+    nonPassStationsOverride: null,
+    showNonPassStations: true,
+  });
 
   async function mountOperator(identityRead: () => Promise<DeviceIdentity>) {
     const api = stubApi({
@@ -2153,7 +2181,18 @@ describe("till-station-screen follows its device's station screen choice (A366 d
 
   it("with no station screen choice shows every station, the default first", async () => {
     const { el, api } = await mountOperator(() =>
-      Promise.resolve(identity([{ kind: "pass", available: true, stations: [], zones: null }])),
+      Promise.resolve(
+        identity([
+          {
+            kind: "pass",
+            available: true,
+            stations: [],
+            zones: null,
+            nonPassStationsOverride: null,
+            showNonPassStations: true,
+          },
+        ]),
+      ),
     );
     expect(picks(el)).toEqual(["st-c", "st-g", "st-f"]);
     expect(api.getStationQueue).toHaveBeenCalledWith("st-c");
@@ -2177,7 +2216,16 @@ describe("till-station-screen follows its device's station screen choice (A366 d
     try {
       const { el, api } = await mountOperator(() =>
         Promise.resolve(
-          identity([{ kind: "station", available: false, stations: [], zones: null }]),
+          identity([
+            {
+              kind: "station",
+              available: false,
+              stations: [],
+              zones: null,
+              nonPassStationsOverride: null,
+              showNonPassStations: true,
+            },
+          ]),
         ),
       );
       expect(
@@ -2306,7 +2354,16 @@ describe("till-station-screen follows its device's station screen choice (A366 d
   });
 
   describe("given back while its line shows", () => {
-    const screenGone = identity([{ kind: "station", available: false, stations: [], zones: null }]);
+    const screenGone = identity([
+      {
+        kind: "station",
+        available: false,
+        stations: [],
+        zones: null,
+        nonPassStationsOverride: null,
+        showNonPassStations: true,
+      },
+    ]);
     const grillOnly = identity([stationScreen([{ id: "st-g", name: "Grill", available: true }])]);
     const withFakeTimers = async (run: () => Promise<void>) => {
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout"] });
@@ -2816,7 +2873,14 @@ describe("till-station-screen 15-second refresh", () => {
       await flush(el);
       expect(api.getStationQueue).toHaveBeenCalledTimes(2);
       expect(columnsWindow(el)).not.toBeNull();
-      expect(queueWidget(el)!.columns.order).toEqual(["overview", "waiting", "ready", "preparing"]);
+      expect(queueWidget(el)!.columns.order).toEqual([
+        "overview",
+        "waiting",
+        "waitingOnly",
+        "held",
+        "ready",
+        "preparing",
+      ]);
     });
 
     it("the board's narrow tabs: the chosen tab survives the screen's 15-second refresh", async () => {
@@ -4154,6 +4218,10 @@ describe.each(["Table 4", null, "missing card"])(
                   {
                     ...kitchenQueue[0]!.items[0]!,
                     firedAt: null,
+                    phase: "held",
+                    requestedAt: null,
+                    readyAt: null,
+                    passControlled: false,
                     group: {
                       id: "g-3",
                       position: 3,
@@ -5359,8 +5427,8 @@ describe("the device's kitchen columns", () => {
     expect(storedColumnKeys()).toEqual([columnsKey("st-1")]);
     expect(JSON.parse(localStorage.getItem(columnsKey("st-1"))!)).toEqual({
       version: 1,
-      order: ["overview", "waiting", "preparing", "ready"],
-      hidden: [],
+      order: ["overview", "waiting", "waitingOnly", "held", "preparing", "ready"],
+      hidden: ["waitingOnly", "held"],
       collapsed: ["ready"],
     });
     cleanupWidgets();
@@ -5445,7 +5513,14 @@ describe("the device's kitchen columns", () => {
   it("the device's kitchen columns: Overview comes first by default", async () => {
     const { el } = await mountOperator();
     const queue = queueWidget(el)!;
-    expect(queue.columns.order).toEqual(["overview", "waiting", "preparing", "ready"]);
+    expect(queue.columns.order).toEqual([
+      "overview",
+      "waiting",
+      "waitingOnly",
+      "held",
+      "preparing",
+      "ready",
+    ]);
     expect(queue.shadowRoot!.querySelector("[data-column]")!.getAttribute("data-column")).toBe(
       "overview",
     );
@@ -5463,7 +5538,14 @@ describe("the device's kitchen columns", () => {
     );
     const { el } = await mountOperator();
     const queue = queueWidget(el)!;
-    expect(queue.columns.order).toEqual(["overview", "ready", "waiting", "preparing"]);
+    expect(queue.columns.order).toEqual([
+      "overview",
+      "ready",
+      "waiting",
+      "waitingOnly",
+      "held",
+      "preparing",
+    ]);
     expect(queue.columns.hidden).not.toContain("overview");
     expect(queue.columns.collapsed).not.toContain("overview");
     expect(isCollapsed(queue, "overview")).toBe(false);
@@ -5510,10 +5592,19 @@ describe("the Columns window on the till", () => {
     await openColumns(el);
     await pressInWindow(el, '[data-column-up="ready"]');
     expect(columnsWindow(el)).not.toBeNull();
-    expect(queueWidget(el)!.columns.order).toEqual(["overview", "waiting", "ready", "preparing"]);
+    expect(queueWidget(el)!.columns.order).toEqual([
+      "overview",
+      "waiting",
+      "waitingOnly",
+      "held",
+      "ready",
+      "preparing",
+    ]);
     expect(JSON.parse(localStorage.getItem(columnsKey("st-1"))!).order).toEqual([
       "overview",
       "waiting",
+      "waitingOnly",
+      "held",
       "ready",
       "preparing",
     ]);
@@ -5522,8 +5613,39 @@ describe("the Columns window on the till", () => {
     expect(queueWidget(again.el)!.columns.order).toEqual([
       "overview",
       "waiting",
+      "waitingOnly",
+      "held",
       "ready",
       "preparing",
+    ]);
+  });
+
+  it("the Columns window: Waiting and Held apart instead of Waiting + Held redraw the board at once and are kept on the device", async () => {
+    await pageAt(1280, 800);
+    const drawnColumns = (screen: TillStationScreen) =>
+      [
+        ...queueWidget(screen)!.shadowRoot!.querySelectorAll<HTMLElement>(
+          ".kanban > [data-column]",
+        ),
+      ].map((section) => section.dataset.column);
+    const { el } = await mountOperator();
+    await openColumns(el);
+    await pressInWindow(el, '[data-column-show="waitingOnly"]');
+    await pressInWindow(el, '[data-column-show="held"]');
+    await pressInWindow(el, '[data-column-show="waiting"]');
+    await queueWidget(el)!.updateComplete;
+    expect(drawnColumns(el)).toEqual(["overview", "waiting-only", "held", "preparing", "ready"]);
+    expect(JSON.parse(localStorage.getItem(columnsKey("st-1"))!).hidden).toEqual(["waiting"]);
+    cleanupWidgets();
+
+    const again = await mountOperator();
+    expect(queueWidget(again.el)!.columns.hidden).toEqual(["waiting"]);
+    expect(drawnColumns(again.el)).toEqual([
+      "overview",
+      "waiting-only",
+      "held",
+      "preparing",
+      "ready",
     ]);
   });
 
@@ -5537,7 +5659,7 @@ describe("the Columns window on the till", () => {
     await pressInWindow(el, '[data-column-show="waiting"]');
     await pressInWindow(el, "[data-columns-done]");
     await vi.waitFor(() => expect(columnsWindow(el)).toBeNull());
-    expect(queueWidget(el)!.columns.hidden).toEqual(["waiting"]);
+    expect(queueWidget(el)!.columns.hidden).toEqual([...STATION_COLUMNS.hidden, "waiting"]);
     expect(escaped).not.toHaveBeenCalled();
   });
 
@@ -5545,7 +5667,14 @@ describe("the Columns window on the till", () => {
     const { el } = await mountOperator({ serverOrigin: undefined });
     await openColumns(el);
     await pressInWindow(el, '[data-column-up="ready"]');
-    expect(queueWidget(el)!.columns.order).toEqual(["overview", "waiting", "ready", "preparing"]);
+    expect(queueWidget(el)!.columns.order).toEqual([
+      "overview",
+      "waiting",
+      "waitingOnly",
+      "held",
+      "ready",
+      "preparing",
+    ]);
     expect(storedColumnKeys()).toEqual([]);
   });
 

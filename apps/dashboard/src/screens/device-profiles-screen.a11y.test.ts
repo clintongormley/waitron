@@ -429,6 +429,54 @@ describe.each(["light", "dark"] as const)("device-profiles-screen a11y (%s theme
     },
   );
 
+  it("renders the pass's other-stations switches accessibly, on and off", async () => {
+    const kitchen: DeviceProfile = {
+      ...profiles[0]!,
+      id: "p2",
+      name: "Pass",
+      formFactor: "kds",
+      capabilities: [],
+      receiptPrinterIds: [],
+      paymentSlipPrinterIds: [],
+    };
+    const api = stubApi(venuePrinters, {
+      listDeviceProfiles: vi.fn().mockResolvedValue([...profiles, kitchen]),
+      getDeviceProfile: vi.fn().mockResolvedValue(kitchen),
+      listProfileKitchenScreens: vi.fn().mockResolvedValue([
+        {
+          profileId: "p2",
+          screens: {
+            pass: { stationIds: null, zoneIds: null, showNonPassStations: true },
+            pass_monitor: { stationIds: null, zoneIds: null, showNonPassStations: false },
+          },
+        },
+      ]),
+    });
+    const { el, host } = await mountWidget<DeviceProfilesScreen>(
+      "dashboard-device-profiles-screen",
+      { api },
+      theme,
+    );
+    await flush(el);
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=edit-p2]")!.click();
+    await flush(el);
+    const other = (kind: string) =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+        `[data-test=profile-${kind}-other-stations]`,
+      )!;
+    expect([other("pass-screen").checked, other("pass-monitor").checked]).toEqual([true, false]);
+    await expectNoA11yViolations(host);
+    other("pass-screen").dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: false }, bubbles: true, composed: true }),
+    );
+    other("pass-monitor").dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
+    );
+    await flush(el);
+    expect([other("pass-screen").checked, other("pass-monitor").checked]).toEqual([false, true]);
+    await expectNoA11yViolations(host);
+  });
+
   it.each([390, 1280])(
     "renders a till's Kitchen and Pass lists with a pass monitor, and the narrowed devices after a save, accessibly at %ipx",
     async (width) => {

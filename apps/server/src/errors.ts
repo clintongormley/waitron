@@ -1630,6 +1630,13 @@ declare module "@waitron/shared" {
       orderNumber: number;
       orderLabel: string | null;
     };
+    /** Raised by the release alert for work at a closed station that waits for the pass. */
+    "route.waiting_at_closed_station": {
+      station: string;
+      dishes: string;
+      workingOrderId: string;
+      orderNumber: number;
+    };
   }
 }
 

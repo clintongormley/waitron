@@ -4,6 +4,7 @@ import { setHelpMode } from "@waitron/ui";
 import type { WtHelpTooltip } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import type { KitchenNotice, StationQueueGroup } from "../api/client.js";
+import { kitchenStamps } from "../../test/kitchen-stamps.js";
 import { helpBadgeLabel, helpEn, helpEs, helpText, type HelpKey } from "../i18n/help-strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, pageAt, resetPage, textRects } from "./test-helpers.js";
@@ -29,6 +30,7 @@ function dish(id: string, state: "queued" | "preparing", name: string) {
     course: null,
     firedAt: SENT,
     queuedAt: SENT,
+    ...kitchenStamps({ state, firedAt: SENT }),
   };
 }
 

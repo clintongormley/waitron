@@ -151,6 +151,7 @@ const read = (board: PassBoard, slots: Partial<DevicePassBoard> = {}): DevicePas
   board,
   stations: [],
   zones: null,
+  display: { showNonPassStations: true, nonPassStationsOverride: null },
   ...slots,
 });
 
@@ -298,7 +299,9 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-table-changed]")).not.toBeNull();
     expect(
-      inBoard(el).querySelector('[data-column="held"] [data-card="group:g-4"]'),
+      inBoard(el).querySelector(
+        '[data-column="toFire"] [data-held-part] ~ [data-card="group:g-4"]',
+      ),
     ).not.toBeNull();
     await expectNoA11yViolations(host);
   });

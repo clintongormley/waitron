@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { userEvent } from "vitest/browser";
 import {
@@ -879,5 +880,60 @@ describe("held-line move editing observation", () => {
     expect(draft.lines[0]!.source!.line.id).toBe("other-line");
     expect(sends).toEqual([]);
     expect(events).toEqual([]);
+  });
+});
+
+describe("A773 at the pass", () => {
+  afterEach(() => setLocale("en"));
+
+  it("says in the dish window and the Sent list that a dish waiting for the pass is at the pass", async () => {
+    setLocale("es");
+    const burger = row("l-burger", "Burger", "1.000", {
+      firedAt: null,
+      kitchen: {
+        stationId: null,
+        movable: false,
+        state: "queued",
+        firedAt: null,
+        phase: "requested",
+        requestedAt: "2026-09-28T20:10:00.000Z",
+      },
+    });
+    const { el } = await mountSent({ currentOrders: current({ ungrouped: [burger] }) });
+    const panel = await unfoldSent(el);
+    expect(text(panel.shadowRoot!.querySelector('[data-fired-line="l-burger"] .status')!)).toBe(
+      es["table.at_the_pass"],
+    );
+    const state = async (lineId: string, kind: "fired" | "held" = "fired") => {
+      await openSentDish(el, lineId, kind);
+      const said = text(q(el, "[data-sent-line-status]")!);
+      await closeSentDish(el);
+      return said;
+    };
+    expect(await state("l-burger")).toBe(es["table.at_the_pass"]);
+    expect(await state("l-flan", "held")).toBe(es["table.group_held"]);
+    expect(await state("l-croq")).toBe(es["table.group_fired_ago"].replace("{n}", "25"));
+  });
+
+  it("says a dish is at the pass while one of its kitchen items waits there, though its own has fired", async () => {
+    const burger = row("l-burger", "Burger", "1.000", {
+      firedAt: null,
+      requestedAt: "2026-09-28T20:08:00.000Z",
+      kitchen: {
+        stationId: null,
+        movable: false,
+        state: "queued",
+        firedAt: "2026-09-28T20:10:00.000Z",
+        phase: "waiting",
+        requestedAt: "2026-09-28T20:10:00.000Z",
+      },
+    });
+    const { el } = await mountSent({ currentOrders: current({ ungrouped: [burger] }) });
+    const panel = await unfoldSent(el);
+    expect(text(panel.shadowRoot!.querySelector('[data-fired-line="l-burger"] .status')!)).toBe(
+      t("table.at_the_pass"),
+    );
+    await openSentDish(el, "l-burger", "fired");
+    expect(text(q(el, "[data-sent-line-status]")!)).toBe(t("table.at_the_pass"));
   });
 });

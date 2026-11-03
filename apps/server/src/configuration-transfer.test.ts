@@ -7117,7 +7117,13 @@ it("round-trips deleted kitchen configuration and preserves archived products an
       (row) => row.device_profile_id === ids.profile,
     ),
   ).toEqual([
-    { device_profile_id: ids.profile, screen: "station", every_station: 0, every_zone: 0 },
+    {
+      device_profile_id: ids.profile,
+      screen: "station",
+      every_station: 0,
+      every_zone: 0,
+      show_non_pass_stations: 1,
+    },
   ]);
   for (const table of ["kitchen_courses", "kitchen_stations"]) {
     const forged = {
@@ -8067,4 +8073,112 @@ it("round-trips explicit unit staff identity, empty and disabled translations an
     true,
   );
   expect(await targetSuite.db.select().from(unitSeedStates)).toEqual(marker);
+});
+
+describe("A773 pass display policy", () => {
+  async function exportPassProfile(taxId: string) {
+    const source = await applyVenue(planVenue(venue(taxId), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    const cfg = { locationId: locationId(source.locationId) };
+    const deviceId = await withTransaction(suite.db, async (tx) => {
+      const [profile] = await tx
+        .insert(deviceProfiles)
+        .values({ name: "Hidden pass", formFactor: "till" })
+        .returning();
+      await VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, profile!.id, {
+        pass: { stationIds: null, zoneIds: null, showNonPassStations: false },
+        pass_monitor: { stationIds: null, zoneIds: null },
+      });
+      const { deviceId } = await seedDevice(tx, {
+        locationId: source.locationId,
+        profileId: profile!.id,
+      });
+      await VENUE_SERVICE.setDeviceKitchenScreens(tx, cfg, {
+        deviceId,
+        profileId: profile!.id,
+        screens: [{ kind: "pass", stationIds: null, zoneIds: null }],
+      });
+      await tx.execute(
+        sql`update device_kitchen_screens set show_non_pass_stations = 1 where device_id = ${deviceId}`,
+      );
+      return deviceId;
+    });
+    expect(
+      (
+        await suite.db.execute(
+          sql`select count(*) as n from device_kitchen_screens where device_id = ${deviceId}`,
+        )
+      ).rows,
+    ).toEqual([{ n: 1 }]);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const transferred = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-11-03T12:00:00Z"),
+      versions,
+    );
+    return { transferred, versions };
+  }
+
+  async function importedPassValues() {
+    return (
+      await targetSuite.db.execute(sql`
+        select s.screen, s.show_non_pass_stations as shown
+        from device_profile_kitchen_screens s
+        join device_profiles p on p.id = s.device_profile_id
+        where p.name = 'Hidden pass'
+        order by s.screen`)
+    ).rows;
+  }
+
+  it("carries a profile's hidden choice through export and import, and no device's rows", async () => {
+    const { transferred, versions } = await exportPassProfile("B24681357");
+    expect(Object.keys(transferred.tables).filter((t) => t.startsWith("device_kitchen"))).toEqual(
+      [],
+    );
+    await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
+    });
+    expect(await importedPassValues()).toEqual([
+      { screen: "pass", shown: 0 },
+      { screen: "pass_monitor", shown: 1 },
+    ]);
+    expect(
+      (await targetSuite.db.execute(sql`select count(*) as n from device_kitchen_screens`)).rows,
+    ).toEqual([{ n: 0 }]);
+  });
+
+  it("imports a profile row exported before the choice existed as showing other stations", async () => {
+    const { transferred, versions } = await exportPassProfile("B35792468");
+    const older = {
+      ...transferred,
+      tables: {
+        ...transferred.tables,
+        device_profile_kitchen_screens: transferred.tables.device_profile_kitchen_screens!.map(
+          (row) => {
+            const stripped: Record<string, unknown> = { ...row };
+            delete stripped.show_non_pass_stations;
+            return stripped;
+          },
+        ),
+      },
+    };
+    await applyVenue(planVenue(venue("B46802468"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, older, ALL_MODULES, versions),
+    });
+    expect(await importedPassValues()).toEqual([
+      { screen: "pass", shown: 1 },
+      { screen: "pass_monitor", shown: 1 },
+    ]);
+  });
 });

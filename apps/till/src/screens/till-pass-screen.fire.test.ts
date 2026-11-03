@@ -42,6 +42,7 @@ const deviceBoard = (board: PassBoard = toFireBoard()): DevicePassBoard => ({
   board,
   stations: [],
   zones: null,
+  display: { showNonPassStations: true, nonPassStationsOverride: null },
 });
 
 function identity(kind: "pass" | "pass_monitor" | null): DeviceIdentity {
@@ -49,7 +50,19 @@ function identity(kind: "pass" | "pass_monitor" | null): DeviceIdentity {
     deviceId: "dev-1",
     formFactor: "till",
     name: "Till 1",
-    kitchenScreens: kind === null ? [] : [{ kind, available: true, stations: [], zones: null }],
+    kitchenScreens:
+      kind === null
+        ? []
+        : [
+            {
+              kind,
+              available: true,
+              stations: [],
+              zones: null,
+              nonPassStationsOverride: null,
+              showNonPassStations: true,
+            },
+          ],
   };
 }
 

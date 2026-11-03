@@ -2400,6 +2400,8 @@ describe("till-table-order-screen", () => {
               stationId: null,
               movable: false,
               state: "ready",
+              phase: "ready",
+              requestedAt: firedAt,
               firedAt,
               ...{ awayAt: "2026-09-27T10:16:00.000Z" },
             },
@@ -2414,7 +2416,7 @@ describe("till-table-order-screen", () => {
       });
 
       it("a fired dish with no fired time reads Fired", async () => {
-        const { panel } = await mountProgress({ firedAt: null });
+        const { panel } = await mountProgress({ firedAt: null, requestedAt: null });
         expect(state(panel, "l-beer")).toBe(t("table.group_fired"));
       });
 
@@ -6511,6 +6513,7 @@ describe("A668 nutrition after table-order names", () => {
             billStatus: "open",
             netAmount: "2.00",
             readyAt: null,
+            requestedAt: "2026-10-17T12:00:00.000Z",
             firedAt: "2026-10-17T12:00:00.000Z",
             lineId: "other-bill-line",
             workingOrderId: "other-bill",

@@ -577,8 +577,14 @@ export interface KitchenScreenScope {
   readonly zoneIds: readonly string[] | null;
 }
 
+/** A profile's screen of one kind. `showNonPassStations` is read and written on `pass` and
+ *  `pass_monitor` entries only; a write that omits it keeps the stored value. */
+export interface ProfileKitchenScreen extends KitchenScreenScope {
+  readonly showNonPassStations?: boolean;
+}
+
 export type ProfileKitchenScreens = Readonly<
-  Partial<Record<KitchenScreenKind, KitchenScreenScope>>
+  Partial<Record<KitchenScreenKind, ProfileKitchenScreen>>
 >;
 
 export interface DeviceKitchenScreen extends KitchenScreenScope {
@@ -626,6 +632,11 @@ export interface ResolvedKitchenScreen {
   readonly stations: readonly ScreenSlot[];
   /** null: no zone filter; otherwise zone order. */
   readonly zones: readonly ScreenSlot[] | null;
+  /** The device's own stored choice of showing other stations' dishes; null when it holds none
+   *  (or no choice of this kind), and always null on a station screen. */
+  readonly nonPassStationsOverride: boolean | null;
+  /** `nonPassStationsOverride`, else the profile's row of this kind, else true. */
+  readonly showNonPassStations: boolean;
 }
 
 export type KitchenNoteScope = { workingOrderId: string } | { partyId: string };
@@ -1162,6 +1173,16 @@ export interface VenueServiceContribution {
     tx: Transaction,
     cfg: { locationId: LocationId },
     input: { deviceId: string; profileId: string; screens: readonly DeviceKitchenScreen[] },
+  ): Promise<void>;
+  /** Sets the device's own choice of showing other stations' dishes on its screen of `kind`
+   *  (null: the profile's), changing nothing else. Refused `device.unauthorized` for a kind other
+   *  than a pass or a pass monitor, and when the device's effective choice has no screen of that
+   *  kind (a kind a narrowing took keeps its row and stored value). */
+  setDeviceKitchenScreenDisplay(
+    tx: Transaction,
+    deviceId: string,
+    kind: "pass" | "pass_monitor",
+    value: boolean | null,
   ): Promise<void>;
   readDeviceZoneSelection(
     tx: Transaction,

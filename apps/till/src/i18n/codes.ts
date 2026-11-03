@@ -156,8 +156,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Hay una cuenta de esta mesa sin pagar. Cóbrala antes de cerrar la mesa",
   },
   "unpaid_departure.unfired_dishes": {
-    en: "A bill on this table holds items the kitchen is not making: not sent, on hold, or recalled. Cancel them first, then record the departure again",
-    es: "Una cuenta de esta mesa tiene artículos que cocina no está preparando: sin enviar, en espera o retirados. Cancélalos primero y vuelve a registrar la salida",
+    en: "A bill on this table holds items the kitchen is not making: not sent, on hold, recalled, or waiting for the pass and not fully served. Cancel them first, then record the departure again",
+    es: "Una cuenta de esta mesa tiene artículos que cocina no está preparando: sin enviar, en espera, retirados, o esperando al pase y sin servir del todo. Cancélalos primero y vuelve a registrar la salida",
   },
   "unpaid_departure.bill_holds_payment": {
     en: "A bill on this table already holds a payment, even if it was refunded, so it cannot be left unpaid. Take the rest of that bill as a payment first",

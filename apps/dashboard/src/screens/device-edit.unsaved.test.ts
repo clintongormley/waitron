@@ -571,6 +571,8 @@ const kitchenDisplay = {
           profileEveryStation: true,
           stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
           zones: null,
+          nonPassStationsOverride: null,
+          showNonPassStations: true,
         },
       ],
     },
@@ -615,6 +617,56 @@ it("a kitchen display's screen choice protects the actual patch and a revert", a
         name: "Counter",
         profileId: "p1",
         kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
+        receiptPrinterId: null,
+        paymentSlipPrinterId: null,
+      },
+    ],
+  ]);
+});
+it("a pass display's choice for other stations' dishes asks before leaving, a revert is clean, and its save leaves nothing to warn about", async () => {
+  const sent: unknown[] = [];
+  const { screen } = await mount({
+    ...kitchenDisplay,
+    listDevices: async () => [
+      {
+        ...device,
+        kind: "kds_station",
+        kitchenScreens: [
+          {
+            kind: "pass" as const,
+            available: true,
+            everyStation: true,
+            everyZone: true,
+            profileEveryStation: true,
+            stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
+            zones: null,
+            nonPassStationsOverride: true,
+            showNonPassStations: true,
+          },
+        ],
+      },
+    ],
+    updateDevice: async (id, body) => {
+      sent.push([id, body]);
+    },
+  });
+  expect(unload()).toBe(false);
+  change(screen, "other-stations", "hide");
+  expect(unload()).toBe(true);
+  change(screen, "other-stations", "show");
+  expect(unload()).toBe(false);
+  change(screen, "other-stations", "profile");
+  expect(unload()).toBe(true);
+  q(screen, "[data-test=edit-save]")!.click();
+  await expect.poll(() => modal(screen)).toBeNull();
+  expect(unload()).toBe(false);
+  expect(sent).toEqual([
+    [
+      "d1",
+      {
+        name: "Counter",
+        profileId: "p1",
+        kitchenScreenDisplay: { pass: null },
         receiptPrinterId: null,
         paymentSlipPrinterId: null,
       },

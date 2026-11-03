@@ -364,6 +364,7 @@ const row = (lineId: string, courseId: string | null): CurrentOrderRow => ({
   billStatus: "open",
   netAmount: "2.00",
   readyAt: null,
+  requestedAt: null,
   firedAt: null,
   lineId,
   courseId,

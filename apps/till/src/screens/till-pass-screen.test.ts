@@ -1,9 +1,10 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { allergenName } from "../i18n/allergen-names.js";
+import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { kitchenScreenNoticeText } from "../kitchen-screen-notice.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
 import { PASS_COLUMNS } from "../state/kitchen-columns.js";
 import type { TillPassBoard } from "../widgets/pass-board.js";
 import type { TillKitchenColumnsDialog } from "../widgets/kitchen-columns-dialog.js";
@@ -51,7 +52,13 @@ const boardB = passBoard({ inProgress: [passCard({ key: "bill:b" })] });
 const deviceBoard = (
   board: PassBoard = boardA,
   slots: Partial<Pick<DevicePassBoard, "stations" | "zones">> = {},
-): DevicePassBoard => ({ board, stations: [], zones: null, ...slots });
+): DevicePassBoard => ({
+  board,
+  stations: [],
+  zones: null,
+  display: { showNonPassStations: true, nonPassStationsOverride: null },
+  ...slots,
+});
 
 function identity(kitchenScreens: ResolvedKitchenScreen[]): DeviceIdentity {
   return { deviceId: "dev-1", formFactor: "till", name: "Till 1", kitchenScreens };
@@ -62,6 +69,8 @@ const chosen = (kind: ResolvedKitchenScreen["kind"], available = true): Resolved
   available,
   stations: [],
   zones: null,
+  nonPassStationsOverride: null,
+  showNonPassStations: true,
 });
 
 function fakeApi(overrides: Record<string, unknown> = {}) {
@@ -284,6 +293,22 @@ describe("A773 pass screen", () => {
         expect(boardOf(el)!.shadowRoot!.querySelectorAll(ready)).toHaveLength(0);
       },
     );
+
+    it("carries the pass's display choice, and All stations' default, from each board read (D70)", () =>
+      withFakeTimers(async () => {
+        const hidden = { showNonPassStations: false, nonPassStationsOverride: false };
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          getDevicePassBoard: vi.fn().mockResolvedValue({ ...deviceBoard(), display: hidden }),
+        });
+        const el = await mount({ api });
+        expect(el.display).toEqual(hidden);
+        api.getDeviceIdentity.mockResolvedValue(identity([]));
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(boardOf(el)!.mode).toBe("all_stations");
+        expect(el.display).toEqual({ showNonPassStations: true, nonPassStationsOverride: null });
+      }));
 
     it("switches the read and clears the old board when the choice changes between refreshes", () =>
       withFakeTimers(async () => {
@@ -938,8 +963,8 @@ describe("A773 pass screen", () => {
       await press(el, '[data-column-show="ready"]');
     }
     const changed = {
-      order: ["overview", "toFire", "held", "inProgress", "ready"],
-      hidden: ["overview", "ready"],
+      order: ["overview", "toFire", "toFireOnly", "held", "inProgress", "ready"],
+      hidden: ["overview", "held", "toFireOnly", "ready"],
       collapsed: ["inProgress"],
     };
 
@@ -986,6 +1011,7 @@ describe("A773 pass screen", () => {
       };
       const words = [
         t("station.overview"),
+        t("pass.columns_held_to_fire"),
         t("pass.column.held"),
         t("pass.column.to_fire"),
         t("pass.column.in_progress"),
@@ -1031,6 +1057,814 @@ describe("A773 pass screen", () => {
       expect(boardOf(el)!.columns).toEqual(changed);
       expect(storedColumnKeys()).toEqual([]);
     });
+
+    describe("D95 the pass's Columns choices", () => {
+      const heldCard = passCard({
+        key: "bill:order-6",
+        target: { kind: "bill", workingOrderId: "order-6" },
+        kind: "held",
+        requestedAt: null,
+        orders: [{ orderId: "order-6", orderNumber: 17, tableLabel: "T9", kitchenNote: null }],
+        items: [passItem({ id: "held-1", orderId: "order-6", phase: "held", firedAt: null })],
+      });
+      const toFireCard = passCard({
+        key: "bill:order-2",
+        target: { kind: "bill", workingOrderId: "order-2" },
+        orders: [{ orderId: "order-2", orderNumber: 13, tableLabel: "T5", kitchenNote: null }],
+        items: [passItem({ id: "req-1", orderId: "order-2", phase: "requested", firedAt: null })],
+        releaseTicketItemIds: ["req-1"],
+        releaseContext: "ctx-1",
+      });
+      const board = passBoard({ held: [heldCard], toFire: [toFireCard] });
+      const section = (el: TillPassScreen, key: string) =>
+        boardOf(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-column="${key}"]`)!;
+      const sections = (el: TillPassScreen) =>
+        [...boardOf(el)!.shadowRoot!.querySelectorAll<HTMLElement>("[data-column]")].map(
+          (column) => column.dataset.column,
+        );
+      const cardsIn = (el: TillPassScreen, key: string) =>
+        [...section(el, key).querySelectorAll("[data-card]")].map((card) =>
+          card.getAttribute("data-card"),
+        );
+      async function openColumns(el: TillPassScreen) {
+        await userEvent.click(
+          boardOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-columns-open]")!,
+        );
+        await flush(el);
+      }
+
+      it("with Held and To fire switched on and Held + To fire off, draws each apart and keeps it", async () => {
+        await pageAt(1280, 800);
+        try {
+          const el = await mount({ deviceMode: true, initialBoard: deviceBoard(board) });
+          await openColumns(el);
+          await press(el, '[data-column-show="held"]');
+          await press(el, '[data-column-show="toFireOnly"]');
+          await press(el, '[data-column-show="toFire"]');
+          const drawsApart = (on: TillPassScreen) => {
+            expect(sections(on)).toEqual(["held", "toFireOnly", "inProgress", "ready"]);
+            expect(cardsIn(on, "held")).toEqual([heldCard.key]);
+            expect(cardsIn(on, "toFireOnly")).toEqual([toFireCard.key]);
+            expect(section(on, "toFireOnly").querySelector("[data-held-part]")).toBeNull();
+            expect(boardOf(on)!.shadowRoot!.querySelector("[data-held-part]")).toBeNull();
+            const heading = section(on, "held").querySelector(".column-heading")!.textContent;
+            expect(heading).toContain(t("pass.column.held"));
+            expect(heading).not.toContain(t("pass.column.to_fire"));
+          };
+          drawsApart(el);
+          expect(stored("pass").hidden).toEqual(["overview", "toFire"]);
+          el.remove();
+          const again = await mount({ deviceMode: true, initialBoard: deviceBoard(board) });
+          expect(boardOf(again)!.columns.hidden).toEqual(["overview", "toFire"]);
+          drawsApart(again);
+        } finally {
+          await resetPage();
+        }
+      });
+
+      it("switching Held on leaves Held + To fire shown, so the held card is drawn in both", async () => {
+        await pageAt(1280, 800);
+        try {
+          const el = await mount({ deviceMode: true, initialBoard: deviceBoard(board) });
+          await openColumns(el);
+          await press(el, '[data-column-show="held"]');
+          expect(stored("pass").hidden).toEqual(["overview", "toFireOnly"]);
+          expect(cardsIn(el, "held")).toEqual([heldCard.key]);
+          const toFire = section(el, "toFire");
+          const part = toFire.querySelector("[data-held-part]")!;
+          const drawnHeld = toFire.querySelector(`[data-card="${heldCard.key}"]`)!;
+          expect(
+            part.compareDocumentPosition(drawnHeld) & Node.DOCUMENT_POSITION_FOLLOWING,
+          ).not.toBe(0);
+        } finally {
+          await resetPage();
+        }
+      });
+    });
+  });
+
+  describe("the device's other-stations choice", () => {
+    const columnsWindow = (el: TillPassScreen) =>
+      el.shadowRoot!.querySelector<TillKitchenColumnsDialog>("till-kitchen-columns-dialog");
+    const control = (el: TillPassScreen) =>
+      columnsWindow(el)?.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-segmented-control"]>(
+        "[data-other-stations]",
+      ) ?? null;
+    const radios = (el: TillPassScreen) => [
+      ...control(el)!.shadowRoot!.querySelectorAll<HTMLButtonElement>('[role="radio"]'),
+    ];
+    const checked = (el: TillPassScreen) =>
+      radios(el).map((radio) => radio.getAttribute("aria-checked"));
+    const words = (el: TillPassScreen) =>
+      columnsWindow(el)!
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector(".footer [data-error]")
+        ?.textContent!.trim();
+    const marked = (el: TillPassScreen) =>
+      control(el)!.shadowRoot!.querySelector('[role="radiogroup"]')!.getAttribute("aria-invalid");
+    async function settle(el: TillPassScreen) {
+      await flush(el);
+      const shown = columnsWindow(el);
+      if (shown === null) return;
+      await shown.updateComplete;
+      await control(el)?.updateComplete;
+      await shown.shadowRoot!.querySelector("wt-form-actions")!.updateComplete;
+      await shown.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+    }
+    const display = (nonPassStationsOverride: boolean | null) => ({
+      showNonPassStations: nonPassStationsOverride ?? true,
+      nonPassStationsOverride,
+    });
+    async function open(el: TillPassScreen) {
+      await userEvent.click(
+        boardOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-columns-open]")!,
+      );
+      await settle(el);
+    }
+    async function choose(el: TillPassScreen, index: number) {
+      await userEvent.click(radios(el)[index]!);
+      await settle(el);
+    }
+    async function closeWindow(el: TillPassScreen) {
+      await userEvent.click(
+        columnsWindow(el)!.shadowRoot!.querySelector<HTMLElement>("[data-columns-done]")!,
+      );
+      await vi.waitFor(() => expect(columnsWindow(el)).toBeNull());
+    }
+    const refused = (code: string) => Object.assign(new Error(code), { code, status: 409 });
+
+    it.each([
+      ["a kitchen display's pass", { deviceMode: true }, false, ["false", "false", "true"]],
+      ["a pass monitor", { monitor: true }, null, ["true", "false", "false"]],
+    ] as const)(
+      "on %s, the Columns window shows the board's own choice",
+      async (_name, props, override, expected) => {
+        const el = await mount({
+          ...props,
+          initialBoard: { ...deviceBoard(), display: display(override) },
+        });
+        await open(el);
+        expect(checked(el)).toEqual(expected);
+      },
+    );
+
+    it("a till's All stations shows no section", async () => {
+      const el = await mount({});
+      await open(el);
+      expect(columnsWindow(el)).not.toBeNull();
+      expect(control(el)).toBeNull();
+    });
+
+    it.each([
+      ["a kitchen display's pass", { deviceMode: true }, "pass", "getDevicePassBoard"],
+      ["a pass monitor", { monitor: true }, "pass_monitor", "getDevicePassMonitorBoard"],
+    ] as const)(
+      "on %s, a choice is sent once, the choices are off while it is out, and the board is read again",
+      async (_name, props, kind, read) => {
+        const sent = deferred<void>();
+        const api = fakeApi({
+          setDeviceKitchenScreenDisplay: vi.fn().mockReturnValue(sent.promise),
+          [read]: vi.fn().mockResolvedValue({ ...deviceBoard(), display: display(true) }),
+        });
+        const el = await mount({
+          ...props,
+          api,
+          initialBoard: { ...deviceBoard(), display: display(null) },
+        });
+        await open(el);
+        await choose(el, 1);
+        expect(api.setDeviceKitchenScreenDisplay).toHaveBeenCalledTimes(1);
+        expect(api.setDeviceKitchenScreenDisplay).toHaveBeenCalledWith(kind, true);
+        expect(control(el)!.disabled).toBe(true);
+        expect(api[read]).not.toHaveBeenCalled();
+        sent.resolve();
+        await flush(el);
+        await columnsWindow(el)!.updateComplete;
+        expect(api[read]).toHaveBeenCalledTimes(1);
+        expect(el.display).toEqual(display(true));
+        expect(control(el)!.disabled).toBe(false);
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+      },
+    );
+
+    it.each(["device.unauthorized", "kitchen_screen.not_allowed"])(
+      "on a kitchen display, %s closes the window and asks the app to re-read the device's screens, showing no words",
+      async (code) => {
+        const changed = vi.fn();
+        document.addEventListener("kitchen-screen-changed", changed);
+        try {
+          const api = fakeApi({
+            setDeviceKitchenScreenDisplay: vi.fn().mockRejectedValue(refused(code)),
+          });
+          const el = await mount({ deviceMode: true, api, initialBoard: deviceBoard() });
+          await open(el);
+          await choose(el, 2);
+          expect(columnsWindow(el)).toBeNull();
+          expect(changed).toHaveBeenCalledTimes(1);
+          expect(changed.mock.calls[0]![0].detail).toEqual({ from: "pass" });
+          expect(el.shadowRoot!.querySelector("[data-table-changed]")).toBeNull();
+          expect(boardOf(el)!.querySelector("[data-lever-error]")).toBeNull();
+        } finally {
+          document.removeEventListener("kitchen-screen-changed", changed);
+        }
+      },
+    );
+
+    it("at a till, device.unauthorized closes the window, re-reads the device's choice and says the screen was refreshed", async () => {
+      const changed = vi.fn();
+      document.addEventListener("kitchen-screen-changed", changed);
+      try {
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          setDeviceKitchenScreenDisplay: vi.fn().mockRejectedValue(refused("device.unauthorized")),
+        });
+        const el = await mount({ api });
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(1);
+        await open(el);
+        await choose(el, 2);
+        await flush(el);
+        expect(columnsWindow(el)).toBeNull();
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        const line = el.shadowRoot!.querySelector("[data-table-changed]");
+        expect(line?.textContent!.trim()).toBe(t("station.table_changed"));
+        expect(el.shadowRoot!.textContent).not.toContain(codeMessage("device.unauthorized"));
+        expect(changed).not.toHaveBeenCalled();
+      } finally {
+        document.removeEventListener("kitchen-screen-changed", changed);
+      }
+    });
+
+    it.each([
+      ["a kitchen display's pass", "storage.disk_full", { deviceMode: true }],
+      ["a till's pass", "storage.disk_full", {}],
+      ["a till's pass", "kitchen_screen.not_allowed", {}],
+    ] as const)(
+      "on %s, %s keeps the previous choice and shows its words in the window until the next choice",
+      async (_name, code, props) => {
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          getDevicePassBoard: vi
+            .fn()
+            .mockResolvedValue({ ...deviceBoard(), display: display(true) }),
+          setDeviceKitchenScreenDisplay: vi
+            .fn()
+            .mockRejectedValueOnce(refused(code))
+            .mockReturnValueOnce(new Promise(() => {})),
+        });
+        const el = await mount({
+          ...props,
+          api,
+          initialBoard: { ...deviceBoard(), display: display(true) },
+        });
+        const reads = api.getDevicePassBoard.mock.calls.length;
+        await open(el);
+        await choose(el, 2);
+        expect(columnsWindow(el)).not.toBeNull();
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+        expect(words(el)).toBe(codeMessage(code));
+        expect(marked(el)).toBeNull();
+        expect(control(el)!.disabled).toBe(false);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(reads);
+        await choose(el, 0);
+        expect(words(el)).toBeUndefined();
+      },
+    );
+
+    it("a refusal's words stay when the window is closed and opened again", async () => {
+      const api = fakeApi({
+        setDeviceKitchenScreenDisplay: vi.fn().mockRejectedValue(refused("storage.disk_full")),
+      });
+      const el = await mount({ deviceMode: true, api, initialBoard: deviceBoard() });
+      await open(el);
+      await choose(el, 2);
+      expect(words(el)).toBe(codeMessage("storage.disk_full"));
+      await closeWindow(el);
+      await open(el);
+      expect(words(el)).toBe(codeMessage("storage.disk_full"));
+    });
+
+    it("while a choice is out the window shows it, off, until the board has been read again", async () => {
+      const sent = deferred<void>();
+      const read = deferred<DevicePassBoard>();
+      const api = fakeApi({
+        setDeviceKitchenScreenDisplay: vi.fn().mockReturnValue(sent.promise),
+        getDevicePassBoard: vi.fn().mockReturnValue(read.promise),
+      });
+      const el = await mount({
+        deviceMode: true,
+        api,
+        initialBoard: { ...deviceBoard(), display: display(null) },
+      });
+      await open(el);
+      await choose(el, 1);
+      expect(checked(el)).toEqual(["false", "true", "false"]);
+      expect(control(el)!.disabled).toBe(true);
+      sent.resolve();
+      await settle(el);
+      expect(api.getDevicePassBoard).toHaveBeenCalledTimes(1);
+      expect(checked(el)).toEqual(["false", "true", "false"]);
+      expect(control(el)!.disabled).toBe(true);
+      read.resolve({ ...deviceBoard(), display: display(true) });
+      await settle(el);
+      expect(checked(el)).toEqual(["false", "true", "false"]);
+      expect(control(el)!.disabled).toBe(false);
+    });
+
+    it("a till's own pass window shows the board's stored choice when it opens", async () => {
+      const api = fakeApi({
+        getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+        getDevicePassBoard: vi
+          .fn()
+          .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+      });
+      const el = await mount({ api });
+      await open(el);
+      expect(checked(el)).toEqual(["false", "false", "true"]);
+    });
+
+    it("at a till, the window shows no choice until a read of the board gives it", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          getDevicePassBoard: vi
+            .fn()
+            .mockRejectedValueOnce(new Error("offline"))
+            .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+        });
+        const el = await mount({ api });
+        await open(el);
+        expect(columnsWindow(el)).not.toBeNull();
+        expect(control(el)).toBeNull();
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+      }));
+
+    it("after an accepted choice, a failed read keeps the value sent, and the old one can be chosen again", async () => {
+      const api = fakeApi({
+        setDeviceKitchenScreenDisplay: vi.fn().mockResolvedValue(undefined),
+        getDevicePassBoard: vi.fn().mockRejectedValue(new Error("offline")),
+      });
+      const el = await mount({
+        deviceMode: true,
+        api,
+        initialBoard: { ...deviceBoard(), display: display(null) },
+      });
+      await open(el);
+      await choose(el, 2);
+      expect(api.getDevicePassBoard).toHaveBeenCalledTimes(1);
+      expect(checked(el)).toEqual(["false", "false", "true"]);
+      expect(control(el)!.disabled).toBe(false);
+      await choose(el, 0);
+      expect(api.setDeviceKitchenScreenDisplay).toHaveBeenLastCalledWith("pass", null);
+      expect(api.setDeviceKitchenScreenDisplay).toHaveBeenCalledTimes(2);
+    });
+
+    it("a read begun before a choice was accepted does not put the old choice back", () =>
+      withFakeTimers(async () => {
+        const older = deferred<DevicePassBoard>();
+        const api = fakeApi({
+          setDeviceKitchenScreenDisplay: vi.fn().mockResolvedValue(undefined),
+          getDevicePassBoard: vi
+            .fn()
+            .mockReturnValueOnce(older.promise)
+            .mockRejectedValue(new Error("offline")),
+        });
+        const el = await mount({
+          deviceMode: true,
+          api,
+          initialBoard: { ...deviceBoard(), display: display(null) },
+        });
+        await open(el);
+        await vi.advanceTimersByTimeAsync(15_000);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(1);
+        await choose(el, 2);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        older.resolve({ ...deviceBoard(), display: display(null) });
+        await settle(el);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+      }));
+
+    it("at a till whose choice moves from the pass to the monitor, the window forgets the pass's choice and refusal", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          getDeviceIdentity: vi
+            .fn()
+            .mockResolvedValueOnce(identity([chosen("pass")]))
+            .mockResolvedValue(identity([chosen("pass_monitor")])),
+          getDevicePassBoard: vi
+            .fn()
+            .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+          getDevicePassMonitorBoard: vi
+            .fn()
+            .mockRejectedValueOnce(new Error("offline"))
+            .mockResolvedValue({ ...deviceBoard(), display: display(true) }),
+          setDeviceKitchenScreenDisplay: vi.fn().mockRejectedValue(refused("storage.disk_full")),
+        });
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 0);
+        expect(words(el)).toBe(codeMessage("storage.disk_full"));
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(api.getDevicePassMonitorBoard).toHaveBeenCalledTimes(1);
+        await open(el);
+        expect(control(el)).toBeNull();
+        await closeWindow(el);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await open(el);
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+        expect(words(el)).toBeUndefined();
+      }));
+
+    it("a read after an accepted choice shows the read's value, such as a change made on the dashboard", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          setDeviceKitchenScreenDisplay: vi.fn().mockResolvedValue(undefined),
+          getDevicePassBoard: vi
+            .fn()
+            .mockResolvedValueOnce({ ...deviceBoard(), display: display(true) })
+            .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+        });
+        const el = await mount({
+          deviceMode: true,
+          api,
+          initialBoard: { ...deviceBoard(), display: display(null) },
+        });
+        await open(el);
+        await choose(el, 1);
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+      }));
+
+    it("after an accepted choice whose board read stalls, a later read that answers frees the choices", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          setDeviceKitchenScreenDisplay: vi.fn().mockResolvedValue(undefined),
+          getDevicePassBoard: vi
+            .fn()
+            .mockReturnValueOnce(new Promise(() => {}))
+            .mockResolvedValue({ ...deviceBoard(boardB), display: display(false) }),
+        });
+        const el = await mount({
+          deviceMode: true,
+          api,
+          initialBoard: { ...deviceBoard(), display: display(null) },
+        });
+        await open(el);
+        await choose(el, 2);
+        expect(control(el)!.disabled).toBe(true);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+        expect(control(el)!.disabled).toBe(false);
+      }));
+
+    it("after an accepted choice, a board read that never answers is given up after the read limit, freeing the choices", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          setDeviceKitchenScreenDisplay: vi.fn().mockResolvedValue(undefined),
+          getDevicePassBoard: vi
+            .fn()
+            .mockImplementationOnce(hangUntilAborted)
+            .mockRejectedValue(new Error("offline")),
+        });
+        const el = await mount({
+          deviceMode: true,
+          api,
+          initialBoard: { ...deviceBoard(), display: display(null) },
+        });
+        await open(el);
+        await choose(el, 2);
+        await vi.advanceTimersByTimeAsync(24_000);
+        await settle(el);
+        expect(control(el)!.disabled).toBe(true);
+        await vi.advanceTimersByTimeAsync(1_000);
+        await settle(el);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+        expect(control(el)!.disabled).toBe(false);
+      }));
+
+    const movesToMonitorWhileSending = (monitorRead: Promise<DevicePassBoard>) => {
+      const sent = deferred<void>();
+      const api = fakeApi({
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValueOnce(identity([chosen("pass")]))
+          .mockResolvedValue(identity([chosen("pass_monitor")])),
+        getDevicePassBoard: vi
+          .fn()
+          .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+        getDevicePassMonitorBoard: vi.fn().mockReturnValue(monitorRead),
+        setDeviceKitchenScreenDisplay: vi.fn().mockReturnValue(sent.promise),
+      });
+      return { api, sent };
+    };
+
+    it("at a till whose choice moves to the monitor while a pass choice is out, the monitor's first read is kept", () =>
+      withFakeTimers(async () => {
+        const monitorRead = deferred<DevicePassBoard>();
+        const { api, sent } = movesToMonitorWhileSending(monitorRead.promise);
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(api.getDevicePassMonitorBoard).toHaveBeenCalledTimes(1);
+        sent.resolve();
+        await settle(el);
+        monitorRead.resolve({ ...deviceBoard(boardB), display: display(null) });
+        await settle(el);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+        expect(el.display).toEqual(display(null));
+      }));
+
+    it("at a till whose choice moves to the monitor while a pass choice is out, the monitor's window does not show the pass's choice", () =>
+      withFakeTimers(async () => {
+        const { api, sent } = movesToMonitorWhileSending(
+          Promise.resolve({ ...deviceBoard(boardB), display: display(null) }),
+        );
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+        sent.resolve();
+        await settle(el);
+        await open(el);
+        expect(checked(el)).toEqual(["true", "false", "false"]);
+      }));
+
+    it("at a till whose choice moves to the monitor while a pass choice is still out, the monitor's window offers the monitor's own choice", () =>
+      withFakeTimers(async () => {
+        const { api } = movesToMonitorWhileSending(
+          Promise.resolve({ ...deviceBoard(boardB), display: display(null) }),
+        );
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        expect(control(el)!.disabled).toBe(true);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+        await open(el);
+        expect(checked(el)).toEqual(["true", "false", "false"]);
+        expect(control(el)!.disabled).toBe(false);
+      }));
+
+    it("at a till whose choice moves to the monitor, a late answer to the pass's choice does not free a monitor choice still out", () =>
+      withFakeTimers(async () => {
+        const { api, sent } = movesToMonitorWhileSending(
+          Promise.resolve({ ...deviceBoard(boardB), display: display(null) }),
+        );
+        const monitorSent = deferred<void>();
+        vi.mocked(api.setDeviceKitchenScreenDisplay)
+          .mockReturnValueOnce(sent.promise)
+          .mockReturnValueOnce(monitorSent.promise);
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await open(el);
+        await choose(el, 2);
+        expect(api.setDeviceKitchenScreenDisplay).toHaveBeenLastCalledWith("pass_monitor", false);
+        sent.resolve();
+        await settle(el);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+        expect(control(el)!.disabled).toBe(true);
+        monitorSent.resolve();
+        await settle(el);
+        expect(control(el)!.disabled).toBe(false);
+        expect(api.setDeviceKitchenScreenDisplay).toHaveBeenCalledTimes(2);
+      }));
+
+    it.each([
+      ["a refusal", refused("storage.disk_full")],
+      ["a network failure", new TypeError("Failed to fetch")],
+    ])(
+      "at a till whose choice moves to the monitor, %s of the pass's choice shows nothing in the monitor's window",
+      (_name, failure) =>
+        withFakeTimers(async () => {
+          const { api, sent } = movesToMonitorWhileSending(
+            Promise.resolve({ ...deviceBoard(boardB), display: display(null) }),
+          );
+          const el = await mount({ api });
+          await open(el);
+          await choose(el, 1);
+          await vi.advanceTimersByTimeAsync(15_000);
+          await settle(el);
+          await open(el);
+          sent.reject(failure);
+          await settle(el);
+          expect(columnsWindow(el)).not.toBeNull();
+          expect(words(el)).toBeUndefined();
+          expect(marked(el)).not.toBe("true");
+        }),
+    );
+
+    it.each([
+      ["a refusal", refused("storage.disk_full")],
+      ["a network failure", new TypeError("Failed to fetch")],
+    ])(
+      "at a till whose choice moves to the monitor, %s of the pass's choice leaves no words beside a monitor choice that saved",
+      (_name, failure) =>
+        withFakeTimers(async () => {
+          const { api, sent } = movesToMonitorWhileSending(
+            Promise.resolve({ ...deviceBoard(boardB), display: display(null) }),
+          );
+          const monitorSent = deferred<void>();
+          vi.mocked(api.setDeviceKitchenScreenDisplay)
+            .mockReturnValueOnce(sent.promise)
+            .mockReturnValueOnce(monitorSent.promise);
+          const el = await mount({ api });
+          await open(el);
+          await choose(el, 1);
+          await vi.advanceTimersByTimeAsync(15_000);
+          await settle(el);
+          await open(el);
+          await choose(el, 2);
+          sent.reject(failure);
+          await settle(el);
+          monitorSent.resolve();
+          await settle(el);
+          expect(api.setDeviceKitchenScreenDisplay).toHaveBeenLastCalledWith("pass_monitor", false);
+          expect(words(el)).toBeUndefined();
+          expect(control(el)!.disabled).toBe(false);
+        }),
+    );
+
+    it("at a till whose choice moves to the monitor, a late device.unauthorized for the pass's choice leaves the monitor's window open and says nothing was refreshed", () =>
+      withFakeTimers(async () => {
+        const { api, sent } = movesToMonitorWhileSending(
+          Promise.resolve({ ...deviceBoard(boardB), display: display(null) }),
+        );
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await open(el);
+        const reads = vi.mocked(api.getDeviceIdentity).mock.calls.length;
+        sent.reject(refused("device.unauthorized"));
+        await settle(el);
+        expect(columnsWindow(el)).not.toBeNull();
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(reads);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(el.shadowRoot!.querySelector("[data-table-changed]")).toBeNull();
+      }));
+
+    const movesToMonitorAndBack = () => {
+      const sent = deferred<void>();
+      const api = fakeApi({
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValueOnce(identity([chosen("pass")]))
+          .mockResolvedValueOnce(identity([chosen("pass_monitor")]))
+          .mockResolvedValue(identity([chosen("pass")])),
+        getDevicePassBoard: vi
+          .fn()
+          .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+        getDevicePassMonitorBoard: vi
+          .fn()
+          .mockResolvedValue({ ...deviceBoard(boardB), display: display(null) }),
+        setDeviceKitchenScreenDisplay: vi.fn().mockReturnValueOnce(sent.promise),
+      });
+      return { api, sent };
+    };
+
+    it("at a till moved to the monitor and back to the pass, a late success of the old pass choice does not replace a newer one that saved", () =>
+      withFakeTimers(async () => {
+        const { api, sent } = movesToMonitorAndBack();
+        const newer = deferred<void>();
+        vi.mocked(api.setDeviceKitchenScreenDisplay)
+          .mockReset()
+          .mockReturnValueOnce(sent.promise)
+          .mockReturnValueOnce(newer.promise);
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await open(el);
+        vi.mocked(api.getDevicePassBoard).mockResolvedValueOnce({
+          ...deviceBoard(),
+          display: display(null),
+        });
+        await choose(el, 0);
+        newer.resolve();
+        await settle(el);
+        expect(checked(el)).toEqual(["true", "false", "false"]);
+        vi.mocked(api.getDevicePassBoard).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+        sent.resolve();
+        await settle(el);
+        expect(checked(el)).toEqual(["true", "false", "false"]);
+      }));
+
+    it("at a till moved to the monitor and back to the pass, a late success of the old pass choice keeps the board the switch back reads", () =>
+      withFakeTimers(async () => {
+        const { api, sent } = movesToMonitorAndBack();
+        const back = deferred<DevicePassBoard>();
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        vi.mocked(api.getDevicePassBoard)
+          .mockImplementationOnce(() => back.promise)
+          .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        sent.resolve();
+        await settle(el);
+        back.resolve({ ...deviceBoard(boardB), display: display(true) });
+        await settle(el);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+      }));
+
+    it("at a till moved to the monitor and back to the pass, a late success of the old pass choice re-reads the board and shows the value the server accepted", () =>
+      withFakeTimers(async () => {
+        const { api, sent } = movesToMonitorAndBack();
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await open(el);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+        vi.mocked(api.getDevicePassBoard).mockResolvedValueOnce({
+          ...deviceBoard(),
+          display: display(true),
+        });
+        const reads = vi.mocked(api.getDevicePassBoard).mock.calls.length;
+        sent.resolve();
+        await settle(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(reads + 1);
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+      }));
+
+    it("at a till, a choice answered after a refresh of the same board began shows the choice and frees the window", () =>
+      withFakeTimers(async () => {
+        const sent = deferred<void>();
+        const held = deferred<DevicePassBoard>();
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          getDevicePassBoard: vi
+            .fn()
+            .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+          setDeviceKitchenScreenDisplay: vi.fn().mockReturnValueOnce(sent.promise),
+        });
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        vi.mocked(api.getDevicePassBoard)
+          .mockImplementationOnce(() => held.promise)
+          .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        sent.resolve();
+        await settle(el);
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+        expect(control(el)!.disabled).toBe(false);
+        expect(el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
+        held.resolve({ ...deviceBoard(), display: display(false) });
+        await settle(el);
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+        expect(control(el)!.disabled).toBe(false);
+      }));
+
+    it("on a kitchen display, drops the section when a refresh says a narrowing took every station", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          getDevicePassBoard: vi.fn().mockResolvedValue(
+            deviceBoard(boardA, {
+              stations: [{ id: "s-1", name: "Grill", available: false }],
+            }),
+          ),
+        });
+        const el = await mount({ deviceMode: true, api, initialBoard: deviceBoard() });
+        await open(el);
+        expect(control(el)).not.toBeNull();
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(1);
+        expect(control(el)).toBeNull();
+      }));
   });
 
   describe("header", () => {
@@ -1584,7 +2418,7 @@ describe("A773 pass screen: a pass monitor", () => {
       const el = await mountOne();
       expect(boardOf(el)!.mode).toBe("monitor");
       expect(boardOf(el)!.runsPass).toBe(true);
-      expect(cardKeys(el)).toEqual(["group:g-4", "group:g-2", "group:g-1", "bill:order-1"]);
+      expect(cardKeys(el)).toEqual(["group:g-2", "group:g-4", "group:g-1", "bill:order-1"]);
       expect(boardOf(el)!.shadowRoot!.querySelector("[data-columns-open]")).not.toBeNull();
       expect(actionButtons(el, excused)).toEqual([]);
     },
@@ -1705,4 +2539,97 @@ describe("A773 pass screen: a pass monitor", () => {
         }
       }),
   );
+});
+
+describe("D95 the pass on a 1024 px tablet", () => {
+  afterEach(resetPage);
+
+  const held = passCard({
+    key: "bill:order-6",
+    target: { kind: "bill", workingOrderId: "order-6" },
+    kind: "held",
+    requestedAt: null,
+    orders: [{ orderId: "order-6", orderNumber: 17, tableLabel: "T9", kitchenNote: null }],
+    items: [passItem({ id: "held-1", orderId: "order-6", phase: "held", firedAt: null })],
+  });
+  const toFire = passCard({
+    key: "bill:order-2",
+    target: { kind: "bill", workingOrderId: "order-2" },
+    orders: [{ orderId: "order-2", orderNumber: 13, tableLabel: "T5", kitchenNote: null }],
+    items: [passItem({ id: "req-1", orderId: "order-2", phase: "requested", firedAt: null })],
+    releaseTicketItemIds: ["req-1"],
+    releaseContext: "ctx-1",
+  });
+  const inProgress = passCard({ key: "bill:order-5" });
+  const ready = passCard({
+    key: "bill:order-7",
+    target: { kind: "bill", workingOrderId: "order-7" },
+    readyAt: minutesAgo(3),
+    allReady: true,
+    orders: [{ orderId: "order-7", orderNumber: 18, tableLabel: "T10", kitchenNote: null }],
+    items: [passItem({ id: "ready-1", orderId: "order-7", phase: "ready", state: "ready" })],
+  });
+  const withHeld = passBoard({
+    held: [held],
+    toFire: [toFire],
+    inProgress: [inProgress],
+    ready: [ready],
+  });
+  const withoutHeld = passBoard({ toFire: [toFire], inProgress: [inProgress], ready: [ready] });
+
+  const store = (hidden: string[]) =>
+    localStorage.setItem(
+      columnsKey("pass"),
+      JSON.stringify({ version: 1, order: [...PASS_COLUMNS.order], hidden, collapsed: [] }),
+    );
+  const drawn = (el: TillPassScreen) => {
+    const shadow = boardOf(el)!.shadowRoot!;
+    return {
+      kanban: shadow.querySelector(".kanban") !== null,
+      list: shadow.querySelector(".list") !== null,
+      sections: [...shadow.querySelectorAll<HTMLElement>("[data-column]")].map(
+        (section) => section.dataset.column,
+      ),
+    };
+  };
+
+  it("measures a 944 px board, and draws the default's columns with and without a held card", async () => {
+    await pageAt(1024, 768);
+    for (const board of [withHeld, withoutHeld]) {
+      const el = await mount({ deviceMode: true, initialBoard: deviceBoard(board) });
+      expect(Math.abs(boardOf(el)!.getBoundingClientRect().width - 944)).toBeLessThanOrEqual(1);
+      expect(drawn(el)).toEqual({
+        kanban: true,
+        list: false,
+        sections: ["toFire", "inProgress", "ready"],
+      });
+      cleanupWidgets();
+    }
+  });
+
+  it("with Held and To fire apart, draws the narrow list at 1024 px and columns at 1280 px", async () => {
+    store(["overview", "toFire"]);
+    await pageAt(1024, 768);
+    for (const board of [withHeld, withoutHeld]) {
+      const el = await mount({ deviceMode: true, initialBoard: deviceBoard(board) });
+      expect(drawn(el)).toMatchObject({ kanban: false, list: true });
+      expect(drawn(el).sections).toEqual(["held", "toFireOnly", "inProgress", "ready"]);
+      cleanupWidgets();
+    }
+    const el = await mount({ deviceMode: true, initialBoard: deviceBoard(withHeld) });
+    expect(drawn(el)).toMatchObject({ kanban: false, list: true });
+    await pageAt(1280, 800);
+    await vi.waitFor(() => expect(drawn(el)).toMatchObject({ kanban: true, list: false }));
+  });
+
+  it("with Overview shown as well, still draws columns at 1024 px", async () => {
+    store(["held", "toFireOnly"]);
+    await pageAt(1024, 768);
+    const el = await mount({ deviceMode: true, initialBoard: deviceBoard(withHeld) });
+    expect(drawn(el)).toEqual({
+      kanban: true,
+      list: false,
+      sections: ["overview", "toFire", "inProgress", "ready"],
+    });
+  });
 });

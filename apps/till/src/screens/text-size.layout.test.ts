@@ -14,6 +14,7 @@ import "../widgets/station-queue.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { TillStationQueue } from "../widgets/station-queue.js";
 import type { FloorZone, StationQueueGroup, TableState } from "../api/client.js";
+import { kitchenStamps } from "../../test/kitchen-stamps.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -226,6 +227,7 @@ const queue: StationQueueGroup[] = DISHES.map((name, index) => ({
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
       queuedAt: "2026-08-17T10:00:00.000Z",
+      ...kitchenStamps({ state: STATES[index]!, firedAt: "2026-08-17T10:00:00.000Z" }),
     },
   ],
 }));

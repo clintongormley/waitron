@@ -7,6 +7,7 @@ import { TillStationQueue } from "./station-queue.js";
 import type { KitchenNotice, StationQueueGroup } from "../api/client.js";
 
 const queuedAt = new Date().toISOString();
+const firedAt = new Date().toISOString();
 const group = {
   orderId: "order-a",
   orderNumber: 7,
@@ -25,7 +26,11 @@ const group = {
       name: "Burger",
       quantity: "1.000",
       course: null,
-      firedAt: new Date().toISOString(),
+      phase: "waiting",
+      requestedAt: firedAt,
+      firedAt,
+      readyAt: null,
+      passControlled: false,
       queuedAt,
       note: "No onions",
     },

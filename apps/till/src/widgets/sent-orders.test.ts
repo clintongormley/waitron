@@ -1,10 +1,12 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders, TabLine } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./sent-orders.js";
+import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
 
 type Panel = LitElement & {
   scope: string;
@@ -17,26 +19,27 @@ type Panel = LitElement & {
 };
 const now = Date.parse("2026-10-18T12:00:00Z");
 const at = (minute: number) => `2026-10-18T11:${String(minute).padStart(2, "0")}:00Z`;
-const row = (id: string, over: Partial<CurrentOrderRow> = {}): CurrentOrderRow => ({
-  lineId: id,
-  workingOrderId: "b1",
-  billStatus: "open",
-  lineNo: 1,
-  courseId: null,
-  name: id,
-  quantity: "1.000",
-  netAmount: "3.00",
-  unitPrecision: 0,
-  servedQuantity: "0.000",
-  servedAt: null,
-  released: true,
-  readyAt: null,
-  firedAt: at(40),
-  kitchen: null,
-  note: null,
-  extras: [],
-  ...over,
-});
+const row = (id: string, over: Partial<CurrentOrderRow> = {}): CurrentOrderRow =>
+  withRowRequestedAt({
+    lineId: id,
+    workingOrderId: "b1",
+    billStatus: "open",
+    lineNo: 1,
+    courseId: null,
+    name: id,
+    quantity: "1.000",
+    netAmount: "3.00",
+    unitPrecision: 0,
+    servedQuantity: "0.000",
+    servedAt: null,
+    released: true,
+    readyAt: null,
+    firedAt: at(40),
+    kitchen: null,
+    note: null,
+    extras: [],
+    ...over,
+  });
 const group = (
   id: string,
   rows: CurrentOrderRow[],
@@ -1042,4 +1045,96 @@ it("A803 portion grouping: a long press on a grouped row names every member", as
     { lineId: "burger-1", workingOrderId: "b1", kind: "fired", lineIds: ["burger-1", "burger-2"] },
   ]);
   expect(serves).toEqual([]);
+});
+
+describe("A773 at the pass", () => {
+  it("says a released dish the kitchen asked for and the pass has not fired is at the pass", async () => {
+    setLocale("es");
+    const el = await mount(
+      current(
+        [
+          row("burger", {
+            firedAt: null,
+            kitchen: {
+              state: "queued",
+              firedAt: null,
+              stationId: "grill",
+              movable: false,
+              phase: "requested",
+              requestedAt: at(45),
+            },
+          }),
+          row("unknown", { firedAt: null }),
+          row("queued", {
+            firedAt: at(50),
+            kitchen: {
+              state: "queued",
+              firedAt: at(50),
+              stationId: "grill",
+              movable: false,
+              phase: "waiting",
+              requestedAt: at(50),
+            },
+          }),
+        ],
+        [group("g", [row("held", { released: false, firedAt: null })])],
+      ),
+    );
+    await click(el, "[data-sent-toggle]");
+    await click(el, "[data-held-toggle]");
+    const status = (selector: string) =>
+      find(el, `${selector} .status`).textContent!.replace(/\s+/g, " ").trim();
+    expect(status("[data-fired-line=burger]")).toBe(es["table.at_the_pass"]);
+    expect(status("[data-fired-line=unknown]")).toBe(es["table.group_fired"]);
+    expect(status("[data-fired-line=queued]")).toBe(
+      es["table.group_fired_ago"].replace("{n}", "10"),
+    );
+    expect(status("[data-held-line=held]")).toBe(es["table.group_held"]);
+  });
+
+  it("says a dish is at the pass while one of its kitchen items waits there, though its own has fired", async () => {
+    const el = await mount(
+      current([
+        row("burger", {
+          firedAt: null,
+          requestedAt: at(44),
+          kitchen: {
+            state: "queued",
+            firedAt: at(45),
+            stationId: "grill",
+            movable: false,
+            phase: "waiting",
+            requestedAt: at(45),
+          },
+        }),
+      ]),
+    );
+    await click(el, "[data-sent-toggle]");
+    expect(
+      find(el, "[data-fired-line=burger] .status").textContent!.replace(/\s+/g, " ").trim(),
+    ).toBe("at the pass");
+  });
+
+  it("does not say a dish is at the pass until the waiter has released it", async () => {
+    const el = await mount(
+      current([
+        row("burger", {
+          released: false,
+          firedAt: null,
+          kitchen: {
+            state: "queued",
+            firedAt: null,
+            stationId: "grill",
+            movable: false,
+            phase: "requested",
+            requestedAt: at(45),
+          },
+        }),
+      ]),
+    );
+    await click(el, "[data-sent-toggle]");
+    expect(
+      find(el, "[data-fired-line=burger] .status").textContent!.replace(/\s+/g, " ").trim(),
+    ).toBe("Fired");
+  });
 });

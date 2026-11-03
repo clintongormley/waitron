@@ -1116,6 +1116,32 @@ describe("department transfer read boundaries", () => {
       (await get(f.desk.cookie, `/api/department-transfers/${id}`)).body.outstandingWork,
     ).toEqual([]);
   });
+  it("carries a dish waiting for the pass with its request time and no fire time", async () => {
+    const f = await ready();
+    f.tab = await counterOrder(v, "Burger");
+    await withTransaction(suite.db, (tx) => retargetOrderServiceContext(tx, v.cfg, f.tab, f.az));
+    await placeOrder(
+      { admission: testTradingAdmission(), db: suite.db, backend: v.backend, clock: v.clock },
+      requestCfg(v.cfg, f.source),
+      f.tab,
+      personId,
+    );
+    const id = await pending(f);
+    const [ticket] = await suite.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, f.tab));
+    const requestedAt = "2026-11-03T10:00:00.000Z";
+    await suite.db
+      .update(ticketItems)
+      .set({ requestedAt, firedAt: null })
+      .where(eq(ticketItems.id, ticket!.id));
+    const detail = await get(f.desk.cookie, `/api/department-transfers/${id}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.outstandingWork).toEqual([
+      expect.objectContaining({ id: ticket!.id, requestedAt, firedAt: null }),
+    ]);
+  });
   it.each([
     { name: "held", active: 2000, served: 0, held: true, included: true },
     { name: "partly served", active: 2000, served: 1000, held: false, included: true },

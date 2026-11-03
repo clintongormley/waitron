@@ -4404,6 +4404,7 @@ export class TillTableOrderScreen extends LitElement {
   #rowState(row: CurrentOrderRow): string | TemplateResult | typeof nothing {
     if (row.servedAt !== null) return t("table.row_served");
     if (!row.released) return t("table.group_held");
+    if (row.firedAt === null && row.requestedAt !== null) return t("table.at_the_pass");
     const kitchen = row.kitchen;
     if (kitchen === null || kitchen.firedAt === null) return nothing;
     if (kitchen.state === "ready") return t("table.group_ready");

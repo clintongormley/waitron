@@ -297,7 +297,7 @@ it("delete last screen zone leaves an explicit empty parent on disabled devices 
     expect(
       (await readProfileKitchenScreens(tx, f.cfg)).find((row) => row.profileId === f.explicit)
         ?.screens,
-    ).toEqual({ pass: { stationIds: [station!.id], zoneIds: [] } });
+    ).toEqual({ pass: { stationIds: [station!.id], zoneIds: [], showNonPassStations: true } });
     expect(await readDeviceKitchenScreens(tx, f.cfg, d!.id)).toEqual([]);
     expect(
       await tx

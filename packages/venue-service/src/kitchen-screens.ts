@@ -6,6 +6,7 @@ import type {
   KitchenScreenKind,
   KitchenScreenScope,
   NarrowedDevice,
+  ProfileKitchenScreen,
   ProfileKitchenScreens,
   ResolvedKitchenScreen,
   ScreenSlot,
@@ -40,7 +41,10 @@ function refuse(field: Field, reason: Reason): never {
   throw new AppError("device_profile.access_invalid", { field, reason });
 }
 
-type MutableScreens = Partial<Record<KitchenScreenKind, KitchenScreenScope>>;
+type MutableScreens = Partial<Record<KitchenScreenKind, ProfileKitchenScreen>>;
+
+/** The kinds whose rows' `show_non_pass_stations` is read; a station row keeps its default. */
+const hasDisplay = (kind: KitchenScreenKind) => kind !== "station";
 
 export async function readProfileKitchenScreens(
   tx: Transaction,
@@ -118,6 +122,7 @@ async function readStored(
     screens[row.screen] = {
       stationIds: row.everyStation ? null : of(stations),
       zoneIds: row.screen === "station" || row.everyZone ? null : of(zones),
+      ...(hasDisplay(row.screen) ? { showNonPassStations: row.showNonPassStations } : {}),
     };
     byProfile.set(row.deviceProfileId, screens);
   }
@@ -140,7 +145,7 @@ export async function setProfileKitchenScreens(
   screens: ProfileKitchenScreens,
 ): Promise<NarrowedDevice[]> {
   const stored = (await readStored(tx, [profileId])).get(profileId) ?? {};
-  return replaceProfileKitchenScreens(tx, profileId, screens, stored);
+  return replaceProfileKitchenScreens(tx, profileId, screens, stored, stored);
 }
 
 export async function copyProfileKitchenScreens(
@@ -151,7 +156,7 @@ export async function copyProfileKitchenScreens(
 ): Promise<void> {
   await liveFormFactor(tx, sourceId);
   const stored = (await readStored(tx, [sourceId])).get(sourceId) ?? {};
-  await replaceProfileKitchenScreens(tx, targetId, stored, stored);
+  await replaceProfileKitchenScreens(tx, targetId, stored, stored, {});
 }
 
 async function replaceProfileKitchenScreens(
@@ -159,6 +164,8 @@ async function replaceProfileKitchenScreens(
   profileId: string,
   screens: ProfileKitchenScreens,
   stored: MutableScreens,
+  /** The target's own stored screens, whose display values a screen omitting one keeps. */
+  kept: MutableScreens,
 ): Promise<NarrowedDevice[]> {
   const formFactor = await liveFormFactor(tx, profileId);
   for (const kind of KITCHEN_SCREEN_KINDS) {
@@ -169,14 +176,17 @@ async function replaceProfileKitchenScreens(
       refuse(zoneField, "empty");
   }
   const kinds = KITCHEN_SCREEN_KINDS.filter((kind) => screens[kind] !== undefined);
-  const checked: { kind: KitchenScreenKind; scope: KitchenScreenScope }[] = [];
+  const checked: { kind: KitchenScreenKind; scope: ProfileKitchenScreen }[] = [];
   for (const kind of kinds) {
     const scope = screens[kind]!;
     const fields = LIST_FIELDS[kind];
     if (fields.zones === null && scope.zoneIds !== null) refuse("kitchenScreens", "not_for_screen");
     const stationIds = await checkedStations(tx, scope.stationIds, fields);
     const zoneIds = await checkedZones(tx, scope.zoneIds, stored[kind], fields);
-    checked.push({ kind, scope: { stationIds, zoneIds } });
+    const showNonPassStations = hasDisplay(kind)
+      ? (scope.showNonPassStations ?? kept[kind]?.showNonPassStations ?? true)
+      : undefined;
+    checked.push({ kind, scope: { stationIds, zoneIds, showNonPassStations } });
   }
 
   const onProfile = await tx
@@ -245,7 +255,7 @@ async function insertScreen(
   tx: Transaction,
   profileId: string,
   kind: KitchenScreenKind,
-  scope: KitchenScreenScope,
+  scope: ProfileKitchenScreen,
 ): Promise<void> {
   const zoneIds = kind === "station" ? [] : scope.zoneIds;
   await tx.insert(deviceProfileKitchenScreens).values({
@@ -253,6 +263,7 @@ async function insertScreen(
     screen: kind,
     everyStation: scope.stationIds === null,
     everyZone: zoneIds === null,
+    showNonPassStations: scope.showNonPassStations ?? true,
   });
   await insertLists(tx, profileId, kind, scope.stationIds ?? [], zoneIds ?? []);
 }
@@ -363,10 +374,15 @@ async function placesHere(tx: Transaction): Promise<{ stations: Place[]; zones: 
   return { stations, zones };
 }
 
+/** A device's stored choice of one kind, with its stored display value (null: the profile's). */
+interface StoredChoice extends KitchenScreenScope {
+  readonly showNonPassStations: boolean | null;
+}
+
 async function readChoices(
   tx: Transaction,
   deviceIds: readonly string[],
-): Promise<Map<string, Map<KitchenScreenKind, KitchenScreenScope>>> {
+): Promise<Map<string, Map<KitchenScreenKind, StoredChoice>>> {
   const rows = await tx
     .select()
     .from(deviceKitchenScreens)
@@ -383,7 +399,7 @@ async function readChoices(
     list: readonly T[],
     row: { deviceId: string; screen: KitchenScreenKind },
   ) => list.filter((entry) => entry.deviceId === row.deviceId && entry.screen === row.screen);
-  const choices = new Map<string, Map<KitchenScreenKind, KitchenScreenScope>>(
+  const choices = new Map<string, Map<KitchenScreenKind, StoredChoice>>(
     deviceIds.map((id) => [id, new Map()]),
   );
   for (const row of rows) {
@@ -393,6 +409,7 @@ async function readChoices(
         row.screen === "station" || row.everyZone
           ? null
           : of(zones, row).map((entry) => entry.zoneId),
+      showNonPassStations: row.showNonPassStations,
     });
   }
   return choices;
@@ -416,7 +433,7 @@ async function readEffectiveChoices(
   tx: Transaction,
   deviceIds: readonly string[],
   removals?: readonly Removal[],
-): Promise<Map<string, Map<KitchenScreenKind, KitchenScreenScope>>> {
+): Promise<Map<string, Map<KitchenScreenKind, StoredChoice>>> {
   return lessRemovals(
     await readChoices(tx, deviceIds),
     removals ?? (await readRemovals(tx, deviceIds)),
@@ -424,9 +441,9 @@ async function readEffectiveChoices(
 }
 
 function lessRemovals(
-  choices: Map<string, Map<KitchenScreenKind, KitchenScreenScope>>,
+  choices: Map<string, Map<KitchenScreenKind, StoredChoice>>,
   removals: readonly Removal[],
-): Map<string, Map<KitchenScreenKind, KitchenScreenScope>> {
+): Map<string, Map<KitchenScreenKind, StoredChoice>> {
   for (const [deviceId, choice] of choices) {
     for (const [kind, scope] of choice) {
       const ofKind = removals.filter((row) => row.deviceId === deviceId && row.screen === kind);
@@ -445,7 +462,7 @@ function lessRemovals(
         ofKind.map((row) => row.zoneId),
       );
       if (stationIds?.length === 0 || zoneIds?.length === 0) choice.delete(kind);
-      else choice.set(kind, { stationIds, zoneIds });
+      else choice.set(kind, { ...scope, stationIds, zoneIds });
     }
   }
   return choices;
@@ -533,7 +550,8 @@ export async function assertDeviceKitchenScreens(
   await checkChoice(tx, profileId, screens, stored);
 }
 
-/** Replaces the device's kitchen screens; a pick forgets everything narrowings took from it. */
+/** Replaces the device's kitchen screens; a pick forgets everything narrowings took from it, and
+ *  keeps each kept kind's display value. */
 export async function setDeviceKitchenScreens(
   tx: Transaction,
   _cfg: VenueScope,
@@ -554,6 +572,7 @@ export async function setDeviceKitchenScreens(
       screen: screen.kind,
       everyStation: screen.stationIds === null,
       everyZone: screen.kind !== "station" && screen.zoneIds === null,
+      showNonPassStations: stored.get(screen.kind)?.showNonPassStations ?? null,
     });
     if (stationIds.length > 0) {
       await tx
@@ -566,6 +585,26 @@ export async function setDeviceKitchenScreens(
         .values(zoneIds.map((zoneId) => ({ deviceId, screen: screen.kind, zoneId })));
     }
   }
+}
+
+/** Sets the device's own choice of showing other stations' dishes on its screen of `kind` (null:
+ *  the profile's), changing nothing else. Refused `device.unauthorized` for a kind other than a
+ *  pass or a pass monitor, and when the device's effective choice has no screen of `kind`: none
+ *  chosen, or a narrowing took the kind or all its stations or zones (the stored value stays, and
+ *  its override reads null). */
+export async function setDeviceKitchenScreenDisplay(
+  tx: Transaction,
+  deviceId: string,
+  kind: "pass" | "pass_monitor",
+  value: boolean | null,
+): Promise<void> {
+  if (kind !== "pass" && kind !== "pass_monitor") throw new AppError("device.unauthorized", {});
+  const effective = (await readEffectiveChoices(tx, [deviceId])).get(deviceId)!;
+  if (!effective.has(kind)) throw new AppError("device.unauthorized", {});
+  await tx
+    .update(deviceKitchenScreens)
+    .set({ showNonPassStations: value })
+    .where(and(eq(deviceKitchenScreens.deviceId, deviceId), eq(deviceKitchenScreens.screen, kind)));
 }
 
 /** How many kitchen screens the device has chosen. */
@@ -646,7 +685,7 @@ export async function readDevicesKitchenScreens(
 /** The targets' removal rows and effective choices, as a caller that already read them passes on. */
 interface DeviceReads {
   readonly removals: readonly Removal[];
-  readonly choices: Map<string, Map<KitchenScreenKind, KitchenScreenScope>>;
+  readonly choices: Map<string, Map<KitchenScreenKind, StoredChoice>>;
 }
 
 async function readDeviceState(
@@ -685,6 +724,12 @@ async function resolveDevices(
       const removedZones = new Set(ofKind.flatMap((row) => row.zoneId ?? []));
       const chosen = choice.get(kind);
       const bound = offered[kind];
+      const nonPassStationsOverride =
+        chosen === undefined || !hasDisplay(kind) ? null : chosen.showNonPassStations;
+      const display = {
+        nonPassStationsOverride,
+        showNonPassStations: nonPassStationsOverride ?? bound?.showNonPassStations ?? true,
+      };
       if (chosen === undefined) {
         return {
           kind,
@@ -694,6 +739,7 @@ async function resolveDevices(
           profileEveryStation: false,
           stations: slots(places.stations, [], null, removedStations),
           zones: removedZones.size === 0 ? null : slots(places.zones, [], null, removedZones),
+          ...display,
         };
       }
       const everyZone =
@@ -714,6 +760,7 @@ async function resolveDevices(
           kind === "station" || everyZone
             ? null
             : slots(places.zones, chosen.zoneIds, bound?.zoneIds ?? null, removedZones),
+        ...display,
       };
     };
     resolved.set(

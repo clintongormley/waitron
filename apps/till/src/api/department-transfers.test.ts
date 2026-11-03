@@ -45,6 +45,7 @@ const detail = {
       note: "No salt",
       firedAt: "2026-10-07T09:01:00.000Z",
       courseId: null,
+      requestedAt: null,
     },
   ],
 };

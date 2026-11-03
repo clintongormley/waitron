@@ -121,7 +121,8 @@ un pedido así: cada estación con un plato por llegar en él recibe el aviso de
 mostrador, e imprime un ticket **MOVIDO** si su ajuste **Imprimir un aviso al cambiar de mesa los
 platos enviados** es **Imprimir**; los platos siguen en el pase hasta que se entrega el pedido. Cada pase atiende solo las
 estaciones y zonas de servicio que tiene asignadas; un plato de otra estación en una de sus tarjetas
-se muestra atenuado.
+se muestra atenuado, salvo si el pase oculta los platos de otras estaciones (consulta
+[Trabaja en el pase](kitchen-service.md#pass-screen)).
 
 Tú decides cuándo pedir la preparación desde el terminal; no hay un modo de marcha para todo el
 local. Cada estación de preparación fija si su pantalla de cocina avanza la preparación un plato cada vez
@@ -148,17 +149,23 @@ sea cual sea el ajuste de las estaciones.
 La pantalla de cocina muestra una tarjeta por cada grupo de platos que envió una mesa, y una por
 cada pedido de mostrador. Una tarjeta nombra su mesa por su nombre corto; un pedido de mostrador sin
 mesa dice **Mostrador #12**. Una tarjeta está en la columna de su plato menos avanzado,
-**Esperando**, **Preparando** o **Listo**, y primero va la que lleva más tiempo esperando. Toca la
-cabecera de una columna, que muestra cuántas tarjetas tiene, para plegarla en una franja estrecha
-que conserva su nombre y su número (**Listo · 3**); tócala otra vez para abrirla. La pantalla
-recuerda qué columnas están plegadas, en cada estación, incluso después de reiniciarse. Toca un
-plato para avanzarlo un paso, o toca la cabecera de la tarjeta para avanzar la tarjeta: solo avanzan
-los platos que la retienen, así que un plato que ya va más adelante se queda donde está. El borde
-superior de una tarjeta pasa de verde a ámbar mientras espera, y después todo el borde a rojo, según
-los avisos de demora de la estación, y el borde de una tarjeta olvidada late; en un dispositivo
-configurado para reducir el movimiento se queda quieto. Una tarjeta cuyos platos están todos en espera tiene el
-borde discontinuo, no muestra minutos y espera en **Esperando** hasta que el camarero [pida la
-preparación](kitchen-service.md#request-cooking).
+**Esperando**, **Preparando** o **Listo**, y primero va la que lleva más tiempo esperando. Sus
+minutos cuentan desde que su primer plato se envió a esta estación para prepararlo, o se pasó a
+ella. Toca la cabecera de una columna, que muestra cuántas tarjetas tiene, para plegarla en una
+franja estrecha que conserva su nombre y su número (**Listo · 3**); tócala otra vez para abrirla.
+Toca un plato para avanzarlo un paso, o toca la cabecera de la tarjeta para avanzar la tarjeta: solo
+avanzan los platos que la retienen, así que un plato que ya va más adelante se queda donde está. En
+una tarjeta de **Toda la comanda**, un toque en un plato avanza los platos de la tarjeta que están
+en la misma fase. El borde superior de una tarjeta pasa de verde a ámbar mientras espera, y después
+todo el borde a rojo, según los avisos de demora de la estación, y el borde de una tarjeta olvidada
+late; en un dispositivo configurado para reducir el movimiento se queda quieto.
+
+Una tarjeta cuyos platos están todos en espera tiene el borde discontinuo y no muestra minutos. Dice
+**En espera, sin marchar** hasta que el camarero [pida la
+preparación](kitchen-service.md#request-cooking), y **Esperando al pase** cuando el camarero ya ha
+pedido todos sus platos y el pase aún no la ha marchado. Al principio está al final de
+**Esperando**, bajo una cabecera **En espera** que solo aparece mientras haya algo en espera; si la
+pantalla muestra la columna **En espera**, también está allí.
 
 La primera columna, **Resumen**, muestra cada plato que espera o se está haciendo con cuántos hay,
 para que veas de un vistazo cuántos de cada uno empezar. Tras un **+** muestra cuántos más están en
@@ -166,25 +173,33 @@ espera (**Secreto ibérico 1 +2**). Primero van los platos que quedan por hacer,
 cuántos son. Resumen es una columna como las demás: toca su cabecera para plegarla, y muévela u
 ocúltala en **Columnas**.
 
-Donde la pantalla es demasiado estrecha para sus columnas, muestra una columna cada vez y las
-columnas pasan a ser pestañas en el mismo orden (**Esperando · 2**). La primera pestaña está elegida
-hasta que tocas otra. Una columna oculta no tiene pestaña, y la pestaña de una columna plegada sigue
-mostrando sus tarjetas. Abrir una columna plegada puede dejar sin sitio a las demás: la pantalla
-pasa entonces a pestañas y muestra la columna que abriste. Para volver a ver las columnas una al
-lado de otra en esa pantalla, oculta columnas en **Columnas** hasta que quepan. Una pestaña cuya
-columna tiene una tarjeta con retraso lleva una barra roja debajo; una columna plegada con una
-tarjeta con retraso la lleva en su parte superior.
+Donde la pantalla es demasiado estrecha para las columnas activadas, muestra una columna cada vez y
+las columnas pasan a ser pestañas en el mismo orden (**Esperando · 2**). Por defecto, una tarjeta en espera
+no ocupa una columna propia: su cabecera **En espera** va dentro de **Esperando**. La primera pestaña
+está elegida hasta que tocas otra. Una columna oculta no tiene pestaña, y la pestaña de una columna
+plegada sigue mostrando sus tarjetas. Abrir una columna plegada puede dejar sin sitio a las demás:
+la pantalla pasa entonces a pestañas y muestra la columna que abriste. Para volver a ver las
+columnas una al lado de otra en esa pantalla, oculta columnas en **Columnas** hasta que quepan. Una
+pestaña cuya columna tiene una tarjeta con retraso lleva una barra roja debajo; una columna plegada
+con una tarjeta con retraso la lleva en su parte superior.
 
 Una fila encima de las columnas muestra cuántos platos quedan por hacer y cuántas tarjetas van con
 retraso, y **Columnas** al final; encima de las columnas de una sola estación muestra también si la
 estación está abierta hoy y, en una pantalla de cocina en la que nadie inicia sesión, el nombre de
 la estación (salvo si la estación ya no está disponible: entonces la nombra la línea encima de sus
-columnas). Toca **Columnas** para
-ordenar las columnas: las flechas suben o bajan una columna en la lista, que es el orden en
-que la pantalla las muestra, y **Mostrar** la oculta o la muestra. Cada cambio se ve al
-momento y se guarda en este dispositivo; **Hecho** cierra la ventana. Las tarjetas de una columna
-oculta siguen contando en la fila. Con todas las columnas ocultas, la fila y **Columnas** siguen
-ahí, para que puedas mostrar una de nuevo.
+columnas). Toca **Columnas** para ordenar las columnas. Lista **Resumen**, **Esperando + En
+espera**, **Esperando**, **En espera**, **Preparando** y **Listo**: las flechas suben o bajan una
+columna en la lista, que es el orden en que la pantalla las muestra, y **Mostrar** la muestra o la
+oculta. Al principio la pantalla muestra Resumen, Esperando + En espera (con la cabecera
+**Esperando** en la pantalla), Preparando y Listo. Una pantalla lo bastante ancha puede mostrar
+**Esperando** y **En espera** como dos columnas: activa las dos y desactiva **Esperando + En
+espera**. Mientras la pantalla tenga alguna tarjeta, una columna activada se muestra aunque esté
+vacía. Dos columnas activadas que contienen las mismas tarjetas las muestran las dos: con
+**Esperando + En espera** y **En espera** activadas, una tarjeta en espera aparece en ambas. Cada
+cambio se ve al momento; **Hecho** cierra la ventana. Este dispositivo guarda el orden, las columnas
+que se muestran y las plegadas, para cada tablero, incluso después de reiniciarse la pantalla. Las
+tarjetas de una columna oculta siguen contando en la fila. Con todas las columnas ocultas, la fila y
+**Columnas** siguen ahí, para que puedas mostrar una de nuevo.
 
 Cada tarjeta lleva la nota para cocina de su pedido y cualquier problema de impresión. En un
 terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pedido está pagado y
@@ -194,13 +209,15 @@ dos.
 ## Trabaja en el pase {#pass-screen}
 
 El pase muestra una tarjeta por cada grupo de platos que envía una mesa, en todas sus cuentas, y una
-por cada pedido de mostrador. Sus columnas son **En espera**, **Por marchar**, **En curso** y
-**Listo**, y una tarjeta avanza por ellas como sus platos: está en **En espera** mientras todos sus
-platos están en espera, en **Por marchar** mientras tiene platos que esperan a que este pase los
-marche, en **En curso** mientras sus platos están en sus estaciones y en **Listo** cuando todos
-están listos. **Resumen** está oculta hasta que la muestras en **Columnas**, y entonces va primero.
-No cuenta los platos atenuados y cuenta los demás como el de la pantalla de cocina, con los que están
-en espera o esperan al pase tras el **+**.
+por cada pedido de mostrador. Al principio muestra las columnas **Por marchar**, **En curso** y
+**Listo**, y una tarjeta avanza por ellas como sus platos. Una tarjeta cuyos platos están todos en
+espera está al final de **Por marchar**, bajo una cabecera **En espera** que solo aparece mientras
+haya algo en espera; si el pase muestra la columna **En espera**, también está allí. Una tarjeta
+está en **Por marchar** mientras tiene platos que esperan a que este pase los marche, en **En
+curso** mientras sus platos están en sus estaciones y en **Listo** cuando todos están listos.
+**Resumen** está oculta hasta que la muestras en **Columnas**, y entonces va primero. No cuenta los
+platos atenuados y cuenta los demás como el de la pantalla de cocina, con los que están en espera o
+esperan al pase tras el **+**.
 
 La cabecera de una tarjeta dice qué envió el camarero, **Nuevo pedido**, **Siguiente pase** o
 **Añadido** (una tarjeta en espera no dice ninguno), y después su número de pedido, su mesa y su
@@ -225,17 +242,31 @@ estación desde el TPV o abre Parrilla por hoy**, y **Marchar** sigue desactivad
 una de las dos cosas. Un extra que va a su propia estación cerrada dice en cambio **Parrilla está
 cerrada: Marchar lo envía allí igualmente**, y **Marchar** sigue activo.
 
-Mientras ninguna estación que cubre este pase espere al pase, nada de lo que cubre se atenúa.
-Cuando una espera, sus platos que esperan a este pase se ven enteros, y el pase atenúa los platos de
-sus estaciones que no esperan y los enviados antes de que su estación empezara a esperar: dicen, por
-ejemplo, **Preparando · Ya en Barra**. Un plato de una estación o zona de servicio que este pase no
-cubre solo aparece en una tarjeta que también lleva un plato que este pase cubre, y siempre se
-atenúa; mientras espera a su propio pase dice **Barra: esperando a su pase**. Los platos atenuados son solo información.
+Nada de lo que cubre este pase se atenúa hasta que una estación que cubre espere al pase, o una de
+sus tarjetas lleve un plato que cubre y que se envió a esperar al pase. Mientras sea así, sus platos
+que esperan a este pase se ven enteros, y el pase atenúa los platos de sus estaciones que no esperan
+y los enviados antes de que su estación empezara a esperar: dicen, por ejemplo, **Preparando · Ya en
+Barra**. Un plato de una estación o zona de servicio que este pase no cubre solo aparece en una
+tarjeta que también lleva un plato que este pase cubre, y, cuando se muestra, se atenúa; mientras espera a su
+propio pase dice **Barra: esperando a su pase**. Los platos atenuados son solo información.
+
+En una pantalla de pase o un monitor de pase, **Columnas** ofrece también **Platos de otras
+estaciones**: **Usar la configuración del perfil**, **Mostrar** u **Ocultar**. **Ocultar** quita de
+las tarjetas los platos atenuados; mientras nada de lo que cubre este pase está atenuado, solo son
+platos de estaciones y zonas de servicio que no cubre. Una tarjeta se queda en su columna con sus
+botones aunque **Ocultar** la deje sin ningún plato. **Ocultar** solo cambia qué platos se dibujan:
+el color de la tarjeta y el número de tarjetas con retraso son los mismos que con **Mostrar**. La
+elección es de este dispositivo y sustituye la que un encargado eligió para el dispositivo en el
+panel. Allí, en **Perfiles de dispositivo**, la pantalla de pase y el monitor de pase de un perfil
+tienen cada uno **Mostrar en el pase los platos de otras estaciones**, activado al principio; en
+**Dispositivos**, la ventana **Editar** de un dispositivo tiene el mismo ajuste para su pantalla de
+pase o su monitor de pase, con **Usar la configuración del perfil**, **Mostrar** y **Ocultar**.
 
 En una tarjeta en **En curso**, **Grupo listo** marca como listos todos los platos enviados del
 grupo de la mesa, en todas las estaciones, no solo los que muestra este pase, y en un pedido de
-mostrador **Curso listo**, seguido del nombre del curso, hace lo mismo con ese curso. **Marchar** y estos botones solo aparecen en
-un dispositivo cuyo perfil **Lleva el pase**. En un terminal, una tarjeta que no está en espera
+mostrador **Curso listo**, seguido del nombre del curso, hace lo mismo con ese curso. Los platos
+que aún no se han mandado a preparar, en espera o esperando al pase, se quedan como están.
+**Marchar** y estos botones solo aparecen en un dispositivo cuyo perfil **Lleva el pase**. En un terminal, una tarjeta que no está en espera
 ofrece además **Reimprimir** por cada una de sus cuentas.
 
 Un monitor de pase muestra el mismo tablero para mirarlo, sin **Marchar**, botones de listo ni
@@ -243,11 +274,19 @@ Un monitor de pase muestra el mismo tablero para mirarlo, sin **Marchar**, boton
 **Pase** con todas las estaciones y zonas de servicio, sin **Marchar**: solo marcha una pantalla
 de pase.
 
-Toca la cabecera de una columna para plegarla, y usa **Columnas**, al final de la fila encima de las
-columnas, para mover u ocultar columnas, como en la [pantalla de cocina](kitchen-service.md#kitchen-screen);
-este dispositivo guarda la disposición de cada tablero. Donde la pantalla es demasiado estrecha para
-sus columnas, el pase las muestra como secciones de una sola lista, en el mismo orden, y una sección
-se pliega tocando su cabecera.
+Toca la cabecera de una columna para plegarla en una franja estrecha que conserva su nombre y su
+número; tócala otra vez para abrirla. **Columnas**, al final de la fila encima de las columnas, lista
+**Resumen**, **En espera + Por marchar**, **En espera**, **Por marchar**, **En curso** y **Listo**:
+las flechas suben o bajan una columna en la lista, que es el orden en que el pase las muestra,
+**Mostrar** la muestra o la oculta, y **Hecho** cierra la ventana. **En espera + Por marchar** es la
+columna con la cabecera **Por marchar** en el tablero, con las tarjetas en espera al final. Una
+pantalla lo bastante ancha puede mostrar **En espera** y **Por marchar** como dos columnas: activa
+las dos y desactiva **En espera + Por marchar**. Una columna activada se muestra aunque esté vacía.
+Dos columnas activadas que contienen las mismas tarjetas las muestran las dos: con **En espera + Por
+marchar** y **Por marchar** activadas, una tarjeta por marchar aparece en ambas. Este dispositivo
+guarda el orden, las columnas que se muestran y las plegadas, para cada tablero. Solo cuando las
+columnas activadas no caben en la pantalla, el pase las muestra como secciones de una sola lista, en
+el mismo orden; una sección se pliega tocando su cabecera.
 
 ## Ayuda en la pantalla de cocina {#kitchen-help}
 
@@ -302,7 +341,10 @@ quien envía no es encargado, el terminal pide el PIN de un encargado tras **La 
 
 Pide los platos en espera desde el pedido de la mesa. Las colas de las estaciones y el pase muestran los pases
 y grupos en espera sin botón Marchar. En las colas de las estaciones, los platos en espera se muestran
-atenuados y no avanzan al tocarlos; en el pase, una tarjeta con todos sus platos en espera está en **En espera**.
+atenuados y no avanzan al tocarlos; en el pase, una tarjeta con todos sus platos en espera está bajo
+**En espera** al final de **Por marchar**, o en **En espera** si el pase muestra esa columna. En la
+pantalla del pedido de la mesa, un plato dice **en el pase** mientras él, o uno de sus extras,
+espera a que el pase lo marche.
 Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estación. Un plato cuya
 estación espera al pase va en cambio a la columna **Por marchar** del pase: consulta
 [Trabaja en el pase](kitchen-service.md#pass-screen).

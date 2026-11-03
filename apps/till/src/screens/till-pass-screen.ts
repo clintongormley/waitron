@@ -19,12 +19,9 @@ import {
   type ColumnScope,
   type ColumnState,
   PASS_COLUMNS,
-  moveColumn,
-  readColumnState,
-  saveColumnState,
-  setColumnVisible,
   toggleColumnCollapsed,
 } from "../state/kitchen-columns.js";
+import { KitchenColumnLayouts } from "../state/kitchen-column-layouts.js";
 import type {
   DevicePassBoard,
   PassBoard,
@@ -180,6 +177,23 @@ export class TillPassScreen extends LitElement {
   @state() private lostLines: string[] = [];
   @state() private nothingLeft = false;
   @state() private columnsWindow: ColumnsWindow | null = null;
+  /**
+   * The choice sent on the board shown, until the send is refused, a board read begun after its
+   * acceptance answers, or that follow-up read ends; the window shows it, disabled.
+   */
+  @state() private otherStationsSending?: boolean | null;
+  /**
+   * Moves on with each choice sent and each change of board. An older send's answer frees no newer
+   * choice, its success is not taken as the newest answer, and its failure is not acted on.
+   */
+  #otherStationsSend = 0;
+  /**
+   * The send the server accepted; a board read begun after it ends its sending when it answers,
+   * unless a newer send is out.
+   */
+  #acceptedSend = 0;
+  /** A refusal of that choice, shown in the window until the next choice or a change of board. */
+  @state() private otherStationsError?: string;
   /** A read of the device's choice has answered; until one does, All stations shows. */
   #choiceRead = false;
   #choiceRequest = 0;
@@ -200,8 +214,16 @@ export class TillPassScreen extends LitElement {
   /** The refresh sentence, with the table a Ready refusal names; Fire's names none. */
   @state() private tableChanged: { table?: string } | null = null;
   #tableChangedNext: { table?: string } | null = null;
-  /** Each board's layout, read from storage once and never again on a refresh. */
-  readonly #columns = new Map<string, ColumnState>();
+  readonly #layouts = new KitchenColumnLayouts(PASS_COLUMNS);
+  /** Unset until a read of the board shown answers; the window offers no choice until then. */
+  #display?: DevicePassBoard["display"];
+  /** A choice the server accepted, shown until a read begun after it answers. */
+  #acceptedChoice?: boolean | null;
+
+  /** The last board read's choice of showing other stations' dishes. */
+  get display(): DevicePassBoard["display"] | undefined {
+    return this.#display;
+  }
 
   /** Re-renders the idle display so an item's band can climb between refreshes, with no refetch. */
   readonly #clock = new TickingClock(this);
@@ -260,6 +282,11 @@ export class TillPassScreen extends LitElement {
         this.lostLines = [];
         this.nothingLeft = false;
         this.columnsWindow = null;
+        this.#display = undefined;
+        this.#acceptedChoice = undefined;
+        this.otherStationsSending = undefined;
+        this.#otherStationsSend++;
+        this.otherStationsError = undefined;
       }
       this.selected = next;
     }
@@ -267,13 +294,17 @@ export class TillPassScreen extends LitElement {
   }
 
   async #refresh(): Promise<void> {
+    await this.#bounded((signal) =>
+      this.#followsChoice() ? this.#loadChoice(signal) : this.#reload(signal, true),
+    );
+  }
+
+  async #bounded(run: (signal: AbortSignal) => Promise<void>): Promise<void> {
     const read = new AbortController();
     const limit = setTimeout(() => read.abort(), READ_LIMIT_MS);
     this.#refreshReads.add(read);
     try {
-      await (this.#followsChoice()
-        ? this.#loadChoice(read.signal)
-        : this.#reload(read.signal, true));
+      await run(read.signal);
     } finally {
       clearTimeout(limit);
       this.#refreshReads.delete(read);
@@ -300,7 +331,12 @@ export class TillPassScreen extends LitElement {
     try {
       const result: DevicePassBoard =
         boardId === "all"
-          ? { ...(await this.api.getExpoBoard({ signal })), stations: [], zones: null }
+          ? {
+              ...(await this.api.getExpoBoard({ signal })),
+              stations: [],
+              zones: null,
+              display: { showNonPassStations: true, nonPassStationsOverride: null },
+            }
           : boardId === "pass"
             ? await this.api.getDevicePassBoard({ signal })
             : await this.api.getDevicePassMonitorBoard({ signal });
@@ -326,6 +362,9 @@ export class TillPassScreen extends LitElement {
 
   #adoptBoard(read: DevicePassBoard): void {
     this.board = read.board;
+    this.#display = read.display;
+    this.#acceptedChoice = undefined;
+    if (this.#acceptedSend === this.#otherStationsSend) this.otherStationsSending = undefined;
     this.lostLines = lostLines(read);
     this.nothingLeft = nothingLeft(read);
     for (const key of this.#asks.keys()) if (!this.sending.has(key)) this.#dropAskIfChanged(key);
@@ -431,6 +470,45 @@ export class TillPassScreen extends LitElement {
     if (this.#isCurrent(boardId)) await this.#reload();
   }
 
+  /**
+   * The device's own choice of showing other stations' dishes on the board it shows. A refusal
+   * meaning the board itself has gone follows Fire's (D74, D92); any other keeps the previous choice.
+   */
+  async #chooseOtherStations(boardId: BoardId, value: boolean | null): Promise<void> {
+    if (boardId === "all" || this.otherStationsSending !== undefined) return;
+    this.otherStationsError = undefined;
+    this.otherStationsSending = value;
+    const send = ++this.#otherStationsSend;
+    let reload: "board" | "choice" | null = "board";
+    try {
+      await this.api.setDeviceKitchenScreenDisplay(
+        boardId === "pass" ? "pass" : "pass_monitor",
+        value,
+      );
+      if (send === this.#otherStationsSend && this.#isCurrent(boardId)) {
+        this.#acceptedChoice = value;
+        this.#acceptedSend = send;
+        // Counts as an answer newer than any board read already out, so none of those can undo it.
+        this.#appliedRequest = ++this.#request;
+      }
+    } catch (error) {
+      reload = null;
+      if (send === this.#otherStationsSend) {
+        const code = (error as { code?: string } | null)?.code ?? "server.internal";
+        if (this.#switched(error)) this.columnsWindow = null;
+        else if (code === "device.unauthorized" && this.#followsChoice()) {
+          this.columnsWindow = null;
+          this.#tableChangedNext = {};
+          reload = "choice";
+        } else this.otherStationsError = code;
+      }
+    }
+    if (reload === "board" && this.#isCurrent(boardId))
+      await this.#bounded((signal) => this.#reload(signal));
+    if (send === this.#otherStationsSend) this.otherStationsSending = undefined;
+    if (reload === "choice" && this.#isCurrent(boardId)) await this.#loadChoice();
+  }
+
   #leverRefused(card: PassCard | undefined, error: unknown): void {
     this.leverError = {
       code: (error as { code?: string } | null)?.code ?? "server.internal",
@@ -492,41 +570,17 @@ export class TillPassScreen extends LitElement {
     return this.now ?? this.#clock.now;
   }
 
-  /** The getter itself throws where the browser refuses storage altogether. */
-  #deviceStorage(): Storage | null {
-    try {
-      return localStorage;
-    } catch {
-      return null;
-    }
-  }
-
   #columnScope(boardId: BoardId): ColumnScope | null {
     if (!this.deviceId || !this.serverOrigin) return null;
     return { venueId: this.serverOrigin, deviceId: this.deviceId, screen: SCOPES[boardId] };
   }
 
   #columnsFor(boardId: BoardId): ColumnState {
-    const scope = this.#columnScope(boardId);
-    const key = scope === null ? `memory|${boardId}` : JSON.stringify(scope);
-    let layout = this.#columns.get(key);
-    if (layout === undefined) {
-      const storage = scope === null ? null : this.#deviceStorage();
-      layout =
-        scope !== null && storage !== null
-          ? readColumnState(storage, scope, PASS_COLUMNS)
-          : PASS_COLUMNS;
-      this.#columns.set(key, layout);
-    }
-    return layout;
+    return this.#layouts.get(this.#columnScope(boardId), boardId);
   }
 
-  /** A refused store leaves the layout in memory. */
   #keepColumns(boardId: BoardId, layout: ColumnState): void {
-    const scope = this.#columnScope(boardId);
-    this.#columns.set(scope === null ? `memory|${boardId}` : JSON.stringify(scope), layout);
-    const storage = scope === null ? null : this.#deviceStorage();
-    if (scope !== null && storage !== null) saveColumnState(storage, scope, layout);
+    this.#layouts.keep(this.#columnScope(boardId), boardId, layout);
     this.requestUpdate();
   }
 
@@ -672,18 +726,34 @@ export class TillPassScreen extends LitElement {
       .names=${passColumnNames()}
       .boardName=${this.#title()}
       .opener=${open.opener}
+      .otherStations=${
+        boardId === "all" || !this.#shows() || this.#display === undefined
+          ? null
+          : {
+              value:
+                this.otherStationsSending !== undefined
+                  ? this.otherStationsSending
+                  : this.#acceptedChoice !== undefined
+                    ? this.#acceptedChoice
+                    : this.#display.nonPassStationsOverride,
+              sending: this.otherStationsSending !== undefined,
+              errorCode: this.otherStationsError,
+            }
+      }
+      @other-stations-choose=${(event: Event) => {
+        event.stopPropagation();
+        const { value } = (event as CustomEvent<{ value: boolean | null }>).detail;
+        void this.#chooseOtherStations(boardId, value);
+      }}
       @column-move=${(event: Event) => {
         event.stopPropagation();
-        const { key, direction } = (
-          event as CustomEvent<{ key: ColumnKey; direction: "up" | "down" }>
-        ).detail;
-        this.#keepColumns(boardId, moveColumn(this.#columnsFor(boardId), key, direction));
+        this.#layouts.applyMove(this.#columnScope(boardId), boardId, event);
+        this.requestUpdate();
       }}
       @column-show=${(event: Event) => {
         event.stopPropagation();
-        const { key, visible } = (event as CustomEvent<{ key: ColumnKey; visible: boolean }>)
-          .detail;
-        this.#keepColumns(boardId, setColumnVisible(this.#columnsFor(boardId), key, visible));
+        this.#layouts.applyShow(this.#columnScope(boardId), boardId, event);
+        this.requestUpdate();
       }}
       @close=${(event: Event) => {
         event.stopPropagation();

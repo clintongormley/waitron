@@ -9,6 +9,7 @@ import {
   passCard,
   passItem,
 } from "../../test/pass-board-fixtures.js";
+import { allergyBlock } from "../../test/kitchen-allergy-fixtures.js";
 import { overviewRows } from "./kitchen-overview.js";
 import {
   type CardView,
@@ -349,6 +350,62 @@ describe("A773 pass view", () => {
     });
     expect(onlyView("inProgress", unnamed).courseReady).toEqual([
       { orderId: "order-1", courseId: "course-unnamed", name: "" },
+    ]);
+  });
+
+  it("counts a dish Hide hides for the card's lateness, the overdue count and course Ready, drawing none", () => {
+    const cooking = passItem({
+      id: "cold-late",
+      stationName: "Cold",
+      stationId: "st-cold",
+      state: "preparing",
+      phase: "preparing",
+      queuedAt: minutesAgo(50),
+      informational: true,
+      passControlled: false,
+    });
+    const card = passCard({ requestedAt: minutesAgo(50), items: [], hiddenItems: [cooking] });
+    const views = passCardViews(passBoard({ inProgress: [card] }), "pass", true, PASS_NOW);
+    const [view] = views.get("inProgress")!;
+    expect(view!.items).toEqual([]);
+    expect(view!.band).toBe("forgotten");
+    expect(passOverdueCount(views)).toBe(1);
+    expect(view!.courseReady).toEqual([
+      { orderId: "order-1", courseId: "course-mains", name: "Mains" },
+    ]);
+  });
+
+  it("marks a card's allergy from every dish in view, drawn or hidden, and none from a dish out of view", () => {
+    const dimmed = { informational: true, passControlled: false, allergy: allergyBlock };
+    const marked = (card: PassCard) => onlyView("inProgress", card).allergy;
+    expect(marked(passCard())).toBe(false);
+    expect(marked(passCard({ items: [passItem({ allergy: allergyBlock })] }))).toBe(true);
+    expect(marked(passCard({ items: [passItem(dimmed)] }))).toBe(true);
+    expect(marked(passCard({ items: [], hiddenItems: [passItem(dimmed)] }))).toBe(true);
+    expect(
+      marked(passCard({ items: [], hiddenItems: [passItem({ ...dimmed, visible: false })] })),
+    ).toBe(false);
+  });
+
+  it("offers course Ready in the same order whether Hide hid a dish or drew it", () => {
+    const starters = { id: "course-starters", name: "Starters", displayOrder: 1 };
+    const coldStarter = passItem({
+      id: "cold-starter",
+      stationId: "st-cold",
+      course: starters,
+      informational: true,
+      passControlled: false,
+    });
+    const grillMain = passItem({ id: "grill-main" });
+    const ready = (card: PassCard) =>
+      onlyView("inProgress", card).courseReady.map(({ orderId, name }) => `${orderId} ${name}`);
+    expect(ready(passCard({ items: [coldStarter, grillMain] }))).toEqual([
+      "order-1 Starters",
+      "order-1 Mains",
+    ]);
+    expect(ready(passCard({ items: [grillMain], hiddenItems: [coldStarter] }))).toEqual([
+      "order-1 Starters",
+      "order-1 Mains",
     ]);
   });
 

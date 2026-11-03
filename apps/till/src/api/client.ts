@@ -596,6 +596,9 @@ export interface CurrentOrderKitchen {
   firedAt: string | null;
   stationId: string | null;
   movable: boolean;
+  phase: KitchenPhase;
+  /** Null while the item is held, or since it was recalled. */
+  requestedAt: string | null;
 }
 
 /** A dish row of `GET /api/parties/:id/current-orders`, on any bill of the party but an abandoned
@@ -610,6 +613,9 @@ export interface CurrentOrderRow {
   /** Stored dish and extras total, after adjustments. */
   netAmount: string;
   readyAt: string | null;
+  /** The earliest initiation of its kitchen components once every one is initiated, else null;
+   *  `firedAt` for a dish with no kitchen work. */
+  requestedAt: string | null;
   firedAt: string | null;
   nutrition?: LineNutrition;
   lineId: string;
@@ -1588,9 +1594,15 @@ export interface StationQueueItem {
   group?: QueueGroup;
   /** The period this dish was confirmed sent after; absent when it was not. */
   afterPeriod?: string;
-  /** `null` while the item is HELD — not advanceable (`ticket.item_held`); a timestamp once
-   *  fired. */
+  phase: KitchenPhase;
+  /** `null` while the item is held. */
+  requestedAt: string | null;
+  /** `null` while the item is HELD — not advanceable (`ticket.item_held`) — or requested and
+   *  waiting for the pass; a timestamp once fired. */
   firedAt: string | null;
+  readyAt: string | null;
+  /** Whether the item waited for the pass when it was requested. */
+  passControlled: boolean;
   /** When this dish joined the queue: set at fire, and again when a release re-routes it. */
   queuedAt: string;
   /** The NON-FISCAL kitchen note as frozen at fire, so a later edit never changes what the cook sees. */
@@ -1764,6 +1776,11 @@ export interface ResolvedKitchenScreen {
   stations: ScreenSlot[];
   /** null: no zone filter. */
   zones: ScreenSlot[] | null;
+  /** The device's own stored choice of showing other stations' dishes; null when it holds none
+   *  (or no choice of this kind), and always null on a station screen. */
+  nonPassStationsOverride: boolean | null;
+  /** `nonPassStationsOverride`, else the profile's row of this kind, else true. */
+  showNonPassStations: boolean;
 }
 
 export interface ProfileChoice {
@@ -1988,6 +2005,9 @@ export interface PassCard {
   }[];
   group?: { displayNumber: number; numberPartyLabel?: string; position: number };
   items: PassCardItem[];
+  /** Dimmed dishes the pass's display choice hides: never drawn, but counted for the card's
+   *  lateness, allergy marker and course Ready levers as if drawn. */
+  hiddenItems?: PassCardItem[];
   /** Empty, with a null context, on the pass monitor's board. */
   releaseTicketItemIds: string[];
   releaseContext: string | null;
@@ -2011,6 +2031,7 @@ export interface DevicePassBoard {
   stations: ScreenSlot[];
   /** null: no zone filter. */
   zones: ScreenSlot[] | null;
+  display: Pick<ResolvedKitchenScreen, "showNonPassStations" | "nonPassStationsOverride">;
 }
 
 /** A card's `releaseTicketItemIds` and `releaseContext`, sent back unchanged. */
@@ -2546,6 +2567,7 @@ export interface DepartmentTransferDetail {
     stationName: string | null;
     state: TicketState;
     note: string | null;
+    requestedAt: string | null;
     firedAt: string | null;
     courseId: string | null;
   }[];
@@ -3493,6 +3515,18 @@ export class TillApi {
    *  `ticket.pass_context_changed`. */
   releaseDevicePass(ask: PassReleaseAsk): Promise<PassReleaseResult> {
     return this.#request<PassReleaseResult>("/api/device/pass-screen/release", "POST", ask);
+  }
+
+  /** The device's own choice of showing other stations' dishes on its pass or pass monitor →
+   *  `PUT /api/device/kitchen-screen-display`; null takes the profile's. */
+  async setDeviceKitchenScreenDisplay(
+    kind: "pass" | "pass_monitor",
+    value: boolean | null,
+  ): Promise<void> {
+    await this.#request<void>("/api/device/kitchen-screen-display", "PUT", {
+      kind,
+      showNonPassStations: value,
+    });
   }
 
   async bumpDeviceCourseReady(orderId: string, courseId: string): Promise<void> {

@@ -5,33 +5,35 @@ import { setLocale } from "../i18n/t.js";
 import type { TillSentOrders } from "./sent-orders.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./sent-orders.js";
+import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
 
 const now = Date.parse("2026-09-28T20:15:00.000Z");
 const nutrition: LineNutrition = {
   allergens: { gluten: { kinds: ["rye"] } },
   dietaryDeclarations: ["kosher"],
 };
-const dish = (over: Partial<CurrentOrderRow> = {}): CurrentOrderRow => ({
-  lineId: "dish",
-  workingOrderId: "bill",
-  billStatus: "open",
-  netAmount: "4.00",
-  readyAt: null,
-  firedAt: "2026-09-28T20:00:00.000Z",
-  lineNo: 1,
-  courseId: null,
-  name: "Dish",
-  quantity: "2.000",
-  unitPrecision: 0,
-  servedQuantity: "0.000",
-  servedAt: null,
-  released: true,
-  kitchen: null,
-  note: null,
-  extras: [],
-  nutrition,
-  ...over,
-});
+const dish = (over: Partial<CurrentOrderRow> = {}): CurrentOrderRow =>
+  withRowRequestedAt({
+    lineId: "dish",
+    workingOrderId: "bill",
+    billStatus: "open",
+    netAmount: "4.00",
+    readyAt: null,
+    firedAt: "2026-09-28T20:00:00.000Z",
+    lineNo: 1,
+    courseId: null,
+    name: "Dish",
+    quantity: "2.000",
+    unitPrecision: 0,
+    servedQuantity: "0.000",
+    servedAt: null,
+    released: true,
+    kitchen: null,
+    note: null,
+    extras: [],
+    nutrition,
+    ...over,
+  });
 function orders(rows: CurrentOrderRow[], held = false): CurrentOrders {
   return {
     hasGroups: held,

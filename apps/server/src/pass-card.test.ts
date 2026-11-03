@@ -735,6 +735,75 @@ describe("A773 pass board: dimming", () => {
       expect(release(board)).toEqual(release(calm));
   });
 
+  it("5c. keeps a card Hide empties in its column, with its party and levers (D83)", () => {
+    const rows = [
+      released({ id: "grill-1", state: "preparing", passControlled: false, lineNo: 1 }),
+      released({ id: "grill-2", state: "ready", passControlled: false, lineNo: 2 }),
+    ];
+    const options = { aStationInViewWaits: true };
+    const shown = buildPassBoard(rows, HOT, { ...options, showNonPassStations: true });
+    const hidden = buildPassBoard(rows, HOT, { ...options, showNonPassStations: false });
+    expect(cards(shown)).toHaveLength(1);
+    const card = cards(shown)[0]!;
+    expect(card.items.every((item) => item.informational)).toBe(true);
+    expect(card.party).toEqual({ id: party, revision: 7 });
+    expect(hidden.inProgress).toEqual([{ ...card, items: [], hiddenItems: card.items }]);
+    expect(columnOf(hidden, card.key)).toBe(columnOf(shown, card.key));
+    expect(hidden.overview).toEqual([]);
+  });
+
+  it("5d. keeps the dishes Hide hides on their card, apart from the dishes it draws (D73)", () => {
+    const rows = [
+      released({ id: "grill-1", state: "ready", lineNo: 1, course: mains }),
+      released({
+        id: "cold-1",
+        stationId: cold,
+        state: "preparing",
+        passControlled: false,
+        firedAt: at("11:30"),
+        lineNo: 2,
+        course: mains,
+      }),
+    ];
+    const options = { aStationInViewWaits: true };
+    const shown = buildPassBoard(rows, EVERY, { ...options, showNonPassStations: true });
+    const hidden = buildPassBoard(rows, EVERY, { ...options, showNonPassStations: false });
+    const [card] = cards(shown);
+    expect(cards(shown)).toHaveLength(1);
+    expect(card).not.toHaveProperty("hiddenItems");
+    const { items, ...rest } = card!;
+    expect(cards(hidden)).toEqual([
+      {
+        ...rest,
+        items: items.filter((item) => item.id === "grill-1"),
+        hiddenItems: items.filter((item) => item.id === "cold-1"),
+      },
+    ]);
+    expect(itemOf(card!, "cold-1").informational).toBe(true);
+    expect(hidden.overview.map((fact) => fact.lineId)).toEqual(["line-grill-1"]);
+  });
+
+  it("5e. keeps a dish outside the pass's view among its card's hidden dishes (D83)", () => {
+    const starters = { id: "course-starters", name: "Starters", displayOrder: 1 };
+    const rows = [
+      released({ id: "cold-1", stationId: cold, state: "preparing", lineNo: 1, course: starters }),
+      released({ id: "grill-1", state: "preparing", lineNo: 2, course: mains }),
+    ];
+    const shown = buildPassBoard(rows, HOT, { showNonPassStations: true });
+    const hidden = buildPassBoard(rows, HOT, { showNonPassStations: false });
+    const [card] = cards(shown);
+    expect(cards(shown)).toHaveLength(1);
+    expect(itemOf(card!, "cold-1").visible).toBe(false);
+    const { items, ...rest } = card!;
+    expect(cards(hidden)).toEqual([
+      {
+        ...rest,
+        items: items.filter((item) => item.id === "grill-1"),
+        hiddenItems: items.filter((item) => item.id === "cold-1"),
+      },
+    ]);
+  });
+
   it("5b. lets no recalled pass work dim the board", () => {
     const rows = [
       row({ id: "grill-recalled", recalled: true, lineNo: 1 }),

@@ -32,12 +32,9 @@ import {
   type ColumnScope,
   type ColumnState,
   STATION_COLUMNS,
-  moveColumn,
-  readColumnState,
-  saveColumnState,
-  setColumnVisible,
   toggleColumnCollapsed,
 } from "../state/kitchen-columns.js";
+import { KitchenColumnLayouts } from "../state/kitchen-column-layouts.js";
 import type {
   BillEditExpected,
   DeviceStationScreen,
@@ -87,10 +84,6 @@ interface DishMove {
   generation: number;
   expectedEdit: BillEditExpected | null;
 }
-
-/** Without a scope a layout is held for the screen only, apart for each station. */
-const layoutKey = (scope: ColumnScope | null, stationId: string | undefined): string =>
-  scope === null ? `memory|${stationId ?? ""}` : JSON.stringify(scope);
 
 const worked = (station: DeviceStation): station is WorkedStation =>
   station.available || station.switchedOff;
@@ -342,17 +335,7 @@ export class TillStationScreen extends LitElement {
     return this.deviceStations.filter(drawsQueue).map((station) => station.id);
   }
 
-  /** Each board's layout, read from storage once and never again on a refresh. */
-  #columns = new Map<string, ColumnState>();
-
-  /** The getter itself throws where the browser refuses storage altogether. */
-  #deviceStorage(): Storage | null {
-    try {
-      return localStorage;
-    } catch {
-      return null;
-    }
-  }
+  readonly #layouts = new KitchenColumnLayouts(STATION_COLUMNS);
 
   #columnScope(stationId: string | undefined): ColumnScope | null {
     if (!this.deviceId || !this.serverOrigin) return null;
@@ -360,25 +343,11 @@ export class TillStationScreen extends LitElement {
   }
 
   #columnsFor(stationId?: string): ColumnState {
-    const scope = this.#columnScope(stationId);
-    const key = layoutKey(scope, stationId);
-    let layout = this.#columns.get(key);
-    if (layout === undefined) {
-      const storage = scope === null ? null : this.#deviceStorage();
-      layout =
-        scope !== null && storage !== null
-          ? readColumnState(storage, scope, STATION_COLUMNS)
-          : STATION_COLUMNS;
-      this.#columns.set(key, layout);
-    }
-    return layout;
+    return this.#layouts.get(this.#columnScope(stationId), stationId ?? "");
   }
 
   #keepColumns(stationId: string | undefined, layout: ColumnState): void {
-    const scope = this.#columnScope(stationId);
-    this.#columns.set(layoutKey(scope, stationId), layout);
-    const storage = scope === null ? null : this.#deviceStorage();
-    if (scope !== null && storage !== null) saveColumnState(storage, scope, layout);
+    this.#layouts.keep(this.#columnScope(stationId), stationId ?? "", layout);
     this.requestUpdate();
   }
 
@@ -403,16 +372,13 @@ export class TillStationScreen extends LitElement {
       .opener=${open.opener}
       @column-move=${(event: Event) => {
         event.stopPropagation();
-        const { key, direction } = (
-          event as CustomEvent<{ key: ColumnKey; direction: "up" | "down" }>
-        ).detail;
-        this.#keepColumns(stationId, moveColumn(this.#columnsFor(stationId), key, direction));
+        this.#layouts.applyMove(this.#columnScope(stationId), stationId ?? "", event);
+        this.requestUpdate();
       }}
       @column-show=${(event: Event) => {
         event.stopPropagation();
-        const { key, visible } = (event as CustomEvent<{ key: ColumnKey; visible: boolean }>)
-          .detail;
-        this.#keepColumns(stationId, setColumnVisible(this.#columnsFor(stationId), key, visible));
+        this.#layouts.applyShow(this.#columnScope(stationId), stationId ?? "", event);
+        this.requestUpdate();
       }}
       @close=${(event: Event) => {
         event.stopPropagation();

@@ -512,6 +512,13 @@
       "when": 1793353385831,
       "tag": "0072_abnormal_kylun",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "6",
+      "when": 1793704688147,
+      "tag": "0073_brief_silver_samurai",
+      "breakpoints": true
     }
   ]
 }
