@@ -746,6 +746,15 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   means moving `apps/server/src/first-setup-backup-handoff.test.ts`'s paused-API probe to another
   setup GET and removing the route's two direct cases in `apps/server/src/setup-api.test.ts`.
 
+- **Setup's refusal text for the operation description asks for an edit nobody can make** — left
+  open by A1315 PR 5 (#2441). Setup no longer sends the value; the server fills the filing module's
+  default (`apps/server/src/setup-api.ts` `parseVenue`). So `server_fields.operation_description`
+  (`apps/setup/src/i18n/strings/start.ts`, EN and ES), which says to shorten the text or remove
+  hidden characters, can now be reached only by a filing module with no default or a faulty one —
+  a fault in Waitron, which a refusal should name as such (root `CLAUDE.md` §3, refusals). The
+  mapping stays because `scripts/setup-wizard-fiscal-fields.test.ts` requires setup to word every
+  venue field the Veri*Factu module can refuse. Wanted: reword it as a fault in Waitron.
+
 - **The setup role screen shows its choices as cards with buttons, not `wt-choice-row` rows**
   (`apps/setup/src/screens/role-screen.ts`, reached from Join or recover). Split out of A237.
 
