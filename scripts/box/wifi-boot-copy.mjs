@@ -5,6 +5,7 @@ import {
   BOOT_ROOT,
   WIFI_NO_COPY_REASONS,
   createWifiRecordReader,
+  formatWifiRecord,
   parseWifiRecord,
 } from "./wifi-record.mjs";
 
@@ -139,6 +140,7 @@ export function createWifiBootCopyPublisher(deps) {
   if (!validDeps(deps)) throw programmingError(DEPS_CODE, "deps-invalid");
   const { bootRoot, ownerUid, inspectBootMount } = deps;
   const folder = join(bootRoot, "waitron-recovery");
+  const recordPath = join(folder, "wifi.json");
   const nextPath = join(folder, "wifi.json.next");
   const io = Object.hasOwn(deps, "io") ? /** @type {WifiCopyIo} */ (deps.io) : hostFileIo;
   const reader = createWifiRecordReader({
@@ -187,9 +189,14 @@ export function createWifiBootCopyPublisher(deps) {
   async function checkFolder() {
     const stats = await lstatIfPresent(folder);
     if (stats === null) return false;
+    folderRules(stats);
+    return true;
+  }
+
+  /** @param {import("node:fs").BigIntStats} stats */
+  function folderRules(stats) {
     if (stats.isSymbolicLink() || !stats.isDirectory()) throw refusal("path-unsafe");
     if (!owned(stats)) throw refusal("permissions-unsafe");
-    return true;
   }
 
   // Only root can put a name in a root-only folder, so a staging name that is not a regular,
@@ -205,19 +212,61 @@ export function createWifiBootCopyPublisher(deps) {
     return true;
   }
 
-  /** @returns {Promise<{state: WifiCopyState, failure: WifiCopyFailure|null}>} */
-  async function publishChecked() {
+  /** @param {import("./wifi-record.mjs").WifiReadResult} found @param {Uint8Array} bytes */
+  function holds(found, bytes) {
+    if (found.kind !== "loaded") return false;
+    const loaded = formatWifiRecord(found.network);
+    return loaded.length === bytes.length && loaded.every((byte, at) => byte === bytes[at]);
+  }
+
+  /**
+   * @param {Uint8Array} bytes
+   * @param {import("./wifi-record.mjs").WifiReadResult} found  the reader's answer before any write
+   * @param {boolean} folderExists @param {boolean} nextExists
+   */
+  async function writeCopy(bytes, found, folderExists, nextExists) {
+    if (!folderExists) {
+      await io.mkdir(folder, { mode: 0o700 });
+      folderRules(await io.lstat(folder, { bigint: true }));
+    }
+    // Flushed on every publication: an earlier one may have made the folder or written the copy
+    // and then failed to flush, and a later call cannot tell.
+    await io.syncDirectory(bootRoot);
+    if (!nextExists && holds(found, bytes)) {
+      await io.syncDirectory(folder);
+      return;
+    }
+    if (nextExists) await io.unlink(nextPath);
+    await io.writeFile(nextPath, bytes, { flag: "wx", mode: 0o600 });
+    await io.syncFile(nextPath);
+    await io.rename(nextPath, recordPath);
+    await io.syncDirectory(folder);
+    if (!holds(await reader.read(), bytes)) throw refusal("publication-unverified");
+  }
+
+  async function removeCopy() {
+    throw new Error("not implemented");
+  }
+
+  /**
+   * @param {CheckedDecision} decision
+   * @returns {Promise<{state: WifiCopyState, failure: WifiCopyFailure|null}>}
+   */
+  async function publishChecked(decision) {
     const found = await reader.read();
     if (found.kind === "refused" && UNSAFE.has(found.reason)) {
       return { state: "failed", failure: /** @type {WifiCopyFailure} */ (found.reason) };
     }
     try {
-      if (await checkFolder()) await checkNext();
+      const folderExists = await checkFolder();
+      const nextExists = folderExists && (await checkNext());
+      if (decision.kind === "remove") return await removeCopy();
+      await writeCopy(decision.bytes, found, folderExists, nextExists);
+      return { state: "current", failure: null };
     } catch (error) {
       if (refusals.has(/** @type {object} */ (error))) return /** @type {any} */ (error);
       throw error;
     }
-    throw new Error("not implemented");
   }
 
   return {
@@ -228,7 +277,7 @@ export function createWifiBootCopyPublisher(deps) {
       latestReason = reason;
       running++;
       try {
-        finished = await inTurn(publishChecked);
+        finished = await inTurn(() => publishChecked(checked));
       } catch {
         // The error itself is never kept: an injected io's message may hold the password.
         finished = { state: "failed", failure: "io-failed" };

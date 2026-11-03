@@ -12,7 +12,7 @@ import {
   publishWifiBootCopy,
   wifiBootCopyStatus,
 } from "./wifi-boot-copy.mjs";
-import { createWifiRecordReader, decideWifiBootCopy } from "./wifi-record.mjs";
+import { createWifiRecordReader, decideWifiBootCopy, formatWifiRecord } from "./wifi-record.mjs";
 
 // The fixed entry points' default io is not injectable, so their file calls are seen through the
 // module's own `node:fs/promises`; with no hook set, writeFile is the real one.
@@ -824,5 +824,175 @@ describe("the fixed entry points", () => {
       DECISION_INVALID,
     );
     expect(fsCalls.log).toEqual([]);
+  });
+});
+
+describe("publish writes a copy through wifi.json.next and reads it back", () => {
+  const path = (f, name) => join(f.folder, name);
+  const readerCalls = (f) => [
+    ["lstat", f.bootRoot],
+    ["lstat", f.folder],
+    ["open", f.recordPath],
+  ];
+  const writeTail = (f) => [
+    ["writeFile", f.nextPath],
+    ["syncFile", f.nextPath],
+    ["rename", f.nextPath, f.recordPath],
+    ["syncDirectory", f.folder],
+    ...readerCalls(f),
+  ];
+  const CURRENT = { state: "current", reason: null, failure: null };
+  const expectLoaded = async (f, settings) => {
+    const decision = decideWifiBootCopy(settings);
+    const found = await f.reader().read();
+    expect(found.kind).toBe("loaded");
+    expect(formatWifiRecord(found.network)).toEqual(decision.bytes);
+  };
+  const expectHolds = async (f, bytes) => {
+    const stats = await fs.lstat(f.recordPath);
+    expect(stats.isFile()).toBe(true);
+    expect(stats.mode & 0o7777).toBe(0o600);
+    expect(stats.nlink).toBe(1);
+    expect(new Uint8Array(await fs.readFile(f.recordPath))).toEqual(bytes);
+    await expect(fs.lstat(f.nextPath)).rejects.toMatchObject({ code: "ENOENT" });
+  };
+
+  it("a new folder: made 0o700, flushed, written, renamed, flushed, read back", async () => {
+    const f = await fixture({ folder: false });
+    expectStatus(await f.make().publish(writeB), CURRENT);
+    expect(f.counting.log).toEqual([
+      ["lstat", f.bootRoot],
+      ["lstat", f.folder],
+      ["lstat", f.folder],
+      ["mkdir", f.folder],
+      ["lstat", f.folder],
+      ["syncDirectory", f.bootRoot],
+      ...writeTail(f),
+    ]);
+    expect((await fs.lstat(f.folder)).mode & 0o7777).toBe(0o700);
+    await expectHolds(f, writeB.bytes);
+    await expectLoaded(f, wifi({ keyMgmt: "sae", psk: PASSWORD_B }));
+  });
+
+  it("a clean folder with no wifi.json → current", async () => {
+    const f = await fixture();
+    expectStatus(await f.make().publish(writeA), CURRENT);
+    await expectHolds(f, writeA.bytes);
+  });
+
+  it("replacing A with B: the other recovery file is untouched", async () => {
+    const f = await fixture({ record: "A" });
+    const crt = path(f, "recovery.crt");
+    const crtBefore = await fs.readFile(crt);
+    expectStatus(await f.make().publish(writeB), CURRENT);
+    expect(f.counting.log).toEqual([
+      ...readerCalls(f),
+      ["lstat", f.folder],
+      ["lstat", f.nextPath],
+      ["syncDirectory", f.bootRoot],
+      ...writeTail(f),
+    ]);
+    await expectHolds(f, writeB.bytes);
+    expect(await fs.readFile(crt)).toEqual(crtBefore);
+    expect((await fs.lstat(crt)).mode & 0o7777).toBe(0o600);
+  });
+
+  it("a leftover wifi.json.next is removed after the boot flush and before the write", async () => {
+    const f = await fixture({
+      record: "A",
+      next: Buffer.from(writeA.bytes).subarray(0, writeA.bytes.length >> 1),
+    });
+    expectStatus(await f.make().publish(writeB), CURRENT);
+    expect(f.counting.log).toEqual([
+      ...readerCalls(f),
+      ["lstat", f.folder],
+      ["lstat", f.nextPath],
+      ["syncDirectory", f.bootRoot],
+      ["unlink", f.nextPath],
+      ...writeTail(f),
+    ]);
+    await expectHolds(f, writeB.bytes);
+  });
+
+  it.each([
+    ["{}\\n", "{}\n"],
+    ["1025 bytes of a", "a".repeat(1025)],
+  ])("a damaged copy (%s) is replaced by B", async (_name, record) => {
+    const f = await fixture({ record });
+    expectStatus(await f.make().publish(writeB), CURRENT);
+    await expectHolds(f, writeB.bytes);
+  });
+
+  it("already right: nothing is written, only the two folders are flushed", async () => {
+    const f = await fixture({ record: "B" });
+    const before = await fs.lstat(f.recordPath);
+    expectStatus(await f.make().publish(writeB), CURRENT);
+    expect(f.counting.log).toEqual([
+      ...readerCalls(f),
+      ["lstat", f.folder],
+      ["lstat", f.nextPath],
+      ["syncDirectory", f.bootRoot],
+      ["syncDirectory", f.folder],
+    ]);
+    const names = f.counting.log.map(([name]) => name);
+    for (const name of [...WRITE_OPS, "syncFile"]) expect(names).not.toContain(name);
+    const after = await fs.lstat(f.recordPath);
+    expect(after.ino).toBe(before.ino);
+    expect(after.mtimeMs).toBe(before.mtimeMs);
+    await expectHolds(f, writeB.bytes);
+  });
+
+  it("already right with a leftover wifi.json.next: the full write runs", async () => {
+    const f = await fixture({ record: "B", next: "A" });
+    expectStatus(await f.make().publish(writeB), CURRENT);
+    const names = f.counting.log.map(([name]) => name);
+    expect(names).toContain("unlink");
+    expect(names).toContain("writeFile");
+    expect(names).toContain("rename");
+    await expectHolds(f, writeB.bytes);
+  });
+
+  it.each([
+    ["a WPA2 network", wifi()],
+    [
+      "a hidden WPA3 network with a non-ASCII password",
+      wifi({ keyMgmt: "sae", psk: "Crème brûlée Àngels", hidden: true }),
+    ],
+    ["a 64-hex-digit WPA2 password", wifi({ psk: "0123456789abcdef".repeat(4) })],
+  ])("the written file is what the reader loads: %s", async (_name, settings) => {
+    const f = await fixture({ record: "A" });
+    expectStatus(await f.make().publish(decideWifiBootCopy(settings)), CURRENT);
+    await expectLoaded(f, settings);
+  });
+
+  it("a folder this publication made that comes out group-readable → permissions-unsafe", async () => {
+    const f = await fixture({ folder: false });
+    const counting = countingIo({
+      mkdir: async (target) => {
+        await fs.mkdir(target);
+        await fs.chmod(target, 0o755);
+      },
+    });
+    const status = await f.make({ io: counting.io }).publish(writeB);
+    expectStatus(status, { state: "failed", reason: null, failure: "permissions-unsafe" });
+    expect(counting.log.map(([name]) => name)).not.toContain("writeFile");
+    expect((await fs.lstat(f.folder)).isDirectory()).toBe(true);
+  });
+
+  it("a read-back that loads a different record → publication-unverified", async () => {
+    const f = await fixture({ record: "A" });
+    const elsewhere = path(f, "elsewhere.json");
+    await fs.writeFile(elsewhere, writeA.bytes);
+    await fs.chmod(elsewhere, 0o600);
+    let opens = 0;
+    const counting = countingIo({
+      open: (target, ...rest) =>
+        fs.open(target === f.recordPath && ++opens === 2 ? elsewhere : target, ...rest),
+    });
+    const status = await f.make({ io: counting.io }).publish(writeB);
+    expectStatus(status, { state: "failed", reason: null, failure: "publication-unverified" });
+    expect(
+      counting.log.filter(([name, at]) => name === "open" && at === f.recordPath),
+    ).toHaveLength(2);
   });
 });
