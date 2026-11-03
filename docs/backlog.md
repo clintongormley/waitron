@@ -5958,6 +5958,10 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   [Earlier measurements](backlog/ci.md#a1252-remaining-server-job-time-after-the-held-setup-split).
   [Method](developers/ci-and-gates.md#the-servers-shards-twenty-four-after-a1297).
 
+- **The server's test suite has more measured speed-ups left.** A1297 took the three largest; four
+  more were measured or named but not built. Plus two small guard gaps from the same PR.
+  [Detail](backlog/ci.md#server-test-time-levers-left-after-a1297).
+
 - **The server's duration table needs a staleness warning.** Flag missing files and
   shards over four minutes from CI measurements; refreshing the table remains manual.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)

@@ -1165,6 +1165,36 @@ No assertion failure was reported; whether this shares the earlier stall's cause
 A1305 owns that investigation in Lane B. Keep the failed run; a passing retry would not establish
 the cause or a repair.
 
+## Server test time levers left after A1297
+
+[PR #2418](https://github.com/clintongormley/waitron/pull/2418) (A1297) remembered recovery-key checks
+within a test file, migrated `heldSetup`'s databases once per file, sealed the test helpers' backups
+under one salt per file and split `first-fiscal-hour.e2e.test.ts`. Its investigators measured or named
+these, which it did not build (local figures, 2 November 2026):
+
+- **Start child servers from a prebuilt bundle instead of `tsx`.** Loading `src/boot.ts` through `tsx`
+  took 2.3–2.5 s per process on a busy machine; `kitchen-allergy.restart.test.ts` starts 15,
+  `hour-recovery-placement-*` 2–4 each. A bundle's start time was not measured, and an earlier attempt
+  to bundle `bin.ts` failed resolving `ui-core` and the assets' font path.
+- **One migrated template for every `useVenueDb` suite** (`packages/db/src/testing/venue-db.ts`):
+  about 0.85 s of migration per file, across several hundred suites.
+- **The `zone-process-matrix.*` files** run other test files in nested Vitest runs; child processes
+  were 47–54 s of their 49–57 s locally. Not investigated further.
+- **The remaining random salts in test setup:** `src/testing/staged-hour-restore.ts`,
+  `src/testing/staged-hour-crash.ts` and the re-seal at `setup-first-backup-api.test.ts:84` still draw
+  one per call. Sharing `apps/server/test/fixture-salt.ts` with `src/testing/` would mean moving it
+  there, under coverage and mutation.
+- **The recovery-key memo lives in `apps/server/test/hour-recovery-host.ts` only.** Files that do not
+  load the host still pay the full derivation per check; moving the memo into a wider test setup
+  must keep `src/testing/watched-scrypt.ts`'s derivation counts correct.
+
+Guard gaps the review left:
+
+- `scripts/vitest-duration-sequencer.test.mjs` checks shard counts up to 24, so the next increase has
+  to raise that bound too.
+- Nothing compares the server coverage merge's expected blob count (25) with the shard count plus the
+  stream job; the download script refuses a wrong count only when CI runs.
+
 ## A1252: remaining server job time after the held-setup split
 
 **Coordination, 1 November at 12:45:** the watcher closed A1252 after its split and three
