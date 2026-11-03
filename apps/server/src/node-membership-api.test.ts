@@ -21,7 +21,14 @@ import {
   readHandoverRestriction,
   recordHandoverRestrictionTx,
 } from "@waitron/node-db";
-import type { StepDownRequest, StepDownResult } from "./handover-stepdown.js";
+import { AppError } from "@waitron/shared";
+import { createHandoverGate } from "./handover-gate.js";
+import {
+  stepDown,
+  type StepDownDeps,
+  type StepDownRequest,
+  type StepDownResult,
+} from "./handover-stepdown.js";
 import { mountNodeMembershipApi, type NodeMembershipApiDeps } from "./node-membership-api.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 
@@ -224,7 +231,7 @@ describe("POST /api/node/membership", () => {
     expect(await readNodeMembership(db)).toEqual(fencing);
   });
 
-  it("a fencing chart that names no serving main box is held without stepping down", async () => {
+  it("a fencing chart that names no serving main box stops the box with no successor named", async () => {
     const { app, self, peer, peerSigner, stepDown, db } = await boxes();
     const fencing = chart(5, peerSigner, [
       [self, "sell-only"],
@@ -234,7 +241,145 @@ describe("POST /api/node/membership", () => {
       status: 200,
       body: { accepted: true },
     });
-    expect(stepDown).not.toHaveBeenCalled();
+    expect(stepDown).toHaveBeenCalledTimes(1);
+    expect(stepDown.mock.calls[0]![0]).toMatchObject({
+      kind: "superseded",
+      successorNodeId: null,
+      membershipTerm: 5,
+    });
     expect(await readNodeMembership(db)).toEqual(fencing);
+  });
+
+  it("sending the held fencing chart again repairs a stepdown that failed", async () => {
+    const { app, self, peer, peerSigner, stepDown } = await boxes();
+    stepDown.mockRejectedValueOnce(new Error("the first check failed"));
+    const fencing = chart(5, peerSigner, [
+      [self, "sell-only"],
+      [peer, "serving-primary"],
+    ]);
+    expect((await hand(app, { document: fencing })).status).toBe(500);
+    expect(await hand(app, { document: fencing })).toEqual({
+      status: 200,
+      body: { accepted: false },
+    });
+    expect(stepDown).toHaveBeenCalledTimes(2);
+    expect(stepDown.mock.calls[1]![0]).toMatchObject({ successorNodeId: peer, membershipTerm: 5 });
+  });
+
+  it("a stepdown refused because another chart's stepdown got there first still answers", async () => {
+    const { app, self, peer, peerSigner, stepDown } = await boxes();
+    stepDown.mockRejectedValueOnce(new AppError("handover.restriction_conflict", {}));
+    const fencing = chart(5, peerSigner, [
+      [self, "sell-only"],
+      [peer, "serving-primary"],
+    ]);
+    expect(await hand(app, { document: fencing })).toEqual({
+      status: 200,
+      body: { accepted: true },
+    });
+  });
+
+  it("a chart that does not verify does not start a stepdown, even on a box holding a fencing chart", async () => {
+    const { app, self, peer, peerSigner, stepDown, db } = await boxes();
+    const fencing = chart(5, peerSigner, [
+      [self, "sell-only"],
+      [peer, "serving-primary"],
+    ]);
+    await writeNodeMembership(db, fencing);
+    const forged = chart(9, { nodeId: peer, privateKey: generateNodeKeyPair().privateKey }, [
+      [self, "serving-primary"],
+    ]);
+    for (const body of [{}, { document: forged }])
+      expect(await hand(app, body)).toEqual({ status: 200, body: { accepted: false } });
+    expect(stepDown).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/node/membership with the real stepdown", () => {
+  const suite = useVenueDb({
+    migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
+  });
+
+  async function sellingBox() {
+    const db = suite.db;
+    await seedVenue(db);
+    const self = await seedNode(db);
+    const peer = await seedNode(db);
+    await establishNodeIdentity({ ownerDb: db, node: suite.node, ring: RING }, peer);
+    const signer = { nodeId: peer, privateKey: await readNodeIdentityKey(suite.node, RING, peer) };
+    await writeNodeMembership(
+      db,
+      chart(4, signer, [
+        [self, "serving-primary"],
+        [peer, "serving-secondary"],
+      ]),
+    );
+    const gate = createHandoverGate();
+    const restart = vi.fn();
+    const deps: StepDownDeps = {
+      node: suite.node,
+      nodeId: self,
+      gate,
+      duties: { aborts: [], closers: [] },
+      close: () => Promise.resolve(),
+      restart,
+      log: () => {},
+    };
+    const app = new Hono();
+    app.use("*", gate.middleware);
+    mountNodeMembershipApi(
+      app,
+      {
+        db,
+        node: suite.node,
+        nodeId: self,
+        stepDown: (request) => stepDown(deps, request),
+        selling: () => true,
+      },
+      () => {},
+    );
+    const send = async (body: string) => {
+      const response = await app.request("/api/node/membership", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      });
+      return response.status;
+    };
+    return { self, peer, signer, send, restart };
+  }
+
+  it("two sends of the same fencing chart together step down once and answer both", async () => {
+    const { self, peer, signer, send, restart } = await sellingBox();
+    const body = JSON.stringify({
+      document: chart(5, signer, [
+        [self, "sell-only"],
+        [peer, "serving-primary"],
+      ]),
+    });
+    expect(await Promise.all([send(body), send(body)])).toEqual([200, 200]);
+    await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
+    expect(await readHandoverRestriction(suite.node, self)).toMatchObject({
+      kind: "superseded",
+      successorNodeId: peer,
+      membershipTerm: 5,
+    });
+  });
+
+  it("two different fencing charts together step down once and answer both", async () => {
+    const { self, peer, signer, send, restart } = await sellingBox();
+    const fencing = (term: number) =>
+      JSON.stringify({
+        document: chart(term, signer, [
+          [self, "sell-only"],
+          [peer, "serving-primary"],
+        ]),
+      });
+    expect(await Promise.all([send(fencing(5)), send(fencing(6))])).toEqual([200, 200]);
+    await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1));
+    expect(await readHandoverRestriction(suite.node, self)).toMatchObject({
+      kind: "superseded",
+      successorNodeId: peer,
+    });
   });
 });

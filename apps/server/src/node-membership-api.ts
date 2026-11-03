@@ -14,7 +14,7 @@ import {
   type SignedMembershipDocument,
 } from "@waitron/membership";
 import { readHandoverRestriction } from "@waitron/node-db";
-import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
+import { codeOf, createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import type { StepDownRequest, StepDownResult } from "./handover-stepdown.js";
 import type { Logger } from "./logger.js";
 
@@ -35,9 +35,10 @@ function documentOf(raw: unknown): SignedMembershipDocument | null {
 
 /**
  * `POST /api/node/membership` — a box is handed a signed chart. It keeps the chart when it verifies
- * against the stored keys and is strictly newer than the one held; when that chart fences a selling
- * box that holds no restriction, the box steps down as `superseded` before it sells again. A
- * refused chart answers only `{ accepted: false }`, so the caller learns nothing it did not send.
+ * against the stored keys and is strictly newer than the one held. When the chart it then holds
+ * fences a selling box that holds no restriction, the box steps down as `superseded` before it
+ * sells again. A refused chart answers only `{ accepted: false }`, so the caller learns nothing it
+ * did not send.
  */
 export function mountNodeMembershipApi(app: Hono, deps: NodeMembershipApiDeps, log: Logger): void {
   const run = createErrorBoundary({}, "node-membership.failed");
@@ -53,32 +54,36 @@ export function mountNodeMembershipApi(app: Hono, deps: NodeMembershipApiDeps, l
       // Judged against the chart held before it, as boot does: a retirement chart is signed by
       // the node it evicts.
       const verdict = acceptMembershipDocument(incoming, held?.body.term ?? null, trustSet, held);
-      if (!verdict.accepted) return c.json({ accepted: false }, 200);
-      if (!(await persistNodeMembershipIfNewer(deps.db, incoming)))
+      // A chart that verifies but is not newer may be the one already held, sent again because
+      // the stepdown it should have caused failed.
+      if (!verdict.accepted && verdict.reason !== "not_newer")
         return c.json({ accepted: false }, 200);
+      const accepted = verdict.accepted && (await persistNodeMembershipIfNewer(deps.db, incoming));
+      // Decided from the chart held now, saved in venue.db before stepDown writes node.db, so a
+      // re-send repairs a stepdown that failed.
+      const now = await readNodeMembership(deps.db);
       if (
+        now === null ||
         deps.stepDown === undefined ||
         deps.selling?.() !== true ||
-        !isFencedStanding(standingOf(incoming, deps.nodeId))
+        !isFencedStanding(standingOf(now, deps.nodeId)) ||
+        // A second restriction write that differs is refused, so a box already restricted keeps
+        // the one it has.
+        (await readHandoverRestriction(deps.node, deps.nodeId)) !== null
       )
-        return c.json({ accepted: true }, 200);
-      // A second restriction write that differs is refused, so a box already restricted keeps
-      // the one it has.
-      if ((await readHandoverRestriction(deps.node, deps.nodeId)) !== null)
-        return c.json({ accepted: true }, 200);
-      const successorNodeId = servingPrimaryNodeId(incoming);
-      if (successorNodeId === undefined) {
-        log("warn", "membership.fenced_without_successor", { term: incoming.body.term });
-        return c.json({ accepted: true }, 200);
+        return c.json({ accepted }, 200);
+      try {
+        await deps.stepDown({
+          kind: "superseded",
+          successorNodeId: servingPrimaryNodeId(now) ?? null,
+          membershipTerm: now.body.term,
+          self: c,
+        });
+      } catch (error) {
+        // Another request's stepdown for a different chart got there first; this box is stopping.
+        if (codeOf(error) !== "handover.restriction_conflict") throw error;
       }
-      // venue.db's chart is saved above, before stepDown writes node.db's restriction.
-      await deps.stepDown({
-        kind: "superseded",
-        successorNodeId,
-        membershipTerm: incoming.body.term,
-        self: c,
-      });
-      return c.json({ accepted: true }, 200);
+      return c.json({ accepted }, 200);
     }),
   );
 }

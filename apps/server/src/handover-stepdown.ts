@@ -45,10 +45,14 @@ export type StepDownRequest =
       self: Context;
     }
   | {
-      /** A supersession learnt from a newer chart alone, under no operation. */
+      /**
+       * A supersession learnt from a chart alone, under no operation. A chart that names no
+       * serving main box gives no successor, so no restriction is written; the next start's read
+       * of that chart fences the box.
+       */
       binding?: undefined;
       kind: "superseded";
-      successorNodeId: string;
+      successorNodeId: string | null;
       membershipTerm: number;
       self: Context;
     };
@@ -104,17 +108,20 @@ async function writeRestriction(deps: StepDownDeps, request: StepDownRequest): P
       await assertBindingTx(tx, deps.nodeId, binding);
       await advanceHandoverTx(tx, deps.nodeId, binding.operationId, "source_stepped_down", {});
     }
-    await recordHandoverRestrictionTx(tx, restrictionRow(deps.nodeId, request));
+    const row = restrictionRow(deps.nodeId, request);
+    if (row !== null) await recordHandoverRestrictionTx(tx, row);
   });
 }
 
 function restrictionRow(nodeId: string, request: StepDownRequest) {
   if (request.binding === undefined) {
+    const { successorNodeId } = request;
+    if (successorNodeId === null) return null;
     return {
       nodeId,
       operationId: null,
       kind: request.kind,
-      successorNodeId: request.successorNodeId,
+      successorNodeId,
       membershipTerm: request.membershipTerm,
     };
   }
@@ -138,6 +145,7 @@ async function assertMatchesStored(
   const stored = await readHandoverRestriction(node, nodeId);
   if (stored === null) return;
   const wanted = restrictionRow(nodeId, request);
+  if (wanted === null) return;
   if (
     stored.operationId !== wanted.operationId ||
     stored.kind !== wanted.kind ||
