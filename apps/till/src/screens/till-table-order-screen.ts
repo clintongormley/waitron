@@ -3901,7 +3901,9 @@ export class TillTableOrderScreen extends LitElement {
       <div class="draft-actions help-anchor" role="group" aria-label=${t("table.draft_actions")}>
         ${button(true, "table.group_fire", "fire-selected")}
         ${button(false, "table.draft_send_all", "send-all")}
-        ${helpBadge("help.order.send", t("table.draft_actions"))}
+        ${helpBadge("help.order.send", t("table.draft_actions"), {
+          guide: "kitchen-service.after-period",
+        })}
       </div>
     </div>`;
   }

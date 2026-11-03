@@ -2450,6 +2450,7 @@ export class TillFloorScreen extends LitElement {
                   ? "help.floor.tables_map"
                   : "help.floor.tables_map_view",
               t("floor.map_label"),
+              { guide: "table-service.service-steps" },
             )}
           </div>
         </div>
@@ -3065,7 +3066,9 @@ export class TillFloorScreen extends LitElement {
         @click=${() => this.#openReady(first)}
         >${t("floor.ready_bar_open")}</wt-button
       >
-      ${helpBadge("help.floor.ready_bar", t("floor.ready_title"))}
+      ${helpBadge("help.floor.ready_bar", t("floor.ready_title"), {
+        guide: "table-service.ready-bar",
+      })}
     </section>`;
   }
 
