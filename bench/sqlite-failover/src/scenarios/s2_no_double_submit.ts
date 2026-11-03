@@ -43,6 +43,8 @@ import {
   applyTailInsertOnly,
   applyTailRegressing,
   buildReturnBatch,
+  buildReturnBatchKeepingEnviando,
+  buildReturnBatchMissingOnly,
   chainsOf,
   diffTail,
   drainPass,
@@ -498,6 +500,45 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     // because these two parts are the gate A947 §7.1 names and their result is the finding.
     const returned = runReturnSequence(open, "returned", { fenced: true, build: buildReturnBatch });
 
+    // ---- Controls for Part F: each removes one part of the return batch ----------------------
+    // Written down BEFORE these controls were first run, as each one's line in the detail below:
+    //
+    //   no-fence: filed-twice=no-fence-m1:2,no-fence-m1:4 never-filed=none
+    //     m1's own drain, unfenced, files records 2 and 4 after the batch carried them `pendiente`,
+    //     and m2 files them too. Not 3: m1 holds it `enviando`, which this model's drain never
+    //     claims. Its replay line reads same-bytes=false, because m1's state moved after the cut.
+    //   missing-only: filed-twice=missing-only-m1:1 never-filed=none
+    //     The batch carries no filing row for record 1, which m2 already held, so m2 never learns
+    //     m1 filed it, and files it again.
+    //   keeps-enviando: filed-twice=none never-filed=keeps-enviando-m1:3
+    //     NOT a second filing: record 3 reaches m2 `enviando`, no drain claims it, and nobody ever
+    //     files it. This model's drain has no five-minute recovery (README, S2), so a missed
+    //     filing is the only way this control can fail; with that recovery, m2 would file it once.
+    const noFence = runReturnSequence(open, "no-fence", { fenced: false, build: buildReturnBatch });
+    assert.deepEqual(
+      [noFence.filedTwice, noFence.neverFiled, noFence.sameBytes],
+      [["no-fence-m1:2", "no-fence-m1:4"], [], false],
+      "control: without the fence the sender files records 2 and 4 after the cut, and so does m2",
+    );
+    const missingOnly = runReturnSequence(open, "missing-only", {
+      fenced: true,
+      build: buildReturnBatchMissingOnly,
+    });
+    assert.deepEqual(
+      [missingOnly.filedTwice, missingOnly.neverFiled],
+      [["missing-only-m1:1"], []],
+      "control: a batch of missing records only leaves m2 filing the record m1 already filed",
+    );
+    const keepsEnviando = runReturnSequence(open, "keeps-enviando", {
+      fenced: true,
+      build: buildReturnBatchKeepingEnviando,
+    });
+    assert.deepEqual(
+      [keepsEnviando.filedTwice, keepsEnviando.neverFiled],
+      [[], ["keeps-enviando-m1:3"]],
+      "control: a batch carrying enviando verbatim leaves record 3 unfiled",
+    );
+
     // ---- Control for Part A: the guard removed, so a terminal row is regressed ----------------
     // Each control runs the same sequence over its own nodes and its own ledger — a control is
     // meant to file twice, and mixing that into the ledger above would destroy the assertion that
@@ -572,6 +613,9 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
         `sales-carried=${returned.salesGained}. ` +
         `G REPLAY: same-bytes=${returned.sameBytes} replay-applied=${returned.replayApplied} ` +
         `filed-after-replay=${returned.filedAfterReplay}. ` +
+        `F controls: no-fence ${describeReturn(noFence)} same-bytes=${noFence.sameBytes}; ` +
+        `missing-only ${describeReturn(missingOnly)}; ` +
+        `keeps-enviando ${describeReturn(keepsEnviando)}. ` +
         `Controls double-file: regressing=${regressed.doubled.length} ` +
         `insert-only=${dropped.doubled.length}`,
     };
