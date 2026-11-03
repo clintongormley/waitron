@@ -2558,6 +2558,7 @@ export interface DepartmentTransferDetail {
     stationName: string | null;
     state: TicketState;
     note: string | null;
+    requestedAt: string | null;
     firedAt: string | null;
     courseId: string | null;
   }[];

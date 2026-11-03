@@ -62,6 +62,7 @@ const detail = {
       stationName: "Deli grill / Plancha",
       state: "preparing",
       note: "Collect at deli / Recoger en mostrador",
+      requestedAt: null,
       firedAt: null,
       courseId: null,
     },
@@ -186,6 +187,69 @@ for (const locale of ["en-GB", "es-ES"]) {
       await el.updateComplete;
       expect(chips("[data-incoming=incoming-1]")).toEqual(expected);
       expect(el.shadowRoot!.querySelector("[data-sent=sent-1] .counts")).toBeNull();
+    } finally {
+      setLocale(previous);
+    }
+  });
+}
+
+for (const locale of ["en-GB", "es-ES"]) {
+  it(`says a dish waiting for the pass is waiting for it, and a released dish its state, in ${locale}`, async () => {
+    const previous = currentLocale();
+    try {
+      setLocale(locale);
+      const words = locale === "es-ES" ? es : en;
+      const work = detail.outstandingWork[0]!;
+      const withWaiting = {
+        ...detail,
+        outstandingWork: [
+          {
+            ...work,
+            id: "work-asked",
+            state: "queued",
+            requestedAt: "2026-10-07T09:05:00.000Z",
+            firedAt: null,
+          },
+          { ...work, id: "work-held", state: "queued", requestedAt: null, firedAt: null },
+          {
+            ...work,
+            id: "work-fired",
+            state: "preparing",
+            requestedAt: "2026-10-07T09:05:00.000Z",
+            firedAt: "2026-10-07T09:06:00.000Z",
+          },
+        ],
+      };
+      const api = new TillApi(
+        "",
+        async () =>
+          new Response(JSON.stringify(withWaiting), {
+            headers: { "content-type": "application/json" },
+          }),
+      );
+      const { el } = await mountWidget<TillDepartmentTransfers>("till-department-transfers", {
+        api,
+        snapshot: {
+          incoming: [incoming],
+          sent: [],
+          receivingAllowed: true,
+          notifications: [incoming],
+          error: undefined,
+        },
+      });
+      el.open = true;
+      await el.updateComplete;
+      el.shadowRoot!.querySelector<HTMLElement>("[data-view]")!.click();
+      const rows = () =>
+        [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-current-work] li")].map((row) =>
+          row.textContent!.replace(/\s+/g, " "),
+        );
+      await vi.waitFor(() => expect(rows()).toHaveLength(3));
+      expect(rows()[0]).toContain(words["pass.waiting_for_pass"]);
+      expect(rows()[1]).toContain(words["station.state.queued"]);
+      expect(rows()[1]).not.toContain(words["pass.waiting_for_pass"]);
+      expect(rows()[2]).toContain(words["station.state.preparing"]);
+      expect(rows()[2]).not.toContain(words["pass.waiting_for_pass"]);
     } finally {
       setLocale(previous);
     }
