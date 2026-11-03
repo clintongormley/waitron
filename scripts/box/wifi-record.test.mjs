@@ -68,9 +68,9 @@ describe("parseWifiRecord loads version 1", () => {
   });
 
   it("the largest valid record — a 32-byte name and a 256-byte WPA3 password of '\"' characters, which JSON doubles — is under 1024 bytes and loads", () => {
-    const fields = { ssidHex: SSID_32, keyMgmt: "sae", psk: '"'.repeat(256), hidden: true };
+    const fields = { ssidHex: SSID_32, keyMgmt: "sae", psk: '"'.repeat(256), hidden: false };
     const bytes = recordBytes(fields);
-    expect(bytes.length).toBe(642);
+    expect(bytes.length).toBe(643);
     expect(bytes.length).toBeLessThan(WIFI_RECORD_MAX_BYTES);
     expectLoadsAs(fields);
   });
@@ -87,6 +87,16 @@ describe("parseWifiRecord refuses an oversized record", () => {
 
   it("1025 bytes → record-oversized, even when they begin with a valid record", () => {
     expectRefused(padded(1025), "record-oversized");
+  });
+
+  it("1025 bytes of 0xFF → record-oversized, not corrupt", () => {
+    expectRefused(new Uint8Array(1025).fill(0xff), "record-oversized");
+  });
+
+  it("a version 2 record padded to 1025 bytes → record-oversized, not unsupported", () => {
+    const bytes = new Uint8Array(1025).fill(0x20);
+    bytes.set(recordBytes({ version: 2 }));
+    expectRefused(bytes, "record-oversized");
   });
 
   it("1024 bytes of the same shape → record-corrupt, not oversized", () => {
@@ -135,10 +145,15 @@ describe("parseWifiRecord refuses a damaged record", () => {
     ["ssidHex empty", () => recordBytes({ ssidHex: "" })],
     ["ssidHex of 33 bytes", () => recordBytes({ ssidHex: "ab".repeat(33) })],
     ["ssidHex not a string", () => recordBytes({ ssidHex: 7 })],
+    ['ssidHex an array, ["ab"]', () => recordBytes({ ssidHex: ["ab"] })],
     ["a WPA2 password of 7 characters", () => recordBytes({ psk: "1234567" })],
     ["a WPA2 password of 64 non-hex characters", () => recordBytes({ psk: "g".repeat(64) })],
     ["a WPA2 password of 65 characters", () => recordBytes({ psk: "a".repeat(65) })],
     ["a WPA2 password not a string", () => recordBytes({ psk: 12345678 })],
+    [
+      "a WPA2 password of 4 emoji (8 UTF-16 units, 4 characters)",
+      () => recordBytes({ psk: "😀".repeat(4) }),
+    ],
     ["a WPA3 password empty", () => recordBytes({ keyMgmt: "sae", psk: "" })],
     ["a WPA3 password of 257 bytes", () => recordBytes({ keyMgmt: "sae", psk: "a".repeat(257) })],
     [
@@ -182,6 +197,10 @@ describe("parseWifiRecord refuses a record it does not support", () => {
   const cases = [
     ["a WPA2 password holding a tab", () => recordBytes({ psk: "pass\tword" })],
     ["a WPA2 password holding ñ", () => recordBytes({ psk: "contraseña" })],
+    [
+      "a WPA2 password of 32 emoji (64 UTF-16 units, 32 characters)",
+      () => recordBytes({ psk: "😀".repeat(32) }),
+    ],
     ["version: 2 with otherwise valid fields", () => recordBytes({ version: 2 })],
     ["version: 2 with extra keys", () => recordBytes({ version: 2, band: "5GHz", extra: true })],
     ["version: 0", () => recordBytes({ version: 0 })],

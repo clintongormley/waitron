@@ -19,7 +19,8 @@ const KEY_MANAGEMENT = ["wpa-psk", "sae"];
 // A network name is up to 32 arbitrary bytes and need not be UTF-8, so it travels as hex.
 const SSID_HEX = /^(?:[0-9a-f]{2}){1,32}$/;
 const PRINTABLE_ASCII = /^[ -~]*$/;
-// NetworkManager's g_ascii_isxdigit accepts both letter cases (nm-utils.c:1249-1254).
+// NetworkManager's g_ascii_isxdigit accepts both letter cases (1.52.0,
+// src/libnm-core-impl/nm-utils.c:1249-1255).
 const PSK_HEX = /^[0-9a-fA-F]{64}$/;
 const SAE_MAX_BYTES = 256;
 
@@ -35,8 +36,9 @@ function sameBytes(a, b) {
 
 /** @param {unknown} psk */
 function wpaPskOutsidePrintable(psk) {
-  if (typeof psk !== "string" || PSK_HEX.test(psk)) return false;
-  return psk.length >= 8 && psk.length <= 63 && !PRINTABLE_ASCII.test(psk);
+  if (typeof psk !== "string") return false;
+  const characters = [...psk].length;
+  return characters >= 8 && characters <= 63 && !PRINTABLE_ASCII.test(psk);
 }
 
 /** @param {unknown} psk */
