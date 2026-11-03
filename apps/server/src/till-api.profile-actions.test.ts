@@ -527,7 +527,7 @@ describe("screens and actions are separate", () => {
   it("lets a visible, read-only live-orders profile look at the station and the pass, and refuses it preparing, handing over and payment", async () => {
     const { cookie } = await signIn(["show-station", "show-expo", "take-orders"]);
     expect((await send(cookie, "GET", `/api/stations/${stationId}/queue`)).status).toBe(200);
-    expect((await send(cookie, "GET", "/api/expo/queue")).status).toBe(200);
+    expect((await send(cookie, "GET", "/api/expo/board")).status).toBe(200);
     const advance = await send(cookie, "POST", `/api/ticket-items/${id}/advance`, {
       to: "ready",
     });

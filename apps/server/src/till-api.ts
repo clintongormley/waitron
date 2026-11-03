@@ -105,7 +105,6 @@ import {
   captureOrderService,
   getHeldOrder,
   getPlacedCounterOrder,
-  listExpoQueue,
   listCounterWaiting,
   listHeldOrders,
   listStationQueue,
@@ -2311,16 +2310,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         );
       });
       return c.body(null, 200);
-    }),
-  );
-
-  app.get("/api/expo/queue", (c) =>
-    run(c, log, async () => {
-      await requireSession(deps, c);
-      const queue = await withTransaction(deps.db, async (tx) => {
-        return listExpoQueue(tx);
-      });
-      return c.json(queue);
     }),
   );
 

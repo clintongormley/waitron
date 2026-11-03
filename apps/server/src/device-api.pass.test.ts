@@ -673,18 +673,22 @@ describe("A773 pass board: routes", () => {
 
 describe("A773 the old pass reads are gone", () => {
   it.each([
-    ["pass", "/api/device/pass-screen"],
-    ["pass_monitor", "/api/device/pass-monitor"],
-  ] as const)("a %s device's GET %s answers 404", async (kind, path) => {
-    const f = await fixture();
-    await burgerOrder(f.v);
-    const display = await f.device(`Old ${kind}`, f.kds, {
-      kitchenScreen: { kind, stationIds: null, zoneIds: null },
-    });
-    const answer = await f.app.request(path, { headers: { cookie: display.cookie } });
-    expect(answer.status).toBe(404);
-    expect(await answer.text()).toBe("404 Not Found");
-  });
+    ["pass", "/api/device/pass-screen", "/api/device/pass-board"],
+    ["pass_monitor", "/api/device/pass-monitor", "/api/device/pass-monitor-board"],
+  ] as const)(
+    "a %s device's GET %s answers 404, while its board shows the order",
+    async (kind, path, boardPath) => {
+      const f = await fixture();
+      const itemId = await burgerOrder(f.v);
+      const display = await f.device(`Old ${kind}`, f.kds, {
+        kitchenScreen: { kind, stationIds: null, zoneIds: null },
+      });
+      const answer = await f.app.request(path, { headers: { cookie: display.cookie } });
+      expect(answer.status).toBe(404);
+      expect(await answer.text()).toBe("404 Not Found");
+      expect(items(await read(f.app, display.cookie, boardPath))).toEqual([itemId]);
+    },
+  );
 
   it("keeps the release route that shares the old read's path", async () => {
     const f = await fixture();

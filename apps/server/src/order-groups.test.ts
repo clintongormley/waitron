@@ -66,7 +66,6 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   createOpenOrder,
-  listExpoQueue,
   listStationQueue,
   parkOrder,
   splitUnitsWithinOrder,
@@ -74,6 +73,9 @@ import {
   type TillSaleDeps,
 } from "./working-order.js";
 import { seatTable } from "./parties.js";
+import { readScopedPassBoard } from "./pass-board.js";
+import type { PassBoard, PassCard } from "./pass-card.js";
+import { boardCards, cardOf, EVERY } from "./testing/pass-board-probe.js";
 import { listStationNotices } from "@waitron/venue-service";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import {
@@ -340,6 +342,21 @@ async function groupsOf(partyId: string) {
   return inTx((tx) => listOrderGroups(tx, partyId));
 }
 
+async function passBoard(v: Venue): Promise<PassBoard> {
+  return inTx((tx) => readScopedPassBoard(tx, v.cfg, EVERY));
+}
+
+function groupIdOf(card: PassCard): string | null {
+  return card.target.kind === "group" ? card.target.groupId : null;
+}
+
+/** The party's group cards on the pass, by group position. */
+function groupCardsOf(board: PassBoard, partyId: string): PassCard[] {
+  return boardCards(board)
+    .filter((card) => card.party?.id === partyId && card.group !== undefined)
+    .sort((a, b) => a.group!.position - b.group!.position);
+}
+
 /** The top-level lines of the party's bills, by bill then line number. */
 async function linesOf(partyId: string) {
   return db
@@ -545,8 +562,10 @@ describe("permanent group numbers on kitchen work", () => {
       "Terrace 4, 9",
       "Terrace 7",
     ]);
-    const expo = (await inTx((tx) => listExpoQueue(tx))).find((o) => o.orderId === into.tabId)!;
-    expect(expo.groups.map((g) => g.numberPartyLabel)).toEqual(["Terrace 4, 9", "Terrace 7"]);
+    const pass = await passBoard(v);
+    expect(
+      [a.id, b.id].map((id) => cardOf(pass, (card) => groupIdOf(card) === id).group),
+    ).toMatchObject([{ numberPartyLabel: "Terrace 4, 9" }, { numberPartyLabel: "Terrace 7" }]);
     const before = (await printed(v)).length;
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, into.tabId));
     const paper = (await printed(v)).slice(before).join("\n");
@@ -672,8 +691,14 @@ describe("permanent group numbers on kitchen work", () => {
       displayNumber: 5,
       numberPartyId: s.partyId,
     });
-    const expo = (await inTx((tx) => listExpoQueue(tx))).find((o) => o.orderId === s.tabId)!;
-    expect(expo.groups.map((g) => [g.position, g.displayNumber, g.numberPartyId])).toEqual([
+    const cards = groupCardsOf(await passBoard(v), s.partyId);
+    expect(
+      cards.map((card) => [
+        card.group!.position,
+        card.group!.displayNumber,
+        card.items[0]!.group!.numberPartyId,
+      ]),
+    ).toEqual([
       [1, 1, s.partyId],
       [2, 2, s.partyId],
       [3, 5, s.partyId],
@@ -4014,17 +4039,21 @@ describe("the kitchen and the pass read a party's groups", () => {
     }
   });
 
-  it("sections a party's order on the pass by group position, held groups unfired, and names no course", async () => {
+  it("puts a party's groups on the pass as cards by group position, held groups unfired", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const revision = await revisionOf(s.partyId);
 
-    const order = (await inTx((tx) => listExpoQueue(tx))).find((row) => row.orderId === s.tabId)!;
+    const cards = groupCardsOf(await passBoard(v), s.partyId);
 
-    expect(order.party).toEqual({ id: s.partyId, revision });
-    expect(order.courses).toEqual([]);
+    for (const card of cards) expect(card.party).toEqual({ id: s.partyId, revision });
     expect(
-      order.groups.map((group) => [group.groupId, group.position, group.state, group.fired]),
+      cards.map((card) => [
+        groupIdOf(card),
+        card.group!.position,
+        card.items[0]!.group!.state,
+        card.kind !== "held",
+      ]),
     ).toEqual([
       // The drinks' water needs no preparation, so only the beer is on the pass.
       [s.drinks, 1, "fired", true],
@@ -4034,57 +4063,46 @@ describe("the kitchen and the pass read a party's groups", () => {
       [s.desserts, 5, "held", false],
     ]);
     // One pass item per portion.
-    expect(order.groups.map((group) => group.items.map((item) => item.name))).toEqual([
+    expect(cards.map((card) => card.items.map((item) => item.name))).toEqual([
       Array(2).fill(DISHES.beer.kitchen),
       Array(4).fill(DISHES.cold.kitchen),
       Array(4).fill(DISHES.warm.kitchen),
       [DISHES.steak.kitchen, DISHES.steak.kitchen, DISHES.fish.kitchen],
       Array(2).fill(DISHES.flan.kitchen),
     ]);
-    expect(order.groups[1]!.items[0]!.group).toEqual({
+    expect(cards[1]!.items[0]!.group).toEqual({
       id: s.cold,
       position: 2,
       displayNumber: 2,
       numberPartyId: s.partyId,
       state: "fired",
     });
-    expect(order.groups.every((group) => !("away" in group))).toBe(true);
+    expect(cards.every((card) => !("away" in card))).toBe(true);
   });
 
-  // Fails if the pass orders groups by course (the rows' own order) rather than by position.
-  it("orders a party's groups on the pass by position, not by course", async () => {
+  // Fails if the pass orders held groups by course (the rows' own order) rather than by position.
+  it("orders a party's held groups on the pass by position, not by course", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     await reorder(s.partyId, [s.desserts, s.mains, s.warm]);
 
-    const order = (await inTx((tx) => listExpoQueue(tx))).find((row) => row.orderId === s.tabId)!;
+    const board = await passBoard(v);
 
-    expect(order.groups.map((group) => [group.groupId, group.position])).toEqual([
-      [s.drinks, 1],
-      [s.cold, 2],
+    expect(
+      board.held
+        .filter((card) => card.party?.id === s.partyId)
+        .map((card) => [groupIdOf(card), card.group!.position]),
+    ).toEqual([
       [s.desserts, 3],
       [s.mains, 4],
       [s.warm, 5],
     ]);
-  });
-
-  // Fails if two groups at one position fall back to course order instead of the earlier-made first.
-  it("puts the earlier-made of two groups at one position first on the pass", async () => {
-    const v = await setupVenue();
-    const s = await specExample(v);
-    await db
-      .update(orderGroups)
-      .set({ position: 4, createdAt: "2000-01-01T00:00:00.000Z" })
-      .where(eq(orderGroups.id, s.desserts));
-
-    const order = (await inTx((tx) => listExpoQueue(tx))).find((row) => row.orderId === s.tabId)!;
-
-    expect(order.groups.map((group) => group.groupId)).toEqual([
+    expect(groupCardsOf(board, s.partyId).map(groupIdOf)).toEqual([
       s.drinks,
       s.cold,
-      s.warm,
       s.desserts,
       s.mains,
+      s.warm,
     ]);
   });
 
@@ -4102,36 +4120,37 @@ describe("the kitchen and the pass read a party's groups", () => {
         ),
       );
 
-    const board = await inTx((tx) => listExpoQueue(tx));
-    const tab = board.find((row) => row.orderId === s.tabId)!;
-    expect(tab.groups.find((group) => group.groupId === s.cold)).toMatchObject({
-      position: 2,
-      fired: true,
-    });
-    expect(board.find((row) => row.orderId === s.checkId)!.groups).toMatchObject([
-      { groupId: s.cold, position: 2, fired: true },
-    ]);
-    for (const bill of [tab, board.find((row) => row.orderId === s.checkId)!]) {
-      expect(bill.groups.find((group) => group.groupId === s.cold)).not.toHaveProperty("away");
-    }
+    const board = await passBoard(v);
+    const cold = cardOf(board, (card) => groupIdOf(card) === s.cold);
+    expect(cold.group).toMatchObject({ position: 2 });
+    expect(cold.kind).not.toBe("held");
+    expect(board.ready).toContain(cold);
+    expect(cold.orders.map((order) => order.orderId).sort()).toEqual([s.tabId, s.checkId].sort());
+    expect(cold).not.toHaveProperty("away");
   });
 
-  it("puts a fired line in no group in one section with no group, first", async () => {
+  it("puts a fired line in no group on its bill's own card, with no group", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     // A round, not a group submission, leaves the fired line in no group.
     await inTx((tx) => addTabRound(tx, v.cfg, s.tabId, [line(v, "steak")]));
 
-    const order = (await inTx((tx) => listExpoQueue(tx))).find((row) => row.orderId === s.tabId)!;
+    const board = await passBoard(v);
+    const loose = cardOf(
+      board,
+      (card) => card.target.kind === "bill" && card.target.workingOrderId === s.tabId,
+    );
 
-    expect(order.groups[0]).toMatchObject({ groupId: null, position: null, state: null });
-    expect(order.groups[0]!.items.map((item) => [item.name, "group" in item])).toEqual([
+    expect(loose).not.toHaveProperty("group");
+    expect(loose.items.map((item) => [item.name, "group" in item])).toEqual([
       [DISHES.steak.kitchen, false],
     ]);
-    expect(order.groups.slice(1).map((group) => group.position)).toEqual([1, 2, 3, 4, 5]);
+    expect(groupCardsOf(board, s.partyId).map((card) => card.group!.position)).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
   });
 
-  it("keeps a bill of no party in course sections, with no party and no groups", async () => {
+  it("keeps a bill of no party on one card, its dishes in course order, with no party and no groups", async () => {
     const v = await setupVenue();
     const tabId = await billOfNoParty(v, (tx, id) =>
       addTabRound(tx, v.cfg, id, [
@@ -4140,20 +4159,22 @@ describe("the kitchen and the pass read a party's groups", () => {
       ]),
     );
 
-    const order = (await inTx((tx) => listExpoQueue(tx))).find((row) => row.orderId === tabId)!;
+    const pass = cardOf(
+      await passBoard(v),
+      (card) => card.target.kind === "bill" && card.target.workingOrderId === tabId,
+    );
     const [card] = (await inTx((tx) => listStationQueue(tx, v.stationId))).filter(
       (row) => row.orderId === tabId,
     );
 
-    expect(order.party).toBeUndefined();
-    expect(order.groups).toEqual([]);
-    expect(order.courses.map((course) => course.courseName)).toEqual([
+    expect("party" in pass).toBe(false);
+    expect(pass).not.toHaveProperty("group");
+    expect(pass.items.map((item) => item.course?.name ?? null)).toEqual([
       COURSES.drinks,
       COURSES.mains,
     ]);
     expect("party" in card!).toBe(false);
     expect(card!.items.map((item) => "group" in item)).toEqual([false, false]);
-    expect("party" in order).toBe(false);
   });
 });
 

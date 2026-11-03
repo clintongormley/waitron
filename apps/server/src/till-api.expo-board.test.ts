@@ -194,6 +194,14 @@ describe("A773 pass board: all stations", () => {
     expect((await read(f, f.signedIn)).status).toBe(200);
   });
 
+  it("answers 404 at the retired /api/expo/queue, signed in or not", async () => {
+    const f = await fixture();
+    for (const cookie of [f.signedIn, f.deviceCookie]) {
+      const answer = await f.app.request("/api/expo/queue", { headers: { cookie } });
+      expect(answer.status).toBe(404);
+    }
+  });
+
   it("lists a To fire card while Grill waits, with no Fire to offer", async () => {
     const f = await fixture();
     await inTx(f.v, (tx) => setStationsWaitForPass(tx, true, [f.grill]));

@@ -797,9 +797,9 @@ describe("KDS-3 expo routes: cross-station queue read + whole-course ready", () 
   });
 
   it("requires sign-in for the board and Ready while Away is retired", async () => {
-    const queue = await app.request("/api/expo/board");
-    expect(queue.status).toBe(401);
-    expect(await queue.json()).toMatchObject({ error: { code: "session.required" } });
+    const board = await app.request("/api/expo/board");
+    expect(board.status).toBe(401);
+    expect(await board.json()).toMatchObject({ error: { code: "session.required" } });
 
     const ready = await app.request(`/api/orders/${randomUUID()}/courses/${randomUUID()}/ready`, {
       method: "POST",
