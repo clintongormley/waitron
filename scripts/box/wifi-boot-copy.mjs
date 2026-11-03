@@ -15,8 +15,9 @@ import {
  *   |'publication-unverified'} WifiCopyFailure
  * @typedef {object} WifiCopyStatus  frozen; exactly these keys; says nothing about live connectivity
  * @property {WifiCopyState} state
- * @property {import("./wifi-record.mjs").WifiNoCopyReason|null} reason  the latest decision's reason
- *   when it is a remove
+ * @property {import("./wifi-record.mjs").WifiNoCopyReason|null} reason  when the decision is a
+ *   remove, its reason: from publish, its own decision's; from status(), the most recently called
+ *   one's
  * @property {WifiCopyFailure|null} failure  set exactly when state is failed
  * @typedef {import("./disk-key.mjs").DiskRecoveryIo} WifiCopyIo
  * @typedef {object} WifiCopyDeps
@@ -32,6 +33,9 @@ import {
 
 const DEPS_CODE = "wifi_copy.deps_invalid";
 const DECISION_CODE = "wifi_copy.decision_invalid";
+const FOLDER = "waitron-recovery";
+const RECORD = "wifi.json";
+const NEXT = "wifi.json.next";
 const IO_OPS = [
   "lstat",
   "open",
@@ -131,7 +135,12 @@ function statusOf(state, reason, failure) {
 
 /**
  * Test seam and the future host service's constructor; publish never takes a path.
- * Throws wifi_copy.deps_invalid (deps-invalid) at construction, before any call.
+ * Throws code "wifi_copy.deps_invalid", reason "deps-invalid", at construction, before any io or
+ * inspectBootMount call, when deps is not exactly WifiCopyDeps's keys (io optional, and then
+ * exactly the eight file operations). publish rejects with code "wifi_copy.decision_invalid",
+ * reason "decision-invalid", when the decision is not exactly a write whose bytes parseWifiRecord
+ * loads or a remove whose reason is on WIFI_NO_COPY_REASONS; it makes no file call and changes no
+ * status.
  * @param {WifiCopyDeps} deps
  * @returns {{ publish(decision: import("./wifi-record.mjs").WifiCopyDecision): Promise<WifiCopyStatus>,
  *   status(): WifiCopyStatus }}
@@ -139,9 +148,9 @@ function statusOf(state, reason, failure) {
 export function createWifiBootCopyPublisher(deps) {
   if (!validDeps(deps)) throw programmingError(DEPS_CODE, "deps-invalid");
   const { bootRoot, ownerUid, inspectBootMount } = deps;
-  const folder = join(bootRoot, "waitron-recovery");
-  const recordPath = join(folder, "wifi.json");
-  const nextPath = join(folder, "wifi.json.next");
+  const folder = join(bootRoot, FOLDER);
+  const recordPath = join(folder, RECORD);
+  const nextPath = join(folder, NEXT);
   const io = Object.hasOwn(deps, "io") ? /** @type {WifiCopyIo} */ (deps.io) : hostFileIo;
   const reader = createWifiRecordReader({
     bootRoot,
@@ -229,8 +238,9 @@ export function createWifiBootCopyPublisher(deps) {
       await io.mkdir(folder, { mode: 0o700 });
       folderRules(await io.lstat(folder, { bigint: true }));
     }
-    // Flushed on every publication: an earlier one may have made the folder or written the copy
-    // and then failed to flush, and a later call cannot tell.
+    // Flushed on every write that gets this far, an unchanged copy included: an earlier one may
+    // have made the folder or written the copy and then failed to flush, and a later call cannot
+    // tell.
     await io.syncDirectory(bootRoot);
     if (!nextExists && holds(found, bytes)) {
       await io.syncDirectory(folder);
@@ -324,7 +334,8 @@ const fixedPublisher = createWifiBootCopyPublisher({
 
 /**
  * Fixed production entry point. No boot-mount check exists until the Linux pull request, so a
- * valid decision answers failed / mount-unverified with no file call.
+ * valid decision answers failed / mount-unverified with no file call. Rejects with code
+ * "wifi_copy.decision_invalid", reason "decision-invalid", as publish does.
  * @param {import("./wifi-record.mjs").WifiCopyDecision} decision
  * @returns {Promise<WifiCopyStatus>}
  */
