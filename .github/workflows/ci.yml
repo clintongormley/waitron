@@ -1130,6 +1130,18 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Resolve installed Playwright version
+        id: playwright-version
+        run: echo "version=$(pnpm --filter @waitron/server exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      # Restore only: the browser jobs' entry holds full Chromium, headless shell included, and a
+      # save from here would put a shell-only folder under their key.
+      - name: Restore cached Playwright browsers
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install setup download Chromium
         timeout-minutes: 7
         run: |
