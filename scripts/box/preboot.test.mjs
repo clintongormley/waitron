@@ -1,4 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { Buffer } from "node:buffer";
+import { readFileSync } from "node:fs";
+import { setImmediate } from "node:timers";
+import { URL } from "node:url";
+import { inspect } from "node:util";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { WAITRON_LAYOUTS } from "./disk-state.mjs";
 import {
   UNLOCK_DELAYS_MS,
@@ -1052,5 +1057,377 @@ describe("prebootUnlockGate", () => {
     expect(isZeros(key)).toBe(true);
     expect(await pending).toEqual(answer("refused-state", null, "adapter-missing"));
     expect(from).not.toHaveBeenCalled();
+  });
+});
+
+describe("key-leak sweep", () => {
+  const KEY = Uint8Array.from(KEY_BYTES);
+  const hex = (bytes) => Buffer.from(bytes).toString("hex");
+  const decimal = (bytes, separator) => Array.from(bytes).join(separator);
+  const spacedHex = (bytes) =>
+    Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(" ");
+  const windows = Array.from({ length: KEY.length - 7 }, (_, i) => KEY.subarray(i, i + 8));
+  // A window's 11th base64 character also holds bits of the byte after it, so only 10 are matched.
+  const base64Prefix = (window, encoding) => Buffer.from(window).toString(encoding).slice(0, 10);
+  const FORMS = [
+    ["hex", hex(KEY)],
+    ["upper hex", hex(KEY).toUpperCase()],
+    ["spaced hex", spacedHex(KEY)],
+    ["base64", Buffer.from(KEY).toString("base64")],
+    ["base64url", Buffer.from(KEY).toString("base64url")],
+    ['decimal ", "', decimal(KEY, ", ")],
+    ['decimal ","', decimal(KEY, ",")],
+    ["array-like JSON", JSON.stringify(KEY)],
+    ...windows.flatMap((window, i) => [
+      [`hex window ${i}`, hex(window)],
+      [`upper hex window ${i}`, hex(window).toUpperCase()],
+      [`spaced hex window ${i}`, spacedHex(window)],
+      [`upper spaced hex window ${i}`, spacedHex(window).toUpperCase()],
+      [`base64 window ${i}`, base64Prefix(window, "base64")],
+      [`base64url window ${i}`, base64Prefix(window, "base64url")],
+      [`decimal ", " window ${i}`, decimal(window, ", ")],
+      [`decimal "," window ${i}`, decimal(window, ",")],
+      [`array-like JSON window ${i}`, JSON.stringify(window)],
+    ]),
+  ];
+  const RAW_FORMS = [
+    ["raw key", Buffer.from(KEY)],
+    ...windows.map((window, i) => [`raw window ${i}`, Buffer.from(window)]),
+  ];
+  /** The names of every form `text` holds, whitespace runs collapsed so wrapped arrays still match. */
+  const formsIn = (text) => {
+    const collapsed = text.replace(/\s+/g, " ");
+    const found = FORMS.filter(([, form]) => text.includes(form) || collapsed.includes(form));
+    const bytes = Buffer.from(text, "latin1");
+    const raw = RAW_FORMS.filter(([, form]) => bytes.indexOf(form) !== -1);
+    return [...found, ...raw].map(([name]) => name);
+  };
+
+  /** Ways a fake adapter can fail while carrying the key it was handed. */
+  const leakyThrows = {
+    "hex in the message": (key) => new Error(`adapter failed for key ${hex(key)}`),
+    "base64 in the message": (key) =>
+      new Error(`adapter failed for key ${Buffer.from(key).toString("base64")}`),
+    "raw bytes in the message": (key) =>
+      new Error(`adapter failed for key ${Buffer.from(key).toString("latin1")}`),
+    "a copy as a property": (key) =>
+      Object.assign(new Error("adapter failed"), { key: Uint8Array.from(key) }),
+    "a copy thrown": (key) => Uint8Array.from(key),
+  };
+  const throwing = (make) => async (_handle, key) => {
+    throw make(key);
+  };
+
+  const rejections = [];
+  const onRejection = (reason) => rejections.push(reason);
+  beforeAll(() => {
+    process.on("unhandledRejection", onRejection);
+  });
+  afterAll(() => {
+    process.off("unhandledRejection", onRejection);
+  });
+
+  /** Collects every text a caller, a logger or a crash report could show. */
+  function collector() {
+    const c = { texts: [], answers: [], expected: [] };
+    c.value = (label, value) =>
+      c.texts.push(
+        [label, String(value)],
+        [label, JSON.stringify(value) ?? ""],
+        [label, inspect(value, { depth: 10 })],
+      );
+    c.error = (label, error) =>
+      c.texts.push(
+        [label, String(error?.message)],
+        [label, String(error?.stack)],
+        [label, JSON.stringify(error) ?? ""],
+        [label, inspect(error, { depth: 10 })],
+      );
+    c.look = (label, gate) => {
+      c.texts.push([`${label} gate`, inspect(gate, { depth: 10, showHidden: true })]);
+      c.value(`${label} status`, gate.status());
+    };
+    c.make = ({ obs = observation(), verify = async () => false, open = async () => {} } = {}) => {
+      const g = { clock: 0, clockFails: false };
+      const now = () => {
+        if (g.clockFails) throw new Error(`clock failed ${hex(KEY)}`);
+        return g.clock;
+      };
+      g.gate = createUnlockGate({ observation: obs, now, verify, open });
+      return g;
+    };
+    /** Starts a submission; `done` awaits it and records its answer against `expected`. */
+    c.start = (label, gate, expected, key = goodKey()) => {
+      c.look(`${label} before`, gate);
+      const pending = gate.submit(key);
+      return async () => {
+        let got;
+        try {
+          got = await pending;
+          c.value(`${label} answer`, got);
+        } catch (error) {
+          got = "threw";
+          c.error(`${label} threw`, error);
+        }
+        c.answers.push([label, got]);
+        c.expected.push([label, expected]);
+        c.look(`${label} after`, gate);
+      };
+    };
+    c.submit = (label, gate, expected, key) => c.start(label, gate, expected, key)();
+    return c;
+  }
+
+  const REFUSED_TARGETS = {
+    "observation-invalid": () => observation({ expectedDiskUuid: hex(KEY) }),
+    "disk-missing": () => observation({ machine: machine([]) }),
+    "disk-multiple": () =>
+      observation({
+        machine: machine([waitronDisk(), waitronDisk({ diskId: SECOND_ID, uuid: OTHER_UUID })]),
+      }),
+    "disk-not-waitron": () => observation({ machine: machine([windowsDisk()]) }),
+    "disk-mismatch": () => observation({ expectedDiskUuid: OTHER_UUID }),
+    "disk-duplicate": () =>
+      observation({
+        machine: machine([
+          waitronDisk(),
+          waitronDisk({ diskId: EXTERNAL_ID, attachment: "external" }),
+        ]),
+      }),
+    "first-start-pending": () => observation({ firstStart: "pending" }),
+  };
+
+  async function runEveryPath(c) {
+    {
+      const g = c.make({ verify: async () => true });
+      await c.submit("opened", g.gate, answer("opened"));
+      await c.submit("after opened", g.gate, answer("refused-state", null, "opened"));
+    }
+    {
+      const g = c.make();
+      await c.submit("wrong-key", g.gate, answer("wrong-key", 2000));
+      g.clock = 1000;
+      await c.submit("wait during a delay", g.gate, answer("wait", 2000));
+      g.clock = 2000;
+      const short = Uint8Array.from(KEY_BYTES.slice(0, 31));
+      await c.submit("a 31-byte key", g.gate, answer("wrong-key", 6000), short);
+      g.clock = 6000;
+      await c.submit("a plain array key", g.gate, answer("wrong-key", 14000), [...KEY_BYTES]);
+      g.clock = 14000;
+      await c.submit("a hex string key", g.gate, answer("wrong-key", 30000), hex(KEY));
+      g.clock = 30000;
+      const moved = goodKey();
+      moved.buffer.transfer();
+      await c.submit("a transferred key", g.gate, answer("wrong-key", 62000), moved);
+    }
+    {
+      const check = deferred();
+      const g = c.make({ verify: () => check.promise });
+      const first = c.start("verify pending", g.gate, answer("wrong-key", 2000));
+      c.look("while verify is pending", g.gate);
+      await c.submit("wait while verify runs", g.gate, answer("wait"));
+      check.resolve(false);
+      await first();
+    }
+    {
+      const opening = deferred();
+      const opened = deferred();
+      const open = () => {
+        opening.resolve();
+        return opened.promise;
+      };
+      const g = c.make({ verify: async () => true, open });
+      const first = c.start("open pending", g.gate, answer("opened"));
+      await opening.promise;
+      c.look("while open is pending", g.gate);
+      await c.submit("wait while open runs", g.gate, answer("wait"));
+      opened.resolve();
+      await first();
+    }
+    for (const [reason, obs] of Object.entries(REFUSED_TARGETS)) {
+      const g = c.make({ obs: obs(), verify: async () => true });
+      await c.submit(`target ${reason}`, g.gate, answer("refused-state", null, reason));
+    }
+    {
+      const g = c.make();
+      await c.submit("before the clock fails", g.gate, answer("wrong-key", 2000));
+      g.clockFails = true;
+      await c.submit("clock-failed", g.gate, answer("refused-state", null, "clock-failed"));
+    }
+    {
+      const g = c.make();
+      await c.submit("before the clock fails in status", g.gate, answer("wrong-key", 2000));
+      g.clockFails = true;
+      c.look("clock fails in status", g.gate);
+    }
+    {
+      const gate = createUnlockGate({
+        observation: observation(),
+        now: () => Uint8Array.from(KEY),
+        verify: async () => false,
+        open: async () => {},
+      });
+      await c.submit(
+        "a clock answering the key",
+        gate,
+        answer("refused-state", null, "clock-failed"),
+      );
+    }
+    for (const [how, make] of Object.entries(leakyThrows)) {
+      const checker = c.make({ verify: throwing(make) });
+      await c.submit(
+        `checker throws ${how}`,
+        checker.gate,
+        answer("refused-state", null, "verifier-failed"),
+      );
+      const opener = c.make({ verify: async () => true, open: throwing(make) });
+      await c.submit(
+        `opener throws ${how}`,
+        opener.gate,
+        answer("refused-state", null, "open-failed"),
+      );
+    }
+    {
+      const g = c.make({ verify: async (_handle, key) => Uint8Array.from(key) });
+      await c.submit(
+        "checker answers the key",
+        g.gate,
+        answer("refused-state", null, "verifier-failed"),
+      );
+      const h = c.make({ verify: async (_handle, key) => hex(key) });
+      await c.submit(
+        "checker answers the key's hex",
+        h.gate,
+        answer("refused-state", null, "verifier-failed"),
+      );
+    }
+    for (const verdict of [true, false]) {
+      const check = deferred();
+      const g = c.make({ verify: () => check.promise });
+      const label = `close while verify runs, then ${verdict}`;
+      const first = c.start(label, g.gate, answer("refused-state", null, "closed"));
+      c.look(`${label}: pending`, g.gate);
+      g.gate.close();
+      c.look(`${label}: just closed`, g.gate);
+      check.resolve(verdict);
+      await first();
+      await c.submit(`${label}, resubmit`, g.gate, answer("refused-state", null, "closed"));
+    }
+    for (const [outcome, expected] of [
+      ["opens", answer("opened")],
+      ["throws", answer("refused-state", null, "open-failed")],
+    ]) {
+      const opening = deferred();
+      const opened = deferred();
+      let held;
+      const open = (_handle, key) => {
+        held = key;
+        opening.resolve();
+        return opened.promise;
+      };
+      const g = c.make({ verify: async () => true, open });
+      const label = `close while open runs, then it ${outcome}`;
+      const first = c.start(label, g.gate, expected);
+      await opening.promise;
+      c.look(`${label}: pending`, g.gate);
+      g.gate.close();
+      c.look(`${label}: just closed`, g.gate);
+      if (outcome === "opens") opened.resolve();
+      else opened.reject(leakyThrows["hex in the message"](held));
+      await first();
+    }
+    {
+      const g = c.make();
+      g.gate.close();
+      c.look("just closed while idle", g.gate);
+      await c.submit("closed", g.gate, answer("refused-state", null, "closed"));
+    }
+    await c.submit(
+      "fixed gate",
+      prebootUnlockGate(),
+      answer("refused-state", null, "adapter-missing"),
+    );
+    for (const [label, options] of [
+      ["options with the key as an extra field", { ...c.base(), key: Uint8Array.from(KEY) }],
+      ["the key as the options", Uint8Array.from(KEY)],
+    ]) {
+      try {
+        createUnlockGate(options);
+        c.answers.push([label, "returned"]);
+      } catch (error) {
+        c.answers.push([label, error?.code]);
+        c.error(label, error);
+      }
+      c.expected.push([label, "unlock.options_invalid"]);
+    }
+  }
+
+  it("no path puts the key in an answer, a status, an error, the gate, a log, the environment or the arguments", async () => {
+    const env = JSON.stringify(process.env);
+    const argv = [...process.argv];
+    const spies = [];
+    for (const name of Object.keys(console).filter((key) => typeof console[key] === "function"))
+      spies.push([`console.${name}`, vi.spyOn(console, name).mockImplementation(() => {})]);
+    spies.push(
+      ["process.stdout.write", vi.spyOn(process.stdout, "write").mockImplementation(() => true)],
+      ["process.stderr.write", vi.spyOn(process.stderr, "write").mockImplementation(() => true)],
+    );
+    const c = collector();
+    c.base = () => ({
+      observation: observation(),
+      now: () => 0,
+      verify: async () => false,
+      open: async () => {},
+    });
+    let writes;
+    try {
+      await runEveryPath(c);
+      await new Promise((resolve) => setImmediate(resolve));
+    } finally {
+      writes = spies
+        .filter(([, spy]) => spy.mock.calls.length > 0)
+        .map(([name, spy]) => `${name} x${spy.mock.calls.length}`);
+      for (const [, spy] of spies) spy.mockRestore();
+    }
+    const leaks = [];
+    for (const [label, text] of c.texts)
+      for (const form of formsIn(text)) leaks.push(`${label}: ${form}`);
+    for (const text of [JSON.stringify(process.env), ...process.argv])
+      for (const form of formsIn(text)) leaks.push(`environment or arguments: ${form}`);
+
+    expect(leaks).toEqual([]);
+    expect(writes).toEqual([]);
+    expect(rejections.map((reason) => inspect(reason, { depth: 2 }))).toEqual([]);
+    expect(JSON.stringify(process.env)).toBe(env);
+    expect(process.argv).toEqual(argv);
+    expect(c.answers).toEqual(c.expected);
+    const reasons = new Set(c.answers.map(([, got]) => got?.reason).filter(Boolean));
+    expect([...reasons].sort()).toEqual(
+      [
+        ...Object.keys(REFUSED_TARGETS),
+        "adapter-missing",
+        "closed",
+        "clock-failed",
+        "open-failed",
+        "opened",
+        "verifier-failed",
+      ].sort(),
+    );
+    const kinds = new Set(c.answers.map(([, got]) => got?.kind).filter(Boolean));
+    expect([...kinds].sort()).toEqual(["opened", "refused-state", "wait", "wrong-key"]);
+  });
+
+  it("preboot.mjs imports no module that could write a file or start a process", () => {
+    const source = readFileSync(new URL("./preboot.mjs", import.meta.url), "utf8");
+    const imports = source
+      .split("\n")
+      .filter((line) => /^\s*import\b/.test(line))
+      .map((line) => line.trim());
+    expect(imports).toEqual([
+      'import { types } from "node:util";',
+      'import { WAITRON_LAYOUTS, classifyDisk } from "./disk-state.mjs";',
+      'import { exactRecord } from "./upgrades/contracts.mjs";',
+    ]);
+    expect(source).not.toMatch(/\brequire\s*\(|\bawait\s+import\s*\(|\bprocess\.\w/);
   });
 });
