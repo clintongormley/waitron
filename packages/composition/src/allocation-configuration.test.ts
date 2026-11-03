@@ -243,6 +243,7 @@ function hourHost(environment: ModuleOperationHost["environment"] = {}) {
     history: [{ reference: "selected-backup", complete: true, records: [] }],
     oldMachineOffline: true,
     oldMachineAbsent: false,
+    oldMachineRelinquished: false,
     noParallelRecovery: true,
     priorActivation: "none",
   };

@@ -185,6 +185,7 @@ export function createSelectedRecoveryPreparation(options: Options): {
           oldMachineAbsent: isolation.oldMachineAbsent,
           oldMachineOffline: isolation.oldMachineOffline,
           noParallelRecovery: isolation.noParallelRecovery,
+          oldMachineRelinquished: false,
           contextKey: JSON.stringify([
             binding,
             stored.country,

@@ -224,6 +224,7 @@ export async function host() {
       await withTransaction(suite.db, (tx) => readHourHistoryWithRecordFloor(tx, "preproduction")),
     ],
     oldMachineAbsent: false,
+    oldMachineRelinquished: false,
     oldMachineOffline: true,
     noParallelRecovery: true,
     priorActivation: "none" as "none" | "committed",

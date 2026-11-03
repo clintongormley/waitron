@@ -223,6 +223,7 @@ async function hostedComparison(
     history: backupHistory,
     oldMachineOffline: true,
     oldMachineAbsent: false,
+    oldMachineRelinquished: false,
     noParallelRecovery: true,
     priorActivation: "none",
   };
