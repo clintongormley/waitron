@@ -154,6 +154,37 @@ describe("the restricted box's own page", () => {
     ]);
   });
 
+  it("dates each step in the venue's time zone", async () => {
+    await seedVenue(suite.db, { timeZone: "Pacific/Auckland" });
+    const successor = await seedNode(suite.db);
+    await handOver(successor);
+    await suite.node.insert(nodeHandoverEvents).values({
+      nodeId: NODE,
+      operationId: OP,
+      kind: "filing_relinquished",
+      detail: {},
+      envelope: null,
+      recordedAt: new Date("2020-01-01T00:00:00Z"),
+    });
+    const { html } = await page("en-GB");
+    expect(html).toContain("1 Jan 2020, 13:00: Stopped sending invoice records to the tax agency");
+  });
+
+  it("dates each step in UTC when this box's copy holds no venue", async () => {
+    await handOver("dddddddd-dddd-4ddd-8ddd-dddddddddddd");
+    await suite.node.insert(nodeHandoverEvents).values({
+      nodeId: NODE,
+      operationId: OP,
+      kind: "filing_relinquished",
+      detail: {},
+      envelope: null,
+      recordedAt: new Date("2020-01-01T00:00:00Z"),
+    });
+    const { status, html } = await page("en-GB");
+    expect(status).toBe(200);
+    expect(html).toContain("1 Jan 2020, 00:00: Stopped sending invoice records to the tax agency");
+  });
+
   it("answers a failure to read through the error boundary, which logs it", async () => {
     logged.length = 0;
     const { status, html } = await page("en-GB");

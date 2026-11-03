@@ -1,6 +1,6 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
-import { locations, nodes, type Database, type NodeDatabase } from "@waitron/db";
+import { nodes, readVenue, type Database, type NodeDatabase } from "@waitron/db";
 import { initialState } from "@waitron/handover";
 import {
   nodeHandoverEvents,
@@ -9,7 +9,7 @@ import {
   type HandoverOperationState,
 } from "@waitron/node-db";
 import { createErrorBoundary } from "@waitron/server-kit";
-import { FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
+import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { escapeHtml } from "./recovery-surface.js";
@@ -114,8 +114,12 @@ function stepText(kind: string, locale: SupportedLocale): string {
  * box writes nothing to venue.db (`boot.restricted-quiet.test.ts`).
  */
 async function readTimeZone(venue: Database): Promise<string> {
-  const [row] = await venue.select({ timeZone: locations.timeZone }).from(locations).limit(1);
-  return row === undefined ? "UTC" : knownZone(row.timeZone);
+  try {
+    return knownZone((await readVenue(venue)).timeZone);
+  } catch (error) {
+    if (error instanceof AppError && error.code === "venue.not_found") return "UTC";
+    throw error;
+  }
 }
 
 async function readView(deps: RestrictedPageDeps): Promise<RestrictedView> {
