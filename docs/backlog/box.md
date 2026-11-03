@@ -902,8 +902,8 @@ dracut files; the rig entry point (`bench/box-installer/run.mjs`) and disk fixtu
 observation, mount and cleanup adapters (until then the disk-key store's fixed entry points
 refuse); the root-owned
 check run as root; real power cuts; seal experiments (a)–(i) and every slice-1 measurement.
-PR 2 left for later, from its plan's "Out": the preboot screen, the words for the `explain` answer
-and the letters-to-bytes decoder; the public CA download and its help page; the key-use record
+PR 2 left for later, from its plan's "Out": the preboot screen and the words for the `explain`
+answer; the public CA download and its help page; the key-use record
 and the startup-fingerprint check before resealing; the real `cryptsetup`, observation,
 boot-mount, certificate-file and listener adapters; joining Wi-Fi; the address fallback; the four
 preboot rig cases; and the key-memory measurements.
@@ -973,6 +973,25 @@ and removes real files, through file operations a test can replace.
   The fixed `publishWifiBootCopy` answers a valid decision with `failed` / `mount-unverified` and no
   file call until the Linux pull request adds the boot-mount check.
 
+**Built so far (2026-11-03), PR 6.** [PR 6](../superpowers/plans/2026-11-03-b3-6-disk-key-letters.md)
+adds `scripts/box/disk-recovery-key.mjs`, called by nothing yet. It turns the disk recovery key
+between the 32 bytes the box keeps and the 64 letters a person reads and types, using systemd's
+16-letter set in systemd's order (`DISK_KEY_LETTERS`).
+
+- `formatDiskRecoveryKey`: 32 bytes to systemd's 64 lower-case letters in eight groups of eight
+  joined by hyphens, for the sheet.
+- `diskRecoveryKeyPassphrase`: the same 71 characters as bytes, in a new array the caller zeroes.
+  That text is exactly the passphrase `systemd-cryptenroll` enrols, so the unlock adapter sends
+  these bytes rather than what was typed.
+- `parseDiskRecoveryKey`: typed text to 32 bytes, in a new array the caller zeroes. Letters are
+  read in either case, ASCII only; hyphens, spaces, tabs and line breaks are ignored anywhere. The
+  first other character is refused as `{ reason: "letter", position }`, its place counted from 1;
+  a count of letters other than 64 is refused as `{ reason: "length", letters }`; text over 4096
+  UTF-16 code units (`DISK_KEY_TEXT_MAX`) is refused unread, with `letters: null`. A value that is not
+  text throws `disk_recovery_key.invalid`. No answer holds a typed character or a key letter.
+- Both byte inputs take exactly 32 bytes in a genuine `Uint8Array` (a `Buffer` is accepted),
+  checked as the unlock gate checks them, and anything else throws `disk_recovery_key.invalid`.
+
 **A box that already holds Waitron, with its TPM or Secure Boot switched off:** the owner decided on 2026-11-03; see [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
 **For later slices, from PR 1's re-map against main:**
@@ -997,7 +1016,6 @@ and removes real files, through file operations a test can replace.
   OWE and enterprise networks and the password cases get no Wi-Fi unlock in version 1.
 - The address fallback widens `freezeLockedTarget`'s one-name rule for the recovery certificate
   and `decideLockedRequest`'s host rule together.
-- Slice 8's sheet and the preboot screen share one letters-to-bytes alphabet.
 - A weak test assertion, not a production defect: `apps/server/src/box-tls-repair.test.ts:397`
   checks a repaired leaf with `X509Certificate.checkIssued`, which matches the issuer's name and
   key identifier, both of which another CA can copy, and not the signature. So the test would also
@@ -1114,6 +1132,22 @@ and removes real files, through file operations a test can replace.
   boot root, an outside file removed, `current` over a different copy, and `absent` with the old
   password left under the boot root. Slice 3 must keep every other writer out of the boot root
   while it publishes, or the Linux adapter must use folder-relative calls.
+
+**For later slices, from PR 6's [re-map against main](../superpowers/plans/2026-11-03-b3-6-disk-key-letters.md#re-map-against-main-on-2026-11-03):**
+
+- The unlock adapter calls `diskRecoveryKeyPassphrase` on the gate's bytes, sends exactly those 71
+  bytes to `cryptsetup` with `--key-file=-` and no newline, and zeroes them; it never sends a typed
+  spelling. That LUKS reads standard input without stripping anything is a rig check.
+- A refused text never reaches the unlock gate, so it starts none of the gate's waits.
+- First start either reads `systemd-cryptenroll --recovery-key`'s printed text back with
+  `parseDiskRecoveryKey`, or enrols `diskRecoveryKeyPassphrase` of its own 32 random bytes; both
+  give the same key slot.
+- Slice 8's sheet takes `formatDiskRecoveryKey`'s text from the host (proposed), since `apps/server`
+  does not import from `scripts/`; its QR code holds that same text, so `parseDiskRecoveryKey`
+  reads a scan of it.
+- The screen's words for the `letter` and `length` refusals, in Spanish and English, come with the
+  preboot screen.
+- The key-use record and the startup-fingerprint check before resealing wait for slice 1's recipe.
 
 **Left open by PR 1's review (#2370):**
 
