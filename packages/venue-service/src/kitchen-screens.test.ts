@@ -2514,6 +2514,25 @@ describe("A773 pass display policy", () => {
     });
   });
 
+  it("keeps a device's own choice through a narrowing that takes only some of its stations", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, {
+      pass: { stationIds: [venue.grill, venue.cold], zoneIds: null, showNonPassStations: true },
+    });
+    const pass = await seedDevice(venue.kds, "Pass");
+    await choose(venue, pass, venue.kds, [
+      { kind: "pass", stationIds: [venue.grill, venue.cold], zoneIds: null },
+    ]);
+    await storeDeviceValue(pass, "pass", false);
+    await set(venue, venue.kds, { pass: { stationIds: [venue.grill], zoneIds: null } });
+
+    expect(await removalsOf(pass)).toHaveLength(1);
+    await expect(displayOf(venue, pass, "pass")).resolves.toEqual({
+      showNonPassStations: false,
+      nonPassStationsOverride: false,
+    });
+  });
+
   it("sets and clears a device's own choice through the seat, touching no scope or removal", async () => {
     const venue = await seedVenueWithStations();
     await set(venue, venue.kds, passes(venue));
