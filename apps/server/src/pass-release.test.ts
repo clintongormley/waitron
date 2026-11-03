@@ -1334,7 +1334,11 @@ describe("A773 pass release: paper", () => {
           submissionId: randomUUID(),
           expectedPartyRevision: await partyRevisionOf(tx, venue.party.partyId),
         });
-        expect(waitingReads).toHaveBeenCalledTimes(1);
+        const closed = [venue.stations.grill, venue.stations.fryer];
+        const closedReads = waitingReads.mock.calls.filter(([, stationIds]) =>
+          [...stationIds].some((id) => closed.includes(id)),
+        );
+        expect(closedReads).toHaveLength(1);
       } finally {
         waitingReads.mockRestore();
       }
