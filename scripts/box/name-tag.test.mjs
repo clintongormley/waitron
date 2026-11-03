@@ -1,6 +1,8 @@
 import { Buffer } from "node:buffer";
 import { TextDecoder, TextEncoder } from "node:util";
 import { describe, expect, it, vi } from "vitest";
+import { WAITRON_LAYOUTS, classifyDisk } from "./disk-state.mjs";
+import { createInstallerState, nextInstallerStep } from "./installer-policy.mjs";
 import {
   LUKS2_TOKENS_MAX,
   NAME_TAG_MAX_BYTES,
@@ -659,5 +661,244 @@ describe("planNameTagWrite answers", () => {
     expect(first.json).toEqual(second.json);
     first.json.fill(0);
     expect(planNameTagWrite(metadata, BAR).steps[0]).toEqual(put("import", 0, BAR));
+  });
+});
+
+const EFI_TYPE = "c12a7328-f81f-11d2-ba4b-00a0c93ec93b";
+const XBOOTLDR_TYPE = "bc13c2ff-59e6-4262-a352-b275fd6f7172";
+const LUKS_UUID = "2f0e8c1a-5b7d-4e3f-9a6c-1d2b3c4d5e6f";
+const LAYOUT = WAITRON_LAYOUTS[0];
+const INTERNAL_ID = "nvme-Samsung_SSD_980_500GB_S64DNF0R123456A";
+
+const valid = (subsystem = LAYOUT.subsystem, uuid = LUKS_UUID) => ({
+  state: "valid",
+  subsystem,
+  uuid,
+});
+const plain = (content) => ({ content, luks: null });
+const luks = (primary = valid(), secondary = valid()) => ({
+  content: "luks2",
+  luks: [primary, secondary],
+});
+const partition = (signature, typeGuid, name = "") => ({ ...signature, typeGuid, name });
+const efi = () => partition(plain("vfat"), EFI_TYPE, "EFI System Partition");
+const boot = () => partition(plain("other"), XBOOTLDR_TYPE, "boot");
+const waitronPartition = (signature = luks()) =>
+  partition(signature, LAYOUT.typeGuid, LAYOUT.partitionName);
+const disk = (overrides = {}) => ({
+  diskId: INTERNAL_ID,
+  attachment: "internal",
+  table: "gpt",
+  partitions: [],
+  whole: plain("none"),
+  nameTag: null,
+  ...overrides,
+});
+const completeWaitronDisk = (overrides = {}) =>
+  disk({ partitions: [efi(), boot(), waitronPartition()], ...overrides });
+const machine = (disks, overrides = {}) => ({
+  tpm: "enabled",
+  secureBoot: "user-mode",
+  disks,
+  ...overrides,
+});
+
+/**
+ * The test's own stand-in for cryptsetup's token commands, as re-map finding 3 measured them.
+ * @param {{tokens: Record<string, unknown>}} start @param {readonly any[]} steps
+ */
+const apply = (start, steps) => {
+  const after = globalThis.structuredClone(start);
+  for (const step of steps) {
+    const key = String(step.tokenId);
+    const used = Object.hasOwn(after.tokens, key);
+    if (step.op === "import" && (used || step.tokenId < 0 || step.tokenId > 31))
+      throw new Error(`import onto token ${key}`);
+    if (step.op === "remove" && !used) throw new Error(`remove of free token ${key}`);
+    if (step.op === "remove") delete after.tokens[key];
+    else after.tokens[key] = JSON.parse(new TextDecoder().decode(step.json));
+  }
+  return after;
+};
+
+/** @param {Record<string, unknown>} tokens */
+const readBack = (tokens) => {
+  const bytes = findNameTag(header(tokens));
+  return bytes === null ? null : decodeNameTag(bytes);
+};
+
+const OLD = { name: "Old Name", live: false };
+const OTHER = { name: "Other Name", live: true };
+const MALFORMED = { type: NAME_TAG_TYPE, keyslots: [], version: 1, name: "Bar", live: "yes" };
+const old = () => tagObject(OLD.name, OLD.live);
+
+/** screen: the one good tag the installer should show for the start header, or null. */
+const STARTS = [
+  { label: "no tokens", tokens: {}, screen: null },
+  { label: "systemd tokens only", tokens: { 0: TPM, 1: RECOVERY }, screen: null },
+  { label: "a tag at 0", tokens: { 0: old() }, screen: OLD },
+  { label: "a tag at 7 beside TPM at 0", tokens: { 0: TPM, 7: old() }, screen: OLD },
+  { label: "two equal tags at 2 and 5", tokens: { 2: old(), 5: old() }, screen: null },
+  {
+    label: "two different tags",
+    tokens: { 2: old(), 5: tagObject(OTHER.name, OTHER.live) },
+    screen: null,
+  },
+  { label: "a malformed Waitron token", tokens: { 3: MALFORMED }, screen: null },
+  { label: "31 other tokens", tokens: others(31), screen: null },
+  { label: "31 other tokens and a tag at 31", tokens: { ...others(31), 31: old() }, screen: OLD },
+  { label: "32 other tokens", tokens: others(32), screen: null },
+].map((start) => ({ ...start, object: { ...BASE, tokens: start.tokens } }));
+
+const DESIRED = [
+  ["BAR", BAR],
+  ["Bar \u00C0ngels, not live", { name: "Bar \u00C0ngels", live: false }],
+  ["256 emoji", { name: EMOJI_256, live: true }],
+  ["256 quotes", { name: QUOTES_256, live: false }],
+  ["a decomposed name", { name: "Bar A\u0300ngels", live: true }],
+  ["no tag", null],
+  ["257 emoji", { name: "\u{1F600}".repeat(257), live: true }],
+];
+
+/** @param {{name: string, live: boolean}|null} tag */
+const expectedTag = (tag) => {
+  const name = tag === null ? null : usableVenueName(tag.name);
+  return name === null ? null : { name, live: /** @type {any} */ (tag).live };
+};
+
+/** @param {Record<string, unknown>} tokens */
+const waitronNumbers = (tokens) =>
+  Object.keys(tokens).filter((key) => /** @type {any} */ (tokens[key]).type === NAME_TAG_TYPE);
+
+const ALL_PAIRS = STARTS.flatMap((start) =>
+  DESIRED.map(([desiredLabel, desired]) => {
+    const plan = planNameTagWrite(header(start.tokens), desired);
+    return { label: `${start.label} + ${desiredLabel}`, start, desired, plan };
+  }),
+);
+const PAIRS = ALL_PAIRS.filter(({ plan }) => plan.kind !== "refused");
+const RESULTS = PAIRS.map((pair) => ({
+  ...pair,
+  after: apply(pair.start.object, pair.plan.steps),
+}));
+
+describe("name tag sweep: the pairs it covers", () => {
+  it("skips only 32 other tokens with a usable name, refused no-free-token", () => {
+    const refused = ALL_PAIRS.filter(({ plan }) => plan.kind === "refused");
+    expect(refused.map(({ label }) => label)).toEqual(
+      DESIRED.filter(([, tag]) => expectedTag(tag) !== null).map(
+        ([label]) => `32 other tokens + ${label}`,
+      ),
+    );
+    for (const { plan } of refused) expect(plan.reason).toBe("no-free-token");
+  });
+});
+
+describe("name tag sweep: steps name only Waitron's tokens or a free number", () => {
+  it.each(PAIRS)("$label", ({ start, plan }) => {
+    const ours = waitronNumbers(start.tokens);
+    for (const step of plan.steps) {
+      const key = String(step.tokenId);
+      expect(ours.includes(key) || !Object.hasOwn(start.tokens, key)).toBe(true);
+    }
+  });
+});
+
+describe("name tag sweep: the bytes carry nothing but the desired tag", () => {
+  it.each(PAIRS.filter(({ plan }) => plan.steps.some((step) => step.op !== "remove")))(
+    "$label",
+    ({ desired, plan }) => {
+      for (const step of plan.steps) {
+        if (step.op === "remove") continue;
+        expect(decodeNameTag(step.json)).toEqual(expectedTag(desired));
+        expect(Object.keys(JSON.parse(new TextDecoder().decode(step.json)))).toEqual([
+          "type",
+          "keyslots",
+          "version",
+          "name",
+          "live",
+        ]);
+      }
+    },
+  );
+});
+
+describe("name tag sweep: nothing else changes (against this test's stand-in for cryptsetup, not a real header)", () => {
+  it.each(RESULTS)("$label", ({ start, after }) => {
+    for (const [key, token] of Object.entries(start.tokens))
+      if (/** @type {any} */ (token).type !== NAME_TAG_TYPE)
+        expect(after.tokens[key]).toEqual(token);
+    for (const field of ["keyslots", "digests", "segments", "config"])
+      expect(after[field]).toEqual(start.object[field]);
+  });
+});
+
+describe("name tag sweep: the result reads back as the desired tag", () => {
+  it.each(RESULTS)("$label", ({ desired, after }) => {
+    expect(readBack(after.tokens)).toEqual(expectedTag(desired));
+  });
+});
+
+describe("name tag sweep: planning again on the result answers unchanged", () => {
+  it.each(RESULTS)("$label", ({ desired, after }) => {
+    expect(planNameTagWrite(header(after.tokens), desired).kind).toBe("unchanged");
+  });
+});
+
+describe("name tag sweep: a write cut between steps (against this test's stand-in for cryptsetup)", () => {
+  const multiStep = PAIRS.filter(({ plan }) => plan.steps.length >= 2);
+
+  it("covers write and remove plans", () => {
+    expect(new Set(multiStep.map(({ plan }) => plan.kind))).toEqual(new Set(["write", "remove"]));
+  });
+
+  it.each(multiStep)("$label", ({ start, desired, plan }) => {
+    const startTags = waitronNumbers(start.tokens).map((key) => readBack({ 0: start.tokens[key] }));
+    for (let length = 1; length < plan.steps.length; length++) {
+      const seen = readBack(apply(start.object, plan.steps.slice(0, length)).tokens);
+      if (plan.kind === "write") {
+        expect([null, expectedTag(desired)]).toContainEqual(seen);
+      } else if (seen !== null) {
+        expect(waitronNumbers(start.tokens).length).toBeGreaterThanOrEqual(2);
+        expect(startTags).toContainEqual(seen);
+      }
+    }
+  });
+});
+
+const RECOGNISED = classifyDisk(machine([completeWaitronDisk({ nameTag: null })]));
+
+describe("name tag sweep: the disk is still recognised whatever its tag", () => {
+  it.each([
+    ...STARTS.map((start) => [`start: ${start.label}`, start.tokens]),
+    ...RESULTS.map(({ label, after }) => [`result: ${label}`, after.tokens]),
+  ])("%s", (_label, tokens) => {
+    const nameTag = findNameTag(header(tokens));
+    if (nameTag !== null)
+      expect(classifyDisk(machine([completeWaitronDisk({ nameTag })]))).toEqual(RECOGNISED);
+  });
+});
+
+describe("name tag sweep: the installer's screen shows the tag, before and after", () => {
+  it.each([
+    ...STARTS.map((start) => [`start: ${start.label}`, start.tokens, start.screen]),
+    ...RESULTS.map(({ label, after, desired }) => [
+      `result: ${label}`,
+      after.tokens,
+      expectedTag(desired),
+    ]),
+  ])("%s", (_label, tokens, screen) => {
+    const state = createInstallerState({ atMs: 0, clockFloorMs: 0, eraseWord: "ERASE-CONFIRM" });
+    const found = nextInstallerStep(state, {
+      kind: "observed",
+      atMs: 1000,
+      observation: machine([completeWaitronDisk()]),
+      venueTag: readBack(tokens),
+    });
+    const keyed = nextInstallerStep(found.state, { kind: "key", atMs: 2000 });
+    const tag = /** @type {{name: string, live: boolean}|null} */ (screen);
+    expect(found.message.params.venueName).toBe(tag === null ? null : tag.name.normalize("NFC"));
+    expect(found.message.params.live).toBe(tag === null ? null : tag.live);
+    expect(keyed.message.params.prompt).toBe(tag === null ? "erase-word" : "venue-name");
   });
 });
