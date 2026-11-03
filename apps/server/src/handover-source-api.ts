@@ -97,8 +97,8 @@ async function openFinalCopy(
   return inRetakeTurn(path, async () => {
     const retaken = await openIfMatching(path, snapshot);
     if (retaken !== null) return retaken;
-    // One process owns the state folder and its retakes take turns, so any retake file found
-    // here was left by a run that stopped part way.
+    // Retakes in this process take turns (inRetakeTurn), so no retake file found here belongs
+    // to a retake still running in this process.
     await mkdir(dirname(path), { recursive: true });
     await removeLeftoverRetakes(path);
     return retake(deps, operationId, path, snapshot);
