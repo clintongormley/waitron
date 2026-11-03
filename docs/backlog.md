@@ -6360,8 +6360,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `QU`, `XB`, `XG`, `XN` and `XU` as bare codes. Add sourced English/Spanish labels without
   treating them as postal countries. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A968. The guide's frame and the recovery page move into `apps/server/src/i18n/`.** The recovery
-  page must still load without the database. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+- **The Start again choice's words move into `apps/server/src/i18n/`.** `START_AGAIN_PAGE_TEXT`
+  (`apps/server/src/recovery-start-again.ts`) is recovery-page wording added after A968 was
+  written; A968 moved the rest of the page's words to `i18n/recovery-page.ts`.
 
 
 - **Spanish text in a server test venue, for A913's English-only audit.**

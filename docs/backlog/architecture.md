@@ -395,9 +395,6 @@ until A977).
   Both dialogs use that helper for the issuing list. Add sourced names for that list without
   admitting those values to the postal-country list. This is a wording follow-up; the identifiers
   retain their explicit issuing code.
-- **A968 — point 2: the guide's frame and the recovery page.** `guide-pages.ts:73–85` and
-  `recovery-surface.ts:107–425` (about 50 strings). The recovery page is served when the box cannot
-  start, so its strings must load without the database. No visible change.
 - **A971 — point 5: Spain's pack provides English.** Check every word `country-es` shows on a screen:
   holiday names (`data/es-2026.ts`, one `name` per row, verbatim from the BOE and compared by a
   test), the area label «Lleida, fuera del territorio de Arán» (Waitron's wording), and the notices
