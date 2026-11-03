@@ -1109,6 +1109,11 @@ it.each([
     "event-2",
     { oldMachineRelinquished: false, oldMachineOffline: true },
   ],
+  [
+    "a promotion saying both relinquished and offline",
+    "event-2",
+    { oldMachineRelinquished: true, oldMachineOffline: true },
+  ],
   ["a restore saying offline", "event-1", { version: 2, oldMachineRelinquished: false }],
   ["a first setup saying absent", "event-0", { version: 2, oldMachineRelinquished: true }],
 ])("a stored version 2 approval no promotion writes is refused: %s", async (_name, key, fields) => {
