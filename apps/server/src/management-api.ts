@@ -1573,6 +1573,7 @@ export function mountManagementApi(
         forgottenAfterMinutes?: unknown;
         readyWarningAfterMinutes?: unknown;
         printerIds?: unknown;
+        waitsForPass?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1587,6 +1588,12 @@ export function mountManagementApi(
           throw new AppError("management.request_invalid", { field: "isDefault" });
         isDefault = body.isDefault;
       }
+      let waitsForPass: boolean | undefined;
+      if (body.waitsForPass !== undefined) {
+        if (typeof body.waitsForPass !== "boolean")
+          throw new AppError("management.request_invalid", { field: "waitsForPass" });
+        waitsForPass = body.waitsForPass;
+      }
       const colour = parseStationColour(body.colour);
       const { name } = body;
       const thresholds = parseStationTimingPatch(body);
@@ -1599,6 +1606,7 @@ export function mountManagementApi(
           colour,
           thresholds,
           printerIds,
+          waitsForPass,
         });
       });
       return c.json(result, 201);
@@ -1646,6 +1654,7 @@ export function mountManagementApi(
         forgottenAfterMinutes?: unknown;
         readyWarningAfterMinutes?: unknown;
         printerIds?: unknown;
+        waitsForPass?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1661,6 +1670,7 @@ export function mountManagementApi(
         printHeldWork?: boolean;
         bumpMode?: BumpMode;
         changesAfterSending?: ChangesAfterSending;
+        waitsForPass?: boolean;
         warmAfterMinutes?: number;
         overdueAfterMinutes?: number;
         forgottenAfterMinutes?: number;
@@ -1688,6 +1698,11 @@ export function mountManagementApi(
         if (typeof body.printHeldWork !== "boolean")
           throw new AppError("management.request_invalid", { field: "printHeldWork" });
         patch.printHeldWork = body.printHeldWork;
+      }
+      if (body.waitsForPass !== undefined) {
+        if (typeof body.waitsForPass !== "boolean")
+          throw new AppError("management.request_invalid", { field: "waitsForPass" });
+        patch.waitsForPass = body.waitsForPass;
       }
       const colour = parseStationColour(body.colour);
       if (colour !== undefined) patch.colour = colour;

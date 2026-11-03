@@ -1020,7 +1020,7 @@ describe("/management-api/tables", () => {
 describe("/management-api/stations (KDS-1 config)", () => {
   async function createStation(
     name: string,
-    extra: { isDefault?: boolean; colour?: string } = {},
+    extra: { isDefault?: boolean; colour?: string; waitsForPass?: boolean } = {},
   ): Promise<string> {
     const res = await req(
       "/stations",
@@ -1042,6 +1042,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       colour: string;
       ticketGrouping: string;
       printHeldWork: boolean;
+      waitsForPass: boolean;
       readyWarningAfterMinutes: number;
     }[]
   > {
@@ -1055,6 +1056,7 @@ describe("/management-api/stations (KDS-1 config)", () => {
       colour: string;
       ticketGrouping: string;
       printHeldWork: boolean;
+      waitsForPass: boolean;
       readyWarningAfterMinutes: number;
     }[];
   }
@@ -1972,6 +1974,46 @@ describe("/management-api/stations (KDS-1 config)", () => {
         printHeldWork: true,
       });
     }
+  });
+
+  it("A773 station policy: the station routes carry waitsForPass", async () => {
+    const stationRow = async (id: string) =>
+      (await listStations()).find((station) => station.id === id);
+    const notWaiting = await createStation(unique("Not waiting"));
+    expect(await stationRow(notWaiting)).toMatchObject({ waitsForPass: false });
+    const id = await createStation(unique("Waiting"), { waitsForPass: true });
+    expect(await stationRow(id)).toMatchObject({ waitsForPass: true });
+    const off = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ waitsForPass: false }) },
+      managerCookie,
+    );
+    expect(off.status).toBe(204);
+    expect(await stationRow(id)).toMatchObject({ waitsForPass: false });
+    const before = await stationRow(id);
+    for (const waitsForPass of [null, "true", 1]) {
+      const response = await req(
+        `/stations/${id}`,
+        { method: "PATCH", body: JSON.stringify({ waitsForPass }) },
+        managerCookie,
+      );
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "waitsForPass" } },
+      });
+      expect(await stationRow(id)).toEqual(before);
+    }
+    const name = unique("Null waiting");
+    const refused = await req(
+      "/stations",
+      { method: "POST", body: JSON.stringify({ name, waitsForPass: null }) },
+      managerCookie,
+    );
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({
+      error: { code: "management.request_invalid", params: { field: "waitsForPass" } },
+    });
+    expect((await listStations()).some((station) => station.name === name)).toBe(false);
   });
 
   it("PATCH body screens: array → body; non-string name; non-boolean active — the station is left as it was", async () => {

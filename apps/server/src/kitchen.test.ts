@@ -245,6 +245,7 @@ describe("kitchen-station config", () => {
         printHeldWork: false,
         bumpMode: "line",
         changesAfterSending: "held-or-waiting",
+        waitsForPass: false,
         ...defaultThresholds,
       },
       {
@@ -259,6 +260,7 @@ describe("kitchen-station config", () => {
         printHeldWork: false,
         bumpMode: "line",
         changesAfterSending: "held-or-waiting",
+        waitsForPass: false,
         ...defaultThresholds,
       },
       {
@@ -273,6 +275,7 @@ describe("kitchen-station config", () => {
         printHeldWork: false,
         bumpMode: "line",
         changesAfterSending: "held-or-waiting",
+        waitsForPass: false,
         ...defaultThresholds,
       },
     ]);
@@ -420,6 +423,7 @@ describe("kitchen-station config", () => {
         printHeldWork: false,
         bumpMode: "line",
         changesAfterSending: "held-or-waiting",
+        waitsForPass: false,
         warmAfterMinutes: 5,
         overdueAfterMinutes: 10,
         forgottenAfterMinutes: 15,
@@ -435,6 +439,32 @@ describe("kitchen-station config", () => {
       code: "station.not_found",
       params: { stationId: id },
     });
+  });
+
+  it("A773 station policy: a station starts not waiting, and a patch switches it on and off", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Grill" }));
+    const waits = async () =>
+      (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id)!.waitsForPass;
+    expect(await waits()).toBe(false);
+    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { waitsForPass: true }));
+    expect(await waits()).toBe(true);
+    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { name: "Grill two" }));
+    expect(await waits()).toBe(true);
+    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { waitsForPass: false }));
+    expect(await waits()).toBe(false);
+    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { name: "Grill three" }));
+    expect(await waits()).toBe(false);
+  });
+
+  it("A773 station policy: create stores a given waitsForPass", async () => {
+    const cfg = await setupVenue();
+    const { id } = await asApp(cfg, (tx) =>
+      createStation(tx, cfg, { name: "Grill", waitsForPass: true }),
+    );
+    expect(
+      (await asApp(cfg, (tx) => listStations(tx, cfg))).find((s) => s.id === id)!.waitsForPass,
+    ).toBe(true);
   });
 
   it("updateStation surfaces a name collision as station.name_taken", async () => {
