@@ -49,6 +49,16 @@ export function usableVenueName(value) {
   return length >= 1 && length <= NAME_TAG_MAX_CODE_POINTS ? name : null;
 }
 
+/** Throws name_tag.tag_invalid (tag-invalid) unless tag is exactly {name: string, live: boolean}. */
+function assertTagShape(/** @type {unknown} */ tag) {
+  if (
+    !exactRecord(tag, ["name", "live"]) ||
+    typeof (/** @type {VenueTag} */ (tag).name) !== "string" ||
+    typeof (/** @type {VenueTag} */ (tag).live) !== "boolean"
+  )
+    throw refusal("name_tag.tag_invalid", "tag-invalid");
+}
+
 /**
  * Pure. Encodes usableVenueName(tag.name), so a decomposed name is stored composed.
  * Throws name_tag.tag_invalid: reason "tag-invalid" unless tag is exactly {name: string, live:
@@ -56,12 +66,7 @@ export function usableVenueName(value) {
  * @param {VenueTag} tag @returns {Uint8Array} a fresh array
  */
 export function encodeNameTag(tag) {
-  if (
-    !exactRecord(tag, ["name", "live"]) ||
-    typeof tag.name !== "string" ||
-    typeof tag.live !== "boolean"
-  )
-    throw refusal("name_tag.tag_invalid", "tag-invalid");
+  assertTagShape(tag);
   const name = usableVenueName(tag.name);
   if (name === null) throw refusal("name_tag.tag_invalid", "name-unusable");
   return canonicalBytes(name, tag.live);
@@ -157,15 +162,7 @@ export function findNameTag(metadata) {
  * @param {Uint8Array} metadata @param {VenueTag|null} tag @returns {NameTagWritePlan}
  */
 export function planNameTagWrite(metadata, tag) {
-  if (
-    tag !== null &&
-    !(
-      exactRecord(tag, ["name", "live"]) &&
-      typeof tag.name === "string" &&
-      typeof tag.live === "boolean"
-    )
-  )
-    throw refusal("name_tag.tag_invalid", "tag-invalid");
+  if (tag !== null) assertTagShape(tag);
   const tokens = readTokens(metadata);
   const numbers = tokens === null ? null : Object.keys(tokens).map(tokenNumber);
   if (numbers === null || numbers.includes(null)) return plan("refused", "metadata-unreadable", []);

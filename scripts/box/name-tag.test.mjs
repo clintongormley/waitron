@@ -452,6 +452,14 @@ describe("planNameTagWrite adds a tag", () => {
     });
   });
 
+  it("imports at 31 when only 31 is free", () => {
+    expect(planNameTagWrite(header(others(31)), BAR)).toEqual({
+      kind: "write",
+      reason: null,
+      steps: [put("import", 31, BAR)],
+    });
+  });
+
   it("replaces a tag at 31 when every other number is taken", () => {
     const tokens = { ...others(31), 31: tagObject("Old", false) };
     expect(planNameTagWrite(header(tokens), BAR)).toEqual({
@@ -610,6 +618,12 @@ describe("planNameTagWrite input", () => {
     ["undefined", undefined],
   ])("a tag that is %s throws name_tag.tag_invalid", (_label, tag) => {
     expect(() => planNameTagWrite(header({}), /** @type {any} */ (tag))).toThrow(
+      expect.objectContaining({ code: "name_tag.tag_invalid", reason: "tag-invalid" }),
+    );
+  });
+
+  it("checks the tag before the metadata", () => {
+    expect(() => planNameTagWrite(utf8("not json"), /** @type {any} */ ({ name: "Bar" }))).toThrow(
       expect.objectContaining({ code: "name_tag.tag_invalid", reason: "tag-invalid" }),
     );
   });
