@@ -33,6 +33,8 @@ Nothing here runs on a box, opens a disk, listens on a socket, or joins a networ
 - M1–M11: an `unhandledRejection` listener and `util.inspect(gate, { depth: 10, showHidden: true })` in the sweep (Task 4); the spawn-timeout guard named as a negative check only (Task 5); `prebootUnlockGate` built like PR 1's `fixedStore` (Task 3); red steps that fail on named assertions (every task); the 0xFF case on a `sae` record, the 64-digit key's letter case, and unsupported networks named as a gap for task 3.1 (Task 7 and re-map finding 12); genuine targets marked in a `WeakSet` and a refused redirect identity throwing (Task 6); the observation copied once with `structuredClone` (Task 1); every `input_invalid` reason named, and bad reader deps refused (Tasks 2, 5, 6, 7, 8); the redirect certificate must be self-signed (Task 5); wording fixes (Task 1, re-map finding 12, Self-review); the `openssl` receipt, two more "Out" items, `retryAt`'s clock, and who sets the installation id's minimum length (Out, Tasks 2 and 5, re-map finding 7).
 - Q7: the proposed CLAUDE.md line is dropped; the backlog line about `apps/server/src/box-tls-repair.test.ts:397` stays, worded as a weak test assertion (Task 9).
 
+**Round-3 check folded 2026-11-03.** A narrow check of the folded plan, with probe scripts, found fourteen points; all are folded as the coordinator ruled: Task 1's rule-4 and copy deletion controls reworded so each fails as named, and its red step matched to the stub convention; Task 2's submission-during-open case asserts the call counts before awaiting; Task 3's `close()` window defined (`verifying` until the running call settles, a submission then answers `closed`, `close()` on a refused gate does nothing); Task 4 inspects the gate while calls are pending and waits one event-loop turn before checking for unhandled rejections; Task 5's timeout-guard sentence and Vitest's 10-second hook default stated exactly; Task 6's `selectLockedIdentity` names its `target-invalid` throw; Task 7 compares bytes, not strings, and calls a non-ASCII WPA2 password `record-unsupported`; Task 8 says `realpath` equality is the caller's duty; line numbers in `self-signed-cert.ts` corrected; the spec's "cancel" narrowed to a person cancelling, with the screen's own clearing added to "Out".
+
 ## Global Constraints
 
 - **Machine limits on 2026-11-03:** macOS, unprivileged. No Linux, no virtual machine, no TPM (the security chip), no `cryptsetup` (the Linux disk-encryption tool). Anything that needs those is not built here and is never described as working.
@@ -80,6 +82,7 @@ Nothing here runs on a box, opens a disk, listens on a socket, or joins a networ
 - The Spanish/English local screen and the trusted key form, their light and dark themes, and the 390 px and 1280 px checks (parent Task 1.3, last step).
 - Turning the 64 typed letters into 32 bytes. The letters come from systemd's 16-letter "modhex" set (P40). The decoder belongs beside the screen, and slice 8's sheet must print with the same alphabet; one shared encoder and decoder is that pull request's choice. The gate takes bytes only.
 - The changed-startup warning («Han cambiado los archivos de arranque») and the "the startup image cannot prove itself honest" warning (spec §7.5).
+- On a person's Cancel, the screen clears its own copy of the typed key (spec §7.5: "clear on cancel/error"). It does not call the gate's `close()`.
 - The words for Task 6's `explain` answer, in the preboot screen's English and Spanish translation files, keyed by its fixed code `unlock.remote_unavailable`.
 - Showing a wait. The gate's `retryAt` is a deadline on a clock that never jumps (`performance.now()` in production), which means nothing to a browser; the HTTP adapter converts it to time remaining before sending it.
 
@@ -128,7 +131,7 @@ The six-slice plan was written on 2026-10-26, before PR 1. This re-map checks Ta
 
    The spec says "restoring a venue must not replace the physical disk's preboot identity", so the recovery address needs its own per-disk id, made at first start (see "Out"). Task 5 checks only its spelling: 1 to 56 lowercase letters or digits. 56 is 63 minus the 7 characters of `unlock-`; a DNS label is "63 octets or less" (RFC 1035 §2.3.4, fetched with `curl` on 2026-11-03). Hyphens are refused so the address has one spelling; the first-start pull request may widen this. The minimum length that keeps two boxes' addresses apart belongs to whichever pull request mints the id; 1 here is only the spelling floor.
 8. **"Not signed by the CA" is checked by signature, never by name.** Node's `X509Certificate.checkIssued(ca)` compares names only. Run on 2026-11-03 with OpenSSL 4.1.0: a self-signed certificate whose subject copies the CA's name gave `checkIssued(ca) = true` and `verify(ca.publicKey) = false`. So Task 5 proves "signed by the CA" with `verify(ca.publicKey)` and uses `checkIssued` only as an extra condition. While checking this, the planner saw that `apps/server/src/box-tls-repair.test.ts:396-401` asserts a repaired leaf with `checkIssued` alone. That is outside this pull request; Task 9 records it in the backlog.
-9. **A certificate input is exactly one PEM certificate block.** Run on 2026-11-03: `new X509Certificate(leafPem + caPrivateKeyPem)` parsed without error and returned the leaf. A file holding a certificate plus a private key would pass a parse-only check, so Task 5 refuses any input that is not one `-----BEGIN CERTIFICATE-----` block and nothing else. The block may use `\n` or `\r\n` line endings, one style throughout (review I2): the box CA is written by node-forge's `certificateToPem` (`apps/server/src/self-signed-cert.ts:221`, written to disk at `apps/server/src/box-secrets.ts:212`), and a `certificateToPem` run on 2026-11-03 produced `\r\n` on every line. Its keys are RSA-2048 (`apps/server/src/self-signed-cert.ts:23`, `:150`).
+9. **A certificate input is exactly one PEM certificate block.** Run on 2026-11-03: `new X509Certificate(leafPem + caPrivateKeyPem)` parsed without error and returned the leaf. A file holding a certificate plus a private key would pass a parse-only check, so Task 5 refuses any input that is not one `-----BEGIN CERTIFICATE-----` block and nothing else. The block may use `\n` or `\r\n` line endings, one style throughout (review I2): the box CA is written by node-forge's `certificateToPem` (`apps/server/src/self-signed-cert.ts:222`, written to disk at `apps/server/src/box-secrets.ts:212`), and a `certificateToPem` run on 2026-11-03 produced `\r\n` on every line. Its keys are RSA-2048, generated at `apps/server/src/self-signed-cert.ts:156`.
 10. **A recovery certificate may name exactly one thing, the recovery address.** The spec's Android table describes the leaf as "with its SANs naming only the recovery identity" (SAN: the certificate's list of names it is valid for). The address fallback (see "Out") is the later exception.
 11. **A temporary redirect, never a permanent one.** RFC 9110 says a 308 (and a 301) "is heuristically cacheable" (§15.4.9 and §15.4.2, fetched with `curl` on 2026-11-03). A browser that cached a permanent redirect from `http://waitron.local` would keep sending people to the recovery address after the box unlocks. So the redirect is a 302 with `Cache-Control: no-store`. Methods other than GET and HEAD get 405, never a redirect, so a browser is never told to send a submitted body on to another address. A request for any other host gets 421, which RFC 9110 §15.5.20 describes as "the request was directed at a server that is unable or unwilling to produce an authoritative response for the target URI".
 12. **The Wi-Fi record format does not exist yet.** Task 3.1, which writes it, is not built: no `wifi.json`, `waitron-recovery` or `network.mjs` exists in the tree (checked with `grep -rn` over `apps`, `packages`, `scripts` and `deploy`). Task 7 defines version 1, the minimum the spec allows: the network name, the security type, the password and whether the network is hidden. The field rules follow NetworkManager 1.52.0, fetched with `curl` on 2026-11-03:
@@ -136,7 +139,7 @@ The six-slice plan was written on 2026-10-26, before PR 1. This re-map checks Ta
     - WPA2 password: `src/libnm-core-impl/nm-setting-wireless-security.c:1707-1711`, "either an ASCII passphrase of 8 to 63 characters … or the key in form of 64 hexadecimal character", and `src/libnm-core-impl/nm-utils.c:1237-1258`;
     - WPA3 password: the same comment, "a passphrase of any length for SAE authentication", and `nm-setting-wireless-security.c:858-863`, which asks for the password again when it is empty.
 
-    Version 1 supports `wpa-psk` (WPA2 and WPA3 personal) and `sae` (WPA3 personal only). Open networks, WEP, enterprise sign-in and OWE are "unsupported" and never load, and a WPA2 password with a character outside printable ASCII is refused, although NetworkManager's own check (`nm-utils.c:1237-1258`) counts only its length. Such a box has no Wi-Fi unlock and needs cable or the local screen. That is a gap, recorded for task 3.1, which reports the copy as failed rather than claiming Wi-Fi recovery works.
+    Version 1 supports `wpa-psk` (WPA2 and WPA3 personal) and `sae` (WPA3 personal only). Open networks, WEP, enterprise sign-in and OWE are "unsupported" and never load, and a WPA2 password with a character outside printable ASCII is refused as `record-unsupported` (Task 7's rule 8, so task 3.1 can explain the refusal), although NetworkManager's own check (`nm-utils.c:1237-1258`) counts only its length. Such a box has no Wi-Fi unlock and needs cable or the local screen. That is a gap, recorded for task 3.1, which reports the copy as failed rather than claiming Wi-Fi recovery works.
 13. **The reader has a boot-mount seam, and its fixed entry point refuses.** Without one, a fixed entry point reading `/boot` would answer differently on macOS (no `/boot`) and on CI's Linux runner (a real `/boot`), so a test of it would depend on the machine. PR 1's pattern avoids that: the fixed entry refuses `mount-unverified` until the Linux pull request supplies the check.
 14. **Spec line numbers that moved.** The spec cites `apps/server/src/self-signed-cert.ts:31-35` and `:29-33` for the CA's permitted names. They are now at `:27-33` (`PERMITTED_DNS` is at `:33`). Checked by reading. The spec is historical and is not edited (CLAUDE.md §6, docs).
 15. **PR 1's refusal codes are registered nowhere** (`grep -rn 'disk_recovery.refused'` outside `scripts/box/` finds only PR 1's plan). Host libraries keep their codes local; this pull request does the same. `apps/server/src/errors.ts` is untouched.
@@ -224,16 +227,16 @@ export function freezeUnlockTarget(observation);
     - `firstStart "pending" | "unknown" → first-start-pending`.
   - **Bad shapes,** each `observation-invalid`: `null`; an extra key; a missing `firstStart`; `firstStart: "done"`; an upper-case `expectedDiskUuid`; a `machine` that `classifyDisk` refuses (a disk id `"../sda"`); an observation holding a function; an observation whose `firstStart` is a getter that throws.
   - `a getter that answers "complete" the first time it is read and "pending" after → the answer follows one read only` (the copy), and the test counts the getter's reads as 1.
-- [ ] **Step 2: Run red.** `pnpm exec vitest run scripts/box/preboot.test.mjs`. Expect failures saying `freezeUnlockTarget` is missing, not a fixture error.
+- [ ] **Step 2: Run red.** `pnpm exec vitest run scripts/box/preboot.test.mjs`. With `freezeUnlockTarget` exported as a stub that throws (see "Red means a named assertion failing"), expect each case to fail on its own assertion, not one import error or a fixture error.
 - [ ] **Step 3: Implement** `freezeUnlockTarget`: pure, synchronous, no I/O.
 - [ ] **Step 4: Run green.** Read the `Tests` count, then run the one-file coverage command for `preboot.mjs`.
 - [ ] **Step 5: Deletion controls.** For each one, make the change, see the named test fail, then restore. Record each in the commit body.
   - Remove rule 3's UUID comparison → `disk-mismatch` fails.
   - Count only internal disks in rule 4 → the external-disk and installer-stick duplicate cases fail.
-  - Count only disks other than the Waitron one in rule 4 → the same-disk foreign-partition case fails.
+  - Count at most one signature per disk in rule 4 → the same-disk foreign-partition case answers `ready`.
   - Read `observation.firstStart` directly instead of from the copy → the getter case reads twice.
   - Accept `firstStart: "unknown"` → its case fails.
-  - Build the handle from a reference to the observation's disk object → the "changed after freezing" case fails.
+  - Bypass the copy and point the handle into the caller's own observation object → the "changed after freezing" case fails.
   - Refuse when `hardware` is not null → the TPM-disabled case fails, which shows the rule does not wrongly refuse a box that needs its key typed.
 - [ ] **Step 6: Commit.** `git add scripts/box/preboot.mjs scripts/box/preboot.test.mjs && git commit -s -m "feat(box): decide which disk the preboot unlock may open"`. The commit body names the deletion controls and says the real observation, expected UUID and first-start state come from the Linux pull request.
 
@@ -294,7 +297,7 @@ The delay after the n-th failure is `UNLOCK_DELAYS_MS[min(n, 6) - 1]`: 2, 4, 8, 
   - `slow checker: submitted at 0, answers false at 1500 → retryAt 3500`.
   **One check at a time (Review Focus 1)**
   - `two submissions while the checker is pending → the checker is called once; the second gets {kind:"wait", retryAt:null}`.
-  - `a submission while open is pending → {kind:"wait", retryAt:null}`; open is called once, and the first submission's result is `opened` when it resolves.
+  - `a submission while open is pending → {kind:"wait", retryAt:null}`. Before awaiting that second result, assert the checker has been called exactly once and the opener once, so the deletion control below fails on an assertion, not on a timeout; then resolve the opener, and the first submission's result is `opened`.
   - `a malformed submission while the checker is pending → wait, and the checker is still called once`.
   - `malformed submissions — a string, 31 bytes, 33 bytes, an Array of 32 numbers, null → wrong-key with retryAt 2000`, the checker never called.
   - `a malformed submission during a wait → wait`, and the failure count does not change.
@@ -349,8 +352,11 @@ The gate's copy is handed to `verify` and then `open`, and filled with zeros whe
 - marks the gate closed, so every later submission answers `refused-state "closed"`;
 - never wipes a copy that `verify` or `open` is still using; that copy is wiped when the call settles;
 - if `verify` is running: when it settles, the copy is wiped, `open` is not called, and that submission answers `refused-state "closed"`;
-- if `open` is already running: it finishes, its result stands and is reported (`opened`, or `open-failed`), and the status follows it;
-- after opening, or a second time: changes nothing.
+- if `open` is already running: it finishes, and that submission's result stands and is reported (`opened`, or `refused-state "open-failed"`);
+- `status()` reports `verifying` until a `verify` or `open` that was running at `close()` settles, then `opened` if the open succeeded and `closed` otherwise;
+- a submission made in that window answers `refused-state "closed"` (Task 2's rule 1 comes before its rule 2);
+- after opening, or a second time: changes nothing;
+- on a refused gate, including the fixed `prebootUnlockGate()`: changes nothing, and the gate stays refused with its reason.
 
 **The fixed gate** (review M3) follows PR 1's `fixedStore` (`scripts/box/disk-key.mjs`, end of file): `prebootUnlockGate()` is built once by the same internal constructor `createUnlockGate` uses, given a target seam that is called once and answers refused `adapter-missing`. No stub `verify`, `open` or clock is written for it: a refused gate never calls them, and an uncalled stub would be an uncovered function.
 
@@ -361,8 +367,10 @@ The gate's copy is handed to `verify` and then `open`, and filled with zeros whe
   - `the checker receives the original bytes in an array that is not the caller's`, and the opener receives that same array.
   - `it.each` over opened, wrong-key, checker throws, opener throws: `the array the checker received is all zeros once submit settles`.
   - `close while the checker is pending → the array the checker holds still has its bytes right after close() (the test reads it before resolving the checker); the checker then answers true; open is never called; the result is refused-state "closed"; the array is zeros`.
-  - `close while the opener is pending → the array the opener holds still has its bytes right after close(); the opener resolves; the result is {kind:"opened"}; status opened; the array is zeros`.
-  - `close while the opener is pending, and the opener then throws → refused-state "open-failed"; status refused "open-failed"`.
+  - `close while the opener is pending → the array the opener holds still has its bytes right after close(); status() is verifying; the opener resolves; the result is {kind:"opened"}; status opened; the array is zeros`.
+  - `close while the opener is pending, and the opener then throws → the result is refused-state "open-failed"; status closed`.
+  - `close while the opener is pending, then a second submission → refused-state "closed"`, the checker and opener each still called once.
+  - `close on a gate whose target was refused → status still {state:"refused", reason}`; `close on prebootUnlockGate() → status still refused "adapter-missing"`.
   - `close, then submit → refused-state "closed"`; `close twice → status closed`; `close after opened → status still opened`.
   - `prebootUnlockGate() returns the same object twice; its status is {state:"refused", reason:"adapter-missing"}; submit gives refused-state "adapter-missing", zeroes the caller's array and makes no copy`.
 - [ ] **Step 2: Run red.**
@@ -397,7 +405,7 @@ The gate's copy is handed to `verify` and then `open`, and filled with zeros whe
   - `close()` while `verify` runs and while `open` runs;
   - the fixed `prebootUnlockGate`.
 
-  While doing so, spy on `console.*`, `process.stdout.write` and `process.stderr.write`. Collect every result, every `status()` taken before and after each step, and every thrown error's `message`, `stack`, `JSON.stringify(error)` and `util.inspect(error, { depth: 10 })`. Collect `util.inspect(gate, { depth: 10, showHidden: true })` after each step (review M1). Register a `process.on("unhandledRejection")` listener for the whole block and collect what it receives. Take `JSON.stringify(process.env)` and `process.argv` before and after. Collapse runs of whitespace before matching the decimal forms, as PR 1 does.
+  While doing so, spy on `console.*`, `process.stdout.write` and `process.stderr.write`. Collect every result, every `status()` taken before and after each step, and every thrown error's `message`, `stack`, `JSON.stringify(error)` and `util.inspect(error, { depth: 10 })`. Collect `util.inspect(gate, { depth: 10, showHidden: true })` after each step, and also while `verify` is pending, while `open` is pending, and just after `close()` (review M1): after a step the copy is already zeros, so only these moments can show a copy kept on the gate. Register a `process.on("unhandledRejection")` listener for the whole block and collect what it receives. Node reports an unhandled rejection only after a full turn of the event loop (the checker's Vitest probe: nothing after a microtask, one report after `setImmediate`), so before asserting, `await new Promise((resolve) => setImmediate(resolve))`. Take `JSON.stringify(process.env)` and `process.argv` before and after. Collapse runs of whitespace before matching the decimal forms, as PR 1 does.
 
   Assert:
   - no form appears in any collected value;
@@ -412,7 +420,7 @@ The gate's copy is handed to `verify` and then `open`, and filled with zeros whe
   - `console.log` the copied key in `submit`;
   - set `process.env.WAITRON_LAST_KEY` to the key's hex;
   - keep the last copied key on the gate object as a property (`gate.lastKey = copy`) → the `util.inspect(gate)` check fails;
-  - call `verify` without awaiting or catching it, so a throwing checker's rejection goes unhandled → the listener check fails.
+  - keep awaiting `verify`, and also attach an extra `.then(() => {})` with no `catch` to its promise, so a throwing checker's rejection goes unhandled on that branch → the listener check fails.
 - [ ] **Step 4: Run the coverage command** for `preboot.mjs` again. It is unchanged unless a leak was fixed.
 - [ ] **Step 5: Commit:** `test(box): sweep every preboot unlock path for the typed key in any form`. The commit body states the limit: this proves what the gate returns, throws, logs and sets, not what a real adapter, the browser or the operating system keeps.
 
@@ -508,7 +516,7 @@ The tests read each certificate's real dates with `new X509Certificate(pem).vali
   - `a missing key | an extra key | a non-string certificate | now NaN → throws {code:"recovery_identity.input_invalid", reason:"input-invalid"}`.
 - [ ] **Step 2: Run red.** `pnpm exec vitest run scripts/box/preboot-locked.test.mjs`.
 - [ ] **Step 3: Implement** `freezeLockedTarget` and `BOX_NAME`.
-- [ ] **Step 4: Run green**, the one-file coverage command for `preboot-locked.mjs`, and `pnpm exec vitest run scripts/spawn-timeout-budget.test.ts`. That guard is a negative check only: it reads text and compares the largest single wait with the bound it finds, so passing it does not show the hook has time enough (review M2). What matters is the hook's own 30 000 ms bound: the root config sets only `testTimeout: 30_000` (`vitest.config.ts:96`), not a hook timeout, and Vitest's default hook timeout is 10 seconds (the reviewer's figure; not re-checked here).
+- [ ] **Step 4: Run green**, the one-file coverage command for `preboot-locked.mjs`, and `pnpm exec vitest run scripts/spawn-timeout-budget.test.ts`. That guard reads text, and for this shape (one `execFileSync` inside a `beforeAll`) it returns "unreadable" and declines to judge it (the round-3 checker's run), so passing it says nothing about this suite (review M2). What matters is the hook's own 30 000 ms bound. The root config sets only `testTimeout: 30_000` (`vitest.config.ts:96`) and no hook timeout, and Vitest 4.1.12's default hook timeout is 10 seconds (`hookTimeout ??= resolved.browser.enabled ? 3e4 : 1e4`, confirmed by the round-3 checker).
 - [ ] **Step 5: Deletion controls.**
   - Use `checkIssued(ca)` alone for rule 4 → the impostor case fails.
   - Drop the one-block rule → the appended-private-key case loads.
@@ -531,7 +539,7 @@ The tests read each certificate's real dates with `new X509Certificate(pem).vali
 - Produces:
 
 ```js
-/** For the TLS adapter's name callback. @param {LockedTargetResult} result @param {string|undefined} serverName @returns {'recovery'|'redirect'|null} */
+/** For the TLS adapter's name callback. Throws code "locked_request.invalid", reason "target-invalid", when result is not from freezeLockedTarget. @param {LockedTargetResult} result @param {string|undefined} serverName @returns {'recovery'|'redirect'|null} */
 export function selectLockedIdentity(result, serverName);
 /**
  * @typedef {object} LockedRequest  exactly these keys: no path, query, headers or body ever reaches the decision
@@ -622,31 +630,34 @@ export function parseWifiRecord(bytes);
 **Version 1, exact bytes.** `JSON.stringify({version:1, ssidHex, keyMgmt, psk, hidden})` with keys in that order, plus one newline, encoded as UTF-8, at most 1024 bytes.
 
 - `ssidHex`: `/^(?:[0-9a-f]{2}){1,32}$/`. Hex, because a network name is up to 32 arbitrary bytes and need not be valid UTF-8 (NetworkManager, re-map finding 12).
-- `keyMgmt` `wpa-psk`: `psk` is 8–63 characters from space to `~` (0x20–0x7E), or exactly 64 hex digits in either letter case, as NetworkManager's `g_ascii_isxdigit` check accepts both (`nm-utils.c:1249-1254`). The record keeps the case the writer used. A password with a character outside printable ASCII is refused: a gap for task 3.1 to report (re-map finding 12), not a safe default.
+- `keyMgmt` `wpa-psk`: `psk` is 8–63 characters from space to `~` (0x20–0x7E), or exactly 64 hex digits in either letter case, as NetworkManager's `g_ascii_isxdigit` check accepts both (`nm-utils.c:1249-1254`). The record keeps the case the writer used. A password with a character outside printable ASCII is `record-unsupported` (rule 8): a gap for task 3.1 to report (re-map finding 12), not a safe default.
 - `keyMgmt` `sae`: `psk` is 1–256 UTF-8 bytes, well-formed (no lone surrogate), with no control character (U+0000–U+001F or U+007F). The 256-byte bound is this plan's choice; NetworkManager sets none.
 - `hidden`: a boolean.
 
 **Order of checks.**
 1. More than 1024 bytes → `record-oversized`.
-2. Not valid UTF-8 → `record-corrupt`. Decode with `new TextDecoder("utf-8", { fatal: true, ignoreBOM: true })`; a byte-order mark then stays in the text and fails the canonical check. A non-fatal decoder would turn a bad byte into U+FFFD and the canonical check would still pass, loading a different password.
+2. Not valid UTF-8 → `record-corrupt`. Decode with `new TextDecoder("utf-8", { fatal: true, ignoreBOM: true })`; a byte-order mark then stays in the text, and `JSON.parse` refuses it at rule 3.
 3. Not JSON, not a plain object, or `version` not a whole number → `record-corrupt`.
 4. `version` other than 1 → `record-unsupported`, whatever else the record holds.
 5. Keys other than exactly the five → `record-corrupt`.
-6. `keyMgmt` a string other than `wpa-psk` or `sae` → `record-unsupported` (for example `none`, `wpa-eap`, `owe`, `WPA-PSK`); not a string → `record-corrupt`.
-7. Any field rule fails, or the bytes are not exactly the canonical form → `record-corrupt`.
+6. The bytes are not exactly the canonical form → `record-corrupt`. This compares **bytes**: the parsed fields go back through `JSON.stringify` in the fixed key order, plus a newline, are encoded with `TextEncoder`, and must equal the input byte for byte. Rules 2 and 6 each refuse a record with a bad byte on their own: a non-fatal decoder would turn 0xFF into U+FFFD, which re-encodes as the three bytes EF BF BD, so the byte comparison still differs. Only a non-fatal decoder together with a string comparison would load a different password.
+7. `keyMgmt` a string other than `wpa-psk` or `sae` → `record-unsupported` (for example `none`, `wpa-eap`, `owe`, `WPA-PSK`); not a string → `record-corrupt`.
+8. `keyMgmt` `wpa-psk` with a `psk` of 8–63 characters that holds a character outside 0x20–0x7E, and is not the 64-hex-digit form → `record-unsupported`, so task 3.1 can say why the copy was refused rather than calling it damaged (review round 3).
+9. Any other field rule fails → `record-corrupt`.
 
 - [ ] **Step 1: Write the failing tests.** The test builds records with a `recordBytes(fields)` helper that writes the canonical form.
   - **Loads:** a WPA2 record; a WPA3 record whose password is `"contraseña Àngels"`; a 32-byte network name; passwords of 8 and 63 characters; a 64-hex-digit password in lower case and the same in upper case; `hidden: true`. Each asserts the whole result, frozen.
   - `the largest valid record — a 32-byte name and a 256-byte WPA3 password of '"' characters, which JSON doubles — is under 1024 bytes and loads` (assert its length).
   - **Oversized:** `1025 bytes → record-oversized`, even when the first 1024 are a valid record.
-  - **Corrupt:** invalid JSON; extra spaces; keys in another order; no final newline; an extra key; a missing key; `ssidHex` odd length, upper case, empty, or 33 bytes; a WPA2 password of 7 characters, 64 non-hex characters, 65 characters, holding a tab, or holding `ñ`; a WPA3 password empty, of 257 bytes, holding U+0000, holding U+001F, or written as `"\ud800"`; `hidden: "false"`; a 0xFF byte inside a **`sae`** record's password (a `wpa-psk` password would be refused by its printable-ASCII rule anyway, so it would not prove the decoder; review M5); a byte-order mark before the record; `version: "1"`; `version: 1.5`; `keyMgmt: 7`.
-  - **Unsupported:** `version: 2` with otherwise valid fields; `version: 2` with extra keys; `version: 0`; `keyMgmt` `"none"`, `"wpa-eap"`, `"owe"`, `"WPA-PSK"`.
+  - **Corrupt:** invalid JSON; extra spaces; keys in another order; no final newline; an extra key; a missing key; `ssidHex` odd length, upper case, empty, or 33 bytes; a WPA2 password of 7 characters, 64 non-hex characters, or 65 characters; a WPA3 password empty, of 257 bytes, holding U+0000, holding U+001F, or written as `"\ud800"`; `hidden: "false"`; a 0xFF byte inside a **`sae`** record's password (a `wpa-psk` password would be refused by its printable-ASCII rule anyway, so it would not prove the decoder; review M5); a byte-order mark before the record; `version: "1"`; `version: 1.5`; `keyMgmt: 7`.
+  - **Unsupported:** a WPA2 password of 8–63 characters holding a tab, and one holding `ñ`; `version: 2` with otherwise valid fields; `version: 2` with extra keys; `version: 0`; `keyMgmt` `"none"`, `"wpa-eap"`, `"owe"`, `"WPA-PSK"`.
   - `a string or an Array → throws {code:"wifi_record.input_invalid", reason:"input-invalid"}`.
 - [ ] **Step 2: Run red.** `pnpm exec vitest run scripts/box/wifi-record.test.mjs`.
 - [ ] **Step 3: Implement** `parseWifiRecord` and `WIFI_RECORD_MAX_BYTES`.
 - [ ] **Step 4: Run green**, then run the coverage command for `wifi-record.mjs`.
 - [ ] **Step 5: Deletion controls.**
-  - Decode with `Buffer.from(bytes).toString("utf8")` → the `sae` 0xFF case loads (with U+FFFD in its password).
+  - Decode with `Buffer.from(bytes).toString("utf8")` **and** compare strings instead of bytes in rule 6 → the `sae` 0xFF case loads (with U+FFFD in its password). Each change alone still refuses it; run both singly too and record that they do.
+  - Answer `record-corrupt` for rule 8 → the tab and `ñ` cases fail.
   - Accept lower-case hex only for the 64-digit form → the upper-case case is refused.
   - Drop the canonical comparison → the extra-spaces and key-order cases load.
   - Drop the well-formed check → the lone-surrogate case loads.
@@ -668,7 +679,7 @@ export const BOOT_ROOT; // "/boot"; the Linux pull request confirms where the st
 /**
  * @typedef {{ bootRoot: string, rootId: string }} BootMountIdentity  rootId is "<dev>:<ino>" of bootRoot
  * @typedef {object} WifiReaderDeps
- * @property {string} bootRoot  absolute, realpath-equal
+ * @property {string} bootRoot  absolute and equal to its own path.resolve (checked at construction); being equal to its realpath is the caller's duty, not checked
  * @property {number} ownerUid  0 in production; tests pass process.getuid()
  * @property {() => Promise<BootMountIdentity>} inspectBootMount
  * @property {{ lstat: typeof fs.lstat, open: typeof fs.open }} [io]  test-only override; the reader has no other file operation
@@ -767,7 +778,7 @@ Open `wifi.json` with `O_RDONLY | O_NOFOLLOW | O_NONBLOCK`, as `disk-key.mjs` op
 | "first-start-repair state offer[s] Stop/reinstall guidance, not a key form" (§7.5). §7.3's "Waitron does not start while an empty passphrase remains" stays the first-start service's duty; the gate only refuses a key form while first start is unfinished | Task 1, `first-start-pending` |
 | "one verifier at a time across local and all remote clients … 2, 4, 8, 16, 32, then 60 seconds, capped at 60 until successful unlock or reboot" | Task 2 |
 | "Malformed submissions cannot start concurrent verification or bypass the delay" | Task 2 |
-| "Do not log submitted bytes. Keep key input only in process memory; never arguments, environment, files … Clear input … on success; clear on cancel/error" | Tasks 3 and 4 (process-level only; see their stated limits). The spec's "cancel" is the gate's `close()`, called at shutdown |
+| "Do not log submitted bytes. Keep key input only in process memory; never arguments, environment, files … Clear input … on success; clear on cancel/error" | Tasks 3 and 4 (process-level only; see their stated limits). The spec's "cancel" (spec line 813) is a person cancelling: the screen clears its own copy of the typed key then ("Out"), and the gate already keeps no copy outside a running check. The gate's `close()` is shutdown, a different thing |
 | "While locked, `http://waitron.local` redirects straight to `https://unlock-<installation-id>.waitron.local`" | Task 6 |
 | "`https://waitron.local` instead serves a deliberately untrusted redirect-only certificate, NOT signed by the box CA" | Task 5 (`redirect-ca-signed`) and Task 6 (`selectLockedIdentity`) |
 | "Neither entry point accepts a key, sign-in or configuration change. The target is a fixed host-owned per-disk URL, never a request-supplied redirect or credential-bearing URL" | Task 6 |
