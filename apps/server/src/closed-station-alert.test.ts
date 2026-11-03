@@ -153,8 +153,8 @@ it("records the waiting-for-the-pass alert under its own code, without the order
       venue.cfg,
       tabId,
       at,
+      [],
       [{ stationId: station.id, stationName: "Fryer", lineIds: [line!.id] }],
-      "route.waiting_at_closed_station",
     ),
   );
   const alerts = await inTx(venue, (tx) =>
@@ -174,5 +174,60 @@ it("records the waiting-for-the-pass alert under its own code, without the order
     dishes: "Burger",
     workingOrderId: tabId,
     orderNumber: order!.number,
+  });
+});
+
+it("raises both alerts from one call, each naming only its own stations and dishes", async () => {
+  const venue = await setupPartyVenue(suite.db);
+  const bar = await inTx(venue, (tx) =>
+    createStation(tx, venue.cfg, { name: "Upstairs bar", isDefault: true }),
+  );
+  const fryer = await inTx(venue, (tx) => createStation(tx, venue.cfg, { name: "Fryer" }));
+  const tableId = await venue.table(`A-${randomUUID().slice(0, 8)}`);
+  const { partyId, tabId } = await seat(venue, tableId);
+  await orderForParty(venue, partyId, ["Burger", "Vino", "Paella"], tabId);
+  const lines = await inTx(venue, (tx) =>
+    tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, tabId))
+      .orderBy(workingOrderLines.lineNo),
+  );
+  const [order] = await inTx(venue, (tx) =>
+    tx
+      .select({ number: workingOrders.orderNumber, label: workingOrders.label })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, tabId)),
+  );
+  await inTx(venue, (tx) =>
+    raiseReleasedAtClosedStation(
+      tx,
+      venue.cfg,
+      tabId,
+      new Date("2026-10-02T18:45:00.000Z"),
+      [{ stationId: bar.id, stationName: "Upstairs bar", lineIds: [lines[1]!.id] }],
+      [{ stationId: fryer.id, stationName: "Fryer", lineIds: [lines[2]!.id, lines[0]!.id] }],
+    ),
+  );
+  const alerts = await inTx(venue, (tx) =>
+    tx
+      .select()
+      .from(incidents)
+      .then((rows) => rows.filter((row) => row.params.workingOrderId === tabId)),
+  );
+  expect(Object.fromEntries(alerts.map((alert) => [alert.code, alert.params]))).toEqual({
+    "route.released_at_closed_station": {
+      station: "Upstairs bar",
+      dishes: "Vino",
+      workingOrderId: tabId,
+      orderNumber: order!.number,
+      orderLabel: order!.label,
+    },
+    "route.waiting_at_closed_station": {
+      station: "Fryer",
+      dishes: "Burger, Paella",
+      workingOrderId: tabId,
+      orderNumber: order!.number,
+    },
   });
 });

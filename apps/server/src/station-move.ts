@@ -125,14 +125,7 @@ export async function rerouteHeldAtRelease(
       orderId,
       routing.at,
       stations.filter((station) => !waiting.has(station.stationId)),
-    );
-    await raiseReleasedAtClosedStation(
-      tx,
-      cfg,
-      orderId,
-      routing.at,
       stations.filter((station) => waiting.has(station.stationId)),
-      "route.waiting_at_closed_station",
     );
   };
   if (dishes.length === 0) {
