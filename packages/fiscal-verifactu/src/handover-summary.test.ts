@@ -51,6 +51,36 @@ function records(nodeId: string) {
   );
 }
 
+const TIME = "2026-07-20T17:20:00.000Z";
+
+async function envio(registroId: string, estado: string) {
+  await suite.db.execute(
+    sql`insert into envios (registro_id, estado, proximo_intento_en) values (${registroId}, ${estado}, ${TIME})`,
+  );
+}
+
+async function ack(registroId: string, csv: string | null, state: string) {
+  await suite.db.execute(
+    sql`insert into acks (registro_id, submitted_at, csv, state) values (${registroId}, ${TIME}, ${csv}, ${state})`,
+  );
+  return [registroId, TIME, csv, state, null];
+}
+
+function acksHash(acks: (string | null)[][]) {
+  const sorted = [...acks].sort((x, y) => (x[0]! < y[0]! ? -1 : 1));
+  return createHash("sha256").update(JSON.stringify(sorted)).digest("hex");
+}
+
+function sifFields(sifId: string) {
+  const [row] = suite.db.all<{ id_sistema_informatico: string; numero_instalacion: string }>(
+    sql`select id_sistema_informatico, numero_instalacion from registro_sif where id = ${sifId}`,
+  );
+  return {
+    idSistemaInformatico: row!.id_sistema_informatico,
+    numeroInstalacion: row!.numero_instalacion,
+  };
+}
+
 const noEnvios = {
   pendiente: 0,
   enviando: 0,
@@ -68,40 +98,45 @@ describe("summariseChains", () => {
     await append(first, 9);
     await append(first, 3);
     await append(second, 20);
+    await append(second, 11);
     await seedNode(suite.db, "Never traded");
+    const [a1, a2] = records(first.nodeId);
+    const [b1, b2] = records(second.nodeId);
+    await envio(a1!.id, "aceptado");
+    await envio(a2!.id, "enviando");
+    await envio(b1!.id, "rechazado");
+    await envio(b2!.id, "enviando");
+    const ackA = await ack(a1!.id, "csv-first", "accepted");
+    const ackB = await ack(b2!.id, null, "rejected");
 
     const summaries = await summarise();
 
-    const [a1, a2] = records(first.nodeId);
-    const [b1] = records(second.nodeId);
-    const [sifA] = suite.db.all<{ numero_instalacion: string; id_sistema_informatico: string }>(
-      sql`select numero_instalacion, id_sistema_informatico from registro_sif where id = ${first.sifId}`,
-    );
     const expected = [
       {
+        ...sifFields(first.sifId),
         nodeId: first.nodeId,
         sifId: first.sifId,
-        idSistemaInformatico: sifA!.id_sistema_informatico,
-        numeroInstalacion: sifA!.numero_instalacion,
         count: 2,
         headRegistroId: a2!.id,
         headHuella: a2!.huella,
-        envios: noEnvios,
-        acksSha256: createHash("sha256").update("[]").digest("hex"),
-        enviandoIds: [],
+        envios: { ...noEnvios, aceptado: 1, enviando: 1 },
+        acksSha256: acksHash([ackA]),
+        enviandoIds: [a2!.id],
       },
       {
+        ...sifFields(second.sifId),
         nodeId: second.nodeId,
         sifId: second.sifId,
-        count: 1,
-        headRegistroId: b1!.id,
-        headHuella: b1!.huella,
+        count: 2,
+        headRegistroId: b2!.id,
+        headHuella: b2!.huella,
+        envios: { ...noEnvios, rechazado: 1, enviando: 1 },
+        acksSha256: acksHash([ackB]),
+        enviandoIds: [b2!.id],
       },
     ].sort((x, y) => (x.nodeId < y.nodeId ? -1 : 1));
-    expect(summaries).toHaveLength(2);
-    expect(summaries[0]).toMatchObject(expected[0]!);
-    expect(summaries[1]).toMatchObject(expected[1]!);
-    expect(a1!.id).not.toBe(a2!.id);
+    expect(a2!.secuencia).toBe(b2!.secuencia);
+    expect(summaries).toEqual(expected);
     expect(typeof summaries[0]!.count).toBe("number");
     expect(JSON.parse(JSON.stringify(summaries))).toEqual(summaries);
   });
@@ -119,22 +154,41 @@ describe("summariseChains", () => {
       }),
     );
     await append(node, 3);
+    const rows = records(node.nodeId);
+    await envio(rows[0]!.id, "aceptado");
+    await envio(rows[2]!.id, "enviando");
+    const oldAck = await ack(rows[1]!.id, "csv-old", "accepted");
+    const newAck = await ack(rows[2]!.id, null, "halted");
 
     const summaries = await summarise();
-    const rows = records(node.nodeId);
+
     const expected = [
-      { sifId: node.sifId, count: 2, headRegistroId: rows[1]!.id, headHuella: rows[1]!.huella },
       {
-        sifId: replacement.id,
+        ...sifFields(node.sifId),
+        nodeId: node.nodeId,
+        sifId: node.sifId,
+        count: 2,
+        headRegistroId: rows[1]!.id,
+        headHuella: rows[1]!.huella,
+        envios: { ...noEnvios, aceptado: 1 },
+        acksSha256: acksHash([oldAck]),
+        enviandoIds: [],
+      },
+      {
+        idSistemaInformatico: "WT",
         numeroInstalacion: "second",
+        nodeId: node.nodeId,
+        sifId: replacement.id,
         count: 1,
         headRegistroId: rows[2]!.id,
         headHuella: rows[2]!.huella,
+        envios: { ...noEnvios, enviando: 1 },
+        acksSha256: acksHash([newAck]),
+        enviandoIds: [rows[2]!.id],
       },
     ].sort((x, y) => (x.sifId < y.sifId ? -1 : 1));
-    expect(summaries).toHaveLength(2);
-    expect(summaries[0]).toMatchObject({ nodeId: node.nodeId, ...expected[0] });
-    expect(summaries[1]).toMatchObject({ nodeId: node.nodeId, ...expected[1] });
+    expect(rows.map((row) => row.sif_id)).toEqual([node.sifId, node.sifId, replacement.id]);
+    expect(summaries).toEqual(expected);
   });
 
   it("counts every envio state, lists the ones being sent and hashes the acks", async () => {
@@ -216,7 +270,7 @@ describe("summariseChains", () => {
     await append(node, 1);
     const path = await copy();
     const digest = () =>
-      [path, `${path}-wal`].map((file) =>
+      [path, `${path}-wal`, `${path}-shm`].map((file) =>
         existsSync(file) ? createHash("sha256").update(readFileSync(file)).digest("hex") : null,
       );
     const before = digest();
