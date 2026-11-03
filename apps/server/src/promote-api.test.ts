@@ -1,8 +1,10 @@
 import { Hono } from "hono";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { Database, NodeDatabase } from "@waitron/db";
-import type { PromoteRunResult } from "./promote-api.js";
+import type { PromoteApiDeps, PromoteRunResult } from "./promote-api.js";
 
 // A unit test with no database: login, authorisation, `verifyBreakGlass` and `run` are doubled, so
 // it pins only the endpoint's own logic, never the promote functions.
@@ -221,5 +223,64 @@ describe("POST /management-api/promote (two-path auth over the promote closure)"
     const res = await post(app, { oldNodeNeutralised: true, breakGlass: GOOD_SECRET });
     expect(res.status).toBe(409);
     expect((await res.json()).error.code).toBe("promotion.node_fenced");
+  });
+});
+
+describe("the promote routes' context for the node preparation", () => {
+  it("both routes hand on only the fence and sole-recovery answers, never a relinquishment claim or the sign-in fields", async () => {
+    const prepare = vi.fn(async () => ({}));
+    const withPromotion = vi.fn(async () => ({}));
+    const app = new Hono();
+    mountPromoteApi(app, {
+      appDb: fakeDb,
+      nodeDb: fakeNode,
+      nodeId: NODE,
+      run: vi.fn(),
+      credentialKeyRing: TOTP_KEY_RING,
+      nodePreparation: { prepare, withPromotion } as unknown as PromoteApiDeps["nodePreparation"],
+      requestFromBox: () => false,
+    });
+    const binding = {
+      module: "test-regime",
+      action: "promote",
+      eventId: "event-1",
+      sourceId: "promotion-1",
+      targetNodeId: NODE,
+    };
+    const body = {
+      oldNodeNeutralised: true,
+      noParallelRecovery: true,
+      oldMachineRelinquished: true,
+      personId: PERSON,
+      password: "pw",
+      totp: "123456",
+      breakGlass: GOOD_SECRET,
+      moduleOperation: { binding, input: null },
+    };
+    const socket = new TLSSocket(new Socket());
+    try {
+      for (const [path, sent] of [
+        ["/preparation", { ...body, proposal: { action: "clock-challenge" } }],
+        ["", body],
+      ] as const) {
+        const response = await app.request(
+          `https://box.test/management-api/promote${path}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(sent),
+          },
+          { incoming: { socket } },
+        );
+        expect(response.status).toBe(200);
+      }
+    } finally {
+      socket.destroy();
+    }
+    const exact = { oldNodeNeutralised: true, noParallelRecovery: true };
+    expect(prepare).toHaveBeenCalledTimes(1);
+    expect(withPromotion).toHaveBeenCalledTimes(1);
+    expect((prepare.mock.calls[0] as unknown[])[2]).toStrictEqual(exact);
+    expect((withPromotion.mock.calls[0] as unknown[])[2]).toStrictEqual(exact);
   });
 });

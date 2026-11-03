@@ -62,6 +62,15 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   ...HELD_DOCUMENT_REFUSALS,
 };
 
+// Only these two answers: a request body must never be able to claim the old box relinquished.
+const preparationContext = (body: {
+  oldNodeNeutralised?: unknown;
+  noParallelRecovery?: unknown;
+}) => ({
+  oldNodeNeutralised: body.oldNodeNeutralised,
+  noParallelRecovery: body.noParallelRecovery,
+});
+
 export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = () => {}): void {
   const run = createErrorBoundary(STATUS, "promotion.failed");
 
@@ -90,9 +99,13 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
         });
       const onBox = (deps.requestFromBox ?? requestFromBox)(c);
       return c.json(
-        await deps.nodePreparation.prepare(operation.binding, body, body, body.proposal, {
-          onBox,
-        }),
+        await deps.nodePreparation.prepare(
+          operation.binding,
+          body,
+          preparationContext(body),
+          body.proposal,
+          { onBox },
+        ),
       );
     }),
   );
@@ -119,7 +132,7 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
           const result = await deps.nodePreparation.withPromotion(
             operation,
             body,
-            body,
+            preparationContext(body),
             (_modules, runner) =>
               deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true }, runner),
           );
