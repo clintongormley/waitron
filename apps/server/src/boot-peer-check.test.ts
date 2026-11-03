@@ -658,6 +658,75 @@ describe("checkPeersAtStart — the review's cases", () => {
   });
 });
 
+describe("checkPeersAtStart — an operation whose scenario, role and state do not fit", () => {
+  it.each<["controlled" | "emergency", "source" | "destination", HandoverState]>([
+    ["controlled", "destination", "emergency_declared"],
+    ["emergency", "destination", "copy_accepted"],
+    ["emergency", "destination", "filing_assumed"],
+    ["controlled", "destination", "source_stepped_down"],
+    ["controlled", "source", "copy_accepted"],
+  ])("a %s %s operation at %s counts as S: the box waits", async (scenario, role, state) => {
+    const d = deps({
+      answers: { [SPARE]: status(SAME, { ...operation(scenario, state), role }) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("control: a controlled destination operation at prepared fits, and the box proceeds", async () => {
+    const d = deps({ answers: { [SPARE]: status(SAME, operation("controlled", "prepared")) } });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+  });
+
+  it("control: a requested operation that does not fit also counts as S", async () => {
+    const d = deps({
+      answers: {
+        [SPARE]: {
+          ...status(SAME),
+          requestedOperation: operation("controlled", "emergency_declared"),
+        },
+      },
+    });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+});
+
+describe("checkPeersAtStart — what each peer answered", () => {
+  it("reports each asked peer's answer kind, whether it is counted and whether its operation stopped this box", async () => {
+    const onAnswers = vi.fn();
+    const d = deps({
+      held: chart(3, [
+        [SELF, "serving-primary", OWN_ORIGIN],
+        [SPARE, "serving-secondary"],
+        [OLD, "sell-only"],
+        ["m3", "serving-secondary"],
+      ]),
+      joinedIds: [SPARE, "m3"],
+      activatedFrom: new Set([OLD]),
+      answers: {
+        [SPARE]: status(SAME, operation("controlled", "copy_accepted")),
+        [OLD]: status(SAME),
+      },
+      onAnswers,
+    });
+    expect(await checkPeersAtStart(d)).toBe("superseded");
+    expect(onAnswers).toHaveBeenCalledTimes(1);
+    expect(onAnswers.mock.calls[0]![0]).toEqual([
+      { nodeId: SPARE, answer: "F", counted: true, byOperation: true },
+      { nodeId: OLD, answer: "=", counted: false, byOperation: false },
+      { nodeId: "m3", answer: "S", counted: true, byOperation: false },
+    ]);
+  });
+
+  it("a newer chart that fences this box is F, not by operation", async () => {
+    const onAnswers = vi.fn();
+    const d = deps({ answers: { [SPARE]: status(NEWER_FENCING) }, onAnswers });
+    expect(await checkPeersAtStart(d)).toBe("superseded");
+    expect(onAnswers.mock.calls[0]![0]).toEqual([
+      { nodeId: SPARE, answer: "F", counted: true, byOperation: false },
+    ]);
+  });
+});
+
 describe("persistingAccept", () => {
   const pair = generateNodeKeyPair();
   const trust: TrustSet = { [SELF]: pair.publicKey };

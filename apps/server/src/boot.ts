@@ -69,6 +69,14 @@ import {
   setSingletonRole,
 } from "@waitron/node-db";
 import { finishPromotedRole } from "./promoted-role.js";
+import type { StartCheckResult } from "./boot-peer-check.js";
+import {
+  recordSupersededAtStart,
+  repairAtStart,
+  runStartPeerCheck,
+  successorAfterCheck,
+  type StartPeerCheckOutcome,
+} from "./start-peer-check.js";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
@@ -956,6 +964,27 @@ export interface StartServerSeams {
     mount(app: Hono, stepDown: (request: StepDownRequest) => Promise<StepDownResult>): void;
     restart(): void;
   };
+  /**
+   * Stands in for the start check on a box that is not a mirror. A suite sets it, saying why at the
+   * site, when its chart lists a joined box that is not running.
+   */
+  peerCheck?: () => Promise<StartCheckResult>;
+}
+
+/** A seam's result, with the successor read from the held chart alone. */
+async function peerCheckFromSeam(
+  peerCheck: () => Promise<StartCheckResult>,
+  db: Database,
+  nodeId: string,
+): Promise<StartPeerCheckOutcome> {
+  const result = await peerCheck();
+  return {
+    result,
+    successorNodeId:
+      result === "superseded"
+        ? successorAfterCheck(await readNodeMembership(db), nodeId, [])
+        : null,
+  };
 }
 
 /**
@@ -1689,15 +1718,15 @@ async function bootServer(
   // Before every worker, the first start, the stream host and the backup supervisor: a box that
   // has handed over or been superseded starts nothing that sells, files or writes beside its
   // successor.
-  if ((await readHandoverRestriction(store.node, config.node.nodeId)) !== null) {
+  const restrictedStart = () => {
     health.takesNoSales = true;
     return startRestricted({
       app,
-      nodeId: config.node.nodeId,
+      nodeId: node.nodeId,
       environment: config.environment,
       readMembership: () => readNodeMembership(db),
       routes: [
-        restrictedPageRoute({ venue: db, node: store.node, nodeId: config.node.nodeId, log }),
+        restrictedPageRoute({ venue: db, node: store.node, nodeId: node.nodeId, log }),
         (restrictedApp) =>
           mountPeerStatusApi(
             restrictedApp,
@@ -1733,10 +1762,38 @@ async function bootServer(
         );
       },
     });
-  }
+  };
+  if ((await readHandoverRestriction(store.node, config.node.nodeId)) !== null)
+    return restrictedStart();
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
   // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
   const initialAxes = await readNodeMode(store.node, config.node.nodeId);
+  // A mirror files nothing, so it has nothing to ask its peers before it starts.
+  if (initialAxes.mode !== "mirror") {
+    await repairAtStart({ node: store.node, nodeId: config.node.nodeId });
+    const outcome =
+      seams.peerCheck === undefined
+        ? await runStartPeerCheck({
+            db,
+            node: store.node,
+            ring,
+            nodeId: config.node.nodeId,
+            advertisedOrigin: config.advertisedOrigin,
+            log,
+          })
+        : await peerCheckFromSeam(seams.peerCheck, db, config.node.nodeId);
+    if (outcome.result === "superseded" && outcome.successorNodeId !== null) {
+      const held = await readNodeMembership(db);
+      await recordSupersededAtStart(
+        { node: store.node, nodeId: config.node.nodeId },
+        outcome.successorNodeId,
+        held?.body.term ?? 0,
+      );
+      return restrictedStart();
+    }
+    // `superseded` with no successor goes on: the chart it now holds fences it below (Ruling R7).
+    // `wait` goes on as today until the waiting start exists (Ruling R1).
+  }
   // A returned box that died before it was fenced would otherwise boot with a stale chart and SELL
   // while the promoted cloud is also primary — two nodes filing under one NIF (CLAUDE.md §5). So a
   // non-mirror node with a configured cloud peer best-effort fetches the peer's signed chart and

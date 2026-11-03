@@ -1,7 +1,11 @@
 import { randomBytes } from "node:crypto";
 import {
   HANDOVER_STATES,
+  initialState,
+  nextState,
   verifyEnvelope,
+  type HandoverRole,
+  type HandoverScenario,
   type HandoverState,
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
@@ -43,9 +47,19 @@ export interface CheckPeersDeps {
   /** An open operation in which this box is the source. */
   openOperation: boolean;
   timeoutMs?: number;
+  /** Handed every asked peer's answer, in the held chart's order, before the result is decided. */
+  onAnswers?: (answers: readonly PeerAnswer[]) => void;
 }
 
-type Answer = "F" | "N" | "=" | "S";
+export type Answer = "F" | "N" | "=" | "S";
+
+export interface PeerAnswer {
+  nodeId: string;
+  answer: Answer;
+  counted: boolean;
+  /** An F read from the peer's operation naming this box as its source, not from a chart. */
+  byOperation: boolean;
+}
 
 const ROUTABLE: readonly NodeStanding[] = ["serving-primary", "serving-secondary", "sell-only"];
 
@@ -122,20 +136,27 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
     .sort((a, b) => b.chart.body.term - a.chart.body.term);
   for (const { chart, index } of charted) verdicts.set(index, await deps.accept(chart));
 
-  const answers: { answer: Answer; counted: boolean }[] = statuses.map((status, index) => {
-    const counted = peers[index]!.counted;
-    if (status === null) return { answer: "S", counted };
+  const answers: PeerAnswer[] = statuses.map((status, index) => {
+    const { server, counted } = peers[index]!;
+    const of = (answer: Answer, byOperation = false): PeerAnswer => ({
+      nodeId: server.nodeId,
+      answer,
+      counted,
+      byOperation,
+    });
+    if (status === null) return of("S");
     // Read from the signed status itself, whatever its chart: stopping is the safe side.
-    if (operationFences(status.openOperation, nodeId)) return { answer: "F", counted };
+    if (operationFences(status.openOperation, nodeId)) return of("F", true);
     const verdict = verdicts.get(index);
     if (verdict?.accepted === true && isFencedStanding(standingOf(verdict.document, nodeId)))
-      return { answer: "F", counted };
+      return of("F");
     // A part this box cannot read may report a takeover, so it cannot clear a wait. Nor can no
     // chart, or one this box cannot trust: neither vouches that no handover happened.
-    if (!partsReadable(status) || verdict === undefined) return { answer: "S", counted };
-    if (verdict.accepted) return { answer: "N", counted };
-    return { answer: verdict.reason === "invalid" ? "S" : "=", counted };
+    if (!partsReadable(status) || verdict === undefined) return of("S");
+    if (verdict.accepted) return of("N");
+    return of(verdict.reason === "invalid" ? "S" : "=");
   });
+  deps.onAnswers?.(answers);
 
   if (answers.some((a) => a.answer === "F")) return "superseded";
   if (deps.openOperation) return "wait";
@@ -182,6 +203,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Whether a box in `role` can ever hold `state` in this scenario (`nextState`'s steps). */
+function stateFits(role: HandoverRole, scenario: HandoverScenario, state: HandoverState): boolean {
+  if (initialState(role, scenario) === state) return true;
+  return HANDOVER_STATES.some((from) => {
+    try {
+      nextState(role, scenario, from, state);
+      return true;
+    } catch {
+      return false;
+    }
+  });
+}
+
 function isOperationStatus(value: unknown): value is PeerOperationStatus | null {
   if (value === null) return true;
   if (!isRecord(value)) return false;
@@ -190,6 +224,7 @@ function isOperationStatus(value: unknown): value is PeerOperationStatus | null 
     (value.role === "source" || value.role === "destination") &&
     (value.scenario === "controlled" || value.scenario === "emergency") &&
     (HANDOVER_STATES as readonly unknown[]).includes(value.state) &&
+    stateFits(value.role, value.scenario, value.state as HandoverState) &&
     typeof value.sourceNodeId === "string" &&
     typeof value.destinationNodeId === "string"
   );
