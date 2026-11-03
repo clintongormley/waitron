@@ -2315,7 +2315,12 @@ const sweepSeen = (disks, venueTag = null, overrides = {}, atMs = AT) =>
 const COMPOSED = Object.freeze({ name: "Bar \u00C0ngels", live: true });
 const UNREADABLE = Object.freeze({ name: "", live: false });
 const ERASE = OPTIONS.eraseWord;
-const CANARIES = ["CANARY-7f3a", "Bar Santet extra", "CANARY-scan-8412345678905"];
+const CANARIES = [
+  "CANARY-7f3a",
+  "Bar Santet extra",
+  "CANARY-scan-8412345678905",
+  "CANARY-opens-reinstall-5e21",
+];
 const ACTIONS = [
   "wait",
   "find-network",
@@ -2422,6 +2427,17 @@ const RUNS = [
       submit("CANARY-7f3a", 4_000),
       submit(ERASE, 5_000),
       ...toBooted(6_000),
+    ],
+  },
+  {
+    name: "a Waitron reinstall whose screen a typed line opened",
+    ends: "boot-installed",
+    events: [
+      sweepSeen([completeWaitronDisk()], SANTET),
+      ramReady(2_000),
+      submit("CANARY-opens-reinstall-5e21", 3_000),
+      submit("Bar Santet", 4_000),
+      ...toBooted(5_000),
     ],
   },
   {
