@@ -191,6 +191,8 @@ describe("A773 pass screen: levers", () => {
         submissionId: expect.stringMatching(UUID),
         expectedPartyRevision: 7,
       });
+      const other = group === "bumpGroupReady" ? "bumpDeviceGroupReady" : "bumpGroupReady";
+      expect(api[other]).not.toHaveBeenCalled();
       expect(api.getDevicePassBoard).toHaveBeenCalledTimes(reads + 1);
     },
   );

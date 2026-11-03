@@ -1469,9 +1469,18 @@ describe("A773 pass screen: a till's All stations, its extras and portions", () 
 });
 
 describe("A773 pass screen: a pass monitor", () => {
-  /** A To fire group card, an In progress group card and an In progress bill card, all of a pass. */
+  /** A Held group card, a To fire group card, an In progress group card and an In progress bill card. */
   const busyBoard = (minutes = 1) =>
     passBoard({
+      held: [
+        passCard({
+          key: "group:g-4",
+          target: { kind: "group", partyId: "p-1", groupId: "g-4" },
+          kind: "held",
+          requestedAt: null,
+          items: [passItem({ id: "h-a", phase: "held", firedAt: null })],
+        }),
+      ],
       toFire: [
         passCard({
           key: "group:g-2",
@@ -1530,12 +1539,13 @@ describe("A773 pass screen: a pass monitor", () => {
       if (node.shadowRoot) found.push(...deepQueryAll(node.shadowRoot, selector));
     return found;
   }
-  /** Every button but the board's own Columns and column headings (D72) and a till's Back. */
-  const SCREEN_CONTROLS = "[data-columns-open], [data-column-toggle], [data-back]";
-  const actionButtons = (el: TillPassScreen) =>
+  /** The board's own Columns and column headings (D72); only a till's monitor adds its Back. */
+  const BOARD_CONTROLS = "[data-columns-open], [data-column-toggle]";
+  const TILL_CONTROLS = `${BOARD_CONTROLS}, [data-back]`;
+  const actionButtons = (el: TillPassScreen, excused = BOARD_CONTROLS) =>
     deepQueryAll(el.shadowRoot!, "button, wt-button, [role='button']").filter((node) => {
       const host = (node.getRootNode() as ShadowRoot).host;
-      return !node.matches(SCREEN_CONTROLS) && !host?.matches(SCREEN_CONTROLS);
+      return !node.matches(excused) && !host?.matches(excused);
     });
 
   it("on a kitchen display, reads the monitor's board under the device's name and nothing else", async () => {
@@ -1558,17 +1568,25 @@ describe("A773 pass screen: a pass monitor", () => {
   });
 
   it.each([
-    ["on a kitchen display", () => mountDisplay(fakeApi(), deviceBoard(busyBoard()))],
-    ["at a till whose device chose it", () => mount({ api: tillApi(deviceBoard(busyBoard())) })],
+    [
+      "on a kitchen display",
+      () => mountDisplay(fakeApi(), deviceBoard(busyBoard())),
+      BOARD_CONTROLS,
+    ],
+    [
+      "at a till whose device chose it",
+      () => mount({ api: tillApi(deviceBoard(busyBoard())) }),
+      TILL_CONTROLS,
+    ],
   ])(
-    "%s, draws no button but Columns, its column headings and a till's Back, though it runs the pass",
-    async (_, mountOne) => {
+    "%s, draws its Held cards and no button but Columns, its column headings and a till's Back, though it runs the pass",
+    async (_, mountOne, excused) => {
       const el = await mountOne();
       expect(boardOf(el)!.mode).toBe("monitor");
       expect(boardOf(el)!.runsPass).toBe(true);
-      expect(cardKeys(el)).toEqual(["group:g-2", "group:g-1", "bill:order-1"]);
+      expect(cardKeys(el)).toEqual(["group:g-4", "group:g-2", "group:g-1", "bill:order-1"]);
       expect(boardOf(el)!.shadowRoot!.querySelector("[data-columns-open]")).not.toBeNull();
-      expect(actionButtons(el)).toEqual([]);
+      expect(actionButtons(el, excused)).toEqual([]);
     },
   );
 
@@ -1592,8 +1610,31 @@ describe("A773 pass screen: a pass monitor", () => {
       expect(api.getDevicePassMonitorBoard).toHaveBeenCalledOnce();
       expect(el.shadowRoot!.querySelector("[data-stale]")).not.toBeNull();
       expect(boardOf(el)!.shadowRoot!.querySelector("[data-overdue-count]")).not.toBeNull();
+      expect(boardOf(el)!.shadowRoot!.querySelector("[data-columns-open]")).not.toBeNull();
       expect(actionButtons(el)).toEqual([]);
     }));
+
+  it("on a kitchen display, ignores a read that answers after it left the page", async () => {
+    const answer = deferred<DevicePassBoard>();
+    const api = fakeApi({ getDevicePassMonitorBoard: vi.fn(() => answer.promise) });
+    const el = await mountDisplay(api);
+    expect(api.getDevicePassMonitorBoard).toHaveBeenCalledOnce();
+    el.remove();
+    answer.resolve(deviceBoard(boardB));
+    await flush(el);
+    expect(cardKeys(el)).toEqual([]);
+  });
+
+  it("on a kitchen display, ignores a failed read that answers after it left the page", async () => {
+    const answer = deferred<DevicePassBoard>();
+    const api = fakeApi({ getDevicePassMonitorBoard: vi.fn(() => answer.promise) });
+    const el = await mountDisplay(api);
+    expect(api.getDevicePassMonitorBoard).toHaveBeenCalledOnce();
+    el.remove();
+    answer.reject(new Error("offline"));
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-stale]")).toBeNull();
+  });
 
   it("on a kitchen display, refreshes every fifteen seconds and keeps its board under a stale line when a read fails", () =>
     withFakeTimers(async () => {
