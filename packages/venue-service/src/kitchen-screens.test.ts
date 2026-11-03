@@ -21,6 +21,7 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { createDepartment, createServiceZone } from "./operations.js";
 import {
   addProfileKitchenScreen,
+  copyProfileKitchenScreens,
   assertDeviceKitchenScreens,
   assertKitchenDisplayHasScreen,
   assertPassScreenZone,
@@ -163,8 +164,16 @@ describe("a profile's kitchen screens", () => {
     ).resolves.toEqual([]);
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
       station: { stationIds: [venue.cold, venue.grill], zoneIds: null },
-      pass: { stationIds: null, zoneIds: [venue.terrace, venue.counter] },
-      pass_monitor: { stationIds: [venue.cold, venue.pastry], zoneIds: null },
+      pass: {
+        stationIds: null,
+        zoneIds: [venue.terrace, venue.counter],
+        showNonPassStations: true,
+      },
+      pass_monitor: {
+        stationIds: [venue.cold, venue.pastry],
+        zoneIds: null,
+        showNonPassStations: true,
+      },
     });
     expect(
       await db
@@ -182,7 +191,7 @@ describe("a profile's kitchen screens", () => {
     });
     await expect(screensOf(venue, venue.till)).resolves.toEqual({
       station: { stationIds: null, zoneIds: null },
-      pass: { stationIds: [venue.grill], zoneIds: [venue.dining] },
+      pass: { stationIds: [venue.grill], zoneIds: [venue.dining], showNonPassStations: true },
     });
   });
 
@@ -212,7 +221,7 @@ describe("a profile's kitchen screens", () => {
       .where(eq(kitchenStations.id, venue.cold));
     await db.update(floorZones).set({ active: false }).where(eq(floorZones.id, venue.terrace));
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.grill], zoneIds: [venue.dining] },
+      pass: { stationIds: [venue.grill], zoneIds: [venue.dining], showNonPassStations: true },
     });
   });
 
@@ -240,7 +249,11 @@ describe("a profile's kitchen screens", () => {
         }),
       ).resolves.toEqual([]);
       await expect(screensOf(venue, profileId)).resolves.toEqual({
-        pass_monitor: { stationIds: [venue.grill, venue.pastry], zoneIds: [venue.counter] },
+        pass_monitor: {
+          stationIds: [venue.grill, venue.pastry],
+          zoneIds: [venue.counter],
+          showNonPassStations: true,
+        },
       });
     }
   });
@@ -319,7 +332,7 @@ describe("a profile's kitchen screens", () => {
       ),
     ).resolves.toEqual(refused("passScreenZones", "not_found"));
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.cold], zoneIds: [] },
+      pass: { stationIds: [venue.cold], zoneIds: [], showNonPassStations: true },
     });
     await expect(
       outcome(
@@ -373,9 +386,13 @@ describe("a profile whose form factor changes", () => {
       .update(deviceProfiles)
       .set({ formFactor: "till" })
       .where(eq(deviceProfiles.id, venue.kds));
-    await expect(screensOf(venue, venue.kds)).resolves.toEqual(screens);
+    const read = {
+      ...screens,
+      pass_monitor: { ...screens.pass_monitor, showNonPassStations: true },
+    };
+    await expect(screensOf(venue, venue.kds)).resolves.toEqual(read);
     await expect(outcome(set(venue, venue.kds, screens))).resolves.toEqual({ resolved: [] });
-    await expect(screensOf(venue, venue.kds)).resolves.toEqual(screens);
+    await expect(screensOf(venue, venue.kds)).resolves.toEqual(read);
   });
 });
 
@@ -396,7 +413,7 @@ describe("a kitchen screen added to a profile", () => {
     });
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
       station: { stationIds: [venue.grill], zoneIds: null },
-      pass: { stationIds: null, zoneIds: [venue.dining] },
+      pass: { stationIds: null, zoneIds: [venue.dining], showNonPassStations: true },
     });
   });
 
@@ -411,7 +428,11 @@ describe("a kitchen screen added to a profile", () => {
       zoneIds: [venue.terrace],
     });
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.cold, venue.grill], zoneIds: [venue.terrace, venue.dining] },
+      pass: {
+        stationIds: [venue.cold, venue.grill],
+        zoneIds: [venue.terrace, venue.dining],
+        showNonPassStations: true,
+      },
     });
   });
 
@@ -422,7 +443,7 @@ describe("a kitchen screen added to a profile", () => {
     });
     await add(venue, venue.kds, { kind: "pass", stationIds: null, zoneIds: null });
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: null, zoneIds: null },
+      pass: { stationIds: null, zoneIds: null, showNonPassStations: true },
     });
   });
 
@@ -435,7 +456,7 @@ describe("a kitchen screen added to a profile", () => {
     await add(venue, venue.kds, { kind: "station", stationIds: [venue.cold], zoneIds: null });
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
       station: { stationIds: null, zoneIds: null },
-      pass_monitor: { stationIds: [venue.grill], zoneIds: null },
+      pass_monitor: { stationIds: [venue.grill], zoneIds: null, showNonPassStations: true },
     });
     expect(
       await db
@@ -2077,7 +2098,7 @@ describe("deleted zone bounds", () => {
       set(venue, venue.kds, { pass: { stationIds: [venue.grill], zoneIds: [] } }),
     ).resolves.toEqual([]);
     await expect(screensOf(venue, venue.kds)).resolves.toEqual({
-      pass: { stationIds: [venue.grill], zoneIds: [] },
+      pass: { stationIds: [venue.grill], zoneIds: [], showNonPassStations: true },
     });
     const [parent] = await db
       .select()
@@ -2162,4 +2183,182 @@ it("A725 profile and device station choices use names and preserve removed slots
   const rows = (await shown(v, device))[0]!.stations;
   expect(rows.map(({ id }) => id)).toEqual([v.cold, v.grill, v.pastry]);
   expect(rows.map(({ available }) => available)).toEqual([true, true, false]);
+});
+
+describe("A773 pass display policy", () => {
+  const passes = (venue: Venue) => ({
+    pass: { stationIds: [venue.grill, venue.cold], zoneIds: null },
+    pass_monitor: every,
+  });
+
+  const deviceValues = async (deviceId: string) =>
+    Object.fromEntries(
+      (
+        await db
+          .select({
+            screen: deviceKitchenScreens.screen,
+            value: deviceKitchenScreens.showNonPassStations,
+          })
+          .from(deviceKitchenScreens)
+          .where(eq(deviceKitchenScreens.deviceId, deviceId))
+      ).map((row) => [row.screen, row.value]),
+    );
+
+  const storeDeviceValue = (deviceId: string, kind: DeviceKitchenScreen["kind"], value: boolean) =>
+    db
+      .update(deviceKitchenScreens)
+      .set({ showNonPassStations: value })
+      .where(
+        sql`${deviceKitchenScreens.deviceId} = ${deviceId} and ${deviceKitchenScreens.screen} = ${kind}`,
+      );
+
+  it("reads a new profile's pass entry as showing other stations, and reads back a saved false", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, { pass: every });
+    expect((await screensOf(venue, venue.kds))!.pass).toEqual({
+      ...every,
+      showNonPassStations: true,
+    });
+    await set(venue, venue.kds, { pass: { ...every, showNonPassStations: false } });
+    expect((await screensOf(venue, venue.kds))!.pass).toEqual({
+      ...every,
+      showNonPassStations: false,
+    });
+  });
+
+  it("keeps each kind's stored value when a save omits it, and starts an added kind true", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, {
+      pass: { ...every, showNonPassStations: false },
+      pass_monitor: { ...every, showNonPassStations: true },
+    });
+    await set(venue, venue.kds, {
+      pass: { stationIds: [venue.grill], zoneIds: null },
+      pass_monitor: { stationIds: [venue.cold], zoneIds: null },
+    });
+    await expect(screensOf(venue, venue.kds)).resolves.toEqual({
+      pass: { stationIds: [venue.grill], zoneIds: null, showNonPassStations: false },
+      pass_monitor: { stationIds: [venue.cold], zoneIds: null, showNonPassStations: true },
+    });
+
+    await set(venue, venue.till, { pass: { ...every, showNonPassStations: false } });
+    await set(venue, venue.till, { pass: every, pass_monitor: every });
+    await expect(screensOf(venue, venue.till)).resolves.toEqual({
+      pass: { ...every, showNonPassStations: false },
+      pass_monitor: { ...every, showNonPassStations: true },
+    });
+  });
+
+  it("copies each kind's value to the copy", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, {
+      station: every,
+      pass: { ...every, showNonPassStations: true },
+      pass_monitor: { ...every, showNonPassStations: false },
+    });
+    const copy = await seedProfile("kds");
+    await scoped((tx) => copyProfileKitchenScreens(tx, venue.cfg, venue.kds, copy));
+    await expect(screensOf(venue, copy)).resolves.toEqual({
+      station: every,
+      pass: { ...every, showNonPassStations: true },
+      pass_monitor: { ...every, showNonPassStations: false },
+    });
+  });
+
+  it("keeps a device's stored value for each kind a new pick keeps, and starts a re-added kind null", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.till, { station: every, ...passes(venue) });
+    const till = await seedDevice(venue.till, "Till");
+    await choose(venue, till, venue.till, [
+      { kind: "station", ...every },
+      { kind: "pass", ...every },
+    ]);
+    await storeDeviceValue(till, "station", true);
+    await storeDeviceValue(till, "pass", false);
+
+    await choose(venue, till, venue.till, [
+      { kind: "station", stationIds: [venue.grill], zoneIds: null },
+      { kind: "pass", stationIds: [venue.cold], zoneIds: null },
+    ]);
+    await expect(deviceValues(till)).resolves.toEqual({ station: true, pass: false });
+
+    await choose(venue, till, venue.till, [{ kind: "station", ...every }]);
+    await choose(venue, till, venue.till, [
+      { kind: "station", ...every },
+      { kind: "pass", ...every },
+    ]);
+    await expect(deviceValues(till)).resolves.toEqual({ station: true, pass: null });
+
+    await storeDeviceValue(till, "pass", false);
+    await set(venue, venue.till, {
+      station: every,
+      pass: { ...passes(venue).pass, showNonPassStations: true },
+      pass_monitor: { ...every, showNonPassStations: true },
+    });
+    await expect(deviceValues(till)).resolves.toEqual({ station: true, pass: false });
+  });
+
+  it("leaves a narrowed device's stored value alone and records no removal for it", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, { pass: { stationIds: [venue.grill, venue.cold], zoneIds: null } });
+    const pass = await seedDevice(venue.kds, "Pass");
+    await choose(venue, pass, venue.kds, [
+      { kind: "pass", stationIds: [venue.grill, venue.cold], zoneIds: null },
+    ]);
+    await storeDeviceValue(pass, "pass", false);
+
+    await expect(
+      set(venue, venue.kds, {
+        pass: { stationIds: [venue.grill], zoneIds: null, showNonPassStations: true },
+      }),
+    ).resolves.toEqual([
+      {
+        deviceId: pass,
+        deviceName: "Pass",
+        lost: { screens: [], stations: [{ id: venue.cold, name: "Cold" }], zones: [] },
+      },
+    ]);
+    await expect(deviceValues(pass)).resolves.toEqual({ pass: false });
+    expect(
+      (await removalsOf(pass)).map(({ screen, stationId, zoneId }) => ({
+        screen,
+        stationId,
+        zoneId,
+      })),
+    ).toEqual([{ screen: "pass", stationId: venue.cold, zoneId: null }]);
+
+    await expect(
+      set(venue, venue.kds, {
+        pass: { stationIds: [venue.grill], zoneIds: null, showNonPassStations: false },
+      }),
+    ).resolves.toEqual([]);
+    expect(await removalsOf(pass)).toHaveLength(1);
+  });
+
+  it("stores the profile's value as a column the export reads, and reads a row written without it as true", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, { pass: { ...every, showNonPassStations: false } });
+    const exported = await db.all<Record<string, unknown>>(
+      sql`select * from device_profile_kitchen_screens where device_profile_id = ${venue.kds}`,
+    );
+    expect(exported).toEqual([expect.objectContaining({ show_non_pass_stations: 0 })]);
+
+    await db.run(sql`
+      insert into device_profile_kitchen_screens (device_profile_id, screen, every_station, every_zone)
+      values (${venue.till}, 'pass', 1, 1)
+    `);
+    expect((await screensOf(venue, venue.till))!.pass).toEqual({
+      ...every,
+      showNonPassStations: true,
+    });
+  });
+
+  it("puts the key on a profile's pass and pass-monitor entries and never on its station entry", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, { station: every, pass: every, pass_monitor: every });
+    const screens = (await screensOf(venue, venue.kds))!;
+    expect(screens.station).not.toHaveProperty("showNonPassStations");
+    expect(screens.pass).toHaveProperty("showNonPassStations", true);
+    expect(screens.pass_monitor).toHaveProperty("showNonPassStations", true);
+  });
 });

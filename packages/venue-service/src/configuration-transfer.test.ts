@@ -1982,3 +1982,20 @@ describe("validateServiceSteps", () => {
     expect(names.indexOf("service_steps")).toBe(names.indexOf("departments") + 1);
   });
 });
+
+describe("A773 pass display policy", () => {
+  it("carries a profile's kitchen-screen rows, whole, and leaves every device's choice behind", () => {
+    const names: string[] = VENUE_SERVICE_CONFIGURATION_TRANSFER.tables.map((table) => table.name);
+    expect(VENUE_SERVICE_CONFIGURATION_TRANSFER.tables).toContainEqual({
+      name: "device_profile_kitchen_screens",
+    });
+    for (const deviceTable of [
+      "device_kitchen_screens",
+      "device_kitchen_screen_stations",
+      "device_kitchen_screen_zones",
+      "device_kitchen_screen_removals",
+    ]) {
+      expect(names).not.toContain(deviceTable);
+    }
+  });
+});

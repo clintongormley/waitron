@@ -219,6 +219,22 @@ for (const locale of ["en", "es"] as const) {
           { name: "request_kind", type: "TEXT", notnull: 1, dflt_value: "'new_order'", pk: 0 },
           "new_order",
         ],
+        [
+          "device_profile_kitchen_screens",
+          {
+            name: "show_non_pass_stations",
+            type: "INTEGER",
+            notnull: 1,
+            dflt_value: "true",
+            pk: 0,
+          },
+          1,
+        ],
+        [
+          "device_kitchen_screens",
+          { name: "show_non_pass_stations", type: "INTEGER", notnull: 0, dflt_value: null, pk: 0 },
+          null,
+        ],
       ] as const) {
         const table = expected[phase].tables[name]!;
         table.columns.push(column);

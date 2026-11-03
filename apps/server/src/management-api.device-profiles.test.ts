@@ -1549,7 +1549,10 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         body: JSON.stringify(kitchen(uniqueName("Bare"))),
       });
       const bareId = ((await bare.json()) as ProfileRow).id;
-      expect(await screensOf(app, id)).toEqual(offered);
+      expect(await screensOf(app, id)).toEqual({
+        ...offered,
+        pass: { ...offered.pass, showNonPassStations: true },
+      });
       expect(await screensOf(app, bareId)).toEqual({});
 
       const kept = await app.request(`/management-api/device-profiles/${id}`, {
@@ -1559,7 +1562,10 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       });
       expect(kept.status).toBe(200);
       expect(((await kept.json()) as { narrowedDevices: unknown }).narrowedDevices).toEqual([]);
-      expect(await screensOf(app, id)).toEqual(offered);
+      expect(await screensOf(app, id)).toEqual({
+        ...offered,
+        pass: { ...offered.pass, showNonPassStations: true },
+      });
 
       const replaced = await app.request(`/management-api/device-profiles/${id}`, {
         method: "PUT",
@@ -1600,7 +1606,7 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       });
       expect(res.status).toBe(200);
       expect(await screensOf(app, id)).toEqual({
-        pass_monitor: { stationIds: null, zoneIds: null },
+        pass_monitor: { stationIds: null, zoneIds: null, showNonPassStations: true },
       });
     });
 
@@ -1634,7 +1640,9 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         headers: { cookie: managerCookie },
       });
       expect(((await stored.json()) as { formFactor: string }).formFactor).toBe("till");
-      expect(await screensOf(app, id)).toEqual(monitor);
+      expect(await screensOf(app, id)).toEqual({
+        pass_monitor: { ...monitor.pass_monitor, showNonPassStations: true },
+      });
 
       const accepted = await app.request(`/management-api/device-profiles/${id}`, {
         method: "PUT",
@@ -1645,7 +1653,9 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       });
       expect(accepted.status).toBe(200);
       expect(((await accepted.json()) as { formFactor: string }).formFactor).toBe("till");
-      expect(await screensOf(app, id)).toEqual({ pass: { stationIds: null, zoneIds: null } });
+      expect(await screensOf(app, id)).toEqual({
+        pass: { stationIds: null, zoneIds: null, showNonPassStations: true },
+      });
     });
 
     it("refuses a kitchenScreens that is not a map of screens to lists", async () => {
@@ -1746,7 +1756,9 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
             .where(eq(deviceProfiles.id, id))
         )[0]?.name,
       ).toBe(name);
-      expect(await screensOf(app, id)).toEqual({ pass: { stationIds: [grill], zoneIds: [] } });
+      expect(await screensOf(app, id)).toEqual({
+        pass: { stationIds: [grill], zoneIds: [], showNonPassStations: true },
+      });
     });
 
     it("retained empty zone bound survives unrelated save and profile copy without widening", async () => {
@@ -1777,14 +1789,18 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
         body: JSON.stringify(kitchen(name, { kitchenScreens })),
       });
       expect(saved.status).toBe(200);
-      expect(await screensOf(app, id)).toEqual(kitchenScreens);
+      expect(await screensOf(app, id)).toEqual({
+        pass: { ...kitchenScreens.pass, showNonPassStations: true },
+      });
       const renamed = await app.request(`/management-api/device-profiles/${id}`, {
         method: "PUT",
         headers: { ...JSON_HEADERS, cookie: managerCookie },
         body: JSON.stringify(kitchen(uniqueName("Renamed empty pass"))),
       });
       expect(renamed.status).toBe(200);
-      expect(await screensOf(app, id)).toEqual(kitchenScreens);
+      expect(await screensOf(app, id)).toEqual({
+        pass: { ...kitchenScreens.pass, showNonPassStations: true },
+      });
       const copied = await app.request(`/management-api/device-profiles/${id}/copy`, {
         method: "POST",
         headers: { ...JSON_HEADERS, cookie: managerCookie },
@@ -1792,7 +1808,9 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       });
       expect(copied.status).toBe(201);
       const copy = (await copied.json()) as ProfileRow;
-      expect(await screensOf(app, copy.id)).toEqual(kitchenScreens);
+      expect(await screensOf(app, copy.id)).toEqual({
+        pass: { ...kitchenScreens.pass, showNonPassStations: true },
+      });
       const [parent] = await suite.db
         .select()
         .from(deviceProfileKitchenScreens)
@@ -1828,7 +1846,10 @@ describe("Management API — device-profile CRUD (Task 4)", () => {
       });
       expect(copied.status).toBe(201);
       const copy = (await copied.json()) as ProfileRow;
-      expect(await screensOf(app, copy.id)).toEqual(screens);
+      expect(await screensOf(app, copy.id)).toEqual({
+        ...screens,
+        pass: { ...screens.pass, showNonPassStations: true },
+      });
       const before = await suite.db.select({ id: deviceProfiles.id }).from(deviceProfiles);
       await suite.db
         .update(deviceProfiles)

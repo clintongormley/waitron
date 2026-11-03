@@ -577,8 +577,14 @@ export interface KitchenScreenScope {
   readonly zoneIds: readonly string[] | null;
 }
 
+/** A profile's screen of one kind. `showNonPassStations` is read and written on `pass` and
+ *  `pass_monitor` entries only; a write that omits it keeps the stored value. */
+export interface ProfileKitchenScreen extends KitchenScreenScope {
+  readonly showNonPassStations?: boolean;
+}
+
 export type ProfileKitchenScreens = Readonly<
-  Partial<Record<KitchenScreenKind, KitchenScreenScope>>
+  Partial<Record<KitchenScreenKind, ProfileKitchenScreen>>
 >;
 
 export interface DeviceKitchenScreen extends KitchenScreenScope {

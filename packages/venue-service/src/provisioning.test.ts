@@ -530,6 +530,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       expect({ ...till?.pass, stationIds: [...(till?.pass?.stationIds ?? [])].sort() }).toEqual({
         stationIds: [bar!.id],
         zoneIds: null,
+        showNonPassStations: true,
       });
     });
 

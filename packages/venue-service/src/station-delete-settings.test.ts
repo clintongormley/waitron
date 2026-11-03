@@ -414,7 +414,7 @@ it("retains empty explicit device and profile parents and all unrelated zones", 
     expect(
       (await readProfileKitchenScreens(tx, f.cfg)).find((row) => row.profileId === pid)?.screens,
     ).toEqual({
-      pass: { stationIds: [], zoneIds: [f.zone] },
+      pass: { stationIds: [], zoneIds: [f.zone], showNonPassStations: true },
       station: { stationIds: [f.other], zoneIds: null },
     });
     expect(await readDeviceKitchenScreens(tx, f.cfg, explicit)).toEqual([]);

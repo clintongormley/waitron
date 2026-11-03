@@ -6,6 +6,7 @@ import type {
   KitchenScreenKind,
   KitchenScreenScope,
   NarrowedDevice,
+  ProfileKitchenScreen,
   ProfileKitchenScreens,
   ResolvedKitchenScreen,
   ScreenSlot,
@@ -40,7 +41,10 @@ function refuse(field: Field, reason: Reason): never {
   throw new AppError("device_profile.access_invalid", { field, reason });
 }
 
-type MutableScreens = Partial<Record<KitchenScreenKind, KitchenScreenScope>>;
+type MutableScreens = Partial<Record<KitchenScreenKind, ProfileKitchenScreen>>;
+
+/** The kinds whose rows' `show_non_pass_stations` is read; a station row keeps its default. */
+const hasDisplay = (kind: KitchenScreenKind) => kind !== "station";
 
 export async function readProfileKitchenScreens(
   tx: Transaction,
@@ -118,6 +122,7 @@ async function readStored(
     screens[row.screen] = {
       stationIds: row.everyStation ? null : of(stations),
       zoneIds: row.screen === "station" || row.everyZone ? null : of(zones),
+      ...(hasDisplay(row.screen) ? { showNonPassStations: row.showNonPassStations } : {}),
     };
     byProfile.set(row.deviceProfileId, screens);
   }
@@ -140,7 +145,7 @@ export async function setProfileKitchenScreens(
   screens: ProfileKitchenScreens,
 ): Promise<NarrowedDevice[]> {
   const stored = (await readStored(tx, [profileId])).get(profileId) ?? {};
-  return replaceProfileKitchenScreens(tx, profileId, screens, stored);
+  return replaceProfileKitchenScreens(tx, profileId, screens, stored, stored);
 }
 
 export async function copyProfileKitchenScreens(
@@ -151,7 +156,7 @@ export async function copyProfileKitchenScreens(
 ): Promise<void> {
   await liveFormFactor(tx, sourceId);
   const stored = (await readStored(tx, [sourceId])).get(sourceId) ?? {};
-  await replaceProfileKitchenScreens(tx, targetId, stored, stored);
+  await replaceProfileKitchenScreens(tx, targetId, stored, stored, {});
 }
 
 async function replaceProfileKitchenScreens(
@@ -159,6 +164,8 @@ async function replaceProfileKitchenScreens(
   profileId: string,
   screens: ProfileKitchenScreens,
   stored: MutableScreens,
+  /** The target's own stored screens, whose display values a screen omitting one keeps. */
+  kept: MutableScreens,
 ): Promise<NarrowedDevice[]> {
   const formFactor = await liveFormFactor(tx, profileId);
   for (const kind of KITCHEN_SCREEN_KINDS) {
@@ -169,14 +176,17 @@ async function replaceProfileKitchenScreens(
       refuse(zoneField, "empty");
   }
   const kinds = KITCHEN_SCREEN_KINDS.filter((kind) => screens[kind] !== undefined);
-  const checked: { kind: KitchenScreenKind; scope: KitchenScreenScope }[] = [];
+  const checked: { kind: KitchenScreenKind; scope: ProfileKitchenScreen }[] = [];
   for (const kind of kinds) {
     const scope = screens[kind]!;
     const fields = LIST_FIELDS[kind];
     if (fields.zones === null && scope.zoneIds !== null) refuse("kitchenScreens", "not_for_screen");
     const stationIds = await checkedStations(tx, scope.stationIds, fields);
     const zoneIds = await checkedZones(tx, scope.zoneIds, stored[kind], fields);
-    checked.push({ kind, scope: { stationIds, zoneIds } });
+    const showNonPassStations = hasDisplay(kind)
+      ? (scope.showNonPassStations ?? kept[kind]?.showNonPassStations ?? true)
+      : undefined;
+    checked.push({ kind, scope: { stationIds, zoneIds, showNonPassStations } });
   }
 
   const onProfile = await tx
@@ -245,7 +255,7 @@ async function insertScreen(
   tx: Transaction,
   profileId: string,
   kind: KitchenScreenKind,
-  scope: KitchenScreenScope,
+  scope: ProfileKitchenScreen,
 ): Promise<void> {
   const zoneIds = kind === "station" ? [] : scope.zoneIds;
   await tx.insert(deviceProfileKitchenScreens).values({
@@ -253,6 +263,7 @@ async function insertScreen(
     screen: kind,
     everyStation: scope.stationIds === null,
     everyZone: zoneIds === null,
+    showNonPassStations: scope.showNonPassStations ?? true,
   });
   await insertLists(tx, profileId, kind, scope.stationIds ?? [], zoneIds ?? []);
 }
@@ -533,7 +544,8 @@ export async function assertDeviceKitchenScreens(
   await checkChoice(tx, profileId, screens, stored);
 }
 
-/** Replaces the device's kitchen screens; a pick forgets everything narrowings took from it. */
+/** Replaces the device's kitchen screens; a pick forgets everything narrowings took from it, and
+ *  keeps each kept kind's display value. */
 export async function setDeviceKitchenScreens(
   tx: Transaction,
   _cfg: VenueScope,
@@ -542,6 +554,17 @@ export async function setDeviceKitchenScreens(
   const { deviceId, profileId, screens } = input;
   const stored = (await readChoices(tx, [deviceId])).get(deviceId)!;
   await checkChoice(tx, profileId, screens, stored);
+  const displays = new Map(
+    (
+      await tx
+        .select({
+          screen: deviceKitchenScreens.screen,
+          value: deviceKitchenScreens.showNonPassStations,
+        })
+        .from(deviceKitchenScreens)
+        .where(eq(deviceKitchenScreens.deviceId, deviceId))
+    ).map((row) => [row.screen, row.value]),
+  );
   await tx.delete(deviceKitchenScreens).where(eq(deviceKitchenScreens.deviceId, deviceId));
   await tx
     .delete(deviceKitchenScreenRemovals)
@@ -554,6 +577,7 @@ export async function setDeviceKitchenScreens(
       screen: screen.kind,
       everyStation: screen.stationIds === null,
       everyZone: screen.kind !== "station" && screen.zoneIds === null,
+      showNonPassStations: displays.get(screen.kind) ?? null,
     });
     if (stationIds.length > 0) {
       await tx

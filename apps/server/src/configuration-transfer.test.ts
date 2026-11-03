@@ -7117,7 +7117,13 @@ it("round-trips deleted kitchen configuration and preserves archived products an
       (row) => row.device_profile_id === ids.profile,
     ),
   ).toEqual([
-    { device_profile_id: ids.profile, screen: "station", every_station: 0, every_zone: 0 },
+    {
+      device_profile_id: ids.profile,
+      screen: "station",
+      every_station: 0,
+      every_zone: 0,
+      show_non_pass_stations: 1,
+    },
   ]);
   for (const table of ["kitchen_courses", "kitchen_stations"]) {
     const forged = {
