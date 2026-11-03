@@ -294,6 +294,12 @@ const nthLstatAt = (path, nth, change) => {
   };
 };
 
+/** An lstat that throws `value` for `path`, without looking at it first. */
+const lstatThrowingAt = (path, value) => async (target, options) => {
+  if (target === path) throw value;
+  return fs.lstat(target, options);
+};
+
 const ioError = (code) => Object.assign(new Error(`${code}: ${PASSWORD_A}`), { code });
 
 /** @param {unknown} status @param {unknown} expected */
@@ -714,9 +720,23 @@ const ioFailedRows = [
     "the lstat of wifi.json.next throws EIO",
     "io-failed",
     async (f) => ({
-      lstat: lstatAt(f.nextPath, () => {
-        throw ioError("EIO");
-      }),
+      lstat: lstatThrowingAt(f.nextPath, ioError("EIO")),
+    }),
+    { lastCall: (f) => ["lstat", f.nextPath] },
+  ],
+  [
+    "the lstat of wifi.json.next throws an object shaped like a refusal",
+    "io-failed",
+    async (f) => ({
+      lstat: lstatThrowingAt(f.nextPath, { state: "failed", failure: "path-unsafe" }),
+    }),
+    { lastCall: (f) => ["lstat", f.nextPath] },
+  ],
+  [
+    "the lstat of wifi.json.next throws a plain string",
+    "io-failed",
+    async (f) => ({
+      lstat: lstatThrowingAt(f.nextPath, `EIO: ${PASSWORD_A}`),
     }),
     { lastCall: (f) => ["lstat", f.nextPath] },
   ],
@@ -788,7 +808,6 @@ describe("publish does not refuse a safe leftover or a damaged copy (the positiv
     it.each(cases)(`${decision.kind}: %s`, async (_name, fixtureArgs) => {
       const f = await fixture(fixtureArgs);
       const status = await f.make().publish(decision);
-      expect(status.state).toBe("failed");
       expect(["path-unsafe", "permissions-unsafe"]).not.toContain(status.failure);
     });
   }

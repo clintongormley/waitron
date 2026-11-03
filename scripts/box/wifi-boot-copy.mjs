@@ -192,8 +192,8 @@ export function createWifiBootCopyPublisher(deps) {
     return true;
   }
 
-  // Only root can put a name in a root-only folder, so a staging name that is not the writer's
-  // own regular file is a fault, refused before any write rather than removed.
+  // Only root can put a name in a root-only folder, so a staging name that is not a regular,
+  // single-link, owner-only file is a fault, refused before any write rather than removed.
   /** @returns {Promise<boolean>} whether a leftover staging file exists */
   async function checkNext() {
     const stats = await lstatIfPresent(nextPath);
