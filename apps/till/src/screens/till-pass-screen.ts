@@ -181,7 +181,7 @@ export class TillPassScreen extends LitElement {
   @state() private otherStationsSending?: boolean | null;
   /**
    * Moves on with each choice sent and each change of board. An older send's answer frees no newer
-   * choice, and its failure is not acted on.
+   * choice, its success is not taken as the newest answer, and its failure is not acted on.
    */
   #otherStationsSend = 0;
   /** A refusal of that choice, shown in the window until the next choice or a change of board. */
@@ -472,7 +472,7 @@ export class TillPassScreen extends LitElement {
         boardId === "pass" ? "pass" : "pass_monitor",
         value,
       );
-      if (this.#isCurrent(boardId)) {
+      if (send === this.#otherStationsSend && this.#isCurrent(boardId)) {
         this.#acceptedChoice = value;
         // Counts as an answer newer than any board read already out, so none of those can undo it.
         this.#appliedRequest = ++this.#request;
@@ -481,7 +481,7 @@ export class TillPassScreen extends LitElement {
       reload = null;
       const code = (error as { code?: string } | null)?.code ?? "server.internal";
       if (send !== this.#otherStationsSend) {
-        // Answers a board no longer shown.
+        // Sent before the last change of board.
       } else if (this.#switched(error)) this.columnsWindow = null;
       else if (code === "device.unauthorized" && this.#followsChoice()) {
         this.columnsWindow = null;

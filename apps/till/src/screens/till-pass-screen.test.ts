@@ -1674,6 +1674,76 @@ describe("A773 pass screen", () => {
         expect(el.shadowRoot!.querySelector("[data-table-changed]")).toBeNull();
       }));
 
+    const movesToMonitorAndBack = () => {
+      const sent = deferred<void>();
+      const api = fakeApi({
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValueOnce(identity([chosen("pass")]))
+          .mockResolvedValueOnce(identity([chosen("pass_monitor")]))
+          .mockResolvedValue(identity([chosen("pass")])),
+        getDevicePassBoard: vi
+          .fn()
+          .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+        getDevicePassMonitorBoard: vi
+          .fn()
+          .mockResolvedValue({ ...deviceBoard(boardB), display: display(null) }),
+        setDeviceKitchenScreenDisplay: vi.fn().mockReturnValueOnce(sent.promise),
+      });
+      return { api, sent };
+    };
+
+    it("at a till moved to the monitor and back to the pass, a late success of the old pass choice does not replace a newer one that saved", () =>
+      withFakeTimers(async () => {
+        const { api, sent } = movesToMonitorAndBack();
+        const newer = deferred<void>();
+        vi.mocked(api.setDeviceKitchenScreenDisplay)
+          .mockReset()
+          .mockReturnValueOnce(sent.promise)
+          .mockReturnValueOnce(newer.promise);
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await open(el);
+        vi.mocked(api.getDevicePassBoard).mockResolvedValueOnce({
+          ...deviceBoard(),
+          display: display(null),
+        });
+        await choose(el, 0);
+        newer.resolve();
+        await settle(el);
+        expect(checked(el)).toEqual(["true", "false", "false"]);
+        vi.mocked(api.getDevicePassBoard).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+        sent.resolve();
+        await settle(el);
+        expect(checked(el)).toEqual(["true", "false", "false"]);
+      }));
+
+    it("at a till moved to the monitor and back to the pass, a late success of the old pass choice keeps the board the switch back reads", () =>
+      withFakeTimers(async () => {
+        const { api, sent } = movesToMonitorAndBack();
+        const back = deferred<DevicePassBoard>();
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        vi.mocked(api.getDevicePassBoard)
+          .mockImplementationOnce(() => back.promise)
+          .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        sent.resolve();
+        await settle(el);
+        back.resolve({ ...deviceBoard(boardB), display: display(true) });
+        await settle(el);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+      }));
+
     it("on a kitchen display, drops the section when a refresh says a narrowing took every station", () =>
       withFakeTimers(async () => {
         const api = fakeApi({
