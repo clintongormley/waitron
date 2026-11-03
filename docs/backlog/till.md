@@ -2502,15 +2502,18 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 **A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
 with PRs B–D remaining. PR B is cut into B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
 B4 is cut into B4a and B4b by its [task plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md);
-B4b remains, and no station can be set to wait for the pass until PR C. B3
+PR B is complete, PR C is next, and no station can be set to wait for the pass until PR C. B3
 ([task plan](../superpowers/plans/2026-11-02-a773-2b3-pass-release.md)) built the pass's board
 reads (`GET /api/device/pass-board`, `GET /api/device/pass-monitor-board`) and its Fire
 (`POST /api/device/pass-screen/release`), which gives a card's waiting dishes to their stations
 once, and the HOLD paper corrections for dishes waiting for the pass. B4a put the pass, the pass
 monitor and the till's own Pass on that board (`apps/till/src/screens/till-pass-screen.ts`, the
-till's every-station view on `GET /api/expo/board`) and retired the old pass reads. What B1,
-[B2's task plan](../superpowers/plans/2026-11-01-a773-2b2-requested-lifecycle.md) and B3 leave to
-B4 is in the slice plan's "Left for B4"; what B4a left is B4b in [the B4 plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md). Old nonempty stamps remain in regression fixtures, outside the till's
+till's every-station view on `GET /api/expo/board`) and retired the old pass reads. B4b put held
+cards under a Held heading at the bottom of the station's Waiting and the pass's To fire by default,
+made every kitchen column a choice in Columns, gave the waiter's table screen "at the pass", and
+added a pass's choice to show or hide other stations' dishes (per profile and per device, migration
+0073). What B4 leaves for PRs C, D and later is in [the B4 plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)'s
+"Left for PR C, PR D and later". Old nonempty stamps remain in regression fixtures, outside the till's
 public contracts. Physical schema and configuration-transfer fields remain for Task 12.
 
 PRs B–D add Requested and scoped pass release, integrate the agreed columns and display policy,
