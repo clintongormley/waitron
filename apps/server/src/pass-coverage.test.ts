@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   devices,
   floorZones,
   kitchenStations,
+  parties,
   ticketItems,
   withTransaction,
+  workingOrders,
 } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -33,6 +35,7 @@ import type { PassCard } from "./pass-card.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import { readPassCoverage, type PassCoverageGap } from "./pass-coverage.js";
 import { deleteStation } from "./station-delete.js";
+import { markServed } from "./working-order.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -365,7 +368,146 @@ describe("A773 station policy: pass coverage", () => {
     await passOn(venue, "Every pass", null);
     expect(await coverage(venue)).toEqual([]);
   });
+
+  it("dishes case 1: a dish waiting at the tables keeps its gap after its station stops waiting", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    await burgerAtTable(venue, "fire");
+    await stopWaiting(venue);
+    expect(await coverage(venue)).toEqual(await gaps(venue, [["grill", venue.party.zoneId]]));
+  });
+
+  it("dishes case 2: only a pass that sees the dish's zone covers it", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    await burgerAtTable(venue, "fire");
+    await stopWaiting(venue);
+    await passOn(venue, "Counter pass", [venue.stations.grill], [venue.counter.zoneId]);
+    expect(await coverage(venue)).toEqual(await gaps(venue, [["grill", venue.party.zoneId]]));
+    await passOn(venue, "Tables pass", [venue.stations.grill], [venue.party.zoneId]);
+    expect(await coverage(venue)).toEqual([]);
+  });
+
+  it("dishes case 3: a released dish is no gap", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    await burgerAtTable(venue, "fire");
+    await stopWaiting(venue);
+    const pass = await passOn(venue, "Every pass", null);
+    const by: PassActor = { deviceId: pass.deviceId, personId: null };
+    const [card] = await toFire(venue, by);
+    await release(venue, by, card!);
+    await withTransaction(db, (tx) =>
+      tx.update(devices).set({ active: false }).where(eq(devices.id, pass.deviceId)),
+    );
+    expect(await coverage(venue)).toEqual([]);
+  });
+
+  it("dishes case 4: a held dish at a station that no longer waits is no gap", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    await burgerAtTable(venue, "hold");
+    await stopWaiting(venue);
+    expect(await coverage(venue)).toEqual([]);
+  });
+
+  it("dishes case 5: a dish in no zone needs an every-zone pass", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    await withTransaction(db, async (tx) => {
+      const counterId = await fireNewOrder(tx, venue.cfg, [
+        { productId: venue.products.burger, quantity: "1" },
+      ]);
+      await tx.execute(
+        sql`delete from order_service_contexts where working_order_id = ${counterId}`,
+      );
+    });
+    await stopWaiting(venue);
+    await passOn(venue, "Tables pass", [venue.stations.grill], [venue.party.zoneId]);
+    await passOn(venue, "Counter pass", [venue.stations.grill], [venue.counter.zoneId]);
+    expect(await coverage(venue)).toEqual([
+      { stationId: venue.stations.grill, stationName: "Grill", zoneId: null, zoneName: null },
+    ]);
+    await passOn(venue, "Every pass", null);
+    expect(await coverage(venue)).toEqual([]);
+  });
+
+  it("dishes case 6: a dish served in full is no gap", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    const placed = await burgerAtTable(venue, "fire");
+    await stopWaiting(venue);
+    await withTransaction(db, async (tx) => {
+      const [party] = await tx
+        .select({ revision: parties.revision })
+        .from(parties)
+        .where(eq(parties.id, venue.party.partyId));
+      await markServed(
+        tx,
+        venue.cfg,
+        venue.party.partyId,
+        [{ lineId: placed.lineId, quantity: "1" }],
+        {
+          operatorId: OPERATOR,
+          submissionId: randomUUID(),
+          expectedPartyRevision: party!.revision,
+        },
+      );
+    });
+    expect(await coverage(venue)).toEqual([]);
+  });
+
+  it("dishes case 6: a dish whose order was abandoned is no gap", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    const placed = await burgerAtTable(venue, "fire");
+    await stopWaiting(venue);
+    await withTransaction(db, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ status: "abandoned" })
+        .where(eq(workingOrders.id, placed.orderId)),
+    );
+    expect(await coverage(venue)).toEqual([]);
+  });
+
+  it("dishes case 7: a pair both configured and with a dish waiting is listed once", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    await burgerAtTable(venue, "fire");
+    expect(await coverage(venue)).toEqual(
+      await gaps(venue, [
+        ["grill", venue.party.zoneId],
+        ["grill", venue.counter.zoneId],
+      ]),
+    );
+  });
 });
+
+/** A Grill burger placed at the party's table with `release`. */
+const burgerAtTable = (venue: Venue, release: "fire" | "hold") =>
+  withTransaction(db, async (tx) => {
+    const group = (
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [
+          {
+            lines: [{ menuItemId: venue.tables.offerFor(venue.products.burger), quantity: "1" }],
+            release,
+          },
+        ],
+      })
+    ).groups[0]!;
+    const [item] = await tx
+      .select({ orderId: ticketItems.workingOrderId, requestedAt: ticketItems.requestedAt })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, group.lineIds[0]!));
+    expect(item!.requestedAt === null).toBe(release === "hold");
+    return { lineId: group.lineIds[0]!, orderId: item!.orderId };
+  });
+
+const stopWaiting = (venue: Venue) =>
+  withTransaction(db, (tx) => setStationsWaitForPass(tx, false, [venue.stations.grill]));
 
 /** A till pass on every station and zone, signed in as a new person, whose profile serves the
  *  tables zone's department and, of its zones, only the tables zone. The fixture's counter zone is
