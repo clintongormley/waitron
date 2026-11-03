@@ -256,6 +256,27 @@ describe("joining a Wi-Fi network from the hotspot's page", () => {
     expect(final(decisions).state.phase).toBe("online");
   });
 
+  it("a join request after a probe fell due but before its tick still joins: only a tick makes a deadline count", () => {
+    const decisions = play([...HOTSPOT_OPEN, joinRequested(125_000)]);
+    expect(final(decisions)).toMatchObject({
+      action: "join",
+      ssidHex: VENUE_HEX,
+      deadlineMs: 185_000,
+      state: { phase: "joining" },
+    });
+  });
+
+  it("link internet false past the probing deadline → wait; the hotspot opens only on a tick", () => {
+    const decisions = play([link(65_000, false), tick(66_000)]);
+    expect(actions(decisions)).toEqual(["wait", "open-hotspot"]);
+    expect(decisions[0].state).toEqual({
+      phase: "probing",
+      atMs: 65_000,
+      deadlineMs: 60_000,
+      failure: null,
+    });
+  });
+
   it("join-requested while probing → wait (no form is offered before the hotspot opens)", () => {
     const decisions = play([link(0, false), joinRequested(10_000)]);
     expect(actions(decisions)).toEqual(["wait", "wait"]);

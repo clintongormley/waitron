@@ -494,7 +494,7 @@ export const NETWORK_TIMINGS_MS; // frozen { hotspotAfter: 60_000, retryEvery: 6
  * @property {number|null} deadlineMs  probing: when the hotspot opens; hotspot: the next probe; joining/joined: when the join counts as failed
  * @property {'join-failed'|'no-internet'|null} failure  why the last join failed (the page says the password was wrong, or the network has no internet); null until one fails, and again after continue
  * @typedef {'wait'|'probe'|'open-hotspot'|'join'|'continue'} NetworkAction
- *   open-hotspot: open «Waitron-Instalar» (fixed name, open, 10.42.0.1, forwarding nothing; the adapter's duty)
+ *   open-hotspot: open the installer's own network (spec §5.3 item 2's fixed name; open, 10.42.0.1, forwarding nothing; the adapter's duty)
  *   join: close the hotspot, then join ssidHex with the password the adapter took from the form
  *   continue: internet found; close the hotspot if open; the installer goes on
  * @typedef {{ action: NetworkAction, ssidHex: string|null, deadlineMs: number|null, state: NetworkState }} NetworkDecision  frozen
