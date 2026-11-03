@@ -23,6 +23,8 @@ export interface CarryOnWords {
   notPermitted: string;
   throttled: (minutes: number) => string;
   insecure: string;
+  /** In place of the form when it could not be drawn. */
+  unavailable: string;
   failed: string;
   /** The refusal's words around the successor's name. */
   knownHandover: readonly [string, string];
@@ -64,7 +66,7 @@ export const WAITING_PAGE_WORDS: Readonly<
       heading: "Carry on as the main box",
       intro: [
         "Only if ",
-        " is switched off: sign in, and this box takes sales and sends records to the tax agency again until it next starts. When it starts again, it asks again.",
+        " is switched off. This box then runs the venue until it next restarts, when it asks again.",
       ],
       email: "Email",
       password: "Password",
@@ -79,14 +81,16 @@ export const WAITING_PAGE_WORDS: Readonly<
       statementMissing: "Tick this to confirm it.",
       fixFields: "Correct the highlighted fields to continue.",
       signInRefused:
-        "That email and password do not match an account here. Check them and try again.",
+        "That email and password do not match an account here. Check them and try again. Nothing was changed.",
       totpRequired:
         "Enter your password again and the code from your authenticator app, or one of your recovery codes.",
       notPermitted:
-        "Your role does not let you choose which box runs the venue. Sign in here as an administrator to carry on.",
+        "Your role does not let you choose which box runs the venue. Sign in here as an administrator to carry on. Nothing was changed.",
       throttled: (minutes) =>
-        `Too many incorrect attempts. Wait ${minutes === 1 ? "a minute" : `${minutes} minutes`} and try again.`,
+        `Too many incorrect attempts. Wait ${minutes === 1 ? "a minute" : `${minutes} minutes`} and try again. Nothing was changed.`,
       insecure: "To carry on as the main box, open this page at its https:// address.",
+      unavailable:
+        "The form to carry on as the main box could not be shown. Reload this page to try again.",
       failed: "Nothing was changed, because something went wrong. Try again.",
       knownHandover: [
         "This box has already handed over to ",
@@ -96,9 +100,9 @@ export const WAITING_PAGE_WORDS: Readonly<
       knownTitle: "This box has already handed over",
       restartingTitle: "This box is restarting",
       restarting:
-        "It has learnt that another box has taken over, or it is shutting down, so it has not carried on as the main box. Nothing was recorded. Open this page again in a minute.",
+        "Another box has taken over, or this box is shutting down, so it did not carry on. Nothing was recorded. Open this page again in a minute.",
       restartingAfterRecord:
-        "Your decision to carry on was recorded, but this box then learnt that another box has taken over, or it is shutting down, so it did not carry on. Open this page again in a minute.",
+        "Your decision was recorded, but another box has taken over, or this box is shutting down, so it did not carry on. Open this page again in a minute.",
       peerAnsweredTitle: "The other box answered",
       peerAnswered:
         "It answered before you carried on, so this box is starting normally. Nothing was recorded. This page reloads in a few seconds.",
@@ -117,7 +121,7 @@ export const WAITING_PAGE_WORDS: Readonly<
       heading: "Seguir como equipo principal",
       intro: [
         "Solo si ",
-        " está apagado: inicia sesión, y este equipo vuelve a hacer ventas y a enviar registros a Hacienda hasta que se vuelva a iniciar. Cuando se inicie de nuevo, volverá a preguntar.",
+        " está apagado. Este equipo lleva entonces el local hasta que se reinicie, y entonces vuelve a preguntar.",
       ],
       email: "Correo electrónico",
       password: "Contraseña",
@@ -133,14 +137,16 @@ export const WAITING_PAGE_WORDS: Readonly<
       statementMissing: "Marca esta casilla para confirmarlo.",
       fixFields: "Corrige los campos marcados para continuar.",
       signInRefused:
-        "Ese correo electrónico y esa contraseña no coinciden con ninguna cuenta de aquí. Revísalos y vuelve a intentarlo.",
+        "Ese correo electrónico y esa contraseña no coinciden con ninguna cuenta de aquí. Revísalos y vuelve a intentarlo. No se ha cambiado nada.",
       totpRequired:
         "Vuelve a introducir tu contraseña y el código de tu aplicación de autenticación o uno de tus códigos de recuperación.",
       notPermitted:
-        "Tu función no te permite elegir qué equipo lleva el local. Inicia sesión aquí como administrador para seguir.",
+        "Tu función no te permite elegir qué equipo lleva el local. Inicia sesión aquí como administrador para seguir. No se ha cambiado nada.",
       throttled: (minutes) =>
-        `Demasiados intentos incorrectos. Espera ${minutes === 1 ? "un minuto" : `${minutes} minutos`} y vuelve a intentarlo.`,
+        `Demasiados intentos incorrectos. Espera ${minutes === 1 ? "un minuto" : `${minutes} minutos`} y vuelve a intentarlo. No se ha cambiado nada.`,
       insecure: "Para seguir como equipo principal, abre esta página en su dirección https://.",
+      unavailable:
+        "No se ha podido mostrar el formulario para seguir como equipo principal. Vuelve a cargar esta página para intentarlo.",
       failed: "No se ha cambiado nada, porque algo ha fallado. Vuelve a intentarlo.",
       knownHandover: [
         "Este equipo ya ha pasado el local a ",
@@ -150,9 +156,9 @@ export const WAITING_PAGE_WORDS: Readonly<
       knownTitle: "Este equipo ya ha pasado el local",
       restartingTitle: "Este equipo se está reiniciando",
       restarting:
-        "Ha sabido que otro equipo ha pasado a llevar el local, o se está apagando, así que no ha seguido como equipo principal. No se ha registrado nada. Vuelve a abrir esta página dentro de un minuto.",
+        "Otro equipo ha pasado a llevar el local, o este equipo se está apagando, así que no ha seguido. No se ha registrado nada. Vuelve a abrir esta página dentro de un minuto.",
       restartingAfterRecord:
-        "Tu decisión de seguir se ha registrado, pero después este equipo ha sabido que otro equipo ha pasado a llevar el local, o se está apagando, así que no ha seguido. Vuelve a abrir esta página dentro de un minuto.",
+        "Tu decisión se ha registrado, pero otro equipo ha pasado a llevar el local, o este equipo se está apagando, así que no ha seguido. Vuelve a abrir esta página dentro de un minuto.",
       peerAnsweredTitle: "El otro equipo ha respondido",
       peerAnswered:
         "Respondió antes de que siguieras, así que este equipo se inicia con normalidad. No se ha registrado nada. Esta página se vuelve a cargar en unos segundos.",

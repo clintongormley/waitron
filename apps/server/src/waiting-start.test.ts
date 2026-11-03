@@ -189,6 +189,51 @@ describe("the waiting start", () => {
     expect(recheck).toHaveBeenCalledTimes(2);
   });
 
+  it("a listener that fails to close fails the start instead of continuing it", async () => {
+    const log = vi.fn();
+    const failure = new Error("listener remains bound");
+    const h = harness(() => Promise.resolve(PROCEED), {
+      log,
+      listen: () => ({ close: () => Promise.reject(failure) }),
+    });
+    await expect(h.waiting.ended).rejects.toBe(failure);
+    expect(h.health.takesNoSales).toBe(true);
+    expect(log).toHaveBeenCalledWith("error", "waiting_start.close_failed", {
+      errorCode: "unknown",
+    });
+    await h.waiting.server.close();
+    expect(h.closeStore).not.toHaveBeenCalled();
+  });
+
+  it("a listener that fails to close after a carry-on fails the start too", async () => {
+    const failure = new Error("listener remains bound");
+    const h = harness(() => Promise.resolve(WAIT), {
+      intervalMs: 60_000,
+      listen: () => ({ close: () => Promise.reject(failure) }),
+    });
+    const turn = await h.waiting.beginCarryOn();
+    if (turn.kind !== "go") throw new Error(`expected the turn, got ${turn.kind}`);
+    expect(await turn.claim()).toBe(true);
+    turn.finish();
+    await expect(h.waiting.ended).rejects.toBe(failure);
+    expect(h.health.takesNoSales).toBe(true);
+  });
+
+  it("a listener that fails to close at a shutdown still closes the store", async () => {
+    const log = vi.fn();
+    const h = harness(() => Promise.resolve(WAIT), {
+      log,
+      intervalMs: 60_000,
+      listen: () => ({ close: () => Promise.reject(new Error("listener remains bound")) }),
+    });
+    await h.waiting.server.close();
+    expect(await h.waiting.ended).toEqual({ kind: "stopped" });
+    expect(h.closeStore).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith("warn", "waiting_start.close_failed", {
+      errorCode: "unknown",
+    });
+  });
+
   it("a re-ask that answers superseded ends the wait with that answer", async () => {
     const superseded: StartPeerCheckOutcome = { result: "superseded", successorNodeId: SPARE_ID };
     const h = harness(() => Promise.resolve(superseded));
@@ -365,7 +410,7 @@ describe("the waiting start", () => {
       expect([wrong.status, unknown.status]).toEqual([401, 401]);
       const [wrongPage, unknownPage] = [await wrong.text(), await unknown.text()];
       expect(wrongPage).toContain(
-        "That email and password do not match an account here. Check them and try again.",
+        "That email and password do not match an account here. Check them and try again. Nothing was changed.",
       );
       expect(unknownPage.replace("nobody@example.test", "owner@example.test")).toBe(wrongPage);
       // A sign-in's refusal marks no field.
@@ -604,7 +649,7 @@ describe("the waiting start", () => {
       const carried = await posted;
       expect(carried.status).toBe(409);
       expect(await carried.text()).toContain(
-        "Your decision to carry on was recorded, but this box then learnt that another box has taken over, or it is shutting down, so it did not carry on.",
+        "Your decision was recorded, but another box has taken over, or this box is shutting down, so it did not carry on.",
       );
       expect((await stepped).status).toBe(200);
       expect(await h.waiting.ended).toEqual({ kind: "stopped" });
@@ -649,6 +694,87 @@ describe("the waiting start", () => {
       expect(answer.status).toBe(403);
       await stillWaiting();
       expect(await events()).toEqual([]);
+    });
+
+    it("a sign-in whose form cannot be read answers the failure sentence, logged, and still waits", async () => {
+      await h.waiting.server.close();
+      const log = vi.fn();
+      h = harness(() => new Promise(() => {}), {
+        node: suite.node,
+        intervalMs: 60_000,
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+        log,
+      });
+      const answer = await h.app().request(
+        "https://box.test/carry-on",
+        {
+          method: "POST",
+          headers: { "content-type": "multipart/form-data", "accept-language": "en-GB" },
+          body: "not a form",
+        },
+        tls(),
+      );
+      expect(answer.status).toBe(500);
+      const shown = await answer.text();
+      expect(shown).toContain(
+        '<p id="carry-on-message" role="alert">Nothing was changed, because something went wrong. Try again.</p>',
+      );
+      expect(log).toHaveBeenCalledWith("warn", "waiting_start.carry_on_failed", {
+        errorCode: "unknown",
+        errno: null,
+      });
+      await stillWaiting();
+      expect(await events()).toEqual([]);
+    });
+  });
+
+  describe("carrying on when this box's own records cannot be read", () => {
+    const unreadable = Object.assign(new Error("disk I/O error"), { code: "EIO" });
+    const failingNode = {
+      select: () => {
+        throw unreadable;
+      },
+    } as never;
+
+    it("the page shows a line to reload in place of the form, and a sign-in answers the failure sentence with its reason logged", async () => {
+      const log = vi.fn();
+      const h = harness(() => new Promise(() => {}), {
+        node: failingNode,
+        intervalMs: 60_000,
+        carryOn: { db: undefined as never, credentialKeyRing: TOTP_KEY_RING, secure: () => true },
+        log,
+      });
+      const shown = await h.app().request("/", { headers: { "accept-language": "en-GB" } });
+      expect(shown.status).toBe(200);
+      const html = await shown.text();
+      expect(html).toContain("<h1>This box is waiting for Spare</h1>");
+      expect(html).not.toContain("<form");
+      expect(html).toContain(
+        "<p>The form to carry on as the main box could not be shown. Reload this page to try again.</p>",
+      );
+      expect(log).toHaveBeenCalledWith("warn", "waiting_page.section_failed", {
+        errorCode: "unknown",
+        errno: "EIO",
+      });
+      const answer = await h.app().request("/carry-on", {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          "accept-language": "en-GB",
+        },
+        body: new URLSearchParams({ email: "owner@example.test", password: "x" }).toString(),
+      });
+      expect(answer.status).toBe(500);
+      const refused = await answer.text();
+      expect(refused).toContain(
+        '<p id="carry-on-message" role="alert">Nothing was changed, because something went wrong. Try again.</p>',
+      );
+      expect(refused).not.toContain("owner@example.test");
+      expect(log).toHaveBeenCalledWith("warn", "waiting_start.carry_on_failed", {
+        errorCode: "unknown",
+        errno: "EIO",
+      });
+      await h.waiting.server.close();
     });
   });
 });

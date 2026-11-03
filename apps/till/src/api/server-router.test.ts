@@ -574,6 +574,24 @@ describe("ServerRouter — handing on the held chart", () => {
     expect(posts).toBe(2);
   });
 
+  it("a post answered with a server failure is tried again on a later round, until one is answered", async () => {
+    const statuses = [503, 500, 200];
+    let posts = 0;
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        posts += 1;
+        return new Response("{}", { status: statuses[posts - 1] ?? 200 });
+      }
+      return new Response(JSON.stringify({ acceptingSales: true, term: 2, nodeId: "b" }), {
+        status: 200,
+      });
+    }) as unknown as typeof fetch;
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    r.offerChart(chart(3));
+    for (let round = 0; round < 5; round += 1) await r.probeNow();
+    expect(posts).toBe(3);
+  });
+
   it("a post answered with a refusal is not sent again for the same answer", async () => {
     let posts = 0;
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
@@ -607,7 +625,7 @@ describe("ServerRouter — handing on the held chart", () => {
           (JSON.parse(String(init.body)) as { document: { body: { term: number } } }).document.body
             .term,
         );
-        return new Response("{}", { status: 500 });
+        return new Response("{}", { status: 409 });
       }
       return new Response(JSON.stringify({ acceptingSales: true, term: 2, nodeId: "b" }), {
         status: 200,

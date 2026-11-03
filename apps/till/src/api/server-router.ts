@@ -196,8 +196,9 @@ export class ServerRouter extends EventTarget {
     }
   }
 
-  /** Fire and forget, and never moves the till. A post the server answered, whatever the status, is
-   * not sent again for the same answer; one that failed in transit is tried on a later round. */
+  /** Fire and forget, and never moves the till. A post answered with a 2xx or 4xx status is not sent
+   * again for the same answer; one answered with a 5xx status, or that failed in transit, is tried
+   * again on a later probe round. */
   #handChart(url: string, term: number | null): void {
     const chart = this.#chart;
     if (chart === null || (term !== null && term >= chart.body.term)) return;
@@ -214,9 +215,14 @@ export class ServerRouter extends EventTarget {
           cache: "no-store",
         }),
       )
-      .catch(() => {
-        this.#chartSent.delete(key);
-      });
+      .then(
+        (res) => {
+          if (res.status >= 500) this.#chartSent.delete(key);
+        },
+        () => {
+          this.#chartSent.delete(key);
+        },
+      );
   }
 
   #merge(list: ServerEntry[]): Tracked[] {

@@ -1,12 +1,20 @@
 import { inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
 import { nodes, type Database } from "@waitron/db";
-import { FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
+import { FALLBACK_LOCALE, isAppError, type SupportedLocale } from "@waitron/shared";
 import { WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
 import { codeOf } from "@waitron/server-kit";
+import { errnoOf } from "./errno.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { escapeHtml } from "./recovery-surface.js";
+
+/** A failure's log fields: an app error's log-only `reason` when it carries one, else its errno. */
+export function failureFields(error: unknown): Record<string, string | null> {
+  if (isAppError(error) && error.reason !== undefined)
+    return { errorCode: codeOf(error), reason: error.reason };
+  return { errorCode: codeOf(error), errno: errnoOf(error) ?? null };
+}
 
 /** Each box's name from this box's `nodes` rows, or `null` where it has no row or no name. */
 export async function readPeerNames(
@@ -95,7 +103,15 @@ export function waitingPageRoute(
         log("warn", "waiting_page.names_failed", { errorCode: codeOf(error) });
       }
       const other = otherBoxPhrase(shown, locale);
-      const below = section === undefined ? "" : await section(c, other, locale);
+      let below: string | { page: string } = "";
+      if (section !== undefined) {
+        try {
+          below = await section(c, other, locale);
+        } catch (error) {
+          log("warn", "waiting_page.section_failed", failureFields(error));
+          below = `<p>${escapeHtml(WAITING_PAGE_WORDS[locale].carryOn.unavailable)}</p>\n`;
+        }
+      }
       return c.html(
         typeof below === "string" ? renderWaitingPage(other, locale, below) : below.page,
       );

@@ -21,7 +21,6 @@ import {
   type TotpKeyRing,
 } from "@waitron/identity";
 import { appendHandoverEventTx } from "@waitron/node-db";
-import { codeOf } from "@waitron/server-kit";
 import { WAITING_PAGE_WORDS, type CarryOnWords } from "./i18n/waiting-page.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
@@ -31,6 +30,7 @@ import { isSecure } from "./recovery-start-again.js";
 import { escapeHtml } from "./recovery-surface.js";
 import { knownHandoverSuccessor, type StartPeerCheckOutcome } from "./start-peer-check.js";
 import {
+  failureFields,
   otherBoxPhrase,
   renderDocument,
   renderWaitingPage,
@@ -52,11 +52,13 @@ export type CarryOnTurn =
       kind: "go";
       /**
        * Inside the transaction that records the decision: whether the box still waits. A stepdown
-       * that began before it refuses the record; one that begins after it wins over `finish`.
+       * or shutdown that began before it refuses the record; one that begins after it wins over
+       * `finish`.
        */
       claim: () => Promise<boolean>;
       /**
-       * Ends the wait as carried on unless a stepdown began after `claim`; says whether it did.
+       * Ends the wait as carried on unless a stepdown or shutdown began after `claim`; says whether
+       * it did.
        * The decision is recorded either way.
        */
       finish: () => boolean;
@@ -218,12 +220,27 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
       );
     };
 
-    const knownBefore = await knownHandoverSuccessor(deps.node, deps.nodeId);
+    const failed = (error: unknown, shown: FormView = BLANK) => {
+      deps.log("warn", "waiting_start.carry_on_failed", failureFields(error));
+      return page(formSection({ ...shown, message: words.failed }, other, words), 500);
+    };
+
+    let knownBefore: string | null;
+    try {
+      knownBefore = await knownHandoverSuccessor(deps.node, deps.nodeId);
+    } catch (error) {
+      return failed(error);
+    }
     if (knownBefore !== null) return known(knownBefore);
     if (!(deps.secure ?? postedSecurely)(c))
       return page(`<p role="alert">${escapeHtml(words.insecure)}</p>\n`, 403);
 
-    const form = await c.req.parseBody();
+    let form: Awaited<ReturnType<typeof c.req.parseBody>>;
+    try {
+      form = await c.req.parseBody();
+    } catch (error) {
+      return failed(error);
+    }
     const text = (key: string) => (typeof form[key] === "string" ? form[key] : "");
     const view: FormView = {
       ...BLANK,
@@ -244,12 +261,8 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
     if (Object.keys(view.errors).length > 0)
       return page(formSection({ ...view, message: words.fixFields }, other, words), 400);
 
-    const refused = (message: string, status: 401 | 403 | 429 | 500, askCode = view.askCode) =>
+    const refused = (message: string, status: 401 | 403 | 429, askCode = view.askCode) =>
       page(formSection({ ...view, askCode, message }, other, words), status);
-    const failed = (error: unknown) => {
-      deps.log("warn", "waiting_start.carry_on_failed", { errorCode: codeOf(error) });
-      return refused(words.failed, 500);
-    };
 
     let personId: string;
     try {
@@ -278,13 +291,13 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
       }
       finishAttempt("success");
     } catch (error) {
-      if (!isAppError(error)) return failed(error);
+      if (!isAppError(error)) return failed(error, view);
       if (hasCode(error, "totp.required")) return refused(words.totpRequired, 401, true);
       if (hasCode(error, "password.invalid")) return refused(words.signInRefused, 401);
       if (hasCode(error, "authorization.not_permitted")) return refused(words.notPermitted, 403);
       if (hasCode(error, "password.throttled"))
         return refused(words.throttled(Math.ceil(error.params.retryAfterSeconds / 60)), 429);
-      return failed(error);
+      return failed(error, view);
     }
 
     const turn = await deps.beginCarryOn();
@@ -328,7 +341,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
       if (isAppError(error) && hasCode(error, "handover.known_handover"))
         return known(error.params.successorNodeId);
       if (error instanceof NoLongerWaiting) return restarting();
-      return failed(error);
+      return failed(error, view);
     }
     if (!turn.finish())
       return c.html(

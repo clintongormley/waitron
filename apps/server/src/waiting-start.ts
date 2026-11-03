@@ -72,7 +72,10 @@ export type WaitEnd =
 export interface WaitingStart {
   /** What the start answers while it waits; `close` stops the wait and closes the store. */
   server: StartedServer;
-  /** Settles once the listeners and timer are gone; a `checked` or `carried-on` start goes on. */
+  /**
+   * Settles once the listeners and timer are gone; a `checked` or `carried-on` start goes on. Rejects
+   * when the listeners fail to close as the wait ends other than `stopped`.
+   */
   ended: Promise<WaitEnd>;
   /** Takes the carry-on turn, as the carry-on route does. */
   beginCarryOn: () => Promise<CarryOnTurn>;
@@ -117,7 +120,11 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   waitingPageRoute(() => deps.namesOf(waitingOn), log, section)(app);
 
   let resolveEnd: (end: WaitEnd) => void = () => {};
-  const ended = new Promise<WaitEnd>((resolve) => (resolveEnd = resolve));
+  let failEnd: (error: unknown) => void = () => {};
+  const ended = new Promise<WaitEnd>((resolve, reject) => {
+    resolveEnd = resolve;
+    failEnd = reject;
+  });
   let leaving = false;
   // Set before the stepdown's first await, so an answer that lands while the restriction is being
   // written never continues the start the stepdown is about to restart.
@@ -140,6 +147,12 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     try {
       await listeners.close();
     } catch (error) {
+      if (end.kind !== "stopped") {
+        // A listener still bound would hold the port the full start needs: the start fails.
+        log("error", "waiting_start.close_failed", { errorCode: codeOf(error) });
+        failEnd(error);
+        return;
+      }
       log("warn", "waiting_start.close_failed", { errorCode: codeOf(error) });
     }
     if (end.kind === "stopped") {
@@ -242,7 +255,8 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
       health: deps.health,
       close: async () => {
         await leave({ kind: "stopped" });
-        await ended;
+        // A failed end is the start's failure, already carried by `ended` to whoever awaits it.
+        await ended.catch(() => {});
       },
     },
     ended,
