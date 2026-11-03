@@ -945,7 +945,7 @@ folder or NetworkManager.
   reasons; an error the reader throws is not caught and reaches the caller.
 
 **Built so far (2026-11-03), PR 5.** [PR 5](../superpowers/plans/2026-11-03-b3-5-wifi-publication.md)
-(#PR5) adds one host library under `scripts/box/`, none of it called yet. Unlike PR 4's, it writes
+(#2432) adds one host library under `scripts/box/`, none of it called yet. Unlike PR 4's, it writes
 and removes real files, through file operations a test can replace.
 
 - `disk-key.mjs` exports its default file operations as `hostFileIo`, so both modules share one
