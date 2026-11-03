@@ -403,6 +403,42 @@ describe("A773 the pass's other-stations choice", () => {
     ).toBeNull();
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "at 390 px each choice's words are drawn whole, the choices inside the window (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        await pageAt(390, 844);
+        const { el } = await mount({
+          layout: passLayout(),
+          otherStations: { value: null, sending: false },
+        });
+        await control(el)!.updateComplete;
+        expect(radios(el)).toHaveLength(3);
+        for (const radio of radios(el)) {
+          const walker = document.createTreeWalker(radio, NodeFilter.SHOW_TEXT);
+          for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+            for (const word of node.textContent!.matchAll(/\S+/g)) {
+              const range = document.createRange();
+              range.setStart(node, word.index);
+              range.setEnd(node, word.index + word[0].length);
+              expect(range.getClientRects(), word[0]).toHaveLength(1);
+            }
+          }
+        }
+        const group = control(el)!.shadowRoot!.querySelector<HTMLElement>('[role="radiogroup"]')!;
+        expect(group.scrollWidth).toBeLessThanOrEqual(group.clientWidth);
+        expect(group.getBoundingClientRect().right).toBeLessThanOrEqual(
+          control(el)!.getBoundingClientRect().right,
+        );
+      } finally {
+        setLocale(before);
+        await resetPage();
+      }
+    },
+  );
+
   it("reads the section in Spanish", async () => {
     const before = currentLocale();
     setLocale("es-ES");

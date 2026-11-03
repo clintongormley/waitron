@@ -176,3 +176,60 @@ test.each(["public", "staff_only", "not_sold_separately", ""])(
     expect(el.shadowRoot!.activeElement).toBe(selected);
   },
 );
+
+/** How many line boxes each word of `button`'s label is drawn across: 1 for a whole word. */
+function wordLines(button: HTMLButtonElement): Record<string, number> {
+  const lines: Record<string, number> = {};
+  const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    for (const word of node.textContent!.matchAll(/\S+/g)) {
+      const range = document.createRange();
+      range.setStart(node, word.index);
+      range.setEnd(node, word.index + word[0].length);
+      lines[word[0]] = range.getClientRects().length;
+    }
+  }
+  return lines;
+}
+async function setupNarrow(width: number, labels: string[]) {
+  const el = await setup();
+  host.style.width = `${width}px`;
+  el.options = labels.map((label, index) => ({ value: String(index), label }));
+  el.value = "0";
+  await el.updateComplete;
+  return el;
+}
+function lineCount(button: HTMLButtonElement): number {
+  const range = document.createRange();
+  range.selectNodeContents(button);
+  return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+}
+
+test("a control too narrow for its labels on one line wraps them between words, never inside one", async () => {
+  const el = await setupNarrow(300, ["Usar la configuración del perfil", "Mostrar", "Ocultar"]);
+  const [profile, show, hide] = buttons(el);
+  expect(lineCount(profile!), "the long label had to wrap").toBeGreaterThan(1);
+  expect(wordLines(profile!)).toEqual({ Usar: 1, la: 1, configuración: 1, del: 1, perfil: 1 });
+  expect(wordLines(show!)).toEqual({ Mostrar: 1 });
+  expect(wordLines(hide!)).toEqual({ Ocultar: 1 });
+  const group = el.shadowRoot!.querySelector('[role="radiogroup"]')!.getBoundingClientRect();
+  expect(group.right).toBeLessThanOrEqual(el.getBoundingClientRect().right);
+});
+
+test("a word wider than the whole control breaks inside itself rather than widen the control", async () => {
+  const word = "Supercalifragilisticexpialidocious";
+  const el = await setupNarrow(150, [word]);
+  const [only] = buttons(el);
+  expect(wordLines(only!)[word]).toBeGreaterThan(1);
+  const box = el.getBoundingClientRect();
+  expect(only!.getBoundingClientRect().right).toBeLessThanOrEqual(box.right);
+  expect(only!.scrollWidth).toBeLessThanOrEqual(only!.clientWidth);
+});
+
+test("a one-letter choice in a host narrower than the tap target stays tap-target wide", async () => {
+  const el = await setupNarrow(20, ["A", "B"]);
+  expect(buttons(el)).toHaveLength(2);
+  for (const button of buttons(el)) {
+    expect(button.getBoundingClientRect().width).toBeGreaterThanOrEqual(44);
+  }
+});

@@ -39,9 +39,12 @@ export class WtSegmentedControl extends LitElement {
         display: inline-flex;
         max-width: 100%;
       }
+      /* No min-width: a set one would let a choice shrink below its longest word. Flex keeps each
+         choice at least as wide as that word (the strut below lifts it to the tap target), and the
+         max-width lets only a word wider than the whole control break. */
       button {
         flex: 1 1 auto;
-        min-width: var(--wt-tap-min);
+        max-width: max(100%, var(--wt-tap-min));
         min-height: var(--wt-tap-min);
         padding: var(--wt-space-2) var(--wt-space-3);
         border: 1px solid var(--wt-color-border);
@@ -52,7 +55,12 @@ export class WtSegmentedControl extends LitElement {
         font-size: var(--wt-font-size-sm);
         font-weight: var(--wt-font-weight-bold);
         cursor: pointer;
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
+      }
+      button::before {
+        content: "";
+        display: block;
+        inline-size: calc(var(--wt-tap-min) - 2 * var(--wt-space-3));
       }
       button + button {
         border-inline-start-width: 0;
