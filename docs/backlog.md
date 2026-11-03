@@ -573,6 +573,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   filesystems, or a `logs` volume on another disk. Left open by A1127.
   [Detail](backlog/setup.md#the-spare-files-size-is-measured-on-hfs-and-linux-tmpfs-only)
 
+- **The start-from-spare tests could use the real 8 MiB spare instead of 6 MiB** now that their disk
+  is 48 MiB. Once, the write-back case passed with 8 MiB; the restart and no-release cases were not
+  tried. Left open by A1313, #2424.
+
 - **Measure the backup room note's `venue.db` identity on the box's filesystem** (likely ext4, inside Docker),
   including whether the birth time is reported. Left open by A1167.
 
