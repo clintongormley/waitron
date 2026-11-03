@@ -1256,7 +1256,13 @@ export class TillStationQueue extends LitElement {
     ${sharedCourse === null ? nothing : html`<span class="course-name">${sharedCourse.name}</span>`}
     ${
       group?.state === "held" || since === null
-        ? html`<span class="held-note" data-group-held>${t("station.group_held")}</span>`
+        ? html`<span class="held-note" data-group-held
+            >${t(
+              since === null && card.items.every((item) => item.phase === "requested")
+                ? "pass.waiting_for_pass"
+                : "station.group_held",
+            )}</span
+          >`
         : nothing
     }
     ${
@@ -1326,7 +1332,9 @@ export class TillStationQueue extends LitElement {
   #stateWord(card: KitchenCard, item: StationQueueItem): TemplateResult | typeof nothing {
     let word: string | undefined;
     if (item.firedAt === null) {
-      if (card.since !== null) word = t("station.group_held");
+      if (card.since !== null) {
+        word = t(item.phase === "requested" ? "pass.waiting_for_pass" : "station.group_held");
+      }
     } else if (COLUMNS.indexOf(item.state) > COLUMNS.indexOf(card.column)) {
       word = t(`station.state.${item.state}` as const);
     }

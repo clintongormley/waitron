@@ -158,6 +158,12 @@ describe("the kitchen board's help", () => {
       expect(help["help.kitchen.notices"]).toContain(words["station.notice.acknowledge"]);
       expect(help["help.kitchen.columns"]).toContain(words["station.columns"]);
     });
+
+    it(`the station card's help names Held, Held, not released and Waiting for the pass by their own words (${language})`, () => {
+      expect(help["help.kitchen.card"]).toContain(words["pass.column.held"]);
+      expect(help["help.kitchen.card"]).toContain(words["station.group_held"]);
+      expect(help["help.kitchen.card"]).toContain(words["pass.waiting_for_pass"]);
+    });
   }
 });
 

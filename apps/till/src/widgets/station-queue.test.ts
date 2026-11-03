@@ -1,10 +1,12 @@
 import { commands, page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setContentLanguages } from "@waitron/ui";
+import { setContentLanguages, setHelpMode } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, pageAt, resetPage, textRects } from "./test-helpers.js";
 import { allergenName } from "../i18n/allergen-names.js";
+import { helpBadgeLabel, helpEn, helpEs, helpText } from "../i18n/help-strings.js";
+import { es } from "../i18n/strings.js";
 import { TillStationQueue, stationColumnNames } from "./station-queue.js";
 import { type ColumnKey, STATION_COLUMNS } from "../state/kitchen-columns.js";
 import { CARD_COLUMN_TEXT_WIDTHS, OVERVIEW_COLUMN_REMS } from "../state/kitchen-board-fit.js";
@@ -5232,4 +5234,101 @@ describe("A773 held column", () => {
     });
     expect(drawn(el)).toEqual(["overview", "held", "queued", "preparing", "ready"]);
   });
+
+  // A requested group's card, a card mixing a requested and a held dish, and a released card
+  // carrying one requested dish and one held dish.
+  const asked = (id: string, name: string) => ({ ...requestedDish(id, 4), name });
+  const kept = (id: string, name: string) => heldDish(id, 4, { name });
+  const wordsScene = () => [
+    ageBill(1, [
+      { ...asked("asked-a", "Squid"), group: { ...heldGroup, state: "held" as const } },
+      { ...asked("asked-b", "Prawns"), group: { ...heldGroup, state: "held" as const } },
+    ]),
+    ageBill(2, [asked("mixed-asked", "Clams"), kept("mixed-kept", "Mussels")]),
+    ageBill(3, [
+      { ...ageDish("sent", 18), name: "Octopus" },
+      asked("line-asked", "Cockles"),
+      kept("line-kept", "Razor clams"),
+    ]),
+  ];
+  const note = (el: TillStationQueue, order: number) =>
+    shadow(el)
+      .querySelector(`[data-card][data-order="${order}"] [data-group-held]`)
+      ?.textContent?.trim();
+  const lineWord = (el: TillStationQueue, id: string) =>
+    shadow(el).querySelector(`[data-item="${id}"] .line-state`)?.textContent?.trim();
+
+  it("a card in Held says Waiting for the pass when every dish on it is Requested, else Held, not released", async () => {
+    const { el } = await mountBoard(wordsScene());
+    expect(ordersIn(el, "held")).toEqual(["1", "2"]);
+    expect(note(el, 1)).toBe(t("pass.waiting_for_pass"));
+    expect(note(el, 2)).toBe(t("station.group_held"));
+  });
+
+  it("on a released card a Requested dish says Waiting for the pass and a held one Held, not released; a dish in Held says nothing", async () => {
+    const { el } = await mountBoard(wordsScene());
+    expect(ordersIn(el, "queued")).toEqual(["3"]);
+    expect(lineWord(el, "line-asked")).toBe(t("pass.waiting_for_pass"));
+    expect(lineWord(el, "line-kept")).toBe(t("station.group_held"));
+    expect(lineWord(el, "sent")).toBeUndefined();
+    for (const id of ["asked-a", "asked-b", "mixed-asked", "mixed-kept"]) {
+      expect(shadow(el).querySelector(`[data-item="${id}"]`)).not.toBeNull();
+      expect(lineWord(el, id)).toBeUndefined();
+    }
+  });
+
+  it("Overview counts a Requested dish after the +, as it counts a held one", async () => {
+    const { el } = await mountBoard([ageBill(1, [asked("asked-a", "Squid")])]);
+    const row = shadow(el).querySelector<HTMLElement>("[data-overview-row]")!;
+    expect(row.querySelector("[data-overview-making]")?.textContent?.trim() ?? "0").toBe("0");
+    expect(row.querySelector("[data-overview-held]")!.textContent!.trim()).toBe("+1");
+  });
+
+  it("in Spanish, Held's heading and the Waiting for the pass note and marker read the catalogue", async () => {
+    const previousLocale = currentLocale();
+    setLocale("es");
+    try {
+      const { el } = await mountBoard(wordsScene());
+      expect(column(el, "held")!.querySelector(".column-title")!.textContent).toBe(
+        es["pass.column.held"],
+      );
+      expect(note(el, 1)).toBe(es["pass.waiting_for_pass"]);
+      expect(note(el, 2)).toBe(es["station.group_held"]);
+      expect(lineWord(el, "line-asked")).toBe(es["pass.waiting_for_pass"]);
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
+  it.each([
+    { lang: "en", text: helpEn },
+    { lang: "es", text: helpEs },
+  ])(
+    "with help on, the first card's help says where held and requested cards sit ($lang)",
+    async ({ lang, text }) => {
+      const previousLocale = currentLocale();
+      setLocale(lang);
+      try {
+        const { el } = await mountBoard(wordsScene());
+        setHelpMode(true);
+        await el.updateComplete;
+        const cards = [...shadow(el).querySelectorAll<HTMLElement>("[data-card]")];
+        const badge = cards[0]!.querySelector<HTMLElement>(":scope > wt-help-tooltip")!;
+        expect(badge.getAttribute("aria-label")).toBe(
+          helpBadgeLabel(helpText("help.kitchen.cards_part")),
+        );
+        expect(badge.textContent).toBe(text["help.kitchen.card"]);
+        if (lang === "en") {
+          expect(badge.textContent).toBe(
+            "Each card is a group a table sent, or a counter order. A card none of whose dishes has been sent to this station to be cooked is in the Held column, with a dashed border and no minutes: it says Held, not released until a waiter requests cooking, and Waiting for the pass once the waiter has asked and the pass has not yet fired it. Every other card is in the column of its least advanced dish; its minutes count from when its first dish was sent to this station to be cooked, or moved here. Tap a dish to move it on one step (on a Whole ticket card, with every dish at its step), or the card's heading to move on the dishes holding it back. Its top edge turns from green to amber, then its whole border red, as the card waits, by the station's late flags.",
+          );
+        } else {
+          expect(badge.textContent).toContain(es["pass.waiting_for_pass"]);
+        }
+      } finally {
+        setHelpMode(false);
+        setLocale(previousLocale);
+      }
+    },
+  );
 });
