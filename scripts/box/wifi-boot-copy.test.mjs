@@ -408,66 +408,69 @@ const throwing = () => {
   throw new Error("bytes unreadable: " + PASSWORD_A);
 };
 
-describe("publish refuses a decision that is not exactly a write or a remove", () => {
-  /** @type {Array<[string, () => unknown]>} */
-  const cases = [
-    ["null", () => null],
-    ["a write with no bytes", () => ({ kind: "write" })],
-    ["a write whose bytes are an array", () => ({ kind: "write", bytes: [1, 2] })],
-    ["a write whose bytes are a string", () => ({ kind: "write", bytes: "x" })],
-    ["a write with an extra key", () => ({ ...writeA, extra: 1 })],
-    ["a write whose bytes the reader refuses", () => ({ kind: "write", bytes: canaryBytes })],
-    ["a remove with no reason", () => ({ kind: "remove" })],
-    ["a remove with an unknown reason", () => ({ kind: "remove", reason: "other" })],
-    ["a remove with a null reason", () => ({ kind: "remove", reason: null })],
-    ["an unknown kind", () => ({ kind: "erase", reason: "cable-only" })],
-    [
-      "a write whose bytes getter throws",
-      () => ({
-        kind: "write",
-        get bytes() {
-          return throwing();
-        },
-      }),
-    ],
-    [
-      "a write whose kind getter throws",
-      () => ({
-        get kind() {
-          return throwing();
-        },
-        bytes: writeA.bytes,
-      }),
-    ],
-    [
-      "a proxy whose keys throw when listed",
-      () =>
-        new Proxy(
-          { ...writeA },
-          {
-            ownKeys() {
-              throw new Error("keys unreadable: " + PASSWORD_A);
-            },
-          },
-        ),
-    ],
-  ];
-
-  it.each(cases)("%s → wifi_copy.decision_invalid, nothing called", async (_name, build) => {
-    const f = await fixture({ record: "A" });
-    const publisher = f.make();
-    const error = await publisher.publish(/** @type {any} */ (build())).then(
-      () => {
-        throw new Error("expected a rejection");
+/** @type {Array<[string, () => unknown]>} */
+const invalidDecisions = [
+  ["null", () => null],
+  ["a write with no bytes", () => ({ kind: "write" })],
+  ["a write whose bytes are an array", () => ({ kind: "write", bytes: [1, 2] })],
+  ["a write whose bytes are a string", () => ({ kind: "write", bytes: "x" })],
+  ["a write with an extra key", () => ({ ...writeA, extra: 1 })],
+  ["a write whose bytes the reader refuses", () => ({ kind: "write", bytes: canaryBytes })],
+  ["a remove with no reason", () => ({ kind: "remove" })],
+  ["a remove with an unknown reason", () => ({ kind: "remove", reason: "other" })],
+  ["a remove with a null reason", () => ({ kind: "remove", reason: null })],
+  ["an unknown kind", () => ({ kind: "erase", reason: "cable-only" })],
+  [
+    "a write whose bytes getter throws",
+    () => ({
+      kind: "write",
+      get bytes() {
+        return throwing();
       },
-      (reason) => reason,
-    );
-    expect(error).toEqual(DECISION_INVALID);
-    expect(f.inspectBootMount).not.toHaveBeenCalled();
-    expect(f.counting.log).toEqual([]);
-    expectStatus(publisher.status(), FIRST_STATUS);
-    expectNoForm(errorTexts(error), [...passwordForms("CANARY1"), ...passwordForms(PASSWORD_A)]);
-  });
+    }),
+  ],
+  [
+    "a write whose kind getter throws",
+    () => ({
+      get kind() {
+        return throwing();
+      },
+      bytes: writeA.bytes,
+    }),
+  ],
+  [
+    "a proxy whose keys throw when listed",
+    () =>
+      new Proxy(
+        { ...writeA },
+        {
+          ownKeys() {
+            throw new Error("keys unreadable: " + PASSWORD_A);
+          },
+        },
+      ),
+  ],
+];
+
+describe("publish refuses a decision that is not exactly a write or a remove", () => {
+  it.each(invalidDecisions)(
+    "%s → wifi_copy.decision_invalid, nothing called",
+    async (_name, build) => {
+      const f = await fixture({ record: "A" });
+      const publisher = f.make();
+      const error = await publisher.publish(/** @type {any} */ (build())).then(
+        () => {
+          throw new Error("expected a rejection");
+        },
+        (reason) => reason,
+      );
+      expect(error).toEqual(DECISION_INVALID);
+      expect(f.inspectBootMount).not.toHaveBeenCalled();
+      expect(f.counting.log).toEqual([]);
+      expectStatus(publisher.status(), FIRST_STATUS);
+      expectNoForm(errorTexts(error), [...passwordForms("CANARY1"), ...passwordForms(PASSWORD_A)]);
+    },
+  );
 });
 
 describe("publish refuses an unverified boot mount with no file call", () => {
@@ -1111,6 +1114,7 @@ describe("publish removes wifi.json and wifi.json.next on every no-copy answer",
         failure: "publication-unverified",
       });
       expect(counting.log).toContainEqual(["unlink", target(f)]);
+      expect((await fs.lstat(target(f))).isFile()).toBe(true);
     },
   );
 
@@ -1125,5 +1129,335 @@ describe("publish removes wifi.json and wifi.json.next on every no-copy answer",
       failure: null,
     });
     expect(new Uint8Array(await fs.readFile(f.recordPath))).toEqual(writeB.bytes);
+  });
+});
+
+const INJECTED = `EIO: ${PASSWORD_A} → ${PASSWORD_B}`;
+
+/**
+ * An override for operation `name` that throws an EIO error holding both passwords on its `nth`
+ * call (counting only calls for `path`, when given) and calls the real operation otherwise.
+ */
+const failAt = (name, nth = 1, message = INJECTED, path = undefined) => {
+  let seen = 0;
+  return async (...args) => {
+    if ((path === undefined || args[0] === path) && ++seen === nth) {
+      throw Object.assign(new Error(message), { code: "EIO" });
+    }
+    return REAL_IO[name](...args);
+  };
+};
+
+const leftoverHalfA = Buffer.from(writeA.bytes).subarray(0, writeA.bytes.length >> 1);
+const readerCallsOf = (f) => [
+  ["lstat", f.bootRoot],
+  ["lstat", f.folder],
+  ["open", f.recordPath],
+];
+const IO_FAILED_WRITE = { state: "failed", reason: null, failure: "io-failed" };
+const IO_FAILED_CABLE = { state: "failed", reason: "cable-only", failure: "io-failed" };
+
+/** Runs `decision` over a fixture with `overrides(f)` replacing operations. */
+async function runWith(fixtureArgs, decision, overrides) {
+  const f = await fixture(fixtureArgs);
+  const counting = countingIo(overrides(f));
+  const status = await f.make({ io: counting.io }).publish(decision);
+  return { f, log: counting.log, status };
+}
+
+const expectBytes = async (path, bytes) =>
+  expect(new Uint8Array(await fs.readFile(path))).toEqual(new Uint8Array(bytes));
+const expectMissing = async (path) =>
+  expect(fs.lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+const expectReaderLoads = async (f, bytes) => {
+  const found = await f.reader().read();
+  expect(found.kind).toBe("loaded");
+  expect(formatWifiRecord(found.network)).toEqual(bytes);
+};
+
+// [label, operation, nth, index of the failing call in the full log, wifi.json, wifi.json.next, reader]
+/** @type {Array<[string, string, number, number, "A"|"B", "leftover"|"none"|"B", "A"|"B"]>} */
+const writeFailureRows = [
+  ["syncDirectory of the boot root", "syncDirectory", 1, 5, "A", "leftover", "A"],
+  ["unlink of the leftover", "unlink", 1, 6, "A", "leftover", "A"],
+  ["writeFile", "writeFile", 1, 7, "A", "none", "A"],
+  ["syncFile", "syncFile", 1, 8, "A", "B", "A"],
+  ["rename", "rename", 1, 9, "A", "B", "A"],
+  ["syncDirectory of the folder", "syncDirectory", 2, 10, "B", "none", "B"],
+];
+const runWriteFailure = (op, nth) =>
+  runWith({ record: "A", next: leftoverHalfA }, writeB, () => ({ [op]: failAt(op, nth) }));
+
+// [label, overrides(f), index of the failing call in the full log]
+/** @type {Array<[string, (f: any) => object, number]>} */
+const newFolderFailureRows = [
+  ["mkdir", () => ({ mkdir: failAt("mkdir") }), 3],
+  [
+    "the publisher's lstat of the folder after the mkdir",
+    (f) => ({ lstat: failAt("lstat", 3, INJECTED, f.folder) }),
+    4,
+  ],
+];
+const runNewFolderFailure = (overrides) => runWith({ folder: false }, writeB, overrides);
+
+// [label, operation, nth, index of the failing call in the full log, wifi.json left, .next left]
+/** @type {Array<[string, string, number, number, boolean, boolean]>} */
+const removeFailureRows = [
+  ["the first unlink (wifi.json)", "unlink", 1, 5, true, true],
+  ["the second unlink (wifi.json.next)", "unlink", 2, 6, false, true],
+  ["syncDirectory of the folder", "syncDirectory", 1, 7, false, false],
+];
+const runRemoveFailure = (op, nth) =>
+  runWith({ record: "A", next: "B" }, removeCable, () => ({ [op]: failAt(op, nth) }));
+
+// [label, decision, overrides(f), last call(f)]
+/** @type {Array<[string, any, (f: any) => object, (f: any) => unknown[]]>} */
+const checkFailureRows = [
+  [
+    "the read-back's open of wifi.json",
+    writeB,
+    () => ({ open: failAt("open", 2) }),
+    (f) => ["open", f.recordPath],
+  ],
+  [
+    "the removal check's reader open of wifi.json",
+    removeCable,
+    () => ({ open: failAt("open", 2) }),
+    (f) => ["open", f.recordPath],
+  ],
+  [
+    "the removal check's own lstat of wifi.json.next",
+    removeCable,
+    (f) => ({ lstat: failAt("lstat", 2, INJECTED, f.nextPath) }),
+    (f) => ["lstat", f.nextPath],
+  ],
+];
+const runCheckFailure = (decision, overrides) => runWith({ record: "A" }, decision, overrides);
+
+const runPlainStringRejection = () =>
+  runWith({ record: "A" }, writeB, () => ({
+    writeFile: () => Promise.reject("boom " + PASSWORD_B),
+  }));
+
+/** A publisher with no io key, so disk-key.mjs's hostFileIo runs over the mocked fs. */
+const defaultPublisher = (f) =>
+  createWifiBootCopyPublisher({
+    bootRoot: f.bootRoot,
+    ownerUid: process.getuid(),
+    inspectBootMount: f.inspectBootMount,
+  });
+
+// Cleared once the publication settles, so a later run in the same case writes for real.
+const clearHook = () => (fsHooks.writeFile = undefined);
+
+async function runDefaultSymlinkHook() {
+  const f = await fixture({ record: "A" });
+  const target = join(f.parent, "target.json");
+  await fs.writeFile(target, "target bytes");
+  fsHooks.writeFile = async (path) => fs.symlink(target, path);
+  const status = await defaultPublisher(f).publish(writeB).finally(clearHook);
+  return { f, status, target };
+}
+
+async function runDefaultFifoHook() {
+  const f = await fixture({ record: "A" });
+  fsHooks.writeFile = async (path) => mkfifo(path);
+  const outcome = await settleOrRelease(defaultPublisher(f).publish(writeB).finally(clearHook), [
+    f.nextPath,
+    f.recordPath,
+  ]);
+  return { f, outcome, status: outcome.value };
+}
+
+describe("a failed step stops the publication there", () => {
+  const fullWriteLog = (f) => [
+    ...readerCallsOf(f),
+    ["lstat", f.folder],
+    ["lstat", f.nextPath],
+    ["syncDirectory", f.bootRoot],
+    ["unlink", f.nextPath],
+    ["writeFile", f.nextPath],
+    ["syncFile", f.nextPath],
+    ["rename", f.nextPath, f.recordPath],
+    ["syncDirectory", f.folder],
+    ...readerCallsOf(f),
+  ];
+
+  it.each(writeFailureRows)(
+    "A → B with a leftover, %s fails → io-failed, and the log ends there",
+    async (_label, op, nth, at, record, next, loaded) => {
+      const { f, log, status } = await runWriteFailure(op, nth);
+      expectStatus(status, IO_FAILED_WRITE);
+      expect(log).toEqual(fullWriteLog(f).slice(0, at + 1));
+      expect(log.at(-1)[0]).toBe(op);
+      await expectBytes(f.recordPath, RECORDS[record]);
+      if (next === "none") await expectMissing(f.nextPath);
+      else await expectBytes(f.nextPath, next === "B" ? writeB.bytes : leftoverHalfA);
+      await expectReaderLoads(f, RECORDS[loaded]);
+
+      expectStatus(await f.make().publish(writeB), {
+        state: "current",
+        reason: null,
+        failure: null,
+      });
+      await expectBytes(f.recordPath, writeB.bytes);
+      await expectMissing(f.nextPath);
+    },
+  );
+
+  it.each(newFolderFailureRows)(
+    "a new folder, %s fails → io-failed, no wifi.json, and the log ends there",
+    async (_label, overrides, at) => {
+      const { f, log, status } = await runNewFolderFailure(overrides);
+      expectStatus(status, IO_FAILED_WRITE);
+      expect(log).toEqual(
+        [
+          ["lstat", f.bootRoot],
+          ["lstat", f.folder],
+          ["lstat", f.folder],
+          ["mkdir", f.folder],
+          ["lstat", f.folder],
+        ].slice(0, at + 1),
+      );
+      expect(log.map(([name]) => name)).not.toContain("writeFile");
+      expectNoForm(
+        [JSON.stringify(status), inspect(status, { depth: null })],
+        [...passwordForms(PASSWORD_A), ...passwordForms(PASSWORD_B)],
+      );
+      await expectMissing(f.recordPath);
+      expect((await f.reader().read()).kind).toBe("absent");
+
+      expectStatus(await f.make().publish(writeB), {
+        state: "current",
+        reason: null,
+        failure: null,
+      });
+      await expectBytes(f.recordPath, writeB.bytes);
+    },
+  );
+
+  it.each(removeFailureRows)(
+    "a remove over A with a leftover, %s fails → io-failed, and the log ends there",
+    async (_label, op, nth, at, recordLeft, nextLeft) => {
+      const { f, log, status } = await runRemoveFailure(op, nth);
+      expectStatus(status, IO_FAILED_CABLE);
+      expect(log).toEqual(
+        [
+          ...readerCallsOf(f),
+          ["lstat", f.folder],
+          ["lstat", f.nextPath],
+          ["unlink", f.recordPath],
+          ["unlink", f.nextPath],
+          ["syncDirectory", f.folder],
+        ].slice(0, at + 1),
+      );
+      if (recordLeft) await expectBytes(f.recordPath, writeA.bytes);
+      else await expectMissing(f.recordPath);
+      if (nextLeft) await expectBytes(f.nextPath, writeB.bytes);
+      else await expectMissing(f.nextPath);
+
+      expectStatus(await f.make().publish(removeCable), {
+        state: "absent",
+        reason: "cable-only",
+        failure: null,
+      });
+      await expectMissing(f.recordPath);
+      await expectMissing(f.nextPath);
+    },
+  );
+
+  it.each(checkFailureRows)(
+    "%s throws → publication-unverified, and the log ends there",
+    async (_label, decision, overrides, lastCall) => {
+      const { f, log, status } = await runCheckFailure(decision, overrides);
+      const reason = decision.kind === "remove" ? decision.reason : null;
+      expectStatus(status, { state: "failed", reason, failure: "publication-unverified" });
+      expect(log.at(-1)).toEqual(lastCall(f));
+    },
+  );
+
+  it("a writeFile that rejects with a plain string → io-failed; publish resolves", async () => {
+    const { f, status } = await runPlainStringRejection();
+    expectStatus(status, IO_FAILED_WRITE);
+    expectNoForm(
+      [JSON.stringify(status), String(status), inspect(status)],
+      passwordForms(PASSWORD_B),
+    );
+    await expectBytes(f.recordPath, writeA.bytes);
+  });
+});
+
+describe("the default file operations", () => {
+  it("write B on a clean fixture → current, through the real fs (the log's positive control)", async () => {
+    const f = await fixture();
+    const publisher = defaultPublisher(f);
+    fsCalls.log.length = 0;
+    expectStatus(await publisher.publish(writeB), {
+      state: "current",
+      reason: null,
+      failure: null,
+    });
+    expect(fsCalls.log.length).toBeGreaterThan(0);
+    expect(fsCalls.log.map(([name]) => name)).toContain("rename");
+    await expectBytes(f.recordPath, writeB.bytes);
+    await expectMissing(f.nextPath);
+  });
+
+  it("a symlink where the staging file should be → io-failed (the flush does not follow it)", async () => {
+    const { f, status, target } = await runDefaultSymlinkHook();
+    expectStatus(status, IO_FAILED_WRITE);
+    await expectBytes(f.recordPath, writeA.bytes);
+    expect(await fs.readFile(target, "utf8")).toBe("target bytes");
+  });
+
+  it("a FIFO where the staging file should be → io-failed without waiting for a writer", async () => {
+    const { f, outcome, status } = await runDefaultFifoHook();
+    expect(outcome.hung).toBe(false);
+    expectStatus(status, IO_FAILED_WRITE);
+    await expectBytes(f.recordPath, writeA.bytes);
+  });
+});
+
+describe("no status or error holds the password", () => {
+  it("every failure and every refused decision, in String, JSON and inspect", async () => {
+    const entries = [];
+    for (const [, op, nth] of writeFailureRows)
+      entries.push((await runWriteFailure(op, nth)).status);
+    for (const [, overrides] of newFolderFailureRows) {
+      entries.push((await runNewFolderFailure(overrides)).status);
+    }
+    for (const [, op, nth] of removeFailureRows) {
+      entries.push((await runRemoveFailure(op, nth)).status);
+    }
+    for (const [, decision, overrides] of checkFailureRows) {
+      entries.push((await runCheckFailure(decision, overrides)).status);
+    }
+    entries.push((await runPlainStringRejection()).status);
+    entries.push((await runDefaultSymlinkHook()).status);
+    entries.push((await runDefaultFifoHook()).status);
+    const f = await fixture({ record: "A" });
+    const publisher = f.make();
+    for (const [, build] of invalidDecisions) {
+      entries.push(await publisher.publish(/** @type {any} */ (build())).catch((error) => error));
+    }
+
+    expect(entries.length).toBeGreaterThanOrEqual(29);
+    expect(entries.filter((entry) => entry instanceof Error)).toHaveLength(invalidDecisions.length);
+    const forms = [...passwordForms(PASSWORD_A), ...passwordForms(PASSWORD_B)];
+    for (const entry of entries) {
+      expectNoForm(
+        [
+          JSON.stringify(entry instanceof Error ? { ...entry } : entry),
+          String(entry),
+          inspect(entry, { depth: null, showHidden: true }),
+        ],
+        forms,
+      );
+    }
+
+    // The positive control: the bytes a current publication wrote do hold the password.
+    const written = await fixture();
+    await written.make().publish(writeB);
+    expect((await fs.readFile(written.recordPath)).toString("utf8")).toContain(PASSWORD_B);
   });
 });
