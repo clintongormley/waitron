@@ -166,6 +166,12 @@ declare module "@waitron/shared" {
     /** A box's signed query came from a key this box's stored keys and held chart do not vouch for. */
     "handover.peer_unknown": Record<string, never>;
     /**
+     * A final copy was asked of a box that has not stepped down for this operation: its
+     * restriction is missing, names another operation or successor, or it is not the operation's
+     * source. Answered 409.
+     */
+    "handover.not_stepped_down": { operationId: string };
+    /**
      * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
      * document that fences it, so it boots read-only rather than sell beside the promoted primary
      * (two nodes filing under one NIF — CLAUDE.md §5). Logged, never thrown: a fenced boot is a
