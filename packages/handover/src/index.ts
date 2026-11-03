@@ -7,6 +7,13 @@ export {
 } from "./envelope.js";
 export { bindingFingerprint, parseBinding } from "./binding.js";
 export type { HandoverBinding, HandoverScenario } from "./binding.js";
+export { assembleIndicator, signIndicator } from "./indicator.js";
+export type {
+  FinalStateFacts,
+  FinalStateIndicator,
+  ModuleEntry,
+  SchemaEntry,
+} from "./indicator.js";
 export { NODE_LOCAL_MANIFEST } from "./manifest.js";
 export type { NodeLocalItem, NodeLocalManifestRow } from "./manifest.js";
 export { HANDOVER_STATES, initialState, isOpen, nextState } from "./states.js";
