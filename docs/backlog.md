@@ -2463,7 +2463,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A773-2. Firing and the pass.** The [reviewed implementation
   plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) leaves PRs B–D: Requested, scoped
   pass release, station settings and coverage warnings, ticket presentation and physical
-  schema/configuration retirement. PR B is complete (B4a #2425, then B4b; [B4
+  schema/configuration retirement. PR B is complete (B4a #2425, then B4b #2440; [B4
   plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)). Next: PR C, the station editor's
   "Waits for the pass", its import check and the coverage warning; no station can be set to wait
   for the pass until then. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
@@ -4368,8 +4368,8 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   pages; English and Spanish). The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients).
   Done: setup (#2435) and the till's counter, floor, menu, order, More menu, person and kitchen
   notices/merge help (#2437, #2439), but for an owner choice on the Transfers help. Left: the
-  dashboard and server pages; lane C's B4b rewrites the kitchen card, columns, pass and More menu
-  Pass help.
+  dashboard and server pages; A773-2 B4b (#2440) rewrote the kitchen card, columns, pass and More
+  menu Pass help.
   [Detail](backlog/dashboard.md#a1315-bring-every-help-bubble-down-to-orientation-one-area-per-pr)
 
 - **`wt-combobox` without a search box never exposes `aria-required`**

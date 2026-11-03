@@ -1342,8 +1342,8 @@ Dashboard, till and server pages, in English and Spanish. The rule is in
 describes first, move each dropped fact into its linked guide section, and list every changed text
 before and after.
 
-Left: the dashboard and server pages. Lane C's B4b rewrites the kitchen card, columns, pass and
-More menu Pass help, so this work leaves those alone.
+Left: the dashboard and server pages. A773-2 B4b (#2440) rewrote the kitchen card, columns, pass
+and More menu Pass help, so this work leaves those alone.
 
 - **The till's Transfers help** (`help.more.transfers`): its last sentence, on the order counts, is
   more than orientation, but `apps/till/src/i18n/help-strings.test.ts` (A757 slice 6) pins it word
