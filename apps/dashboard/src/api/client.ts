@@ -917,6 +917,7 @@ export interface ProfileScopeChoices {
 
 export const KITCHEN_SCREEN_KINDS = ["station", "pass", "pass_monitor"] as const;
 export type KitchenScreenKind = (typeof KITCHEN_SCREEN_KINDS)[number];
+export type PassKind = Exclude<KitchenScreenKind, "station">;
 
 /** null is every station or every zone; a station screen has no zones and is always null. */
 export interface KitchenScreenScope {
@@ -3943,6 +3944,9 @@ export class DashboardApi {
       profileId: string;
       /** Replaces the device's kitchen screens and clears what narrowings took; absent leaves them. */
       kitchenScreens?: DeviceKitchenScreen[];
+      /** Whether each pass kind shows other stations' dishes; null is the profile's setting, an
+       *  absent kind keeps what is stored. */
+      kitchenScreenDisplay?: Partial<Record<PassKind, boolean | null>>;
       /** Null puts the role on Use default. */
       receiptPrinterId: string | null;
       paymentSlipPrinterId: string | null;

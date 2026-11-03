@@ -514,6 +514,54 @@ describe.each(["light", "dark"] as const)("devices-screen a11y (%s theme)", (the
     },
   );
 
+  it.each([390, 1280])(
+    "renders a pass display's choice for other stations' dishes, stored and changed, accessibly at %ipx",
+    async (width) => {
+      await page.viewport(width, 900);
+      const pass: DeviceRow = {
+        ...devices[0]!,
+        id: "passdisplay",
+        kind: "kds_station",
+        deviceProfileId: "dp3",
+        kitchenScreens: [
+          {
+            kind: "pass",
+            available: true,
+            everyStation: true,
+            everyZone: true,
+            profileEveryStation: true,
+            stations: [],
+            zones: null,
+            nonPassStationsOverride: false,
+            showNonPassStations: false,
+          },
+        ],
+      };
+      const { el, host } = await mountWidget<DevicesScreen>(
+        "dashboard-devices-screen",
+        { api: stubApi({ listDevices: vi.fn().mockResolvedValue([pass]) }) },
+        theme,
+      );
+      await flush(el);
+      deep(el.shadowRoot!, "[data-test=edit-device-passdisplay]")!.click();
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.querySelector("[data-test=edit-other-stations]")).not.toBeNull(),
+      );
+      await flush(el);
+      const choice = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
+        "[data-test=edit-other-stations]",
+      )!;
+      expect(choice.value).toBe("hide");
+      await expectNoA11yViolations(host);
+      await chooseOption(choice, "show");
+      await flush(el);
+      expect(choice.value).toBe("show");
+      expect(el.scrollWidth).toBeLessThanOrEqual(width);
+      await expectNoA11yViolations(host);
+      await page.viewport(1280, 900);
+    },
+  );
+
   it("renders a till's Edit dialog with Save quiet, and then with a change, accessibly", async () => {
     const till: DeviceRow = {
       ...devices[0]!,

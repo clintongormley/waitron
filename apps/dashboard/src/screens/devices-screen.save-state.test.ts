@@ -496,6 +496,43 @@ describe("the Edit dialog's Save", () => {
     expect(await state(el, "edit-save")).toEqual(quiet);
   });
 
+  it("the choice for other stations' dishes wakes Save, choosing it back quiets it, and a save sends it alone", async () => {
+    const passDisplay: DeviceRow = {
+      ...onOffStation,
+      id: "k5",
+      label: "Pass display",
+      kitchenScreens: [
+        {
+          kind: "pass",
+          available: true,
+          everyStation: true,
+          everyZone: true,
+          profileEveryStation: true,
+          stations: [{ id: "s1", name: "Kitchen", available: true, switchedOff: false }],
+          zones: null,
+          nonPassStationsOverride: null,
+          showNonPassStations: true,
+        },
+      ],
+    };
+    const { el, api } = await openEdit(
+      "k5",
+      stubApi({ listDevices: vi.fn().mockResolvedValue([till, passDisplay]) }),
+    );
+    expect(value(el, "edit-other-stations")).toBe("profile");
+    expect(await state(el, "edit-save")).toEqual(quiet);
+    await choose(el, "edit-other-stations", "hide");
+    expect(await state(el, "edit-save")).toEqual(ready);
+    await choose(el, "edit-other-stations", "profile");
+    expect(await state(el, "edit-save")).toEqual(quiet);
+    await choose(el, "edit-other-stations", "show");
+    await press(el, "edit-save");
+    await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+    const body = vi.mocked(api.updateDevice).mock.calls[0]![1];
+    expect(body.kitchenScreenDisplay).toEqual({ pass: true });
+    expect(body).not.toHaveProperty("kitchenScreens");
+  });
+
   it("another profile wakes Save", async () => {
     const { el } = await openEdit();
     await choose(el, "edit-profile", "pc");

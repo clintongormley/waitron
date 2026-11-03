@@ -1515,6 +1515,9 @@ export const en = {
   "devices.kitchen_screen_none_offered": "This profile offers none yet",
   "devices.station_screen_shows": "Kitchen screen shows",
   "devices.pass_screen_shows": "Pass screen shows",
+  "devices.use_profile_setting": "Use the profile's setting",
+  "devices.other_stations_show": "Show",
+  "devices.other_stations_hide": "Hide",
   "devices.every_station_profile": "Every station the profile allows",
   "devices.no_longer_available": "No longer available",
   "devices.empty_profile_stations":
@@ -5291,6 +5294,9 @@ export const es: Record<StringKey, string> = {
   "devices.kitchen_screen_none_offered": "Este perfil aún no ofrece ninguna",
   "devices.station_screen_shows": "La pantalla de cocina muestra",
   "devices.pass_screen_shows": "La pantalla de pase muestra",
+  "devices.use_profile_setting": "Usar la configuración del perfil",
+  "devices.other_stations_show": "Mostrar",
+  "devices.other_stations_hide": "Ocultar",
   "devices.every_station_profile": "Todas las estaciones que permite el perfil",
   "devices.no_longer_available": "Ya no está disponible",
   "devices.empty_profile_stations":
