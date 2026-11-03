@@ -209,6 +209,7 @@ import { startRestricted } from "./restricted-start.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
+import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
 import { readPeerNames } from "./waiting-page.js";
 import { startWaiting, WAIT_RECHECK_MS } from "./waiting-start.js";
@@ -1770,6 +1771,19 @@ async function bootServer(
           ),
         (restrictedApp) =>
           mountNodeMembershipApi(restrictedApp, { db, node: store.node, nodeId: node.nodeId }, log),
+        (restrictedApp) =>
+          mountHandoverSourceApi(
+            restrictedApp,
+            {
+              venue: db,
+              node: store.node,
+              stateDir: config.stateDir,
+              ring,
+              nodeId: node.nodeId,
+              modules: setsToMigrate,
+            },
+            log,
+          ),
       ],
       log,
       listen: (restrictedApp) => {

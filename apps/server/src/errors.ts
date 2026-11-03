@@ -171,6 +171,14 @@ declare module "@waitron/shared" {
      * source. Answered 409.
      */
     "handover.not_stepped_down": { operationId: string };
+    /** A box asked for the final copy of a handover operation this box holds no record of. */
+    "handover.operation_unknown": { operationId: string };
+    /**
+     * The final copy's file was missing or differed from the indicator, and a copy taken again
+     * from venue.db does not match the indicator either: venue.db changed after the indicator was
+     * signed. Answered 409.
+     */
+    "handover.final_copy_changed": { operationId: string };
     /**
      * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
      * document that fences it, so it boots read-only rather than sell beside the promoted primary

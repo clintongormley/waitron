@@ -126,6 +126,34 @@ async function boot(
   return { port: httpPort(), venue };
 }
 
+const FINAL_COPY_OP = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+/** Asks for the final copy's indicator of an operation this box never held, as the main box. */
+async function askForIndicator(port: number): Promise<{ status: number; code: unknown }> {
+  const response = await fetch(
+    `http://127.0.0.1:${port}/api/node/handover/${FINAL_COPY_OP}/indicator`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        signEnvelope(
+          "query",
+          { nonce: "c".repeat(20), atMs: 1, operationId: FINAL_COPY_OP },
+          MAIN_BOX,
+        ),
+      ),
+    },
+  );
+  const text = await response.text();
+  let code: unknown = null;
+  try {
+    code = (JSON.parse(text) as { error?: { code?: unknown } }).error?.code ?? null;
+  } catch {
+    // A route that is not mounted answers no JSON.
+  }
+  return { status: response.status, code };
+}
+
 describe("a box holding a handover restriction starts restricted", () => {
   // Every case here only reads, so they share one start.
   const suite = useVenueDb({ migrations, resetPerTest: false });
@@ -184,6 +212,13 @@ describe("a box holding a handover restriction starts restricted", () => {
       },
       openOperation: null,
       requestedOperation: null,
+    });
+  }, 60_000);
+
+  it("serves the final copy's routes", async () => {
+    expect(await askForIndicator(start().port)).toEqual({
+      status: 404,
+      code: "handover.operation_unknown",
     });
   }, 60_000);
 
@@ -247,6 +282,13 @@ describe("a full start's stepdown, through its test seam", () => {
   const suite = useVenueDb({ migrations });
 
   afterEach(stop);
+
+  it("a full start does not serve the final copy's routes", async () => {
+    const { port } = await boot(suite, { restricted: false });
+    const answer = await askForIndicator(port);
+    expect(answer.status).toBe(404);
+    expect(answer.code).not.toBe("handover.operation_unknown");
+  }, 60_000);
 
   it("a full start answers a peer's signed query", async () => {
     const { port, venue } = await boot(suite, { restricted: false });

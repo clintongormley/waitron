@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { KeyRing } from "@waitron/credentials";
 import { withNodeTransaction, type Database, type NodeDatabase } from "@waitron/db";
@@ -56,6 +56,11 @@ export function journalDigest(hashes: readonly string[]): string {
   return sha256Hex(hashes.join("\n"));
 }
 
+/** Where a stepped-down box keeps the final copy of venue.db its indicator describes. */
+export function finalCopyPath(stateDir: string, operationId: string): string {
+  return join(stateDir, "handover", operationId, "venue.db");
+}
+
 const JOURNAL_TABLE = /^__drizzle_migrations_[a-z_]+$/;
 
 /** Each node handle's capture in flight, by operation, so two calls take one copy. */
@@ -96,9 +101,8 @@ async function captureOnce(deps: CaptureDeps, operationId: string): Promise<Fina
     // from a missing one would say every file is absent.
     throw new Error(`the state folder ${deps.stateDir} does not exist`);
   }
-  const folder = join(deps.stateDir, "handover", operationId);
-  await mkdir(folder, { recursive: true });
-  const path = join(folder, "venue.db");
+  const path = finalCopyPath(deps.stateDir, operationId);
+  await mkdir(dirname(path), { recursive: true });
   // VACUUM INTO: a file a read-only open leaves byte for byte as it was.
   await deps.venue.archiveTo(path);
   const facts = await describeCopy(deps, binding, path);
@@ -211,9 +215,16 @@ async function describeCopy(
 }
 
 async function digestFile(path: string): Promise<{ sha256: string; bytes: number }> {
+  return digestBytes(createReadStream(path));
+}
+
+/** The SHA-256, as lowercase hex, and the length of the bytes a stream yields. */
+export async function digestBytes(
+  stream: AsyncIterable<unknown>,
+): Promise<{ sha256: string; bytes: number }> {
   const hash = createHash("sha256");
   let bytes = 0;
-  for await (const chunk of createReadStream(path)) {
+  for await (const chunk of stream) {
     hash.update(chunk as Buffer);
     bytes += (chunk as Buffer).length;
   }

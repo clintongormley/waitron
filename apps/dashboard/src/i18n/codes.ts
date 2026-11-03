@@ -1349,6 +1349,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This server has not handed over its work in this handover, so it took no final copy of the venue. Nothing was changed.",
     es: "Este servidor no ha pasado su trabajo en este cambio de servidor, así que no ha hecho la copia final del local. No se ha cambiado nada.",
   },
+  "handover.operation_unknown": {
+    en: "This server holds no record of that handover, so it sent nothing. Nothing was changed.",
+    es: "Este servidor no tiene constancia de ese cambio de servidor, así que no ha enviado nada. No se ha cambiado nada.",
+  },
+  "handover.final_copy_changed": {
+    en: "This server's venue data changed after it made its final copy, so it did not send the copy. Nothing was changed. Start the handover again.",
+    es: "Los datos del local en este servidor cambiaron después de hacer la copia final, así que no ha enviado la copia. No se ha cambiado nada. Vuelve a empezar el cambio de servidor.",
+  },
   "handover.summary_failed": {
     en: "The handover stopped, because this server could not read part of the venue's data from its copy. Nothing was sent or changed. Start the handover again.",
     es: "El cambio de servidor se ha parado, porque este servidor no ha podido leer parte de los datos del local en su copia. No se ha enviado ni cambiado nada. Vuelve a empezar el cambio de servidor.",
