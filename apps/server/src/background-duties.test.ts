@@ -174,6 +174,41 @@ describe("background duties", () => {
     expect(calls).toContain("stop appendOnlyWatch");
   });
 
+  it("carries on past a failing abort to every other abort and closer, then rejects with the first failure", async () => {
+    const calls: string[] = [];
+    const first = new Error("cloud abort failed");
+    let finish!: () => void;
+    const running = new Promise<void>((resolve) => (finish = resolve));
+    const handles = recordingHandles(calls, {
+      cloudController: {
+        abort: () => {
+          throw first;
+        },
+      },
+      attendanceController: {
+        abort: () => {
+          throw new Error("attendance abort failed");
+        },
+      },
+      loop: running,
+      clockWatch: { stop: () => Promise.reject(new Error("clock watch failed")) },
+    });
+
+    let settled = false;
+    const stopping = stopBackgroundDuties(backgroundDuties(handles)).finally(
+      () => (settled = true),
+    );
+    stopping.catch(() => {});
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(settled).toBe(false);
+    expect(calls).toContain("abort tenderRefundController");
+    expect(calls).not.toContain("stop streamHost");
+
+    finish();
+    await expect(stopping).rejects.toBe(first);
+    expect(calls.at(-1)).toBe("stop streamHost");
+  });
+
   it("awaits a stop called early in its place, without calling it again", async () => {
     let stops = 0;
     let finish!: () => void;
