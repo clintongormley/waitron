@@ -204,6 +204,8 @@ accept: `winners=2/2 store-keys=5`. So the assertion tests the fence and not an 
 
 ### S2 — no second tax-agency filing · critical · **FAIL**
 
+**2026-11-03:** re-run with A1018's return batch — see [S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03).
+
 **This is the gate's negative result.** The rig found a way the loop as modelled here submits one sale
 to the tax agency twice. Nothing here proposes a fix, and the scenario records the failure rather than
 reporting PASS beside it.
@@ -934,6 +936,79 @@ and not re-run during review because the Linux binaries are not kept on disk (th
 them inside its container). That is consistent with the binary carrying Go's fallback root certificates, which
 would explain the control, but it was not established that those roots verified S3's certificate. The
 first native amd64 confirmation is the first CI job that runs the pinned binary.
+
+## S2 re-run with A1018's return batch (2026-11-03)
+
+A947 §7.1, as A1018 amends it, made a re-run of S2 the gate for building the return batch: model
+the fence and the fiscal-only full-state batch, add the replay as a part of its own, and see it
+pass, with three controls that must fail. That re-run was added to S2 as Parts F and G.
+
+**What the new parts model.** The old box comes back holding four records of its own chain, and
+the box that replaced it holds a copy with the first two, both waiting to be filed:
+
+- record 1, which the old box filed after that copy was taken;
+- record 2, which nobody has filed (the old box's one attempt was refused);
+- record 3, which the old box was part-way through sending when the power went, before the
+  request left — so it is marked "being sent" and was never filed;
+- record 4, never attempted.
+
+The old box is fenced (its filing run does nothing), then builds the batch: its records after the
+head the replacement reported, the filing state of every record of its chain, and "being sent"
+rows turned back to "waiting". The batch has no field for sales, so none can travel. The
+replacement pauses filing for the old box's chain, the batch arrives in the middle of one of its
+filing runs, and it then files what is left. Part G then builds the batch again from the same
+heads and applies the first batch a second time.
+
+**The result.** Parts F and G pass: every record of both chains is filed exactly once, no sale
+travelled, the batch built again is the same bytes, and the replay changes nothing and files
+nothing. Each control fails:
+
+- **Fence removed:** records 2 and 4 are filed twice — once by the old box after the batch was
+  cut, once by the replacement. Its rebuilt batch is no longer the same bytes.
+- **Batch cut back to missing records only:** record 1 is filed twice — the replacement never
+  learns the old box filed it.
+- **Batch built without turning "being sent" back to "waiting":** record 3 is **never filed**.
+  This is not a second filing, which is what the A1018 plan's Task 9.2 expected of all three. The
+  record arrives marked "being sent", and this rig's filing run picks up only waiting rows; the
+  real drain resets such a row after five minutes (`recoverStaleClaims`, the model gap the S2
+  section above names — read there, not run here). So this control shows what the turning-back buys in this rig: the record is filed
+  at all, without waiting on that reset.
+
+What each control would print was written into the scenario's comment before the controls were
+first run, and each printed it.
+
+**S2's row is still FAIL**, for the same two reasons as on 2026-09-18: Parts D and E's second half
+still measure the old tail ship from an unfenced sender, and their text in the row below is
+byte-identical to the recorded run's. Whether S2's verdict should now be read off Parts F and G
+alone is not decided here.
+
+**One more measurement, not part of the scenario:** on a throwaway copy of the rig with the
+filing run's pause ignored, Part F filed record 1 twice (`returned-m1:1`): the batch arrived while
+the replacement was sending its copy of record 1. No control in the scenario drives the pause.
+
+The run, on the tree committed as `95d0ee3452`, Docker running, node v26.13.0:
+
+```
+TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sqlite-failover scenarios
+```
+
+```
+| id | title | verdict | detail |
+| --- | --- | --- | --- |
+| S0 | the happy failover loop, end to end | PASS | version=0.5.17 happy-box-a-filed=[box-a:1,box-a:2,box-a:3,box-a:4] happy-cloud-first-drain=[cloud-1:1] happy-cloud-second-drain=[box-a:5,box-a:6] happy-submissions=7 happy-distinct=7 happy-refiled=0 happy-current={term:2,node:cloud-1,gen:gen-2-cloud-1} control-ship=off control-held=box-a:1..4 control-refused="the cloud holds box-a's records 1..6 exactly as box-a wrote them" lag-sync-after-drain=off lag-refiled=4 lag-refiled-ids=[box-a:1,box-a:2,box-a:3,box-a:4] lag-refiled-shape=verbatim-same-identity lag-cloud-first-drain=[box-a:1,box-a:2,box-a:3,box-a:4,cloud-1:1] |
+| S1 | double promotion fenced by the store's conditional write | PASS | fenced: winners=1/2 winner=box-a store-keys=3; control: winners=2/2 store-keys=5 |
+| S2 | no second tax-agency filing on a re-sent or recomputed tail ship | FAIL | RETRIED-IN-FULL ship safe: filed=13 double=0 (A receiver files 5 once; B receiver files none of the owner's 4; C blocked chain drains 4 next pass after 1 refusal). D REFRESHED-SUMMARY ship files twice: refreshed-sender:1 (fresh tail carried records [2]; receiver left 1 pendiente acked=0, 2 enviado acked=1). E ship issued mid-pass for a blocked chain: that chain files nothing more that pass, next pass files 3 once, double=0. E tail taken mid-drain carried [1 enviando, 2 pendiente]: receiver left 1 enviando acked=0, 2 pendiente acked=0, and its own drain claims no enviando row, so 1 enviando acked=0 is stuck against that drain and cloud-f:2 is filed twice. F RETURN BATCH from a fenced sender: filed-twice=none never-filed=none receiver-left=[1 enviado acked=1, 2 enviado acked=1, 3 enviado acked=1, 4 enviado acked=1] returned-from-enviando=[3] sales-carried=0. G REPLAY: same-bytes=true replay-applied=0 filed-after-replay=0. F controls: no-fence filed-twice=no-fence-m1:2,no-fence-m1:4 never-filed=none receiver-left=[1 enviado acked=1, 2 enviado acked=1, 3 enviado acked=1, 4 enviado acked=1] same-bytes=false; missing-only filed-twice=missing-only-m1:1 never-filed=none receiver-left=[1 enviado acked=1, 2 enviado acked=1, 3 enviado acked=1, 4 enviado acked=1]; keeps-enviando filed-twice=none never-filed=keeps-enviando-m1:3 receiver-left=[1 enviado acked=1, 2 enviado acked=1, 3 enviando acked=0, 4 enviado acked=1]. Controls double-file: regressing=3 insert-only=2 |
+| S3 | a copied replica equals a direct stream | PASS | version=0.5.17 source-keys=7 source-deleted=1 deletion-waited-ms=3382 direct-rows=16 foreign-keys=9 copied=7 mirror-deleted=6 copied-rows=16 copied-sha-equal=true control-foreign-keys=9 control-copied=7 control-stale=6 control-rows=9 control-nodes=[box-b] control-integrity="row 1 missing from index sqlite_autoindex_chain_head_1" control-refused="the copied replica restores an intact database" same-lineage-stale=1 same-lineage-rows=16 same-lineage-additive="identical" |
+| S4 | offline write load | MEASURED | version=0.5.17 sales=7500 days=30 sales-per-day=250 day-rate=assumed-not-measured rounds=15 idle-ms=1500 offline-daemon=ECONNREFUSED offline-attach-ms=1121 offline-daemon-alive-after-load=true p50-ms=0.123 p95-ms=0.295 p99-ms=0.424 max-ms=3.234 first-day-p95-ms=0.434 last-day-p95-ms=0.132 peak-wal-bytes=309741632 wal-bytes-per-sale=41299 offline-checkpoint-rounds=0/15 checkpointed-db-bytes=3866624 wal-amplification=80.1x spec-small-multiple-ceiling=not-met spec-small-multiple=10 offline-days-per-gib=104 reclaim-offline="ms=11525.6 busy=1 log=75180 checkpointed=4 wal=309741632->309741632 shrank=false" reclaim-next-sale-ms=0.578 reclaim-control="ms=19 busy=0 log=0 checkpointed=0 wal=309778712->0 shrank=true" control="peak-wal=21242752 end-wal=21242752 db=3862528 store-keys=34 checkpoint-rounds=15/15 p95-ms=0.249 p99-ms=0.375" breaches=none |
+| S5 | supplier-invoice clash reported and skipped, ship otherwise intact | PASS | applied=13 clashes=1 retry-applied=0 retry-clashes=1; silent-drop: clashes=0 clash-rows-held=0 records-held=3/3; unisolated: refused="UNIQUE constraint failed: supplier_invoices.supplier, supplier_invoices.invoice_number" records-held=0/3 sales-held=0/3 clean-invoice-rows-held=0; not-a-uniqueness-refusal: refused="the receiver refuses this row for its own reasons" records-held=0/3 |
+| S6 | store conditional write | PASS | create-only=true if-match=refuses-stale race=1/8 unfenced=8/8 |
+| LS | litestream roundtrip | PASS | version=0.5.17 one-shot-keys=1 one-shot-restored=3 daemon-restored=4 first-sync-restores=3 after-write-restores=3 control-refused="litestream restore exited 1: Error: no matching backup files available" |
+| RUNNER | the runner's exit rule and --json dump | PASS | exit-rule-cases=8 critical-fail-exit=1 non-critical-fail-exit=0 critical-skipped-exit=0 critical-measured-exit=0 critical-pass-exit=0 empty-run-exit=0 throw-verdict=FAIL throw-critical=true throw-exit=1 json-parsed=true json-rows=3 json-exit-code=1 json-critical-ids=1 table-rows=5 table-escapes-pipe=true table-flattens-newline=true json-selected-by-flag=true |
+| smoke | harness up: store + sqlite + model | PASS | chain advanced to 2, 4 mutations refused, store round-trip ok |
+```
+
+stderr: `CRITICAL failure: S2 — see the results above.` Exit status **1**. Every other scenario
+has the verdict it had on 2026-09-18: S0, S1, S3, S5, S6, LS, RUNNER and smoke PASS, S4 MEASURED.
 
 ---
 

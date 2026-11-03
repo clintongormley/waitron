@@ -1068,6 +1068,13 @@ is not the measurement, and it may differ from run to run.
 
 ## What S2 measures, and what it does not
 
+> **2026-11-03 — Parts F and G, and their three controls, model A1018's fiscal-only return batch
+> from a fenced sender** (A947 §7.1 as amended). Run them with the whole table:
+> `TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sqlite-failover scenarios`, and
+> read the `F` and `G` segments of S2's row. The result and what each control prints are in
+> `docs/research/2026-09-16-sqlite-failover-prototype.md` → "S2 re-run with A1018's return batch".
+> The rest of this section is about Parts A to E and is left as it was written.
+
 **S2's verdict is FAIL, and that is a result rather than a broken harness.** The rig found a way the
 loop as modelled here submits one sale to the tax agency twice. The scenario records it instead of
 reporting PASS beside it, and nothing here proposes a fix. **How much that costs was revised on owner
