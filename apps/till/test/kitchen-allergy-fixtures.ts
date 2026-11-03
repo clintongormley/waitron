@@ -1,6 +1,7 @@
 import type { KitchenAllergyBlock } from "@waitron/module";
-import type { ExpoOrder, KitchenNotice, StationQueueGroup } from "../src/api/client.js";
+import type { ExpoOrder, KitchenNotice, PassBoard, StationQueueGroup } from "../src/api/client.js";
 import { ALLERGEN_NAMES } from "../src/i18n/allergen-names.js";
+import { passBoard, passCard, passItem } from "./pass-board-fixtures.js";
 
 export const allergyBlock: KitchenAllergyBlock = {
   who: "Window <guest> {allergens}",
@@ -101,6 +102,58 @@ export function allergyOrder(): ExpoOrder {
       },
     ],
   };
+}
+/** The pass's card for {@link allergyQueue}'s order: an In progress bill card, or a party's group
+ * card. */
+export function allergyBoard(kind: "bill" | "group" = "bill"): PassBoard {
+  const group = allergyQueue();
+  return passBoard({
+    inProgress: [
+      passCard({
+        ...(kind === "bill"
+          ? {
+              key: `bill:${group.orderId}`,
+              target: { kind: "bill", workingOrderId: group.orderId },
+            }
+          : {
+              key: "group:group-1",
+              target: { kind: "group", partyId: "party-1", groupId: "group-1" },
+              kind: "next_course",
+              party: { id: "party-1", revision: 1 },
+              group: { displayNumber: 1, position: 1 },
+            }),
+        requestedAt: allergyTime,
+        orders: [
+          {
+            orderId: group.orderId,
+            orderNumber: group.orderNumber,
+            tableLabel: group.label ?? undefined,
+            kitchenNote: group.kitchenNote,
+          },
+        ],
+        items: group.items.map((item) =>
+          passItem({
+            id: item.id,
+            allergy: item.allergy,
+            name: item.name,
+            qty: item.quantity,
+            stationName: "Grill",
+            state: item.state,
+            phase: item.state === "ready" ? "ready" : "waiting",
+            firedAt: item.firedAt,
+            note: item.note,
+            queuedAt: allergyTime,
+            requestedAt: allergyTime,
+            readyAt: item.state === "ready" ? allergyTime : null,
+            thresholds: allergyThresholds,
+            lineId: item.workingOrderLineId,
+            orderId: group.orderId,
+            course: null,
+          }),
+        ),
+      }),
+    ],
+  });
 }
 export function allergyNotice(kind: "changed" | "removed"): KitchenNotice {
   return {

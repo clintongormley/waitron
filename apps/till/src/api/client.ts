@@ -1938,8 +1938,8 @@ export interface ExpoItem {
   queuedAt: string;
   /** This item's OWN station's order-timing thresholds (see {@link queuedAt}). */
   thresholds: StationThresholds;
-  /** This item's age band on the server's clock at fetch time. Not read by `till-expo-screen`,
-   *  which derives the band from {@link queuedAt} and {@link thresholds}. */
+  /** This item's age band on the server's clock at fetch time. The pass board does not read it:
+   *  `passItemBand` derives the band on the till's own clock. */
   band: TimingBand;
 }
 

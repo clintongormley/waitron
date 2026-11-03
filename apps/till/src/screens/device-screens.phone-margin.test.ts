@@ -7,12 +7,12 @@ import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
 import type { TableState, TillApi } from "../api/client.js";
 import { mount as mountTableOrder } from "./till-table-order-screen.test-helpers.js";
 import "./till-floor-screen.js";
-import "./till-expo-screen.js";
+import "./till-pass-screen.js";
 import "./till-station-screen.js";
 import "./till-counter-screen.js";
 import "./till-schedule-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
-import type { TillExpoScreen } from "./till-expo-screen.js";
+import type { TillPassScreen } from "./till-pass-screen.js";
 import type { TillStationScreen } from "./till-station-screen.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 import type { TillScheduleScreen } from "./till-schedule-screen.js";
@@ -83,7 +83,7 @@ const screens: [string, () => Promise<HTMLElement>, string, { left: number; widt
   [
     "expo",
     async () =>
-      (await mountWidget<TillExpoScreen>("till-expo-screen", { embedded: true, api: pendingApi }))
+      (await mountWidget<TillPassScreen>("till-pass-screen", { embedded: true, api: pendingApi }))
         .el,
     ".screen",
     TILL_SPACING,
