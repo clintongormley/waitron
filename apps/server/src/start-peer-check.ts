@@ -13,6 +13,7 @@ import { servingPrimaryNodeId, type SignedMembershipDocument } from "@waitron/me
 import {
   nodeHandoverOperations,
   readHandoverRestriction,
+  readMirrorLink,
   readOpenHandoverOperation,
   recordHandoverRestrictionTx,
 } from "@waitron/node-db";
@@ -21,6 +22,7 @@ import {
   checkPeersAtStart,
   persistingAccept,
   type PeerAnswer,
+  type SilentReason,
   type StartCheckResult,
 } from "./boot-peer-check.js";
 import { peerKeyOf, signAsThisBox } from "./handover-signing.js";
@@ -135,6 +137,8 @@ export async function runStartPeerCheck(deps: StartPeerCheckDeps): Promise<Start
   const ownEntry = held?.body.nodes.find((n) => n.nodeId === nodeId);
   let answers: readonly PeerAnswer[] = [];
   let keyOf: Promise<(id: string) => string | undefined> | undefined;
+  let link: ReturnType<typeof readMirrorLink> | undefined;
+  const askWhy = new Map<string, SilentReason>();
   const result = await checkPeersAtStart({
     held,
     nodeId,
@@ -144,9 +148,15 @@ export async function runStartPeerCheck(deps: StartPeerCheckDeps): Promise<Start
     ask: async (peer) => {
       // Read only when a peer is asked: a box whose chart lists no other box needs no key.
       keyOf ??= peerKeyOf({ db, node, ring, nodeId });
+      link ??= readMirrorLink(node, nodeId);
+      // A spare holds its main box's authority from adoption (`adopt.ts`, `writeMirrorLinkTx`).
+      const pinned = await link;
       return askPeerStatus({
         sign: (body) => signAsThisBox({ node, ring, nodeId }, "query", body),
         publicKeyOf: await keyOf,
+        authorityOf: (id) =>
+          pinned !== null && pinned.originNodeId === id ? pinned.boxCaPem : undefined,
+        onSilent: (id, reason) => askWhy.set(id, reason),
         ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
         timeoutMs,
       })(peer);
@@ -162,7 +172,12 @@ export async function runStartPeerCheck(deps: StartPeerCheckDeps): Promise<Start
   });
   deps.log("info", "handover.start_check", {
     result,
-    peers: answers.map(({ nodeId: id, answer, counted }) => ({ nodeId: id, answer, counted })),
+    peers: answers.map(({ nodeId: id, answer, counted, why }) => ({
+      nodeId: id,
+      answer,
+      counted,
+      ...(why === undefined ? {} : { why: why === "no_answer" ? (askWhy.get(id) ?? why) : why }),
+    })),
   });
   return {
     result,

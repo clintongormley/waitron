@@ -69,12 +69,10 @@ import {
   setSingletonRole,
 } from "@waitron/node-db";
 import { finishPromotedRole } from "./promoted-role.js";
-import type { StartCheckResult } from "./boot-peer-check.js";
 import {
   recordSupersededAtStart,
   repairAtStart,
   runStartPeerCheck,
-  successorAfterCheck,
   type StartPeerCheckOutcome,
 } from "./start-peer-check.js";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
@@ -966,25 +964,11 @@ export interface StartServerSeams {
   };
   /**
    * Stands in for the start check on a box that is not a mirror. A suite sets it, saying why at the
-   * site, when its chart lists a joined box that is not running.
+   * site, when its chart lists a joined box that is not running. `superseded` takes the restricted
+   * start only with a `successorNodeId`; with `null` it takes Ruling R7's path, where only a held
+   * chart that fences this box stops it from selling.
    */
-  peerCheck?: () => Promise<StartCheckResult>;
-}
-
-/** A seam's result, with the successor read from the held chart alone. */
-async function peerCheckFromSeam(
-  peerCheck: () => Promise<StartCheckResult>,
-  db: Database,
-  nodeId: string,
-): Promise<StartPeerCheckOutcome> {
-  const result = await peerCheck();
-  return {
-    result,
-    successorNodeId:
-      result === "superseded"
-        ? successorAfterCheck(await readNodeMembership(db), nodeId, [])
-        : null,
-  };
+  peerCheck?: () => Promise<StartPeerCheckOutcome>;
 }
 
 /**
@@ -1781,8 +1765,9 @@ async function bootServer(
             advertisedOrigin: config.advertisedOrigin,
             log,
           })
-        : await peerCheckFromSeam(seams.peerCheck, db, config.node.nodeId);
+        : await seams.peerCheck();
     if (outcome.result === "superseded" && outcome.successorNodeId !== null) {
+      // The check saved any newer chart in venue.db first; the restriction goes to node.db after.
       const held = await readNodeMembership(db);
       await recordSupersededAtStart(
         { node: store.node, nodeId: config.node.nodeId },

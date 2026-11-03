@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { createServer as createHttpServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { signEnvelope, type HandoverState } from "@waitron/handover";
 import {
   generateNodeKeyPair,
@@ -16,6 +18,12 @@ import {
   type CheckPeersDeps,
 } from "./boot-peer-check.js";
 import type { PeerOperationStatus, PeerStatusBody } from "./peer-status-api.js";
+import {
+  mintBoxAuthority,
+  startBoxServer,
+  type BoxAuthority,
+  type BoxServer,
+} from "./testing/box-authority.js";
 
 const SELF = "m1";
 const SPARE = "m2";
@@ -713,8 +721,42 @@ describe("checkPeersAtStart — what each peer answered", () => {
     expect(onAnswers.mock.calls[0]![0]).toEqual([
       { nodeId: SPARE, answer: "F", counted: true, byOperation: true },
       { nodeId: OLD, answer: "=", counted: false, byOperation: false },
-      { nodeId: "m3", answer: "S", counted: true, byOperation: false },
+      { nodeId: "m3", answer: "S", counted: true, byOperation: false, why: "no_answer" },
     ]);
+  });
+
+  it.each<[string, Answers, string | undefined, string]>([
+    ["no address", {}, "", "no_address"],
+    ["this box's own address", {}, OWN_ORIGIN, "own_address"],
+    ["no answer in time", { [SPARE]: "hang" }, undefined, "timed_out"],
+    ["a failed ask", { [SPARE]: "throw" }, undefined, "no_answer"],
+    ["no answer", { [SPARE]: null }, undefined, "no_answer"],
+    ["no chart", { [SPARE]: status(null) }, undefined, "no_chart"],
+    [
+      "an unreadable part",
+      { [SPARE]: { ...status(SAME), restriction: "x" as never } },
+      undefined,
+      "unreadable_part",
+    ],
+  ])("says why an S is silent: %s", async (_label, answers, url, reason) => {
+    const onAnswers = vi.fn();
+    const held = chart(3, [
+      [SELF, "serving-primary", OWN_ORIGIN],
+      [SPARE, "serving-secondary", url],
+    ]);
+    await checkPeersAtStart(deps({ held, answers, onAnswers }));
+    expect(onAnswers.mock.calls[0]![0]).toEqual([
+      { nodeId: SPARE, answer: "S", counted: true, byOperation: false, why: reason },
+    ]);
+  });
+
+  it("says an untrusted chart is why an S is silent", async () => {
+    const onAnswers = vi.fn();
+    const store = heldStore(HELD, new Set([4]));
+    await checkPeersAtStart(
+      deps({ accept: store.accept, answers: { [SPARE]: status(NEWER_SERVING) }, onAnswers }),
+    );
+    expect(onAnswers.mock.calls[0]![0][0]).toMatchObject({ answer: "S", why: "untrusted_chart" });
   });
 
   it("a newer chart that fences this box is F, not by operation", async () => {
@@ -834,6 +876,41 @@ describe("askPeerStatus", () => {
   const sign = (b: PeerStatusBody, nodeId = SPARE, privateKey = peerKeys.privateKey) =>
     signEnvelope("status", b as never, { nodeId, privateKey });
 
+  let authorityX: BoxAuthority;
+  let authorityY: BoxAuthority;
+  const servers: BoxServer[] = [];
+  beforeAll(async () => {
+    [authorityX, authorityY] = await Promise.all([mintBoxAuthority(), mintBoxAuthority()]);
+  });
+  afterEach(async () => {
+    while (servers.length > 0) await servers.pop()!.close();
+  });
+
+  /** A box at `localhost` serving `authority`'s leaf, answering each query with `make`. */
+  async function statusServer(
+    authority: BoxAuthority,
+    make: (query: { nonce: string; atMs: number }) => unknown,
+  ) {
+    let last = "";
+    const server = await startBoxServer(authority, (req) => {
+      const query = (JSON.parse(req.body) as { body: { nonce: string; atMs: number } }).body;
+      last = query.nonce;
+      return { status: 200, body: JSON.stringify(make(query)) };
+    });
+    servers.push(server);
+    return { ...server, lastNonce: () => last };
+  }
+
+  function realAsk(over: Partial<Parameters<typeof askPeerStatus>[0]>) {
+    return askPeerStatus({
+      sign: async (b) =>
+        signEnvelope("query", b, { nodeId: SELF, privateKey: selfKeys.privateKey }),
+      publicKeyOf: (id) => keys[id],
+      timeoutMs: 5000,
+      ...over,
+    });
+  }
+
   it("posts a signed query to the peer's status route and returns the verified answer", async () => {
     const { calls, fetchFn } = answerWith((q) => sign(body(q.nonce)));
     expect(await ask(fetchFn)(PEER)).toEqual(body(NONCE));
@@ -950,32 +1027,24 @@ describe("askPeerStatus", () => {
     }
   });
 
-  it("with no stand-ins it uses the global fetch, a fresh 32-character nonce and the clock", async () => {
+  it("with no stand-ins it asks over the box transport, with a fresh 32-character nonce and the clock", async () => {
     const seen: { nonce: string; atMs: number }[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        const q = (JSON.parse(String(init?.body)) as { body: { nonce: string; atMs: number } })
-          .body;
-        seen.push(q);
-        return new Response(JSON.stringify(sign(body(q.nonce))), { status: 200 });
-      }),
-    );
-    try {
-      const real = askPeerStatus({
-        sign: async (b) =>
-          signEnvelope("query", b, { nodeId: SELF, privateKey: selfKeys.privateKey }),
-        publicKeyOf: (id) => keys[id],
-      });
-      const before = Date.now();
-      expect(await real(PEER)).not.toBeNull();
-      await real(PEER);
-      expect(seen[0]!.nonce).toMatch(/^[0-9a-f]{32}$/);
-      expect(seen[1]!.nonce).not.toBe(seen[0]!.nonce);
-      expect(seen[0]!.atMs).toBeGreaterThanOrEqual(before);
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    const server = await statusServer(authorityX, (q) => {
+      seen.push(q);
+      return sign(body(q.nonce));
+    });
+    const real = askPeerStatus({
+      sign: async (b) =>
+        signEnvelope("query", b, { nodeId: SELF, privateKey: selfKeys.privateKey }),
+      publicKeyOf: (id) => keys[id],
+    });
+    const before = Date.now();
+    const peer = { ...PEER, url: server.url };
+    expect(await real(peer)).not.toBeNull();
+    await real(peer);
+    expect(seen[0]!.nonce).toMatch(/^[0-9a-f]{32}$/);
+    expect(seen[1]!.nonce).not.toBe(seen[0]!.nonce);
+    expect(seen[0]!.atMs).toBeGreaterThanOrEqual(before);
   });
 
   it("a refusal (503 handover.stepping_down) is null", async () => {
@@ -1003,5 +1072,82 @@ describe("askPeerStatus", () => {
         }),
     );
     expect(await ask(fetchFn, 20)(PEER)).toBeNull();
+  });
+
+  describe("over HTTPS to a box serving a leaf from its own authority", () => {
+    it("with the peer's authority pinned, the signed answer verifies", async () => {
+      const server = await statusServer(authorityX, (q) => sign(body(q.nonce)));
+      const real = realAsk({ authorityOf: (id) => (id === SPARE ? authorityX.caPem : undefined) });
+      expect(await real({ ...PEER, url: server.url })).toEqual(body(server.lastNonce()));
+      expect(server.requests).toHaveLength(1);
+    });
+
+    it("with no authority known, the certificate is not checked and the signed answer verifies", async () => {
+      const server = await statusServer(authorityX, (q) => sign(body(q.nonce)));
+      const real = realAsk({});
+      expect(await real({ ...PEER, url: server.url })).toEqual(body(server.lastNonce()));
+    });
+
+    it("with the authority pinned, a box presenting another authority's leaf is refused before the query is sent", async () => {
+      const server = await statusServer(authorityY, (q) => sign(body(q.nonce)));
+      const real = realAsk({ authorityOf: () => authorityX.caPem });
+      expect(await real({ ...PEER, url: server.url })).toBeNull();
+      expect(server.requests).toHaveLength(0);
+    });
+
+    it("with no authority known, an unsigned answer is still null", async () => {
+      const server = await statusServer(authorityX, (q) => body(q.nonce));
+      expect(await realAsk({})({ ...PEER, url: server.url })).toBeNull();
+    });
+
+    it("an answer larger than the limit is null", async () => {
+      const server = await statusServer(authorityX, (q) => ({
+        ...sign(body(q.nonce)),
+        padding: "x".repeat(2 * 1024 * 1024),
+      }));
+      expect(await realAsk({})({ ...PEER, url: server.url })).toBeNull();
+    });
+
+    it("control: the global fetch gets no answer from the same box", async () => {
+      const server = await statusServer(authorityX, (q) => sign(body(q.nonce)));
+      expect(await realAsk({ fetch: globalThis.fetch })({ ...PEER, url: server.url })).toBeNull();
+      expect(server.requests).toHaveLength(0);
+    });
+  });
+
+  it("a plain-http peer is asked over plain http", async () => {
+    let nonce = "";
+    const server = createHttpServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => chunks.push(c));
+      req.on("end", () => {
+        nonce = (JSON.parse(Buffer.concat(chunks).toString("utf8")) as { body: { nonce: string } })
+          .body.nonce;
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(sign(body(nonce))));
+      });
+    });
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    try {
+      const { port } = server.address() as AddressInfo;
+      const answer = await realAsk({})({ ...PEER, url: `http://127.0.0.1:${port}` });
+      expect(answer).toEqual(body(nonce));
+    } finally {
+      await new Promise((done) => server.close(done));
+    }
+  });
+
+  it("reports why an ask got no answer", async () => {
+    const onSilent = vi.fn();
+    const { fetchFn } = answerWith((q) => body(q.nonce));
+    const real = askPeerStatus({
+      sign: async (b) =>
+        signEnvelope("query", b, { nodeId: SELF, privateKey: selfKeys.privateKey }),
+      publicKeyOf: (id) => keys[id],
+      fetch: fetchFn,
+      onSilent,
+    });
+    expect(await real(PEER)).toBeNull();
+    expect(onSilent).toHaveBeenCalledWith(SPARE, "not_verified");
   });
 });

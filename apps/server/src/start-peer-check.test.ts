@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { nodes, readNodeMembership, withNodeTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
@@ -18,6 +18,7 @@ import {
   readHandoverOperation,
   readHandoverRestriction,
   recordHandoverRestrictionTx,
+  writeMirrorLink,
 } from "@waitron/node-db";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import type { PeerOperationStatus, PeerStatusBody } from "./peer-status-api.js";
@@ -28,6 +29,12 @@ import {
   runStartPeerCheck,
   successorAfterCheck,
 } from "./start-peer-check.js";
+import {
+  mintBoxAuthority,
+  startBoxServer,
+  type BoxAuthority,
+  type BoxServer,
+} from "./testing/box-authority.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 
@@ -55,6 +62,7 @@ async function box(
   const venue = await setupVenue(suite.db);
   const nodeId = venue.cfg.nodeId;
   await establishNodeIdentity({ ownerDb: suite.db, node: suite.node, ring: RING }, nodeId);
+  // Stands in for A947 3b's join step, which must make the chart vouch for a joined box's key.
   await pinMainBoxKey(suite.node, nodeId, PEER);
   if (options.joined !== false) {
     const [own] = await suite.db
@@ -144,7 +152,7 @@ async function insertOperation(
 function check(
   suite: VenueDb,
   b: Pick<Box, "nodeId">,
-  fetch: typeof globalThis.fetch,
+  fetch: typeof globalThis.fetch | undefined,
   log = vi.fn(),
 ) {
   return runStartPeerCheck({
@@ -155,7 +163,7 @@ function check(
     advertisedOrigin: OWN_URL,
     log,
     timeoutMs: 1000,
-    fetch,
+    ...(fetch === undefined ? {} : { fetch }),
   });
 }
 
@@ -438,5 +446,76 @@ describe("whom a superseded box names as its successor", () => {
     expect(await readHandoverRestriction(suite.node, b.nodeId)).toMatchObject({
       kind: "handed-over",
     });
+  });
+});
+
+describe("the real start check's transport", () => {
+  const suite = useVenueDb({ migrations });
+  let x: BoxAuthority;
+  let y: BoxAuthority;
+  const servers: BoxServer[] = [];
+  beforeAll(async () => {
+    [x, y] = await Promise.all([mintBoxAuthority(), mintBoxAuthority()]);
+  });
+  afterEach(async () => {
+    while (servers.length > 0) await servers.pop()!.close();
+  });
+
+  /** PEER at `localhost` over HTTPS, serving `x`'s leaf and echoing the box's held chart. */
+  async function httpsPeer(held: () => SignedMembershipDocument): Promise<string> {
+    const server = await startBoxServer(x, (req) => {
+      const nonce = (JSON.parse(req.body) as { body: { nonce: string } }).body.nonce;
+      const body: PeerStatusBody = {
+        nonce,
+        heldMembership: held(),
+        restriction: null,
+        openOperation: null,
+        requestedOperation: null,
+      };
+      return { status: 200, body: JSON.stringify(signEnvelope("status", body as never, PEER)) };
+    });
+    servers.push(server);
+    return server.url;
+  }
+
+  async function linkTo(b: Box, authorityPem: string): Promise<void> {
+    await writeMirrorLink(suite.node, b.nodeId, {
+      relayUrl: "https://relay.example",
+      boxHostname: "localhost",
+      boxCaPem: authorityPem,
+      originNodeId: PEER.nodeId,
+    });
+  }
+
+  it("asks a box with no pinned authority over HTTPS without a certificate check, and judges its signed answer", async () => {
+    const held: { chart?: SignedMembershipDocument } = {};
+    const url = await httpsPeer(() => held.chart!);
+    const b = await box(suite, { peerUrl: url });
+    held.chart = b.held;
+    expect((await check(suite, b, undefined)).result).toBe("proceed");
+  });
+
+  it("pins the main box's authority a spare holds, and its answer counts", async () => {
+    const held: { chart?: SignedMembershipDocument } = {};
+    const url = await httpsPeer(() => held.chart!);
+    const b = await box(suite, { peerUrl: url });
+    held.chart = b.held;
+    await linkTo(b, x.caPem);
+    expect((await check(suite, b, undefined)).result).toBe("proceed");
+  });
+
+  it("control: a pinned authority the box does not present refuses it, logged as unreachable", async () => {
+    const held: { chart?: SignedMembershipDocument } = {};
+    const url = await httpsPeer(() => held.chart!);
+    const b = await box(suite, { peerUrl: url });
+    held.chart = b.held;
+    await linkTo(b, y.caPem);
+    const log = vi.fn();
+    expect((await check(suite, b, undefined, log)).result).toBe("wait");
+    expect(log).toHaveBeenCalledWith("info", "handover.start_check", {
+      result: "wait",
+      peers: [{ nodeId: PEER.nodeId, answer: "S", counted: true, why: "unreachable" }],
+    });
+    expect(servers[0]!.requests).toHaveLength(0);
   });
 });

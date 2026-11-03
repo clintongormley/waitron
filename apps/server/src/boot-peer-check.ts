@@ -21,6 +21,7 @@ import {
   type SignedMembershipDocument,
   type TrustSet,
 } from "@waitron/membership";
+import { boxExchange } from "./mirror-bundle-fetch.js";
 import type { PeerOperationStatus, PeerQueryBody, PeerStatusBody } from "./peer-status-api.js";
 
 export type StartCheckResult = "proceed" | "superseded" | "wait";
@@ -59,7 +60,18 @@ export interface PeerAnswer {
   counted: boolean;
   /** An F read from the peer's operation naming this box as its source, not from a chart. */
   byOperation: boolean;
+  /** For an S only: why the answer counts as silent. */
+  why?: SilentWhy;
 }
+
+export type SilentWhy =
+  | "no_address"
+  | "own_address"
+  | "timed_out"
+  | "no_answer"
+  | "unreadable_part"
+  | "no_chart"
+  | "untrusted_chart";
 
 const ROUTABLE: readonly NodeStanding[] = ["serving-primary", "serving-secondary", "sell-only"];
 
@@ -73,12 +85,12 @@ function originOf(url: string): string {
   }
 }
 
-function withTimeout<T>(work: Promise<T>, ms: number): Promise<T | null> {
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T | "timed_out"> {
   let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), ms);
+  const timeout = new Promise<"timed_out">((resolve) => {
+    timer = setTimeout(() => resolve("timed_out"), ms);
   });
-  return Promise.race([work.catch(() => null), timeout]).finally(() => clearTimeout(timer));
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
 }
 
 /**
@@ -117,12 +129,25 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
     else if (await deps.joined(n.nodeId)) peers.push({ server, counted: true });
   }
 
+  const why = new Map<number, SilentWhy>();
   const statuses = await Promise.all(
-    peers.map(({ server }) =>
-      server.url === "" || originOf(server.url) === ownOrigin
-        ? Promise.resolve(null)
-        : withTimeout(deps.ask(server), timeoutMs),
-    ),
+    peers.map(async ({ server }, index) => {
+      const unasked: SilentWhy | null =
+        server.url === ""
+          ? "no_address"
+          : originOf(server.url) === ownOrigin
+            ? "own_address"
+            : null;
+      const status =
+        unasked ??
+        (await withTimeout(
+          deps.ask(server).catch(() => null),
+          timeoutMs,
+        ));
+      if (status === null) why.set(index, "no_answer");
+      else if (typeof status === "string") why.set(index, status);
+      return typeof status === "string" ? null : status;
+    }),
   );
 
   // Newest first, so an older chart that is still newer than the held one is judged against the
@@ -144,7 +169,8 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
       counted,
       byOperation,
     });
-    if (status === null) return of("S");
+    const silent = (reason: SilentWhy): PeerAnswer => ({ ...of("S"), why: reason });
+    if (status === null) return silent(why.get(index)!);
     // Read from the signed status itself, whatever its chart: stopping is the safe side.
     if (operationFences(status.openOperation, nodeId)) return of("F", true);
     const verdict = verdicts.get(index);
@@ -152,9 +178,10 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
       return of("F");
     // A part this box cannot read may report a takeover, so it cannot clear a wait. Nor can no
     // chart, or one this box cannot trust: neither vouches that no handover happened.
-    if (!partsReadable(status) || verdict === undefined) return of("S");
+    if (!partsReadable(status)) return silent("unreadable_part");
+    if (verdict === undefined) return silent("no_chart");
     if (verdict.accepted) return of("N");
-    return of(verdict.reason === "invalid" ? "S" : "=");
+    return verdict.reason === "invalid" ? silent("untrusted_chart") : of("=");
   });
   deps.onAnswers?.(answers);
 
@@ -188,16 +215,27 @@ export function persistingAccept(deps: {
   };
 }
 
+/** Why an ask has no answer to judge; logged by node id, never with the answer's contents. */
+export type SilentReason =
+  "unreachable" | "refused" | "not_json" | "not_verified" | "wrong_signer" | "wrong_nonce";
+
 export interface AskPeerStatusDeps {
   /** Signs a query envelope with this box's node key (`signAsThisBox(deps, "query", body)`). */
   sign: (body: PeerQueryBody & CanonicalValue) => Promise<SignedHandoverEnvelope<unknown>>;
   /** The key this box stores for a node or its held chart vouches for (`peerKeyOf`). */
   publicKeyOf: (nodeId: string) => string | undefined;
+  /** The authority certificate this box holds for a peer; pinned when there is one. */
+  authorityOf?: (nodeId: string) => string | undefined;
+  /** Replaces the box transport. */
   fetch?: typeof fetch;
+  onSilent?: (nodeId: string, reason: SilentReason) => void;
   nonce?: () => string;
   now?: () => number;
   timeoutMs?: number;
 }
+
+// A status holds at most one chart and two operations; anything far larger is not one.
+const MAX_STATUS_BYTES = 1024 * 1024;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -257,30 +295,64 @@ function partsReadable(status: PeerStatusBody): boolean {
 export function askPeerStatus(
   deps: AskPeerStatusDeps,
 ): (peer: RoutableServer) => Promise<PeerStatusBody | null> {
-  const fetchFn = deps.fetch ?? fetch;
   const nonceOf = deps.nonce ?? (() => randomBytes(16).toString("hex"));
   const now = deps.now ?? Date.now;
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  return async (peer) => {
-    const nonce = nonceOf();
-    try {
-      const query = await deps.sign({ nonce, atMs: now() });
-      const res = await fetchFn(`${peer.url.replace(/\/+$/, "")}/api/node/peer-status`, {
+  const post = async (peer: RoutableServer, url: string, body: string) => {
+    const signal = AbortSignal.timeout(timeoutMs);
+    if (deps.fetch !== undefined) {
+      const res = await deps.fetch(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(query),
-        signal: AbortSignal.timeout(timeoutMs),
+        body,
+        signal,
       });
-      if (!res.ok) return null;
-      const verdict = verifyEnvelope<unknown>(await res.json(), "status", deps.publicKeyOf);
-      if (!verdict.valid || verdict.signerNodeId !== peer.nodeId) return null;
-      // Passed on whole: `checkPeersAtStart` judges each part, so an unreadable one cannot hide
-      // what a readable one says.
-      return isRecord(verdict.body) && verdict.body.nonce === nonce
-        ? (verdict.body as unknown as PeerStatusBody)
-        : null;
-    } catch {
-      return null;
+      return { status: res.status, text: await res.text() };
     }
+    const ca = deps.authorityOf?.(peer.nodeId);
+    return boxExchange(
+      new URL(url),
+      {
+        method: "POST",
+        // Unchecked without a pinned authority: the answer counts only once its signed envelope
+        // verifies and echoes this query's nonce, and the query carries no credential.
+        trust: ca === undefined ? { rejectUnauthorized: false } : { ca, rejectUnauthorized: true },
+        signal,
+        body,
+      },
+      MAX_STATUS_BYTES,
+    );
+  };
+  return async (peer) => {
+    const silent = (reason: SilentReason) => {
+      deps.onSilent?.(peer.nodeId, reason);
+      return null;
+    };
+    const nonce = nonceOf();
+    let answer: { status: number; text: string };
+    try {
+      const query = await deps.sign({ nonce, atMs: now() });
+      answer = await post(
+        peer,
+        `${peer.url.replace(/\/+$/, "")}/api/node/peer-status`,
+        JSON.stringify(query),
+      );
+    } catch {
+      return silent("unreachable");
+    }
+    if (answer.status < 200 || answer.status > 299) return silent("refused");
+    let raw: unknown;
+    try {
+      raw = JSON.parse(answer.text);
+    } catch {
+      return silent("not_json");
+    }
+    const verdict = verifyEnvelope<unknown>(raw, "status", deps.publicKeyOf);
+    if (!verdict.valid) return silent("not_verified");
+    if (verdict.signerNodeId !== peer.nodeId) return silent("wrong_signer");
+    // Passed on whole: `checkPeersAtStart` judges each part, so an unreadable one cannot hide
+    // what a readable one says.
+    if (!isRecord(verdict.body) || verdict.body.nonce !== nonce) return silent("wrong_nonce");
+    return verdict.body as unknown as PeerStatusBody;
   };
 }

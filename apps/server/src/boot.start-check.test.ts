@@ -19,7 +19,7 @@ import {
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverRestriction } from "@waitron/node-db";
-import type { StartedServer } from "./boot.js";
+import type { StartedServer, StartServerSeams } from "./boot.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import type { PeerStatusBody } from "./peer-status-api.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -109,7 +109,7 @@ interface Booted {
  */
 async function boot(
   suite: VenueDb,
-  options: { spareUrl: string; joined: boolean },
+  options: { spareUrl: string; joined: boolean; pinned?: boolean; seams?: StartServerSeams },
 ): Promise<Booted> {
   beforeServerStarts();
   const venue = await setupVenue(suite.db);
@@ -128,7 +128,8 @@ async function boot(
       name: "Spare",
       publicKey: SPARE.publicKey,
     });
-    await pinMainBoxKey(suite.node, nodeId, SPARE);
+    // Stands in for A947 3b's join step, which must make the chart vouch for a joined box's key.
+    if (options.pinned !== false) await pinMainBoxKey(suite.node, nodeId, SPARE);
   }
   const body: MembershipDocumentBody = {
     term: 1,
@@ -179,7 +180,7 @@ async function boot(
     return (original as (...args: unknown[]) => boolean)(chunk, ...rest);
   }) as typeof process.stdout.write;
   try {
-    server = await startServer(env, env);
+    server = await startServer(env, env, options.seams);
   } finally {
     process.stdout.write = original;
   }
@@ -219,10 +220,13 @@ describe("the start check on a real start", () => {
     expect(startChecks(booted.lines)).toEqual([{ result: "proceed", peers: [] }]);
   }, 60_000);
 
-  it("control: with the spare's nodes row the box counts it, and it is silent", async () => {
+  it("control: with the spare's nodes row the box counts it; at this box's own address it is never asked, so it counts as silent", async () => {
     const booted = await boot(suite, { spareUrl: OWN_URL, joined: true });
     expect(startChecks(booted.lines)).toEqual([
-      { result: "wait", peers: [{ nodeId: SPARE.nodeId, answer: "S", counted: true }] },
+      {
+        result: "wait",
+        peers: [{ nodeId: SPARE.nodeId, answer: "S", counted: true, why: "own_address" }],
+      },
     ]);
   }, 60_000);
 
@@ -283,5 +287,38 @@ describe("the start check on a real start", () => {
     expect(booted.acceptingSales).toBe(false);
     expect((await readNodeMembership(suite.db))?.body.term).toBe(2);
     expect(await readHandoverRestriction(suite.node, booted.nodeId)).toBeNull();
+  }, 60_000);
+
+  it("a joined spare whose key the main box does not hold: its answer cannot be checked, so the check waits (and today the start goes on)", async () => {
+    let asked = 0;
+    const url = await startPeer(() => {
+      asked += 1;
+      return {};
+    });
+    const booted = await boot(suite, { spareUrl: url, joined: true, pinned: false });
+    expect(asked).toBe(1);
+    expect(startChecks(booted.lines)).toEqual([
+      {
+        result: "wait",
+        peers: [{ nodeId: SPARE.nodeId, answer: "S", counted: true, why: "not_verified" }],
+      },
+    ]);
+    // Ruling R1: a wait goes on as before until the waiting start exists.
+    expect(booted.acceptingSales).toBe(true);
+  }, 60_000);
+
+  it("the seam's superseded with a successor takes the restricted start", async () => {
+    const booted = await boot(suite, {
+      spareUrl: OWN_URL,
+      joined: false,
+      seams: {
+        peerCheck: () => Promise.resolve({ result: "superseded", successorNodeId: SPARE.nodeId }),
+      },
+    });
+    expect(booted.acceptingSales).toBe(false);
+    expect(await readHandoverRestriction(suite.node, booted.nodeId)).toMatchObject({
+      kind: "superseded",
+      successorNodeId: SPARE.nodeId,
+    });
   }, 60_000);
 });

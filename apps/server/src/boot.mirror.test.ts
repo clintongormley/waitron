@@ -419,7 +419,9 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       ["mirror", 0],
       ["primary", 1],
     ] as const) {
-      const peerCheck = vi.fn(() => Promise.resolve("proceed" as const));
+      const peerCheck = vi.fn(() =>
+        Promise.resolve({ result: "proceed" as const, successorNodeId: null }),
+      );
       const port = await freePort();
       const env = {
         ...KEY_ENV,
