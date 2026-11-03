@@ -18,9 +18,9 @@ import {
 } from "./tender-refund-sends.js";
 import "./errors.js";
 
-/** Once `signal` is aborted, no further refund is put to its provider; each one left untouched
- * stays pending for a later pass. */
-export type TenderRefundDeps = BillRefundDeps & { signal?: AbortSignal };
+/** Once `stopSignal` is aborted the recovery pass looks up no further refund; each one it did not
+ * ask about stays pending for a later pass. */
+export type TenderRefundDeps = BillRefundDeps & { stopSignal?: AbortSignal };
 type RefundRow = typeof tenderRefunds.$inferSelect;
 
 export function toTenderRefundView(row: RefundRow): TenderRefundView {

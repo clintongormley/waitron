@@ -139,7 +139,7 @@ export async function runTenderRefundRecoveryLoop(
       let wait = RECHECK_MS;
       try {
         if (deps.isPrimary()) {
-          const report = await recoverTenderRefunds(deps);
+          const report = await recoverTenderRefunds({ ...deps, stopSignal: deps.signal });
           wait = sleepMsFor(report.nextDueAt, deps.clock.now().instant, 500, RECHECK_MS);
         }
       } catch (error) {

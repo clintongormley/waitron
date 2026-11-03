@@ -270,25 +270,81 @@ describe("settled tender recovery stopping", () => {
       const ask = v.card.lookupRefund.bind(v.card);
       vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
         controller.abort();
-        return ask(query);
+        await ask(query);
+        return {
+          kind: "match",
+          providerRefundRef: randomUUID(),
+          outcome: "completed",
+          providerStatus: "completed",
+        };
       });
       await recoverTenderRefunds({
         ...v.deps,
-        ...(signalled ? { signal: controller.signal } : {}),
+        ...(signalled ? { stopSignal: controller.signal } : {}),
       });
       const asked = v.card.lookupCalls.slice(lookups).map((q) => q.refundId);
       expect(asked).toHaveLength(signalled ? 1 : waiting.length);
-      const unasked = waiting.filter((id) => !asked.includes(id));
-      expect(await pending()).toEqual(expect.arrayContaining(unasked));
+      const stillPending = await pending();
+      expect(stillPending).toEqual(
+        expect.arrayContaining(waiting.filter((id) => !asked.includes(id))),
+      );
+      for (const id of asked) {
+        const [row] = await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, id));
+        expect(row!.state).toBe("completed");
+      }
     },
   );
   it("a signal already raised asks about no refund and leaves its lookup time unwritten", async () => {
     const t = await retained(true);
     const lookups = v.card.lookupCalls.length;
-    await recoverTenderRefunds({ ...v.deps, signal: AbortSignal.abort() });
+    await recoverTenderRefunds({ ...v.deps, stopSignal: AbortSignal.abort() });
     expect(v.card.lookupCalls).toHaveLength(lookups);
     const [row] = await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, t.refund.id));
     expect(row).toMatchObject({ state: "pending", lastLookupAt: null, sendCount: 1 });
+  });
+  it("the loop hands its own signal to its pass", async () => {
+    await retained(true);
+    await retained(true);
+    const controller = new AbortController();
+    const lookups = v.card.lookupCalls.length;
+    const ask = v.card.lookupRefund.bind(v.card);
+    vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
+      controller.abort();
+      return ask(query);
+    });
+    const errors: unknown[] = [];
+    await runTenderRefundRecoveryLoop({
+      ...v.deps,
+      signal: controller.signal,
+      isPrimary: () => true,
+      onError: (error) => errors.push(error),
+      sleep: async () => {},
+    });
+    expect(errors).toEqual([]);
+    expect(v.card.lookupCalls.slice(lookups)).toHaveLength(1);
+  });
+  it("an error other than the stop is still raised while stopping", async () => {
+    const t = await retained(true);
+    const controller = new AbortController();
+    const admission = new TradingAdmission();
+    admission.admit();
+    vi.spyOn(v.card, "lookupRefund").mockImplementation(async () => {
+      controller.abort();
+      admission.repairOnly("invalid");
+      return {
+        kind: "match",
+        providerRefundRef: randomUUID(),
+        outcome: "completed",
+        providerStatus: "completed",
+      };
+    });
+    await expect(
+      resumeTenderRefund(
+        { ...v.deps, admission, stopSignal: controller.signal },
+        t.refund.id,
+        "loop",
+      ),
+    ).rejects.toMatchObject({ code: "venue.time_zone_not_ready" });
   });
 });
 describe("bill refund admission", () => {

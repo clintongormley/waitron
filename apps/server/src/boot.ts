@@ -579,15 +579,59 @@ export function withPendingSweep(
   };
 }
 
+/** The pending-card loop's pass: the card sweep, then automatic card recovery, the release of
+ * stale payment marks and the settling of pending bill payments, in that order. Once `signal` is
+ * aborted no later step starts: work left open is picked up by the next start. Exported for a
+ * direct test (`boot-pending-sweep.test.ts`). */
+export function pendingCardPass(
+  parts: {
+    sweepProviders: () => Promise<readonly PaymentProvider[]>;
+    owners: () => CollectionOwners;
+    recover: () => ReturnType<typeof recoverAutomaticCardPayments>;
+    release: () => Promise<number>;
+    settle: () => Promise<BillPaymentsPass>;
+    getRole: () => SingletonRole;
+    log: Logger;
+  },
+  signal: AbortSignal,
+): (now: Date) => Promise<PassReport> {
+  const { getRole, log } = parts;
+  return withPendingBillPayments(
+    withStalePaymentRelease(
+      withAutomaticCardRecovery(
+        withPendingSweep(
+          async () => ({ duties: [], nextDueAt: null }),
+          parts.sweepProviders,
+          parts.owners,
+          log,
+          signal,
+        ),
+        parts.recover,
+        getRole,
+        log,
+        signal,
+      ),
+      parts.release,
+      log,
+      signal,
+    ),
+    parts.settle,
+    getRole,
+    log,
+    signal,
+  );
+}
+
 export function withAutomaticCardRecovery(
   inner: (now: Date) => Promise<PassReport>,
   recover: () => ReturnType<typeof recoverAutomaticCardPayments>,
   getRole: () => SingletonRole,
   log: Logger,
+  signal?: AbortSignal,
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
     const report = await inner(now);
-    if (getRole() !== "primary") return report;
+    if (signal?.aborted || getRole() !== "primary") return report;
     try {
       const result = await recover();
       if (result.filed > 0) log("info", "payment.automatic_recovery", { filed: result.filed });
@@ -610,9 +654,11 @@ export function withStalePaymentRelease(
   inner: (now: Date) => Promise<PassReport>,
   release: () => Promise<number>,
   log: Logger,
+  signal?: AbortSignal,
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
     const report = await inner(now);
+    if (signal?.aborted) return report;
     try {
       const released = await release();
       if (released > 0) log("info", "payment_attempt.released", { released });
@@ -640,10 +686,11 @@ export function withPendingBillPayments(
   settle: () => Promise<BillPaymentsPass>,
   getRole: () => SingletonRole,
   log: Logger,
+  signal?: AbortSignal,
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
     const report = await inner(now);
-    if (getRole() !== "primary") return report;
+    if (signal?.aborted || getRole() !== "primary") return report;
     try {
       const { errors, pending, ...counts } = await settle();
       const settled =
@@ -3329,50 +3376,41 @@ async function bootServer(
   const pendingCardController = new AbortController();
   const pendingCardLoop = runPendingCardLoop({
     admission: tradingAdmission,
-    pass: withPendingBillPayments(
-      withStalePaymentRelease(
-        withAutomaticCardRecovery(
-          withPendingSweep(
-            async () => ({ duties: [], nextDueAt: null }),
-            connectedCardProviderSweep({
-              db,
-              pool: cardPool,
-              contributions: CARD_PROVIDERS,
-              simulator: cardProvider,
-            }),
-            () => sweepOwners(tradingContext.nodeId, holders.singletonRole.current),
-            log,
-            pendingCardController.signal,
-          ),
-          () =>
-            recoverAutomaticCardPayments({
-              db,
-              backend: nodeBackend,
-              admission: tradingAdmission,
-              clock: tillClock,
-              cfg: tradingContext,
-              pool: cardPool,
-              attendance: attendanceRecorder,
-              log,
-            }),
-          () => holders.singletonRole.current,
-          log,
-        ),
-        () => releaseStalePaymentAttempts(db),
-        log,
-      ),
-      () =>
-        settlePendingBillPayments({
+    pass: pendingCardPass(
+      {
+        sweepProviders: connectedCardProviderSweep({
           db,
-          backend: nodeBackend,
-          admission: tradingAdmission,
-          clock: tillClock,
-          cfg: tradingContext,
-          refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
-          log,
+          pool: cardPool,
+          contributions: CARD_PROVIDERS,
+          simulator: cardProvider,
         }),
-      () => holders.singletonRole.current,
-      log,
+        owners: () => sweepOwners(tradingContext.nodeId, holders.singletonRole.current),
+        recover: () =>
+          recoverAutomaticCardPayments({
+            db,
+            backend: nodeBackend,
+            admission: tradingAdmission,
+            clock: tillClock,
+            cfg: tradingContext,
+            pool: cardPool,
+            attendance: attendanceRecorder,
+            log,
+          }),
+        release: () => releaseStalePaymentAttempts(db),
+        settle: () =>
+          settlePendingBillPayments({
+            db,
+            backend: nodeBackend,
+            admission: tradingAdmission,
+            clock: tillClock,
+            cfg: tradingContext,
+            refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
+            log,
+          }),
+        getRole: () => holders.singletonRole.current,
+        log,
+      },
+      pendingCardController.signal,
     ),
     now,
     signal: pendingCardController.signal,

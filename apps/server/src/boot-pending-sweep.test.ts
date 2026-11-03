@@ -8,6 +8,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   connectedCardProviderSweep,
   sweepOwners,
+  pendingCardPass,
   withAutomaticCardRecovery,
   withPendingSweep,
   withStalePaymentRelease,
@@ -24,6 +25,59 @@ const OWNERS: CollectionOwners = {
   takenOverFrom: [],
   unowned: true,
 };
+
+describe("pendingCardPass", () => {
+  it.each([true, false])(
+    "a signal raised during the sweep runs none of the later steps (signalled: %s)",
+    async (signalled) => {
+      const controller = new AbortController();
+      const ran: string[] = [];
+      const empty: ForwardResult = {
+        nextDueAt: null,
+        forwarded: 0,
+        declined: 0,
+        incidentsRaised: 0,
+      };
+      const pass = pendingCardPass(
+        {
+          sweepProviders: async () => [
+            fakeProvider("stripe", async () => {
+              if (signalled) controller.abort();
+              return empty;
+            }),
+          ],
+          owners: () => OWNERS,
+          recover: async () => {
+            ran.push("recover");
+            return { filed: 0, errors: [] };
+          },
+          release: async () => {
+            ran.push("release");
+            return 0;
+          },
+          settle: async () => {
+            ran.push("settle");
+            return {
+              received: 0,
+              failed: 0,
+              mismatched: 0,
+              refundsCompleted: 0,
+              refundsFailed: 0,
+              refundsUnresolved: 0,
+              pending: 0,
+              errors: [],
+            };
+          },
+          getRole: () => "primary",
+          log: vi.fn(),
+        },
+        controller.signal,
+      );
+      expect(await pass(new Date())).toEqual(REPORT);
+      expect(ran).toEqual(signalled ? [] : ["recover", "release", "settle"]);
+    },
+  );
+});
 
 describe("automatic recovery in the pending-card pass", () => {
   it("recovers after the sweep and before releasing stale marks", async () => {
