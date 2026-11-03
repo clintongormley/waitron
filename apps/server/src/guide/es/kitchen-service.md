@@ -121,7 +121,8 @@ un pedido así: cada estación con un plato por llegar en él recibe el aviso de
 mostrador, e imprime un ticket **MOVIDO** si su ajuste **Imprimir un aviso al cambiar de mesa los
 platos enviados** es **Imprimir**; los platos siguen en el pase hasta que se entrega el pedido. Cada pase atiende solo las
 estaciones y zonas de servicio que tiene asignadas; un plato de otra estación en una de sus tarjetas
-se muestra atenuado.
+se muestra atenuado, salvo si el pase oculta los platos de otras estaciones (consulta
+[Trabaja en el pase](kitchen-service.md#pass-screen)).
 
 Tú decides cuándo pedir la preparación desde el terminal; no hay un modo de marcha para todo el
 local. Cada estación de preparación fija si su pantalla de cocina avanza la preparación un plato cada vez
@@ -173,8 +174,8 @@ cuántos son. Resumen es una columna como las demás: toca su cabecera para pleg
 ocúltala en **Columnas**.
 
 Donde la pantalla es demasiado estrecha para las columnas activadas, muestra una columna cada vez y
-las columnas pasan a ser pestañas en el mismo orden (**Esperando · 2**). Una tarjeta en espera no
-ocupa una columna propia: su cabecera **En espera** va dentro de **Esperando**. La primera pestaña
+las columnas pasan a ser pestañas en el mismo orden (**Esperando · 2**). Por defecto, una tarjeta en espera
+no ocupa una columna propia: su cabecera **En espera** va dentro de **Esperando**. La primera pestaña
 está elegida hasta que tocas otra. Una columna oculta no tiene pestaña, y la pestaña de una columna
 plegada sigue mostrando sus tarjetas. Abrir una columna plegada puede dejar sin sitio a las demás:
 la pantalla pasa entonces a pestañas y muestra la columna que abriste. Para volver a ver las

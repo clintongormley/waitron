@@ -104,7 +104,8 @@ finishes with **They'll collect it at the counter**, its food still to come beco
 each station with a dish still to come on it is told it moved to the counter, and prints a **MOVED**
 slip when its **Print a slip when sent dishes move table** setting is **Print**; the food stays
 on the pass until the order is handed over. Each pass handles only the stations and service zones
-assigned to it; another station's dish on one of its cards shows dimmed.
+assigned to it; another station's dish on one of its cards shows dimmed, unless the pass hides
+other stations' dishes (see [Work the pass](kitchen-service.md#pass-screen)).
 
 You choose when to request cooking from the till; there is no venue-wide firing mode. Each prep
 station sets whether its kitchen screen moves preparation on one item at a time or a whole
@@ -152,7 +153,7 @@ of them there are. Overview is a column like the others: tap its heading to coll
 hide it in **Columns**.
 
 Where the screen is too narrow for the columns switched on, it shows one column at a time, and the
-columns become tabs in the same order (**Waiting · 2**). A held card takes no column of its own: its
+columns become tabs in the same order (**Waiting · 2**). By default a held card takes no column of its own: its
 **Held** heading sits inside **Waiting**. The first tab is chosen until you tap another. A hidden
 column has no tab, and a collapsed column's tab still shows its cards. Opening a collapsed column
 can leave the others too little room: the screen then turns to tabs and shows the column you opened.
