@@ -68,8 +68,7 @@ export const venueEn = {
   "venue.fiscal_territory": "Fiscal territory: {territory}",
   "venue.time_zone": "Time zone: {zone}",
   "venue.invoice_locales_help_label": "Help with the receipt language",
-  "venue.invoice_locales_help":
-    "Choose the language receipts print in by default. Where the region's law sets it, it is chosen for you and cannot be changed. The operation description is kept separately.",
+  "venue.invoice_locales_help": "Choose the language receipts print in by default.",
 
   // Each `venue.field.*` fills `{field}` in the three sentences after it. Spanish carries the
   // article in the field, so the sentences read correctly whatever the noun's gender.
@@ -101,7 +100,7 @@ export const venueEn = {
   "venue.help.name":
     "The name you use for this venue. You can keep the suggested name or change it.",
   "venue.help.operation_description":
-    "This text describes the sale on every record sent to the tax agency. Keep the suggested wording for ordinary shop sales. The receipt language does not translate this text. You can change it in the dashboard for future records.",
+    "This text describes the sale on every record sent to the tax agency. Keep the suggested wording; you can change it later in the dashboard.",
   "venue.hint.address_line1": "Street and building number",
   "venue.hint.address_line2": "Floor, unit or other detail",
   "venue.address_lookup.label": "Find the address",
@@ -119,11 +118,10 @@ export const venueEn = {
   "venue.help.day_cutover":
     "Sales before this time belong to the previous business day. Keep 04:00 if you finish trading after midnight.",
   "venue.help.series_code":
-    "This prefix identifies ordinary invoices, for example FS/1. Use letters, numbers, / _ . or -, up to 21 characters. Keep FS unless you need another series.",
-  "venue.help.full_series_code":
-    "This prefix identifies full invoices, for example FF/1. Use a different prefix from the other invoice series.",
+    "This prefix identifies ordinary invoices, for example FS/1. Keep FS unless you need another series.",
+  "venue.help.full_series_code": "This prefix identifies full invoices, for example FF/1.",
   "venue.help.rectificative_series_code":
-    "This prefix identifies correction invoices, for example FR/1. Use a different prefix from ordinary invoices. Keep FR unless you need another series.",
+    "This prefix identifies correction invoices, for example FR/1. Keep FR unless you need another series.",
 
   "venue.error.invoice_locales": "Choose the receipt language.",
   "venue.error.tax_id": "Enter a valid tax ID for the selected country.",
@@ -316,8 +314,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.fiscal_territory": "Territorio fiscal: {territory}",
   "venue.time_zone": "Zona horaria: {zone}",
   "venue.invoice_locales_help_label": "Ayuda sobre el idioma del recibo",
-  "venue.invoice_locales_help":
-    "Elige el idioma en que se imprimen los recibos por defecto. Donde la ley de la región lo fija, viene elegido y no se puede cambiar. La descripción de la operación se guarda aparte.",
+  "venue.invoice_locales_help": "Elige el idioma en que se imprimen los recibos por defecto.",
 
   "venue.field.country": "el país",
   "venue.field.tax_id": "el número de identificación fiscal",
@@ -347,7 +344,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.help.name":
     "El nombre que usas para este local. Puedes mantener el nombre propuesto o cambiarlo.",
   "venue.help.operation_description":
-    "Este texto describe la venta en cada registro que se envía a la Agencia Tributaria. Mantén el texto propuesto para las ventas habituales en tienda. El idioma del recibo no traduce este texto. Puedes cambiarlo en el panel de control para los registros futuros.",
+    "Este texto describe la venta en cada registro que se envía a la Agencia Tributaria. Mantén el texto propuesto; puedes cambiarlo más adelante en el panel de control.",
   "venue.hint.address_line1": "Calle y número",
   "venue.hint.address_line2": "Piso, puerta u otro detalle",
   "venue.address_lookup.label": "Buscar la dirección",
@@ -365,11 +362,11 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.help.day_cutover":
     "Las ventas anteriores a esta hora pertenecen al día comercial anterior. Deja las 04:00 si cierras después de medianoche.",
   "venue.help.series_code":
-    "Este prefijo identifica las facturas ordinarias, por ejemplo FS/1. Usa letras, números, / _ . o -, hasta 21 caracteres. Deja FS salvo que necesites otra serie.",
+    "Este prefijo identifica las facturas ordinarias, por ejemplo FS/1. Deja FS salvo que necesites otra serie.",
   "venue.help.full_series_code":
-    "Este prefijo identifica las facturas completas, por ejemplo FF/1. Usa un prefijo distinto al de las demás series.",
+    "Este prefijo identifica las facturas completas, por ejemplo FF/1.",
   "venue.help.rectificative_series_code":
-    "Este prefijo identifica las facturas rectificativas, por ejemplo FR/1. Usa un prefijo distinto al de las facturas ordinarias. Deja FR salvo que necesites otra serie.",
+    "Este prefijo identifica las facturas rectificativas, por ejemplo FR/1. Deja FR salvo que necesites otra serie.",
 
   "venue.error.invoice_locales": "Elige el idioma del recibo.",
   "venue.error.tax_id": "Introduce un número de identificación fiscal válido para el país elegido.",
