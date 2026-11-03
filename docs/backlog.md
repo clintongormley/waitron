@@ -90,7 +90,7 @@ Everything not listed here needs more spec work first.
    kitchen and pass work, following A773-1's Sent and New order panel. PR B is cut into four
    ([slice plan](superpowers/plans/2026-11-01-a773-2b-requested-release.md)), and its B4 into two
    ([B4 plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)): B4a, the pass on the new
-   board, is built; B4b (the station's Held column, "at the pass" and the display setting) remains,
+   board, landed (#2425); B4b (the station's Held column, "at the pass" and the display setting) remains,
    then PRs C–D.
    **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
    slices wait for A773-2.
@@ -2443,7 +2443,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) leaves PRs B–D: Requested, scoped
   pass release, station settings and coverage warnings, ticket presentation and physical
   schema/configuration retirement. No station can be set to wait for the pass until PR C. The pass
-  runs on the new board (B4a). Next: B4b, the station's Held column, "at the pass" and the display
+  runs on the new board (B4a, #2425). Next: B4b, the station's Held column, "at the pass" and the display
   setting ([B4 plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md), tasks B1a1–B13).
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
