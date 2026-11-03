@@ -106,8 +106,8 @@ const DESTINATION = "22222222-2222-4222-8222-222222222222";
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 /** How long a restarted box is watched for AEAT traffic; the control's first submission lands inside it. */
 const QUIET_MS = 2_000;
-/** The child starts in about two seconds. */
-const CHILD_LIMIT_MS = 15_000;
+/** The child starts in about two seconds locally; on a CI shard a first, cold child took over 15. */
+const CHILD_LIMIT_MS = 45_000;
 const HEALTH_LIMIT_MS = 10_000;
 /** Over the sum of one case's waits: three child waits, two health waits and the quiet wait. */
 const CASE_LIMIT_MS = 3 * CHILD_LIMIT_MS + 2 * HEALTH_LIMIT_MS + QUIET_MS + 30_000;
