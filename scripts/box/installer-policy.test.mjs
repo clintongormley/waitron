@@ -1729,7 +1729,7 @@ const writes = (decisions) => decisions.filter((d) => d.action === "write-owned-
 const hourOfTicks = (fromMs) =>
   Array.from({ length: 60 }, (_, i) => tick(fromMs + (i + 1) * 60_000));
 
-describe("a result answers only the request that asked for it (D13)", () => {
+describe("a result answers only the request that asked for it", () => {
   const sequenceInvalid = { reason: "sequence-invalid", hardware: null, releaseVersion: null };
   const blankSeen = () => observed(survey([blankDisk()]), null, 0);
   /** Requests 1 to 3 (find-network, set-clock, download A), A unavailable, then 4 and 5 (find-network, download B). */
