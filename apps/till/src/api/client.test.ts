@@ -1898,6 +1898,21 @@ describe("TillApi", () => {
     expect(JSON.parse(fetchStub.mock.calls[0]![1].body as string)).toEqual(ask);
   });
 
+  it("A773 pass display PUTs the device's own choice for a kind, null for the profile's (empty 204 body)", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    const api = new TillApi("", fetchStub);
+    await expect(api.setDeviceKitchenScreenDisplay("pass", false)).resolves.toBeUndefined();
+    await api.setDeviceKitchenScreenDisplay("pass_monitor", null);
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/device/kitchen-screen-display",
+      expect.objectContaining({ method: "PUT", credentials: "include" }),
+    );
+    expect(fetchStub.mock.calls.map((call) => JSON.parse(call[1].body as string))).toEqual([
+      { kind: "pass", showNonPassStations: false },
+      { kind: "pass_monitor", showNonPassStations: null },
+    ]);
+  });
+
   it("bumpCourseReady POSTs an empty object to the order+course /ready route (empty 200 body)", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
 

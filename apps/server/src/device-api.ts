@@ -555,6 +555,20 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
+  // Presentation only, so no cooking action is asked (master Contract 12).
+  app.put("/api/device/kitchen-screen-display", (c) =>
+    leverRun(c, log, async () => {
+      const proof = await requireDeviceProof({ db: deps.db, devMode: deps.devMode }, c);
+      const { kind, value } = parseOwnKitchenScreenDisplay(await readJsonBody<unknown>(c));
+      await withTransaction(deps.db, async (tx) => {
+        const device = await assertDeviceStillProven(tx, proof);
+        await kitchenScreenOf(tx, c, deps.cfg, device, kind);
+        await VENUE_SERVICE.setDeviceKitchenScreenDisplay(tx, device.deviceId, kind, value);
+      });
+      return c.body(null, 204);
+    }),
+  );
+
   app.get("/api/device/pass-board", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
@@ -989,6 +1003,24 @@ const EQUIPMENT_ROLES: readonly EquipmentRole[] = [
   "invoice",
   "card_terminal",
 ];
+
+/** `PUT /api/device/kitchen-screen-display`'s body: a pass kind and a choice, null for the profile's. */
+function parseOwnKitchenScreenDisplay(body: unknown): {
+  kind: "pass" | "pass_monitor";
+  value: boolean | null;
+} {
+  const fields: Record<string, unknown> =
+    typeof body === "object" && body !== null && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : {};
+  const kind = fields.kind;
+  if (kind !== "pass" && kind !== "pass_monitor")
+    throw new AppError("management.request_invalid", { field: "kind" });
+  const value = fields.showNonPassStations;
+  if (typeof value !== "boolean" && value !== null)
+    throw new AppError("management.request_invalid", { field: "showNonPassStations" });
+  return { kind, value };
+}
 
 /** `PUT /api/device/equipment`'s body, each field checked for shape. */
 function parseEquipmentChoice(

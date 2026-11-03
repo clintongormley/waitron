@@ -3516,6 +3516,18 @@ export class TillApi {
     return this.#request<PassReleaseResult>("/api/device/pass-screen/release", "POST", ask);
   }
 
+  /** The device's own choice of showing other stations' dishes on its pass or pass monitor →
+   *  `PUT /api/device/kitchen-screen-display`; null takes the profile's. */
+  async setDeviceKitchenScreenDisplay(
+    kind: "pass" | "pass_monitor",
+    value: boolean | null,
+  ): Promise<void> {
+    await this.#request<void>("/api/device/kitchen-screen-display", "PUT", {
+      kind,
+      showNonPassStations: value,
+    });
+  }
+
   async bumpDeviceCourseReady(orderId: string, courseId: string): Promise<void> {
     await this.#request<void>(
       `/api/device/orders/${orderId}/courses/${courseId}/ready`,
