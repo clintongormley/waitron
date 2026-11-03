@@ -378,7 +378,7 @@ describe("till-floor-screen: the zone menu on a phone and wider", () => {
     await chooseItem(el, "reset");
     const dialog = menuOf(el)!.shadowRoot!.querySelector('wt-dialog[data-dialog="reset"]')!;
     expect(dialog.querySelector("[data-reset-body]")!.textContent!.trim()).toBe(
-      "Free tables go back now; occupied ones show Needs moving once free.",
+      "Free tables go back now; tables with guests or still to clear show Needs moving once free.",
     );
   });
 

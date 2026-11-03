@@ -69,6 +69,13 @@ describe("the order lists' help", () => {
     expect(helpEs["help.counter.waiting_orders"]).toContain(es["tab.counter"].toLowerCase());
   });
 
+  it("no Spanish help text calls counter orders «del mostrador», as the rest say «de mostrador»", () => {
+    const saysDel = Object.entries(helpEs).filter(([, text]) =>
+      /pedidos? del mostrador/iu.test(text),
+    );
+    expect(saysDel).toEqual([]);
+  });
+
   const states = ["items", "unsent", "held", "waiting", "ready"] as const;
   // \b is ASCII-only in JS, so a boundary here is "no letter on either side", accents included.
   const wholeWord = (word: string) =>
@@ -96,6 +103,15 @@ describe("the order lists' help", () => {
     const sentences = (text: string) => text.split(/(?<=\.)\s+/).length;
     expect(sentences(helpEs["help.more.transfers"])).toBe(sentences(helpEn["help.more.transfers"]));
     expect(sentences(helpEn["help.more.transfers"])).toBe(3);
+  });
+});
+
+describe("the person menu's help", () => {
+  it("Fix my hours offers another day, and no place, as its dialog does", () => {
+    expect(helpEn["help.person.fix_hours"]).toContain("another day you choose");
+    expect(helpEn["help.person.fix_hours"]).not.toMatch(/(?<!\p{L})place(?!\p{L})/u);
+    expect(helpEs["help.person.fix_hours"]).toContain("otro día que elijas");
+    expect(helpEs["help.person.fix_hours"]).not.toMatch(/(?<!\p{L})lugar(?!\p{L})/u);
   });
 });
 
