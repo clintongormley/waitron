@@ -1141,7 +1141,7 @@ between the 32 bytes the box keeps and the 64 letters a person reads and types, 
 - A refused text never reaches the unlock gate, so it starts none of the gate's waits.
 - First start either reads `systemd-cryptenroll --recovery-key`'s printed text back with
   `parseDiskRecoveryKey`, or enrols `diskRecoveryKeyPassphrase` of its own 32 random bytes; both
-  give the same key slot.
+  routes put the formatted text in the key slot as its passphrase.
 - Slice 8's sheet takes `formatDiskRecoveryKey`'s text from the host (proposed), since `apps/server`
   does not import from `scripts/`; its QR code holds that same text, so `parseDiskRecoveryKey`
   reads a scan of it.

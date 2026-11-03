@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { getRandomValues } from "node:crypto";
 import { TextEncoder } from "node:util";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DISK_KEY_BYTES,
   DISK_KEY_LETTERS,
@@ -50,6 +50,19 @@ function thrown(run) {
     return /** @type {Error & { code?: string, reason?: string }} */ (error);
   }
   throw new Error("expected a throw");
+}
+
+/**
+ * @param {() => unknown} run
+ * @param {string} reason
+ */
+function expectInvalid(run, reason) {
+  const error = thrown(run);
+  expect(error.code).toBe("disk_recovery_key.invalid");
+  expect(error.reason).toBe(reason);
+  expect(error.message).toBe("disk_recovery_key.invalid");
+  expect(Object.keys(error).sort()).toEqual(["code", "reason"]);
+  return error;
 }
 
 class LyingLength extends Uint8Array {
@@ -126,9 +139,7 @@ describe.each([
     ["an ArrayBuffer", new ArrayBuffer(32)],
     ["a Uint16Array", new Uint16Array(32)],
   ])("refuses %s as not-bytes", (_what, value) => {
-    const error = thrown(() => run(/** @type {Uint8Array} */ (value)));
-    expect(error.code).toBe("disk_recovery_key.invalid");
-    expect(error.reason).toBe("not-bytes");
+    expectInvalid(() => run(/** @type {Uint8Array} */ (value)), "not-bytes");
   });
 
   it.each([
@@ -137,15 +148,13 @@ describe.each([
     ["no bytes", new Uint8Array(0)],
     ["a subclass claiming 32", new LyingLength(31)],
   ])("refuses %s as wrong-length", (_what, value) => {
-    const error = thrown(() => run(value));
-    expect(error.code).toBe("disk_recovery_key.invalid");
-    expect(error.reason).toBe("wrong-length");
+    expectInvalid(() => run(value), "wrong-length");
   });
 
   it("puts no key byte or letter in its error", () => {
     const canary = new Uint8Array(33);
     canary.set(COUNTING_KEY);
-    const error = thrown(() => run(canary));
+    const error = expectInvalid(() => run(canary), "wrong-length");
     const texts = [JSON.stringify(error), String(error), error.message, String(error.reason)];
     for (const text of texts)
       for (const secret of ["cbdefghi", "jklnrtuv", "0123456789abcdef"])
@@ -275,6 +284,7 @@ describe("parseDiskRecoveryKey refusals", () => {
     ["c with cedilla", "\u00E7"],
     ["the Kelvin sign", "\u212A"],
     ["capital I with a dot", "\u0130"],
+    ["a dotless i", "\u0131"],
     ["an en dash", "\u2013"],
     ["a no-break space", "\u00A0"],
     ["a full-width c", "\uFF43"],
@@ -325,9 +335,7 @@ describe("parseDiskRecoveryKey refusals", () => {
     ["a number", 42],
     ["a String object", new String("c".repeat(64))],
   ])("throws not-text for %s", (_name, value) => {
-    const error = thrown(() => parseDiskRecoveryKey(/** @type {string} */ (value)));
-    expect(error.code).toBe("disk_recovery_key.invalid");
-    expect(error.reason).toBe("not-text");
+    expectInvalid(() => parseDiskRecoveryKey(/** @type {string} */ (value)), "not-text");
   });
 });
 
@@ -352,13 +360,47 @@ describe("parseDiskRecoveryKey keeps the key out of its answers", () => {
   });
 
   it("in its not-text error", () => {
-    const error = thrown(() =>
-      parseDiskRecoveryKey(
-        /** @type {string} */ (/** @type {unknown} */ (new String(COUNTING_TEXT))),
-      ),
+    const error = expectInvalid(
+      () =>
+        parseDiskRecoveryKey(
+          /** @type {string} */ (/** @type {unknown} */ (new String(COUNTING_TEXT))),
+        ),
+      "not-text",
     );
-    expect(error.reason).toBe("not-text");
     expectNoKey(JSON.stringify(error));
     expectNoKey(String(error));
+  });
+});
+
+describe("the working arrays are zeroed", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** Lengths of the byte arrays `fill(0)` was called on after this point. */
+  const zeroedLengths = () => {
+    const fill = vi.spyOn(Uint8Array.prototype, "fill");
+    return () =>
+      fill.mock.calls.flatMap((call, index) =>
+        call[0] === 0 && call.length === 1
+          ? [/** @type {Uint8Array} */ (fill.mock.contexts[index]).length]
+          : [],
+      );
+  };
+
+  it("formatDiskRecoveryKey zeroes its 71 character codes", () => {
+    const lengths = zeroedLengths();
+    formatDiskRecoveryKey(COUNTING_KEY);
+    expect(lengths()).toContain(71);
+  });
+
+  it.each([
+    ["an accepted key", COUNTING_TEXT, true],
+    ["a letter refusal", `a${COUNTING_TEXT.slice(1)}`, false],
+    ["a length refusal", COUNTING_TEXT.slice(1), false],
+  ])("parseDiskRecoveryKey zeroes its 64 half-bytes on %s", (_name, text, ok) => {
+    const lengths = zeroedLengths();
+    expect(parseDiskRecoveryKey(text).ok).toBe(ok);
+    expect(lengths()).toContain(64);
   });
 });

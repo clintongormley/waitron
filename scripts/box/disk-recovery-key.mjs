@@ -58,15 +58,19 @@ export function formatDiskRecoveryKey(key) {
 }
 
 /**
- * The exact passphrase `systemd-cryptenroll --recovery-key` puts in the key slot: the formatted
- * text as 71 ASCII bytes, in a new array the caller zeroes.
+ * The exact passphrase `systemd-cryptenroll --recovery-key` puts in the key slot (systemd v257
+ * src/cryptenroll/cryptenroll-recovery.c:28, :36-42): the formatted text as 71 ASCII bytes, in a
+ * new array the caller zeroes.
  * @param {Uint8Array} key @returns {Uint8Array}
  */
 export function diskRecoveryKeyPassphrase(key) {
   return formattedCodes(key);
 }
 
-/** Far above any sensible typing (71 characters plus whitespace), so a pasted page is not scanned. */
+/**
+ * Far above any sensible typing (71 characters plus whitespace), so a longer paste is refused
+ * unread.
+ */
 export const DISK_KEY_TEXT_MAX = 4096;
 
 const SEPARATORS = new Set(["-", " ", "\t", "\r", "\n"]);
