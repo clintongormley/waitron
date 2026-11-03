@@ -9,6 +9,11 @@ export interface ServerStatus {
   state: ServerState;
   term: number | null;
 }
+/** A signed membership chart as the start read carries it. The till reads only its term; the box
+ * it is handed to verifies it. */
+export interface HeldChart {
+  readonly body: { readonly term: number };
+}
 export interface RouterOptions {
   origin: string;
   fetchImpl: typeof fetch;
@@ -47,6 +52,9 @@ export class ServerRouter extends EventTarget {
   #waiting = false;
   /** The initial `""` never equals a real signature, so the first change always dispatches. */
   #stateSignature = "";
+  #chart: HeldChart | null = null;
+  /** `url term` pairs already posted, so a server is handed each held chart once. */
+  readonly #chartSent = new Set<string>();
   #inFlight = 0;
   #round: Promise<void> | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
@@ -87,6 +95,13 @@ export class ServerRouter extends EventTarget {
     this.#servers = this.#merge(list);
     this.#save(list);
     this.#emitStateChanged();
+  }
+
+  /** Keeps the newer of this chart and the one held, to hand to a server that answers an older term
+   * or none. */
+  offerChart(chart: HeldChart | null | undefined): void {
+    if (chart === null || chart === undefined) return;
+    if (this.#chart === null || chart.body.term > this.#chart.body.term) this.#chart = chart;
   }
 
   start(): void {
@@ -170,12 +185,34 @@ export class ServerRouter extends EventTarget {
       };
       s.state = body.acceptingSales === true ? "primary" : "standby";
       s.term = typeof body.term === "number" ? body.term : null;
+      this.#handChart(s.url, s.term);
     } catch {
       s.state = "unreachable";
       s.term = null;
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /** Fire and forget: a failed post is not retried for the same server and term, and never moves
+   * the till. */
+  #handChart(url: string, term: number | null): void {
+    const chart = this.#chart;
+    if (chart === null || (term !== null && term >= chart.body.term)) return;
+    const key = `${url} ${chart.body.term}`;
+    if (this.#chartSent.has(key)) return;
+    this.#chartSent.add(key);
+    const fetchImpl = this.#fetch;
+    void Promise.resolve()
+      .then(() =>
+        fetchImpl(`${url}/api/node/membership`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ document: chart }),
+          cache: "no-store",
+        }),
+      )
+      .catch(() => undefined);
   }
 
   #merge(list: ServerEntry[]): Tracked[] {

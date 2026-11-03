@@ -1378,6 +1378,7 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
       // `node_membership` holds no row (the server-list test below writes one and removes it again).
       nodeId: cfg.nodeId,
       servers: [],
+      membership: null,
       setupRevision: expect.stringMatching(/^[0-9a-f]{64}$/),
       // This suite's configuration carries no regime limit.
       simplifiedInvoiceLimit: null,
@@ -1433,6 +1434,27 @@ describe("GET /api/staff (pre-login roster) + GET /api/till (public boot info)",
     } finally {
       await suite.db.execute(sql`delete from node_membership`);
     }
+  });
+
+  describe("membership", () => {
+    it("the start read carries the held chart", async () => {
+      const app = new Hono();
+      const held = signedMembershipDoc(7, {
+        signerNodeId: cfg.nodeId,
+        nodes: [
+          { nodeId: cfg.nodeId, contactUrl: "https://box.deli.test", standing: "serving-primary" },
+        ],
+      });
+      // Removed in the `finally`: the other start-read cases assert an empty `node_membership`.
+      await writeNodeMembership(suite.db, held);
+      try {
+        mountTillApi(app, deps(suite.db), collect([]));
+        const body = (await (await app.request("/api/till")).json()) as Record<string, unknown>;
+        expect(body.membership).toEqual(held);
+      } finally {
+        await suite.db.execute(sql`delete from node_membership`);
+      }
+    });
   });
 
   it("GET /api/till DECOUPLES the UI locale (venueLocale) from the receipt invoiceLocale (the venue's receipt language)", async () => {

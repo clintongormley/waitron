@@ -461,6 +461,105 @@ describe("ServerRouter — polling, refusals and stored state", () => {
   });
 });
 
+describe("ServerRouter — handing on the held chart", () => {
+  const chart = (term: number) => ({
+    body: { term, nodes: [] },
+    signerNodeId: "b",
+    signature: `sig-${term}`,
+    endorsements: [],
+  });
+
+  /** Answers each probe from `table` (a missing `term` key answers none) and records every POST. */
+  function chartFetch(table: Record<string, Record<string, unknown>>) {
+    const posts: { url: string; body: unknown }[] = [];
+    const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method === "POST") {
+        posts.push({ url, body: JSON.parse(String(init.body)) });
+        return new Response(JSON.stringify({ accepted: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify(table[new URL(url).origin]), { status: 200 });
+    }) as unknown as typeof fetch;
+    return { fetchImpl, posts };
+  }
+
+  it("posts the held chart to a server answering a lower term, once", async () => {
+    const { fetchImpl, posts } = chartFetch({
+      [BOX]: { acceptingSales: true, term: 5, nodeId: "b" },
+      [CLOUD]: { acceptingSales: true, term: 4, nodeId: "c" },
+    });
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    r.setServers([{ url: BOX }, { url: CLOUD }]);
+    r.offerChart(chart(5));
+    await r.probeNow();
+    await r.probeNow();
+    expect(posts).toEqual([{ url: `${CLOUD}/api/node/membership`, body: { document: chart(5) } }]);
+    // The post never moves the till: the higher term still wins.
+    expect(r.current).toBe(BOX);
+  });
+
+  it("posts it to a server answering no term, once", async () => {
+    const { fetchImpl, posts } = chartFetch({
+      [BOX]: { acceptingSales: true, term: 5, nodeId: "b" },
+      [CLOUD]: { acceptingSales: false },
+    });
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    r.setServers([{ url: BOX }, { url: CLOUD }]);
+    r.offerChart(chart(5));
+    await r.probeNow();
+    await r.probeNow();
+    expect(posts).toEqual([{ url: `${CLOUD}/api/node/membership`, body: { document: chart(5) } }]);
+  });
+
+  it("posts nothing to a server at the same or a higher term", async () => {
+    const { fetchImpl, posts } = chartFetch({
+      [BOX]: { acceptingSales: true, term: 5, nodeId: "b" },
+      [CLOUD]: { acceptingSales: false, term: 6, nodeId: "c" },
+    });
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    r.setServers([{ url: BOX }, { url: CLOUD }]);
+    r.offerChart(chart(5));
+    await r.probeNow();
+    expect(posts).toEqual([]);
+  });
+
+  it("keeps the newest of two charts it was given", async () => {
+    const { fetchImpl, posts } = chartFetch({
+      [BOX]: { acceptingSales: true, term: 4, nodeId: "b" },
+    });
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    r.offerChart(chart(5));
+    r.offerChart(chart(3));
+    r.offerChart(null);
+    await r.probeNow();
+    expect(posts).toEqual([{ url: `${BOX}/api/node/membership`, body: { document: chart(5) } }]);
+  });
+
+  it("posts a newer chart again to a server it already sent an older one, and a failed post neither retries nor stops the round", async () => {
+    const posts: number[] = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        posts.push(
+          (JSON.parse(String(init.body)) as { document: { body: { term: number } } }).document.body
+            .term,
+        );
+        throw new TypeError("Failed to fetch");
+      }
+      return new Response(JSON.stringify({ acceptingSales: true, term: 2, nodeId: "b" }), {
+        status: 200,
+      });
+    }) as unknown as typeof fetch;
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    r.offerChart(chart(3));
+    await r.probeNow();
+    await r.probeNow();
+    r.offerChart(chart(4));
+    await r.probeNow();
+    expect(posts).toEqual([3, 4]);
+    expect(r.statuses()[0]).toMatchObject({ state: "primary", term: 2 });
+  });
+});
+
 describe("withServerTarget", () => {
   it("rewrites a relative path onto the current target and leaves absolute inputs alone", async () => {
     const seen: string[] = [];
