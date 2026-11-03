@@ -149,9 +149,9 @@ describe("the floor's help on service steps", () => {
 });
 
 describe("the kitchen board's help", () => {
-  for (const [language, help, words] of [
-    ["English", helpEn, en],
-    ["Spanish", helpEs, es],
+  for (const [language, help, words, heldColumn] of [
+    ["English", helpEn, en, (held: string) => `the ${held} column`],
+    ["Spanish", helpEs, es, (held: string) => `la columna ${held}`],
   ] as const) {
     it(`the kitchen help texts name the board's buttons and flags by their own words (${language})`, () => {
       expect(help["help.kitchen.card"]).toContain(words["station.whole_ticket"]);
@@ -160,7 +160,7 @@ describe("the kitchen board's help", () => {
     });
 
     it(`the station card's help names Held, Held, not released and Waiting for the pass by their own words (${language})`, () => {
-      expect(help["help.kitchen.card"]).toContain(words["pass.column.held"]);
+      expect(help["help.kitchen.card"]).toContain(heldColumn(words["pass.column.held"]));
       expect(help["help.kitchen.card"]).toContain(words["station.group_held"]);
       expect(help["help.kitchen.card"]).toContain(words["pass.waiting_for_pass"]);
     });
