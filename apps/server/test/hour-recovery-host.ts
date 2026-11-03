@@ -78,9 +78,8 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
 export const realSecretChecks: Mock<(secret: string, stored: string) => Promise<boolean>> =
   mocked.realSecretChecks;
 /**
- * Each real check derives a key for 20–25 ms and a test repeats the same one dozens of times, so
- * this file remembers every answer: the same secret against the same stored hash always gives the
- * same answer. The memo lives as long as one test file's module graph.
+ * Remembers every answer for the test file: the same secret against the same stored hash always
+ * gives the same answer.
  */
 vi.mock("@waitron/identity", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/identity")>();
@@ -92,8 +91,7 @@ vi.mock("@waitron/identity", async (importOriginal) => {
       if (bySecret === undefined) answers.set(stored, (bySecret = new Map()));
       const remembered = bySecret.get(secret);
       if (remembered !== undefined) {
-        // A real check yields to the event loop; a remembered one still does, so steps a test runs
-        // side by side interleave as they would against the real derivation.
+        // A remembered answer still yields one event-loop turn.
         await new Promise((resolve) => setImmediate(resolve));
         return remembered;
       }
