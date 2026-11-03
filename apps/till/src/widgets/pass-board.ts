@@ -4,6 +4,7 @@ import { customElement, property } from "lit/decorators.js";
 import type { TimingBand } from "@waitron/shared";
 import type { PassBoard } from "../api/client.js";
 import { helpText } from "../i18n/help-strings.js";
+import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { type BoardMeasure, columnsFit } from "../state/kitchen-board-fit.js";
 import { type ColumnKey, type ColumnState, PASS_COLUMNS } from "../state/kitchen-columns.js";
@@ -28,6 +29,7 @@ import {
   dishAllergens,
   dishModifiers,
   dishNote,
+  heldPart,
   kitchenBoardStyles,
   measureBoard,
   overviewList,
@@ -40,19 +42,41 @@ import {
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { queueCrossRefs } from "./queue-crossrefs.js";
 
-const COLUMN_WORDS = {
-  overview: "station.overview",
-  held: "pass.column.held",
-  toFire: "pass.column.to_fire",
-  inProgress: "pass.column.in_progress",
-  ready: "pass.column.ready",
-} as const;
+type ServerColumn = "held" | "toFire" | "inProgress" | "ready";
+
+interface DrawnColumn {
+  title: StringKey;
+  /** The Columns window's name, which tells Held + To fire from the separate To fire. */
+  name: StringKey;
+  draws: ServerColumn;
+  /** The server's held cards go last, under a Held heading drawn only while one is held. */
+  heldPart?: true;
+}
+
+/** Its key order sets only the order of {@link passColumnNames}; the board follows the layout's. */
+const DRAWN: Partial<Record<ColumnKey, DrawnColumn>> = {
+  toFire: {
+    title: "pass.column.to_fire",
+    name: "pass.columns_held_to_fire",
+    draws: "toFire",
+    heldPart: true,
+  },
+  held: { title: "pass.column.held", name: "pass.column.held", draws: "held" },
+  toFireOnly: { title: "pass.column.to_fire", name: "pass.column.to_fire", draws: "toFire" },
+  inProgress: {
+    title: "pass.column.in_progress",
+    name: "pass.column.in_progress",
+    draws: "inProgress",
+  },
+  ready: { title: "pass.column.ready", name: "pass.column.ready", draws: "ready" },
+};
 
 /** The pass's column names, for the Columns window. */
 export function passColumnNames(): Map<ColumnKey, string> {
-  return new Map(
-    Object.entries(COLUMN_WORDS).map(([key, word]) => [key as ColumnKey, t(word)] as const),
-  );
+  return new Map([
+    ["overview", t("station.overview")],
+    ...Object.entries(DRAWN).map(([key, drawn]) => [key as ColumnKey, t(drawn.name)] as const),
+  ]);
 }
 
 /** A pure view of a pass board: it reads nothing and acts by events. */
@@ -429,7 +453,8 @@ export class TillPassBoard extends LitElement {
     const views = this.#views;
     const overdue = this.#overdue;
     const shown = this.columns.order.filter(
-      (key) => !this.columns.hidden.includes(key) && (key === "overview" || views.has(key)),
+      (key) =>
+        !this.columns.hidden.includes(key) && (key === "overview" || DRAWN[key] !== undefined),
     );
     const fits =
       this.#measured === undefined || columnsFit(this.#measured, shown, this.columns.collapsed);
@@ -458,28 +483,34 @@ export class TillPassBoard extends LitElement {
         >
       </div>
       <slot name="status"></slot>
-      <div class=${fits ? "kanban" : "list"}>
-        ${shown.map((key) => this.#column(key, views.get(key) ?? []))}
-      </div>`;
+      <div class=${fits ? "kanban" : "list"}>${shown.map((key) => this.#column(key, views))}</div>`;
   }
 
-  #column(key: ColumnKey, cards: readonly CardView[]): TemplateResult {
+  #column(key: ColumnKey, views: ReadonlyMap<ColumnKey, CardView[]>): TemplateResult {
     const collapsed = this.columns.collapsed.includes(key);
     const toggle = () => this.#emit("toggle-column", { key });
-    const title = t(COLUMN_WORDS[key as keyof typeof COLUMN_WORDS]);
-    if (key === "overview") {
+    const drawn = DRAWN[key];
+    if (drawn === undefined) {
       const rows = this.#overview;
       return html`<section
         class="column column-overview ${collapsed ? "collapsed" : ""}"
         data-column="overview"
       >
-        ${columnHeading(key, title, rowsToMake(rows), collapsed, toggle)}
+        ${columnHeading(key, t("station.overview"), rowsToMake(rows), collapsed, toggle)}
         ${collapsed ? nothing : overviewList(rows)}
       </section>`;
     }
+    const cards = views.get(drawn.draws) ?? [];
+    const held = drawn.heldPart === undefined ? [] : (views.get("held") ?? []);
     return html`<section class="column ${collapsed ? "collapsed" : ""}" data-column=${key}>
-      ${columnHeading(key, title, cards.length, collapsed, toggle)}
-      ${collapsed ? nothing : cards.map((view) => this.#card(view))}
+      ${columnHeading(key, t(drawn.title), cards.length + held.length, collapsed, toggle)}
+      ${
+        collapsed
+          ? nothing
+          : html`${cards.map((view) => this.#card(view))}
+            ${held.length === 0 ? nothing : heldPart(held.length)}
+            ${held.map((view) => this.#card(view))}`
+      }
     </section>`;
   }
 

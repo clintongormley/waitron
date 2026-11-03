@@ -402,9 +402,11 @@ describe("A773 waiter authority — expo allergy boundary", () => {
             expect(Math.round(el.getBoundingClientRect().width)).toBe(width);
             const dish = inBoard(el).querySelector<HTMLElement>('[data-item="ticket-1"]')!;
             expect(dish.classList.contains("held")).toBe(true);
-            const heldColumn = inBoard(el).querySelector('[data-column="held"]')!;
-            expect(heldColumn.querySelector(`[data-card="group:${group.id}"]`)).not.toBeNull();
-            expect(heldColumn.querySelector(".column-heading")!.textContent).toContain(
+            const toFire = inBoard(el).querySelector('[data-column="toFire"]')!;
+            expect(
+              toFire.querySelector(`[data-held-part] ~ [data-card="group:${group.id}"]`),
+            ).not.toBeNull();
+            expect(toFire.querySelector("[data-held-part]")!.textContent).toContain(
               t("pass.column.held"),
             );
             expect(dish.getBoundingClientRect().right).toBeLessThanOrEqual(width + 1);

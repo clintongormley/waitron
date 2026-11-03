@@ -963,8 +963,8 @@ describe("A773 pass screen", () => {
       await press(el, '[data-column-show="ready"]');
     }
     const changed = {
-      order: ["overview", "toFire", "held", "inProgress", "ready"],
-      hidden: ["overview", "ready"],
+      order: ["overview", "toFire", "toFireOnly", "held", "inProgress", "ready"],
+      hidden: ["overview", "held", "toFireOnly", "ready"],
       collapsed: ["inProgress"],
     };
 
@@ -1011,6 +1011,7 @@ describe("A773 pass screen", () => {
       };
       const words = [
         t("station.overview"),
+        t("pass.columns_held_to_fire"),
         t("pass.column.held"),
         t("pass.column.to_fire"),
         t("pass.column.in_progress"),
@@ -1965,7 +1966,7 @@ describe("A773 pass screen: a pass monitor", () => {
       const el = await mountOne();
       expect(boardOf(el)!.mode).toBe("monitor");
       expect(boardOf(el)!.runsPass).toBe(true);
-      expect(cardKeys(el)).toEqual(["group:g-4", "group:g-2", "group:g-1", "bill:order-1"]);
+      expect(cardKeys(el)).toEqual(["group:g-2", "group:g-4", "group:g-1", "bill:order-1"]);
       expect(boardOf(el)!.shadowRoot!.querySelector("[data-columns-open]")).not.toBeNull();
       expect(actionButtons(el, excused)).toEqual([]);
     },

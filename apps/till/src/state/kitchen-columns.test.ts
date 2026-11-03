@@ -310,8 +310,8 @@ describe("A773 columns state: the device's kitchen columns", () => {
 describe("A773 pass view", () => {
   it("reads the pass's default columns for the pass, the monitor and All stations, each under its own key", () => {
     const passDefaults: ColumnState = {
-      order: ["overview", "held", "toFire", "inProgress", "ready"],
-      hidden: ["overview"],
+      order: ["overview", "toFire", "held", "toFireOnly", "inProgress", "ready"],
+      hidden: ["overview", "held", "toFireOnly"],
       collapsed: [],
     };
     const storage = fakeStorage();
@@ -321,7 +321,7 @@ describe("A773 pass view", () => {
     }
 
     const saved: ColumnState = {
-      order: ["ready", "inProgress", "toFire", "held", "overview"],
+      order: ["ready", "inProgress", "toFire", "held", "toFireOnly", "overview"],
       hidden: [],
       collapsed: ["held"],
     };
@@ -330,6 +330,34 @@ describe("A773 pass view", () => {
     for (const screen of ["pass_monitor", "all_stations"] as const) {
       expect(readColumnState(storage, { ...base, screen }, PASS_COLUMNS)).toEqual(passDefaults);
     }
+  });
+
+  it("D95: reads a pass layout saved before Held + To fire with the separate To fire hidden after Held", () => {
+    const passScope = { venueId: "https://box.local", deviceId: "dev-1", screen: "pass" } as const;
+    const stored = (hidden: ColumnState["hidden"]) => {
+      const storage = fakeStorage();
+      saveColumnState(storage, passScope, {
+        order: ["overview", "held", "toFire", "inProgress", "ready"],
+        hidden,
+        collapsed: ["inProgress"],
+      });
+      return readColumnState(storage, passScope, PASS_COLUMNS);
+    };
+    expect(readColumnState(fakeStorage(), passScope, PASS_COLUMNS)).toEqual({
+      order: ["overview", "toFire", "held", "toFireOnly", "inProgress", "ready"],
+      hidden: ["overview", "held", "toFireOnly"],
+      collapsed: [],
+    });
+    expect(stored(["overview"])).toEqual({
+      order: ["overview", "held", "toFireOnly", "toFire", "inProgress", "ready"],
+      hidden: ["overview", "toFireOnly"],
+      collapsed: ["inProgress"],
+    });
+    expect(stored(["overview", "held"])).toEqual({
+      order: ["overview", "held", "toFireOnly", "toFire", "inProgress", "ready"],
+      hidden: ["overview", "held", "toFireOnly"],
+      collapsed: ["inProgress"],
+    });
   });
 });
 

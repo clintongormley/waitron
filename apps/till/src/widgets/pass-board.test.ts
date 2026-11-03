@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
 import { CARD_COLUMN_TEXT_WIDTHS, OVERVIEW_COLUMN_REMS } from "../state/kitchen-board-fit.js";
-import { type ColumnKey, PASS_COLUMNS } from "../state/kitchen-columns.js";
+import { type ColumnKey, type ColumnState, PASS_COLUMNS } from "../state/kitchen-columns.js";
 import { overviewRows, rowsToMake } from "../state/kitchen-overview.js";
 import { passOverviewDishes } from "../state/pass-view.js";
 import type { OverviewFact, PassBoard } from "../api/client.js";
@@ -15,7 +15,7 @@ import {
   passItem,
 } from "../../test/pass-board-fixtures.js";
 import { allergyBlock } from "../../test/kitchen-allergy-fixtures.js";
-import type { TillPassBoard } from "./pass-board.js";
+import { type TillPassBoard, passColumnNames } from "./pass-board.js";
 import "./pass-board.js";
 
 beforeEach(async () => {
@@ -172,19 +172,17 @@ describe("A773 pass board widget", () => {
     });
     const columns = [...root(el).querySelectorAll<HTMLElement>("[data-column]")];
     expect(columns.map((column) => column.dataset.column)).toEqual([
-      "held",
       "toFire",
       "inProgress",
       "ready",
     ]);
     expectSideBySide(columns);
     const words = {
-      held: "pass.column.held",
       toFire: "pass.column.to_fire",
       inProgress: "pass.column.in_progress",
       ready: "pass.column.ready",
     } as const;
-    const counts = { held: 1, toFire: 1, inProgress: 2, ready: 1 };
+    const counts = { toFire: 2, inProgress: 2, ready: 1 };
     for (const column of columns) {
       const key = column.dataset.column as keyof typeof words;
       expect(column.querySelector(".column-heading")!.textContent).toContain(t(words[key]));
@@ -410,17 +408,13 @@ describe("A773 pass board widget", () => {
       }),
       columns: {
         order: ["ready", "toFire", "held", "inProgress", "overview"],
-        hidden: ["held", "overview"],
+        hidden: ["toFire", "overview"],
         collapsed: [],
       },
     });
     const columns = [...root(el).querySelectorAll<HTMLElement>("[data-column]")];
-    expect(columns.map((column) => column.dataset.column)).toEqual([
-      "ready",
-      "toFire",
-      "inProgress",
-    ]);
-    expect(cardOf(el, heldCard.key)).toBeNull();
+    expect(columns.map((column) => column.dataset.column)).toEqual(["ready", "held", "inProgress"]);
+    expect(cardOf(el, toFireCard.key)).toBeNull();
   });
 
   it("names each bill on a two-bill card's Reprint, and each emits its own bill", async () => {
@@ -523,7 +517,9 @@ describe("A773 pass board widget", () => {
       });
       const heading = (key: string) =>
         root(el).querySelector(`[data-column="${key}"] .column-heading`)!.textContent;
-      expect(heading("held")).toContain(t("pass.column.held", "es-ES"));
+      expect(
+        root(el).querySelector('[data-column="toFire"] [data-held-part]')!.textContent,
+      ).toContain(t("pass.column.held", "es-ES"));
       expect(heading("toFire")).toContain(t("pass.column.to_fire", "es-ES"));
       expect(heading("inProgress")).toContain(t("pass.column.in_progress", "es-ES"));
       expect(cardOf(el, toFireCard.key).textContent).toContain(t("pass.kind.new_order", "es-ES"));
@@ -656,6 +652,11 @@ describe("A773 pass board widget", () => {
     },
   ];
   const allShown = { order: PASS_COLUMNS.order, hidden: [], collapsed: [] };
+  const withOverview: ColumnState = {
+    order: [...PASS_COLUMNS.order],
+    hidden: ["held", "toFireOnly"],
+    collapsed: [],
+  };
 
   it("draws Overview's rows from the pass's own dishes, the held after a +, when it is shown", async () => {
     const board = passBoard({ toFire: [toFireCard], overview: overviewFacts });
@@ -871,7 +872,7 @@ describe("A773 pass board widget", () => {
   });
 
   it("turns to the narrow list when the screen narrows, also after it is moved", async () => {
-    const el = await mountBoard({ board: everyColumnBoard, columns: allShown });
+    const el = await mountBoard({ board: everyColumnBoard, columns: withOverview });
     expect(root(el).querySelector(".kanban")).not.toBeNull();
     await page.viewport(390, 844);
     await vi.waitFor(() => expect(root(el).querySelector(".list")).not.toBeNull());
@@ -921,5 +922,62 @@ describe("A773 pass board widget", () => {
     const statusBox = status.getBoundingClientRect();
     expect(statusBox.top).toBeGreaterThanOrEqual(head.getBoundingClientRect().bottom);
     expect(statusBox.bottom).toBeLessThanOrEqual(sectionsOf(el)[0]!.getBoundingClientRect().top);
+  });
+
+  describe("D95 the pass's Held + To fire", () => {
+    const before = (a: Node, b: Node) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+    it("draws held cards at the bottom of To fire, under a Held part, by default", async () => {
+      expect(window.innerWidth).toBe(1280);
+      const el = await mountBoard({
+        board: passBoard({
+          held: [heldCard],
+          toFire: [toFireCard],
+          inProgress: [billInProgress],
+          ready: [readyCard],
+        }),
+      });
+      const columns = [...root(el).querySelectorAll<HTMLElement>("[data-column]")];
+      expect(columns.map((column) => column.dataset.column)).toEqual([
+        "toFire",
+        "inProgress",
+        "ready",
+      ]);
+      const toFire = root(el).querySelector<HTMLElement>('[data-column="toFire"]')!;
+      const fireCard = toFire.querySelector(`[data-card="${toFireCard.key}"]`)!;
+      const part = toFire.querySelector<HTMLElement>("[data-held-part]")!;
+      const held = toFire.querySelector<HTMLElement>(`[data-card="${heldCard.key}"]`)!;
+      expect(before(fireCard, part)).toBe(true);
+      expect(before(part, held)).toBe(true);
+      expect(part.textContent!.replace(/\s+/g, " ").trim()).toBe(`${t("pass.column.held")} · 1`);
+      expect(part.querySelector("[data-held-count]")!.textContent!.trim()).toBe("1");
+      expect(toFire.querySelector("[data-column-count]")!.textContent!.trim()).toBe("2");
+      expect(getComputedStyle(held).borderTopStyle).toBe("dashed");
+      expect(held.querySelector(".age")).toBeNull();
+      expect(held.querySelector("[data-pass-fire]")).toBeNull();
+      expect(fireCard.querySelector("[data-pass-fire]")).not.toBeNull();
+      expect(root(el).querySelector('[data-column="held"]')).toBeNull();
+      expect(root(el).querySelector('[data-column="toFireOnly"]')).toBeNull();
+
+      el.board = passBoard({ toFire: [toFireCard] });
+      await el.updateComplete;
+      expect(root(el).querySelector("[data-held-part]")).toBeNull();
+      expect(
+        root(el).querySelector('[data-column="toFire"] [data-column-count]')!.textContent!.trim(),
+      ).toBe("1");
+    });
+
+    it("names Held + To fire, Held and To fire apart in the Columns window", () => {
+      expect([...passColumnNames()]).toEqual([
+        ["overview", t("station.overview")],
+        ["toFire", t("pass.columns_held_to_fire")],
+        ["held", t("pass.column.held")],
+        ["toFireOnly", t("pass.column.to_fire")],
+        ["inProgress", t("pass.column.in_progress")],
+        ["ready", t("pass.column.ready")],
+      ]);
+      expect(t("pass.columns_held_to_fire", "es-ES")).toBe("En espera + Por marchar");
+    });
   });
 });
