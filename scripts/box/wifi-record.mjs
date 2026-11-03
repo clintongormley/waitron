@@ -132,6 +132,18 @@ function networkInvalid(reason) {
 }
 
 /**
+ * The canonical version-1 bytes and the reader's answer for them.
+ * @param {{ssidHex:string, keyMgmt:string, psk:string, hidden:boolean}} network
+ * @returns {{bytes: Uint8Array, result: WifiParseResult}}
+ */
+function canonicalRecord({ ssidHex, keyMgmt, psk, hidden }) {
+  const bytes = new TextEncoder().encode(
+    JSON.stringify({ version: 1, ssidHex, keyMgmt, psk, hidden }) + "\n",
+  );
+  return { bytes, result: parseWifiRecord(bytes) };
+}
+
+/**
  * Pure. network is exactly {ssidHex, keyMgmt, psk, hidden}. Returns the canonical version-1 bytes
  * once parseWifiRecord answers loaded for them. Throws code "wifi_record.network_invalid" with
  * reason "network-invalid" (wrong shape) or the reason parseWifiRecord gives those bytes; the
@@ -150,10 +162,7 @@ export function formatWifiRecord(network) {
   ) {
     throw networkInvalid("network-invalid");
   }
-  const bytes = new TextEncoder().encode(
-    JSON.stringify({ version: 1, ssidHex, keyMgmt, psk, hidden }) + "\n",
-  );
-  const result = parseWifiRecord(bytes);
+  const { bytes, result } = canonicalRecord(network);
   if (result.kind !== "loaded") throw networkInvalid(result.reason);
   return bytes;
 }
@@ -181,6 +190,13 @@ const SECURITY_REASONS = new Map([
   ["wpa-eap", "enterprise"],
   ["wpa-eap-suite-b-192", "enterprise"],
 ]);
+
+/** @type {Record<'record-oversized'|'record-corrupt'|'record-unsupported', WifiNoCopyReason>} */
+const PASSWORD_REASONS = {
+  "record-unsupported": "password-not-printable",
+  "record-corrupt": "password-invalid",
+  "record-oversized": "password-invalid",
+};
 
 /** @param {WifiNoCopyReason} reason @returns {WifiCopyDecision} */
 function noCopy(reason) {
@@ -224,16 +240,12 @@ export function decideWifiBootCopy(settings) {
     return noCopy(SECURITY_REASONS.get(keyMgmt) ?? "unsupported-security");
   }
   if (psk === null) return noCopy("password-unavailable");
-  // The reader answers record-corrupt for a too-long WPA3 password and for a damaged one alike.
+  // The reader cannot tell a too-long WPA3 password from a damaged one (`record-corrupt` or
+  // `record-oversized`).
   if (keyMgmt === "sae" && saeTooLong(psk)) return noCopy("password-too-long");
-  let bytes;
-  try {
-    bytes = formatWifiRecord({ ssidHex, keyMgmt, psk, hidden });
-  } catch (error) {
-    // The shape is already checked, so the reader's refusal can only be about the password.
-    const reason = /** @type {any} */ (error).reason;
-    return noCopy(reason === "record-unsupported" ? "password-not-printable" : "password-invalid");
-  }
+  // The shape is already checked, so the reader's refusal can only be about the password.
+  const { bytes, result } = canonicalRecord({ ssidHex, keyMgmt, psk, hidden });
+  if (result.kind !== "loaded") return noCopy(PASSWORD_REASONS[result.reason]);
   return /** @type {WifiCopyDecision} */ (Object.freeze({ kind: "write", bytes }));
 }
 

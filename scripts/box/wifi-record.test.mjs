@@ -1504,7 +1504,7 @@ describe("decideWifiBootCopy says why there is no copy", () => {
     expectDecisionShape(decision);
   });
 
-  it("the emoji cases count as the brief says", () => {
+  it("the test inputs have the lengths their names claim", () => {
     const forty = "\u{1F600}".repeat(40);
     expect([forty.length, [...forty].length]).toEqual([80, 40]);
     const five = "\u{1F600}".repeat(4) + "a";
