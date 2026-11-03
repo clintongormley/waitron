@@ -541,6 +541,7 @@ export function withPendingSweep(
   sweepProviders: () => Promise<readonly PaymentProvider[]>,
   owners: () => CollectionOwners,
   log: Logger,
+  signal?: AbortSignal,
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
     const report = await inner(now);
@@ -557,7 +558,9 @@ export function withPendingSweep(
     }
     for (const provider of providers) {
       try {
-        const r = await provider.resolvePending(now, owned);
+        const r = await (signal === undefined
+          ? provider.resolvePending(now, owned)
+          : provider.resolvePending(now, owned, signal));
         log("info", "resolve_pending.complete", {
           provider: provider.provider,
           captured: r.forwarded,
@@ -3339,6 +3342,7 @@ async function bootServer(
             }),
             () => sweepOwners(tradingContext.nodeId, holders.singletonRole.current),
             log,
+            pendingCardController.signal,
           ),
           () =>
             recoverAutomaticCardPayments({

@@ -157,6 +157,20 @@ describe("withPendingSweep", () => {
     });
   });
 
+  it("hands its signal to each provider's sweep", async () => {
+    const now = new Date("2026-09-10T12:00:00.000Z");
+    const empty: ForwardResult = { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
+    const resolvePending = vi.fn(async () => empty);
+    const signal = new AbortController().signal;
+    await withPendingSweep(
+      async () => REPORT,
+      async () => [fakeProvider("stripe", resolvePending)],
+      vi.fn(),
+      signal,
+    )(now);
+    expect(resolvePending).toHaveBeenCalledWith(now, signal);
+  });
+
   it("sweeps EVERY enumerated provider (the simulator + a pooled provider), each once", async () => {
     const empty: ForwardResult = { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     const sim = vi.fn(async () => empty);

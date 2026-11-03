@@ -260,8 +260,9 @@ export interface PaymentProvider {
    * row is polled at the processor and resolved `captured` or `failed`; a row the processor still
    * reports pending is left for the next pass (`nextDueAt`). `forwarded` counts rows captured,
    * `declined` rows failed. Only rows `owners` covers are read. An adapter whose `collect` never
-   * leaves a row `attempting` answers all-zeros. */
-  resolvePending(now: Date, owners: CollectionOwners): Promise<ForwardResult>;
+   * leaves a row `attempting` answers all-zeros. Once `signal` is aborted the pass asks the
+   * processor about no further row, leaving each unasked row `attempting` for a later pass. */
+  resolvePending(now: Date, owners: CollectionOwners, signal?: AbortSignal): Promise<ForwardResult>;
 
   /** Settle one `attempting` row that nothing in this process is still driving — the caller
    * guarantees that — by asking the processor what became of it. A `captured` or `failed` outcome

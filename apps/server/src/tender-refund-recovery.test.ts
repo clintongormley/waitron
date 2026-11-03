@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { billPaymentRefunds, tenderRefunds, tenders, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -238,6 +238,59 @@ describe("settled tender recovery admission", () => {
   });
 });
 
+describe("settled tender recovery stopping", () => {
+  it.each([true, false])(
+    "a signal stops before the next refund (signalled: %s)",
+    async (signalled) => {
+      await retained(true);
+      await retained(true);
+      const pending = async () =>
+        (
+          await v.db
+            .select({ id: tenderRefunds.id })
+            .from(tenderRefunds)
+            .where(and(eq(tenderRefunds.state, "pending"), eq(tenderRefunds.method, "card")))
+        ).map(({ id }) => id);
+      // Sent and due: each one this pass would put to the provider.
+      const waiting = (
+        await v.db
+          .select({ id: tenderRefunds.id })
+          .from(tenderRefunds)
+          .where(
+            and(
+              eq(tenderRefunds.state, "pending"),
+              eq(tenderRefunds.method, "card"),
+              isNotNull(tenderRefunds.sentAt),
+              isNull(tenderRefunds.nextRetryAt),
+            ),
+          )
+      ).map(({ id }) => id);
+      const controller = new AbortController();
+      const lookups = v.card.lookupCalls.length;
+      const ask = v.card.lookupRefund.bind(v.card);
+      vi.spyOn(v.card, "lookupRefund").mockImplementation(async (query) => {
+        controller.abort();
+        return ask(query);
+      });
+      await recoverTenderRefunds({
+        ...v.deps,
+        ...(signalled ? { signal: controller.signal } : {}),
+      });
+      const asked = v.card.lookupCalls.slice(lookups).map((q) => q.refundId);
+      expect(asked).toHaveLength(signalled ? 1 : waiting.length);
+      const unasked = waiting.filter((id) => !asked.includes(id));
+      expect(await pending()).toEqual(expect.arrayContaining(unasked));
+    },
+  );
+  it("a signal already raised asks about no refund and leaves its lookup time unwritten", async () => {
+    const t = await retained(true);
+    const lookups = v.card.lookupCalls.length;
+    await recoverTenderRefunds({ ...v.deps, signal: AbortSignal.abort() });
+    expect(v.card.lookupCalls).toHaveLength(lookups);
+    const [row] = await v.db.select().from(tenderRefunds).where(eq(tenderRefunds.id, t.refund.id));
+    expect(row).toMatchObject({ state: "pending", lastLookupAt: null, sendCount: 1 });
+  });
+});
 describe("bill refund admission", () => {
   it("refuses initial connected refund before reservation or provider call", async () => {
     const t = await billRefund(),

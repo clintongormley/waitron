@@ -254,12 +254,20 @@ export class StripeTerminalProvider implements PaymentProvider {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
 
-  async resolvePending(now: Date, owners: CollectionOwners): Promise<ForwardResult> {
+  async resolvePending(
+    now: Date,
+    owners: CollectionOwners,
+    signal?: AbortSignal,
+  ): Promise<ForwardResult> {
     const rows = await this.inTransaction((tx) => listAttempting(tx, PROVIDER, owners));
     let forwarded = 0;
     let declined = 0;
     let pending = false;
     for (const row of rows) {
+      if (signal?.aborted) {
+        pending = true;
+        break;
+      }
       try {
         const result = await this.resolveInactiveAttempt(row.paymentRef, now, null);
         if (result.outcome === "captured") forwarded++;
