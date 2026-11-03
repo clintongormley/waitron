@@ -729,7 +729,8 @@ function applyShippedTail(
 
 /**
  * The model of a stepdown's "files nothing": a fenced node's `drainPass` returns at once. Held in
- * memory rather than in the node's database because no scenario restarts a node.
+ * memory rather than in the node's database because S2 never reopens a fenced node, and the fence
+ * belongs to the open handle.
  */
 const fencedNodes = new WeakSet<NodeDb>();
 
@@ -822,7 +823,7 @@ export function buildReturnBatchMissingOnly(
 }
 
 /** S2's control: the batch built without the `enviando` → `pendiente` return — see `ReturnRule`. */
-export function buildReturnBatchKeepingEnviando(
+export function buildReturnBatchKeepsEnviando(
   sender: NodeDb,
   reportedHeads: Readonly<Record<string, number>>,
 ): ReturnBatch {

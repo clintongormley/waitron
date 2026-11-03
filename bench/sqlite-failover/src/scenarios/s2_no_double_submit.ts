@@ -24,11 +24,13 @@
 //     and applied again it changes nothing and files nothing.
 //
 // The verdict is a measurement, not a decision taken here: it is PASS when no part filed any record
-// twice and FAIL when one did. Today it is FAIL, for two separate reasons — see the README section
-// "What S2 measures, and what it does not" for what that means and what is open. Parts A, B, C and
-// the FIRST HALF of Part E still assert, so a failure in one of those is a thrown assertion and the
-// runner reports it as a broken harness rather than a result; Part D and Part E's second half
-// measure without asserting, and feed the verdict instead.
+// twice, Part F left no record unfiled and Part G's replay was clean, and FAIL otherwise. Today it
+// is FAIL, for two separate reasons — see the README section "What S2 measures, and what it does
+// not" for what that means and what is open. Parts A, B, C and the FIRST HALF of Part E still
+// assert, so a failure in one of those is a thrown assertion and the runner reports it as a broken
+// harness rather than a result; Part D, Part E's second half and Parts F and G measure their
+// outcomes without asserting them (F and G assert only preconditions), and feed the verdict
+// instead; Part F's three controls assert.
 //
 // Everything here is the rig's MODEL of the submission state machine (`src/model.ts`) — no result
 // here is a statement about `packages/fiscal-verifactu`.
@@ -43,7 +45,7 @@ import {
   applyTailInsertOnly,
   applyTailRegressing,
   buildReturnBatch,
-  buildReturnBatchKeepingEnviando,
+  buildReturnBatchKeepsEnviando,
   buildReturnBatchMissingOnly,
   chainsOf,
   diffTail,
@@ -79,8 +81,8 @@ function submissionKey(nodeId: string, secuencia: number): string {
 /**
  * The stub NEVER throws on a repeat, even though a repeat is the whole thing this scenario looks
  * for. `drainPass` catches a throwing `submit`, returns the row to `pendiente` and blocks that
- * chain for the rest of the pass (`src/model.ts:581-587`), so an assertion thrown in here is
- * swallowed rather than reported as itself. What it CAUSES — the row released and the chain blocked
+ * chain for the rest of the pass (the `catch` in `drainPass`, `src/model.ts`), so an assertion
+ * thrown in here is swallowed rather than reported as itself. What it CAUSES — the row released and the chain blocked
  * — is visible to the assertions outside the callback, which is how the review seat's throwing stub
  * still made S2 fail. The repeat is read off `filed` afterwards instead.
  *
@@ -501,7 +503,7 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     const returned = runReturnSequence(open, "returned", { fenced: true, build: buildReturnBatch });
 
     // ---- Controls for Part F: each removes one part of the return batch ----------------------
-    // Written down BEFORE these controls were first run, as each one's line in the detail below:
+    // Each control's expected segment of the detail line:
     //
     //   no-fence: filed-twice=no-fence-m1:2,no-fence-m1:4 never-filed=none
     //     m1's own drain, unfenced, files records 2 and 4 after the batch carried them `pendiente`,
@@ -512,8 +514,9 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     //     m1 filed it, and files it again.
     //   keeps-enviando: filed-twice=none never-filed=keeps-enviando-m1:3
     //     NOT a second filing: record 3 reaches m2 `enviando`, no drain claims it, and nobody ever
-    //     files it. This model's drain has no five-minute recovery (README, S2), so a missed
-    //     filing is the only way this control can fail; with that recovery, m2 would file it once.
+    //     files it. This model's drain has no five-minute recovery (the real drain's
+    //     `recoverStaleClaims`; README → "What S2 measures, and what it does not"), so nothing ever
+    //     files record 3.
     const noFence = runReturnSequence(open, "no-fence", { fenced: false, build: buildReturnBatch });
     assert.deepEqual(
       [noFence.filedTwice, noFence.neverFiled, noFence.sameBytes],
@@ -531,7 +534,7 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     );
     const keepsEnviando = runReturnSequence(open, "keeps-enviando", {
       fenced: true,
-      build: buildReturnBatchKeepingEnviando,
+      build: buildReturnBatchKeepsEnviando,
     });
     assert.deepEqual(
       [keepsEnviando.filedTwice, keepsEnviando.neverFiled],
@@ -575,12 +578,10 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     );
 
     // Every filing this scenario measured, gathered in one place, and the verdict is read off it:
-    // FAIL when any of them names a record filed twice. Parts A, B and C assert their own ledger is
-    // clean and would have thrown already; what this adds is D and E, which MEASURE rather than
-    // assert. A measured part must not be able to record a second filing underneath a PASS — with
-    // the verdict read off Part D alone, forcing D's ship to carry the whole chain printed PASS on
-    // a line that still said `cloud-f:2` had been filed twice.
-    const measuredDoubles = [
+    // FAIL when any of them names a record filed twice or, for Part F, never filed. Parts A, B and
+    // C assert their own ledger is clean and would have thrown already; what this adds is D, E and
+    // F, which MEASURE rather than assert; `replayClean` below adds Part G.
+    const measuredFaults = [
       ...doubleFilings(ledger),
       ...doubledD,
       ...doubleFilings(ledgerE),
@@ -593,7 +594,7 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     return {
       id: "S2",
       title: "no second tax-agency filing on a re-sent or recomputed tail ship",
-      verdict: measuredDoubles.length === 0 && replayClean ? "PASS" : "FAIL",
+      verdict: measuredFaults.length === 0 && replayClean ? "PASS" : "FAIL",
       critical: true,
       detail:
         `RETRIED-IN-FULL ship safe: filed=${ledger.filed.length} double=${doubleFilings(ledger).length} ` +
@@ -684,7 +685,7 @@ type ReturnOutcome = {
   filedTwice: string[];
   /** Every record of both chains never filed at all. */
   neverFiled: string[];
-  /** The sender's chain as the receiver holds it after its last drain pass. */
+  /** The sender's chain as the receiver holds it before the replay. */
   receiverStates: string[];
   returnedFromEnviando: number[];
   /** Whether the batch built again from the same reported heads is the same bytes. */
