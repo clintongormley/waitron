@@ -5860,13 +5860,14 @@ a card with a fired dish shows "Held, not released", or "Waiting for the pass" o
 Which cards a column holds is its own (`DRAWN`, `station-queue.ts`). `waiting`, headed Waiting on
 the board and named "Waiting + Held" in Columns (`station.columns_waiting_held`), holds every card
 whose least advanced dish is Waiting: first the cards with a fired dish, then, only while it holds a
-card with none, the held part, then those held cards. The held part is an `h3` with
-`data-held-part` reading "Held · 2", the "·" hidden from screen readers and the count in
-`data-held-count` (`heldPart`, `apps/till/src/widgets/kitchen-board-parts.ts`), drawn in the column
-and in its tab panel alike; a collapsed column draws neither its cards nor the part. `waitingOnly`
+card with none, the held part, then those held cards. The held part is an `h3` with `data-held-part`
+reading "Held · 2", the "·" hidden from screen readers and the count in `data-held-count`
+(`heldPart`, `apps/till/src/widgets/kitchen-board-parts.ts`), drawn in the column and in its tab
+panel alike; a collapsed column draws neither its cards nor the part. `waitingOnly`
 (`data-column="waiting-only"`, headed and named Waiting) holds only the Waiting cards with a fired
-dish, and `held` (`data-column="held"`, headed and named Held) only the cards with none. A shown
-column is drawn even when it holds no card, and a card two shown columns hold is drawn in both.
+dish, and `held` (`data-column="held"`, headed and named Held) only the cards with none. On a board
+with cards, a shown column is drawn even when it holds none, and a card two shown columns hold is
+drawn in both.
 
 The columns are drawn in the device's stored order. The screen reads each board's layout once,
 the first time that board is drawn, with `readColumnState` (`apps/till/src/state/kitchen-columns.ts`)
