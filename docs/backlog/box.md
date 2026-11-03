@@ -840,12 +840,19 @@ large release assets and the A940/A947/A798 coordination.
   with `adapter-missing` until the Linux adapters exist.
 - `preboot-locked.mjs`: what a locked box answers. `freezeLockedTarget` checks the two
   certificates before anything listens: the recovery certificate is signed by the box's CA (by
-  signature), names only `unlock-<installationId>.waitron.local` and has its own key; the redirect
+  signature), names only `unlock-<installationId>.waitron.local` and has its own key; neither it
+  nor the CA carries an extended key usage that leaves out server authentication, and the CA's
+  validity has begun; the redirect
   certificate is self-signed, names only `waitron.local`, and does not share the recovery
   certificate's key (one carrying the CA's key is already refused as CA-signed or not
   self-signed). `decideLockedRequest` sends `waitron.local` to the one recovery address with a 302,
   refuses other methods (405) and other names (421), and answers plain-HTTP GET and HEAD with 503
-  `unlock.remote_unavailable` when the installation id or the recovery certificate is refused. Host and TLS names outside printable ASCII match nothing.
+  `unlock.remote_unavailable` when `freezeLockedTarget` refuses the set. Host and TLS names outside printable ASCII match nothing.
+  Not checked: the recovery certificate's key usage extension (the key operations it allows,
+  separate from the extended key usage above). `X509Certificate` has no property for it, and this
+  module does not decode the certificate's bytes. A real Node handshake failed for an EC leaf whose key usage was `nonRepudiation` alone
+  (TLS 1.2 and 1.3) or `keyEncipherment` or `keyAgreement` alone (TLS 1.2), and such a set still
+  answers ready.
 - `wifi-record.mjs`: version 1 of the boot copy's Wi-Fi record. `parseWifiRecord` accepts only
   `wpa-psk` and `sae` networks; `createWifiRecordReader` reads only
   `waitron-recovery/wifi.json` under the boot root it is given, never the staging copy

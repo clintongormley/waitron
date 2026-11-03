@@ -255,12 +255,12 @@ export const UNLOCK_DELAYS_MS; // frozen [2000, 4000, 8000, 16000, 32000, 60000]
 /**
  * @typedef {object} UnlockGateOptions
  * @property {unknown} observation  handed to freezeUnlockTarget; a refusal makes a refused gate, not a throw
- * @property {() => number} now  milliseconds on a clock that never jumps; production uses performance.now()
+ * @property {() => number} now  milliseconds on a clock that never jumps; the preboot service is to pass performance.now()
  * @property {(handle: UnlockHandle, key: Uint8Array) => Promise<boolean>} verify  must finish with key before it settles
  * @property {(handle: UnlockHandle, key: Uint8Array) => Promise<void>} open  must finish with key before it settles
  * @typedef {object} UnlockResult  frozen
  * @property {'opened'|'wrong-key'|'wait'|'refused-state'} kind
- * @property {number|null} retryAt  wrong-key and wait: the deadline on now()'s clock (monotonic, so the HTTP adapter sends time remaining, never this number); null while verify or open runs, and for opened and refused-state
+ * @property {number|null} retryAt  wrong-key and wait: the deadline on now()'s clock; an HTTP adapter must send the time remaining, never this number; null while verify or open runs, and for opened and refused-state
  * @property {string|null} reason  refused-state only: a Task 1 refusal, or 'opened'|'closed'|'verifier-failed'|'open-failed'|'adapter-missing'
  * @typedef {object} UnlockStatus  frozen
  * @property {'ready'|'waiting'|'verifying'|'opened'|'closed'|'refused'} state  'verifying' while verify or open runs
@@ -459,12 +459,15 @@ export function freezeLockedTarget(input);
 | 1 | `installation-id-invalid` | Not 1–56 characters of `[a-z0-9]`. |
 | 2 | `certificate-unreadable` | The CA or recovery input is not one PEM certificate block, or `X509Certificate` cannot parse it. |
 | 3 | `ca-invalid` | The CA certificate is not a CA (`ca` is false) or does not verify with its own public key. |
+| 3a | `ca-not-server-auth` | The CA has an extended key usage without serverAuth (`1.3.6.1.5.5.7.3.1`); Node's TLS client refused a leaf under such a CA (`INVALID_PURPOSE`), `anyExtendedKeyUsage` alone included. A CA with no extended key usage passes. |
 | 4 | `recovery-not-ca-signed` | The recovery certificate fails `checkIssued(ca)` **or** `verify(ca.publicKey)` (re-map finding 8). |
 | 5 | `recovery-is-ca` | The recovery certificate is itself a CA. |
 | 6 | `recovery-same-key` | Its public key equals the CA's (`KeyObject.equals`). Its private key sits unencrypted on the boot partition, so sharing the CA's key pair would put the CA's signing key there (review I1). |
 | 7 | `recovery-names-wrong` | Its `subjectAltName` is not exactly `DNS:<recoveryHost>` (re-map finding 10). |
+| 7a | `recovery-not-server-auth` | It has an extended key usage without serverAuth, `anyExtendedKeyUsage` alone included: Node's TLS client refused both (`INVALID_PURPOSE`). A leaf with no extended key usage passes. |
 | 8 | `recovery-expired` | `now` is before its `validFromDate` or after its `validToDate`. |
 | 9 | `recovery-outlives-ca` | Its `validToDate` is after the CA's (spec §7.5: "Refuse a leaf that outlives the CA"). |
+| 10 | `ca-not-yet-valid` | `now` is before the CA's `validFromDate` (Node's TLS client: `CERT_NOT_YET_VALID`). A CA past its `validToDate` needs no rule: 8 or 9 already refuses every leaf then. |
 
 | `redirectRefusal` (redirect alone refused: HTTPS `waitron.local` gets no certificate; HTTP and the recovery address still work) | When |
 | --- | --- |
@@ -475,7 +478,7 @@ export function freezeLockedTarget(input);
 | `redirect-names-wrong` | Its `subjectAltName` is not exactly `DNS:waitron.local`. |
 | `redirect-same-key` | Its public key equals the recovery certificate's (`KeyObject.equals`). One carrying the CA's key is already refused as `redirect-ca-signed` or `redirect-not-self-signed`. |
 
-The redirect certificate's dates are not checked: it is untrusted anyway, so an expired one still gives the person the one warning the owner accepted. The recovery certificate's dates are checked against the box's own clock; a box whose clock is wrong refuses a good certificate and sends the person to the local screen, which is the safe direction.
+The redirect certificate's dates are not checked: it is untrusted anyway, so an expired one still gives the person the one warning the owner accepted. The recovery certificate's dates, and the CA's start date, are checked against the box's own clock.
 
 Two decisions here, both the conservative reading: a bad recovery certificate turns off every remote route (a redirect to an address that cannot be trusted helps nobody), while a bad redirect certificate turns off only HTTPS `waitron.local`, so the sheet's full address and `http://waitron.local` still work.
 
@@ -495,6 +498,7 @@ Two decisions here, both the conservative reading: a bad recovery certificate tu
 - `redirectSameKey`: self-signed with the **recovery** key, SAN `DNS:waitron.local`;
 - `recoverySameKey`: signed by `ca`, SAN the recovery address, made from a request signed with **`ca`'s own key**, so it carries the CA's public key;
 - `redirectByImpostor`: signed by `impostorCa`, SAN `DNS:waitron.local`, `CA:FALSE`;
+- `caClientAuth`, `caAnyUsage`, `caServerAuth`: `ca` with extended key usage `clientAuth`, `anyExtendedKeyUsage` or `serverAuth`; `recoveryClientAuth`, `recoveryAnyUsage`, `recoveryServerAuth`, `recoveryBothAuth`: `recovery` with extended key usage `clientAuth`, `anyExtendedKeyUsage`, `serverAuth`, or `clientAuth,serverAuth`; `futureCa`: a self-signed CA starting a day ahead, made with `openssl ca -selfsign -startdate` (OpenSSL 3.0's `req` and `x509` take no start date), and `recoveryOfFutureCa` signed by it;
 - `rsaCa` and `rsaRecovery`: the same as `ca` and `recovery` but with RSA-2048 keys (`-newkey rsa:2048`), as the real box CA uses. The test turns both into `\r\n` text with `.replace(/\n/g, "\r\n")`, which is the shape node-forge writes (re-map finding 9).
 
 The tests read each certificate's real dates with `new X509Certificate(pem).validFromDate` and choose `now` from them, never from the wall clock.
@@ -505,7 +509,7 @@ The tests read each certificate's real dates with `new X509Certificate(pem).vali
   - **Review Focus 4:**
     - `recovery PEM with the CA's private key appended → certificate-unreadable`, and the result's `JSON.stringify` holds no `PRIVATE KEY` text;
     - `two certificates concatenated | a private key alone | "garbage" → certificate-unreadable`;
-    - `impostorRecovery (issuer name matches, another key signed it) → recovery-not-ca-signed`;
+    - `impostorRecovery (issuer name and key identifier copied, another key signed it) → recovery-not-ca-signed`;
     - `withBoxName → recovery-names-wrong`; `withAddress → recovery-names-wrong`; `otherId → recovery-names-wrong`; `normal as the recovery certificate → recovery-names-wrong`;
     - `normal as the redirect certificate → ready, redirect "refused", redirectRefusal "redirect-ca-signed"`; the same for `recovery` and for `ca` as the redirect certificate;
     - `redirectAsCa → redirect-is-ca`; `redirectWrongName → redirect-names-wrong`; `redirectSameKey → redirect-same-key`; `"garbage" → certificate-unreadable`.
@@ -513,6 +517,7 @@ The tests read each certificate's real dates with `new X509Certificate(pem).vali
   - **The real box CA's shape:** `rsaCa and rsaRecovery, both with \r\n line endings → ready`; `the same with \n → ready`; `rsaRecovery with one line ending changed to \n among \r\n → certificate-unreadable`.
   - `redirectByImpostor → ready, redirect "refused", redirectRefusal "redirect-not-self-signed"`.
   - `now one second before validFrom | one second after validTo → recovery-expired`; `longLived → recovery-outlives-ca`.
+  - `caClientAuth | caAnyUsage → ca-not-server-auth`; `caServerAuth → ready`; `recoveryClientAuth | recoveryAnyUsage → recovery-not-server-auth`; `recoveryServerAuth | recoveryBothAuth → ready`; `futureCa`, now one second before its validFrom → `ca-not-yet-valid`, one second after → ready; now after the CA's validTo → `recovery-expired`, and `longLived` then → `recovery-outlives-ca`.
   - `a missing key | an extra key | a non-string certificate | now NaN → throws {code:"recovery_identity.input_invalid", reason:"input-invalid"}`.
 - [ ] **Step 2: Run red.** `pnpm exec vitest run scripts/box/preboot-locked.test.mjs`.
 - [ ] **Step 3: Implement** `freezeLockedTarget` and `BOX_NAME`.
@@ -527,6 +532,7 @@ The tests read each certificate's real dates with `new X509Certificate(pem).vali
   - Drop the self-signed check → `redirectByImpostor` gives `redirect: "ready"`.
   - Accept `\n` endings only → the `\r\n` RSA case is refused.
   - Accept any mix of endings → the mixed case loads.
+  - Drop rule 3a → `caClientAuth` loads; drop rule 7a → `recoveryClientAuth` loads; drop rule 10 → `futureCa` one second before its start loads.
 - [ ] **Step 6: Commit:** `feat(box): check the two certificates a locked box shows before it listens`. The commit body says the files are read and the TLS contexts built by the Linux pull request, and that Android Chrome qualification is UNVERIFIED / NOT RUN.
 
 ### Task 6: what a locked box answers

@@ -31,6 +31,7 @@ const INSTALLATION_ID = /^[a-z0-9]{1,56}$/;
 const BEGIN = "-----BEGIN CERTIFICATE-----";
 const END = "-----END CERTIFICATE-----";
 const BASE64_LINE = /^[A-Za-z0-9+/=]+$/;
+const SERVER_AUTH = "1.3.6.1.5.5.7.3.1";
 
 // Only results this module built reach the request decisions, so a hand-built target cannot.
 /** @type {WeakSet<object>} */
@@ -74,6 +75,15 @@ function parse(text) {
   }
 }
 
+/**
+ * Node 26's TLS client refused the handshake when the leaf or its CA had an extended key usage
+ * without serverAuth, anyExtendedKeyUsage alone included; with no such extension it accepted.
+ * @param {X509Certificate} certificate
+ */
+function allowsServerAuth(certificate) {
+  return certificate.keyUsage === undefined || certificate.keyUsage.includes(SERVER_AUTH);
+}
+
 /** @param {string} text @param {X509Certificate} ca @param {X509Certificate} recovery */
 function redirectRefusal(text, ca, recovery) {
   const redirect = parse(text);
@@ -112,6 +122,7 @@ export function freezeLockedTarget(input) {
   const recovery = parse(recoveryCertificate);
   if (!ca || !recovery) return refused("certificate-unreadable");
   if (!ca.ca || !ca.verify(ca.publicKey)) return refused("ca-invalid");
+  if (!allowsServerAuth(ca)) return refused("ca-not-server-auth");
   // checkIssued matches the issuer's name and key identifier, both of which another CA can copy;
   // only the signature check ties the leaf to this CA's key.
   if (!recovery.checkIssued(ca) || !recovery.verify(ca.publicKey)) {
@@ -123,10 +134,13 @@ export function freezeLockedTarget(input) {
   if (recovery.publicKey.equals(ca.publicKey)) return refused("recovery-same-key");
   const recoveryHost = `unlock-${installationId}.${BOX_NAME}`;
   if (recovery.subjectAltName !== `DNS:${recoveryHost}`) return refused("recovery-names-wrong");
+  if (!allowsServerAuth(recovery)) return refused("recovery-not-server-auth");
   if (now < recovery.validFromDate.getTime() || now > recovery.validToDate.getTime()) {
     return refused("recovery-expired");
   }
   if (recovery.validToDate > ca.validToDate) return refused("recovery-outlives-ca");
+  // A CA past its validTo cannot get here: the two checks above already refuse every such leaf.
+  if (now < ca.validFromDate.getTime()) return refused("ca-not-yet-valid");
 
   // The redirect certificate's dates are deliberately not checked: it is untrusted anyway.
   const refusal = redirectRefusal(redirectCertificate, ca, recovery);

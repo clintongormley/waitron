@@ -31,7 +31,7 @@ signed() {
   openssl x509 -req -in "$name.csr" -CA "$issuer.pem" -CAkey "$issuer.key" \
     -set_serial "$serial" -days "$days" -extfile "$name.ext" -out "$name.pem"
 }
-for k in ca impostorCa recovery redirect; do eckey "$k"; done
+for k in ca impostorCa futureCa recovery redirect; do eckey "$k"; done
 openssl genrsa -out rsaCa.key 2048
 openssl genrsa -out rsaRecovery.key 2048
 
@@ -43,6 +43,21 @@ SAME_ID="-addext subjectKeyIdentifier=5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a"
 self ca ca 30 "/CN=Waitron box CA" $CA_EXT $SAME_ID -addext "nameConstraints=critical,permitted;DNS:waitron.local"
 self impostorCa impostorCa 30 "/CN=Waitron box CA" $CA_EXT $SAME_ID
 self rsaCa rsaCa 30 "/CN=Waitron box CA" $CA_EXT -addext "nameConstraints=critical,permitted;DNS:waitron.local"
+self caClientAuth ca 30 "/CN=Waitron box CA" $CA_EXT $SAME_ID -addext extendedKeyUsage=clientAuth
+self caServerAuth ca 30 "/CN=Waitron box CA" $CA_EXT $SAME_ID -addext extendedKeyUsage=serverAuth
+self caAnyUsage ca 30 "/CN=Waitron box CA" $CA_EXT $SAME_ID -addext extendedKeyUsage=anyExtendedKeyUsage
+# OpenSSL 3.0.20's req and x509 take no start date (no -not_before), so the CA that is not yet valid
+# comes from openssl ca. The dates come from the test: sh has no portable date arithmetic.
+mkdir futureCaDb
+: > futureCaDb/index.txt
+echo 01 > futureCaDb/serial
+printf '%s\n' '[ca]' 'default_ca=d' '[d]' 'database=futureCaDb/index.txt' 'new_certs_dir=futureCaDb' \
+  'serial=futureCaDb/serial' 'default_md=sha256' 'policy=p' 'x509_extensions=e' '[p]' \
+  'commonName=supplied' '[e]' 'basicConstraints=critical,CA:TRUE' 'subjectKeyIdentifier=hash' \
+  > futureCa.cnf
+openssl req -new -key futureCa.key -subj "/CN=Waitron box CA" -out futureCa.csr
+openssl ca -batch -notext -selfsign -config futureCa.cnf -keyfile futureCa.key -in futureCa.csr \
+  -startdate "$FUTURE_START" -enddate "$FUTURE_END" -out futureCa.pem
 
 LEAF='basicConstraints=CA:FALSE\nsubjectAltName='
 signed recovery recovery ca 7 "$LEAF$RECOVERY_SAN"
@@ -57,6 +72,11 @@ signed impostorRecovery recovery impostorCa 7 "$LEAF$RECOVERY_SAN"
 signed recoverySameKey ca ca 7 "$LEAF$RECOVERY_SAN"
 signed redirectByImpostor redirect impostorCa 7 "$LEAF""DNS:waitron.local"
 signed rsaRecovery rsaRecovery rsaCa 7 "$LEAF$RECOVERY_SAN"
+signed recoveryClientAuth recovery ca 7 "$LEAF$RECOVERY_SAN\nextendedKeyUsage=clientAuth"
+signed recoveryAnyUsage recovery ca 7 "$LEAF$RECOVERY_SAN\nextendedKeyUsage=anyExtendedKeyUsage"
+signed recoveryServerAuth recovery ca 7 "$LEAF$RECOVERY_SAN\nextendedKeyUsage=serverAuth"
+signed recoveryBothAuth recovery ca 7 "$LEAF$RECOVERY_SAN\nextendedKeyUsage=clientAuth,serverAuth"
+signed recoveryOfFutureCa recovery futureCa 7 "$LEAF$RECOVERY_SAN"
 
 NOT_CA="-addext basicConstraints=critical,CA:FALSE"
 self redirect redirect 30 "/CN=waitron.local" $NOT_CA -addext subjectAltName=DNS:waitron.local
@@ -72,7 +92,11 @@ const pem = {};
 /** @type {string} */
 let folder;
 
+/** @param {number} ms */
+const opensslDate = (ms) => `${new Date(ms).toISOString().replace(/[-:T]/g, "").slice(2, 14)}Z`;
+
 beforeAll(async () => {
+  const day = 24 * 60 * 60 * 1000;
   folder = await fs.realpath(await fs.mkdtemp(join(tmpdir(), "b3-preboot-locked-")));
   const script = join(folder, "fixtures.sh");
   await fs.writeFile(script, FIXTURES);
@@ -80,7 +104,13 @@ beforeAll(async () => {
     cwd: folder,
     timeout: 20_000,
     stdio: "pipe",
-    env: { ...process.env, RECOVERY_SAN, LONG_ID },
+    env: {
+      ...process.env,
+      RECOVERY_SAN,
+      LONG_ID,
+      FUTURE_START: opensslDate(Date.now() + day),
+      FUTURE_END: opensslDate(Date.now() + 30 * day),
+    },
   });
   for (const name of await fs.readdir(folder)) {
     if (name.endsWith(".pem") || name.endsWith(".key")) {
@@ -256,6 +286,57 @@ describe("freezeLockedTarget", () => {
         refused("ca-invalid"),
       );
     });
+
+    it.each(["caClientAuth", "caAnyUsage"])(
+      "%s (extended key usage without serverAuth) → ca-not-server-auth",
+      (name) => {
+        expect(new X509Certificate(cert(name)).keyUsage).not.toContain("1.3.6.1.5.5.7.3.1");
+        expect(freezeLockedTarget(input({ caCertificate: cert(name) }))).toEqual(
+          refused("ca-not-server-auth"),
+        );
+      },
+    );
+
+    it("caServerAuth (extended key usage serverAuth) → ready", () => {
+      expect(freezeLockedTarget(input({ caCertificate: cert("caServerAuth") }))).toEqual(READY);
+    });
+
+    it("futureCa, now one second before its validFrom, its leaf already valid → ca-not-yet-valid", () => {
+      const now = from("futureCa") - 1000;
+      expect(now).toBeGreaterThan(from("recoveryOfFutureCa"));
+      expect(
+        freezeLockedTarget(
+          input({
+            caCertificate: cert("futureCa"),
+            recoveryCertificate: cert("recoveryOfFutureCa"),
+            now,
+          }),
+        ),
+      ).toEqual(refused("ca-not-yet-valid"));
+    });
+
+    it("futureCa, now one second after its validFrom → ready", () => {
+      const now = from("futureCa") + 1000;
+      expect(now).toBeLessThan(to("recoveryOfFutureCa"));
+      expect(
+        freezeLockedTarget(
+          input({
+            caCertificate: cert("futureCa"),
+            recoveryCertificate: cert("recoveryOfFutureCa"),
+            now,
+          }),
+        ),
+      ).toEqual(READY);
+    });
+
+    it("now after the CA's validTo never reaches ready: recovery → recovery-expired, longLived → recovery-outlives-ca", () => {
+      const now = to("ca") + 1000;
+      expect(freezeLockedTarget(input({ now }))).toEqual(refused("recovery-expired"));
+      expect(now).toBeLessThan(to("longLived"));
+      expect(freezeLockedTarget(input({ recoveryCertificate: cert("longLived"), now }))).toEqual(
+        refused("recovery-outlives-ca"),
+      );
+    });
   });
 
   describe("the recovery certificate", () => {
@@ -291,6 +372,24 @@ describe("freezeLockedTarget", () => {
         expect(freezeLockedTarget(input({ recoveryCertificate: cert(name) }))).toEqual(
           refused("recovery-names-wrong"),
         );
+      },
+    );
+
+    it.each(["recoveryClientAuth", "recoveryAnyUsage"])(
+      "%s (extended key usage without serverAuth) → recovery-not-server-auth",
+      (name) => {
+        expect(new X509Certificate(cert(name)).keyUsage).not.toContain("1.3.6.1.5.5.7.3.1");
+        expect(freezeLockedTarget(input({ recoveryCertificate: cert(name) }))).toEqual(
+          refused("recovery-not-server-auth"),
+        );
+      },
+    );
+
+    it.each(["recoveryServerAuth", "recoveryBothAuth"])(
+      "%s (extended key usage including serverAuth) → ready",
+      (name) => {
+        expect(new X509Certificate(cert(name)).keyUsage).toContain("1.3.6.1.5.5.7.3.1");
+        expect(freezeLockedTarget(input({ recoveryCertificate: cert(name) }))).toEqual(READY);
       },
     );
 
@@ -461,12 +560,23 @@ const REFUSED_INPUTS = [
   ["installation-id-invalid", () => input({ installationId: "" })],
   ["certificate-unreadable", () => input({ caCertificate: "garbage" })],
   ["ca-invalid", () => input({ caCertificate: cert("recovery") })],
+  ["ca-not-server-auth", () => input({ caCertificate: cert("caClientAuth") })],
   ["recovery-not-ca-signed", () => input({ recoveryCertificate: cert("impostorRecovery") })],
   ["recovery-is-ca", () => input({ recoveryCertificate: cert("leafAsCa") })],
   ["recovery-same-key", () => input({ recoveryCertificate: cert("recoverySameKey") })],
   ["recovery-names-wrong", () => input({ recoveryCertificate: cert("normal") })],
+  ["recovery-not-server-auth", () => input({ recoveryCertificate: cert("recoveryClientAuth") })],
   ["recovery-expired", () => input({ now: from("recovery") - 1000 })],
   ["recovery-outlives-ca", () => input({ recoveryCertificate: cert("longLived") })],
+  [
+    "ca-not-yet-valid",
+    () =>
+      input({
+        caCertificate: cert("futureCa"),
+        recoveryCertificate: cert("recoveryOfFutureCa"),
+        now: from("futureCa") - 1000,
+      }),
+  ],
 ];
 
 /** @param {string} reason */
