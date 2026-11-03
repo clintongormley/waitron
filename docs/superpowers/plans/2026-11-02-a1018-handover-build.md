@@ -538,7 +538,7 @@ modules' non-database state (`apps/server/src/backup-sources.ts:50-62`).
 | `node_signing_key` | `node.db` | source-only | M1's private key never leaves M1 (design §2) |
 | `node_handover_operations`, `_events`, `_restriction` (Slice 1) | `node.db` | destination-owned | each box keeps its own |
 | `join_requests` | `venue.db` | source-only, inside the copy | keyed by the receiving box's node id; M2 reads only its own rows, so M1's lie unused |
-| `change_log` | `venue.db` | rebuildable, inside the copy | a dashboard signal deleted by the transaction that wrote it; a leftover row is delivered once on M2, harmlessly |
+| `change_log` | `venue.db` | rebuildable, inside the copy | a dashboard signal deleted by the transaction that wrote it; a leftover row is delivered once on M2 |
 | `node_sealed_state` | `venue.db` | source-only, inside the copy | M1's state files sealed with M1's recovery key, which M2 cannot open; M2 writes its own row |
 | `recovery_packs` | `venue.db` | source-only, inside the copy | keyed by M1's node id; M2 reads its own or none |
 | `fiscal_certificate_installs`, `fiscal_certificate_reminders` | `venue.db` | source-only, inside the copy | keyed by M1's node id. The certificate itself is in `tenant_credentials`. What M2's certificate card shows after activation is asserted in Task 5.10; if it shows no certificate, that is reported as a follow-up FISCAL task, not patched here |
@@ -1996,16 +1996,15 @@ except that Tasks 4.4 and 4.5's interface lines were amended in place.
 - `captureFinalCopy(deps, operationId)` reads the binding from this box's stored operation row,
   never from the request. It refuses `handover.not_stepped_down` unless the restriction is a
   handed-over one for this operation, its successor and its membership term.
-- Besides Task 4.8's 403 and 404, the source routes answer 400 `handover.request_invalid` (the
-  signed query's `operationId` differs from the path's), 409 `handover.not_stepped_down`, 409
+- Besides Task 4.8's 403 and 404, the source routes answer 400 `handover.request_invalid` (a
+  malformed envelope or body, or a signed query whose `operationId` differs from the path's), 409 `handover.not_stepped_down`, 409
   `handover.final_copy_changed` and 500 `handover.summary_failed`
   (`apps/server/src/handover-source-api.ts`).
 - **The final-copy route checks the stored copy (Slice 4's Ruling R9)** against the indicator's
   digest and size before streaming it. A missing or changed file is taken again from `venue.db`,
   one retake at a time in this process, and served only if the retake's digest equals the stored
   one; otherwise the route refuses `handover.final_copy_changed`.
-- A retried capture deletes the unsigned copy a failed attempt left before copying again
-  (c141a9e55d).
+- A retried capture deletes the unsigned copy a failed attempt left before copying again.
 - Litestream's folder sits beside `venue.db` in the venue folder: its manifest row has
   `where: "venue-folder"`.
 - **Other state-folder files are left out of the manifest (Slice 4's Ruling R5)**: `recovery.json`,
@@ -2016,15 +2015,19 @@ except that Tasks 4.4 and 4.5's interface lines were amended in place.
   selected and never activated when its clock reads that name's minute (case 2), and that placing
   M1's history as `module-evidence/` the restore way does not stop it (case 2c), so Step 3's
   fallback is not built. The manifest's `module-preparation-state.json` row is `transferred`, and
-  Task 5.7 merges M1's retained selections into M2's own preparation file (case 2b). Whether such
+  Task 5.7 is to merge M1's retained selections into M2's own preparation file (case 2b). Whether such
   a name counts as used is an open owner question.
 - **The signed peer query is bound to neither a route nor a time window (Slice 4's Ruling R10).**
   One envelope M2 signed was accepted by `peer-status` and twice by `final-copy`; Task 5.4's note
   says its status reads must not sign the same shape.
 - **The source routes' refusal texts speak of "the old box" (Slice 4's Ruling R11)**:
   `handover.not_stepped_down`, `handover.operation_unknown`, `handover.final_copy_changed` and
-  `handover.summary_failed` in `apps/dashboard/src/i18n/codes.ts`. Task 5.5's note says M2's own
-  summary failure needs its own code or wording.
+  `handover.summary_failed` in `apps/dashboard/src/i18n/codes.ts`; `handover.peer_unknown` and
+  `handover.request_invalid` keep their own wording, because the every-start peer-status route
+  throws them too. Task 5.5's note says M2's own summary failure needs its own code or wording.
+- `packages/handover/src/manifest.ts`'s treatments name no refusal M2 does not yet raise: the
+  `secrets.env`, `backup.env` and `modules.json` rows leave out the table's refusals, which Task 5.5
+  adds.
 
 ---
 
@@ -3901,8 +3904,8 @@ the joint specification and Cloud's half.
 - **Whether `vf-recovery-hour` can drive a promotion** is found in Task 6.4; if not, that task
   touches fiscal UI code.
 - **Whether M2 sees every minute name M1 used from the copy alone**: no (Task 4.5's probe, case 2),
-  and the restore path's placement does not stop the reuse (case 2c); Task 5.7 merges M1's retained
-  selections into M2's preparation file (case 2b). Owner question open.
+  and the restore path's placement does not stop the reuse (case 2c); Task 5.7 is to merge M1's
+  retained selections into M2's preparation file (case 2b). Owner question open.
 - **What M2's certificate card shows after activation** is found by Task 5.10; if it shows no
   certificate, a FISCAL follow-up maps it.
 - **A return to a box other than the one the old box handed to** (M2 handed over to M3 before M1

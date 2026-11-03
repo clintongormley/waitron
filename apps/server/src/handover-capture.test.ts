@@ -311,7 +311,7 @@ describe("capturing a stepped-down box's final copy", () => {
     expect(envelope.body.snapshot.sha256).toBe(sha256Hex(await readFile(copyPath())));
   });
 
-  it("a retry after a crash removes the unsigned copy before copying again, so it needs room for one copy", async () => {
+  it("a retry after a crash removes the unsigned copy before copying again", async () => {
     const self = await steppedDown();
     const { venue, foundAtPath } = countingVenue();
     await expect(captureFinalCopy(deps(self, { venue, node: crashingNode() }), OP)).rejects.toThrow(

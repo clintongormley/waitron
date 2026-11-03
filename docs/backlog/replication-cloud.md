@@ -501,7 +501,7 @@ Left open by A1018 Slice 3, each read in review rather than run:
 Left open by A1018 Slice 3 (`apps/server/src/peer-status-api.ts`):
 - A bad signature from a box the chart knows answers 403 `handover.peer_unknown`, not 401.
 - `operationId` is checked as a 1–64 character string, not as a UUID.
-- The route, and the two handover source routes (`apps/server/src/handover-source-api.ts`)
+- The route, and the two handover source routes (Slice 4, `apps/server/src/handover-source-api.ts`)
   through the same `verifiedPeerQuery`, read a body of any size, read the chart and unseal this
   box's key before the signature is checked; a small body limit, or checking the envelope's shape first, would bound it.
 - `boot.adoption-allocation.test.ts` imports from `@waitron/db` twice, and its pending-adoption

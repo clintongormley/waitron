@@ -5821,8 +5821,8 @@ Not in any track until the standalone primary is done.
   open by A1018 Slice 3.
 
 - **The peer-status route's minor follow-ups.** A bad signature from a known box answers 403, the
-  operation id is not checked as a UUID, and a body of any size is read before the signature check.
-  Left open by A1018 Slice 3. [Detail](backlog/replication-cloud.md#the-peer-status-routes-minor-follow-ups)
+  operation id is not checked as a UUID, and a body of any size is read before the signature check,
+  here and on the two handover source routes (Slice 4). Left open by A1018 Slice 3. [Detail](backlog/replication-cloud.md#the-peer-status-routes-minor-follow-ups)
 
 - **The carry-on page's unexpected-failure sentence does not call itself a fault in Waitron**
   (`failed` in `apps/server/src/i18n/waiting-page.ts`). A refused disk write lands there too, so
@@ -5834,9 +5834,10 @@ Not in any track until the standalone primary is done.
   `packages/handover/src/manifest.ts`; whether a handover needs rows for them is not decided. Left
   open by A1018 Slice 4 (Slice 4's Ruling R5).
 
-- **Does a minute name the old box selected but never activated count as used?** Built: yes. The
-  manifest marks `module-preparation-state.json` transferred, and Task 5.7 merges the old box's
-  retained selections into the new box's own preparation file. The alternative: such a name does
+- **Does a minute name the old box selected but never activated count as used?** Planned: yes.
+  The manifest marks `module-preparation-state.json` transferred, and Task 5.7 is to merge the old
+  box's retained selections into the new box's own preparation file; today a spare reuses such a
+  name (`apps/server/src/handover-minute-history.test.ts`, case 2). The alternative: such a name does
   not count, and the row goes back to source-only. Owner's choice. Left open by A1018 Slice 4
   (Slice 4's Ruling R3).
 
