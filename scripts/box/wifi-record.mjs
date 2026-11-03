@@ -180,6 +180,21 @@ export function formatWifiRecord(network) {
  *   frozen; remove: no copy should exist, so any copy present is obsolete
  */
 
+/** Every reason decideWifiBootCopy gives for no copy. */
+export const WIFI_NO_COPY_REASONS = Object.freeze([
+  "cable-only",
+  "open",
+  "open-or-wep",
+  "dynamic-wep",
+  "owe",
+  "enterprise",
+  "unsupported-security",
+  "password-unavailable",
+  "password-not-printable",
+  "password-too-long",
+  "password-invalid",
+]);
+
 const SETTINGS_CODE = "wifi_record.settings_invalid";
 const WIFI_SETTINGS_KEYS = ["kind", "ssidHex", "keyMgmt", "psk", "hidden"];
 /** @type {Map<string, WifiNoCopyReason>} NetworkManager's key-mgmt values that have no copy */

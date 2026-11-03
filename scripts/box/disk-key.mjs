@@ -65,6 +65,8 @@ const defaultIo = {
     syncPath(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW, false),
 };
 
+export { defaultIo as hostFileIo };
+
 // Only refusals built here pass through unchanged: an injected io's error that merely carries the
 // code would otherwise reach the caller with whatever else it holds.
 const refusals = new WeakSet();
