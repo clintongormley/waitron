@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders } from "../api/client.js";
 import { sentPanel } from "./sent-panel.js";
+import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
 
 const now = Date.parse("2026-10-17T13:00:00.000Z");
 const at = (minute: number) => `2026-10-17T12:${String(minute).padStart(2, "0")}:00.000Z`;
 function row(id: string, over: Partial<CurrentOrderRow> = {}): CurrentOrderRow {
-  return {
+  return withRowRequestedAt({
     lineId: id,
     workingOrderId: "bill-1",
     billStatus: "open",
@@ -24,7 +25,7 @@ function row(id: string, over: Partial<CurrentOrderRow> = {}): CurrentOrderRow {
     note: null,
     extras: [],
     ...over,
-  };
+  });
 }
 function group(
   id: string,

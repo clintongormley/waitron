@@ -1,4 +1,4 @@
-import type { CurrentOrderKitchen, StationQueueItem } from "../src/api/client.js";
+import type { CurrentOrderKitchen, CurrentOrderRow, StationQueueItem } from "../src/api/client.js";
 
 type KitchenStamps = Pick<StationQueueItem, "phase" | "requestedAt" | "readyAt" | "passControlled">;
 
@@ -32,4 +32,14 @@ export function withCurrentKitchenStamps(
 ): CurrentOrderKitchen {
   const { phase, requestedAt } = kitchenStamps(kitchen);
   return { phase, requestedAt, ...kitchen };
+}
+
+/** A current order row whose request time follows its stamps unless the fixture states one: its
+ *  fire time once released, null while held. */
+export function withRowRequestedAt(
+  row: Omit<CurrentOrderRow, "requestedAt"> & Partial<Pick<CurrentOrderRow, "requestedAt">>,
+): CurrentOrderRow {
+  const requestedAt =
+    row.requestedAt === undefined ? (row.released ? row.firedAt : null) : row.requestedAt;
+  return { ...row, requestedAt };
 }

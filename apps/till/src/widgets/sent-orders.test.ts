@@ -5,6 +5,7 @@ import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders, TabLine } from 
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./sent-orders.js";
+import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
 
 type Panel = LitElement & {
   scope: string;
@@ -17,26 +18,27 @@ type Panel = LitElement & {
 };
 const now = Date.parse("2026-10-18T12:00:00Z");
 const at = (minute: number) => `2026-10-18T11:${String(minute).padStart(2, "0")}:00Z`;
-const row = (id: string, over: Partial<CurrentOrderRow> = {}): CurrentOrderRow => ({
-  lineId: id,
-  workingOrderId: "b1",
-  billStatus: "open",
-  lineNo: 1,
-  courseId: null,
-  name: id,
-  quantity: "1.000",
-  netAmount: "3.00",
-  unitPrecision: 0,
-  servedQuantity: "0.000",
-  servedAt: null,
-  released: true,
-  readyAt: null,
-  firedAt: at(40),
-  kitchen: null,
-  note: null,
-  extras: [],
-  ...over,
-});
+const row = (id: string, over: Partial<CurrentOrderRow> = {}): CurrentOrderRow =>
+  withRowRequestedAt({
+    lineId: id,
+    workingOrderId: "b1",
+    billStatus: "open",
+    lineNo: 1,
+    courseId: null,
+    name: id,
+    quantity: "1.000",
+    netAmount: "3.00",
+    unitPrecision: 0,
+    servedQuantity: "0.000",
+    servedAt: null,
+    released: true,
+    readyAt: null,
+    firedAt: at(40),
+    kitchen: null,
+    note: null,
+    extras: [],
+    ...over,
+  });
 const group = (
   id: string,
   rows: CurrentOrderRow[],
