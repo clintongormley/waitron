@@ -30,10 +30,15 @@ Si sabes que el otro equipo está apagado, puedes dejar que este equipo siga sin
 `https://` del equipo, la página muestra el formulario **Seguir como equipo principal**:
 
 - Inicia sesión con tu correo electrónico y tu contraseña. Si tu cuenta usa una aplicación de
-  autenticación, la página te pide después de nuevo la contraseña y su código. Solo un
-  administrador puede seguir.
+  autenticación, la página te pide después de nuevo la contraseña y el código de la aplicación, o en
+  su lugar uno de tus códigos de recuperación. Solo un administrador puede seguir.
 - Marca **{otro equipo} está apagado** y **No hay ninguna otra recuperación de este local en
-  curso**. El botón no se puede pulsar hasta que las dos casillas estén marcadas.
+  curso**. El botón no se puede pulsar hasta que todos los campos marcados con `*` estén rellenos y
+  las dos casillas estén marcadas.
+
+Si el otro equipo responde mientras inicias sesión, manda su respuesta: si dice que no ha pasado a
+llevar el local, este equipo se inicia con normalidad; si dice que ha pasado a llevar el local,
+este equipo no sigue.
 
 El equipo vuelve entonces a hacer ventas y a enviar registros a Hacienda. Esto dura hasta que el
 equipo se vuelva a iniciar: cuando se inicie de nuevo, volverá a preguntar al otro equipo, y volverá

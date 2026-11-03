@@ -27,9 +27,13 @@ If you know the other box is switched off, you can let this box carry on without
 box's `https://` address, the page shows the **Carry on as the main box** form:
 
 - Sign in with your email and password. If your account uses an authenticator app, the page then
-  asks for your password again and its code. Only an administrator can carry on.
+  asks for your password again and the app's code, or one of your recovery codes instead. Only an
+  administrator can carry on.
 - Tick **{other box} is switched off** and **No other recovery of this venue is in progress**.
-  The button stays greyed out until both are ticked.
+  The button stays greyed out until every field marked `*` is filled in and both are ticked.
+
+If the other box answers while you are signing in, its answer wins: when it says it has not taken
+over, this box starts normally; when it says it has taken over, this box does not carry on.
 
 The box then takes sales and sends records to the tax agency again. This lasts until the box next
 starts: when it starts again, it asks the other box again, and waits again if it gets no answer.

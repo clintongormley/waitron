@@ -8,6 +8,7 @@ export interface CarryOnWords {
   email: string;
   password: string;
   totp: string;
+  recoveryCode: string;
   /** The first statement's words around the other box's name. */
   switchedOff: readonly [string, string];
   noOtherRecovery: string;
@@ -26,6 +27,11 @@ export interface CarryOnWords {
   /** The refusal's words around the successor's name. */
   knownHandover: readonly [string, string];
   back: string;
+  knownTitle: string;
+  restartingTitle: string;
+  restarting: string;
+  peerAnsweredTitle: string;
+  peerAnswered: string;
   carriedOnTitle: string;
   carriedOnBody: string;
 }
@@ -61,17 +67,19 @@ export const WAITING_PAGE_WORDS: Readonly<
       email: "Email",
       password: "Password",
       totp: "Authenticator code",
+      recoveryCode: "Or one of your recovery codes",
       switchedOff: ["", " is switched off"],
       noOtherRecovery: "No other recovery of this venue is in progress",
       action: "Carry on as the main box",
       emailMissing: "Enter your email.",
       passwordMissing: "Enter your password.",
-      totpMissing: "Enter the code from your authenticator app.",
+      totpMissing: "Enter the code from your authenticator app, or one of your recovery codes.",
       statementMissing: "Tick this to confirm it.",
       fixFields: "Correct the highlighted fields to continue.",
       signInRefused:
         "That email and password do not match an account here. Check them and try again.",
-      totpRequired: "Enter your password again and the code from your authenticator app.",
+      totpRequired:
+        "Enter your password again and the code from your authenticator app, or one of your recovery codes.",
       notPermitted:
         "Your role does not let you choose which box runs the venue. Sign in here as an administrator to carry on.",
       throttled: (minutes) =>
@@ -83,6 +91,13 @@ export const WAITING_PAGE_WORDS: Readonly<
         ". It cannot carry on as the main box.",
       ],
       back: "Back to this box's status",
+      knownTitle: "This box has already handed over",
+      restartingTitle: "This box is restarting",
+      restarting:
+        "It has learnt that another box has taken over, or it is shutting down, so it has not carried on as the main box. Nothing was recorded. Open this page again in a minute.",
+      peerAnsweredTitle: "The other box answered",
+      peerAnswered:
+        "It answered before you carried on, so this box is starting normally. Nothing was recorded. This page reloads in a few seconds.",
       carriedOnTitle: "This box is carrying on as the main box",
       carriedOnBody: "It is starting to take sales again. This page reloads in a few seconds.",
     },
@@ -103,18 +118,20 @@ export const WAITING_PAGE_WORDS: Readonly<
       email: "Correo electrónico",
       password: "Contraseña",
       totp: "Código del autenticador",
+      recoveryCode: "O uno de tus códigos de recuperación",
       switchedOff: ["", " está apagado"],
       noOtherRecovery: "No hay ninguna otra recuperación de este local en curso",
       action: "Seguir como equipo principal",
       emailMissing: "Introduce tu correo electrónico.",
       passwordMissing: "Introduce tu contraseña.",
-      totpMissing: "Introduce el código de tu aplicación de autenticación.",
+      totpMissing:
+        "Introduce el código de tu aplicación de autenticación o uno de tus códigos de recuperación.",
       statementMissing: "Marca esta casilla para confirmarlo.",
       fixFields: "Corrige los campos marcados para continuar.",
       signInRefused:
         "Ese correo electrónico y esa contraseña no coinciden con ninguna cuenta de aquí. Revísalos y vuelve a intentarlo.",
       totpRequired:
-        "Vuelve a introducir tu contraseña y el código de tu aplicación de autenticación.",
+        "Vuelve a introducir tu contraseña y el código de tu aplicación de autenticación o uno de tus códigos de recuperación.",
       notPermitted:
         "Tu función no te permite elegir qué equipo lleva el local. Inicia sesión aquí como administrador para seguir.",
       throttled: (minutes) =>
@@ -126,6 +143,13 @@ export const WAITING_PAGE_WORDS: Readonly<
         ". No puede seguir como equipo principal.",
       ],
       back: "Volver al estado de este equipo",
+      knownTitle: "Este equipo ya ha pasado el local",
+      restartingTitle: "Este equipo se está reiniciando",
+      restarting:
+        "Ha sabido que otro equipo ha pasado a llevar el local, o se está apagando, así que no ha seguido como equipo principal. No se ha registrado nada. Vuelve a abrir esta página dentro de un minuto.",
+      peerAnsweredTitle: "El otro equipo ha respondido",
+      peerAnswered:
+        "Respondió antes de que siguieras, así que este equipo se inicia con normalidad. No se ha registrado nada. Esta página se vuelve a cargar en unos segundos.",
       carriedOnTitle: "Este equipo sigue como equipo principal",
       carriedOnBody:
         "Está empezando a hacer ventas de nuevo. Esta página se vuelve a cargar en unos segundos.",

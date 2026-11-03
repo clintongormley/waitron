@@ -4,9 +4,14 @@ import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import { generateSync } from "otplib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { withNodeTransaction } from "@waitron/db";
+import { withNodeTransaction, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { persons } from "@waitron/identity";
+import {
+  beginOwnTotpEnrollment,
+  finishOwnTotpEnrollment,
+  persons,
+  startManagementSession,
+} from "@waitron/identity";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -341,7 +346,7 @@ describe("the waiting start", () => {
       const askedPage = await asked.text();
       expect(askedPage).toContain('name="totp"');
       expect(askedPage).toContain(
-        "Enter your password again and the code from your authenticator app.",
+        "Enter your password again and the code from your authenticator app, or one of your recovery codes.",
       );
       await stillWaiting();
       const answer = await post({ ...ADMIN, totp: generateSync({ secret }), ...BOTH });
@@ -358,9 +363,12 @@ describe("the waiting start", () => {
       );
       expect(blank).toContain("<strong>Spare</strong> is switched off");
       expect(blank).toContain("No other recovery of this venue is in progress");
-      // After a refusal with both ticked the action works; with one unticked it stays disabled.
+      // The password is never drawn back into the page, so a redrawn form starts with an empty
+      // required field and its action disabled, even with both statements ticked.
       const ticked = await (await post({ ...ADMIN, password: "wrong", ...BOTH })).text();
-      expect(ticked).toContain('<button type="submit">Carry on as the main box</button>');
+      expect(ticked).toContain('<button type="submit" disabled>Carry on as the main box</button>');
+      // The script enables the action only once every required field is filled.
+      expect(ticked).toContain('const required = [...form.querySelectorAll("[required]")];');
       for (const missing of ["switchedOff", "noOtherRecovery"] as const) {
         const one: Record<string, string> = { ...BOTH };
         delete one[missing];
@@ -388,12 +396,16 @@ describe("the waiting start", () => {
       const sentence =
         "This box has already handed over to <strong>Spare</strong>. It cannot carry on as the main box.";
       const shown = await page();
+      expect(shown).toContain("<h1>This box has already handed over</h1>");
       expect(shown).toContain(sentence);
+      expect(shown).not.toContain("This box is waiting for");
       expect(shown).not.toContain("<form");
       const answer = await post({ ...ADMIN, ...BOTH });
       expect(answer.status).toBe(409);
       const refused = await answer.text();
+      expect(refused).toContain("<h1>This box has already handed over</h1>");
       expect(refused).toContain(sentence);
+      expect(refused).not.toContain("This box is waiting for");
       expect(refused).not.toContain("<form");
       expect(refused).toContain('<a href="/">Back to this box&#39;s status</a>');
       await stillWaiting();
@@ -423,6 +435,128 @@ describe("the waiting start", () => {
       await stillWaiting();
       expect(await events()).toEqual([]);
     });
+
+    /** Replaces the case's waiting start with one whose first re-ask is held until `answer`. */
+    const heldReAsk = async () => {
+      await h.waiting.server.close();
+      let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
+      const recheck = vi
+        .fn<() => Promise<StartPeerCheckOutcome>>()
+        .mockReturnValueOnce(new Promise((done) => (answer = done)))
+        .mockReturnValue(new Promise(() => {}));
+      h = harness(recheck, {
+        node: suite.node,
+        intervalMs: 1,
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+      });
+      await vi.waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
+      return (outcome: StartPeerCheckOutcome) => answer(outcome);
+    };
+    /** Resolves once the carry-on has signed in and is waiting for the re-ask in flight. */
+    const signedIn = () => new Promise((done) => setTimeout(done, 300));
+
+    it("a peer's takeover answer already on its way wins over a carry-on: refused, nothing recorded", async () => {
+      const answer = await heldReAsk();
+      const posted = post({ ...ADMIN, ...BOTH });
+      await signedIn();
+      answer({ result: "superseded", successorNodeId: SPARE_ID });
+      const refused = await posted;
+      expect(refused.status).toBe(409);
+      expect(await refused.text()).toContain(
+        "This box has already handed over to <strong>Spare</strong>. It cannot carry on as the main box.",
+      );
+      expect(await h.waiting.ended).toEqual({
+        kind: "checked",
+        outcome: { result: "superseded", successorNodeId: SPARE_ID },
+      });
+      expect(await events()).toEqual([]);
+    });
+
+    it("a peer's answer to go on already on its way wins over a carry-on: the start goes on, nothing recorded", async () => {
+      const answer = await heldReAsk();
+      const posted = post({ ...ADMIN, ...BOTH });
+      await signedIn();
+      answer(PROCEED);
+      const answered = await posted;
+      expect(answered.status).toBe(200);
+      const html = await answered.text();
+      expect(html).toContain("<h1>The other box answered</h1>");
+      expect(html).not.toContain("This box is carrying on as the main box");
+      expect(await h.waiting.ended).toEqual({ kind: "checked", outcome: PROCEED });
+      expect(await events()).toEqual([]);
+    });
+
+    it("a second carry-on records nothing more", async () => {
+      const first = await post({ ...ADMIN, ...BOTH });
+      const second = await post({ ...ADMIN, ...BOTH });
+      expect([first.status, second.status]).toEqual([200, 200]);
+      for (const answered of [first, second])
+        expect(await answered.text()).toContain("<h1>This box is carrying on as the main box</h1>");
+      expect(await h.waiting.ended).toEqual({ kind: "carried-on" });
+      expect(await events()).toHaveLength(1);
+    });
+
+    it("a carry-on while the box steps down is refused and records nothing", async () => {
+      await h.waiting.server.close();
+      h = harness(() => new Promise(() => {}), {
+        node: suite.node,
+        intervalMs: 60_000,
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+        routes: [
+          (app, hooks) =>
+            app.post("/step", async (c) =>
+              c.json(
+                await hooks.stepDown({
+                  kind: "superseded",
+                  successorNodeId: null,
+                  membershipTerm: 4,
+                  self: c,
+                }),
+              ),
+            ),
+        ],
+      });
+      // The carry-on is admitted before the stepdown closes the gate, and is signing in when the
+      // stepdown starts. A chart naming no main box records no restriction, so only the stepdown
+      // in progress can refuse it.
+      const posted = post({ ...ADMIN, ...BOTH });
+      await new Promise((done) => setTimeout(done, 5));
+      const stepped = await h.app().request("/step", { method: "POST" });
+      const carried = await posted;
+      expect(stepped.status).toBe(200);
+      expect(carried.status).toBe(409);
+      expect(await carried.text()).not.toContain("This box is carrying on as the main box");
+      expect(await h.waiting.ended).toEqual({ kind: "stopped" });
+      expect(await events()).toEqual([]);
+    });
+
+    it("an administrator without the authenticator may give a recovery code instead", async () => {
+      const codes = await enrolWithCodes(adminId);
+      const asked = await (await post({ ...ADMIN, ...BOTH })).text();
+      expect(asked).toContain('name="recoveryCode"');
+      const answer = await post({ ...ADMIN, totp: "", recoveryCode: codes[0]!, ...BOTH });
+      expect(answer.status).toBe(200);
+      expect(await h.waiting.ended).toEqual({ kind: "carried-on" });
+      expect(await events()).toHaveLength(1);
+    });
+
+    /** Enrols an authenticator for `personId` and returns its recovery codes. */
+    const enrolWithCodes = (personId: string) =>
+      withTransaction(suite.db, async (tx) => {
+        const { token } = await startManagementSession(tx, { personId });
+        const { enrollmentId, secret } = await beginOwnTotpEnrollment(tx, {
+          managementSessionId: token,
+          currentPassword: ADMIN.password,
+          keyRing: TOTP_KEY_RING,
+        });
+        const { codes } = await finishOwnTotpEnrollment(tx, {
+          managementSessionId: token,
+          enrollmentId,
+          code: generateSync({ secret }),
+          keyRing: TOTP_KEY_RING,
+        });
+        return codes;
+      });
 
     it("over plain HTTP the page offers no form, and a sign-in is refused", async () => {
       const shown = await page(false);

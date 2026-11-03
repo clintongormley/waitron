@@ -5,7 +5,7 @@ import type { TotpKeyRing } from "@waitron/identity";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { codeOf } from "@waitron/server-kit";
 import type { StartedServer } from "./boot.js";
-import { mountCarryOn } from "./carry-on.js";
+import { mountCarryOn, type CarryOnTurn } from "./carry-on.js";
 import type { DeploymentEnvironment } from "./config.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { stepDown, type StepDownRequest, type StepDownResult } from "./handover-stepdown.js";
@@ -104,7 +104,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
           peerNodeIds: () => waitingOn,
           namesOf: deps.namesOf,
           chartTerm: async () => (await deps.readMembership())?.body.term ?? 0,
-          carryOn: () => hooks.carryOn(),
+          beginCarryOn: () => beginCarryOn(),
           log,
         });
   waitingPageRoute(() => deps.namesOf(waitingOn), log, section)(app);
@@ -116,12 +116,19 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   // written never continues the start the stepdown is about to restart.
   let steppingDown = false;
   let timer: NodeJS.Timeout | undefined;
-  // The store stays open until a re-ask that is reading or saving through it has settled.
-  let asking: Promise<unknown> = Promise.resolve();
+  // The latest re-ask, settled once it has decided whether the wait ends (`endedWith` is then
+  // set). The store stays open until it has settled, and a carry-on waits for it.
+  let asking: Promise<void> = Promise.resolve();
+  let endedWith: WaitEnd | null = null;
+  // While a carry-on holds its turn no new re-ask starts, so none can answer after the carry-on
+  // has looked; turns are taken one at a time, so a second carry-on sees the first's outcome.
+  let carrying = false;
+  let carryOnTurn: Promise<void> = Promise.resolve();
 
   const leave = async (end: WaitEnd): Promise<void> => {
     if (leaving) return;
     leaving = true;
+    endedWith = end;
     clearTimeout(timer);
     try {
       await listeners.close();
@@ -157,27 +164,65 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   };
   for (const mount of deps.routes) mount(app, hooks);
 
+  const schedule = (): void => {
+    timer = setTimeout(() => {
+      asking = ask();
+    }, deps.intervalMs);
+  };
+
   const ask = async (): Promise<void> => {
     let outcome: StartPeerCheckOutcome | null = null;
-    const pending = deps.recheck();
-    asking = pending.catch(() => {});
     try {
-      outcome = await pending;
+      outcome = await deps.recheck();
     } catch (error) {
       log("warn", "waiting_start.recheck_failed", { errorCode: codeOf(error) });
     }
     if (leaving || steppingDown) return;
     if (outcome !== null && outcome.result !== "wait") {
-      await leave({ kind: "checked", outcome });
+      // Not awaited: closing the listeners waits for requests in flight, and a carry-on awaiting
+      // this re-ask is one of them.
+      void leave({ kind: "checked", outcome });
       return;
     }
     if (outcome?.waitingOn !== undefined) waitingOn = outcome.waitingOn;
-    timer = setTimeout(() => void ask(), deps.intervalMs);
+    if (!carrying) schedule();
+  };
+
+  const beginCarryOn = async (): Promise<CarryOnTurn> => {
+    const previous = carryOnTurn;
+    let release: () => void = () => {};
+    carryOnTurn = new Promise((done) => (release = done));
+    await previous;
+    carrying = true;
+    clearTimeout(timer);
+    await asking;
+    const done = (): void => {
+      carrying = false;
+      if (!leaving && !steppingDown) schedule();
+      release();
+    };
+    if (endedWith !== null || steppingDown) {
+      const end = endedWith;
+      done();
+      if (end?.kind === "checked") return { kind: "answered", outcome: end.outcome };
+      return end?.kind === "carried-on" ? { kind: "carried-on" } : { kind: "stopped" };
+    }
+    return {
+      kind: "go",
+      stillWaiting: () => !leaving && !steppingDown,
+      finish: () => {
+        const waiting = !leaving && !steppingDown;
+        if (waiting) void leave({ kind: "carried-on" });
+        done();
+        return waiting;
+      },
+      abandon: done,
+    };
   };
 
   deps.health.takesNoSales = true;
   const listeners = deps.listen(app);
-  timer = setTimeout(() => void ask(), deps.intervalMs);
+  schedule();
   log("info", "waiting_start.waiting", { waitingOn });
 
   return {

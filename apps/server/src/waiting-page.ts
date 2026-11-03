@@ -67,12 +67,15 @@ ${section}`,
   );
 }
 
-/** Draws what the page shows below its body for this request: the carry-on form or why not. */
+/**
+ * Draws what the page shows below its body for this request (the carry-on form or why not), or a
+ * whole `page` in place of the waiting page.
+ */
 export type WaitingPageSection = (
   c: Context,
   other: string,
   locale: SupportedLocale,
-) => Promise<string>;
+) => Promise<string | { page: string }>;
 
 /** The page a person opening a box that waits for its peers sees; `names` is read per request. */
 export function waitingPageRoute(
@@ -92,12 +95,9 @@ export function waitingPageRoute(
         log("warn", "waiting_page.names_failed", { errorCode: codeOf(error) });
       }
       const other = otherBoxPhrase(shown, locale);
+      const below = section === undefined ? "" : await section(c, other, locale);
       return c.html(
-        renderWaitingPage(
-          other,
-          locale,
-          section === undefined ? "" : await section(c, other, locale),
-        ),
+        typeof below === "string" ? renderWaitingPage(other, locale, below) : below.page,
       );
     });
   };
