@@ -39,12 +39,9 @@ import { republishMenus } from "./testing/publish-menu.js";
 import { mountManagementApi } from "./management-api.js";
 import { readDrafts, submitDraft } from "./order-drafts.js";
 import { fireGroup, listOrderGroups } from "./order-groups.js";
-import {
-  bumpCourseReady,
-  readTabLines,
-  listExpoQueue,
-  advanceTicketItem,
-} from "./working-order.js";
+import { bumpCourseReady, readTabLines, advanceTicketItem } from "./working-order.js";
+import { readScopedPassBoard } from "./pass-board.js";
+import { EVERY } from "./testing/pass-board-probe.js";
 import { readRestOfOrder } from "./rest-of-order.js";
 import {
   inTx,
@@ -211,7 +208,7 @@ it("keeps retained draft, group, course and ready station history through manage
     events: await v.db.select().from(orderDraftEvents),
     groups: await inTx(v, (tx) => listOrderGroups(tx, seated.partyId)),
     tab: await inTx(v, (tx) => readTabLines(tx, v.cfg, submitted.tabId)),
-    pass: await inTx(v, (tx) => listExpoQueue(tx)),
+    pass: await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY)),
     rest: await inTx(v, (tx) => readRestOfOrder(tx, [submitted.tabId])),
   });
   const before = await history();

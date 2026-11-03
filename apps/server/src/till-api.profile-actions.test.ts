@@ -140,8 +140,8 @@ import {
  *
  * Not action-gated, so a signed-in person (or, for a display's reads, the device) is enough: every
  * read, including a display's `GET /api/device/stations`, `GET /api/device/pass-board` and
- * `GET /api/device/pass-monitor-board`, and the till's
- * `GET /api/invoice-delivery-options`, the POST previews (`/payments/preview`,
+ * `GET /api/device/pass-monitor-board`, and the till's All stations board `GET /api/expo/board`
+ * and `GET /api/invoice-delivery-options`, the POST previews (`/payments/preview`,
  * `/adjustments/preview`) and the dead-end checks (`/api/dead-ends/*`); the session, locale, schedule, profile-switch and device-equipment
  * routes (choosing equipment is not printing, paying or opening the drawer). Left ungated by
  * decision, each with its reason:
@@ -527,7 +527,7 @@ describe("screens and actions are separate", () => {
   it("lets a visible, read-only live-orders profile look at the station and the pass, and refuses it preparing, handing over and payment", async () => {
     const { cookie } = await signIn(["show-station", "show-expo", "take-orders"]);
     expect((await send(cookie, "GET", `/api/stations/${stationId}/queue`)).status).toBe(200);
-    expect((await send(cookie, "GET", "/api/expo/queue")).status).toBe(200);
+    expect((await send(cookie, "GET", "/api/expo/board")).status).toBe(200);
     const advance = await send(cookie, "POST", `/api/ticket-items/${id}/advance`, {
       to: "ready",
     });

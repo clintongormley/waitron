@@ -105,7 +105,6 @@ import {
   captureOrderService,
   getHeldOrder,
   getPlacedCounterOrder,
-  listExpoQueue,
   listCounterWaiting,
   listHeldOrders,
   listStationQueue,
@@ -133,6 +132,7 @@ import {
   paysAfterSending,
   unsentDishLines,
 } from "./working-order.js";
+import { readScopedPassBoard } from "./pass-board.js";
 import type { LineExtras, OrderLinePatch, TicketState, OrderAttendance } from "./working-order.js";
 import { listStationsToday } from "./kitchen.js";
 import {
@@ -2313,13 +2313,13 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     }),
   );
 
-  app.get("/api/expo/queue", (c) =>
+  app.get("/api/expo/board", (c) =>
     run(c, log, async () => {
       await requireSession(deps, c);
-      const queue = await withTransaction(deps.db, async (tx) => {
-        return listExpoQueue(tx);
-      });
-      return c.json(queue);
+      const board = await withTransaction(deps.db, (tx) =>
+        readScopedPassBoard(tx, deps.cfg, { stationIds: null, zoneIds: null }, { release: false }),
+      );
+      return c.json({ board });
     }),
   );
 

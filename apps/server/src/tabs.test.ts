@@ -65,7 +65,6 @@ import {
   createOpenOrder,
   fireOrderLines,
   fireLines,
-  listExpoQueue,
   listStationQueue,
   listTablesWithState,
   markServed,
@@ -76,6 +75,8 @@ import { finishTable, seatTable, partyRevisionOfOrder } from "./testing/party-cl
 import "./errors.js";
 import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { fireGroup } from "./order-groups.js";
+import { readScopedPassBoard } from "./pass-board.js";
+import { boardItems, EVERY } from "./testing/pass-board-probe.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 
@@ -1547,7 +1548,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     expect(recalled!.sentAt).toBe(sent!.sentAt);
   });
 
-  it("reports the ticket's fired quantity on the station and expo queues, and the line's for an older ticket with none", async () => {
+  it("reports the ticket's fired quantity on the station queue and the pass board, and the line's for an older ticket with none", async () => {
     const { cfg, tableId, cafeOffer } = await setupVenue();
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
@@ -1563,8 +1564,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
     const queued = async () =>
       asApp(cfg, async (tx) => ({
         station: (await listStationQueue(tx, stationId!))[0]!.items[0]!.quantity,
-        // A party's round is in no group, so the pass shows it in the no-group section.
-        expo: (await listExpoQueue(tx))[0]!.groups[0]!.items[0]!.qty,
+        expo: boardItems(await readScopedPassBoard(tx, cfg, EVERY))[0]!.qty,
       }));
 
     expect(await queued()).toEqual({ station: "2.000", expo: "2.000" });
@@ -3276,14 +3276,10 @@ describe("the kitchen screen and the expo board are told which lines were sold i
     ]);
   });
 
-  it("marks each expo board item the same way", async () => {
+  it("marks each pass board item the same way", async () => {
     const { cfg } = await fiveDishesOnATab();
 
-    const orders = await asApp(cfg, (tx) => listExpoQueue(tx));
-
-    const items = orders
-      .flatMap((order) => [...order.courses, ...order.groups])
-      .flatMap((section) => section.items);
+    const items = boardItems(await asApp(cfg, (tx) => readScopedPassBoard(tx, cfg, EVERY)));
     expect(items.map((item) => [item.name, item.soldInEach])).toEqual([
       ["Croquette", true],
       ["Gilda", true],

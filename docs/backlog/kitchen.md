@@ -170,7 +170,9 @@ Left open by A757 slice 3. The manager overview's "orders taking too long" list
 of its node that is not made here, on an order neither abandoned nor collected; its `where` has no
 `fired_at` test, so a dish waiting in a held group ages from when it was taken. Since A757 slice 3
 `timingBand`, like the `long_wait` signal before it, counts only fired dishes (`ticket_items.fired_at`
-set; A757 Q17).
+set; A757 Q17). The report also ages a dish waiting for the pass from `queued_at`, which is still its
+insert until the pass fires it, while the pass's board ages it from `requested_at` (A773-2 B4a, its
+plan's D68).
 
 Next: decide whether the report leaves held dishes out, as the floor does. If it does, add a
 `fired_at is not null` test to its `where` and a case beside `overdue-orders.test.ts`'s.
@@ -239,7 +241,7 @@ Seen, 2026-10-25, on the
 demo printer in A789 slice 3's look: `2.000 x CROQ JAMON` and `1.000 x GAMBAS AJILLO`. The slice
 did not cause it. The ticket's quantity comes from `thousandthsToDecimal`
 (`apps/server/src/kitchen-ticket.ts:133`, `:153`; `apps/server/src/kitchen-print.ts:87`; the pass
-board's items read it the same way, `readPassBoard`, `apps/server/src/working-order.ts:8356`), and
+board's items read it the same way, `readPassRows`, `apps/server/src/working-order.ts:8626`), and
 tests pin it (`apps/server/src/order-groups.test.ts:543`,
 `apps/server/src/line-cancel.test.ts:1148`), so it has been chosen or tolerated since #750
 (2026-09-27). **Next action:** decide with the owner whether a whole-number quantity prints as

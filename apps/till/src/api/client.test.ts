@@ -1850,80 +1850,6 @@ describe("TillApi", () => {
     });
   });
 
-  it("getExpoQueue GETs this node's cross-station pass queue (courses across stations)", async () => {
-    const queue = [
-      {
-        orderId: "wo-1",
-        orderNumber: 7,
-        openedMinutes: 3,
-        courses: [
-          {
-            courseId: "co-1",
-            courseName: "Entrantes",
-            displayOrder: 0,
-            fired: true,
-            items: [
-              {
-                allergy: null,
-                id: "ti-1",
-                name: { "es-ES": "Paella" },
-                qty: "2.000",
-                stationName: "Cocina",
-                state: "ready",
-                firedAt: "2026-08-17T10:00:00.000Z",
-              },
-            ],
-          },
-        ],
-      },
-    ];
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(queue));
-
-    const r = await new TillApi("", fetchStub).getExpoQueue();
-
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/expo/queue",
-      expect.objectContaining({ method: "GET", credentials: "include" }),
-    );
-    expect(r).toEqual(queue);
-  });
-
-  it("A773 client reads the device pass without a Done writer", async () => {
-    const screen = {
-      orders: [],
-      stations: [{ id: "st-1", name: "Parrilla", available: false }],
-      zones: null,
-    };
-    const fetchStub = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(screen))
-      .mockResolvedValueOnce(new Response(null, { status: 204 }))
-      .mockResolvedValueOnce(new Response(null, { status: 204 }));
-    const api = new TillApi("", fetchStub);
-    const signal = new AbortController().signal;
-    expect(await api.getDevicePassScreen({ signal })).toEqual(screen);
-    expect("markDevicePassDone" in api).toBe(false);
-    expect(fetchStub.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
-      ["/api/device/pass-screen", "GET"],
-    ]);
-    expect(fetchStub.mock.calls[0]![1].signal).toBe(signal);
-  });
-
-  it("reads the device's pass monitor with the caller's signal", async () => {
-    const monitor = {
-      orders: [],
-      stations: [{ id: "st-1", name: "Parrilla", available: true }],
-      zones: [{ id: "z-1", name: "Terraza", available: false }],
-    };
-    const fetchStub = vi.fn().mockResolvedValue(jsonResponse(monitor));
-    const signal = new AbortController().signal;
-    expect(await new TillApi("", fetchStub).getDevicePassMonitor({ signal })).toEqual(monitor);
-    expect(fetchStub).toHaveBeenCalledWith(
-      "/api/device/pass-monitor",
-      expect.objectContaining({ method: "GET", credentials: "include", signal }),
-    );
-  });
-
   it("A773 pass reads both boards with the caller's signal", async () => {
     const board = { held: [], toFire: [], inProgress: [], ready: [], overview: [] };
     const answer = { board, stations: [], zones: null };
@@ -1939,6 +1865,19 @@ describe("TillApi", () => {
       ["/api/device/pass-board", "GET", signal],
       ["/api/device/pass-monitor-board", "GET", signal],
     ]);
+  });
+
+  describe("A773 pass board: all stations", () => {
+    it("getExpoBoard GETs every station's board with the caller's signal", async () => {
+      const board = { held: [], toFire: [], inProgress: [], ready: [], overview: [] };
+      const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ board }));
+      const signal = new AbortController().signal;
+      expect(await new TillApi("", fetchStub).getExpoBoard({ signal })).toEqual({ board });
+      expect(fetchStub).toHaveBeenCalledWith(
+        "/api/expo/board",
+        expect.objectContaining({ method: "GET", credentials: "include", signal }),
+      );
+    });
   });
 
   it("A773 pass Fire posts the ask as its body and returns the released ids", async () => {

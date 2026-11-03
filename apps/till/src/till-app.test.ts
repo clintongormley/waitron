@@ -1,4 +1,5 @@
 import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
+import { passBoard } from "../test/pass-board-fixtures.js";
 import type { TillFindBillScreen } from "./screens/till-find-bill-screen.js";
 import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
 import {
@@ -505,7 +506,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     getStationQueue: vi.fn().mockResolvedValue({ items: [], notices: [] }),
     advanceTicketItem: vi.fn().mockResolvedValue(undefined),
     markCollected: vi.fn().mockResolvedValue(undefined),
-    getExpoQueue: vi.fn().mockResolvedValue([]),
+    getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard() }),
     bumpCourseReady: vi.fn().mockResolvedValue(undefined),
     markCourseAway: vi.fn().mockResolvedValue(undefined),
     getTablesState: vi.fn().mockResolvedValue([]),
@@ -13677,14 +13678,14 @@ describe("till-app", () => {
       emit(c, "show-expo");
       await flush(el);
 
-      expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("till-pass-screen")).not.toBeNull();
       // On the shell the expo/pass display is a DRILL overlaying the still-mounted counter tab.
       expect(counter(el)).not.toBeNull();
       // The basket survives the trip (till-owned store), like the station/schedule/floor nav.
       expect(c.store.lines).toHaveLength(1);
 
       // Back returns to the counter with the basket intact.
-      emit(el.shadowRoot!.querySelector("till-expo-screen")!, "back-to-counter");
+      emit(el.shadowRoot!.querySelector("till-pass-screen")!, "back-to-counter");
       await flush(el);
       expect(counter(el)).not.toBeNull();
       expect(counter(el)!.store.lines).toHaveLength(1);
@@ -13697,7 +13698,7 @@ describe("till-app", () => {
       const c = await toCounter(el);
       emit(c, "show-expo");
       await flush(el);
-      const screen = el.shadowRoot!.querySelector("till-expo-screen") as unknown as {
+      const screen = el.shadowRoot!.querySelector("till-pass-screen") as unknown as {
         fireControl: string;
       };
       expect("fireControl" in screen).toBe(false);
@@ -14427,8 +14428,8 @@ describe("till-app", () => {
       emit(shell(el)!, "show-expo");
       await el.updateComplete;
       expect(drill(el)).not.toBeNull();
-      expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
-      expect(el.shadowRoot!.querySelector("till-expo-screen")!.getAttribute("slot")).toBe("drill");
+      expect(el.shadowRoot!.querySelector("till-pass-screen")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("till-pass-screen")!.getAttribute("slot")).toBe("drill");
     });
 
     it("ignores the retired Allergens action and URL", async () => {
@@ -15760,13 +15761,13 @@ describe("persistent till destinations", () => {
   it("ignores the watcher an old Pass address names and follows the device's choice", async () => {
     history.replaceState(null, "", "/tabs/counter/view/expo/watcher/pass");
     const { el } = await mountApp({
-      getExpoQueue: vi.fn().mockResolvedValue([]),
+      getExpoBoard: vi.fn().mockResolvedValue({ board: passBoard() }),
     });
     await toCounter(el);
-    const expo = el.shadowRoot!.querySelector("till-expo-screen")!;
+    const expo = el.shadowRoot!.querySelector("till-pass-screen")!;
     await flush(el);
     expect(expo).not.toBeNull();
-    expect(currentApi.getExpoQueue).toHaveBeenCalled();
+    expect(currentApi.getExpoBoard).toHaveBeenCalled();
     expect(expo.shadowRoot!.textContent).toContain("Nada en el pase");
     expect(location.pathname).toBe("/tabs/counter/view/expo");
   });
@@ -15781,7 +15782,7 @@ describe("persistent till destinations", () => {
     await toCounter(el);
     emit(el.shadowRoot!.querySelector("till-shell")!, "show-expo");
     await flush(el);
-    expect(el.shadowRoot!.querySelector("till-expo-screen")!.runsPass).toBe(runsPass);
+    expect(el.shadowRoot!.querySelector("till-pass-screen")!.runsPass).toBe(runsPass);
   });
 
   async function traverse(direction: "back" | "forward", el: TillApp) {
@@ -15795,7 +15796,7 @@ describe("persistent till destinations", () => {
   it.each([
     ["show-schedule", "schedule", "till-schedule-screen"],
     ["show-station", "station", "till-station-screen"],
-    ["show-expo", "expo", "till-expo-screen"],
+    ["show-expo", "expo", "till-pass-screen"],
   ])("restores %s with Back, Forward, login and refresh", async (event, view, selector) => {
     const { el } = await mountApp();
     await toCounter(el);
@@ -15913,7 +15914,7 @@ describe("persistent till destinations", () => {
     await traverse("back", el);
     resolve(fixtureOffers({ menus: [], products: [] }));
     await flush(el);
-    expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-pass-screen")).not.toBeNull();
     emit(el.shadowRoot!.querySelector("till-shell")!, "logout");
     await flush(el);
     await traverse("forward", el);
@@ -21252,27 +21253,27 @@ describe("switching the device's profile from the header", () => {
     });
     emit(counter(el)!, "show-expo");
     await flush(el);
-    expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-pass-screen")).not.toBeNull();
 
     emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
     await flush(el);
     await flush(el);
 
     expect(schedule(el)).not.toBeNull();
-    expect(el.shadowRoot!.querySelector("till-expo-screen")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-pass-screen")).toBeNull();
   });
 
   it("a switch to a profile with no starting screen lands on its fixed home", async () => {
     const { el } = await openProfile();
     emit(counter(el)!, "show-expo");
     await flush(el);
-    expect(el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("till-pass-screen")).not.toBeNull();
 
     emit(profileDialog(el)!, "profile-switch", { profileId: BAR.id });
     await flush(el);
     await flush(el);
 
-    expect(el.shadowRoot!.querySelector("till-expo-screen")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-pass-screen")).toBeNull();
     expect(counter(el)).not.toBeNull();
   });
 
@@ -21705,7 +21706,10 @@ describe("W69 till shell leave routes", () => {
         expect(location.href).not.toBe(href);
         expect(pushes).toHaveBeenCalledOnce();
         if (route === "tab") expect(shell(el)!.activeScreen).toBe("floor");
-        else expect(el.shadowRoot!.querySelector(`till-${route}-screen`)).not.toBeNull();
+        else
+          expect(
+            el.shadowRoot!.querySelector(`till-${route === "expo" ? "pass" : route}-screen`),
+          ).not.toBeNull();
       }
       const unload = new Event("beforeunload", { cancelable: true });
       window.dispatchEvent(unload);
@@ -21838,7 +21842,7 @@ describe("W69 till shell leave routes", () => {
     await flush(el);
     expect(schedule(el)).toBe(owner);
     await answer(el, "discard");
-    await expect.poll(() => el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+    await expect.poll(() => el.shadowRoot!.querySelector("till-pass-screen")).not.toBeNull();
     expect(shell(el)!.activeScreen).toBe("counter");
     expect(pushes).toHaveBeenCalledOnce();
   });
@@ -21889,7 +21893,7 @@ describe("W69 till shell leave routes", () => {
     history.forward();
     await expect.poll(() => question(el).open).toBe(true);
     await answer(el, "discard");
-    await expect.poll(() => el.shadowRoot!.querySelector("till-expo-screen")).not.toBeNull();
+    await expect.poll(() => el.shadowRoot!.querySelector("till-pass-screen")).not.toBeNull();
     expect(pushes).not.toHaveBeenCalled();
   });
   it("an explicit floor tab loads its data only once when the accepted URL is published", async () => {

@@ -8,7 +8,7 @@ import type { ExpoItem } from "./working-order.js";
 export type PassTarget =
   { kind: "group"; partyId: string; groupId: string } | { kind: "bill"; workingOrderId: string };
 
-/** As readPassBoard's ExpoCourse reads it; null for a dish in no course. */
+/** Null for a dish in no course. */
 export type PassCourse = { id: string; name: string | null; displayOrder: number | null } | null;
 
 /** One live kitchen item as the board and the release read it. */
@@ -25,6 +25,7 @@ export interface PassRow {
   group: {
     id: string;
     partyId: string;
+    partyRevision: number;
     state: "held" | "fired";
     requestKind: OrderGroupRequestKind;
     position: number;
@@ -167,10 +168,13 @@ export function passCardRelease(
 
 type Column = "held" | "toFire" | "inProgress" | "ready";
 
-function cardItem(row: PassRow, scope: PassScope): PassCardItem {
+function isPassWork(row: PassRow): boolean {
+  return phaseOf(row) === "held" ? row.stationWaitsNow : row.passControlled;
+}
+
+function cardItem(row: PassRow, scope: PassScope, dims: boolean): PassCardItem {
   const phase = phaseOf(row);
   const visible = passSees(scope, row);
-  const passWork = phase === "held" ? row.stationWaitsNow : row.passControlled;
   return {
     ...row.item,
     lineId: row.lineId,
@@ -180,7 +184,7 @@ function cardItem(row: PassRow, scope: PassScope): PassCardItem {
     requestedAt: row.requestedAt,
     readyAt: row.readyAt,
     visible,
-    informational: !visible || !passWork,
+    informational: !visible || (dims && !isPassWork(row)),
     passControlled: row.passControlled,
     course: row.course,
     stationClosed: row.stationClosed,
@@ -206,9 +210,15 @@ interface Placed {
   heldOrder: [string, string, number];
 }
 
-function placeCard(key: string, cardRows: PassRow[], scope: PassScope): Placed | null {
+function placeCard(
+  key: string,
+  cardRows: PassRow[],
+  scope: PassScope,
+  dims: boolean,
+  releases: boolean,
+): Placed | null {
   cardRows.sort(itemOrder);
-  const items = cardRows.map((row) => cardItem(row, scope));
+  const items = cardRows.map((row) => cardItem(row, scope, dims));
   if (!items.some((item) => item.visible)) return null;
   const first = cardRows[0]!;
   const group = first.group;
@@ -242,8 +252,9 @@ function placeCard(key: string, cardRows: PassRow[], scope: PassScope): Placed |
     void openedAt;
     orders.set(row.orderId, { orderId: row.orderId, ...order });
   }
-  const partyRow = cardRows.find((row) => row.partyId !== null && row.partyRevision !== null);
-  const release = passCardRelease(target, cardRows, scope);
+  const release = releases
+    ? passCardRelease(target, cardRows, scope)
+    : { ticketItemIds: [], context: null };
   const card: PassCard = {
     key,
     target,
@@ -251,9 +262,7 @@ function placeCard(key: string, cardRows: PassRow[], scope: PassScope): Placed |
     requestedAt: initiated[0] ?? null,
     readyAt: column === "ready" ? (readyTimes.at(-1) ?? null) : null,
     allReady,
-    ...(group !== null && partyRow !== undefined
-      ? { party: { id: partyRow.partyId!, revision: partyRow.partyRevision! } }
-      : {}),
+    ...(group !== null ? { party: { id: group.partyId, revision: group.partyRevision } } : {}),
     orders: [...orders.values()],
     ...(group === null
       ? {}
@@ -277,19 +286,35 @@ function placeCard(key: string, cardRows: PassRow[], scope: PassScope): Placed |
   return { card, column, heldOrder };
 }
 
+export interface PassBoardOptions {
+  showNonPassStations?: boolean;
+  /** Releasing needs a pass screen, so a monitor's and a till's All stations cards name nothing
+   *  to release. */
+  release?: boolean;
+  aStationInViewWaits?: boolean;
+}
+
 export function buildPassBoard(
   rows: readonly PassRow[],
   scope: PassScope,
-  display: { showNonPassStations: boolean } = { showNonPassStations: true },
+  {
+    showNonPassStations = true,
+    release = true,
+    aStationInViewWaits = false,
+  }: PassBoardOptions = {},
 ): PassBoard {
   const live = rows.filter((row) => !row.recalled && row.remaining > 0);
+  // Until the pass controls something in its view, nothing in view is dimmed (D89).
+  const dims = aStationInViewWaits || live.some((row) => passSees(scope, row) && isPassWork(row));
   const byCard = new Map<string, PassRow[]>();
   for (const row of live) {
     const key = passCardKey(row);
-    byCard.set(key, [...(byCard.get(key) ?? []), row]);
+    const cardRows = byCard.get(key);
+    if (cardRows === undefined) byCard.set(key, [row]);
+    else cardRows.push(row);
   }
   const placed = [...byCard]
-    .map(([key, cardRows]) => placeCard(key, cardRows, scope))
+    .map(([key, cardRows]) => placeCard(key, cardRows, scope, dims, release))
     .filter((entry): entry is Placed => entry !== null);
   const column = (name: Column, order: (a: Placed, b: Placed) => number) =>
     placed
@@ -312,7 +337,7 @@ export function buildPassBoard(
     overview: [],
   };
   for (const card of [...board.held, ...board.toFire, ...board.inProgress, ...board.ready]) {
-    if (!display.showNonPassStations) card.items = card.items.filter((item) => !item.informational);
+    if (!showNonPassStations) card.items = card.items.filter((item) => !item.informational);
     for (const item of card.items) {
       board.overview.push({
         lineId: item.lineId,

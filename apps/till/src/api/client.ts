@@ -1938,79 +1938,11 @@ export interface ExpoItem {
   queuedAt: string;
   /** This item's OWN station's order-timing thresholds (see {@link queuedAt}). */
   thresholds: StationThresholds;
-  /** This item's age band on the server's clock at fetch time. Not read by `till-expo-screen`,
-   *  which derives the band from {@link queuedAt} and {@link thresholds}. */
+  /** This item's age band on the server's clock at fetch time. The pass board does not read it:
+   *  `passItemBand` derives the band on the till's own clock. */
   band: TimingBand;
 }
 
-/**
- * One course section of an expo order; a null course has `courseId`/`courseName`/`displayOrder` null
- * and sorts EARLIEST. `fired` is true once EVERY item carries `firedAt`.
- */
-export interface ExpoCourse {
-  courseId: string | null;
-  courseName: string | null;
-  displayOrder: number | null;
-  fired: boolean;
-  items: ExpoItem[];
-}
-
-/**
- * One group section of a seated party's bill on the expo board. The section of lines with no group
- * has every group field `null` and sorts first.
- */
-export interface ExpoGroup {
-  groupId: string | null;
-  position: number | null;
-  displayNumber: number | null;
-  numberPartyId: string | null;
-  numberPartyLabel?: string;
-  state: QueueGroup["state"] | null;
-  fired: boolean;
-  items: ExpoItem[];
-}
-
-/**
- * One order on the cross-station expo/pass board, its items grouped BY COURSE, or by group for a
- * seated party's bill. `tableLabel` is omitted when the order maps to no table.
- */
-export interface ExpoOrder {
-  kitchenNote: string | null;
-  orderId: string;
-  tableLabel?: string;
-  orderNumber: number;
-  /** The numbers the order's dishes were sent under before they moved to it, lowest first;
-   *  absent when there are none. */
-  formerNumbers?: number[];
-  openedMinutes: number;
-  /** Absent on a bill with no party. */
-  party?: QueueParty;
-  /** Empty on a seated party's bill. */
-  courses: ExpoCourse[];
-  /** A seated party's bill's sections; absent or empty on any other bill. */
-  groups?: ExpoGroup[];
-  /** The worst age band across the order's UNSERVED lines on the server's clock at fetch time.
-   *  Not read by `till-expo-screen`, which derives the band from each item's `queuedAt` and
-   *  thresholds. */
-  worstBand: TimingBand;
-}
-
-export interface WatcherCourse extends ExpoCourse {
-  allReady: boolean;
-}
-export interface WatcherGroup extends ExpoGroup {
-  allReady: boolean;
-}
-export interface WatcherOrder extends Omit<ExpoOrder, "courses" | "groups"> {
-  courses: WatcherCourse[];
-  groups: WatcherGroup[];
-}
-export interface DevicePassScreen {
-  orders: WatcherOrder[];
-  stations: ScreenSlot[];
-  /** null: no zone filter. */
-  zones: ScreenSlot[] | null;
-}
 export type KitchenPhase = "held" | "requested" | "waiting" | "preparing" | "ready";
 
 export type PassTarget =
@@ -2087,13 +2019,6 @@ export interface PassReleaseAsk {
 
 export interface PassReleaseResult {
   releasedTicketItemIds: string[];
-}
-
-export interface DevicePassMonitor {
-  orders: ExpoOrder[];
-  stations: ScreenSlot[];
-  /** null: no zone filter. */
-  zones: ScreenSlot[] | null;
 }
 
 /**
@@ -3534,28 +3459,6 @@ export class TillApi {
     );
   }
 
-  /** The device's pass screen → `GET /api/device/pass-screen`; at a till it needs a signed-in person.
-   *  Rejects `device.unauthorized` as {@link getDeviceStationScreen} does. */
-  getDevicePassScreen(options: ReadOptions = {}): Promise<DevicePassScreen> {
-    return this.#request<DevicePassScreen>(
-      "/api/device/pass-screen",
-      "GET",
-      undefined,
-      options.signal,
-    );
-  }
-
-  /** A kitchen display's pass monitor → `GET /api/device/pass-monitor`. Rejects
-   *  `device.unauthorized` as {@link getDeviceStationScreen} does. */
-  getDevicePassMonitor(options: ReadOptions = {}): Promise<DevicePassMonitor> {
-    return this.#request<DevicePassMonitor>(
-      "/api/device/pass-monitor",
-      "GET",
-      undefined,
-      options.signal,
-    );
-  }
-
   /** The pass's board → `GET /api/device/pass-board`; at a till it needs a signed-in person. */
   getDevicePassBoard(options: ReadOptions = {}): Promise<DevicePassBoard> {
     return this.#request<DevicePassBoard>(
@@ -3574,6 +3477,12 @@ export class TillApi {
       undefined,
       options.signal,
     );
+  }
+
+  /** The till's All stations board → `GET /api/expo/board`: every station and zone, nothing to
+   *  release; needs a signed-in person. */
+  getExpoBoard(options: ReadOptions = {}): Promise<{ board: PassBoard }> {
+    return this.#request<{ board: PassBoard }>("/api/expo/board", "GET", undefined, options.signal);
   }
 
   /** The pass's Fire → `POST /api/device/pass-screen/release`. A stale card rejects
@@ -3716,15 +3625,6 @@ export class TillApi {
    */
   async reprintOrder(orderId: string): Promise<void> {
     await this.#request<void>(`/api/orders/${orderId}/reprint`, "POST", {});
-  }
-
-  /**
-   * The cross-station expo/pass queue → `GET /api/expo/queue`: orders aggregated into courses, or
-   * into groups for a seated party's bill, ACROSS all stations, oldest first. See {@link ExpoOrder}
-   * for what the server excludes.
-   */
-  getExpoQueue(options: ReadOptions = {}): Promise<ExpoOrder[]> {
-    return this.#request<ExpoOrder[]>("/api/expo/queue", "GET", undefined, options.signal);
   }
 
   /**

@@ -35,14 +35,14 @@ import { readBillEditState } from "./bill-editing.js";
 import { splitBill } from "./bill-actions.js";
 import { completeBillPayment } from "./bill-payments.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { listPassMonitor, listPassScreen, type PassScope } from "./pass-board.js";
+import { readScopedPassBoard } from "./pass-board.js";
+import { boardItems, EVERY } from "./testing/pass-board-probe.js";
 import { readReceiptGuests } from "./receipt-guests.js";
 import {
   advanceTicketItem,
   listCounterWaiting,
   listStationQueue,
   markServed,
-  type ExpoOrder,
 } from "./working-order.js";
 import { partyFamily, readFamilyBills, setPartyGuests } from "./parties.js";
 import { fireGroup, recordHeldPaper } from "./order-groups.js";
@@ -759,11 +759,6 @@ describe("who may send a finishing table's food to the counter", () => {
   });
 });
 
-const EVERY: PassScope = { stationIds: null, zoneIds: null };
-
-const passItems = (orders: ExpoOrder[]) =>
-  orders.flatMap((order) => [...order.courses, ...order.groups].flatMap((part) => part.items));
-
 async function get(path: string) {
   const response = await venue.app.request(path, { headers: { cookie: venue.cookie.staff } });
   return { status: response.status, body: await response.json() };
@@ -771,17 +766,17 @@ async function get(path: string) {
 
 /** Where a waiting order shows: the pass, its monitor, the station, Waiting orders and Find a bill. */
 async function whereItShows(billId: string, itemId: string, label: string) {
-  const boards = await inTx(venue, async (tx) => ({
-    screen: passItems(
-      (await listPassScreen(tx, venue.cfg, venue.cfg.origin.deviceId, EVERY)).orders,
-    ).filter((item) => item.id === itemId),
-    monitor: passItems((await listPassMonitor(tx, venue.cfg, EVERY)).orders).filter(
-      (item) => item.id === itemId,
-    ),
-    station: (await listStationQueue(tx, venue.stationId)).filter(
-      (group) => group.orderId === billId,
-    ),
-  }));
+  const boards = await inTx(venue, async (tx) => {
+    const pass = await readScopedPassBoard(tx, venue.cfg, EVERY);
+    const monitor = await readScopedPassBoard(tx, venue.cfg, EVERY, { release: false });
+    return {
+      screen: boardItems(pass, { inView: true }).filter((item) => item.id === itemId),
+      monitor: boardItems(monitor, { inView: true }).filter((item) => item.id === itemId),
+      station: (await listStationQueue(tx, venue.stationId)).filter(
+        (group) => group.orderId === billId,
+      ),
+    };
+  });
   const waiting = await get("/api/orders/counter-waiting");
   expect(waiting.status).toBe(200);
   // Searched by its label, so other tests' bills in this shared database cannot push it off page 1.

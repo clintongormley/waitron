@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { PartyAllergyRead } from "@waitron/module";
-import type { ExpoOrder, StationQueueGroup, TillApi } from "../api/client.js";
+import type { PassBoard, StationQueueGroup, TillApi } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { TillPartyAllergyDialog } from "../widgets/party-allergy-dialog.js";
+import type { TillPassBoard } from "../widgets/pass-board.js";
 import { TillStationScreen } from "./till-station-screen.js";
-import type { TillExpoScreen } from "./till-expo-screen.js";
-import "./till-expo-screen.js";
+import type { TillPassScreen } from "./till-pass-screen.js";
+import "./till-pass-screen.js";
+import { passBoard, passCard, passItem } from "../../test/pass-board-fixtures.js";
 
 const locale = currentLocale();
 beforeEach(() => setLocale("en"));
@@ -47,39 +49,35 @@ const stationGroup: StationQueueGroup = {
   party,
   items: [{ ...stationItem, group }],
 };
-const expoItem = {
-  allergy: null,
+const expoItem = passItem({
   id: "ticket-1",
   name: "Soup",
   qty: "1.000",
   stationName: "Kitchen",
-  state: "queued" as const,
+  state: "queued",
+  phase: "held",
   firedAt: null,
   queuedAt: "2026-10-20T10:00:00Z",
+  requestedAt: null,
   thresholds,
-  band: "fresh" as const,
-};
-const expoOrder: ExpoOrder = {
-  kitchenNote: null,
   orderId: "bill-1",
-  orderNumber: 5,
-  tableLabel: "Table 4",
-  openedMinutes: 2,
-  worstBand: "fresh",
-  party,
-  courses: [],
-  groups: [
-    {
-      groupId: group.id,
-      position: 1,
-      displayNumber: 1,
-      numberPartyId: party.id,
-      state: "held",
-      fired: false,
+  course: { id: "course-1", name: "Starter", displayOrder: 1 },
+});
+const order = { orderId: "bill-1", orderNumber: 5, tableLabel: "Table 4", kitchenNote: null };
+const expoBoard: PassBoard = passBoard({
+  held: [
+    passCard({
+      key: `group:${group.id}`,
+      target: { kind: "group", partyId: party.id, groupId: group.id },
+      kind: "held",
+      requestedAt: null,
+      party,
+      group: { displayNumber: 1, position: 1 },
+      orders: [order],
       items: [expoItem],
-    },
+    }),
   ],
-};
+});
 function view(answer: PartyAllergyRead["snapshot"]["answer"] = null): PartyAllergyRead {
   return {
     partyId: party.id,
@@ -109,21 +107,19 @@ function view(answer: PartyAllergyRead["snapshot"]["answer"] = null): PartyAller
   };
 }
 function fixture(kind: "group" | "course", deviceMode = false) {
-  const courseOrder = {
-    ...expoOrder,
-    party: undefined,
-    groups: undefined,
-    courses: [
-      {
-        courseId: "course-1",
-        courseName: "Starter",
-        displayOrder: 1,
-        fired: false,
+  const courseBoard = passBoard({
+    held: [
+      passCard({
+        key: "bill:bill-1",
+        target: { kind: "bill", workingOrderId: "bill-1" },
+        kind: "held",
+        requestedAt: null,
+        orders: [order],
         items: [expoItem],
-      },
+      }),
     ],
-  };
-  const orders = [kind === "group" ? expoOrder : courseOrder];
+  });
+  const board = kind === "group" ? expoBoard : courseBoard;
   return {
     listStations: vi.fn().mockResolvedValue([
       {
@@ -155,8 +151,8 @@ function fixture(kind: "group" | "course", deviceMode = false) {
         },
       ],
     }),
-    getExpoQueue: vi.fn().mockResolvedValue(orders),
-    getDevicePassScreen: vi.fn().mockResolvedValue({ orders, stations: [], zones: null }),
+    getExpoBoard: vi.fn().mockResolvedValue({ board }),
+    getDevicePassBoard: vi.fn().mockResolvedValue({ board, stations: [], zones: null }),
     getFindBill: vi.fn().mockResolvedValue({ workingOrderId: "bill-1", partyId: party.id }),
     previewPartyAllergy: vi.fn<TillApi["previewPartyAllergy"]>().mockResolvedValue(view()),
     fireGroup: vi.fn<TillApi["fireGroup"]>().mockResolvedValue({ revision: 8 }),
@@ -178,7 +174,7 @@ function fixture(kind: "group" | "course", deviceMode = false) {
     deviceMode,
   };
 }
-type Screen = TillStationScreen | TillExpoScreen;
+type Screen = TillStationScreen | TillPassScreen;
 async function mount(
   screen: "station" | "expo",
   kind: "group" | "course",
@@ -186,7 +182,7 @@ async function mount(
   theme: "light" | "dark" = "light",
 ) {
   const { el } = await mountWidget<Screen>(
-    `till-${screen}-screen`,
+    screen === "station" ? "till-station-screen" : "till-pass-screen",
     {
       api: api as unknown as TillApi,
       embedded: true,
@@ -200,11 +196,13 @@ async function mount(
     expect(
       screen === "station"
         ? el.shadowRoot!.querySelector("till-station-queue")
-        : el.shadowRoot!.querySelector('[data-item="ticket-1"]'),
+        : inBoard(el).querySelector('[data-item="ticket-1"]'),
     ).not.toBeNull(),
   );
   return { el, api };
 }
+const inBoard = (el: Screen) =>
+  el.shadowRoot!.querySelector<TillPassBoard>("till-pass-board")!.shadowRoot!;
 async function fire(el: Screen, kind: "group" | "course") {
   if (el instanceof TillStationScreen)
     el.shadowRoot!.querySelector("till-station-queue")!.dispatchEvent(
@@ -218,18 +216,20 @@ async function fire(el: Screen, kind: "group" | "course") {
       }),
     );
   else {
-    expect(el.shadowRoot!.querySelector(".lever")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-fire], [data-group-fire]")).toBeNull();
-    el.shadowRoot!.querySelector("[data-item]")!.dispatchEvent(
-      new CustomEvent(kind === "group" ? "fire-kitchen-group" : "fire-course", {
-        detail:
-          kind === "group"
-            ? { partyId: party.id, groupId: group.id, expectedPartyRevision: 7 }
-            : { orderId: "bill-1", courseId: "course-1" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    expect(inBoard(el).querySelector(".lever")).toBeNull();
+    expect(inBoard(el).querySelector("[data-fire], [data-group-fire]")).toBeNull();
+    inBoard(el)
+      .querySelector("[data-item]")!
+      .dispatchEvent(
+        new CustomEvent(kind === "group" ? "fire-kitchen-group" : "fire-course", {
+          detail:
+            kind === "group"
+              ? { partyId: party.id, groupId: group.id, expectedPartyRevision: 7 }
+              : { orderId: "bill-1", courseId: "course-1" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
   }
 }
 const dialog = (el: Screen) =>
@@ -320,7 +320,7 @@ describe("A773 waiter authority — expo allergy boundary", () => {
             const { el } = await mount("expo", kind, api);
             Object.assign(el, { fireControl });
             await el.updateComplete;
-            const reads = deviceMode ? api.getDevicePassScreen : api.getExpoQueue;
+            const reads = deviceMode ? api.getDevicePassBoard : api.getExpoBoard;
             const count = reads.mock.calls.length;
             for (let press = 0; press < 2; press++) {
               await fire(el, kind);
@@ -350,7 +350,7 @@ describe("A773 waiter authority — expo allergy boundary", () => {
             expect(reads).toHaveBeenCalledTimes(count);
             expect(dialog(el)).toBeNull();
             expect(el.shadowRoot!.querySelector('[role="alert"], [data-table-changed]')).toBeNull();
-            expect(el.shadowRoot!.querySelector('[data-item="ticket-1"]')).not.toBeNull();
+            expect(inBoard(el).querySelector('[data-item="ticket-1"]')).not.toBeNull();
           },
         );
 
@@ -396,13 +396,16 @@ describe("A773 waiter authority — expo allergy boundary", () => {
             await settle(el);
             expect(window.innerWidth).toBe(width);
             expect(Math.round(el.getBoundingClientRect().width)).toBe(width);
-            const dish = el.shadowRoot!.querySelector<HTMLElement>('[data-item="ticket-1"]')!;
+            const dish = inBoard(el).querySelector<HTMLElement>('[data-item="ticket-1"]')!;
             expect(dish.classList.contains("held")).toBe(true);
-            expect(el.shadowRoot!.querySelector("[data-group-held]")!.textContent).toContain(
-              t("station.group_held"),
+            const heldColumn = inBoard(el).querySelector('[data-column="held"]')!;
+            expect(heldColumn.querySelector(`[data-card="group:${group.id}"]`)).not.toBeNull();
+            expect(heldColumn.querySelector(".column-heading")!.textContent).toContain(
+              t("pass.column.held"),
             );
             expect(dish.getBoundingClientRect().right).toBeLessThanOrEqual(width + 1);
             expect(el.shadowRoot!.querySelector(".lever, till-party-allergy-dialog")).toBeNull();
+            expect(inBoard(el).querySelector(".lever")).toBeNull();
             expect(api.previewPartyAllergy).not.toHaveBeenCalled();
             await expectNoA11yViolations(el.parentElement!);
             await page.screenshot({

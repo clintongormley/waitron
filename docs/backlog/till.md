@@ -68,8 +68,7 @@ their full text.
 - Found by #618 (`apps/till` `src/api` + `src/state` + `src/i18n`), not fixable in a
   comments-only change. Test titles repeat claims the branch corrected:
   `apps/till/src/state/working-order.test.ts` "previews the total via priceBasket" (the preview
-  sums line totals) and `apps/till/src/api/client.test.ts` "getExpoQueue GETs this node's
-  cross-station pass queue" (the queue is venue-wide and includes placed orders).
+  sums line totals).
 
 ## Test titles repeat claims the branch corrected (#616)
 
@@ -77,8 +76,7 @@ their full text.
   repeat claims the branch corrected: `apps/server/src/working-order.test.ts` "lists the node's open
   orders" (the list is venue-wide); `station-queue.test.ts` "(nothing to release)" is false for a
   held line with no course, and several `station-queue`, `tender-pay` and `modifier-picker` test
-  titles carry task numbers. `css` comments in `apps/till/src/widgets/station-queue.ts` and
-  `screens/till-expo-screen.ts` still call the courseless group "auto-fired". `apps/till/README.md`
+  titles carry task numbers. `apps/till/README.md`
   says the held list is shared across the registers "on a node". Read, not run: a courseless
   section the server held shows its lines greyed with no fire button (`#fireAction` in
   `station-queue.ts`, from #131); `GET /api/till` never sends `stripe_on_device`, so the
@@ -873,9 +871,8 @@ Open:
   zero, a captured card payment with no sale still takes the recovery branch first, settling at
   the captured amount with all of it recorded as tip; the below-zero case with a capture was not
   run.
-- **Task 4 (#832, every paper names all of a party's tables).** At 390 px a pass card whose
-  label wraps also wraps its "2 min" onto two lines (`apps/till/src/screens/till-expo-screen.ts`);
-  nothing overflows. **DECIDED (owner, 2026-09-29): leave it** — after payment, the station queue
+- **Task 4 (#832, every paper names all of a party's tables).** Not yet looked at on the pass
+  card (`apps/till/src/widgets/pass-board.ts`): whether a wrapping label wraps its "2 min" too. **DECIDED (owner, 2026-09-29): leave it** — after payment, the station queue
   card, later kitchen notices and the till's list of a party's bills keep showing the frozen
   receipt label with the party's name ("Ana · Mesa 4, 5"). Not yet checked: the payment API's
   `/management-api/payments/stuck`, `/management-api/payments/bill-payments` and
@@ -926,7 +923,7 @@ original finding; its four-surface count and five-entry list no longer describe 
   `packages/ui-core/src/tokens/colors.css` is `--wt-color-warning` (with `--wt-color-on-warning`),
   which `wt-count-badge` uses. Each of the four call sites writes the fallback form
   `color: var(--wt-color-warning-text, var(--wt-color-text))` — `apps/till/src/widgets/basket.ts`,
-  `station-queue.ts`, `diet-badges.ts` and `apps/till/src/screens/till-expo-screen.ts` — so the
+  `station-queue.ts`, `diet-badges.ts` and the old pass screen (since retired, A773-2 B4) — so the
   emphasis those rows were written to carry never appears. `diet-badges.ts` also reads
   `--wt-color-success-text`, declared nowhere, the same way. **Next action:** whoever takes the till
   layout pass below decides whether these four want `--wt-color-warning`, a new
@@ -2504,14 +2501,16 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 
 **A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
 with PRs B–D remaining. PR B is cut into B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
-B4 remains, and no station can be set to wait for the pass until PR C. B3
+B4 is cut into B4a and B4b by its [task plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md);
+B4b remains, and no station can be set to wait for the pass until PR C. B3
 ([task plan](../superpowers/plans/2026-11-02-a773-2b3-pass-release.md)) built the pass's board
 reads (`GET /api/device/pass-board`, `GET /api/device/pass-monitor-board`) and its Fire
 (`POST /api/device/pass-screen/release`), which gives a card's waiting dishes to their stations
-once; the HOLD paper corrections for dishes waiting for the pass; and the till's client calls,
-which no screen uses yet. What B1,
+once, and the HOLD paper corrections for dishes waiting for the pass. B4a put the pass, the pass
+monitor and the till's own Pass on that board (`apps/till/src/screens/till-pass-screen.ts`, the
+till's every-station view on `GET /api/expo/board`) and retired the old pass reads. What B1,
 [B2's task plan](../superpowers/plans/2026-11-01-a773-2b2-requested-lifecycle.md) and B3 leave to
-B4 is in the slice plan's "Left for B4". Old nonempty stamps remain in regression fixtures, outside the till's
+B4 is in the slice plan's "Left for B4"; what B4a left is B4b in [the B4 plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md). Old nonempty stamps remain in regression fixtures, outside the till's
 public contracts. Physical schema and configuration-transfer fields remain for Task 12.
 
 PRs B–D add Requested and scoped pass release, integrate the agreed columns and display policy,
@@ -2535,16 +2534,6 @@ station is still sent there by the pass's Fire, as a waiter's fire does. A dish 
 the pass and was served in full no longer blocks recording an unpaid departure (B2's D41: keep as
 built); its refusal's words are on the copy sheet.
 
-**B4 builds one owner answer B3 did not** (owner, 2026-11-02): when a waiter fires one held dish on
-its own as the table's first food, its pass card says «Nuevo pedido» / New order, as for a whole
-held course; B3 still says «Siguiente pase» / Next course there. B4 changes the test on main that
-pins «Siguiente pase» and names it in its PR.
-
-**Before PR C:** the expo board (`listExpoQueue`) measures a dish waiting for the pass from
-`queued_at`, which firing a held group does not move, so the dish reads overdue the moment it is
-asked for. Measure it from `requested_at`, or stamp `queued_at` when it is asked for (B3's plan,
-"Left for B4 (and later)").
-
 **An edit that adds an extra at a waiting station.** If the dish's own station fires at once
 (Grill) while the extra's waits for the pass (Fryer), an edit adding onion rings to a burger
 already sent prints no `+1.000 x RINGS` on Fryer's HOLD paper; the pass's release ticket lists
@@ -2557,10 +2546,8 @@ The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
 Sent/New order and bill ownership behavior. Physical dragging and partial-serving trials remain
 separate backlog entries. A803 owns its pass/station presentation tail.
 
-B1–B3 built the server half: a dish can wait for the pass, the pass has its own board read and
-its own Fire, and the till has the client calls but no screen uses them. Next: B4 (the screens, the
-display setting, Columns); the slice plan outlines it and lists, under "Left for B4", what B1–B3
-left for it.
+Next: B4b (the station's Held column, "at the pass" on the table screen and Sent list, the
+closed-station alert's words, and the display setting), tasks B1a1–B13 of the B4 plan.
 
 What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the
 Columns store to reuse, and a key missing from a stored layout returns to its default place, not
@@ -2580,6 +2567,45 @@ requested phase, `overviewDishes` counts them as held. With Held as a fifth colu
 board needs 1148 px at standard text (`columnsFit`), a kitchen display's viewport about 1228 px,
 so a 1024 px display draws tabs unless a column is hidden or collapsed. The kitchen's tabs keep
 the layout's order and hidden columns but not collapse, which the pass's narrow list keeps (slice 9c D9).
+
+## Pin the pass board's live-dish filter
+
+Left open by A773-2 B4a's reviews (A13b, A15b). The board's card reader (`readCardRows`,
+`apps/server/src/pass-board.ts`) filters its own rows with `liveKitchenDish`
+(`apps/server/src/working-order.ts`); with that filter removed from the card reader and from
+`readPassRows`' own read, the board suites the A13b review ran stayed green. A fully served dish stays off the board anyway, because `buildPassBoard` drops a
+row with nothing remaining. The filter's other conditions are the candidates a case could pin: a dish
+made at the till (`madeHere`), and one bill of a two-bill group card collected or abandoned while the
+other is not. That those would show on a card without the filter is reasoned, not measured. Also,
+`line-service-projections.test.ts`'s "3 cancelled" case pins nothing on the board, because cancelling
+a dish in full deletes its tickets; a case needs a ticket that survives with nothing left to make.
+
+## A Ready card on the pass turns red, aged from when it was sent
+
+Seen in A773-2 B4a's look (2026-11-03). A Ready card's minutes count from when its last dish was
+ready, but its edge colour, the overdue count and a dish's Forgotten mark still age each dish from
+when it was sent to be cooked (`passItemBand`, `apps/till/src/state/pass-view.ts`), so food waiting at the pass
+for its runner turns red and says Forgotten. The old pass did the same, and the guide says so. Should
+a dish stop ageing once it is ready, or age from when it was ready? A question for the owner, beside
+A1250's colour question.
+
+## The pass's refreshed line after a Fire is out of view
+
+Seen in A773-2 B4a's look (2026-11-03). When a Fire is refused because the card changed, the screen
+reads the board again and says "The screen has been refreshed: check it and press again." in the
+board's status slot, above the columns (`apps/till/src/screens/till-pass-screen.ts`). After a Fire on
+a card low on a long column the line is off screen. The old pass screen drew its line in the same
+place.
+
+## Two refusal sentences the pass shows after Fire or Ready do not fit it
+
+Left open by A773-2 B4a (its plan's D87). A Fire refused `device.forbidden_action` (and on a till a
+Ready refused the same) shows "This device's profile doesn't allow that. Ask a manager to change
+it.", which sends the person to someone else; `service_zone.not_allowed` shows "This device's profile
+does not work in that area. Choose one of its own areas", which a pass cannot do. Both sentences are
+in `apps/till/src/i18n/codes.ts`, came with #1311 (2026-10-07, device profiles; `git log -S`) and
+are used outside the pass, so B4a did not change them. New words need the owner's approval in both
+languages.
 
 ## A678. Two readers answer "where is this order"
 
@@ -2900,12 +2926,12 @@ alone); their last screen or widget user went in A773-1 (#1897, `c9ad7a634`). De
 English and Spanish; three screen test files (`.test.ts`, `.empty-drawer.a11y`,
 `.populated-drawer.a11y`) check the screen does not show them.
 
-## A1250. The pass marks a late order in the brand colour where the station board marks it amber
+## A1250. The pass marks a late card in the brand colour where the station board marks it amber
 
-**A1250. The pass marks a late order in the brand colour where the station board marks it amber
+**A1250. The pass marks a late card in the brand colour where the station board marks it amber
 (question for the owner).** A late card's edge is `--wt-color-warning` on the station board
 (`apps/till/src/widgets/station-queue.ts`, `.ticket.age-warm`) and `--wt-color-primary` on the
-pass (`apps/till/src/screens/till-expo-screen.ts`, `.order.age-warm`); both then turn red. Should
+pass (`apps/till/src/widgets/pass-board.ts`, `.ticket.age-warm`); both then turn red. Should
 the pass use amber too? The help texts describe each as it is today.
 
 ## A1253. A help badge on a button in the brand colour reads as part of the button

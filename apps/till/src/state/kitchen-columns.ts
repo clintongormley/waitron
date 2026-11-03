@@ -4,7 +4,7 @@ export type ColumnKey =
 export interface ColumnScope {
   venueId: string;
   deviceId: string;
-  screen: "pass" | "pass_monitor" | "station";
+  screen: "pass" | "pass_monitor" | "all_stations" | "station";
   stationId?: string;
 }
 
@@ -17,6 +17,12 @@ export interface ColumnState {
 export const STATION_COLUMNS: ColumnState = {
   order: ["overview", "waiting", "preparing", "ready"],
   hidden: [],
+  collapsed: [],
+};
+
+export const PASS_COLUMNS: ColumnState = {
+  order: ["overview", "held", "toFire", "inProgress", "ready"],
+  hidden: ["overview"],
   collapsed: [],
 };
 

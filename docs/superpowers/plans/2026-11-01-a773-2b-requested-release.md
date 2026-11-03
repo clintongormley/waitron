@@ -1154,6 +1154,10 @@ reads `heldItem()` (D6). No exported signature changes.
 
 ## Left for B4 (B1's per-task reviews, 2026-11-01; B2's plan, 2026-11-02; B3's plan, 2026-11-02)
 
+2026-11-03: B4a built the pass screens on the new board, retired the three old pass routes, aged a
+Requested dish from `requested_at` and made one held dish fired as a table's first food a New order.
+What is left is B4b in [the B4 plan](2026-11-02-a773-2b4-pass-screens.md) (tasks B1a1–B13).
+
 Renamed from "Left for B3 and B4" by B3 (2026-11-02). The points marked B3 below were answered by
 [B3's task plan](2026-11-02-a773-2b3-pass-release.md) (its Decisions D44–D65); what B3 left is
 under "From B3's plan" at the end.

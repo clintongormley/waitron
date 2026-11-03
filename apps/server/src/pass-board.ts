@@ -1,7 +1,12 @@
 import "./errors.js";
 import { and, eq, gte, inArray, isNull, or, type SQL } from "drizzle-orm";
-import { worstBand } from "@waitron/shared";
-import { orderGroups, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import {
+  kitchenStations,
+  orderGroups,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { ResolvedKitchenScreen } from "@waitron/module";
 import type { TradingContext } from "./trading-context.js";
@@ -10,28 +15,20 @@ import { passWaitingStations } from "./kitchen-release.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { unchosenAtClosedStation } from "./station-move.js";
 import { orderWatchZones } from "./watch-zones.js";
-import { buildPassBoard, type PassBoard, type PassRow, type PassTarget } from "./pass-card.js";
 import {
-  liveKitchenDish,
-  readPassBoard,
-  readPassRows,
-  type ExpoCourse,
-  type ExpoGroup,
-  type ExpoOrder,
-} from "./working-order.js";
+  buildPassBoard,
+  type PassBoard,
+  type PassBoardOptions,
+  type PassRow,
+  type PassTarget,
+} from "./pass-card.js";
+import { liveKitchenDish, readPassRows } from "./working-order.js";
 
 /** null: every station (zone). */
 export interface PassScope {
   stationIds: readonly string[] | null;
   zoneIds: readonly string[] | null;
 }
-
-export type PassCourse = ExpoCourse & { allReady: boolean };
-export type PassGroup = ExpoGroup & { allReady: boolean };
-export type PassOrder = Omit<ExpoOrder, "courses" | "groups"> & {
-  courses: PassCourse[];
-  groups: PassGroup[];
-};
 
 /** A dish in no zone is seen only by a pass on every zone. */
 export function passSees(
@@ -54,78 +51,15 @@ export function passScopeOf(screen: ResolvedKitchenScreen): PassScope {
   };
 }
 
-/** The pass retains unserved food until service ends, independently of device marks. */
-export async function listPassScreen(
-  tx: Transaction,
-  cfg: TradingContext,
-  deviceId: string,
-  scope: PassScope,
-): Promise<{ orders: PassOrder[] }> {
-  void deviceId;
-  const kept = await scopedItems(tx, cfg, scope);
-  if (!kept.length) return { orders: [] };
-  const ids = new Set(kept.map((item) => item.id));
-  const orders = await readPassBoard(
-    tx,
-    inArray(workingOrders.id, [...new Set(kept.map((item) => item.orderId))]),
-  );
-  const section = <T extends ExpoCourse | ExpoGroup>(
-    part: T,
-  ): (T & { allReady: boolean }) | null => {
-    const allReady = part.items.every((item) => item.state === "ready");
-    const items = part.items.filter((item) => ids.has(item.id));
-    return items.length
-      ? ({ ...part, allReady, items } as unknown as T & { allReady: boolean })
-      : null;
-  };
-  return {
-    orders: orders.map((order) =>
-      withSections(
-        order,
-        order.courses.flatMap((part) => section(part) ?? []),
-        order.groups.flatMap((part) => section(part) ?? []),
-      ),
-    ),
-  };
-}
-
-/** The monitor shares the pass's service lifetime and cannot mark work complete. */
-export async function listPassMonitor(
-  tx: Transaction,
-  cfg: TradingContext,
-  scope: PassScope,
-): Promise<{ orders: ExpoOrder[] }> {
-  const kept = await scopedItems(tx, cfg, scope);
-  if (!kept.length) return { orders: [] };
-  const ids = new Set(kept.map((item) => item.id));
-  const orders = await readPassBoard(
-    tx,
-    inArray(workingOrders.id, [...new Set(kept.map((item) => item.orderId))]),
-  );
-  const section = <T extends ExpoCourse | ExpoGroup>(part: T): T | null => {
-    const items = part.items.filter((item) => ids.has(item.id));
-    return items.length ? { ...part, items } : null;
-  };
-  return {
-    orders: orders.map((order) =>
-      withSections(
-        order,
-        order.courses.flatMap((part) => section(part) ?? []),
-        order.groups.flatMap((part) => section(part) ?? []),
-      ),
-    ),
-  };
-}
-
 /** The pass's cards: every card one of whose live dishes the scope sees, each read whole. */
 export async function readScopedPassBoard(
   tx: Transaction,
   cfg: TradingContext,
   scope: PassScope,
-  display?: { showNonPassStations: boolean },
+  options: Omit<PassBoardOptions, "aStationInViewWaits"> = {},
 ): Promise<PassBoard> {
   const nowMs = Date.now();
-  const kept = await scopedItems(tx, cfg, scope);
+  const { items: kept, zones } = await scopedItems(tx, cfg, scope);
   const groupIds = [...new Set(kept.flatMap((item) => item.groupId ?? []))];
   const billIds = [
     ...new Set(kept.flatMap((item) => (item.groupId === null ? [item.orderId] : []))),
@@ -134,8 +68,28 @@ export async function readScopedPassBoard(
   if (groupIds.length > 0) keys.push(inArray(workingOrderLines.groupId, groupIds));
   if (billIds.length > 0)
     keys.push(and(inArray(workingOrders.id, billIds), isNull(workingOrderLines.groupId))!);
-  const rows = keys.length === 0 ? [] : await readCardRows(tx, cfg, or(...keys)!, nowMs);
-  return buildPassBoard(rows, scope, display);
+  const waiting =
+    scope.stationIds?.length === 0
+      ? []
+      : await tx
+          .select({ id: kitchenStations.id, active: kitchenStations.active })
+          .from(kitchenStations)
+          .where(eq(kitchenStations.waitsForPass, true));
+  const rows =
+    keys.length === 0
+      ? []
+      : await readCardRows(tx, cfg, or(...keys)!, nowMs, {
+          waits: new Set(waiting.map((station) => station.id)),
+          zones,
+        });
+  return buildPassBoard(rows, scope, {
+    ...options,
+    // Active stations only, so a deactivated station left waiting does not set the flag.
+    aStationInViewWaits: waiting.some(
+      (station) =>
+        station.active && (scope.stationIds === null || scope.stationIds.includes(station.id)),
+    ),
+  });
 }
 
 /** One card's rows, for the release. */
@@ -154,32 +108,35 @@ export async function readPassCardRows(
   );
 }
 
+/** `known.waits` holds every station that waits for the pass; `known.zones` holds orders whose
+ *  watched zone is already read. */
 async function readCardRows(
   tx: Transaction,
   cfg: TradingContext,
   cards: SQL,
   nowMs: number,
+  known?: { waits: ReadonlySet<string>; zones: ReadonlyMap<string, string | null> },
 ): Promise<PassRow[]> {
   const read = await readPassRows(tx, and(liveKitchenDish(), cards)!, nowMs);
   if (read.length === 0) return [];
-  const zones = await rowsWatchZones(tx, cfg, read);
+  const zones = new Map(known?.zones);
+  for (const [id, zone] of await rowsWatchZones(
+    tx,
+    cfg,
+    read.filter((row) => !zones.has(row.orderId)),
+  ))
+    zones.set(id, zone);
   const phase = (row: Pick<PassRow, "requestedAt" | "firedAt" | "item">) =>
     kitchenPhase({ requestedAt: row.requestedAt, firedAt: row.firedAt, state: row.item.state });
-  const waits = await passWaitingStations(
-    tx,
-    read.filter((row) => phase(row) === "held").map((row) => row.stationId),
-  );
+  const waits =
+    known?.waits ??
+    (await passWaitingStations(
+      tx,
+      read.filter((row) => phase(row) === "held").map((row) => row.stationId),
+    ));
   const states = await VENUE_SERVICE.stationStates(tx, cfg, new Date(nowMs));
   return read.map(
-    ({
-      stationChosenAt,
-      stationRetainedAtRelease,
-      makeAtStationId,
-      servedAt,
-      deliveryTableId,
-      ...row
-    }) => {
-      void servedAt;
+    ({ stationChosenAt, stationRetainedAtRelease, makeAtStationId, deliveryTableId, ...row }) => {
       void deliveryTableId;
       const state = states.get(row.stationId);
       const rowPhase = phase(row);
@@ -204,13 +161,18 @@ async function readCardRows(
   );
 }
 
-/** The live kitchen dishes the scope sees. */
+/** The live kitchen dishes the scope sees, and the watched zone of each order read to decide it. */
 async function scopedItems(
   tx: Transaction,
   cfg: TradingContext,
   scope: PassScope,
-): Promise<{ id: string; orderId: string; groupId: string | null }[]> {
-  if (scope.stationIds?.length === 0 || scope.zoneIds?.length === 0) return [];
+): Promise<{
+  items: { id: string; orderId: string; groupId: string | null }[];
+  zones: ReadonlyMap<string, string | null>;
+}> {
+  const none = new Map<string, string | null>();
+  if (scope.stationIds?.length === 0 || scope.zoneIds?.length === 0)
+    return { items: [], zones: none };
   const candidates = await tx
     .select({
       id: ticketItems.id,
@@ -231,11 +193,14 @@ async function scopedItems(
           : inArray(ticketItems.stationId, [...scope.stationIds]),
       ),
     );
-  if (scope.zoneIds === null) return candidates;
+  if (scope.zoneIds === null) return { items: candidates, zones: none };
   const zones = await rowsWatchZones(tx, cfg, candidates);
-  return candidates.filter((item) =>
-    passSees(scope, { stationId: item.stationId, zoneId: zones.get(item.orderId)! }),
-  );
+  return {
+    items: candidates.filter((item) =>
+      passSees(scope, { stationId: item.stationId, zoneId: zones.get(item.orderId)! }),
+    ),
+    zones,
+  };
 }
 
 /** Every live kitchen dish fired, or requested and not yet released, at or after
@@ -294,18 +259,4 @@ function rowsWatchZones(
       ]),
     ).values(),
   ]);
-}
-
-function withSections<C extends ExpoCourse, G extends ExpoGroup>(
-  order: ExpoOrder,
-  courses: C[],
-  groups: G[],
-): Omit<ExpoOrder, "courses" | "groups"> & { courses: C[]; groups: G[] } {
-  const visible = [...courses, ...groups].flatMap((part) => part.items);
-  return {
-    ...order,
-    courses,
-    groups,
-    worstBand: worstBand(visible.map((item) => item.band)),
-  };
 }

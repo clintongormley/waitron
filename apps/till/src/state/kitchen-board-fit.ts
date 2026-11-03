@@ -12,7 +12,7 @@ export interface BoardMeasure {
 /** An open card column holds a 22-character dish line whole, measured at 14 and 18 px text (plan slice 9c D7). */
 export const CARD_COLUMN_TEXT_WIDTHS = 16.5;
 
-/** `.column`'s flex basis in `station-queue.ts`, which Overview keeps and does not grow past. */
+/** A column's flex basis in `kitchenBoardStyles`, which Overview keeps and does not grow past. */
 export const OVERVIEW_COLUMN_REMS = 11;
 
 /** Whether the shown columns, in order, fit side by side; `collapsed` among them take a strip. */

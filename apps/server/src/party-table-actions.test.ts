@@ -22,7 +22,8 @@ import { placeGroups } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { finishTable, readPartyBills, setPartyName } from "./testing/party-close-fixture.js";
 import { switchOff } from "./testing/live-table.js";
-import { listExpoQueue } from "./working-order.js";
+import { readScopedPassBoard } from "./pass-board.js";
+import { boardCards, EVERY } from "./testing/pass-board-probe.js";
 import { withMovedSlips } from "./moved-slips.js";
 import {
   combineParties,
@@ -889,9 +890,9 @@ describe("MOVED notices for a paid bill left on a party combined away", () => {
     expect(noticesOn([ana.tabId])).toEqual([
       { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "PagoM 7" },
     ]);
-    const onPass = (await act((tx) => listExpoQueue(tx))).find(
-      (entry) => entry.orderId === ana.tabId,
-    );
+    const onPass = boardCards(await act((tx) => readScopedPassBoard(tx, v.cfg, EVERY)))
+      .flatMap((card) => card.orders)
+      .find((entry) => entry.orderId === ana.tabId);
     expect(onPass?.tableLabel).toBe("PagoM 7");
     expect(await paidBill(ana.tabId)).toEqual(paid);
   });

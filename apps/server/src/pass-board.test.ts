@@ -17,14 +17,16 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { listPassMonitor, listPassScreen, passSees, type PassScope } from "./pass-board.js";
+import { passSees, readScopedPassBoard, type PassScope } from "./pass-board.js";
+import type { PassBoard, PassCard } from "./pass-card.js";
 import {
-  carveOffLines,
-  createOpenOrder,
-  fireableLineColumns,
-  fireLines,
-  listExpoQueue,
-} from "./working-order.js";
+  boardCards,
+  boardItems,
+  boardOrderIds,
+  cardOf,
+  EVERY,
+} from "./testing/pass-board-probe.js";
+import { carveOffLines, createOpenOrder, fireableLineColumns, fireLines } from "./working-order.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createPairingMode } from "./pairing-mode.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -34,8 +36,6 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
-
-const EVERY: PassScope = { stationIds: null, zoneIds: null };
 
 async function passDevices(v: PartyVenue, count: number): Promise<string[]> {
   return inTx(v, async (tx) => {
@@ -52,14 +52,11 @@ async function passDevices(v: PartyVenue, count: number): Promise<string[]> {
   });
 }
 
-type Board = { orders: { orderId: string; courses: Part[]; groups: Part[] }[] };
-type Part = { items: { id: string; name: string }[] };
-const names = (board: Board) =>
-  board.orders.flatMap((o) =>
-    [...o.courses, ...o.groups].flatMap((p) => p.items.map((i) => i.name)),
-  );
-const ids = (board: Board) =>
-  board.orders.flatMap((o) => [...o.courses, ...o.groups].flatMap((p) => p.items.map((i) => i.id)));
+/** The dishes the board's scope sees. */
+const names = (board: PassBoard) => boardItems(board, { inView: true }).map((i) => i.name);
+const ids = (board: PassBoard) => boardItems(board, { inView: true }).map((i) => i.id);
+const read = (v: PartyVenue, scope: PassScope) =>
+  inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, scope));
 
 /** A Grill and a Bar station, a Terrace zone, and three fired orders: Burger and Caña on the
  *  terrace, Burger inside, and a Burger counter sale. */
@@ -137,23 +134,14 @@ async function twoSectionVenue() {
   return { v, grill, counterId, party };
 }
 
-type Sections = {
-  orders: {
-    orderId: string;
-    courses: { courseName: string | null; items: { name: string }[] }[];
-    groups: { items: { name: string }[] }[];
-  }[];
-};
-const sections = (board: Sections) =>
-  Object.fromEntries(
-    board.orders.map((o) => [
-      o.orderId,
-      {
-        courses: o.courses.map((c) => [c.courseName, c.items.map((i) => i.name)]),
-        groups: o.groups.map((g) => g.items.map((i) => i.name)),
-      },
-    ]),
-  );
+/** A card's dishes in order, each with whether the board's scope sees it. */
+const dishes = (card: PassCard) => card.items.map((i) => [i.name, i.visible]);
+const billCard = (board: PassBoard, orderId: string) =>
+  cardOf(board, (c) => c.target.kind === "bill" && c.target.workingOrderId === orderId);
+const groupCards = (board: PassBoard) =>
+  boardCards(board)
+    .filter((c) => c.target.kind === "group")
+    .sort((a, b) => a.group!.position - b.group!.position);
 
 describe("passSees", () => {
   it("sees a dish only at a listed station and in a listed zone; a dish in no zone only under every zone", () => {
@@ -169,37 +157,20 @@ describe("passSees", () => {
 describe("pass screen", () => {
   it("a Terrace-only pass screen lists neither a Bar dish nor an inside order nor a counter sale", async () => {
     const { v, grill, terrace, outside, inside, counterId } = await terraceVenue();
-    const [device] = await passDevices(v, 1);
-    const every = await inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, EVERY));
-    expect(every.orders.map((o) => o.orderId).sort()).toEqual(
-      [outside.tabId, inside.tabId, counterId].sort(),
-    );
+    const every = await read(v, EVERY);
+    expect(boardOrderIds(every)).toEqual([outside.tabId, inside.tabId, counterId].sort());
     expect(names(every).sort()).toEqual(["BURG", "BURG", "BURG", "CANA"]);
-    const terraceGrill = await inTx(v, (tx) =>
-      listPassScreen(tx, v.cfg, device!, { stationIds: [grill], zoneIds: [terrace] }),
-    );
-    expect(terraceGrill.orders.map((o) => o.orderId)).toEqual([outside.tabId]);
+    const terraceGrill = await read(v, { stationIds: [grill], zoneIds: [terrace] });
+    expect(boardOrderIds(terraceGrill, { inView: true })).toEqual([outside.tabId]);
     expect(names(terraceGrill)).toEqual(["BURG"]);
-    expect(terraceGrill.orders[0]!.groups[0]).toMatchObject({ allReady: false });
-    expect(
-      (await inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, { stationIds: [], zoneIds: null })))
-        .orders,
-    ).toEqual([]);
+    expect(boardCards(terraceGrill)[0]).toMatchObject({ allReady: false });
+    expect(boardCards(await read(v, { stationIds: [], zoneIds: null }))).toEqual([]);
   });
 
   it("neither a pass screen nor a pass monitor lists a dish made at the till, nor one of an abandoned or collected order", async () => {
     const { v, outside, inside, counterId } = await terraceVenue();
-    const [device] = await passDevices(v, 1);
-    const orderIds = async () => ({
-      screen: (await inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, EVERY))).orders
-        .map((o) => o.orderId)
-        .sort(),
-      monitor: (await inTx(v, (tx) => listPassMonitor(tx, v.cfg, EVERY))).orders
-        .map((o) => o.orderId)
-        .sort(),
-    });
-    const all = [outside.tabId, inside.tabId, counterId].sort();
-    expect(await orderIds()).toEqual({ screen: all, monitor: all });
+    const orderIds = async () => boardOrderIds(await read(v, EVERY));
+    expect(await orderIds()).toEqual([outside.tabId, inside.tabId, counterId].sort());
     await suite.db
       .update(ticketItems)
       .set({ madeHere: true })
@@ -210,7 +181,7 @@ describe("pass screen", () => {
     await suite.db.execute(
       sql`update working_orders set collected_at = '2026-10-02T18:00:00.000Z' where id = ${counterId}`,
     );
-    expect(await orderIds()).toEqual({ screen: [], monitor: [] });
+    expect(await orderIds()).toEqual([]);
   });
 
   it("legacy Done marks stay device-specific but never hide food from either pass", async () => {
@@ -224,8 +195,7 @@ describe("pass screen", () => {
           and(eq(ticketItems.workingOrderId, outside.tabId), eq(ticketItems.stationId, grill)),
         ),
     );
-    const read = (device: string) => inTx(v, (tx) => listPassScreen(tx, v.cfg, device, EVERY));
-    const expoBefore = await inTx(v, (tx) => listExpoQueue(tx));
+    const boardBefore = await read(v, EVERY);
     const at = new Date("2026-10-01T12:00:00.000Z");
     await inTx(v, (tx) =>
       tx.insert(passItemMarks).values({
@@ -235,9 +205,8 @@ describe("pass screen", () => {
         doneByPersonId: null,
       }),
     );
-    expect(ids(await read(a!))).toContain(burger!.id);
-    expect(ids(await read(b!))).toContain(burger!.id);
-    expect(await inTx(v, (tx) => listExpoQueue(tx))).toEqual(expoBefore);
+    expect(ids(await read(v, EVERY))).toContain(burger!.id);
+    expect(await read(v, EVERY)).toEqual(boardBefore);
     const person = randomUUID();
     await inTx(v, (tx) =>
       tx.insert(passItemMarks).values({
@@ -262,8 +231,7 @@ describe("pass screen", () => {
         .delete(passItemMarks)
         .where(and(eq(passItemMarks.deviceId, a!), eq(passItemMarks.ticketItemId, burger!.id))),
     );
-    expect(ids(await read(a!))).toContain(burger!.id);
-    expect(ids(await read(b!))).toContain(burger!.id);
+    expect(ids(await read(v, EVERY))).toContain(burger!.id);
     expect(
       await inTx(v, (tx) =>
         tx.select().from(passItemMarks).where(eq(passItemMarks.ticketItemId, burger!.id)),
@@ -275,7 +243,7 @@ describe("pass screen", () => {
 
   it("A773 no dispatch state: splitting keeps the source mark without copying it or hiding food", async () => {
     const v = await setupPartyVenue(suite.db);
-    const [device, other] = await passDevices(v, 2);
+    const [device] = await passDevices(v, 1);
     const party = await seat(v, await v.table("Split table"));
     await orderForParty(v, party.partyId, ["Burger"], party.tabId);
     const [item] = await inTx(v, (tx) =>
@@ -310,45 +278,30 @@ describe("pass screen", () => {
     );
     expect(marks).toHaveLength(1);
     expect(marks[0]!.ticketItemId).toBe(item!.id);
-    expect(ids(await inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, EVERY))).sort()).toEqual(
-      [...itemIds].sort(),
-    );
-    expect(ids(await inTx(v, (tx) => listPassScreen(tx, v.cfg, other!, EVERY))).sort()).toEqual(
-      [...itemIds].sort(),
-    );
+    expect(ids(await read(v, EVERY)).sort()).toEqual([...itemIds].sort());
   });
 });
 
 describe("a pass's sections", () => {
-  it("a pass screen leaves out a course or group holding no dish it shows", async () => {
-    const { v, grill, counterId, party } = await twoSectionVenue();
-    const [device] = await passDevices(v, 1);
-    const read = () =>
-      inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, { stationIds: [grill], zoneIds: null }));
-    expect(sections(await read())).toEqual({
-      [counterId]: { courses: [["Mains", ["BURG"]]], groups: [] },
-      [party.tabId]: { courses: [], groups: [["BURG"]] },
-    });
-    const everything = sections(await inTx(v, (tx) => listPassScreen(tx, v.cfg, device!, EVERY)));
-    expect(everything[counterId]!.courses).toEqual([
-      ["Starters", ["CANA"]],
-      ["Mains", ["BURG"]],
+  it("a pass screen leaves out a group card holding no dish it shows, and shows a bill's card whole", async () => {
+    const { v, grill, counterId } = await twoSectionVenue();
+    const grillOnly = await read(v, { stationIds: [grill], zoneIds: null });
+    expect(dishes(billCard(grillOnly, counterId))).toEqual([
+      ["CANA", false],
+      ["BURG", true],
     ]);
-    expect(everything[party.tabId]!.groups).toEqual([["BURG"], ["CANA"]]);
+    expect(groupCards(grillOnly).map(dishes)).toEqual([[["BURG", true]]]);
+    expect(boardCards(grillOnly)).toHaveLength(2);
+    const everything = await read(v, EVERY);
+    expect(dishes(billCard(everything, counterId))).toEqual([
+      ["CANA", true],
+      ["BURG", true],
+    ]);
+    expect(groupCards(everything).map(dishes)).toEqual([[["BURG", true]], [["CANA", true]]]);
+    expect(boardCards(everything)).toHaveLength(3);
   });
 
-  it("a pass monitor leaves out a course or group holding no dish in its scope", async () => {
-    const { v, grill, counterId, party } = await twoSectionVenue();
-    const board = await inTx(v, (tx) =>
-      listPassMonitor(tx, v.cfg, { stationIds: [grill], zoneIds: null }),
-    );
-    expect(sections(board)).toEqual({
-      [counterId]: { courses: [["Mains", ["BURG"]]], groups: [] },
-      [party.tabId]: { courses: [], groups: [["BURG"]] },
-    });
-  });
-
-  it("a pass monitor keeps both courses after a legacy Away stamp", async () => {
+  it("a pass monitor keeps both of a bill's dishes after a legacy Away stamp", async () => {
     const { v, grill, counterId } = await twoSectionVenue();
     const counterItems = await inTx(v, (tx) =>
       tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, counterId)),
@@ -360,14 +313,50 @@ describe("a pass's sections", () => {
         .set({ awayAt: new Date().toISOString() })
         .where(eq(ticketItems.id, starter.id)),
     );
-    const board = await inTx(v, (tx) => listPassMonitor(tx, v.cfg, EVERY));
-    expect(sections(board)[counterId]).toEqual({
-      courses: [
-        ["Starters", ["CANA"]],
-        ["Mains", ["BURG"]],
-      ],
-      groups: [],
+    expect(dishes(billCard(await read(v, EVERY), counterId))).toEqual([
+      ["CANA", true],
+      ["BURG", true],
+    ]);
+  });
+});
+
+describe("the pass board", () => {
+  it("lists a card's dishes in no course first, then in course order, whatever order they were sent in", async () => {
+    const v = await setupPartyVenue(suite.db);
+    await inTx(v, async (tx) => {
+      const grill = (await createStation(tx, v.cfg, { name: "Grill" })).id;
+      for (const name of ["Burger", "Caña", "Flan"])
+        await routeProductTo(tx, v.cfg, v.productId(name), grill);
+      const starters = await createCourse(tx, v.cfg, { name: "Starters", displayOrder: 0 });
+      await setProductCourse(tx, v.cfg, v.productId("Caña"), starters.id);
+      const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 1 });
+      await setProductCourse(tx, v.cfg, v.productId("Burger"), mains.id);
     });
+    const counterId = randomUUID();
+    await inTx(v, async (tx) => {
+      await createOpenOrder(
+        tx,
+        v.cfg,
+        counterId,
+        v.counter.toOfferLines(
+          ["Burger", "Caña", "Flan"].map((name) => ({
+            productId: v.productId(name),
+            quantity: "1",
+          })),
+        ),
+        null,
+        { zoneId: v.counter.zoneId },
+      );
+      const lines = await tx
+        .select(fireableLineColumns)
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, counterId));
+      await fireLines(tx, v.cfg, counterId, lines);
+    });
+    const board = await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY));
+    const cards = [...board.held, ...board.toFire, ...board.inProgress, ...board.ready];
+    expect(cards.map((card) => card.target)).toEqual([{ kind: "bill", workingOrderId: counterId }]);
+    expect(cards[0]!.items.map((item) => item.name)).toEqual(["FLAN", "CANA", "BURG"]);
   });
 });
 
@@ -401,17 +390,13 @@ describe("pass monitor", () => {
     const { v, grill, terrace, outside, inside, counterId } = await terraceVenue();
     const [device] = await passDevices(v, 1);
     const grillOnly: PassScope = { stationIds: [grill], zoneIds: null };
-    const read = (scope: PassScope) => inTx(v, (tx) => listPassMonitor(tx, v.cfg, scope));
-    const before = await read(grillOnly);
-    expect(before.orders.map((o) => o.orderId).sort()).toEqual(
+    const before = await read(v, grillOnly);
+    expect(boardOrderIds(before, { inView: true })).toEqual(
       [outside.tabId, inside.tabId, counterId].sort(),
     );
     expect(names(before)).toEqual(["BURG", "BURG", "BURG"]);
-    expect(before.orders[0]!.groups[0] ?? before.orders[0]!.courses[0]).not.toHaveProperty(
-      "allReady",
-    );
-    const terraceOnly = await read({ stationIds: null, zoneIds: [terrace] });
-    expect(terraceOnly.orders.map((o) => o.orderId)).toEqual([outside.tabId]);
+    const terraceOnly = await read(v, { stationIds: null, zoneIds: [terrace] });
+    expect(boardOrderIds(terraceOnly, { inView: true })).toEqual([outside.tabId]);
     expect(names(terraceOnly).sort()).toEqual(["BURG", "CANA"]);
 
     const [burger] = await inTx(v, (tx) =>
@@ -429,7 +414,7 @@ describe("pass monitor", () => {
         doneAt: new Date().toISOString(),
       }),
     );
-    expect(await read(grillOnly)).toEqual(before);
+    expect(await read(v, grillOnly)).toEqual(before);
 
     await inTx(v, (tx) =>
       tx
@@ -437,21 +422,17 @@ describe("pass monitor", () => {
         .set({ awayAt: new Date().toISOString() })
         .where(eq(ticketItems.id, burger!.id)),
     );
-    expect((await inTx(v, (tx) => listExpoQueue(tx))).map((o) => o.orderId)).toContain(
-      outside.tabId,
-    );
-    expect((await read(grillOnly)).orders.map((o) => o.orderId).sort()).toEqual(
+    expect(boardOrderIds(await read(v, EVERY))).toContain(outside.tabId);
+    expect(boardOrderIds(await read(v, grillOnly), { inView: true })).toEqual(
       [outside.tabId, inside.tabId, counterId].sort(),
     );
-    expect(ids(await read(EVERY))).toContain(burger!.id);
+    expect(ids(await read(v, EVERY))).toContain(burger!.id);
   });
 
   it("limited to the counter's zone, lists the counter sale and no table's order", async () => {
     const { v, counterId } = await terraceVenue();
-    const board = await inTx(v, (tx) =>
-      listPassMonitor(tx, v.cfg, { stationIds: null, zoneIds: [v.counter.zoneId] }),
-    );
-    expect(board.orders.map((o) => o.orderId)).toEqual([counterId]);
+    const board = await read(v, { stationIds: null, zoneIds: [v.counter.zoneId] });
+    expect(boardOrderIds(board, { inView: true })).toEqual([counterId]);
     expect(names(board)).toEqual(["BURG"]);
   });
 });

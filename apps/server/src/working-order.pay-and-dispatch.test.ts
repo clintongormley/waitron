@@ -61,7 +61,6 @@ import {
   advanceTicketItem,
   cancelPlacedOrder,
   getHeldOrder,
-  listExpoQueue,
   listHeldOrders,
   listStationQueue,
   markCollected,
@@ -70,6 +69,8 @@ import {
   sendToPrep,
 } from "./working-order.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
+import { readScopedPassBoard } from "./pass-board.js";
+import { boardCards, EVERY } from "./testing/pass-board-probe.js";
 import { createPrinter } from "@waitron/printing";
 import { setRoutingCell } from "@waitron/venue-service";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -2588,11 +2589,11 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (ticket prep surf
   });
 });
 
-describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", () => {
-  it("is VENUE-WIDE: each node's expo board shows the venue's orders, regardless of node", async () => {
+describe("the pass board — venue-wide", () => {
+  it("is VENUE-WIDE: each node's pass board shows the venue's orders, regardless of node", async () => {
     const { cfg: nodeA, cafe, zoneId } = await modeVenue("ticket_then_pay");
     // A second node under the SAME tenant + location. Reads are venue-wide, so
-    // BOTH nodes fire a genuine order and BOTH expo boards show both — a measurement where each side
+    // BOTH nodes fire a genuine order and BOTH pass boards show both — a measurement where each side
     // holds two orders, not "one empty, one not" (CLAUDE.md §1).
     const nodeB = await addNode(nodeA);
 
@@ -2624,13 +2625,19 @@ describe("listExpoQueue (KDS-3 cross-station expo/pass read) — venue-wide", ()
       OPERATOR,
     );
 
-    const expoA = await asTenant(nodeA, (tx) => listExpoQueue(tx));
-    const expoB = await asTenant(nodeB, (tx) => listExpoQueue(tx));
+    const orderIdsOn = (cfg: DeviceRequestConfig) =>
+      asTenant(cfg, async (tx) =>
+        boardCards(await readScopedPassBoard(tx, cfg, EVERY)).flatMap((card) =>
+          card.orders.map((order) => order.orderId),
+        ),
+      );
+    const expoA = await orderIdsOn(nodeA);
+    const expoB = await orderIdsOn(nodeB);
 
-    // Same tenant + location on both sides, each expo board holding BOTH orders (oldest-first: A
+    // Same tenant + location on both sides, each pass board holding BOTH orders (oldest-first: A
     // fired before B) — the reads do not separate by node.
-    expect(expoA.map((o) => o.orderId)).toEqual([idA, idB]);
-    expect(expoB.map((o) => o.orderId)).toEqual([idA, idB]);
+    expect(expoA).toEqual([idA, idB]);
+    expect(expoB).toEqual([idA, idB]);
   });
 });
 

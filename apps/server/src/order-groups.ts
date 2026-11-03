@@ -610,7 +610,8 @@ export async function fireHeldLine(
           { kind: "HOLD CHANGED", direction: "removed" },
         );
       }
-      const groupId = await startGroup(tx, partyId, "fire", args.operatorId, "next_course", {
+      const kind = (await nextFireKind(tx, partyId)) === "new_order" ? "new_order" : "next_course";
+      const groupId = await startGroup(tx, partyId, "fire", args.operatorId, kind, {
         at: routing.at.toISOString(),
         by: { personId: args.operatorId },
       });

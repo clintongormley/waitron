@@ -9,7 +9,9 @@ import {
   setupSplitExtrasVenue,
   useSplitExtrasDb,
 } from "./testing/split-extras-venue.js";
-import { listExpoQueue, listStationQueue } from "./working-order.js";
+import { listStationQueue } from "./working-order.js";
+import { readScopedPassBoard } from "./pass-board.js";
+import { boardItems, EVERY } from "./testing/pass-board-probe.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -66,12 +68,7 @@ describe("split extra queues", () => {
       expect(fryer[0]!.items[0]!.crossRefs).toEqual([
         { kind: "for", name: "BURG", stationName: "Grill" },
       ]);
-      const expo = await listExpoQueue(tx);
-      const items = expo.flatMap((order) =>
-        order.courses
-          .flatMap((course) => course.items)
-          .concat(order.groups.flatMap((group) => group.items)),
-      );
+      const items = boardItems(await readScopedPassBoard(tx, venue.cfg, EVERY));
       expect(items.map((item) => item.name).sort()).toEqual(["BURG", "CHIPS"]);
       expect(items.find((item) => item.name === "BURG")!.modifiers).toHaveLength(1);
       expect(items.find((item) => item.name === "BURG")!.crossRefs).toEqual(

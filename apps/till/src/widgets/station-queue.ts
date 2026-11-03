@@ -4,18 +4,16 @@ import {
   kitchenAllergyStyles,
 } from "./kitchen-allergy-block.js";
 import { groupName } from "./group-name.js";
-import { extraCount, queueCrossRefs } from "./queue-crossrefs.js";
-import { optionAnswers } from "./option-snapshot.js";
+import { queueCrossRefs } from "./queue-crossrefs.js";
 import { ContentLanguageController } from "@waitron/ui";
-import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
+import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { TickingClock, baseStyles, registerIcons, visuallyHiddenStyles } from "@waitron/ui";
+import { TickingClock, baseStyles, registerIcons } from "@waitron/ui";
 import { type TimingBand, classifyBand, thousandthsToDecimal } from "@waitron/shared";
-import { clockTime, currentLocale, t } from "../i18n/t.js";
-import { allergenName } from "../i18n/allergen-names.js";
-import { dietBadgeStyles, dietBadges, extraNutrition } from "./diet-badges.js";
+import { clockTime, t } from "../i18n/t.js";
+import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
-import { dishLine, snapshotDescriptionFor, trimQuantity } from "./dish-format.js";
+import { dishLine, trimQuantity } from "./dish-format.js";
 import {
   type CourseSection,
   type KitchenCard,
@@ -29,14 +27,19 @@ import {
   overviewDishes,
   thousandthsToMake,
 } from "../state/kitchen-cards.js";
-import { type OverviewRow, overviewRows, rowsToMake } from "../state/kitchen-overview.js";
+import { overviewRows, rowsToMake } from "../state/kitchen-overview.js";
 import { type ColumnKey, type ColumnState, STATION_COLUMNS } from "../state/kitchen-columns.js";
+import { type BoardMeasure, columnsFit } from "../state/kitchen-board-fit.js";
 import {
-  type BoardMeasure,
-  CARD_COLUMN_TEXT_WIDTHS,
-  columnsFit,
-} from "../state/kitchen-board-fit.js";
-import { PHONE_WIDTH } from "./language-chooser-styles.js";
+  columnHeading,
+  dishAllergens,
+  dishModifiers,
+  dishNote,
+  kitchenBoardStyles,
+  lateWords,
+  measureBoard,
+  overviewList,
+} from "./kitchen-board-parts.js";
 import { segmentedOptionStyles } from "./segmented-control-styles.js";
 import { helpBadge, kitchenHelpStyles } from "./help-badge.js";
 import { helpText } from "../i18n/help-strings.js";
@@ -64,10 +67,6 @@ const NOTICE_ICONS: Record<`notice-${KitchenNoticeKind}`, string> = {
 // Registered here rather than in main.ts: the icons are this widget's, and every surface that mounts it
 // needs them.
 registerIcons(NOTICE_ICONS);
-registerIcons({
-  "column-open": "M2 5.4 3.4 4 8 8.6 12.6 4 14 5.4 8 11.4Z",
-  "column-closed": "M5.4 2 4 3.4 8.6 8 4 12.6 5.4 14 11.4 8Z",
-});
 
 /** `ready` is terminal: a counter order's handover is an order-level collect, not a kitchen state. */
 const NEXT: Record<TicketState, Exclude<TicketState, "queued"> | undefined> = {
@@ -97,10 +96,6 @@ export function stationColumnNames(): Map<ColumnKey, string> {
   ]);
 }
 
-function dishCount(thousandths: number): string {
-  return trimQuantity(thousandthsToDecimal(thousandths));
-}
-
 function afterPeriodWords(period: string): string {
   return t("station.after_period").replace("{period}", () => period);
 }
@@ -126,6 +121,7 @@ export class TillStationQueue extends LitElement {
     orderNumberStyles,
     segmentedOptionStyles,
     kitchenHelpStyles,
+    kitchenBoardStyles,
     css`
       :host {
         display: block;
@@ -148,10 +144,6 @@ export class TillStationQueue extends LitElement {
         gap: var(--wt-space-2);
       }
 
-      .visually-hidden {
-        ${visuallyHiddenStyles}
-      }
-
       .empty {
         margin: 0;
         padding: var(--wt-space-4);
@@ -166,115 +158,8 @@ export class TillStationQueue extends LitElement {
         gap: var(--wt-space-3);
       }
 
-      .column {
-        display: flex;
-        flex: 1 1 11rem;
-        flex-direction: column;
-        gap: var(--wt-space-2);
-        min-width: 0;
-      }
-
-      .column-overview {
-        flex-grow: 0;
-      }
-
-      .column.collapsed {
-        flex: 0 0 var(--wt-tap-min);
-      }
-
-      .overview {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        margin: 0;
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        list-style: none;
-      }
-
-      /* A tab panel spans the board, so a name would sit across the screen from its count. */
-      .tab-panel .overview {
-        max-width: calc(${unsafeCSS(CARD_COLUMN_TEXT_WIDTHS)} * var(--wt-font-size-md));
-      }
-
-      @media ${unsafeCSS(PHONE_WIDTH)} {
-        .tab-panel .overview {
-          max-width: none;
-        }
-      }
-
-      .overview-row {
-        display: flex;
-        align-items: baseline;
-        gap: var(--wt-space-2);
-      }
-
-      .overview-name {
-        flex: 1;
-        min-width: 0;
-        overflow-wrap: anywhere;
-      }
-
-      .overview-making {
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .overview-held {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
-
-      .column-heading {
-        display: flex;
-        margin: 0 0 var(--wt-space-1);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-        color: var(--wt-color-text-muted);
-        text-transform: uppercase;
-      }
-
-      .collapsed .column-heading {
-        flex: 1;
-        margin: 0;
-      }
-
-      .column-toggle {
-        display: flex;
-        flex: 1;
-        align-items: center;
-        gap: var(--wt-space-1);
-        min-width: 0;
-        min-height: var(--wt-tap-min);
-        margin: 0;
-        padding: 0 var(--wt-space-2);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: inherit;
-        font: inherit;
-        text-align: start;
-        text-transform: inherit;
-        cursor: pointer;
-      }
-
-      .collapsed .column-toggle {
-        justify-content: flex-start;
-        padding: var(--wt-space-2) 0;
-        writing-mode: vertical-rl;
-      }
-
-      .collapsed .column-toggle[data-late] {
-        box-shadow: inset 0 var(--wt-space-1) 0 var(--wt-color-danger);
-      }
-
       .column-tab[data-late] {
         box-shadow: 0 var(--wt-space-1) 0 var(--wt-color-danger);
-      }
-
-      .column:not(.collapsed) .column-count {
-        margin-inline-start: auto;
       }
 
       .ticket {
@@ -837,15 +722,7 @@ export class TillStationQueue extends LitElement {
   }
 
   override willUpdate(): void {
-    const own = getComputedStyle(this);
-    const px = (token: string) => parseFloat(own.getPropertyValue(token));
-    this.#measured = {
-      width: this.getBoundingClientRect().width,
-      textPx: parseFloat(own.fontSize),
-      remPx: parseFloat(getComputedStyle(document.documentElement).fontSize),
-      tapMinPx: px("--wt-tap-min"),
-      gapPx: px("--wt-space-3"),
-    };
+    this.#measured = measureBoard(this);
     const tabs = this.groups.length > 0 && !this.#fits();
     if (this.#opening !== undefined && tabs && !this.#drewTabs) {
       this.chosenTab = this.#opening;
@@ -1253,7 +1130,7 @@ export class TillStationQueue extends LitElement {
             @click=${() => (this.chosenTab = key)}
           >
             ${title}<span aria-hidden="true"> ·</span>
-            <span aria-hidden=${late > 0 ? "true" : nothing}>${count}</span>${this.#lateWords(
+            <span aria-hidden=${late > 0 ? "true" : nothing}>${count}</span>${lateWords(
               count,
               late,
             )}
@@ -1263,7 +1140,7 @@ export class TillStationQueue extends LitElement {
       <section class="tab-panel" data-tab-panel=${chosen} data-column=${chosenState ?? "overview"}>
         ${
           chosenState === undefined
-            ? this.#overview(rows)
+            ? overviewList(rows)
             : inColumn(chosenState).map((card) => this.#card(card))
         }
       </section>`;
@@ -1281,8 +1158,10 @@ export class TillStationQueue extends LitElement {
             class="column column-overview ${collapsed ? "collapsed" : ""}"
             data-column="overview"
           >
-            ${this.#heading(key, t("station.overview"), rowsToMake(rows), collapsed)}
-            ${collapsed ? nothing : this.#overview(rows)}
+            ${columnHeading(key, t("station.overview"), rowsToMake(rows), collapsed, () =>
+              this.#toggleColumn(key),
+            )}
+            ${collapsed ? nothing : overviewList(rows)}
           </section>`;
         }
         const inColumn = cards.filter((card) => card.column === state);
@@ -1291,76 +1170,18 @@ export class TillStationQueue extends LitElement {
           class="column column-${state} ${collapsed ? "collapsed" : ""}"
           data-column=${state}
         >
-          ${this.#heading(
+          ${columnHeading(
             key,
             t(`station.state.${state}` as const),
             inColumn.length,
             collapsed,
+            () => this.#toggleColumn(key),
             late,
           )}
           ${collapsed ? nothing : inColumn.map((card) => this.#card(card))}
         </section>`;
       })}
     </div>`;
-  }
-
-  /** One button template for both states, so a redraw keeps the focused element. */
-  #heading(
-    key: ColumnKey,
-    title: string,
-    count: number,
-    collapsed: boolean,
-    late = 0,
-  ): TemplateResult {
-    return html`<h2 class="column-heading">
-      <button
-        class="column-toggle"
-        data-column-toggle=${key}
-        ?data-late=${late > 0}
-        aria-expanded=${collapsed ? "false" : "true"}
-        @click=${() => this.#toggleColumn(key)}
-      >
-        ${collapsed ? html`<wt-icon name="column-closed" aria-hidden="true"></wt-icon>` : nothing}<span
-          class="column-title"
-          >${title}</span
-        >
-        ${collapsed ? html`<span aria-hidden="true">·</span> ` : nothing}<span
-          class="column-count"
-          data-column-count
-          aria-hidden=${late > 0 ? "true" : nothing}
-          >${count}</span
-        >${this.#lateWords(count, late)}${collapsed ? nothing : html`<wt-icon name="column-open" aria-hidden="true"></wt-icon>`}
-      </button>
-    </h2>`;
-  }
-
-  /** The count's words while late: "1, 1 late" in one hidden span, as the drawn count is hidden
-   * then; a hidden span after the drawn count puts a space before its comma in Chromium's name. */
-  #lateWords(count: number, late: number): TemplateResult | typeof nothing {
-    if (late === 0) return nothing;
-    return html`<span class="visually-hidden"
-      >${count}, ${t("station.late").replace("{n}", String(late))}</span
-    >`;
-  }
-
-  #overview(rows: readonly OverviewRow[]): TemplateResult {
-    return html`<ul class="overview" data-overview>
-      ${rows.map(
-        (row) =>
-          html`<li class="overview-row" data-overview-row>
-            <span class="overview-name">${row.name}</span
-            ><span class="overview-making" data-overview-making>${dishCount(row.making)}</span>${
-              row.held > 0
-                ? html`<span class="overview-held" data-overview-held aria-hidden="true"
-                      >+${dishCount(row.held)}</span
-                    ><span class="visually-hidden"
-                      >, ${t("station.overview_held").replace("{n}", dishCount(row.held))}</span
-                    >`
-                : nothing
-            }
-          </li>`,
-      )}
-    </ul>`;
   }
 
   /** A card with no fired dish is held: dashed, untimed and saying so, whatever its group (D3). */
@@ -1510,10 +1331,10 @@ export class TillStationQueue extends LitElement {
               .filter((part) => part !== null)
               .join(" · ")}</span
           >`;
-    const customisation = this.#customisation(item);
-    const modifiers = this.#modifiers(item);
+    const customisation = dishNote(item, "line");
+    const modifiers = dishModifiers(item, "line");
     const crossRefs = queueCrossRefs(item, "line");
-    const allergens = this.#allergens(item);
+    const allergens = dishAllergens(item, "line");
     const allergy = kitchenAllergyBlock(item.allergy);
     const diet = dietBadges(item.asServedDiet, `line-diet-${item.id}`);
     const held = item.firedAt === null;
@@ -1555,53 +1376,6 @@ export class TillStationQueue extends LitElement {
       item.state === "queued" &&
       !(item.crossRefs ?? []).some((ref) => ref.kind === "for")
     );
-  }
-
-  #customisation(item: StationQueueItem): TemplateResult | typeof nothing {
-    const note = item.note ?? null;
-    if (note === null || note === "") return nothing;
-    return html`<span class="line-customisation" data-item-customisation=${item.id}>
-      <span class="line-note" data-note>${note}</span>
-    </span>`;
-  }
-
-  /** A `pending` profile shows a "not reviewed" warning: a cook must never read an unverified plate as
-   *  allergen-free. Each extra's own allergens are shown separately. */
-  #allergens(item: StationQueueItem): TemplateResult | typeof nothing {
-    const asServed = item.asServed;
-    const codes = asServed ? Object.keys(asServed.allergens).sort() : [];
-    if (codes.length === 0) return nothing;
-    const locale = currentLocale();
-    return html`<span class="line-allergens" data-item-allergens=${item.id}>
-      ${
-        codes.length > 0
-          ? html`<span class="allergen-label">${t("allergens.contains")}</span> ${codes.map(
-                (code) => html`<span class="allergen-chip">${allergenName(code, locale)}</span>`,
-              )}`
-          : nothing
-      }
-    </span>`;
-  }
-
-  /** A cook reads the KITCHEN wording of an answer, which carries no per-language text and so needs
-   *  no locale; an extra's own name is still a locale map. */
-  #modifiers(item: StationQueueItem): TemplateResult | typeof nothing {
-    const modifiers = item.modifiers ?? [];
-    const answers = optionAnswers(item.optionSnapshots, { reads: "kitchen" });
-    if (modifiers.length === 0 && answers.length === 0) return nothing;
-    return html`<span class="line-modifiers">
-      ${answers.map((answer) => html`<span class="modifier-answer">${answer}</span>`)}
-      ${modifiers.map(
-        (modifier, i) =>
-          html`<span class="modifier"
-            >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}${extraCount(modifier)}`}${extraNutrition(
-              modifier,
-              `item-modifier-allergens-${item.id}-${i}`,
-              `item-modifier-diet-${item.id}-${i}`,
-            )}</span
-          >`,
-      )}
-    </span>`;
   }
 
   /** The name is the server-resolved kitchen label and is rendered as sent. */

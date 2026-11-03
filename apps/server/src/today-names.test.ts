@@ -25,7 +25,9 @@ import { finishTable, holderOf } from "./testing/party-close-fixture.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { mountTillApi } from "./till-api.js";
-import { handOverOrder, type ExpoOrder } from "./working-order.js";
+import { handOverOrder } from "./working-order.js";
+import type { PassBoard } from "./pass-card.js";
+import { boardCards } from "./testing/pass-board-probe.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
   billRow,
@@ -310,11 +312,12 @@ describe("a group renamed for today, as the kitchen sees it", () => {
     await rename(table.c4!, name);
     await orderForParty(v, guests.partyId, ["Burger"], guests.tabId);
 
-    const answer = await app.request("/api/expo/queue", { headers: { cookie } });
+    const answer = await app.request("/api/expo/board", { headers: { cookie } });
     expect(answer.status, await answer.clone().text()).toBe(200);
-    const board = (await answer.json()) as ExpoOrder[];
+    const { board } = (await answer.json()) as { board: PassBoard };
 
-    expect(board.find((order) => order.orderId === guests.tabId)?.tableLabel).toBe(name);
+    const orders = boardCards(board).flatMap((card) => card.orders);
+    expect(orders.find((order) => order.orderId === guests.tabId)?.tableLabel).toBe(name);
   });
 });
 

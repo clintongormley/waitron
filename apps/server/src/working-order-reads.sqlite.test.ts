@@ -22,7 +22,9 @@ import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { TradingContext } from "./trading-context.js";
 import { listTables } from "./tables.js";
-import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
+import { listStationQueue, listTablesWithState } from "./working-order.js";
+import { readScopedPassBoard } from "./pass-board.js";
+import { boardCards, boardItems, boardOrderIds, EVERY } from "./testing/pass-board-probe.js";
 import { numberBill } from "./testing/bill-identities.js";
 
 /** The three kitchen/floor read models, run against a real migrated venue database. */
@@ -174,14 +176,11 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
     expect(groups[0]!.items[0]).toMatchObject({ state: "ready", band: "fresh" });
   });
 
-  it("lists the expo queue with the order's open age in whole minutes", async () => {
-    const orders = await withTransaction(db, async (tx) => {
-      return listExpoQueue(tx);
-    });
-    expect(orders).toHaveLength(1);
-    // Opened in this suite's own setup, so the floored minute count is 0.
-    expect(orders[0]!.openedMinutes).toBe(0);
-    expect(orders[0]!.tableLabel).toBe("Table 1");
+  it("puts the order on the pass board under its table", async () => {
+    const board = await withTransaction(db, (tx) => readScopedPassBoard(tx, cfg, EVERY));
+    const cards = boardCards(board);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.orders.map((order) => order.tableLabel)).toEqual(["Table 1"]);
   });
 
   it("omits a made-here drink from kitchen and floor reads while retaining the burger", async () => {
@@ -216,23 +215,21 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       async (tx) =>
         [
           await listStationQueue(tx, stationId),
-          await listExpoQueue(tx),
+          await readScopedPassBoard(tx, cfg, EVERY),
           await listTablesWithState(tx, cfg),
         ] as const,
     );
     expect(station.flatMap((group) => group.items).map((item) => item.name)).toEqual(["Burger"]);
-    expect(expo).toHaveLength(1);
-    expect(expo[0]!.groups.flatMap((group) => group.items).map((item) => item.name)).toEqual([
-      "Burger",
-    ]);
+    expect(boardCards(expo)).toHaveLength(1);
+    expect(boardItems(expo).map((item) => item.name)).toEqual(["Burger"]);
     expect(floor[0]).toMatchObject({ pendingToServe: 2, readyToServe: 0, timingBand: "fresh" });
 
     await db
       .update(ticketItems)
       .set({ state: "ready", awayAt: nowIso() })
       .where(eq(ticketItems.id, burger!.id));
-    const afterLegacyAway = await withTransaction(db, (tx) => listExpoQueue(tx));
-    expect(afterLegacyAway.map((order) => order.orderId)).toContain(order!.id);
+    const afterLegacyAway = await withTransaction(db, (tx) => readScopedPassBoard(tx, cfg, EVERY));
+    expect(boardOrderIds(afterLegacyAway)).toContain(order!.id);
   });
 
   it("removes an order with only a made-here item from expo", async () => {
@@ -267,8 +264,8 @@ describe("the kitchen and floor read models on a real migrated venue", () => {
       queuedAt: nowIso(),
       firedAt: nowIso(),
     });
-    const orders = await withTransaction(db, (tx) => listExpoQueue(tx));
-    expect(orders.map((order) => order.orderId)).not.toContain(orderId);
+    const board = await withTransaction(db, (tx) => readScopedPassBoard(tx, cfg, EVERY));
+    expect(boardOrderIds(board)).not.toContain(orderId);
     const [table] = await withTransaction(db, (tx) => listTablesWithState(tx, cfg));
     expect(table).toMatchObject({ pendingDeliveries: 0 });
   });

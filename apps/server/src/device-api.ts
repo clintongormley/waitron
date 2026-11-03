@@ -88,8 +88,7 @@ import { stationPrintersDown } from "./station-outputs-down.js";
 import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
-import { listPassMonitor, listPassScreen, passScopeOf, readScopedPassBoard } from "./pass-board.js";
-import type { PassBoard } from "./pass-card.js";
+import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
 import { mountDeviceLevers, requireKitchenDisplay } from "./device-levers.js";
 import { STATUS as TILL_STATUS, stationMoveRequest } from "./till-api.js";
 import { moveDishesToStation } from "./station-move.js";
@@ -527,24 +526,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
   mountDeviceLevers(app, deps, log, leverRun);
 
   // ── The device's pass screen and pass monitor (DEVICE-GUARDED) ─────────────────────────────────────
-  app.get("/api/device/pass-screen", (c) =>
-    run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      return c.json(
-        await withTransaction(deps.db, async (tx) => {
-          const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass");
-          const { orders } = await listPassScreen(
-            tx,
-            deps.cfg,
-            device.deviceId,
-            passScopeOf(screen),
-          );
-          return { orders, stations: screen.stations, zones: screen.zones };
-        }),
-      );
-    }),
-  );
-
   app.post("/api/device/pass-screen/release", (c) =>
     leverRun(c, log, async () => {
       const proof = await requireDeviceProof({ db: deps.db, devMode: deps.devMode }, c);
@@ -571,19 +552,6 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
     }),
   );
 
-  app.get("/api/device/pass-monitor", (c) =>
-    run(c, log, async () => {
-      const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
-      return c.json(
-        await withTransaction(deps.db, async (tx) => {
-          const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass_monitor");
-          const { orders } = await listPassMonitor(tx, deps.cfg, passScopeOf(screen));
-          return { orders, stations: screen.stations, zones: screen.zones };
-        }),
-      );
-    }),
-  );
-
   app.get("/api/device/pass-board", (c) =>
     run(c, log, async () => {
       const device = await requireDevice({ db: deps.db, devMode: deps.devMode }, c);
@@ -603,8 +571,10 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass_monitor");
-          const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen));
-          return { board: withoutRelease(board), stations: screen.stations, zones: screen.zones };
+          const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen), {
+            release: false,
+          });
+          return { board, stations: screen.stations, zones: screen.zones };
         }),
       );
     }),
@@ -1061,19 +1031,6 @@ async function stationScreenOf(
   device: DeviceBinding,
 ): Promise<ResolvedKitchenScreen> {
   return (await kitchenScreenOf(tx, c, cfg, device, "station")).screen;
-}
-
-/** The monitor has no cooking write path, so its cards name nothing to release. */
-function withoutRelease(board: PassBoard): PassBoard {
-  const strip = (cards: PassBoard["toFire"]) =>
-    cards.map((card) => ({ ...card, releaseTicketItemIds: [], releaseContext: null }));
-  return {
-    ...board,
-    held: strip(board.held),
-    toFire: strip(board.toFire),
-    inProgress: strip(board.inProgress),
-    ready: strip(board.ready),
-  };
 }
 
 /**

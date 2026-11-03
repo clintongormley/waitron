@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   moveColumn,
+  PASS_COLUMNS,
   readColumnState,
   saveColumnState,
   setColumnVisible,
@@ -303,5 +304,31 @@ describe("A773 columns state: the device's kitchen columns", () => {
       hidden: ["waiting", "ready"],
       collapsed: ["preparing", "ready"],
     });
+  });
+});
+
+describe("A773 pass view", () => {
+  it("reads the pass's default columns for the pass, the monitor and All stations, each under its own key", () => {
+    const passDefaults: ColumnState = {
+      order: ["overview", "held", "toFire", "inProgress", "ready"],
+      hidden: ["overview"],
+      collapsed: [],
+    };
+    const storage = fakeStorage();
+    const base = { venueId: "https://box.local", deviceId: "dev-1" };
+    for (const screen of ["pass", "pass_monitor", "all_stations"] as const) {
+      expect(readColumnState(storage, { ...base, screen }, PASS_COLUMNS)).toEqual(passDefaults);
+    }
+
+    const saved: ColumnState = {
+      order: ["ready", "inProgress", "toFire", "held", "overview"],
+      hidden: [],
+      collapsed: ["held"],
+    };
+    saveColumnState(storage, { ...base, screen: "pass" }, saved);
+    expect(readColumnState(storage, { ...base, screen: "pass" }, PASS_COLUMNS)).toEqual(saved);
+    for (const screen of ["pass_monitor", "all_stations"] as const) {
+      expect(readColumnState(storage, { ...base, screen }, PASS_COLUMNS)).toEqual(passDefaults);
+    }
   });
 });

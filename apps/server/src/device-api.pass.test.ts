@@ -23,6 +23,7 @@ import { endSession, loginWithPin, persons } from "@waitron/identity";
 import type { DeviceKitchenScreen, ScreenSlot } from "@waitron/module";
 import type { PassBoard } from "./pass-card.js";
 import { routeProductTo } from "./testing/zone-offers.js";
+import { boardItems } from "./testing/pass-board-probe.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountTillApi } from "./till-api.js";
@@ -97,16 +98,11 @@ async function fixture() {
   return { v, app, grill, kds, till, device, a, b };
 }
 
-type Board = {
-  orders: { groups: { items: { id: string }[] }[]; courses: { items: { id: string }[] }[] }[];
-  stations: { id: string; name: string; available: boolean }[];
-  zones: { id: string; name: string; available: boolean }[] | null;
-};
+type Board = { board: PassBoard; stations: ScreenSlot[]; zones: ScreenSlot[] | null };
 
+/** The dishes the device's scope sees. */
 function items(board: Board): string[] {
-  return board.orders.flatMap((order) =>
-    [...order.groups, ...order.courses].flatMap((part) => part.items.map((item) => item.id)),
-  );
+  return boardItems(board.board, { inView: true }).map((item) => item.id);
 }
 
 const done = (app: Hono, cookie: string, body: unknown) =>
@@ -116,7 +112,7 @@ const done = (app: Hono, cookie: string, body: unknown) =>
     body: JSON.stringify(body),
   });
 
-async function read(app: Hono, cookie: string, path = "/api/device/pass-screen") {
+async function read(app: Hono, cookie: string, path = "/api/device/pass-board") {
   const response = await app.request(path, { headers: { cookie } });
   expect(response.status).toBe(200);
   return (await response.json()) as Board;
@@ -169,14 +165,14 @@ describe("the pass screen's device routes", () => {
   it("answers a device with no pass screen device.unauthorized, and a pass screen's read names its stations", async () => {
     const f = await fixture();
     const station = await f.device("Grill screen", f.kds, { stationId: f.grill });
-    for (const path of ["/api/device/pass-screen", "/api/device/pass-monitor"]) {
+    for (const path of ["/api/device/pass-board", "/api/device/pass-monitor-board"]) {
       const refused = await f.app.request(path, { headers: { cookie: station.cookie } });
       expect(refused.status).toBe(401);
       expect(await refused.json()).toMatchObject({ error: { code: "device.unauthorized" } });
     }
     const refusedDone = await done(f.app, station.cookie, { ticketItemIds: [f.a.id], done: true });
     expect(refusedDone.status).toBe(404);
-    const monitorOnPass = await f.app.request("/api/device/pass-monitor", {
+    const monitorOnPass = await f.app.request("/api/device/pass-monitor-board", {
       headers: { cookie: f.a.cookie },
     });
     expect(monitorOnPass.status).toBe(401);
@@ -187,7 +183,11 @@ describe("the pass screen's device routes", () => {
         VENUE_SERVICE.readDeviceKitchenScreens(tx, f.v.cfg, f.a.id),
       )
     ).filter((s) => s.kind === "pass");
-    expect(board).toEqual({ orders: [], stations: screen!.stations, zones: null });
+    expect(board).toEqual({
+      board: { held: [], toFire: [], inProgress: [], ready: [], overview: [] },
+      stations: screen!.stations,
+      zones: null,
+    });
     expect(board.stations.map((s) => s.id)).toContain(f.grill);
   });
 
@@ -218,7 +218,7 @@ describe("the pass screen's device routes", () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
     const till = await f.device("Till", f.till, { kitchenScreen: EVERY_PASS });
-    const anonymousRead = await f.app.request("/api/device/pass-screen", {
+    const anonymousRead = await f.app.request("/api/device/pass-board", {
       headers: { cookie: till.cookie },
     });
     expect(anonymousRead.status).toBe(401);
@@ -330,15 +330,17 @@ describe("the pass screen's device routes", () => {
       kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: null },
     });
     expect(items(await read(f.app, pass.cookie))).toEqual([itemId]);
-    expect(items(await read(f.app, monitor.cookie, "/api/device/pass-monitor"))).toEqual([itemId]);
+    expect(items(await read(f.app, monitor.cookie, "/api/device/pass-monitor-board"))).toEqual([
+      itemId,
+    ]);
     await inTx(f.v, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, f.v.cfg, narrowed[0]!.id, {
         station: { stationIds: null, zoneIds: null },
       }),
     );
     for (const [cookie, path] of [
-      [pass.cookie, "/api/device/pass-screen"],
-      [monitor.cookie, "/api/device/pass-monitor"],
+      [pass.cookie, "/api/device/pass-board"],
+      [monitor.cookie, "/api/device/pass-monitor-board"],
     ] as const) {
       const refused = await f.app.request(path, { headers: { cookie } });
       expect(refused.status).toBe(401);
@@ -454,17 +456,19 @@ describe("the pass monitor's device route", () => {
     const monitor = await f.device("Pass monitor", f.kds, {
       kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: null },
     });
-    const board = await read(f.app, monitor.cookie, "/api/device/pass-monitor");
+    const board = await read(f.app, monitor.cookie, "/api/device/pass-monitor-board");
     expect(items(board)).toEqual([itemId]);
     expect(board.stations.map((s) => s.id)).toContain(f.grill);
     expect(board.zones).toBeNull();
     expect((await done(f.app, f.a.cookie, { ticketItemIds: [itemId], done: true })).status).toBe(
       404,
     );
-    expect(items(await read(f.app, monitor.cookie, "/api/device/pass-monitor"))).toEqual([itemId]);
+    expect(items(await read(f.app, monitor.cookie, "/api/device/pass-monitor-board"))).toEqual([
+      itemId,
+    ]);
     const monitorDone = await done(f.app, monitor.cookie, { ticketItemIds: [itemId], done: true });
     expect(monitorDone.status).toBe(404);
-    const passOnMonitor = await f.app.request("/api/device/pass-screen", {
+    const passOnMonitor = await f.app.request("/api/device/pass-board", {
       headers: { cookie: monitor.cookie },
     });
     expect(passOnMonitor.status).toBe(401);
@@ -490,20 +494,24 @@ describe("a pass monitor on a till", () => {
     const tables = await monitorOn("Tables till", f.v.tables.zoneId);
     const counter = await monitorOn("Counter till", f.v.counter.zoneId);
 
-    const anonymous = await f.app.request("/api/device/pass-monitor", {
+    const anonymous = await f.app.request("/api/device/pass-monitor-board", {
       headers: { cookie: tables.cookie },
     });
     expect(anonymous.status).toBe(401);
     expect(await anonymous.json()).toMatchObject({ error: { code: "session.required" } });
 
-    const board = await read(f.app, tables.signedIn, "/api/device/pass-monitor");
+    const board = await read(f.app, tables.signedIn, "/api/device/pass-monitor-board");
     expect(items(board)).toEqual([itemId]);
     expect(board.zones?.map((zone) => zone.id)).toEqual([f.v.tables.zoneId]);
-    expect(items(await read(f.app, counter.signedIn, "/api/device/pass-monitor"))).toEqual([]);
+    expect(items(await read(f.app, counter.signedIn, "/api/device/pass-monitor-board"))).toEqual(
+      [],
+    );
     expect((await done(f.app, f.a.cookie, { ticketItemIds: [itemId], done: true })).status).toBe(
       404,
     );
-    expect(items(await read(f.app, tables.signedIn, "/api/device/pass-monitor"))).toEqual([itemId]);
+    expect(items(await read(f.app, tables.signedIn, "/api/device/pass-monitor-board"))).toEqual([
+      itemId,
+    ]);
   });
 });
 
@@ -660,6 +668,38 @@ describe("A773 pass board: routes", () => {
       expect(await anonymous.json()).toMatchObject({ error: { code: "session.required" } });
       expect((await cards(f.app, await signIn(f, till), path)).board.toFire).toHaveLength(1);
     }
+  });
+});
+
+describe("A773 the old pass reads are gone", () => {
+  it.each([
+    ["pass", "/api/device/pass-screen", "/api/device/pass-board"],
+    ["pass_monitor", "/api/device/pass-monitor", "/api/device/pass-monitor-board"],
+  ] as const)(
+    "a %s device's GET %s answers 404, while its board shows the order",
+    async (kind, path, boardPath) => {
+      const f = await fixture();
+      const itemId = await burgerOrder(f.v);
+      const display = await f.device(`Old ${kind}`, f.kds, {
+        kitchenScreen: { kind, stationIds: null, zoneIds: null },
+      });
+      const answer = await f.app.request(path, { headers: { cookie: display.cookie } });
+      expect(answer.status).toBe(404);
+      expect(await answer.text()).toBe("404 Not Found");
+      expect(items(await read(f.app, display.cookie, boardPath))).toEqual([itemId]);
+    },
+  );
+
+  it("keeps the release route that shares the old read's path", async () => {
+    const f = await fixture();
+    const answer = await f.app.request("/api/device/pass-screen/release", {
+      method: "POST",
+      headers: { cookie: f.a.cookie, "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    expect(answer.status).not.toBe(404);
+    // The fixture's profile carries no prepare-orders, so the live route refuses it.
+    expect(await answer.json()).toMatchObject({ error: { code: "device.forbidden_action" } });
   });
 });
 

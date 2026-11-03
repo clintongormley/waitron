@@ -131,8 +131,23 @@ describe("A773 request kind", () => {
     expect(row).toEqual({ state: "fired", requestKind: "next_course" });
   });
 
-  it("gives Fire now on a held dish a next_course group", async () => {
+  it("gives Fire now on a held dish new_order when it is the table's first food", async () => {
     const submitted = await submit([{ release: "hold", lines: [burger(), burger()] }]);
+    const partyId = split.party.partyId;
+    const lineId = submitted.groups[0]!.lineIds[0]!;
+    const args = await command(partyId);
+    await inTx((tx) => fireHeldLine(tx, split.cfg, partyId, lineId, args));
+    const [line] = await suite.db
+      .select({ groupId: workingOrderLines.groupId })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, lineId));
+    expect(line!.groupId).not.toBe(submitted.groups[0]!.id);
+    expect(await kinds([line!.groupId!])).toEqual({ [line!.groupId!]: "new_order" });
+  });
+
+  it("gives Fire now on a held dish next_course after the table's first food", async () => {
+    await submit([{ release: "fire", lines: [water()] }]);
+    const submitted = await submit([{ release: "hold", lines: [burger()] }]);
     const partyId = split.party.partyId;
     const lineId = submitted.groups[0]!.lineIds[0]!;
     const args = await command(partyId);

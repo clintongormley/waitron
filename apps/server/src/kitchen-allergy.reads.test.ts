@@ -14,8 +14,9 @@ import {
 import type { KitchenAllergyBlock } from "@waitron/module";
 import { readBillEditState } from "./bill-editing.js";
 import { submitGroups, type SubmitGroupsInput } from "./order-groups.js";
-import { listExpoQueue, listStationQueue, listStationQueues } from "./working-order.js";
-import { listPassMonitor, listPassScreen } from "./pass-board.js";
+import { listStationQueue, listStationQueues } from "./working-order.js";
+import { readScopedPassBoard, type PassScope } from "./pass-board.js";
+import { boardItems, EVERY } from "./testing/pass-board-probe.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { ALLERGEN_NAMES } from "./i18n/kitchen-allergy.js";
 import {
@@ -113,50 +114,52 @@ async function sent(
   return { ...party, tickets };
 }
 
-function boardItems(board: Awaited<ReturnType<typeof listPassMonitor>>) {
-  return board.orders.flatMap((order) =>
-    [...order.groups, ...order.courses].flatMap((section) => section.items),
-  );
-}
+const passBoard = (scope: PassScope) => inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, scope));
+const monitorBoard = (scope: PassScope) =>
+  inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, scope, { release: false }));
+
+/** A Side product offered as an extra on the Burger and routed to its own station. */
+const routedExtra = () =>
+  inTx(v, async (tx) => {
+    const [parent] = await tx
+      .select()
+      .from(products)
+      .where(eq(products.id, v.productId("Burger")));
+    const { defaultLanguage } = await readContentLanguages(tx, v.cfg.locale);
+    const side = await createProduct(tx, {
+      catalogueId: parent!.catalogueId,
+      categoryId: null,
+      name: "Side staff",
+      customerName: { [defaultLanguage]: "Side customer" },
+      kitchenName: "SIDE COOK",
+      pricingUnit: "each",
+      unitPrice: "1.00",
+      vatClass: "reduced",
+      allergens: { milk: {} },
+    });
+    const list = await createExtraList(
+      tx,
+      {
+        name: "Sides",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: 1,
+        active: true,
+        items: [{ productId: side.id, maxQuantity: 1, preselected: false, price: "1.00" }],
+      },
+      v.cfg.locale,
+    );
+    await writeProductModifiers(tx, v.productId("Burger"), [{ kind: "extras", id: list.id }]);
+    const station = await createStation(tx, v.cfg, { name: "Side station" });
+    await routeProductTo(tx, v.cfg, side.id, station.id);
+    await republishMenus(tx);
+    return { side, list, station };
+  });
 
 describe("A669 reads", () => {
   it("keeps a routed extra's frozen copy at its own station and on every pass projection", async () => {
-    const extra = await inTx(v, async (tx) => {
-      const [parent] = await tx
-        .select()
-        .from(products)
-        .where(eq(products.id, v.productId("Burger")));
-      const { defaultLanguage } = await readContentLanguages(tx, v.cfg.locale);
-      const side = await createProduct(tx, {
-        catalogueId: parent!.catalogueId,
-        categoryId: null,
-        name: "Side staff",
-        customerName: { [defaultLanguage]: "Side customer" },
-        kitchenName: "SIDE COOK",
-        pricingUnit: "each",
-        unitPrice: "1.00",
-        vatClass: "reduced",
-        allergens: { milk: {} },
-      });
-      const list = await createExtraList(
-        tx,
-        {
-          name: "Sides",
-          customerName: null,
-          kitchenName: null,
-          minPicks: 0,
-          maxPicks: 1,
-          active: true,
-          items: [{ productId: side.id, maxQuantity: 1, preselected: false, price: "1.00" }],
-        },
-        v.cfg.locale,
-      );
-      await writeProductModifiers(tx, v.productId("Burger"), [{ kind: "extras", id: list.id }]);
-      const station = await createStation(tx, v.cfg, { name: "Side station" });
-      await routeProductTo(tx, v.cfg, side.id, station.id);
-      await republishMenus(tx);
-      return { side, list, station };
-    });
+    const extra = await routedExtra();
     const p = await sent("fire", true, [
       { listId: extra.list.id, picks: [{ productId: extra.side.id, quantity: 1 }] },
     ]);
@@ -167,16 +170,12 @@ describe("A669 reads", () => {
       { id: sides[0]!.id, allergy: original },
     ]);
     for (const board of [
-      await inTx(v, async (tx) => ({ orders: await listExpoQueue(tx) })),
-      await inTx(v, (tx) =>
-        listPassScreen(tx, v.cfg, randomUUID(), { stationIds: [extra.station.id], zoneIds: null }),
-      ),
-      await inTx(v, (tx) =>
-        listPassMonitor(tx, v.cfg, { stationIds: [extra.station.id], zoneIds: null }),
-      ),
+      await passBoard(EVERY),
+      await passBoard({ stationIds: [extra.station.id], zoneIds: null }),
+      await monitorBoard({ stationIds: [extra.station.id], zoneIds: null }),
     ]) {
       expect(
-        boardItems(board)
+        boardItems(board, { inView: true })
           .filter((item) => item.id === sides[0]!.id)
           .map((item) => item.allergy),
       ).toEqual([original]);
@@ -199,12 +198,7 @@ describe("A669 reads", () => {
       new Map(p.tickets.map((ticket, n) => [ticket.id, n === 0 ? original : null])),
     );
     expect(
-      new Map(
-        boardItems({ orders: await inTx(v, (tx) => listExpoQueue(tx)) }).map((item) => [
-          item.id,
-          item.allergy,
-        ]),
-      ),
+      new Map(boardItems(await passBoard(EVERY)).map((item) => [item.id, item.allergy])),
     ).toEqual(new Map(items.map((item) => [item.id, item.allergy])));
   });
 
@@ -242,14 +236,14 @@ describe("A669 reads", () => {
       const oldName = ALLERGEN_NAMES.milk.en;
       ALLERGEN_NAMES.milk.en = "Future dictionary label";
       try {
-        const board = await inTx(v, async (tx) => {
-          if (mode === "every") return { orders: await listExpoQueue(tx) };
-          const scope = { stationIds: [stationId], zoneIds: null };
-          return mode === "pass"
-            ? listPassScreen(tx, v.cfg, randomUUID(), scope)
-            : listPassMonitor(tx, v.cfg, scope);
-        });
-        const items = boardItems(board);
+        const scope = { stationIds: [stationId], zoneIds: null };
+        const board =
+          mode === "every"
+            ? await passBoard(EVERY)
+            : mode === "pass"
+              ? await passBoard(scope)
+              : await monitorBoard(scope);
+        const items = boardItems(board, { inView: true });
         expect(
           items.map((item) => ({ id: item.id, allergy: Reflect.get(item, "allergy") })),
         ).toEqual(
@@ -277,7 +271,7 @@ describe("A669 reads", () => {
     ]);
   });
 
-  it("keeps narrowed and empty scopes free of another station's allergy", async () => {
+  it("gives a narrowed scope's dishes no other station's allergy, keeps that station's dish on a shared card out of view with its own copy, and reads an empty scope as an empty board", async () => {
     await sent();
     const other = await inTx(v, async (tx) => {
       const station = await createStation(tx, v.cfg, { name: "Other cook" });
@@ -287,16 +281,46 @@ describe("A669 reads", () => {
     const p = await sent("fire", false);
     for (const mode of ["pass", "monitor"] as const) {
       const read = (ids: string[]) =>
-        inTx(v, (tx) =>
-          mode === "pass"
-            ? listPassScreen(tx, v.cfg, randomUUID(), { stationIds: ids, zoneIds: null })
-            : listPassMonitor(tx, v.cfg, { stationIds: ids, zoneIds: null }),
-        );
-      const items = boardItems(await read([other.id]));
+        (mode === "pass" ? passBoard : monitorBoard)({ stationIds: ids, zoneIds: null });
+      const items = boardItems(await read([other.id]), { inView: true });
       expect(items.map((item) => ({ id: item.id, allergy: Reflect.get(item, "allergy") }))).toEqual(
         p.tickets.map((ticket) => ({ id: ticket.id, allergy: null })),
       );
-      expect(await read([])).toEqual({ orders: [] });
+      expect(await read([])).toEqual({
+        held: [],
+        toFire: [],
+        inProgress: [],
+        ready: [],
+        overview: [],
+      });
+    }
+    const extra = await routedExtra();
+    const shared = await sent("fire", true, [
+      { listId: extra.list.id, picks: [{ productId: extra.side.id, quantity: 1 }] },
+    ]);
+    const side = shared.tickets.find((ticket) => ticket.stationId === extra.station.id)!;
+    const ownCopies = new Map(
+      (await inTx(v, (tx) => listStationQueue(tx, other.id)))
+        .filter((order) => order.orderId === shared.tabId)
+        .flatMap((order) => order.items)
+        .map((item) => [item.id, item.allergy]),
+    );
+    expect([...ownCopies.values()].filter((allergy) => allergy !== null)).toEqual([original]);
+    for (const mode of ["pass", "monitor"] as const) {
+      const board = await (mode === "pass" ? passBoard : monitorBoard)({
+        stationIds: [extra.station.id],
+        zoneIds: null,
+      });
+      expect(
+        boardItems(board, { inView: true }).map((item) => ({ id: item.id, allergy: item.allergy })),
+      ).toEqual([{ id: side.id, allergy: original }]);
+      expect(
+        new Map(
+          boardItems(board)
+            .filter((item) => !item.visible)
+            .map((item) => [item.id, item.allergy]),
+        ),
+      ).toEqual(ownCopies);
     }
   });
 
@@ -309,7 +333,7 @@ describe("A669 reads", () => {
         p.tickets.map((ticket) => ticket.id).sort(),
       ]);
       read.mockClear();
-      await inTx(v, (tx) => listExpoQueue(tx));
+      await passBoard(EVERY);
       expect(read.mock.calls.map((call) => [...call[1]].sort())).toEqual([
         p.tickets.map((ticket) => ticket.id).sort(),
       ]);

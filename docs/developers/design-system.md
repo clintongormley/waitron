@@ -2480,21 +2480,23 @@ part that stops the event still counts; `till-guide-sheet` relays a same-origin 
 leaving the page stops it, and a redraw never restarts it. On a till or a handheld help still goes
 off only at the lock screen. The station board (`till-station-queue`) marks its first card drawn,
 Columns, and the Changes to orders heading while there are changes; the station screen marks
-Merged / Stacked, drawn only on a kitchen screen with more than one station; the pass and its
-monitor mark the first order card, and the pass also the first Course ready or Group ready, whose
-wrapper is drawn whether help is on or off. One card and one lever per board carry a badge, so a busy
+Merged / Stacked, drawn only on a kitchen screen with more than one station; the pass board
+(`till-pass-board`, on the pass, its monitor and a till's Pass) marks its first card drawn and
+Columns, and the first Course ready or Group ready, whose wrapper is drawn only while help is on.
+One card and one lever per board carry a badge, so a busy
 board does not fill with identical "?" marks and Tab stops. These badges show on a till's Kitchen and
 Pass screens too. On these boards the cards, Columns and the first lever carry `help-inset`
 (`kitchenHelpStyles` in `help-badge.ts`), which keeps the badge inside the part's trailing edge:
 at phone width the boards have no side padding, and a badge hung past a full-width card or the
 right-aligned Columns would make the screen scroll sideways. Merged / Stacked sits at the leading
 edge, so its badge hangs outward; the notices heading keeps half a badge's target of room after
-its words, help on or off, so its badge starts where the words end. `till-expo-screen` draws its
+its words, help on or off, so its badge starts where the words end. `till-pass-board` draws its
 badges only while help is on (a `HelpModeController`), because a pass monitor is pinned to have no
-button at all while help is off, and a help-mode badge's inner button is in the page even while
-the badge is hidden. Tests: `help-idle.test.ts`, `till-shell.kitchen-help.test.ts`,
-`station-queue.help.test.ts`, `till-station-screen.help.test.ts` and `till-expo-screen.help.test.ts`
-(the board, station-screen and pass suites keep their axe cases in a `*.help.a11y.test.ts` beside each).
+help badge, so no badge button, while help is off, and a help-mode badge's inner button is in the
+page even while the badge is hidden. Tests: `help-idle.test.ts`, `till-shell.kitchen-help.test.ts`,
+`station-queue.help.test.ts`, `till-station-screen.help.test.ts` and `till-pass-screen.help.test.ts`
+(the board and station-screen suites keep their axe cases in a `*.help.a11y.test.ts` beside each;
+the pass's are in `till-pass-screen.a11y.test.ts`).
 
 - A help badge is `<wt-help-tooltip mode="help-mode">` placed in a primitive's `help` slot, or
   drawn by a primitive from its own `help` (a `wt-menu-row`, a `wt-data-table` column, a `wt-tabs`
@@ -5686,7 +5688,7 @@ page's language as `active` and decides what a pick means. A signed-in operator'
 existing preference write; login, pairing and kitchen-display choices are local UI changes.
 
 At phone width the till's page keeps `--wt-space-2` at its edges (`apps/till/index.html`), and the
-Floor, table Order, Expo, Station, Counter and Schedule screens add no side padding of
+Floor, table Order, Pass, Station, Counter and Schedule screens add no side padding of
 their own; Schedule also drops its card's border there. Cases:
 `apps/till/src/screens/device-screens.phone-margin.test.ts`.
 
@@ -5742,7 +5744,7 @@ A dish sent after its period ended, once the kitchen agreed, carries "After {per
 (`station.after_period`) in a warning chip: `--wt-color-warning` with `--wt-color-on-warning` text,
 bold, the printing-problem chip's style (`.after-period`, `apps/till/src/widgets/station-queue.ts`).
 On a card it is a row of its own above each run of consecutive dishes with the same mark, within
-one course. The pass and expo show no mark. The kitchen ticket prints the same words in
+one course. The pass shows no mark. The kitchen ticket prints the same words in
 capitals between `**` above each such run; correction and MOVED slips print none.
 
 ### Identical portions share one row

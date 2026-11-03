@@ -37,10 +37,11 @@ import { createTable } from "./testing/live-table.js";
 import {
   advanceTicketItem,
   createOpenOrder,
-  listExpoQueue,
   listStationQueue,
   priceStoredOrder,
 } from "./working-order.js";
+import { readScopedPassBoard } from "./pass-board.js";
+import { boardCards, EVERY } from "./testing/pass-board-probe.js";
 import { createCourse } from "./kitchen.js";
 import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -839,9 +840,10 @@ describe("splitting a line the kitchen has", () => {
     // The party's table wins over the order's own label.
     await db.update(workingOrders).set({ label: "Terraza" }).where(eq(workingOrders.id, tabId));
 
-    const board = await asApp(cfg, (tx) => listExpoQueue(tx));
+    const board = await asApp(cfg, (tx) => readScopedPassBoard(tx, cfg, EVERY));
+    const orders = boardCards(board).flatMap((card) => card.orders);
 
-    expect(Object.fromEntries(board.map((order) => [order.orderId, order.tableLabel]))).toEqual({
+    expect(Object.fromEntries(orders.map((order) => [order.orderId, order.tableLabel]))).toEqual({
       [tabId]: "T1",
       [checkId]: "T1",
     });
