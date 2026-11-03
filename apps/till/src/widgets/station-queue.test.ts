@@ -9,6 +9,7 @@ import { TillStationQueue, stationColumnNames } from "./station-queue.js";
 import { type ColumnKey, STATION_COLUMNS } from "../state/kitchen-columns.js";
 import { CARD_COLUMN_TEXT_WIDTHS, OVERVIEW_COLUMN_REMS } from "../state/kitchen-board-fit.js";
 import type { KitchenNotice, StationQueueGroup, StationQueueItem } from "../api/client.js";
+import { kitchenStamps, withKitchenStamps } from "../../test/kitchen-stamps.js";
 
 // The shipped DB defaults.
 const DEFAULT_THRESHOLDS: StationThresholds = {
@@ -38,6 +39,10 @@ const groupA: StationQueueGroup = {
       quantity: "2.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      phase: "waiting",
+      requestedAt: "2026-08-17T10:00:00.000Z",
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -49,6 +54,10 @@ const groupA: StationQueueGroup = {
       quantity: "1.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      phase: "preparing",
+      requestedAt: "2026-08-17T10:00:00.000Z",
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
@@ -73,6 +82,10 @@ const groupB: StationQueueGroup = {
       quantity: "3.000",
       course: null,
       firedAt: "2026-08-17T10:05:00.000Z",
+      phase: "ready",
+      requestedAt: "2026-08-17T10:05:00.000Z",
+      readyAt: "2026-08-17T10:05:00.000Z",
+      passControlled: false,
       queuedAt: "2026-08-17T10:05:00.000Z",
     },
   ],
@@ -405,6 +418,10 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          phase: "waiting",
+          requestedAt: "2026-08-17T10:00:00.000Z",
+          readyAt: null,
+          passControlled: false,
           queuedAt: "2026-08-17T10:00:00.000Z",
         },
       ],
@@ -436,6 +453,10 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          phase: "waiting",
+          requestedAt: "2026-08-17T10:00:00.000Z",
+          readyAt: null,
+          passControlled: false,
           queuedAt: "2026-08-17T10:00:00.000Z",
           modifiers: [
             { descriptions: { "es-ES": "Grande" } },
@@ -525,6 +546,10 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          phase: "waiting",
+          requestedAt: "2026-08-17T10:00:00.000Z",
+          readyAt: null,
+          passControlled: false,
           queuedAt: "2026-08-17T10:00:00.000Z",
           note: "sin sal",
         },
@@ -597,6 +622,10 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          phase: "waiting",
+          requestedAt: "2026-08-17T10:00:00.000Z",
+          readyAt: null,
+          passControlled: false,
           queuedAt: "2026-08-17T10:00:00.000Z",
           asServed: { allergens: { milk: {} }, pending: false },
         },
@@ -622,6 +651,10 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          phase: "waiting",
+          requestedAt: "2026-08-17T10:00:00.000Z",
+          readyAt: null,
+          passControlled: false,
           queuedAt: "2026-08-17T10:00:00.000Z",
           asServed: { allergens: {}, pending: true },
         },
@@ -703,6 +736,10 @@ describe("till-station-queue", () => {
           quantity: "1.000",
           course: null,
           firedAt: "2026-08-17T10:00:00.000Z",
+          phase: "waiting",
+          requestedAt: "2026-08-17T10:00:00.000Z",
+          readyAt: null,
+          passControlled: false,
           queuedAt: "2026-08-17T10:00:00.000Z",
           asServedDiet: { vegan: "yes", vegetarian: "yes", contains: [] },
         },
@@ -845,7 +882,14 @@ describe("till-station-queue", () => {
         {
           ...groupB,
           stationId: "st-2",
-          items: [{ ...groupB.items[0]!, id: "ti-4", state: "queued" as const }],
+          items: [
+            {
+              ...groupB.items[0]!,
+              id: "ti-4",
+              state: "queued" as const,
+              ...kitchenStamps({ state: "queued", firedAt: groupB.items[0]!.firedAt }),
+            },
+          ],
         },
       ],
       stationId: "st-9",
@@ -1055,6 +1099,10 @@ const coursedOrder: StationQueueGroup = {
       // Principales — HELD (fired_at null), display_order 2: must render LAST despite being listed first.
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
       firedAt: null,
+      phase: "held",
+      requestedAt: null,
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -1067,6 +1115,10 @@ const coursedOrder: StationQueueGroup = {
       // Entrantes — FIRED, display_order 1: renders after the null course, before Principales.
       course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
       firedAt: "2026-08-17T10:00:00.000Z",
+      phase: "preparing",
+      requestedAt: "2026-08-17T10:00:00.000Z",
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -1079,6 +1131,10 @@ const coursedOrder: StationQueueGroup = {
       // The null course must render FIRST, and carries no header.
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      phase: "waiting",
+      requestedAt: "2026-08-17T10:00:00.000Z",
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
@@ -1711,6 +1767,10 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
       group: { id: "g-3", position: 3, displayNumber: 3, numberPartyId: "v-4", state: "held" },
       firedAt: null,
+      phase: "held",
+      requestedAt: null,
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -1723,6 +1783,10 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-start", name: "Entrantes", displayOrder: 1 },
       group: { id: "g-2", position: 2, displayNumber: 2, numberPartyId: "v-4", state: "fired" },
       firedAt: "2026-08-17T10:00:00.000Z",
+      phase: "preparing",
+      requestedAt: "2026-08-17T10:00:00.000Z",
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -1734,6 +1798,10 @@ const partyOrder: StationQueueGroup = {
       quantity: "1.000",
       course: null,
       firedAt: "2026-08-17T10:00:00.000Z",
+      phase: "waiting",
+      requestedAt: "2026-08-17T10:00:00.000Z",
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -1746,6 +1814,10 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-dessert", name: "Postres", displayOrder: 3 },
       group: { id: "g-4", position: 4, displayNumber: 4, numberPartyId: "v-4", state: "held" },
       firedAt: null,
+      phase: "held",
+      requestedAt: null,
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
     {
@@ -1758,6 +1830,10 @@ const partyOrder: StationQueueGroup = {
       course: { id: "co-main", name: "Principales", displayOrder: 2 },
       group: { id: "g-3", position: 3, displayNumber: 3, numberPartyId: "v-4", state: "held" },
       firedAt: null,
+      phase: "held",
+      requestedAt: null,
+      readyAt: null,
+      passControlled: false,
       queuedAt: "2026-08-17T10:00:00.000Z",
     },
   ],
@@ -2072,7 +2148,14 @@ describe("till-station-queue — a merged queue's station labels", () => {
   it("a merged queue bumps each order by its own station's mode", async () => {
     const queuedAtBar = {
       ...groupB,
-      items: [{ ...groupB.items[0]!, id: "ti-4", state: "queued" as const }],
+      items: [
+        {
+          ...groupB.items[0]!,
+          id: "ti-4",
+          state: "queued" as const,
+          ...kitchenStamps({ state: "queued", firedAt: groupB.items[0]!.firedAt }),
+        },
+      ],
     };
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [
@@ -2102,7 +2185,14 @@ describe("till-station-queue — a merged queue's station labels", () => {
   describe("a whole-ticket order is marked so a cook sees it before tapping", () => {
     const queuedAtBar = {
       ...groupB,
-      items: [{ ...groupB.items[0]!, id: "ti-4", state: "queued" as const }],
+      items: [
+        {
+          ...groupB.items[0]!,
+          id: "ti-4",
+          state: "queued" as const,
+          ...kitchenStamps({ state: "queued", firedAt: groupB.items[0]!.firedAt }),
+        },
+      ],
     };
     const readyAtKitchen = { ...groupB.items[0]!, id: "ti-5", state: "ready" as const };
     const mixed = [
@@ -2155,7 +2245,12 @@ describe("till-station-queue — a merged queue's station labels", () => {
     });
 
     it("a ticket-mode order whose only unfinished dish is held shows no mark", async () => {
-      const held = { ...groupA.items[0]!, id: "ti-held", firedAt: null };
+      const held = {
+        ...groupA.items[0]!,
+        id: "ti-held",
+        firedAt: null,
+        ...kitchenStamps({ state: "queued", firedAt: null }),
+      };
       const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
         groups: [
           {
@@ -2270,6 +2365,10 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "2.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        phase: "waiting",
+        requestedAt: "2026-08-17T10:00:00.000Z",
+        readyAt: null,
+        passControlled: false,
         queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
@@ -2281,6 +2380,10 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "1.000",
         course: { id: "co-main", name: "Principales", displayOrder: 2 },
         firedAt: null,
+        phase: "held",
+        requestedAt: null,
+        readyAt: null,
+        passControlled: false,
         queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
@@ -2292,6 +2395,10 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        phase: "preparing",
+        requestedAt: "2026-08-17T10:00:00.000Z",
+        readyAt: null,
+        passControlled: false,
         queuedAt: "2026-08-17T10:00:00.000Z",
       },
       {
@@ -2303,6 +2410,10 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "1.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        phase: "ready",
+        requestedAt: "2026-08-17T10:00:00.000Z",
+        readyAt: "2026-08-17T10:00:00.000Z",
+        passControlled: false,
         queuedAt: "2026-08-17T10:00:00.000Z",
       },
       // An extra prepared at its own station is its own queue item, named "for" its dish
@@ -2316,6 +2427,10 @@ describe("till-station-queue — moving a dish to another station", () => {
         quantity: "2.000",
         course: null,
         firedAt: "2026-08-17T10:00:00.000Z",
+        phase: "waiting",
+        requestedAt: "2026-08-17T10:00:00.000Z",
+        readyAt: null,
+        passControlled: false,
         queuedAt: "2026-08-17T10:00:00.000Z",
         crossRefs: [{ kind: "for", name: "BURG", stationName: "Grill" }],
       },
@@ -2400,6 +2515,10 @@ describe("till-station-queue — where Move sits", () => {
     quantity: "1.000",
     course: null,
     firedAt: "2026-08-17T10:00:00.000Z",
+    phase: "waiting",
+    requestedAt: "2026-08-17T10:00:00.000Z",
+    readyAt: null,
+    passControlled: false,
     queuedAt: "2026-08-17T10:00:00.000Z",
   });
   const order: StationQueueGroup = {
@@ -2656,15 +2775,18 @@ describe("the board's cards", () => {
     id: string,
     firedAt: string | null,
     extra: Partial<StationQueueItem> = {},
-  ): StationQueueItem => ({
-    ...groupA.items[0]!,
-    id,
-    workingOrderLineId: `wol-${id}`,
-    name: `Dish ${id}`,
-    firedAt,
-    queuedAt: firedAt ?? "2026-08-17T10:00:00.000Z",
-    ...extra,
-  });
+  ): StationQueueItem => {
+    const item = {
+      ...groupA.items[0]!,
+      id,
+      workingOrderLineId: `wol-${id}`,
+      name: `Dish ${id}`,
+      firedAt,
+      queuedAt: firedAt ?? "2026-08-17T10:00:00.000Z",
+      ...extra,
+    };
+    return { ...item, ...kitchenStamps(item) };
+  };
   const bill = (
     orderId: string,
     orderNumber: number,
@@ -3129,7 +3251,7 @@ function ageDish(
   minute: number,
   overrides: Partial<StationQueueItem> = {},
 ): StationQueueItem {
-  return {
+  return withKitchenStamps({
     allergy: null,
     id,
     workingOrderLineId: `line-${id}`,
@@ -3140,7 +3262,7 @@ function ageDish(
     firedAt: ageAt(minute),
     queuedAt: ageAt(minute),
     ...overrides,
-  };
+  });
 }
 
 function ageBill(
@@ -3784,15 +3906,18 @@ describe("the board's columns", () => {
     id: string,
     firedAt: string | null,
     extra: Partial<StationQueueItem> = {},
-  ): StationQueueItem => ({
-    ...groupA.items[0]!,
-    id,
-    workingOrderLineId: `wol-${id}`,
-    name: `Dish ${id}`,
-    firedAt,
-    queuedAt: firedAt ?? "2026-08-17T10:00:00.000Z",
-    ...extra,
-  });
+  ): StationQueueItem => {
+    const item = {
+      ...groupA.items[0]!,
+      id,
+      workingOrderLineId: `wol-${id}`,
+      name: `Dish ${id}`,
+      firedAt,
+      queuedAt: firedAt ?? "2026-08-17T10:00:00.000Z",
+      ...extra,
+    };
+    return { ...item, ...kitchenStamps(item) };
+  };
   const bill = (
     orderId: string,
     orderNumber: number,
@@ -4783,21 +4908,22 @@ describe("the late bar", () => {
 });
 
 describe("A803 portion grouping: the station queue", () => {
-  const portion = (id: string, overrides: Partial<StationQueueItem> = {}): StationQueueItem => ({
-    allergy: null,
-    id,
-    workingOrderLineId: `wol-${id}`,
-    state: "queued",
-    name: "Burger",
-    quantity: "1.000",
-    unitName: null,
-    unitPrecision: 0,
-    soldInEach: true,
-    course: null,
-    firedAt: "2026-08-17T10:00:00.000Z",
-    queuedAt: "2026-08-17T10:00:00.000Z",
-    ...overrides,
-  });
+  const portion = (id: string, overrides: Partial<StationQueueItem> = {}): StationQueueItem =>
+    withKitchenStamps({
+      allergy: null,
+      id,
+      workingOrderLineId: `wol-${id}`,
+      state: "queued",
+      name: "Burger",
+      quantity: "1.000",
+      unitName: null,
+      unitPrecision: 0,
+      soldInEach: true,
+      course: null,
+      firedAt: "2026-08-17T10:00:00.000Z",
+      queuedAt: "2026-08-17T10:00:00.000Z",
+      ...overrides,
+    });
   const order = (items: StationQueueItem[], bumpMode: "line" | "ticket" = "line") => ({
     ...groupA,
     orderId: "wo-p",

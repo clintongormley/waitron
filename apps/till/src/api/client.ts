@@ -1588,9 +1588,15 @@ export interface StationQueueItem {
   group?: QueueGroup;
   /** The period this dish was confirmed sent after; absent when it was not. */
   afterPeriod?: string;
-  /** `null` while the item is HELD — not advanceable (`ticket.item_held`); a timestamp once
-   *  fired. */
+  phase: KitchenPhase;
+  /** `null` while the item is held. */
+  requestedAt: string | null;
+  /** `null` while the item is HELD — not advanceable (`ticket.item_held`) — or requested and
+   *  waiting for the pass; a timestamp once fired. */
   firedAt: string | null;
+  readyAt: string | null;
+  /** Whether the item waited for the pass when it was requested. */
+  passControlled: boolean;
   /** When this dish joined the queue: set at fire, and again when a release re-routes it. */
   queuedAt: string;
   /** The NON-FISCAL kitchen note as frozen at fire, so a later edit never changes what the cook sees. */

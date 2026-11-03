@@ -35,6 +35,10 @@ const stationItem = {
   quantity: "1.000",
   course: { id: "course-1", name: "Starter", displayOrder: 1 },
   firedAt: null,
+  phase: "held" as const,
+  requestedAt: null,
+  readyAt: null,
+  passControlled: false,
   queuedAt: "2026-10-20T10:00:00Z",
 };
 const stationGroup: StationQueueGroup = {
