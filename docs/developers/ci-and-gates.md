@@ -749,7 +749,7 @@ on the actual CI head to check those.
 Before calling a package green, verify its CI coverage result on the current head. Run
 `pnpm --filter <pkg> test:coverage` locally when investigating a failure. There is no single `test`
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
-(`apps/server`) as three-way and twenty-way file shards, each with a `-merge` job that enforces the thresholds on
+(`apps/server`) as three-way and twenty-four-way file shards, each with a `-merge` job that enforces the thresholds on
 the merged blob (#216) — the files that need either downloaded binary (the stream loop and pause tests, the S3 rehearsal
 scenarios, the rehearsal's send gate and interrupt suites, and the S3 test server's suite) run in `test-server-stream` instead, whose
 blob joins the same merge. `test-dashboard` and `test-venue-service` are four-way and `test-till`
@@ -1798,6 +1798,26 @@ which CI's `changes` job answers `code=false` and runs no package's tests: the s
 72 to 199 s and the jobs 108 to 240 s, and `test-till-merge` passed over the seven blobs. The
 busiest was shard 4, as the replay put it, and at 240 s its job sits at the four-minute line.
 
+### The server's shards: twenty-four after A1297
+
+A1297 (3 November 2026) runs the server's ordinary tests in twenty-four
+duration-packed shards, up from twenty, after refreshing the duration table from
+the three CI attempts of PR #2418. The coverage merge now expects twenty-five
+blobs: the twenty-four shards and the stream job.
+
+The choice comes from a packing model, not from a hosted run. It took each file
+at its slowest of the three attempts, packed the files with the real
+`balancedShards` function, counted a shard's test step as its files' seconds
+divided by four workers plus 10.5 seconds, and added the 39–51 seconds a job
+spends outside its test step. The slowest job came out at 286–298 seconds for
+twenty shards, 265–277 for twenty-two, 257–269 for twenty-three and 248–260 for
+twenty-four. GitHub's runners come in two speeds about 1.5 times apart, so
+twenty-four was chosen to stay under 270 seconds with room to spare. The pull
+request records the hosted timings that followed.
+
+The shard-count check in `scripts/ci-workflow.test.mjs` pins twenty-four. It
+reads workflow text, not what Vitest runs.
+
 ### The server's shards: twenty after splitting the recovery suites
 
 When a server job exceeds four minutes, check whether one file dominates before
@@ -1874,7 +1894,7 @@ measurements above; the other entries retain the six-main medians.
 ### The server's shards: sixteen, packed by measured duration
 
 The following A938 measurements describe the earlier sixteen-shard layout. The current
-layout is described [above](#the-servers-shards-twenty-after-splitting-the-recovery-suites).
+layout is described [above](#the-servers-shards-twenty-four-after-a1297).
 
 A938 (2026-10-21). On six `main` runs (39425472781, 39444354037, 39449527877, 39500330558,
 39503634628, 39507125783) the slowest of the eleven `test-server (N)` jobs took 349 to 410 s, and on
@@ -2996,7 +3016,7 @@ every other gate false. `test-server`'s and `test-server-stream`'s `if:` ask for
 request, PR #682: its run for `1081bbb7c`, which changed `ci.yml`, docs and root scripts but neither
 installer, skipped the shards and `test-server-stream`; its next run, 36231025265, for a commit
 that added one line to `scripts/setup-litestream.mjs`, ran both and `test-server-merge`. The cost, read from the jobs' `if:` lines
-in `.github/workflows/ci.yml`: on a pull request an installer change runs the server shards (three then, six from A441, eight from A528, eleven from A801, sixteen since A938),
+in `.github/workflows/ci.yml`: on a pull request an installer change runs the server shards (three then, six from A441, eight from A528, eleven from A801, sixteen from A938, twenty from A1137, twenty-four since A1297),
 `test-server-stream`, `test-server-merge`, and `typecheck` and `bundle-smoke`, which ask for
 `code` alone; on its merge to `main` those two run again, the forced global scope runs every test job and `mutation-shared`, and
 the push runs `image` and, once `ci` passes, `publish`, which moves `:main` unless

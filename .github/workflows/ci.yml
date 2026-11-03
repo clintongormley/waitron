@@ -1075,7 +1075,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+        # prettier-ignore
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
     steps:
       - id: checkout
         name: Check out the code
@@ -1162,7 +1163,7 @@ jobs:
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/server" test:shard \
-            --shard=${{ matrix.shard }}/20 \
+            --shard=${{ matrix.shard }}/24 \
             --exclude src/stream-loop.e2e.test.ts \
             --exclude src/stream-pause.e2e.test.ts \
             --exclude src/s3-rehearsal-scenarios.e2e.test.ts \
@@ -1411,7 +1412,7 @@ jobs:
 
       - id: download
         name: Download the server coverage blobs
-        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports' 21
+        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports' 25
         timeout-minutes: 1
         continue-on-error: true
         env:
@@ -1424,7 +1425,7 @@ jobs:
 
       - name: Download the server coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
-        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports' 21
+        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports' 25
         timeout-minutes: 1
         env:
           GH_TOKEN: ${{ github.token }}
