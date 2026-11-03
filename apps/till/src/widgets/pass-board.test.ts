@@ -297,6 +297,31 @@ describe("A773 pass board widget", () => {
     ]);
   });
 
+  it("names its course on each course Ready of a bill card, in what is drawn and what is read out", async () => {
+    const starters = { id: "course-starters", name: "Starters", displayOrder: 1 };
+    const bill = passCard({
+      ...billInProgress,
+      items: [
+        passItem({ id: "s-1", orderId: "order-5", course: starters }),
+        passItem({ id: "m-1", orderId: "order-5" }),
+      ],
+    });
+    const el = await mountBoard({ board: passBoard({ inProgress: [bill] }) });
+    const levers = [...cardOf(el, bill.key).querySelectorAll<HTMLButtonElement>("[data-ready]")];
+    expect(levers.map((lever) => lever.getAttribute("data-ready"))).toEqual([
+      "course-starters",
+      "course-mains",
+    ]);
+    expect(levers.map((lever) => lever.textContent!.trim())).toEqual([
+      `${t("expo.ready")} Starters`,
+      `${t("expo.ready")} Mains`,
+    ]);
+    for (const lever of levers) {
+      const label = lever.getAttribute("aria-label");
+      expect(label === null || label === lever.textContent!.trim()).toBe(true);
+    }
+  });
+
   it("draws a held card dashed, untimed and without buttons, its dishes held", async () => {
     const el = await mountBoard({ board: passBoard({ held: [heldCard] }), showReprint: true });
     const card = cardOf(el, heldCard.key);
@@ -439,6 +464,21 @@ describe("A773 pass board widget", () => {
       );
       expect(t("pass.column.to_fire", "es-ES")).not.toBe(t("pass.column.to_fire", "en"));
     });
+
+    it("rewords a card's kind on the next draw after the language changes, the board unchanged", async () => {
+      setLocale("en");
+      const el = await mountBoard({ board: passBoard({ toFire: [toFireCard] }) });
+      expect(cardOf(el, toFireCard.key).querySelector(".kind")!.textContent).toBe(
+        t("pass.kind.new_order", "en"),
+      );
+      setLocale("es-ES");
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(cardOf(el, toFireCard.key).querySelector(".kind")!.textContent).toBe(
+        t("pass.kind.new_order", "es-ES"),
+      );
+      expect(t("pass.kind.new_order", "es-ES")).not.toBe(t("pass.kind.new_order", "en"));
+    });
   });
 
   it("colours a card by its dishes' age on the board's clock, flashes forgotten, and counts overdue cards", async () => {
@@ -570,6 +610,19 @@ describe("A773 pass board widget", () => {
       ["Croquetas", "0", "+3"],
     ]);
     expect(rows.map((row) => row.name)).toEqual(drawn.map(([name]) => name));
+  });
+
+  it("redraws Overview's rows from each new board", async () => {
+    const el = await mountBoard({
+      board: passBoard({ overview: overviewFacts }),
+      columns: allShown,
+    });
+    el.board = passBoard({ overview: [{ ...overviewFacts[0]!, name: "Fideuà" }] });
+    await el.updateComplete;
+    const names = [...root(el).querySelectorAll("[data-overview-row] .overview-name")].map(
+      (name) => name.textContent,
+    );
+    expect(names).toEqual(["Fideuà"]);
   });
 
   it("keeps a collapsed column's heading and count, draws none of its cards, and only asks to open it", async () => {

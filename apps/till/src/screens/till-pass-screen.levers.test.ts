@@ -510,7 +510,7 @@ describe("A773 pass screen: levers on a till's All stations", () => {
     expect(inBoard(el, '[data-card="held:h-1"]')).not.toBeNull();
     expect(inBoard(el, '[data-card="group:g-2"]')).not.toBeNull();
     expect(boardOf(el)!.shadowRoot!.querySelectorAll("[data-pass-fire]")).toHaveLength(0);
-    expect(text(inBoard(el, '[data-ready="course-mains"]'))).toBe(t("expo.ready"));
+    expect(text(inBoard(el, '[data-ready="course-mains"]'))).toBe(`${t("expo.ready")} Mains`);
   });
 
   it("sends nothing, and reads nothing more, for a Fire event", async () => {

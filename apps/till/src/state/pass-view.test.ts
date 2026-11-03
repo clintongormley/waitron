@@ -320,12 +320,12 @@ describe("A773 pass view", () => {
       ],
     });
     expect(onlyView("inProgress", bill).courseReady).toEqual([
-      { orderId: "order-1", courseId: "course-starters" },
+      { orderId: "order-1", courseId: "course-starters", name: "Starters" },
     ]);
     expect(onlyView("inProgress", bill).groupReady).toBe(false);
     expect(onlyView("inProgress", bill, "monitor").courseReady).toEqual([]);
     expect(onlyView("inProgress", bill, "all_stations").courseReady).toEqual([
-      { orderId: "order-1", courseId: "course-starters" },
+      { orderId: "order-1", courseId: "course-starters", name: "Starters" },
     ]);
     expect(onlyView("inProgress", bill, "all_stations", false).courseReady).toEqual([]);
 
@@ -339,7 +339,16 @@ describe("A773 pass view", () => {
       ],
     });
     expect(onlyView("inProgress", withDoneCourse).courseReady).toEqual([
-      { orderId: "order-1", courseId: "course-starters" },
+      { orderId: "order-1", courseId: "course-starters", name: "Starters" },
+    ]);
+
+    const unnamed = passCard({
+      items: [
+        passItem({ id: "u1", course: { id: "course-unnamed", name: null, displayOrder: null } }),
+      ],
+    });
+    expect(onlyView("inProgress", unnamed).courseReady).toEqual([
+      { orderId: "order-1", courseId: "course-unnamed", name: "" },
     ]);
   });
 

@@ -4,12 +4,13 @@ import { customElement, property } from "lit/decorators.js";
 import type { TimingBand } from "@waitron/shared";
 import type { PassBoard } from "../api/client.js";
 import { helpText } from "../i18n/help-strings.js";
-import { t } from "../i18n/t.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { type BoardMeasure, columnsFit } from "../state/kitchen-board-fit.js";
 import { type ColumnKey, type ColumnState, PASS_COLUMNS } from "../state/kitchen-columns.js";
-import { overviewRows, rowsToMake } from "../state/kitchen-overview.js";
+import { type OverviewRow, overviewRows, rowsToMake } from "../state/kitchen-overview.js";
 import {
   type CardView,
+  type CourseReady,
   type ItemCaption,
   type ItemView,
   type PassMode,
@@ -365,6 +366,14 @@ export class TillPassBoard extends LitElement {
   #leverBadgeDrawn = false;
   #measured?: BoardMeasure;
   #resizing?: ResizeObserver;
+  /** The card views and their rows, rebuilt only when what they read changes; the locale is one,
+   * since a card's kind word is worded when its view is built. */
+  #viewsFrom?: readonly unknown[];
+  #views = new Map<ColumnKey, CardView[]>();
+  #rows = new Map<CardView, ItemView[][]>();
+  #overdue = 0;
+  #overviewFrom?: PassBoard;
+  #overview: OverviewRow[] = [];
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -391,13 +400,26 @@ export class TillPassBoard extends LitElement {
 
   override willUpdate(): void {
     this.#measured = measureBoard(this);
+    const from = [this.board, this.mode, this.runsPass, this.now, currentLocale()];
+    if (this.#viewsFrom?.every((input, at) => input === from[at]) !== true) {
+      this.#viewsFrom = from;
+      this.#views = passCardViews(this.board, this.mode, this.runsPass, this.now);
+      this.#rows = new Map(
+        [...this.#views.values()].flat().map((view) => [view, rows(view.items)] as const),
+      );
+      this.#overdue = passOverdueCount(this.#views);
+    }
+    if (this.#overviewFrom !== this.board) {
+      this.#overviewFrom = this.board;
+      this.#overview = overviewRows(passOverviewDishes(this.board));
+    }
   }
 
   override render() {
     this.#cardBadgeDrawn = false;
     this.#leverBadgeDrawn = false;
-    const views = passCardViews(this.board, this.mode, this.runsPass, this.now);
-    const overdue = passOverdueCount(views);
+    const views = this.#views;
+    const overdue = this.#overdue;
     const shown = this.columns.order.filter(
       (key) => !this.columns.hidden.includes(key) && (key === "overview" || views.has(key)),
     );
@@ -438,7 +460,7 @@ export class TillPassBoard extends LitElement {
     const toggle = () => this.#emit("toggle-column", { key });
     const title = t(COLUMN_WORDS[key as keyof typeof COLUMN_WORDS]);
     if (key === "overview") {
-      const rows = overviewRows(passOverviewDishes(this.board));
+      const rows = this.#overview;
       return html`<section
         class="column column-overview ${collapsed ? "collapsed" : ""}"
         data-column="overview"
@@ -479,7 +501,7 @@ export class TillPassBoard extends LitElement {
           : nothing,
       )}
       <ul class="items">
-        ${rows(view.items).map((members) => this.#item(members))}
+        ${this.#rows.get(view)!.map((members) => this.#item(members))}
       </ul>
       ${this.#fire(view)}${this.#groupReady(view)}${view.courseReady.map((course) =>
         this.#courseReady(view, course),
@@ -586,18 +608,15 @@ export class TillPassBoard extends LitElement {
     );
   }
 
-  #courseReady(view: CardView, course: { orderId: string; courseId: string }): TemplateResult {
-    const name =
-      view.card.items.find((item) => item.course?.id === course.courseId)?.course?.name ?? "";
+  #courseReady(view: CardView, { orderId, courseId, name }: CourseReady): TemplateResult {
     return this.#withLeverBadge(
       t("expo.ready"),
       html`<button
         class="lever ready"
-        data-ready=${course.courseId}
-        aria-label=${`${t("expo.ready")} ${name}`}
-        @click=${() => this.#emit("pass-course-ready", { key: view.card.key, ...course })}
+        data-ready=${courseId}
+        @click=${() => this.#emit("pass-course-ready", { key: view.card.key, orderId, courseId })}
       >
-        ${t("expo.ready")}
+        ${t("expo.ready")} ${name}
       </button>`,
     );
   }

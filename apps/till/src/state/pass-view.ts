@@ -29,7 +29,12 @@ export interface CardView {
   items: ItemView[];
   fire: { shown: boolean; enabled: boolean };
   groupReady: boolean;
-  courseReady: { orderId: string; courseId: string }[];
+  courseReady: CourseReady[];
+}
+export interface CourseReady {
+  orderId: string;
+  courseId: string;
+  name: string;
 }
 
 type PassColumn = CardView["column"];
@@ -86,22 +91,27 @@ function cardBand(items: readonly ItemView[]): TimingBand | null {
 const released = (item: PassCardItem) => item.phase !== "held" && item.phase !== "requested";
 
 /** Per course of a bill card whose dishes are all released and not all ready, in first-seen order. */
-function readyCourses(card: PassCard): { orderId: string; courseId: string }[] {
+function readyCourses(card: PassCard): CourseReady[] {
   if (card.target.kind !== "bill") return [];
-  const courses = new Map<string, { orderId: string; courseId: string; items: PassCardItem[] }>();
+  const courses = new Map<string, CourseReady & { items: PassCardItem[] }>();
   for (const item of card.items) {
     if (item.course === null) continue;
     const key = JSON.stringify([item.orderId, item.course.id]);
     let course = courses.get(key);
     if (course === undefined) {
-      course = { orderId: item.orderId, courseId: item.course.id, items: [] };
+      course = {
+        orderId: item.orderId,
+        courseId: item.course.id,
+        name: item.course.name ?? "",
+        items: [],
+      };
       courses.set(key, course);
     }
     course.items.push(item);
   }
   return [...courses.values()]
     .filter(({ items }) => items.every(released) && !items.every((item) => item.phase === "ready"))
-    .map(({ orderId, courseId }) => ({ orderId, courseId }));
+    .map(({ orderId, courseId, name }) => ({ orderId, courseId, name }));
 }
 
 function cardView(
