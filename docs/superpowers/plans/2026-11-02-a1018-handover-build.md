@@ -2219,10 +2219,14 @@ promotion flag. If `select` built version 1 while `prepare` built version 2, `pr
 - `inputFor` takes `relinquished: boolean`. When it is `true` it builds a version 2 approval with
   `oldMachineOffline: false, oldMachineRelinquished: true`; when it is `false` it builds today's
   version 1, byte for byte (fixed `oldMachineOffline: true`). Its callers: `:135` passes `false`;
-  `select` (`:160-168`), for a promotion, reads the fact through `options.readContext`
-  (`hosted-hour-recovery.ts:50-57`, which takes no clock reading) and through `checked`, falling
-  back to `options.read(binding)` when a test host gives no `readContext`, as `within` already does
-  (`:146-148`); for a recovery it passes `false` without reading. `prepare` passes
+  `select` (`:160-168`), for a promotion, reads the fact inside `options.withState(binding, …)`,
+  as `within` does at `:145-148` — through `options.readContext` (`hosted-hour-recovery.ts:50-57`,
+  which takes no clock reading) and `checked`, falling back to `options.read(binding)` when a test
+  host gives no `readContext` — because the real host's `readRecoveryFacts` refuses
+  `setup.attempt_conflict` outside a preparation scope
+  (`packages/provisioning/src/recovery-preparation-host.ts:26-30`); for a recovery it passes
+  `false` without reading. Task 5a.3's `select` test drives the real `createHostedHourRecovery`
+  host, so a test host without that scope check cannot hide the refusal. `prepare` passes
   `facts.oldMachineRelinquished` from `within`.
 - `prepare` hands the fact to admission: the facts at `:205-207` gain
   `oldMachineRelinquished: facts.oldMachineRelinquished`, which Task 5a.2's `withHourAdmission`
@@ -2929,8 +2933,8 @@ transaction, as Task 5.8 writes it: the `handover_activations` row with the decl
 then `activated` in node.db. A restart between is finished by Task 5.8b.
 
 - [ ] **Step 1: Write the failing tests.** "takes the next free minute" (fake clock; the same as
-  a controlled activation in the same harness); "the stored approval says offline, not
-  relinquished"; "writes the activation and the unknown interval in the activation's own
+  a controlled activation in the same harness); "the stored approval is version 1,
+  `oldMachineOffline: true`, with no `oldMachineRelinquished` key"; "writes the activation and the unknown interval in the activation's own
   transaction"; "a crash after the activation commit and before the node.db record: the next
   start records `activated` once and sells" (Task 5.8b's repair); "a lost answer and a retry take no second
   name".
@@ -3923,3 +3927,11 @@ activation context gain the fact.
 
 Other plan text: Task 5.8's pointer to the builder now names Task 5a.3 (it named 5a.2). The earlier
 rounds' tables keep the task numbers they used at the time.
+
+Narrow check of round 7 (fresh context, 2026-11-03): two more changes. Task 5a.3's `select` reads
+the fact inside `options.withState`, because the real host's `readRecoveryFacts` refuses
+`setup.attempt_conflict` outside a preparation scope (`recovery-preparation-host.ts:26-30`; read,
+not run), and its test drives the real host. Task 7.4's approval test is worded as the exact
+version 1 shape, since a version 1 approval carries no `oldMachineRelinquished` key. The check ran
+finding 11's control in a throwaway copy (`conflict-recovery-contract.ts:111`) and confirmed the
+round-7 correction, and typechecked the required fields against Tasks 5a.1 and 5a.3's file lists.
