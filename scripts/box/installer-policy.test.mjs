@@ -3,6 +3,7 @@ import { MICROSOFT_RESERVED_TYPE, WAITRON_LAYOUTS } from "./disk-state.mjs";
 import {
   INSTALLER_TIMINGS_MS,
   createInstallerState,
+  installerStatus,
   nextInstallerStep,
 } from "./installer-policy.mjs";
 
@@ -254,7 +255,7 @@ describe("createInstallerState", () => {
     ["a fractional time", { ...OPTIONS, atMs: 1.5 }],
     ["a string clock floor", { ...OPTIONS, clockFloorMs: "1700000000000" }],
     ["an empty erase word", { ...OPTIONS, eraseWord: "" }],
-    ["a 33-code-point erase word", { ...OPTIONS, eraseWord: "À".repeat(33) }],
+    ["a 33-code-point erase word", { ...OPTIONS, eraseWord: "\u00C0".repeat(33) }],
     ["an erase word holding a newline", { ...OPTIONS, eraseWord: "ERASE\n" }],
     ["an erase word holding U+0085", { ...OPTIONS, eraseWord: "ERASE\u0085" }],
     ["an erase word that is not well formed", { ...OPTIONS, eraseWord: "ERASE\uD800" }],
@@ -1051,10 +1052,10 @@ describe("the unknown disk", () => {
   });
 
   it("compares the erase word exactly: a decomposed spelling of an accented word does not confirm", () => {
-    const options = { ...OPTIONS, eraseWord: "ERASÉ" };
-    const decomposed = play([damagedSeen(), submit("ERASÉ", 2_000)], options);
+    const options = { ...OPTIONS, eraseWord: "ERAS\u00C9" };
+    const decomposed = play([damagedSeen(), submit("ERASE\u0301", 2_000)], options);
     expect(decomposed[1].state).toMatchObject({ phase: "awaiting-erase-word", confirmed: null });
-    const exact = play([damagedSeen(), submit("ERASÉ", 2_000)], options);
+    const exact = play([damagedSeen(), submit("ERAS\u00C9", 2_000)], options);
     expect(exact[1].state).toMatchObject({ phase: "loading", confirmed: "typed" });
   });
 
@@ -1467,11 +1468,6 @@ describe("download outcomes (Review Focus 3)", () => {
     expect(decisions.map((d) => d.action)).not.toContain("write-owned-target");
   });
 
-  it("until Task 4's rule replaces it, verified answers wait and stays downloading", () => {
-    const decisions = play([...TO_DOWNLOADING, released("verified", 30_000)]);
-    expect(decisions[4]).toMatchObject({ action: "wait", state: { phase: "downloading" } });
-  });
-
   it("a key or a tick while finding the network or setting the clock answers wait", () => {
     const decisions = play([
       windowsSeen(),
@@ -1535,6 +1531,455 @@ describe("out-of-turn adapter results (D13)", () => {
     expect(decisions[1]).toMatchObject({
       action: "refuse",
       state: { phase: "refused", refusal: sequenceInvalid },
+    });
+  });
+});
+
+const usbInserted = (atMs) => ({ kind: "usb-inserted", atMs });
+const choice = (value, atMs) => ({ kind: "choice", atMs, choice: value });
+const writeFinished = (ok, atMs) => ({ kind: "write-finished", atMs, ok });
+const TO_VERIFIED = [
+  windowsSeen(0),
+  ramReady(0),
+  online(0),
+  clockSet(true, FLOOR, 0),
+  released("verified", 1_000),
+];
+const COUNTDOWN = {
+  key: "installer.erase_countdown",
+  params: { seconds: 60, recognised: "windows" },
+};
+const ERASE_STOPPED = { key: "installer.erase_stopped", params: {} };
+const WRITING = { key: "installer.writing", params: {} };
+const REMOVE_USB = { key: "installer.remove_usb", params: {} };
+const POWERING_OFF = { key: "installer.powering_off", params: {} };
+const writes = (decisions) => decisions.filter((d) => d.action === "write-owned-target");
+const hourOfTicks = (fromMs) =>
+  Array.from({ length: 60 }, (_, i) => tick(fromMs + (i + 1) * 60_000));
+
+describe("the 60 seconds before an unattended erase", () => {
+  it("Windows disk, ram-ready, online, clock set, verified at 1000 → wait with deadline 61000; tick at 60999 → wait; tick at 61000 → write-owned-target with the internal disk id", () => {
+    const decisions = play([...TO_VERIFIED, tick(60_999), tick(61_000)]);
+    expect(decisions[4]).toEqual({
+      action: "wait",
+      diskId: null,
+      message: COUNTDOWN,
+      deadlineMs: 61_000,
+      state: windowsState({
+        phase: "erase-countdown",
+        atMs: 1_000,
+        clockSet: true,
+        deadlineMs: 61_000,
+        message: COUNTDOWN,
+      }),
+    });
+    expect(decisions[5]).toMatchObject({ action: "wait", diskId: null, deadlineMs: 61_000 });
+    expect(decisions[6]).toEqual({
+      action: "write-owned-target",
+      diskId: INTERNAL_ID,
+      message: WRITING,
+      deadlineMs: null,
+      state: windowsState({
+        phase: "writing",
+        atMs: 61_000,
+        clockSet: true,
+        message: WRITING,
+      }),
+    });
+    expect(actions(decisions).filter(([, diskId]) => diskId !== null)).toEqual([
+      ["write-owned-target", INTERNAL_ID],
+    ]);
+  });
+
+  it("a key at 61500 with no tick before it (I1) → confirm-erase, erase-stopped, and no write-owned-target in the run", () => {
+    const decisions = play([...TO_VERIFIED, key(61_500), tick(61_501), tick(200_000)]);
+    expect(decisions[5]).toEqual({
+      action: "confirm-erase",
+      diskId: null,
+      message: ERASE_STOPPED,
+      deadlineMs: null,
+      state: windowsState({
+        phase: "erase-stopped",
+        atMs: 61_500,
+        clockSet: true,
+        message: ERASE_STOPPED,
+      }),
+    });
+    expect(writes(decisions)).toEqual([]);
+  });
+
+  it("a 513-unit submit during the 60 seconds → confirm-erase, erase-stopped, and no write-owned-target in the run", () => {
+    const decisions = play([...TO_VERIFIED, submit("x".repeat(513), 30_000), tick(61_000)]);
+    expect(decisions[5]).toMatchObject({
+      action: "confirm-erase",
+      message: ERASE_STOPPED,
+      state: { phase: "erase-stopped" },
+    });
+    expect(writes(decisions)).toEqual([]);
+  });
+
+  it("a second verification at 2000 (M2) → refuse sequence-invalid, and no write-owned-target in the run", () => {
+    const decisions = play([...TO_VERIFIED, released("verified", 2_000), tick(61_000)]);
+    expect(decisions[5]).toMatchObject({
+      action: "refuse",
+      state: {
+        phase: "refused",
+        refusal: { reason: "sequence-invalid", hardware: null, releaseVersion: null },
+      },
+    });
+    expect(writes(decisions)).toEqual([]);
+  });
+
+  it("a choice during the 60 seconds is ignored, and the erase still comes at 61000", () => {
+    const decisions = play([...TO_VERIFIED, choice("power-off", 2_000), tick(61_000)]);
+    expect(decisions[5]).toMatchObject({ action: "wait", state: { phase: "erase-countdown" } });
+    expect(decisions[6]).toMatchObject({ action: "write-owned-target", diskId: INTERNAL_ID });
+  });
+
+  it("D9: clock-set with utcMs 1_900_000_000_000 at 10000, verified at 20000 → the deadline is 80000", () => {
+    const decisions = play([
+      windowsSeen(0),
+      ramReady(0),
+      online(0),
+      clockSet(true, 1_900_000_000_000, 10_000),
+      released("verified", 20_000),
+      tick(79_999),
+      tick(80_000),
+    ]);
+    expect(decisions[4]).toMatchObject({ action: "wait", deadlineMs: 80_000 });
+    expect(decisions.slice(5).map((d) => d.action)).toEqual(["wait", "write-owned-target"]);
+  });
+});
+
+describe("after a key stops the 60 seconds (D6)", () => {
+  const stopped = [...TO_VERIFIED, key(30_000)];
+
+  it("a key at 30000 → confirm-erase, installer.erase_stopped; ticks, keys and lines to 3600000 → wait only", () => {
+    const decisions = play([
+      ...stopped,
+      ...hourOfTicks(30_000),
+      key(3_700_000),
+      submit("ERASE-CONFIRM", 3_700_001),
+    ]);
+    expect(decisions[5]).toMatchObject({
+      action: "confirm-erase",
+      message: ERASE_STOPPED,
+      deadlineMs: null,
+      state: { phase: "erase-stopped" },
+    });
+    expect(decisions.slice(6).every((d) => d.action === "wait")).toBe(true);
+    expect(last(decisions).state.phase).toBe("erase-stopped");
+  });
+
+  it("then choice install-now → write-owned-target", () => {
+    const decisions = play([...stopped, ...hourOfTicks(30_000), choice("install-now", 3_700_000)]);
+    expect(last(decisions)).toEqual({
+      action: "write-owned-target",
+      diskId: INTERNAL_ID,
+      message: WRITING,
+      deadlineMs: null,
+      state: windowsState({
+        phase: "writing",
+        atMs: 3_700_000,
+        clockSet: true,
+        message: WRITING,
+      }),
+    });
+  });
+
+  it("or choice power-off → power-off, and no write-owned-target ever", () => {
+    const decisions = play([
+      ...stopped,
+      choice("power-off", 40_000),
+      choice("install-now", 41_000),
+      tick(200_000),
+    ]);
+    expect(decisions[6]).toEqual({
+      action: "power-off",
+      diskId: null,
+      message: POWERING_OFF,
+      deadlineMs: null,
+      state: windowsState({
+        phase: "powering-off",
+        atMs: 40_000,
+        clockSet: true,
+        message: POWERING_OFF,
+      }),
+    });
+    expect(decisions.slice(7).map((d) => d.action)).toEqual(["wait", "wait"]);
+    expect(writes(decisions)).toEqual([]);
+  });
+});
+
+describe("a typed confirmation erases once the download is verified (D4)", () => {
+  it("unknown disk, the erase word, ram-ready, online, clock set, verified → write-owned-target at once", () => {
+    const decisions = play([
+      observed(survey([waitronWith(luks(damaged(), damaged()))])),
+      ramReady(2_000),
+      submit("ERASE-CONFIRM", 3_000),
+      online(4_000),
+      clockSet(true, FLOOR, 5_000),
+      released("verified", 6_000),
+    ]);
+    expect(last(decisions)).toMatchObject({
+      action: "write-owned-target",
+      diskId: INTERNAL_ID,
+      message: WRITING,
+      deadlineMs: null,
+      state: { phase: "writing", confirmed: "typed" },
+    });
+  });
+
+  it("Waitron disk, name typed, ram-ready, online, clock set, verified → write-owned-target at once", () => {
+    const decisions = play([
+      waitronSeen(),
+      key(2_000),
+      ramReady(3_000),
+      submit("Bar Santet", 4_000),
+      online(5_000),
+      clockSet(true, FLOOR, 6_000),
+      released("verified", 7_000),
+    ]);
+    expect(last(decisions)).toMatchObject({
+      action: "write-owned-target",
+      diskId: INTERNAL_ID,
+      message: WRITING,
+      state: { phase: "writing", confirmed: "typed" },
+    });
+  });
+});
+
+describe("guard 2: no final restart while the stick is in (Review Focus 4)", () => {
+  const toWriting = [...TO_VERIFIED, tick(61_000)];
+
+  it("write-finished ok with the stick in → wait, installer.remove_usb; usb-removed → boot-installed", () => {
+    const decisions = play([...toWriting, writeFinished(true, 100_000), usbRemoved(110_000)]);
+    expect(decisions[6]).toEqual({
+      action: "wait",
+      diskId: null,
+      message: REMOVE_USB,
+      deadlineMs: null,
+      state: windowsState({
+        phase: "remove-usb",
+        atMs: 100_000,
+        clockSet: true,
+        message: REMOVE_USB,
+      }),
+    });
+    expect(decisions[7]).toEqual({
+      action: "boot-installed",
+      diskId: INTERNAL_ID,
+      message: STARTING_INSTALLED,
+      deadlineMs: null,
+      state: windowsState({
+        phase: "booting",
+        atMs: 110_000,
+        clockSet: true,
+        usbPresent: false,
+        message: STARTING_INSTALLED,
+      }),
+    });
+  });
+
+  it("stick removed after safe-to-remove and before the write ends → write-finished ok → boot-installed at once", () => {
+    const decisions = play([
+      ...TO_VERIFIED,
+      usbRemoved(30_000),
+      tick(61_000),
+      writeFinished(true, 100_000),
+    ]);
+    expect(decisions[5]).toMatchObject({ action: "wait", state: { phase: "erase-countdown" } });
+    expect(last(decisions)).toMatchObject({
+      action: "boot-installed",
+      diskId: INTERNAL_ID,
+      state: { phase: "booting", usbPresent: false },
+    });
+  });
+
+  it("stick removed during writing, then inserted again, then write-finished ok → wait, remove_usb", () => {
+    const decisions = play([
+      ...toWriting,
+      usbRemoved(70_000),
+      usbInserted(80_000),
+      writeFinished(true, 100_000),
+    ]);
+    expect(last(decisions)).toMatchObject({
+      action: "wait",
+      message: REMOVE_USB,
+      state: { phase: "remove-usb", usbPresent: true },
+    });
+  });
+
+  it("ticks for an hour with the stick in → only wait; a stick put back in changes nothing", () => {
+    const decisions = play([
+      ...toWriting,
+      writeFinished(true, 100_000),
+      ...hourOfTicks(100_000),
+      usbInserted(3_800_000),
+      key(3_800_001),
+    ]);
+    expect(decisions.slice(6).every((d) => d.action === "wait")).toBe(true);
+    expect(last(decisions).state.phase).toBe("remove-usb");
+  });
+
+  it("a key, a line, a choice or a tick while writing → wait, and the target is not written twice", () => {
+    const decisions = play([
+      ...toWriting,
+      key(62_000),
+      submit("ERASE-CONFIRM", 63_000),
+      choice("install-now", 64_000),
+      tick(65_000),
+    ]);
+    expect(decisions.slice(6).map((d) => [d.action, d.state.phase])).toEqual([
+      ["wait", "writing"],
+      ["wait", "writing"],
+      ["wait", "writing"],
+      ["wait", "writing"],
+    ]);
+    expect(writes(decisions)).toHaveLength(1);
+  });
+
+  it("write-finished ok: false → refuse write-failed, then every event answers wait", () => {
+    const decisions = play([
+      ...toWriting,
+      writeFinished(false, 100_000),
+      usbRemoved(110_000),
+      tick(200_000),
+      choice("install-now", 200_001),
+    ]);
+    expect(decisions[6]).toMatchObject({
+      action: "refuse",
+      diskId: null,
+      state: {
+        phase: "refused",
+        refusal: { reason: "write-failed", hardware: null, releaseVersion: null },
+      },
+    });
+    expect(decisions.slice(7).map((d) => d.action)).toEqual(["wait", "wait", "wait"]);
+  });
+
+  it("a second write-finished after the write → refuse sequence-invalid", () => {
+    const decisions = play([
+      ...toWriting,
+      writeFinished(true, 100_000),
+      writeFinished(true, 100_001),
+    ]);
+    expect(last(decisions)).toMatchObject({
+      action: "refuse",
+      state: { refusal: { reason: "sequence-invalid" } },
+    });
+  });
+});
+
+describe("the public status (D15)", () => {
+  const stateAfter = (events) => last(play(events)).state;
+
+  it("a new state → observing, nothing else", () => {
+    const status = installerStatus(createInstallerState(OPTIONS));
+    expect(status).toEqual({
+      stage: "observing",
+      safeToRemove: false,
+      stopReason: null,
+      hardware: null,
+      releaseVersion: null,
+    });
+    expect(Object.isFrozen(status)).toBe(true);
+    expect(Object.keys(status)).toEqual([
+      "stage",
+      "safeToRemove",
+      "stopReason",
+      "hardware",
+      "releaseVersion",
+    ]);
+  });
+
+  it("the Windows path: not safe to remove before ram-ready, safe after it, through the write and remove-usb, not once booting", () => {
+    expect(installerStatus(stateAfter([windowsSeen()])).safeToRemove).toBe(false);
+    expect(installerStatus(stateAfter([windowsSeen(), ramReady(2_000)]))).toEqual({
+      stage: "network",
+      safeToRemove: true,
+      stopReason: null,
+      hardware: null,
+      releaseVersion: null,
+    });
+    const toRemoveUsb = [...TO_VERIFIED, tick(61_000), writeFinished(true, 100_000)];
+    expect(installerStatus(stateAfter(toRemoveUsb))).toMatchObject({
+      stage: "remove-usb",
+      safeToRemove: true,
+    });
+    expect(installerStatus(stateAfter([...toRemoveUsb, usbRemoved(110_000)]))).toMatchObject({
+      stage: "booting",
+      safeToRemove: false,
+    });
+  });
+
+  it("a Waitron path before a typed confirmation → not safe to remove", () => {
+    const status = installerStatus(stateAfter([waitronSeen(), ramReady(2_000), key(3_000)]));
+    expect(status).toMatchObject({ stage: "reinstall-screen", safeToRemove: false });
+  });
+
+  it('refuse disk-multiple with tpm "absent" → stopReason and hardware', () => {
+    const state = stateAfter([
+      ramReady(0),
+      observed(survey([blankDisk(), windowsDisk({ diskId: SECOND_ID })], { tpm: "absent" })),
+    ]);
+    expect(installerStatus(state)).toEqual({
+      stage: "refused",
+      safeToRemove: false,
+      stopReason: "disk-multiple",
+      hardware: "no-tpm",
+      releaseVersion: null,
+    });
+  });
+
+  it('a Waitron disk with tpm "disabled" during its 15 seconds (I2) → hardware no-tpm, no stop reason', () => {
+    expect(installerStatus(stateAfter([waitronSeen(SANTET, { tpm: "disabled" })]))).toEqual({
+      stage: "waitron-found",
+      safeToRemove: false,
+      stopReason: null,
+      hardware: "no-tpm",
+      releaseVersion: null,
+    });
+  });
+
+  it('a refused installer-too-old "1.4.0" → releaseVersion "1.4.0"', () => {
+    const state = stateAfter([...TO_DOWNLOADING, released("installer-too-old", 30_000, "1.4.0")]);
+    expect(installerStatus(state)).toEqual({
+      stage: "refused",
+      safeToRemove: false,
+      stopReason: "installer-too-old",
+      hardware: null,
+      releaseVersion: "1.4.0",
+    });
+  });
+
+  it("never carries the venue name or the disk id, at any step of a reinstall", () => {
+    const decisions = play([
+      waitronSeen(),
+      key(2_000),
+      ramReady(3_000),
+      submit("Bar Santet", 4_000),
+      online(5_000),
+      clockSet(true, FLOOR, 6_000),
+      released("verified", 7_000),
+      writeFinished(true, 100_000),
+    ]);
+    for (const decision of decisions) {
+      const text = JSON.stringify(installerStatus(decision.state));
+      expect(text).not.toContain("Bar Santet");
+      expect(text).not.toContain(INTERNAL_ID);
+    }
+  });
+
+  it.each([
+    ["a hand-made state", () => initialState()],
+    ["null", () => null],
+    ["a frozen copy of a real state", () => Object.freeze({ ...createInstallerState(OPTIONS) })],
+  ])("%s → throws installer.state_invalid", (_name, make) => {
+    expect(thrown(() => installerStatus(make()))).toEqual({
+      message: "installer.state_invalid",
+      code: "installer.state_invalid",
+      reason: "state-invalid",
     });
   });
 });

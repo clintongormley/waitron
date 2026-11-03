@@ -76,6 +76,12 @@ function usableText(value, maxCodePoints) {
   return length >= 1 && length <= maxCodePoints;
 }
 
+/** @param {unknown} state */
+function genuine(state) {
+  if (state === null || typeof state !== "object" || !GENUINE.has(state))
+    throw refusal("installer.state_invalid", "state-invalid");
+}
+
 /** @param {string} key @param {object} [params] */
 function message(key, params = {}) {
   return Object.freeze({ key, params: Object.freeze({ ...params }) });
@@ -246,16 +252,33 @@ function enterLoading(state, changes) {
   });
 }
 
-/** @param {InstallerState} state */
-function bootInstalled(state) {
-  return Object.freeze({
-    ...decide(state, "boot-installed", {
+/** One frozen target: the only disk id an action names. @param {InstallerDecision} decision */
+function naming(decision) {
+  const { diskId } = /** @type {NonNullable<InstallerState["target"]>} */ (decision.state.target);
+  return Object.freeze({ ...decision, diskId });
+}
+
+/** @param {InstallerState} state @param {object} [changes] */
+function bootInstalled(state, changes = {}) {
+  return naming(
+    decide(state, "boot-installed", {
+      ...changes,
       phase: "booting",
       deadlineMs: null,
       message: message("installer.starting_installed"),
     }),
-    diskId: /** @type {NonNullable<InstallerState["target"]>} */ (state.target).diskId,
-  });
+  );
+}
+
+/** Reached only from a verified release (spec §5 step 5). @param {InstallerState} state */
+function writeTarget(state) {
+  return naming(
+    decide(state, "write-owned-target", {
+      phase: "writing",
+      deadlineMs: null,
+      message: message("installer.writing"),
+    }),
+  );
 }
 
 /** @param {InstallerState} state @param {number} atMs @param {boolean} mismatch */
@@ -273,14 +296,18 @@ function reinstallScreen(state, atMs, mismatch) {
   });
 }
 
-/** M5. @param {string} text */
-const typedFits = (text) => text.normalize("NFC").length <= MAX_TYPED_UNITS;
+/** M5. @param {string} text @returns {string|null} the NFC text, or null when it is too long */
+function typedFits(text) {
+  const normalised = text.normalize("NFC");
+  return normalised.length <= MAX_TYPED_UNITS ? normalised : null;
+}
 
 /** D7. The text is compared and dropped. @param {InstallerState} state @param {string} text */
 function typedMatches(state, text) {
-  if (!typedFits(text)) return false;
+  const normalised = typedFits(text);
+  if (normalised === null) return false;
   const venueTag = /** @type {NonNullable<InstallerState["target"]>} */ (state.target).venueTag;
-  return venueTag === null ? text === state.eraseWord : text.normalize("NFC") === venueTag.name;
+  return venueTag === null ? text === state.eraseWord : normalised === venueTag.name;
 }
 
 /** @param {InstallerState} state */
@@ -355,7 +382,8 @@ const PHASE_RULES = {
   },
   "awaiting-erase-word": (state, event) => {
     if (event.kind !== "submit") return undefined;
-    if (typedFits(event.text) && event.text === state.eraseWord) return typedConfirmation(state);
+    if (typedFits(event.text) !== null && event.text === state.eraseWord)
+      return typedConfirmation(state);
     const { attachmentUnclear } = /** @type {NonNullable<InstallerState["target"]>} */ (
       state.target
     );
@@ -385,14 +413,48 @@ const PHASE_RULES = {
       return retryLater(state, event.atMs, "download-retry");
     const reason = RELEASE_REFUSALS[/** @type {keyof typeof RELEASE_REFUSALS} */ (outcome)];
     if (reason !== undefined) return refuse(state, reason, null, releaseVersion);
+    if (state.confirmed === "typed") return writeTarget(state);
+    const { recognised } = /** @type {NonNullable<InstallerState["target"]>} */ (state.target);
+    const deadlineMs = event.atMs + INSTALLER_TIMINGS_MS.eraseWait;
+    return decide(state, "wait", {
+      phase: "erase-countdown",
+      deadlineMs,
+      message: message("installer.erase_countdown", {
+        seconds: INSTALLER_TIMINGS_MS.eraseWait / 1000,
+        recognised,
+      }),
+    });
+  },
+  "erase-countdown": (state, event) => {
+    if (event.kind === "key" || event.kind === "submit")
+      return decide(state, "confirm-erase", {
+        phase: "erase-stopped",
+        deadlineMs: null,
+        message: message("installer.erase_stopped"),
+      });
+    if (event.kind === "tick" && event.atMs >= /** @type {number} */ (state.deadlineMs))
+      return writeTarget(state);
     return undefined;
+  },
+  "erase-stopped": (state, event) => {
+    if (event.kind !== "choice") return undefined;
+    if (event.choice === "install-now") return writeTarget(state);
+    return decide(state, "power-off", {
+      phase: "powering-off",
+      message: message("installer.powering_off"),
+    });
+  },
+  writing: (state, event) => {
+    if (event.kind !== "write-finished") return undefined;
+    if (!event.ok) return refuse(state, "write-failed", null);
+    if (!state.usbPresent) return bootInstalled(state);
+    return decide(state, "wait", { phase: "remove-usb", message: message("installer.remove_usb") });
   },
 };
 
 /** Pure. @param {unknown} state @param {unknown} event @returns {InstallerDecision} */
 export function nextInstallerStep(state, event) {
-  if (state === null || typeof state !== "object" || !GENUINE.has(state))
-    throw refusal("installer.state_invalid", "state-invalid");
+  genuine(state);
   const current = /** @type {InstallerState} */ (state);
   checkEvent(event);
   const e = /** @type {any} */ (event);
@@ -415,11 +477,40 @@ export function nextInstallerStep(state, event) {
     const ready = makeState({ ...timed, ramReady: true });
     return ready.phase === "loading" ? enterLoading(ready, {}) : decide(ready, "wait");
   }
-  if (e.kind === "usb-removed")
-    return timed.ramReady
-      ? decide(timed, "wait", { usbPresent: false })
-      : refuse(timed, "usb-removed-early", null);
+  if (e.kind === "usb-removed") {
+    if (!timed.ramReady) return refuse(timed, "usb-removed-early", null);
+    if (timed.phase === "remove-usb") return bootInstalled(timed, { usbPresent: false });
+    return decide(timed, "wait", { usbPresent: false });
+  }
   if (e.kind === "usb-inserted") return decide(timed, "wait", { usbPresent: true });
   const rules = PHASE_RULES[/** @type {keyof typeof PHASE_RULES} */ (timed.phase)];
   return rules?.(timed, e) ?? decide(timed, "wait");
+}
+
+/**
+ * @typedef {object} InstallerStatus  frozen; what the public status page may show (spec §5.6, D15)
+ * @property {InstallerPhase} stage
+ * @property {boolean} safeToRemove  ramReady and a confirmed path, until a final phase
+ * @property {string|null} stopReason
+ * @property {'no-tpm'|'secure-boot-off'|null} hardware  from the refusal or the target (D2)
+ * @property {string|null} releaseVersion  for installer-too-old only (M12)
+ */
+
+/** Pure. The page is open to anyone on the network: no disk id, venue name or typed text. @param {unknown} state @returns {InstallerStatus} */
+export function installerStatus(state) {
+  genuine(state);
+  const {
+    phase,
+    ramReady,
+    confirmed,
+    refusal: stop,
+    target,
+  } = /** @type {InstallerState} */ (state);
+  return Object.freeze({
+    stage: phase,
+    safeToRemove: ramReady && confirmed !== null && !FINAL_PHASES.includes(phase),
+    stopReason: stop?.reason ?? null,
+    hardware: stop?.hardware ?? target?.hardware ?? null,
+    releaseVersion: stop?.releaseVersion ?? null,
+  });
 }
