@@ -1401,14 +1401,18 @@ The build departed from the task texts above in these ways; the task texts are l
   install and update health checks still pass on a box that has stepped down.
 - `stepDown` returns `{ restarting: true, replayed: boolean }`; a replayed call schedules no second
   restart.
-- No production route reaches `stepDown` in Slice 2. `boot.ts` exposes it only through a test seam;
-  Slice 5 adds the authenticated route.
+- No production route reaches `stepDown` in Slice 2. `boot.ts` exposes it only through a test seam.
+  The first production route to reach it is Slice 3's Task 3.3 membership route
+  (`POST /api/node/membership`), which steps a box down as `superseded` when a signed, newer chart
+  fences it; Slice 5's Task 5.3 adds the signed-in management route (`POST /management-api/handover`)
+  that starts a controlled handover.
 - The stepdown's close is bounded by the same shutdown deadline a SIGTERM has, so a close that never
   settles still restarts the box.
 - The pending-card pass skips its later steps once it has been signalled.
 - The restricted page's title is "This box no longer runs the venue" for both kinds of restriction
   (handed over and superseded), and the page carries no closing line about sending records back or
-  becoming the spare. Later slices add those sentences when they build what they describe.
+  becoming the spare. No later task adds those sentences yet: the slice that builds sending records
+  back, or becoming the spare, must add its sentence to the page and to both guides.
 - A superseded stepdown records no handover operation; Task 10.3 begins one.
 
 ---
