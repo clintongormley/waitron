@@ -30,6 +30,8 @@ export interface CarryOnWords {
   knownTitle: string;
   restartingTitle: string;
   restarting: string;
+  /** A stepdown began after the decision was recorded. */
+  restartingAfterRecord: string;
   peerAnsweredTitle: string;
   peerAnswered: string;
   carriedOnTitle: string;
@@ -95,6 +97,8 @@ export const WAITING_PAGE_WORDS: Readonly<
       restartingTitle: "This box is restarting",
       restarting:
         "It has learnt that another box has taken over, or it is shutting down, so it has not carried on as the main box. Nothing was recorded. Open this page again in a minute.",
+      restartingAfterRecord:
+        "Your decision to carry on was recorded, but this box then had to step down as the main box, so it did not carry on. Open this page again in a minute.",
       peerAnsweredTitle: "The other box answered",
       peerAnswered:
         "It answered before you carried on, so this box is starting normally. Nothing was recorded. This page reloads in a few seconds.",
@@ -147,6 +151,8 @@ export const WAITING_PAGE_WORDS: Readonly<
       restartingTitle: "Este equipo se está reiniciando",
       restarting:
         "Ha sabido que otro equipo ha pasado a llevar el local, o se está apagando, así que no ha seguido como equipo principal. No se ha registrado nada. Vuelve a abrir esta página dentro de un minuto.",
+      restartingAfterRecord:
+        "Tu decisión de seguir se ha registrado, pero después este equipo ha tenido que dejar de ser el equipo principal, así que no ha seguido. Vuelve a abrir esta página dentro de un minuto.",
       peerAnsweredTitle: "El otro equipo ha respondido",
       peerAnswered:
         "Respondió antes de que siguieras, así que este equipo se inicia con normalidad. No se ha registrado nada. Esta página se vuelve a cargar en unos segundos.",

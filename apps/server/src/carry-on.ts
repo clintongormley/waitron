@@ -50,9 +50,15 @@ export type CarryOnTurn =
   | { kind: "stopped" }
   | {
       kind: "go";
-      /** Whether the box still waits: read inside the transaction that records the decision. */
-      stillWaiting: () => boolean;
-      /** Ends the wait as carried on, unless something ended it first; says whether it did. */
+      /**
+       * Inside the transaction that records the decision: whether the box still waits. A stepdown
+       * that began before it refuses the record; one that begins after it wins over `finish`.
+       */
+      claim: () => Promise<boolean>;
+      /**
+       * Ends the wait as carried on unless a stepdown began after `claim`; says whether it did.
+       * The decision is recorded either way.
+       */
       finish: () => boolean;
       /** Gives the turn up without ending the wait. */
       abandon: () => void;
@@ -305,7 +311,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
         const since = await knownHandoverSuccessor(tx, deps.nodeId);
         if (since !== null)
           throw new AppError("handover.known_handover", { successorNodeId: since });
-        if (!turn.stillWaiting()) throw new NoLongerWaiting();
+        if (!(await turn.claim())) throw new NoLongerWaiting();
         await appendHandoverEventTx(tx, {
           nodeId: deps.nodeId,
           operationId: null,
@@ -324,8 +330,15 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
       if (error instanceof NoLongerWaiting) return restarting();
       return failed(error);
     }
-    // Only a stepdown that began after the decision was recorded can refuse here.
-    if (!turn.finish()) return restarting();
+    if (!turn.finish())
+      return c.html(
+        renderDocument(
+          locale,
+          words.restartingTitle,
+          `<p>${escapeHtml(words.restartingAfterRecord)}</p>\n`,
+        ),
+        409,
+      );
     deps.log("info", "waiting_start.carried_on", { peerNodeIds: deps.peerNodeIds() });
     return carriedOn();
   });

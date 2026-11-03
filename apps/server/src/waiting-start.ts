@@ -22,8 +22,6 @@ export const WAIT_RECHECK_MS = 15_000;
 export interface WaitingHooks {
   /** Writes the restriction, then closes the waiting start and restarts the process. */
   stepDown: (request: StepDownRequest) => Promise<StepDownResult>;
-  /** Ends the wait as a peer's `proceed` would; does nothing once the wait has ended. */
-  carryOn: () => Promise<void>;
 }
 
 export interface WaitingStartDeps {
@@ -51,6 +49,11 @@ export interface WaitingStartDeps {
   /** The start check, asked again every `intervalMs` until it answers other than `wait`. */
   recheck: () => Promise<StartPeerCheckOutcome>;
   intervalMs: number;
+  /**
+   * Called as a carry-on takes its turn, before it waits for the re-ask in flight (`turn`), and
+   * as it claims the wait inside the transaction that records it (`claimed`). Tests only.
+   */
+  onCarryOn?: (stage: "turn" | "claimed") => void | Promise<void>;
   /** Binds the waiting start's listeners; `close` closes them and nothing else. */
   listen: (app: Hono) => { close(): Promise<void> };
   closeStore: () => Promise<void>;
@@ -69,7 +72,8 @@ export interface WaitingStart {
   server: StartedServer;
   /** Settles once the listeners and timer are gone; a `checked` or `carried-on` start goes on. */
   ended: Promise<WaitEnd>;
-  carryOn: () => Promise<void>;
+  /** Takes the carry-on turn, as the carry-on route does. */
+  beginCarryOn: () => Promise<CarryOnTurn>;
 }
 
 /**
@@ -160,7 +164,6 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
         request,
       );
     },
-    carryOn: () => (steppingDown ? Promise.resolve() : leave({ kind: "carried-on" })),
   };
   for (const mount of deps.routes) mount(app, hooks);
 
@@ -195,6 +198,8 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     await previous;
     carrying = true;
     clearTimeout(timer);
+    // Not awaited: an await here would itself give a re-ask answered by the seam time to finish.
+    void deps.onCarryOn?.("turn");
     await asking;
     const done = (): void => {
       carrying = false;
@@ -209,7 +214,11 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     }
     return {
       kind: "go",
-      stillWaiting: () => !leaving && !steppingDown,
+      claim: async () => {
+        if (leaving || steppingDown) return false;
+        await deps.onCarryOn?.("claimed");
+        return true;
+      },
       finish: () => {
         const waiting = !leaving && !steppingDown;
         if (waiting) void leave({ kind: "carried-on" });
@@ -234,6 +243,6 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
       },
     },
     ended,
-    carryOn: hooks.carryOn,
+    beginCarryOn,
   };
 }

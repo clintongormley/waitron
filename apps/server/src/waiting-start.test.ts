@@ -176,7 +176,10 @@ describe("the waiting start", () => {
 
   it("carrying on ends the wait the way a peer's answer does", async () => {
     const h = harness(() => Promise.resolve(WAIT), { intervalMs: 60_000 });
-    await h.waiting.carryOn();
+    const turn = await h.waiting.beginCarryOn();
+    if (turn.kind !== "go") throw new Error(`expected the turn, got ${turn.kind}`);
+    expect(await turn.claim()).toBe(true);
+    expect(turn.finish()).toBe(true);
     expect(await h.waiting.ended).toEqual({ kind: "carried-on" });
     expect(h.closeListeners).toHaveBeenCalledTimes(1);
     expect(h.health.takesNoSales).toBe(false);
@@ -437,7 +440,11 @@ describe("the waiting start", () => {
     });
 
     /** Replaces the case's waiting start with one whose first re-ask is held until `answer`. */
-    const heldReAsk = async () => {
+    /**
+     * Replaces the case's waiting start with one whose first re-ask is held open, and answered
+     * with `outcome` at the moment a carry-on, already signed in, takes its turn.
+     */
+    const heldReAsk = async (outcome: StartPeerCheckOutcome) => {
       await h.waiting.server.close();
       let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
       const recheck = vi
@@ -448,19 +455,16 @@ describe("the waiting start", () => {
         node: suite.node,
         intervalMs: 1,
         carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+        onCarryOn: (stage) => {
+          if (stage === "turn") answer(outcome);
+        },
       });
       await vi.waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
-      return (outcome: StartPeerCheckOutcome) => answer(outcome);
     };
-    /** Resolves once the carry-on has signed in and is waiting for the re-ask in flight. */
-    const signedIn = () => new Promise((done) => setTimeout(done, 300));
 
     it("a peer's takeover answer already on its way wins over a carry-on: refused, nothing recorded", async () => {
-      const answer = await heldReAsk();
-      const posted = post({ ...ADMIN, ...BOTH });
-      await signedIn();
-      answer({ result: "superseded", successorNodeId: SPARE_ID });
-      const refused = await posted;
+      await heldReAsk({ result: "superseded", successorNodeId: SPARE_ID });
+      const refused = await post({ ...ADMIN, ...BOTH });
       expect(refused.status).toBe(409);
       expect(await refused.text()).toContain(
         "This box has already handed over to <strong>Spare</strong>. It cannot carry on as the main box.",
@@ -473,11 +477,8 @@ describe("the waiting start", () => {
     });
 
     it("a peer's answer to go on already on its way wins over a carry-on: the start goes on, nothing recorded", async () => {
-      const answer = await heldReAsk();
-      const posted = post({ ...ADMIN, ...BOTH });
-      await signedIn();
-      answer(PROCEED);
-      const answered = await posted;
+      await heldReAsk(PROCEED);
+      const answered = await post({ ...ADMIN, ...BOTH });
       expect(answered.status).toBe(200);
       const html = await answered.text();
       expect(html).toContain("<h1>The other box answered</h1>");
@@ -528,6 +529,54 @@ describe("the waiting start", () => {
       expect(await carried.text()).not.toContain("This box is carrying on as the main box");
       expect(await h.waiting.ended).toEqual({ kind: "stopped" });
       expect(await events()).toEqual([]);
+    });
+
+    it("a stepdown that begins once the decision is being recorded wins, and the page says the decision was recorded", async () => {
+      await h.waiting.server.close();
+      let stepping = false;
+      let claimed: () => void = () => {};
+      const reachedClaim = new Promise<void>((done) => (claimed = done));
+      let carryOnGoes: () => void = () => {};
+      const stepdownBegun = new Promise<void>((done) => (carryOnGoes = done));
+      h = harness(() => new Promise(() => {}), {
+        node: suite.node,
+        intervalMs: 60_000,
+        carryOn: { db: suite.db, credentialKeyRing: TOTP_KEY_RING },
+        routes: [
+          (app, hooks) =>
+            app.post("/step", async (c) => {
+              stepping = true;
+              return c.json(
+                await hooks.stepDown({
+                  kind: "superseded",
+                  successorNodeId: null,
+                  membershipTerm: 4,
+                  self: c,
+                }),
+              );
+            }),
+        ],
+        // Holds the carry-on inside its transaction until the stepdown has begun. The stepdown is
+        // sent from the case itself, outside that transaction, and its own write waits for it.
+        onCarryOn: async (stage) => {
+          if (stage !== "claimed") return;
+          claimed();
+          await stepdownBegun;
+        },
+      });
+      const posted = post({ ...ADMIN, ...BOTH });
+      await reachedClaim;
+      const stepped = Promise.resolve(h.app().request("/step", { method: "POST" }));
+      await vi.waitFor(() => expect(stepping).toBe(true));
+      carryOnGoes();
+      const carried = await posted;
+      expect(carried.status).toBe(409);
+      expect(await carried.text()).toContain(
+        "Your decision to carry on was recorded, but this box then had to step down as the main box, so it did not carry on.",
+      );
+      expect((await stepped).status).toBe(200);
+      expect(await h.waiting.ended).toEqual({ kind: "stopped" });
+      expect(await events()).toHaveLength(1);
     });
 
     it("an administrator without the authenticator may give a recovery code instead", async () => {
