@@ -137,7 +137,7 @@ Each is the conservative option the planner could find, except D4, which follows
 - **D10. A failed clock step waits one minute, then checks the network again before retrying.** A network time below the floor the policy was created with counts as a failure.
 - **D11. Download outcomes.** `unavailable` and `truncated` wait one minute and check the network again (§5.3 item 4, "trying again every minute"). `signature`, `checksum` and `too-large` stop with that reason: no retry and no older release (parent: "Invalid newest release never falls back silently"). `installer-too-old` stops with the release's version for the message (§5.4, lines 337–339).
 - **D12. A stick taken out before the installer is wholly in memory stops the installer**, whatever it was doing, guard 3's countdown included (guard 2: "A stick taken out before that just stops a start that had not touched the disk", lines 238–239).
-- **D13. A second disk survey, or an adapter result the policy did not ask for, stops the installer** with `sequence-invalid`. A person's key, line or choice where it means nothing is ignored.
+- **D13. A second disk survey, or an adapter result the policy did not ask for, stops the installer** with `sequence-invalid`. A person's key, line or choice where it means nothing is ignored. A request the policy can make more than once (`find-network`, `set-clock`, `download`) carries a new `requestId`, and its result (`online`, `clock-set`, `release-checked`) must carry the same number back. A result with any other number is one the policy did not ask for (added 2026-11-03 after review: otherwise a late `verified` from an earlier download could start the erase countdown for a later download that had not been checked).
 - **D14. After a final action (`refuse`, `boot-installed`, `power-off`), every later event answers `wait`** with the same message, so a firmware or power action is never asked for twice.
 - **D15. The public status says only the stage, whether the stick may be taken out, a stop reason, the firmware setting that is off, and, for a stick too old, the release's version.** No disk id, venue name or typed text: the status page is open to anyone on the network (§5.6). The setting that is off is shown because §7.7 asks for it "on the screen and the status page" when it refuses (lines 861–862), and this plan extends that to guard 3's start path (D2); the release version because it comes from the public release list and the spec's own refusal sentence names it («… demasiado antiguo para Waitron 1.4.0», lines 338–339).
 - **D16. A Wi-Fi join counts as failed when no internet follows within one minute**, the spec's one minute (§5.3 item 2) reused, and the hotspot reopens. The join event shape refuses a `password` key, so the password cannot enter the decisions.
@@ -200,6 +200,7 @@ export const INSTALLER_TIMINGS_MS; // frozen { waitronStart: 15_000, reinstallId
  *   layoutVersion:number|null, hardware:'no-tpm'|'secure-boot-off'|null, attachmentUnclear:boolean, venueTag:VenueTag|null}} target
  * @property {null|'unattended'|'typed'} confirmed
  * @property {boolean} clockSet
+ * @property {number} requestId  the last find-network, set-clock or download issued; 0 before the first (D13)
  * @property {number|null} deadlineMs
  * @property {null|{reason:string, hardware:'no-tpm'|'secure-boot-off'|null, releaseVersion:string|null}} refusal
  * @property {{key:string, params:object}} message  the last message, repeated by final phases (D14)
@@ -207,6 +208,7 @@ export const INSTALLER_TIMINGS_MS; // frozen { waitronStart: 15_000, reinstallId
  * @typedef {object} InstallerDecision  frozen
  * @property {InstallerAction} action
  * @property {string|null} diskId  the frozen target's id for write-owned-target and boot-installed; null otherwise
+ * @property {number|null} requestId  a new number for find-network, set-clock and download; null otherwise (D13)
  * @property {{key:string, params:object}} message  frozen
  * @property {number|null} deadlineMs  on atMs's clock
  * @property {InstallerState} state
@@ -222,11 +224,12 @@ export function nextInstallerStep(state, event);
 | `kind` | Other keys |
 | --- | --- |
 | `observed` | `observation` (PR 1's `MachineObservation`, checked by `classifyDisk`), `venueTag` (`null` or exactly `{name: string, live: boolean}`) |
-| `ram-ready`, `usb-removed`, `usb-inserted`, `key`, `online`, `tick` | none |
+| `ram-ready`, `usb-removed`, `usb-inserted`, `key`, `tick` | none |
+| `online` | `requestId`: a safe non-negative integer, the `requestId` of the `find-network` it answers (D13) |
 | `submit` | `text`: a string; only a non-string throws. Where a confirmation is asked (`reinstall-screen`, `awaiting-erase-word`), a text whose NFC form is over 512 UTF-16 units is a mismatch (M5; the limit is applied after normalisation so that a valid name typed decomposed still fits, see D8). Where a phase's rules name `submit` without asking for a confirmation (`waitron-found`, `erase-countdown`), it counts as a submit like any other and its text is never read. In every other phase it is ignored. Nothing of the text is kept. |
 | `choice` | `choice`: `install-now` or `power-off` |
-| `clock-set` | `ok`: boolean; `utcMs`: a safe non-negative integer when `ok`, `null` otherwise |
-| `release-checked` | `outcome`: `verified`, `unavailable`, `truncated`, `signature`, `checksum`, `too-large` or `installer-too-old`; `releaseVersion`: for `installer-too-old` a string of 1–32 printable ASCII characters (opaque display text; its format is the deferred release list's), otherwise `null` |
+| `clock-set` | `requestId`: as for `online`, from the `set-clock` it answers; `ok`: boolean; `utcMs`: a safe non-negative integer when `ok`, `null` otherwise |
+| `release-checked` | `requestId`: as for `online`, from the `download` it answers; `outcome`: `verified`, `unavailable`, `truncated`, `signature`, `checksum`, `too-large` or `installer-too-old`; `releaseVersion`: for `installer-too-old` a string of 1–32 printable ASCII characters (opaque display text; its format is the deferred release list's), otherwise `null` |
 | `write-finished` | `ok`: boolean |
 
 **Message keys** (the whole set; Tasks 2–4 use the rest):
@@ -264,7 +267,7 @@ A `refuse` makes the phase `refused`.
 **General rules, checked in this order before any phase's own rules:**
 
 - **D14:** in `refused`, `booting` and `powering-off`, every event (still checked for shape and time) answers `wait`, `diskId: null`, `deadlineMs: null`, the same message, and a state that differs only in `atMs`.
-- **D13, adapter results:** `observed` outside `observing`, `online` outside `network`, `clock-set` outside `clock`, `release-checked` outside `downloading`, and `write-finished` outside `writing` → `refuse` `sequence-invalid`.
+- **D13, adapter results:** `observed` outside `observing`, `online` outside `network`, `clock-set` outside `clock`, `release-checked` outside `downloading`, and `write-finished` outside `writing` → `refuse` `sequence-invalid`. So does an `online`, `clock-set` or `release-checked` in its own phase whose `requestId` is not the state's `requestId`.
 - **D13, a person's input:** `key`, `submit` or `choice` in a phase whose rules (here and in Tasks 2–4) do not name it → `wait`, state unchanged but for `atMs`.
 - `tick` in a phase with no deadline, or before its deadline → `wait`. `ram-ready`, `usb-removed` and `usb-inserted` follow Task 3's rules 1 and 3; until Task 3 they set their flag and answer `wait`.
 

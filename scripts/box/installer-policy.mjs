@@ -25,6 +25,7 @@ export const INSTALLER_TIMINGS_MS = Object.freeze({
  *   layoutVersion:number|null, hardware:'no-tpm'|'secure-boot-off'|null, attachmentUnclear:boolean, venueTag:VenueTag|null}} target
  * @property {null|'unattended'|'typed'} confirmed
  * @property {boolean} clockSet
+ * @property {number} requestId  the last find-network, set-clock or download issued; 0 before the first
  * @property {number|null} deadlineMs
  * @property {null|{reason:string, hardware:'no-tpm'|'secure-boot-off'|null, releaseVersion:string|null}} refusal
  * @property {{key:string, params:object}} message  the last message, repeated by final phases
@@ -32,6 +33,8 @@ export const INSTALLER_TIMINGS_MS = Object.freeze({
  * @typedef {object} InstallerDecision  frozen
  * @property {InstallerAction} action
  * @property {string|null} diskId  the frozen target's id for write-owned-target and boot-installed; null otherwise
+ * @property {number|null} requestId  a new identifier for find-network, set-clock and download; null otherwise.
+ *   Their results (online, clock-set, release-checked) must carry it back; a result carrying another stops the run with sequence-invalid.
  * @property {{key:string, params:object}} message  frozen
  * @property {number|null} deadlineMs  on atMs's clock
  * @property {InstallerState} state
@@ -45,7 +48,8 @@ const ADAPTER_PHASES = Object.freeze({
   "release-checked": "downloading",
   "write-finished": "writing",
 });
-const BARE_KINDS = ["ram-ready", "usb-removed", "usb-inserted", "key", "online", "tick"];
+const REQUESTS = ["find-network", "set-clock", "download"];
+const BARE_KINDS = ["ram-ready", "usb-removed", "usb-inserted", "key", "tick"];
 const RELEASE_OUTCOMES = [
   "verified",
   "unavailable",
@@ -113,6 +117,7 @@ export function createInstallerState(options) {
     target: null,
     confirmed: null,
     clockSet: false,
+    requestId: 0,
     deadlineMs: null,
     refusal: null,
     message: message("installer.starting"),
@@ -123,8 +128,11 @@ export function createInstallerState(options) {
 function checkEvent(event) {
   const { kind } = event ?? {};
   const keys = (/** @type {string[]} */ ...rest) => exactRecord(event, ["kind", "atMs", ...rest]);
+  const answer = (/** @type {string[]} */ ...rest) =>
+    keys("requestId", ...rest) && safeInteger(event.requestId);
   let ok;
   if (BARE_KINDS.includes(kind)) ok = keys();
+  else if (kind === "online") ok = answer();
   else if (kind === "observed")
     ok =
       keys("observation", "venueTag") &&
@@ -137,12 +145,12 @@ function checkEvent(event) {
     ok = keys("choice") && ["install-now", "power-off"].includes(event.choice);
   else if (kind === "clock-set")
     ok =
-      keys("ok", "utcMs") &&
+      answer("ok", "utcMs") &&
       typeof event.ok === "boolean" &&
       (event.ok ? safeInteger(event.utcMs) : event.utcMs === null);
   else if (kind === "release-checked")
     ok =
-      keys("outcome", "releaseVersion") &&
+      answer("outcome", "releaseVersion") &&
       RELEASE_OUTCOMES.includes(event.outcome) &&
       (event.outcome === "installer-too-old"
         ? typeof event.releaseVersion === "string" && PRINTABLE_ASCII.test(event.releaseVersion)
@@ -157,10 +165,12 @@ function checkEvent(event) {
  * @returns {InstallerDecision}
  */
 function decide(state, action, changes = {}) {
-  const next = makeState({ ...state, ...changes });
+  const asks = REQUESTS.includes(action);
+  const next = makeState({ ...state, ...changes, ...(asks && { requestId: state.requestId + 1 }) });
   return Object.freeze({
     action,
     diskId: null,
+    requestId: asks ? next.requestId : null,
     message: next.message,
     deadlineMs: next.deadlineMs,
     state: next,
@@ -465,12 +475,15 @@ export function nextInstallerStep(state, event) {
     return Object.freeze({
       action: "wait",
       diskId: null,
+      requestId: null,
       message: timed.message,
       deadlineMs: null,
       state: timed,
     });
   const adapterPhase = ADAPTER_PHASES[/** @type {keyof typeof ADAPTER_PHASES} */ (e.kind)];
   if (adapterPhase !== undefined && adapterPhase !== timed.phase)
+    return refuse(timed, "sequence-invalid", null);
+  if (Object.hasOwn(e, "requestId") && e.requestId !== timed.requestId)
     return refuse(timed, "sequence-invalid", null);
   if (e.kind === "observed") return observe(timed, e);
   if (e.kind === "ram-ready") {

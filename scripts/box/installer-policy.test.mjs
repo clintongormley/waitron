@@ -98,12 +98,18 @@ const observed = (observation, venueTag = null, atMs = AT) => ({
   venueTag,
 });
 
+/** An adapter result made with this as its requestId answers the last request the run issued. */
+const ANSWERING = Symbol("answering");
+
 /** @param {object[]} events @param {object} [options] */
 function play(events, options = OPTIONS) {
   let state = createInstallerState(options);
+  let asked = 0;
   return events.map((event) => {
-    const decision = nextInstallerStep(state, event);
+    const answer = event?.requestId === ANSWERING ? { ...event, requestId: asked } : event;
+    const decision = nextInstallerStep(state, answer);
     state = decision.state;
+    if (decision.requestId !== null) asked = decision.requestId;
     return decision;
   });
 }
@@ -119,6 +125,7 @@ const initialState = (overrides = {}) => ({
   target: null,
   confirmed: null,
   clockSet: false,
+  requestId: 0,
   deadlineMs: null,
   refusal: null,
   message: STARTING,
@@ -143,6 +150,7 @@ const refused = (reason, hardware, stateOverrides = {}) => {
   return {
     action: "refuse",
     diskId: null,
+    requestId: null,
     message,
     deadlineMs: null,
     state: initialState({
@@ -160,6 +168,7 @@ const loading = (recognised) => {
   return {
     action: "wait",
     diskId: null,
+    requestId: null,
     message,
     deadlineMs: null,
     state: initialState({
@@ -186,6 +195,7 @@ const waitronFound = ({ hardware = null, venueTag = null } = {}) => {
   return {
     action: "wait",
     diskId: null,
+    requestId: null,
     message,
     deadlineMs,
     state: initialState({
@@ -203,6 +213,7 @@ const unknownDisk = ({ attachmentUnclear = false, recognised = null, kind = "unk
   return {
     action: "confirm-erase",
     diskId: null,
+    requestId: null,
     message,
     deadlineMs: null,
     state: initialState({
@@ -459,20 +470,39 @@ describe("events", () => {
     ["a submit text of 5", { kind: "submit", atMs: AT, text: 5 }],
     ["a submit text of null", { kind: "submit", atMs: AT, text: null }],
     ["a choice of erase", { kind: "choice", atMs: AT, choice: "erase" }],
-    ["clock-set ok without a time", { kind: "clock-set", atMs: AT, ok: true, utcMs: null }],
-    ["clock-set failed with a time", { kind: "clock-set", atMs: AT, ok: false, utcMs: 5 }],
-    ["clock-set ok not a boolean", { kind: "clock-set", atMs: AT, ok: 1, utcMs: 5 }],
-    ["clock-set ok with a negative time", { kind: "clock-set", atMs: AT, ok: true, utcMs: -1 }],
-    ["clock-set ok with a string time", { kind: "clock-set", atMs: AT, ok: true, utcMs: "5" }],
+    [
+      "clock-set ok without a time",
+      { kind: "clock-set", atMs: AT, requestId: 0, ok: true, utcMs: null },
+    ],
+    [
+      "clock-set failed with a time",
+      { kind: "clock-set", atMs: AT, requestId: 0, ok: false, utcMs: 5 },
+    ],
+    ["clock-set ok not a boolean", { kind: "clock-set", atMs: AT, requestId: 0, ok: 1, utcMs: 5 }],
+    [
+      "clock-set ok with a negative time",
+      { kind: "clock-set", atMs: AT, requestId: 0, ok: true, utcMs: -1 },
+    ],
+    [
+      "clock-set ok with a string time",
+      { kind: "clock-set", atMs: AT, requestId: 0, ok: true, utcMs: "5" },
+    ],
     [
       "a verified release with a version",
-      { kind: "release-checked", atMs: AT, outcome: "verified", releaseVersion: "1.0.0" },
+      {
+        kind: "release-checked",
+        atMs: AT,
+        requestId: 0,
+        outcome: "verified",
+        releaseVersion: "1.0.0",
+      },
     ],
     [
       "a too-old installer with a newline in its version",
       {
         kind: "release-checked",
         atMs: AT,
+        requestId: 0,
         outcome: "installer-too-old",
         releaseVersion: "1.0.0\n",
       },
@@ -482,6 +512,7 @@ describe("events", () => {
       {
         kind: "release-checked",
         atMs: AT,
+        requestId: 0,
         outcome: "installer-too-old",
         releaseVersion: "1.0.0\u0085",
       },
@@ -491,29 +522,52 @@ describe("events", () => {
       {
         kind: "release-checked",
         atMs: AT,
+        requestId: 0,
         outcome: "installer-too-old",
         releaseVersion: "1.0.0\u00E9",
       },
     ],
     [
       "a too-old installer with an empty version",
-      { kind: "release-checked", atMs: AT, outcome: "installer-too-old", releaseVersion: "" },
+      {
+        kind: "release-checked",
+        atMs: AT,
+        requestId: 0,
+        outcome: "installer-too-old",
+        releaseVersion: "",
+      },
     ],
     [
       "a too-old installer with a 33-character version",
       {
         kind: "release-checked",
         atMs: AT,
+        requestId: 0,
         outcome: "installer-too-old",
         releaseVersion: "1".repeat(33),
       },
     ],
     [
       "an unknown release outcome",
-      { kind: "release-checked", atMs: AT, outcome: "fine", releaseVersion: null },
+      { kind: "release-checked", atMs: AT, requestId: 0, outcome: "fine", releaseVersion: null },
     ],
     ["write-finished ok not a boolean", { kind: "write-finished", atMs: AT, ok: "yes" }],
     ["an observed event without a tag", { kind: "observed", atMs: AT, observation: {} }],
+    ["online without a requestId", { kind: "online", atMs: AT }],
+    ["clock-set without a requestId", { kind: "clock-set", atMs: AT, ok: false, utcMs: null }],
+    [
+      "release-checked without a requestId",
+      { kind: "release-checked", atMs: AT, outcome: "unavailable", releaseVersion: null },
+    ],
+    ["online with a negative requestId", { kind: "online", atMs: AT, requestId: -1 }],
+    ["online with a fractional requestId", { kind: "online", atMs: AT, requestId: 1.5 }],
+    ["online with a string requestId", { kind: "online", atMs: AT, requestId: "1" }],
+    ["online with a null requestId", { kind: "online", atMs: AT, requestId: null }],
+    ["a tick with a requestId", { kind: "tick", atMs: AT, requestId: 0 }],
+    [
+      "write-finished with a requestId",
+      { kind: "write-finished", atMs: AT, requestId: 0, ok: true },
+    ],
     ["null", null],
   ])("throws on %s", (_name, event) => {
     expect(thrown(() => nextInstallerStep(createInstallerState(OPTIONS), event))).toEqual(
@@ -522,18 +576,30 @@ describe("events", () => {
   });
 
   it.each([
-    ["clock-set ok", { kind: "clock-set", atMs: AT, ok: true, utcMs: 5 }],
-    ["clock-set failed", { kind: "clock-set", atMs: AT, ok: false, utcMs: null }],
+    ["clock-set ok", { kind: "clock-set", atMs: AT, requestId: 0, ok: true, utcMs: 5 }],
+    ["clock-set failed", { kind: "clock-set", atMs: AT, requestId: 0, ok: false, utcMs: null }],
     [
       "a too-old installer",
-      { kind: "release-checked", atMs: AT, outcome: "installer-too-old", releaseVersion: "1.0.0" },
+      {
+        kind: "release-checked",
+        atMs: AT,
+        requestId: 0,
+        outcome: "installer-too-old",
+        releaseVersion: "1.0.0",
+      },
     ],
     [
       "an unavailable release",
-      { kind: "release-checked", atMs: AT, outcome: "unavailable", releaseVersion: null },
+      {
+        kind: "release-checked",
+        atMs: AT,
+        requestId: 0,
+        outcome: "unavailable",
+        releaseVersion: null,
+      },
     ],
     ["write-finished", { kind: "write-finished", atMs: AT, ok: true }],
-    ["online", { kind: "online", atMs: AT }],
+    ["online", { kind: "online", atMs: AT, requestId: 0 }],
   ])("accepts the shape of %s and refuses it out of sequence", (_name, event) => {
     expect(play([event])).toEqual([refused("sequence-invalid", null)]);
   });
@@ -566,6 +632,7 @@ describe("events a phase does not name", () => {
       {
         action: "wait",
         diskId: null,
+        requestId: null,
         message: STARTING,
         deadlineMs: null,
         state: initialState({ atMs: AT }),
@@ -617,6 +684,7 @@ describe("final phases", () => {
       later.map((event) => ({
         action: "wait",
         diskId: null,
+        requestId: null,
         message: refusal.message,
         deadlineMs: null,
         state: { ...refusal.state, atMs: event.atMs },
@@ -639,6 +707,7 @@ describe("sequence", () => {
     expect(decisions[1]).toEqual({
       action: "refuse",
       diskId: null,
+      requestId: null,
       message,
       deadlineMs: null,
       state: {
@@ -716,6 +785,7 @@ describe("guard 3: a box that already holds Waitron", () => {
     expect(decisions[2]).toEqual({
       action: "boot-installed",
       diskId: INTERNAL_ID,
+      requestId: null,
       message: STARTING_INSTALLED,
       deadlineMs: null,
       state: {
@@ -747,6 +817,7 @@ describe("guard 3: a box that already holds Waitron", () => {
     expect(decisions[1]).toMatchObject({
       action: "confirm-erase",
       diskId: null,
+      requestId: null,
       deadlineMs: 136_500,
       message: reinstallMessage(),
       state: { phase: "reinstall-screen", deadlineMs: 136_500 },
@@ -867,6 +938,7 @@ describe("the reinstall screen", () => {
     expect(decisions[2]).toEqual({
       action: "wait",
       diskId: null,
+      requestId: null,
       message: LOADING,
       deadlineMs: null,
       state: {
@@ -997,8 +1069,8 @@ describe("hardware off on a box that holds Waitron", () => {
       waitronSeen(SANTET, { tpm: "disabled" }),
       key(5_000),
       submit("Bar Santet", 6_000),
-      { kind: "online", atMs: 7_000 },
-      { kind: "release-checked", atMs: 8_000, outcome: "verified", releaseVersion: null },
+      online(7_000),
+      released("verified", 8_000),
       tick(200_000),
       { kind: "write-finished", atMs: 200_001, ok: true },
     ]);
@@ -1022,6 +1094,7 @@ describe("the unknown disk", () => {
     expect(decisions[1]).toEqual({
       action: "wait",
       diskId: null,
+      requestId: null,
       message: LOADING,
       deadlineMs: null,
       state: {
@@ -1046,6 +1119,7 @@ describe("the unknown disk", () => {
     expect(decisions[1]).toEqual({
       action: "confirm-erase",
       diskId: null,
+      requestId: null,
       message,
       deadlineMs: null,
       state: { ...unknownDisk().state, atMs: 2_000, message },
@@ -1090,11 +1164,18 @@ describe("the unknown disk", () => {
 const FLOOR = OPTIONS.clockFloorMs;
 const ramReady = (atMs) => ({ kind: "ram-ready", atMs });
 const usbRemoved = (atMs) => ({ kind: "usb-removed", atMs });
-const online = (atMs) => ({ kind: "online", atMs });
-const clockSet = (ok, utcMs, atMs) => ({ kind: "clock-set", atMs, ok, utcMs });
-const released = (outcome, atMs, releaseVersion = null) => ({
+const online = (atMs, requestId = ANSWERING) => ({ kind: "online", atMs, requestId });
+const clockSet = (ok, utcMs, atMs, requestId = ANSWERING) => ({
+  kind: "clock-set",
+  atMs,
+  requestId,
+  ok,
+  utcMs,
+});
+const released = (outcome, atMs, releaseVersion = null, requestId = ANSWERING) => ({
   kind: "release-checked",
   atMs,
+  requestId,
   outcome,
   releaseVersion,
 });
@@ -1132,9 +1213,15 @@ describe("in memory first (Review Focus 4)", () => {
     expect(decisions[1]).toEqual({
       action: "find-network",
       diskId: null,
+      requestId: 1,
       message: SAFE_TO_REMOVE,
       deadlineMs: null,
-      state: windowsState({ phase: "network", atMs: 3_000, message: SAFE_TO_REMOVE }),
+      state: windowsState({
+        phase: "network",
+        atMs: 3_000,
+        requestId: 1,
+        message: SAFE_TO_REMOVE,
+      }),
     });
   });
 
@@ -1144,9 +1231,10 @@ describe("in memory first (Review Focus 4)", () => {
     expect(decisions[1]).toEqual({
       action: "find-network",
       diskId: null,
+      requestId: 1,
       message: SAFE_TO_REMOVE,
       deadlineMs: null,
-      state: windowsState({ phase: "network", message: SAFE_TO_REMOVE }),
+      state: windowsState({ phase: "network", requestId: 1, message: SAFE_TO_REMOVE }),
     });
   });
 
@@ -1155,6 +1243,7 @@ describe("in memory first (Review Focus 4)", () => {
     expect(decisions[2]).toEqual({
       ...decisions[1],
       action: "wait",
+      requestId: null,
       state: { ...decisions[1].state, atMs: 3_000 },
     });
   });
@@ -1185,12 +1274,14 @@ describe("in memory first (Review Focus 4)", () => {
     expect(decisions[3]).toEqual({
       action: "find-network",
       diskId: null,
+      requestId: 1,
       message: SAFE_TO_REMOVE,
       deadlineMs: null,
       state: {
         ...waitronFound({ venueTag: SANTET }).state,
         phase: "network",
         atMs: 6_000,
+        requestId: 1,
         ramReady: true,
         confirmed: "typed",
         deadlineMs: null,
@@ -1241,6 +1332,7 @@ describe("early removal", () => {
     expect(decisions[1]).toEqual({
       action: "refuse",
       diskId: null,
+      requestId: null,
       message: early,
       deadlineMs: null,
       state: {
@@ -1273,12 +1365,14 @@ describe("early removal", () => {
     expect(decisions[2]).toEqual({
       action: "wait",
       diskId: null,
+      requestId: null,
       message: SAFE_TO_REMOVE,
       deadlineMs: null,
       state: windowsState({
         phase: "network",
         atMs: 3_000,
         usbPresent: false,
+        requestId: 1,
         message: SAFE_TO_REMOVE,
       }),
     });
@@ -1295,9 +1389,10 @@ describe("the clock before the download", () => {
     expect(decisions[2]).toEqual({
       action: "set-clock",
       diskId: null,
+      requestId: 2,
       message: SETTING_CLOCK,
       deadlineMs: null,
-      state: windowsState({ phase: "clock", atMs: 3_000, message: SETTING_CLOCK }),
+      state: windowsState({ phase: "clock", atMs: 3_000, requestId: 2, message: SETTING_CLOCK }),
     });
   });
 
@@ -1306,12 +1401,14 @@ describe("the clock before the download", () => {
     expect(decisions[3]).toEqual({
       action: "download",
       diskId: null,
+      requestId: 3,
       message: DOWNLOADING,
       deadlineMs: null,
       state: windowsState({
         phase: "downloading",
         atMs: 4_000,
         clockSet: true,
+        requestId: 3,
         message: DOWNLOADING,
       }),
     });
@@ -1327,11 +1424,13 @@ describe("the clock before the download", () => {
     expect(decisions[3]).toEqual({
       action: "wait",
       diskId: null,
+      requestId: null,
       message: CLOCK_RETRY,
       deadlineMs: 64_000,
       state: windowsState({
         phase: "clock-retry",
         atMs: 4_000,
+        requestId: 2,
         deadlineMs: 64_000,
         message: CLOCK_RETRY,
       }),
@@ -1358,9 +1457,15 @@ describe("the clock before the download", () => {
     expect(decisions[5]).toEqual({
       action: "find-network",
       diskId: null,
+      requestId: 3,
       message: FINDING_NETWORK,
       deadlineMs: null,
-      state: windowsState({ phase: "network", atMs: 70_000, message: FINDING_NETWORK }),
+      state: windowsState({
+        phase: "network",
+        atMs: 70_000,
+        requestId: 3,
+        message: FINDING_NETWORK,
+      }),
     });
   });
 
@@ -1374,12 +1479,14 @@ describe("the clock before the download", () => {
     expect(last(decisions)).toEqual({
       action: "download",
       diskId: null,
+      requestId: 5,
       message: DOWNLOADING,
       deadlineMs: null,
       state: windowsState({
         phase: "downloading",
         atMs: 66_000,
         clockSet: true,
+        requestId: 5,
         message: DOWNLOADING,
       }),
     });
@@ -1408,9 +1515,17 @@ describe("download outcomes (Review Focus 3)", () => {
     expect(decisions[4]).toEqual({
       action: "refuse",
       diskId: null,
+      requestId: null,
       message,
       deadlineMs: null,
-      state: windowsState({ phase: "refused", atMs: 30_000, clockSet: true, refusal, message }),
+      state: windowsState({
+        phase: "refused",
+        atMs: 30_000,
+        clockSet: true,
+        requestId: 3,
+        refusal,
+        message,
+      }),
     });
     expect(
       decisions.slice(5).every((d) => d.action === "wait" && d.message === decisions[4].message),
@@ -1440,12 +1555,14 @@ describe("download outcomes (Review Focus 3)", () => {
       expect(decisions[4]).toEqual({
         action: "wait",
         diskId: null,
+        requestId: null,
         message: DOWNLOAD_RETRY,
         deadlineMs: 90_000,
         state: windowsState({
           phase: "download-retry",
           atMs: 30_000,
           clockSet: true,
+          requestId: 3,
           deadlineMs: 90_000,
           message: DOWNLOAD_RETRY,
         }),
@@ -1612,18 +1729,143 @@ const writes = (decisions) => decisions.filter((d) => d.action === "write-owned-
 const hourOfTicks = (fromMs) =>
   Array.from({ length: 60 }, (_, i) => tick(fromMs + (i + 1) * 60_000));
 
+describe("a result answers only the request that asked for it (D13)", () => {
+  const sequenceInvalid = { reason: "sequence-invalid", hardware: null, releaseVersion: null };
+  const blankSeen = () => observed(survey([blankDisk()]), null, 0);
+  /** Requests 1 to 3 (find-network, set-clock, download A), A unavailable, then 4 and 5 (find-network, download B). */
+  const TO_SECOND_DOWNLOAD = [
+    blankSeen(),
+    ramReady(0),
+    online(0),
+    clockSet(true, FLOOR, 0),
+    released("unavailable", 1_000),
+    tick(61_000),
+    online(61_000),
+  ];
+
+  it("every find-network, set-clock and download carries a new identifier, kept in the state; other decisions carry null", () => {
+    const decisions = play(TO_SECOND_DOWNLOAD);
+    expect(decisions.map((d) => [d.action, d.requestId, d.state.requestId])).toEqual([
+      ["wait", null, 0],
+      ["find-network", 1, 1],
+      ["set-clock", 2, 2],
+      ["download", 3, 3],
+      ["wait", null, 3],
+      ["find-network", 4, 4],
+      ["download", 5, 5],
+    ]);
+  });
+
+  it("the first download's late verified, after the second was asked for → refuse sequence-invalid, and no write-owned-target", () => {
+    const decisions = play([
+      ...TO_SECOND_DOWNLOAD,
+      released("verified", 62_000, null, 3),
+      tick(122_000),
+      released("signature", 122_001, null, 5),
+    ]);
+    expect(decisions[7]).toMatchObject({
+      action: "refuse",
+      requestId: null,
+      state: { phase: "refused", requestId: 5, refusal: sequenceInvalid },
+    });
+    expect(decisions.slice(8).map((d) => d.action)).toEqual(["wait", "wait"]);
+    expect(writes(decisions)).toEqual([]);
+  });
+
+  it("the second download's own verified → the 60 seconds, then write-owned-target", () => {
+    const decisions = play([
+      ...TO_SECOND_DOWNLOAD,
+      released("verified", 62_000, null, 5),
+      tick(122_000),
+    ]);
+    expect(decisions.slice(7).map((d) => [d.action, d.diskId, d.state.phase])).toEqual([
+      ["wait", null, "erase-countdown"],
+      ["write-owned-target", INTERNAL_ID, "writing"],
+    ]);
+  });
+
+  it("a verified naming a request not yet issued → refuse sequence-invalid", () => {
+    const decisions = play([...TO_SECOND_DOWNLOAD, released("verified", 62_000, null, 6)]);
+    expect(last(decisions)).toMatchObject({
+      action: "refuse",
+      state: { refusal: sequenceInvalid },
+    });
+  });
+
+  it("a stale clock-set from the first set-clock, after the second was asked for → refuse sequence-invalid, and nothing downloads", () => {
+    const decisions = play([
+      blankSeen(),
+      ramReady(0),
+      online(0),
+      clockSet(false, null, 1_000),
+      tick(61_000),
+      online(61_000),
+      clockSet(true, FLOOR, 62_000, 2),
+    ]);
+    expect(decisions.map((d) => d.requestId)).toEqual([null, 1, 2, null, 3, 4, null]);
+    expect(last(decisions)).toMatchObject({
+      action: "refuse",
+      state: { phase: "refused", refusal: sequenceInvalid },
+    });
+    expect(decisions.map((d) => d.action)).not.toContain("download");
+  });
+
+  it("the second set-clock's own clock-set → download", () => {
+    const decisions = play([
+      blankSeen(),
+      ramReady(0),
+      online(0),
+      clockSet(false, null, 1_000),
+      tick(61_000),
+      online(61_000),
+      clockSet(true, FLOOR, 62_000, 4),
+    ]);
+    expect(last(decisions)).toMatchObject({ action: "download", requestId: 5 });
+  });
+
+  it("a stale online from the first find-network, after the second was asked for → refuse sequence-invalid", () => {
+    const decisions = play([
+      blankSeen(),
+      ramReady(0),
+      online(0),
+      clockSet(false, null, 1_000),
+      tick(61_000),
+      online(62_000, 1),
+    ]);
+    expect(last(decisions)).toMatchObject({
+      action: "refuse",
+      state: { phase: "refused", refusal: sequenceInvalid },
+    });
+    expect(decisions.map((d) => d.action)).not.toContain("download");
+  });
+
+  it("the second find-network's own online → set-clock", () => {
+    const decisions = play([
+      blankSeen(),
+      ramReady(0),
+      online(0),
+      clockSet(false, null, 1_000),
+      tick(61_000),
+      online(62_000, 3),
+    ]);
+    expect(last(decisions)).toMatchObject({ action: "set-clock", requestId: 4 });
+  });
+});
+
 describe("the 60 seconds before an unattended erase", () => {
   it("Windows disk, ram-ready, online, clock set, verified at 1000 → wait with deadline 61000; tick at 60999 → wait; tick at 61000 → write-owned-target with the internal disk id", () => {
     const decisions = play([...TO_VERIFIED, tick(60_999), tick(61_000)]);
     expect(decisions[4]).toEqual({
       action: "wait",
       diskId: null,
+      requestId: null,
       message: COUNTDOWN,
       deadlineMs: 61_000,
       state: windowsState({
         phase: "erase-countdown",
         atMs: 1_000,
         clockSet: true,
+        requestId: 3,
         deadlineMs: 61_000,
         message: COUNTDOWN,
       }),
@@ -1632,12 +1874,14 @@ describe("the 60 seconds before an unattended erase", () => {
     expect(decisions[6]).toEqual({
       action: "write-owned-target",
       diskId: INTERNAL_ID,
+      requestId: null,
       message: WRITING,
       deadlineMs: null,
       state: windowsState({
         phase: "writing",
         atMs: 61_000,
         clockSet: true,
+        requestId: 3,
         message: WRITING,
       }),
     });
@@ -1651,12 +1895,14 @@ describe("the 60 seconds before an unattended erase", () => {
     expect(decisions[5]).toEqual({
       action: "confirm-erase",
       diskId: null,
+      requestId: null,
       message: ERASE_STOPPED,
       deadlineMs: null,
       state: windowsState({
         phase: "erase-stopped",
         atMs: 61_500,
         clockSet: true,
+        requestId: 3,
         message: ERASE_STOPPED,
       }),
     });
@@ -1696,6 +1942,7 @@ describe("the 60 seconds before an unattended erase", () => {
     expect(decisions[5]).toMatchObject({
       action: "wait",
       diskId: null,
+      requestId: null,
       state: { phase: "erase-countdown" },
     });
     expect(decisions[6]).toMatchObject({ action: "write-owned-target", diskId: INTERNAL_ID });
@@ -1741,12 +1988,14 @@ describe("after a key stops the 60 seconds", () => {
     expect(last(decisions)).toEqual({
       action: "write-owned-target",
       diskId: INTERNAL_ID,
+      requestId: null,
       message: WRITING,
       deadlineMs: null,
       state: windowsState({
         phase: "writing",
         atMs: 3_700_000,
         clockSet: true,
+        requestId: 3,
         message: WRITING,
       }),
     });
@@ -1762,12 +2011,14 @@ describe("after a key stops the 60 seconds", () => {
     expect(decisions[6]).toEqual({
       action: "power-off",
       diskId: null,
+      requestId: null,
       message: POWERING_OFF,
       deadlineMs: null,
       state: windowsState({
         phase: "powering-off",
         atMs: 40_000,
         clockSet: true,
+        requestId: 3,
         message: POWERING_OFF,
       }),
     });
@@ -1789,6 +2040,7 @@ describe("a typed confirmation erases once the download is verified", () => {
     expect(last(decisions)).toMatchObject({
       action: "write-owned-target",
       diskId: INTERNAL_ID,
+      requestId: null,
       message: WRITING,
       deadlineMs: null,
       state: { phase: "writing", confirmed: "typed" },
@@ -1808,6 +2060,7 @@ describe("a typed confirmation erases once the download is verified", () => {
     expect(last(decisions)).toMatchObject({
       action: "write-owned-target",
       diskId: INTERNAL_ID,
+      requestId: null,
       message: WRITING,
       state: { phase: "writing", confirmed: "typed" },
     });
@@ -1822,24 +2075,28 @@ describe("guard 2: no final restart while the stick is in (Review Focus 4)", () 
     expect(decisions[6]).toEqual({
       action: "wait",
       diskId: null,
+      requestId: null,
       message: REMOVE_USB,
       deadlineMs: null,
       state: windowsState({
         phase: "remove-usb",
         atMs: 100_000,
         clockSet: true,
+        requestId: 3,
         message: REMOVE_USB,
       }),
     });
     expect(decisions[7]).toEqual({
       action: "boot-installed",
       diskId: INTERNAL_ID,
+      requestId: null,
       message: STARTING_INSTALLED,
       deadlineMs: null,
       state: windowsState({
         phase: "booting",
         atMs: 110_000,
         clockSet: true,
+        requestId: 3,
         usbPresent: false,
         message: STARTING_INSTALLED,
       }),
@@ -1857,6 +2114,7 @@ describe("guard 2: no final restart while the stick is in (Review Focus 4)", () 
     expect(last(decisions)).toMatchObject({
       action: "boot-installed",
       diskId: INTERNAL_ID,
+      requestId: null,
       state: { phase: "booting", usbPresent: false },
     });
   });
@@ -1915,6 +2173,7 @@ describe("guard 2: no final restart while the stick is in (Review Focus 4)", () 
     expect(decisions[6]).toMatchObject({
       action: "refuse",
       diskId: null,
+      requestId: null,
       state: {
         phase: "refused",
         refusal: { reason: "write-failed", hardware: null, releaseVersion: null },
@@ -2287,6 +2546,22 @@ const RUNS = [
     unattended: true,
     ends: "boot-installed",
   })),
+  {
+    name: "the first download's late verified, after the second was asked for",
+    ends: "refuse:sequence-invalid",
+    events: [
+      sweepSeen([blankDisk()], null, {}, 0),
+      ramReady(0),
+      online(0),
+      clockSet(true, FLOOR, 0),
+      released("unavailable", 1_000),
+      tick(61_000),
+      online(61_000),
+      released("verified", 62_000, null, 3),
+      tick(122_000),
+    ],
+    unattended: true,
+  },
   {
     name: "a run interrupted by release-checked installer-too-old",
     ends: "refuse:installer-too-old",

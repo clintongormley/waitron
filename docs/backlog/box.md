@@ -880,7 +880,10 @@ and the real screen, network and disk adapters come with the Linux pull request.
   than the floor the installer is started with (`clockFloorMs`), is tried again a minute later, as
   is a download that is unavailable or cut short. Only a release that checked out leads to a write; a disk
   erased with no question waits 60 seconds after that check, and a key stops it and offers the choices to
-  install now or power off (the spec's «Instalar ahora» and «Apagar»). After the write the installer restarts into the box only once the stick is
+  install now or power off (the spec's «Instalar ahora» and «Apagar»). Each request to find the
+  network, set the clock or download carries a new number, and its answer must carry the same number
+  back; an answer with any other number stops the installer as out of order (`sequence-invalid`), so
+  a late answer to an earlier download cannot lead to an erase. After the write the installer restarts into the box only once the stick is
   out. `installerStatus` gives the public status page the step, whether the stick can come out, the
   stop reason, the firmware setting that is off and, for a too-old installer, the release's
   version; never a disk id, the venue's name or typed text. The four waits are the spec's calls, in
@@ -983,6 +986,10 @@ installed box's host service must notice the setting itself.
   out. It never sends the installer an `online` it did not ask for: an `online` outside the
   network step, for example during the 60-second wait, stops the install as out of order
   (`sequence-invalid`), which is safe but ends the run.
+- Every adapter result echoes the number of the request it answers: `online`, `clock-set` and
+  `release-checked` carry the `requestId` of the `find-network`, `set-clock` or `download` decision
+  that asked for them. An answer to an earlier request that arrives after a newer request was
+  made stops the install.
 - The boot adapter checks for the stick again just before restarting: a stick put back in after
   the policy has ordered the start is not seen by the policy (guard 3 then catches the restart with
   the stick in).
