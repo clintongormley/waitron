@@ -16,7 +16,7 @@ export interface ManualCardPaymentParams {
   /** The device the card payment was keyed on. */
   origin: DeviceOrigin;
   workingOrderId: string;
-  /** The box the card payment was keyed through: its collection owner. */
+  /** The box that recorded the card payment: its collection owner. */
   nodeId: NodeId;
   /** Tax-inclusive. */
   amount: Decimal;

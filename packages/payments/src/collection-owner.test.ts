@@ -9,12 +9,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  decimal,
-  deviceOrigin,
-  nodeId as brandNodeId,
-  workingOrderId as brandWorkingOrderId,
-} from "@waitron/shared";
+import { decimal, deviceOrigin, workingOrderId as brandWorkingOrderId } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { recordManualCardPayment } from "./manual.js";
 import { SimulatorPaymentProvider } from "./simulator.js";
@@ -41,7 +36,7 @@ async function setup() {
   const common = {
     origin: deviceOrigin(seeded.deviceId),
     workingOrderId: seeded.workingOrderId,
-    nodeId: brandNodeId(seeded.nodeId),
+    nodeId: seeded.nodeId,
     provider: "fake",
     amount: decimal("10.00"),
   };
