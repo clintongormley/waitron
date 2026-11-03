@@ -135,7 +135,7 @@ says which A1018 slice replaces or narrows each.
 is not.** Every other slice is the same under either answer.
 
 **2026-11-03:** Slice 9 left one more open question, whether S2's verdict is read off Parts F and G
-alone; it is under _Still unsettled_.
+alone. The owner answered the same day: yes (Slice 9 as built).
 
 **Dropped from the draft: "may a returned invoice come back as a tax record only?"** The approved
 design already answers it. §5: "Do not replay orders, payments, cash, drawer, stock, printing or
@@ -732,7 +732,7 @@ Task 5.10's simulation runs it against a stand-in AEAT, and Slice 5 changes no d
 | Reports | `packages/reporting/src/daily-close.ts:15-35`, `cash-up.ts:18-40`, `vat-return.ts:29-45` | daily close (frozen, hash-chained), cash-up, VAT return over `sales` only |
 | Payments | `packages/payments/src/schema/payments.ts:28-58` | states incl. `attempting`, `initiated`, `accepted_offline`; `node_id` exists, no writer sets it |
 | Servers screen | `apps/dashboard/src/screens/servers-screen.ts:23-36` | Remove and Clear only |
-| Prototype S2 | `bench/sqlite-failover/src/scenarios/s2_no_double_submit.ts` | recorded FAIL (`docs/research/2026-09-16-sqlite-failover-prototype.md:37`) |
+| Prototype S2 | `bench/sqlite-failover/src/scenarios/s2_no_double_submit.ts` | recorded FAIL (`docs/research/2026-09-16-sqlite-failover-prototype.md:37`); PASS since 2026-11-03 (Slice 9 as built) |
 
 ---
 
@@ -3102,11 +3102,12 @@ built").
 The build departed from the task texts above in the first two ways; the last two record a choice
 and a limit the task texts left open. The task texts are left as written.
 
-- S2's row still reads FAIL: Parts F and G pass and the three controls fail, but the old Part D
-  and Part E's second half (the unfenced tail ship) still file a record twice. Whether the gate is read off F and G
-  alone waits for the owner; see the
-  [research note](../../research/2026-09-16-sqlite-failover-prototype.md#s2-re-run-with-a1018s-return-batch-2026-11-03).
-  Task 9.3's commit message was not used, because S2 did not pass.
+- **The owner's decision, 2026-11-03: the "S2 passes" gate for Slices 10 and 11 is read from
+  Parts F and G.** Part D and Part E's second half (the unfenced tail ship, which still files a
+  record twice) stay in the scenario as controls of the retired design, expected to file twice,
+  and S2's row reads PASS; Slices 10 and 11 may be built when their turn comes. See the
+  [research note](../../research/2026-09-16-sqlite-failover-prototype.md#s2-reads-pass-the-owners-reading-2026-11-03).
+  Task 9.3's commit message was not used, because S2 did not pass when Slice 9 landed.
 - The third control reports a record never filed rather than a second filing: the rig's filing
   run picks up only waiting rows.
 - Part G builds the batch again from the same reported heads and applies the first batch a second
@@ -3744,8 +3745,6 @@ the joint specification and Cloud's half.
 - **A return to a box other than the one the old box handed to** (M2 handed over to M3 before M1
   came back) is not built; Task 13.5 leaves M1 restricted and its records in its archive.
 - **Archive deletion** waits for A664's retention policy; nothing here deletes one.
-- **Whether S2's verdict is read off Parts F and G alone** (Slice 9 as built); until answered,
-  Slices 10 and 11 are not built.
 
 ---
 

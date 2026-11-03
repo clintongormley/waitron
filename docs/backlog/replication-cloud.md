@@ -26,8 +26,8 @@ handover tables in `node.db`, the server's handover store and signer), Slice 2 (
 the restricted start; no production route reaches `stepDown` yet), Slice 4b (A764: every payment
 records the box that started it, and each box's card sweep resolves only the payments it owns; what
 it leaves open is under _Payments and card readers_ in [the backlog](../backlog.md)) and Slice 9
-(S2's Parts F and G and three controls in `bench/sqlite-failover`; S2's row still reads FAIL, see
-below).
+(S2's Parts F and G and three controls in `bench/sqlite-failover`; S2's row reads PASS since the
+owner's reading of 2026-11-03, see below).
 Left for the slices that add the callers:
 - `beginHandover` stores the role it is given even when the binding names this box as the other
   side; the first caller must check the role against the binding.
@@ -66,11 +66,10 @@ Left by Slice 2:
   there).
 
 Left by Slice 9 (the S2 re-run, [research note](../research/2026-09-16-sqlite-failover-prototype.md#s2-re-run-with-a1018s-return-batch-2026-11-03)):
-- S2's row still reads FAIL. The new parts F (return batch from a fenced sender) and G (replay)
-  pass and all three controls fail, but the old parts D and E's second half still model the old
-  tail ship from an unfenced sender and still file a sale twice, as on 2026-09-18. Whether S2's
-  verdict is read off F and G alone (D and E then standing as controls for the retired design) is
-  the owner's call; until it is made, the plan's gate for Slices 10 and 11 is not met.
+- S2's row reads PASS (owner, 2026-11-03): its gate is read from the new parts F (return batch
+  from a fenced sender) and G (replay), and the old parts D and E's second half, which still model
+  the tail ship from an unfenced sender and file a sale twice, are controls of the retired design
+  ([research note](../research/2026-09-16-sqlite-failover-prototype.md#s2-reads-pass-the-owners-reading-2026-11-03)). The plan's gate for Slices 10 and 11 is met.
 - The third control (no "being sent" → "waiting" return) shows a record never filed, not a second
   filing as Task 9.2 expected: the rig's filing run picks up only waiting rows.
 - No control drives the receiver's per-chain pause; a one-off run on a throwaway copy with the

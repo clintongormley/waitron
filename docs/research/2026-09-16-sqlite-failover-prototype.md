@@ -11,7 +11,7 @@ and no promotion).
 **Reproducer:** [`bench/sqlite-failover`](../../bench/sqlite-failover/README.md). The rig is the
 evidence; this note is the product.
 **2026-09-23:** slice 2's five measurements are appended under [Slice 2 measurements](#slice-2-measurements).
-**2026-11-03:** S2 re-run with A1018's return batch, appended under [S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03): its new Parts F and G pass and their three controls fail; the row is still FAIL on Part D and Part E's second half.
+**2026-11-03:** S2 re-run with A1018's return batch, appended under [S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03): its new Parts F and G pass and their three controls fail; the row is still FAIL on Part D and Part E's second half. **Later the same day:** the owner reads S2's gate from Parts F and G, Parts D and E's second half became controls of the retired design, and S2 reads PASS — see [S2 reads PASS](#s2-reads-pass-the-owners-reading-2026-11-03).
 
 ---
 
@@ -32,6 +32,9 @@ duplicate record, for reasons set out under S2; it also leaves one piece of work
 owns, named under "What this gate leaves to be built".
 **2026-11-03:** S2 now has seven parts; the two added, F and G, pass — see
 [S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03).
+**2026-11-03, later:** S2 reads PASS, and `scenarios` exits 0 when every scenario passes — see
+[S2 reads PASS](#s2-reads-pass-the-owners-reading-2026-11-03). The table and the exit line below
+are as recorded before that.
 
 | id | what it had to show | critical | verdict |
 | --- | --- | --- | --- |
@@ -207,7 +210,7 @@ accept: `winners=2/2 store-keys=5`. So the assertion tests the fence and not an 
 
 ### S2 — no second tax-agency filing · critical · **FAIL**
 
-**2026-11-03:** re-run with A1018's return batch: the new Parts F and G pass and their three controls fail; the row is still FAIL on Part D and Part E's second half — see [S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03).
+**2026-11-03:** re-run with A1018's return batch: the new Parts F and G pass and their three controls fail; the row is still FAIL on Part D and Part E's second half — see [S2 re-run with A1018's return batch](#s2-re-run-with-a1018s-return-batch-2026-11-03). **Later the same day:** S2 reads PASS, with Part D and Part E's second half kept as controls of the retired design — see [S2 reads PASS](#s2-reads-pass-the-owners-reading-2026-11-03).
 
 **This is the gate's negative result.** The rig found a way the loop as modelled here submits one sale
 to the tax agency twice. Nothing here proposes a fix, and the scenario records the failure rather than
@@ -1020,6 +1023,54 @@ TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sqlite-failover s
 
 stderr: `CRITICAL failure: S2 — see the results above.` Exit status **1**. Every other scenario
 has the verdict it had on 2026-09-18: S0, S1, S3, S5, S6, LS, RUNNER and smoke PASS, S4 MEASURED.
+
+### S2 reads PASS: the owner's reading (2026-11-03)
+
+The owner's decision, 2026-11-03: read the "S2 passes" gate for Slices 10 and 11 from Parts F
+and G. Part D and Part E's second half stay in the scenario as **controls of the retired design**
+— the tail ship from an unfenced sender, which the fenced return batch replaces — and are expected
+to file a record twice. S2's verdict no longer counts their second filings; it still reads FAIL
+when any other part files a record twice, when Part F leaves a record unfiled, or when Part G's
+replay is not clean. Each of the two new controls asserts what it files, as Part F's three
+controls do, so one that stops filing twice makes the scenario throw, and the runner prints a
+critical FAIL row titled `threw`.
+
+Negative controls, each run once on a temporary edit and reverted:
+
+- Part D's ship given an empty view of the receiver, so it carries the whole chain's filing
+  state: `| s2_no_double_submit | threw | FAIL | control: the retired refreshed-summary ship files record 1 twice |`, exit 1.
+- Part E's second half with the receiver's drain skipped:
+  `| s2_no_double_submit | threw | FAIL | control: the retired mid-drain tail ship leaves record 1 stuck enviando and files record 2 twice |`, exit 1.
+
+The run, 2026-11-03, on the branch that added this section, Docker running, node v26.13.0
+(SQLite 3.54.1), litestream 0.5.17 installed by `setup:litestream`:
+
+```
+TESTCONTAINERS_RYUK_DISABLED=true pnpm --filter @waitron/bench-sqlite-failover scenarios
+```
+
+```
+| id | title | verdict | detail |
+| --- | --- | --- | --- |
+| S0 | the happy failover loop, end to end | PASS | version=0.5.17 happy-box-a-filed=[box-a:1,box-a:2,box-a:3,box-a:4] happy-cloud-first-drain=[cloud-1:1] happy-cloud-second-drain=[box-a:5,box-a:6] happy-submissions=7 happy-distinct=7 happy-refiled=0 happy-current={term:2,node:cloud-1,gen:gen-2-cloud-1} control-ship=off control-held=box-a:1..4 control-refused="the cloud holds box-a's records 1..6 exactly as box-a wrote them" lag-sync-after-drain=off lag-refiled=4 lag-refiled-ids=[box-a:1,box-a:2,box-a:3,box-a:4] lag-refiled-shape=verbatim-same-identity lag-cloud-first-drain=[box-a:1,box-a:2,box-a:3,box-a:4,cloud-1:1] |
+| S1 | double promotion fenced by the store's conditional write | PASS | fenced: winners=1/2 winner=box-a store-keys=3; control: winners=2/2 store-keys=5 |
+| S2 | no second tax-agency filing on a re-sent or recomputed tail ship | PASS | RETRIED-IN-FULL ship safe: filed=13 double=0 (A receiver files 5 once; B receiver files none of the owner's 4; C blocked chain drains 4 next pass after 1 refusal). D control (retired design) REFRESHED-SUMMARY ship files twice: refreshed-sender:1 (fresh tail carried records [2]; receiver left 1 pendiente acked=0, 2 enviado acked=1). E ship issued mid-pass for a blocked chain: that chain files nothing more that pass, next pass files 3 once, double=0. E control (retired design) tail taken mid-drain carried [1 enviando, 2 pendiente]: receiver left 1 enviando acked=0, 2 pendiente acked=0, and its own drain claims no enviando row, so 1 enviando acked=0 is stuck against that drain and cloud-f:2 is filed twice. F RETURN BATCH from a fenced sender: filed-twice=none never-filed=none receiver-left=[1 enviado acked=1, 2 enviado acked=1, 3 enviado acked=1, 4 enviado acked=1] returned-from-enviando=[3] sales-carried=0. G REPLAY: same-bytes=true replay-applied=0 filed-after-replay=0. F controls: no-fence filed-twice=no-fence-m1:2,no-fence-m1:4 never-filed=none receiver-left=[1 enviado acked=1, 2 enviado acked=1, 3 enviado acked=1, 4 enviado acked=1] same-bytes=false; missing-only filed-twice=missing-only-m1:1 never-filed=none receiver-left=[1 enviado acked=1, 2 enviado acked=1, 3 enviado acked=1, 4 enviado acked=1]; keeps-enviando filed-twice=none never-filed=keeps-enviando-m1:3 receiver-left=[1 enviado acked=1, 2 enviado acked=1, 3 enviando acked=0, 4 enviado acked=1]. Controls double-file: regressing=3 insert-only=2 |
+| S3 | a copied replica equals a direct stream | PASS | version=0.5.17 source-keys=6 source-deleted=1 deletion-waited-ms=4168 direct-rows=19 foreign-keys=9 copied=6 mirror-deleted=6 copied-rows=19 copied-sha-equal=true control-foreign-keys=9 control-copied=6 control-stale=6 control-rows=9 control-nodes=[box-b] control-integrity="row 1 missing from index sqlite_autoindex_chain_head_1" control-refused="the copied replica restores an intact database" same-lineage-stale=1 same-lineage-rows=19 same-lineage-additive="identical" |
+| S4 | offline write load | MEASURED | version=0.5.17 sales=7500 days=30 sales-per-day=250 day-rate=assumed-not-measured rounds=15 idle-ms=1500 offline-daemon=ECONNREFUSED offline-attach-ms=1117 offline-daemon-alive-after-load=true p50-ms=0.146 p95-ms=0.313 p99-ms=0.467 max-ms=1.718 first-day-p95-ms=0.334 last-day-p95-ms=0.178 peak-wal-bytes=309906432 wal-bytes-per-sale=41321 offline-checkpoint-rounds=0/15 checkpointed-db-bytes=3850240 wal-amplification=80.5x spec-small-multiple-ceiling=not-met spec-small-multiple=10 offline-days-per-gib=103.9 reclaim-offline="ms=12659.3 busy=1 log=75220 checkpointed=4 wal=309906432->309906432 shrank=false" reclaim-next-sale-ms=0.525 reclaim-control="ms=18.4 busy=0 log=0 checkpointed=0 wal=309943512->0 shrank=true" control="peak-wal=20941992 end-wal=20941992 db=3874816 store-keys=34 checkpoint-rounds=15/15 p95-ms=0.276 p99-ms=0.411" breaches=none |
+| S5 | supplier-invoice clash reported and skipped, ship otherwise intact | PASS | applied=13 clashes=1 retry-applied=0 retry-clashes=1; silent-drop: clashes=0 clash-rows-held=0 records-held=3/3; unisolated: refused="UNIQUE constraint failed: supplier_invoices.supplier, supplier_invoices.invoice_number" records-held=0/3 sales-held=0/3 clean-invoice-rows-held=0; not-a-uniqueness-refusal: refused="the receiver refuses this row for its own reasons" records-held=0/3 |
+| S6 | store conditional write | PASS | create-only=true if-match=refuses-stale race=1/8 unfenced=8/8 |
+| LS | litestream roundtrip | PASS | version=0.5.17 one-shot-keys=1 one-shot-restored=3 daemon-restored=4 first-sync-restores=3 after-write-restores=3 control-refused="litestream restore exited 1: Error: no matching backup files available" |
+| RUNNER | the runner's exit rule and --json dump | PASS | exit-rule-cases=8 critical-fail-exit=1 non-critical-fail-exit=0 critical-skipped-exit=0 critical-measured-exit=0 critical-pass-exit=0 empty-run-exit=0 throw-verdict=FAIL throw-critical=true throw-exit=1 json-parsed=true json-rows=3 json-exit-code=1 json-critical-ids=1 table-rows=5 table-escapes-pipe=true table-flattens-newline=true json-selected-by-flag=true |
+| smoke | harness up: store + sqlite + model | PASS | chain advanced to 2, 4 mutations refused, store round-trip ok |
+```
+
+Exit status **0**, no stderr line. S2's detail differs from the earlier run above only in the
+words naming Part D and Part E's second half as controls; every value in it is the same.
+
+**S3 threw on some runs on this machine that day**, with `database disk image is malformed`, so
+the exit was 1 on those runs. It did so with S2's file as it was before this change too: in six
+whole-table runs alternating the two versions of S2's file, S3 threw once with the old one and
+once with the new one. Run alone twice, it passed both times. Why is not investigated here.
 
 ---
 
