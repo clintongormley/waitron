@@ -5849,6 +5849,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **The resume-authority test's ciphertext damage can leave the value unchanged** (left open by
+  A1314). In `apps/server/src/first-setup-backup-resume-authority.test.ts`, `slice(0, -4) + "AAAA"`
+  changes nothing when the ciphertext decodes to a multiple of three bytes ending in three zero
+  bytes. A fix decodes it, flips a bit and re-encodes it, as `tamper` in identity's backup test does.
+
 - **`scripts/ci-diff-paths.sh` never looks for `gnutimeout` for its `-k` bound** (left open by
   A1310, #2400). On ubuntu-26.04 runners it gets uutils' `timeout`, whose forced kill reaches only
   `gh` itself ([receipt](developers/ci-and-gates.md#every-pnpm-setup-is-bounded)); whether `gh api`
