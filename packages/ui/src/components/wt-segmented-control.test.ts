@@ -346,6 +346,28 @@ test("whole words do not widen a parent that sizes its column to its content", a
   expect(await statesOverFrames(el)).toEqual([true, true, true, true, true]);
 });
 
+test("whole words give way when a parent that sizes its column to its content narrows", async () => {
+  const el = await setup();
+  host.style.display = "grid";
+  host.style.width = "400px";
+  el.options = ["Rectas", "Estándar", "Redondeadas"].map((label, index) => ({
+    value: String(index),
+    label,
+  }));
+  await el.updateComplete;
+  expect(await statesOverFrames(el), "whole words fit").toEqual([
+    false,
+    false,
+    false,
+    false,
+    false,
+  ]);
+  host.style.width = "150px";
+  await expect.poll(() => givenWay(el)).toBe(true);
+  expect(el.getBoundingClientRect().right).toBeLessThanOrEqual(host.getBoundingClientRect().right);
+  expectInsideControl(el);
+});
+
 test("whole words that exactly fill the space stay whole, and one pixel less gives way", async () => {
   const el = await setupNarrow(400, ["Rectas", "Estándar", "Redondeadas"]);
   const exact = group(el).getBoundingClientRect().width;

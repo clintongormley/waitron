@@ -14,8 +14,11 @@ export class WtSegmentedControl extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      /* Without min-width: 0, whole words hold a parent grid's column at their width, so the row
+         never changes size when that parent narrows and is never measured again. */
       :host {
         display: block;
+        min-width: 0;
         max-width: var(--wt-field-max-width);
       }
       .label,
