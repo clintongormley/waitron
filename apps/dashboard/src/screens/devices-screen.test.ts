@@ -2537,6 +2537,7 @@ describe("the Edit dialog", () => {
         receipt: native("edit-receipt-printer"),
         slip: native("edit-slip-printer"),
         reader: native("edit-reader"),
+        otherStations: native("edit-other-stations"),
       };
       for (const toggle of el.shadowRoot!.querySelectorAll<HTMLElement & { disabled: boolean }>(
         "[data-test=edit-screen-stations] wt-switch",
@@ -2560,11 +2561,39 @@ describe("the Edit dialog", () => {
         shown: ["name", "profile", "receipt", "slip", "reader", "madeHere:s1", "madeHere:s2"],
       },
       { device: "k1", shown: ["name", "profile", "screen", "receipt", "slip", "reader"] },
-    ])(
+      {
+        device: "k2",
+        shown: ["name", "profile", "screen", "receipt", "slip", "reader", "otherStations"],
+        rows: [
+          till,
+          {
+            ...kitchen,
+            id: "k2",
+            label: "Pass display",
+            kitchenScreens: [
+              {
+                kind: "pass",
+                available: true,
+                everyStation: true,
+                everyZone: true,
+                profileEveryStation: true,
+                stations: [{ id: "s1", name: "Hot line", available: true, switchedOff: false }],
+                zones: null,
+                nonPassStationsOverride: null,
+                showNonPassStations: true,
+              },
+            ],
+          },
+        ],
+      },
+    ] as { device: string; shown: string[]; rows?: DeviceRow[] }[])(
       "takes no new value in any field of $device while its save is unanswered",
-      async ({ device, shown }) => {
+      async ({ device, shown, rows }) => {
         const pending = deferred<undefined>();
-        const api = editApi({ updateDevice: vi.fn().mockReturnValue(pending.promise) });
+        const api = editApi({
+          updateDevice: vi.fn().mockReturnValue(pending.promise),
+          ...(rows === undefined ? {} : { listDevices: vi.fn().mockResolvedValue(rows) }),
+        });
         const el = await openEdit(api, device);
         const before = editControlsDisabled(el);
         expect(Object.keys(before)).toEqual(expect.arrayContaining(shown));
@@ -6123,6 +6152,78 @@ describe("a device's kitchen screens", () => {
       expect(q(await openEdit(api, "k1"), "[data-test=edit-other-stations]")).toBeNull();
       expect(q(await openEdit(api, "t1"), "[data-test=edit-other-stations]")).toBeNull();
       expect(q(await openEdit(api, "t2"), "[data-test=edit-other-stations]")).toBeNull();
+    });
+
+    it.each([
+      [
+        "every chosen station",
+        { everyStation: false, stations: [slot("s1", false), slot("s2", false)] },
+      ],
+      [
+        "every chosen zone",
+        {
+          everyStation: false,
+          stations: [slot("s1")],
+          everyZone: false,
+          zones: [slot("z1", false)],
+        },
+      ],
+      [
+        "every chosen station, read as the server reads a kind the narrowing emptied",
+        {
+          everyStation: false,
+          everyZone: false,
+          stations: [slot("s1", false), slot("s2", false)],
+        },
+      ],
+    ] as [string, Partial<DeviceRow["kitchenScreens"][number]>][])(
+      "draws and sends no choice for a pass that a narrowing took %s from",
+      async (_, lists) => {
+        const api = ksApi([tillRow("t1", [{ ...passScreen("pass", null), ...lists }])]);
+        const el = await openEdit(api, "t1");
+        expect(q(el, "[data-test=edit-other-stations]")).toBeNull();
+        q(el, "[data-test=edit-name]")!.dispatchEvent(
+          new CustomEvent("wt-change", {
+            detail: { value: "Caja 2" },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        await flush(el);
+        await saveEdit(el);
+        await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(1));
+        expect(vi.mocked(api.updateDevice).mock.calls[0]![1]).not.toHaveProperty(
+          "kitchenScreenDisplay",
+        );
+      },
+    );
+
+    it("after a save whose reader was refused, choosing Use the profile's setting sends null", async () => {
+      const api = ksApi([tillRow("t1", [passScreen("pass", null)])], {
+        setDeviceReader: vi
+          .fn()
+          .mockRejectedValueOnce({ code: "reader.not_found" })
+          .mockResolvedValue(undefined),
+      });
+      const el = await openEdit(api, "t1");
+      await chooseOption(q(el, "[data-test=edit-other-stations]")!, "hide");
+      await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+      await flush(el);
+      await saveEdit(el);
+      await vi.waitFor(() =>
+        expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found")),
+      );
+      expect(vi.mocked(api.updateDevice).mock.calls[0]![1].kitchenScreenDisplay).toEqual({
+        pass: false,
+      });
+
+      await chooseOption(q(el, "[data-test=edit-other-stations]")!, "profile");
+      await flush(el);
+      await saveEdit(el);
+      await vi.waitFor(() => expect(api.updateDevice).toHaveBeenCalledTimes(2));
+      expect(vi.mocked(api.updateDevice).mock.calls[1]![1].kitchenScreenDisplay).toEqual({
+        pass: null,
+      });
     });
 
     it("the pair dialog draws no choice and its accept body carries none", async () => {

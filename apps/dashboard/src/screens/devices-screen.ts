@@ -689,9 +689,13 @@ export class DevicesScreen extends LitElement {
     this.#editScope = scope;
   }
 
-  /** The pass kind the draft holds, whose choice of other stations' dishes the dialog shows. */
+  /** The pass kind the draft holds, whose choice of other stations' dishes the dialog shows. None
+   * when its station or zone list is empty: the server refuses the choice for a kind a narrowing
+   * emptied. A list whose every entry is switched off also reads empty here, and hides it too. */
   #displayKind(): PassKind | undefined {
-    return PASS_KINDS.find((kind) => this.editForm.screens[kind] !== undefined);
+    const kind = PASS_KINDS.find((kind) => this.editForm.screens[kind] !== undefined);
+    const scope = kind === undefined ? undefined : this.editForm.screens[kind];
+    return scope?.stationIds?.length !== 0 && scope?.zoneIds?.length !== 0 ? kind : undefined;
   }
 
   #displayDraft(): Partial<Record<PassKind, boolean | null>> {
