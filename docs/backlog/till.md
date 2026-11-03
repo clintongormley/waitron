@@ -2507,12 +2507,14 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 
 **A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
 with PRs B–D remaining. PR B is cut into B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
-B4 remains, and no station can be set to wait for the pass until PR C. B3
+B4 is cut into B4a and B4b by its [task plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md);
+B4b remains, and no station can be set to wait for the pass until PR C. B3
 ([task plan](../superpowers/plans/2026-11-02-a773-2b3-pass-release.md)) built the pass's board
 reads (`GET /api/device/pass-board`, `GET /api/device/pass-monitor-board`) and its Fire
 (`POST /api/device/pass-screen/release`), which gives a card's waiting dishes to their stations
-once; the HOLD paper corrections for dishes waiting for the pass; and the till's client calls,
-which no screen uses yet. What B1,
+once, and the HOLD paper corrections for dishes waiting for the pass. B4a put the pass, the pass
+monitor and the till's own Pass on that board (`apps/till/src/screens/till-pass-screen.ts`, the
+till's every-station view on `GET /api/expo/board`) and retired the old pass reads. What B1,
 [B2's task plan](../superpowers/plans/2026-11-01-a773-2b2-requested-lifecycle.md) and B3 leave to
 B4 is in the slice plan's "Left for B4". Old nonempty stamps remain in regression fixtures, outside the till's
 public contracts. Physical schema and configuration-transfer fields remain for Task 12.
@@ -2538,11 +2540,6 @@ station is still sent there by the pass's Fire, as a waiter's fire does. A dish 
 the pass and was served in full no longer blocks recording an unpaid departure (B2's D41: keep as
 built); its refusal's words are on the copy sheet.
 
-**B4 builds one owner answer B3 did not** (owner, 2026-11-02): when a waiter fires one held dish on
-its own as the table's first food, its pass card says «Nuevo pedido» / New order, as for a whole
-held course; B3 still says «Siguiente pase» / Next course there. B4 changes the test on main that
-pins «Siguiente pase» and names it in its PR.
-
 **An edit that adds an extra at a waiting station.** If the dish's own station fires at once
 (Grill) while the extra's waits for the pass (Fryer), an edit adding onion rings to a burger
 already sent prints no `+1.000 x RINGS` on Fryer's HOLD paper; the pass's release ticket lists
@@ -2555,10 +2552,8 @@ The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
 Sent/New order and bill ownership behavior. Physical dragging and partial-serving trials remain
 separate backlog entries. A803 owns its pass/station presentation tail.
 
-B1–B3 built the server half: a dish can wait for the pass, the pass has its own board read and
-its own Fire, and the till has the client calls but no screen uses them. Next: B4 (the screens, the
-display setting, Columns); the slice plan outlines it and lists, under "Left for B4", what B1–B3
-left for it.
+Next: B4b (the station's Held column, "at the pass" on the table screen and Sent list, the
+closed-station alert's words, and the display setting), tasks B1a1–B13 of the B4 plan.
 
 What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the
 Columns store to reuse, and a key missing from a stored layout returns to its default place, not
@@ -2578,6 +2573,45 @@ requested phase, `overviewDishes` counts them as held. With Held as a fifth colu
 board needs 1148 px at standard text (`columnsFit`), a kitchen display's viewport about 1228 px,
 so a 1024 px display draws tabs unless a column is hidden or collapsed. The kitchen's tabs keep
 the layout's order and hidden columns but not collapse, which the pass's narrow list keeps (slice 9c D9).
+
+## Pin the pass board's live-dish filter
+
+Left open by A773-2 B4a's reviews (A13b, A15b). The board's card reader (`readCardRows`,
+`apps/server/src/pass-board.ts`) filters its own rows with `liveKitchenDish`
+(`apps/server/src/working-order.ts`); with that filter removed from the card reader and from
+`readPassRows`' own read, the board suites the A13b review ran stayed green. A fully served dish stays off the board anyway, because `buildPassBoard` drops a
+row with nothing remaining. The filter's other conditions are the candidates a case could pin: a dish
+made at the till (`madeHere`), and one bill of a two-bill group card collected or abandoned while the
+other is not. That those would show on a card without the filter is reasoned, not measured. Also,
+`line-service-projections.test.ts`'s "3 cancelled" case pins nothing on the board, because cancelling
+a dish in full deletes its tickets; a case needs a ticket that survives with nothing left to make.
+
+## A Ready card on the pass turns red, aged from when it was sent
+
+Seen in A773-2 B4a's look (2026-11-03). A Ready card's minutes count from when its last dish was
+ready, but its edge colour, the overdue count and a dish's Forgotten mark still age each dish from
+when it was sent to be cooked (`passItemBand`, `apps/till/src/state/pass-view.ts`), so food waiting at the pass
+for its runner turns red and says Forgotten. The old pass did the same, and the guide says so. Should
+a dish stop ageing once it is ready, or age from when it was ready? A question for the owner, beside
+A1250's colour question.
+
+## The pass's refreshed line after a Fire is out of view
+
+Seen in A773-2 B4a's look (2026-11-03). When a Fire is refused because the card changed, the screen
+reads the board again and says "The screen has been refreshed: check it and press again." in the
+board's status slot, above the columns (`apps/till/src/screens/till-pass-screen.ts`). After a Fire on
+a card low on a long column the line is off screen. The old pass screen drew its line in the same
+place.
+
+## Two refusal sentences the pass shows after Fire or Ready do not fit it
+
+Left open by A773-2 B4a (its plan's D87). A Fire refused `device.forbidden_action` (and on a till a
+Ready refused the same) shows "This device's profile doesn't allow that. Ask a manager to change
+it.", which sends the person to someone else; `service_zone.not_allowed` shows "This device's profile
+does not work in that area. Choose one of its own areas", which a pass cannot do. Both sentences are
+in `apps/till/src/i18n/codes.ts`, came with #1311 (2026-10-07, device profiles; `git log -S`) and
+are used outside the pass, so B4a did not change them. New words need the owner's approval in both
+languages.
 
 ## A678. Two readers answer "where is this order"
 

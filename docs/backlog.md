@@ -88,9 +88,10 @@ Everything not listed here needs more spec work first.
 1. **A773-2 — firing and the pass** (_The till, devices and table service_). Implement the
    [reviewed plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) for the remaining
    kitchen and pass work, following A773-1's Sent and New order panel. PR B is cut into four
-   ([slice plan](superpowers/plans/2026-11-01-a773-2b-requested-release.md)); B4 (the
-   screens) remains, then PRs C–D. The owner answered the copy sheet and every question on 2026-11-02;
-   B4 carries one answer B3 did not build (`backlog/till.md`, A773-2).
+   ([slice plan](superpowers/plans/2026-11-01-a773-2b-requested-release.md)), and its B4 into two
+   ([B4 plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)): B4a, the pass on the new
+   board, is built; B4b (the station's Held column, "at the pass" and the display setting) remains,
+   then PRs C–D.
    **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
    slices wait for A773-2.
 2. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
@@ -147,8 +148,8 @@ come after the list above:
   (Overview, the first kitchen column, counting each dish to make with the held after a +; below
   the width its columns need, a kitchen board shows them as tabs; a late card's tab, and its
   collapsed column, carry a red bar) landed in #2144, from the build plan's slice 9c. What is left of
-  A797: slices 10–11, now that A803's slice 3 has landed (#2360), and 12b after A773-2, which builds the pass's
-  part: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
+  A797: slices 10–11, now that A803's slice 3 has landed (#2360), and 12b, short names on pass cards
+  (A773-2 B4a built the pass's Overview): [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md).
 - **What a standalone box still lacks before a real venue runs it** (under _The box: backups,
   upgrades and recovery_): upgrade testing with rows the product itself writes and a real older database (owner-marked blocking before go-live); the bootable USB
@@ -1724,7 +1725,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A930. The manager's overdue report counts a held dish as late (left open by A757 slice 3).**
   `computeOverdueOrders` (`packages/reporting/src/overdue-orders.ts`) never checks `fired_at`, so a
-  dish held 20 minutes is listed Forgotten while the floor counts only fired dishes (A757 Q17).
+  dish held 20 minutes is listed Forgotten while the floor counts only fired dishes (A757 Q17). It
+  also ages a dish waiting for the pass from its insert, where the pass ages it from its request.
   Decide whether the report leaves held dishes out too. [Detail](backlog/kitchen.md#a930-the-managers-overdue-report-counts-a-held-dish-as-late)
 
 - **Kitchen paper prints its times in the server process's time zone (left open by A808, 2026-10-27).**
@@ -2440,9 +2442,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A773-2. Firing and the pass.** The [reviewed implementation
   plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) leaves PRs B–D: Requested, scoped
   pass release, station settings and coverage warnings, ticket presentation and physical
-  schema/configuration retirement. No station can be set to wait for the pass until PR C. Next: B4
-  (the screens, the display setting, Columns); the slice plan outlines it and lists, under "Left for
-  B4", what B1–B3 left for it.
+  schema/configuration retirement. No station can be set to wait for the pass until PR C. The pass
+  runs on the new board (B4a). Next: B4b, the station's Held column, "at the pass" and the display
+  setting ([B4 plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md), tasks B1a1–B13).
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **Warn the pass before it fires dishes to a station whose printer or screen is down (left open
@@ -2455,10 +2457,32 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   open by A773-2 B3).** The pass's release ticket lists it when the pass fires.
   [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
-- **Pin two pass-board rules no test holds (left open by A773-2 B3's reviews; both predate it).**
-  No suite fails if today's pass board marks a course section of an order with no party as fired,
-  or if a pass screen's zone that is listed but switched off is still read
-  (`passScopeOf`, `apps/server/src/pass-board.ts`). Add a case for each.
+- **Pin a pass-board rule no test holds (left open by A773-2 B3's reviews; predates it).** No suite
+  fails if a pass screen's zone that is listed but switched off is still read (`passScopeOf`,
+  `apps/server/src/pass-board.ts`). Add a case.
+
+- **Pin the pass board's live-dish filter (left open by A773-2 B4a's reviews).** No case fails if
+  the board's card reader stops leaving out a dish made at the till, or a bill collected or
+  abandoned on a two-bill group card, and none has a ticket that survives with nothing left to make.
+  [Detail](backlog/till.md#pin-the-pass-boards-live-dish-filter)
+
+- **A Ready card on the pass turns red, counts as overdue and says Forgotten, aged from when it was
+  sent (question for the owner, seen in A773-2 B4a's look).** The old pass did the same. Should a
+  card stop ageing once it is Ready? Relates to A1250's colour question.
+  [Detail](backlog/till.md#a-ready-card-on-the-pass-turns-red-aged-from-when-it-was-sent)
+
+- **The pass's "screen has been refreshed" line after a Fire appears above the columns, out of view
+  after a Fire low on the screen (seen in A773-2 B4a's look).** The old pass screen put its line in
+  the same place.
+  [Detail](backlog/till.md#the-passs-refreshed-line-after-a-fire-is-out-of-view)
+
+- **Two refusal sentences the pass shows after Fire or Ready do not fit it (left open by A773-2 B4a,
+  decision D87).** `device.forbidden_action` sends the person to a manager; `service_zone.not_allowed`
+  says to choose an area. Both predate A773-2 (#1311).
+  [Detail](backlog/till.md#two-refusal-sentences-the-pass-shows-after-fire-or-ready-do-not-fit-it)
+
+- **The pass's header does not say what the pass covers (left open by A773-2 B4a).** A797 §3.5 asks
+  for a line naming the stations and zones a pass covers; it needs new words.
 
 - **A station move of dishes from several stations prints each station's slips in an order that
   can change between runs (left open by A773-2 B3's reviews; predates it).** `moveDishesToStation`

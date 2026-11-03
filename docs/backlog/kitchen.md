@@ -170,7 +170,9 @@ Left open by A757 slice 3. The manager overview's "orders taking too long" list
 of its node that is not made here, on an order neither abandoned nor collected; its `where` has no
 `fired_at` test, so a dish waiting in a held group ages from when it was taken. Since A757 slice 3
 `timingBand`, like the `long_wait` signal before it, counts only fired dishes (`ticket_items.fired_at`
-set; A757 Q17).
+set; A757 Q17). The report also ages a dish waiting for the pass from `queued_at`, which is still its
+insert until the pass fires it, while the pass's board ages it from `requested_at` (A773-2 B4a, its
+plan's D68).
 
 Next: decide whether the report leaves held dishes out, as the floor does. If it does, add a
 `fired_at is not null` test to its `where` and a case beside `overdue-orders.test.ts`'s.
