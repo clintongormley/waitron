@@ -1,4 +1,4 @@
-import { types } from "node:util";
+import { genuineLength } from "./preboot.mjs";
 
 /** systemd v257 src/shared/recovery-key.c:7-9; the index is the half-byte value. */
 export const DISK_KEY_LETTERS = "cbdefghijklnrtuv";
@@ -13,19 +13,12 @@ function refusal(code, reason) {
   return Object.assign(new Error(code), { code, reason });
 }
 
-// Read through the built-in getter, never the key's own `length`, which a subclass or proxy can fake.
-const typedArrayLength = /** @type {(this: Uint8Array) => number} */ (
-  /** @type {PropertyDescriptor} */ (
-    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), "length")
-  ).get
-);
-
 /** @param {unknown} key @returns {Uint8Array} */
 function checkedKey(key) {
-  if (!types.isUint8Array(key)) throw refusal("disk_recovery_key.invalid", "not-bytes");
-  if (typedArrayLength.call(key) !== DISK_KEY_BYTES)
-    throw refusal("disk_recovery_key.invalid", "wrong-length");
-  return key;
+  const length = genuineLength(key);
+  if (length === null) throw refusal("disk_recovery_key.invalid", "not-bytes");
+  if (length !== DISK_KEY_BYTES) throw refusal("disk_recovery_key.invalid", "wrong-length");
+  return /** @type {Uint8Array} */ (key);
 }
 
 /**
@@ -47,7 +40,9 @@ function formattedCodes(key) {
 }
 
 /**
- * The text printed on the recovery sheet: 8 groups of 8 lower-case letters joined by "-".
+ * The text printed on the recovery sheet: 8 groups of 8 lower-case letters joined by "-". Pure.
+ * Throws disk_recovery_key.invalid: reason "not-bytes" unless key is a genuine Uint8Array,
+ * "wrong-length" unless it holds exactly 32 bytes.
  * @param {Uint8Array} key @returns {string}
  */
 export function formatDiskRecoveryKey(key) {
@@ -60,7 +55,8 @@ export function formatDiskRecoveryKey(key) {
 /**
  * The exact passphrase `systemd-cryptenroll --recovery-key` puts in the key slot (systemd v257
  * src/cryptenroll/cryptenroll-recovery.c:28, :36-42): the formatted text as 71 ASCII bytes, in a
- * new array the caller zeroes.
+ * new array the caller zeroes. Pure. Throws disk_recovery_key.invalid as `formatDiskRecoveryKey`
+ * does.
  * @param {Uint8Array} key @returns {Uint8Array}
  */
 export function diskRecoveryKeyPassphrase(key) {
@@ -88,8 +84,10 @@ function halfByte(character) {
 }
 
 /**
- * Reads what a person typed or pasted. Letters in either case; hyphens, spaces, tabs and line
- * breaks are ignored anywhere; any other character is refused. No answer holds a typed character.
+ * Reads what a person typed or pasted. Letters in either case; hyphen-minus, ASCII space, tab,
+ * carriage return and line feed are ignored anywhere; any other character is refused. No answer
+ * holds a typed character. Pure. Throws disk_recovery_key.invalid (not-text) unless text is a
+ * string.
  * @param {string} text
  * @returns {{ ok: true, key: Uint8Array } | { ok: false, reason: "letter", position: number } | { ok: false, reason: "length", letters: number | null }}
  */

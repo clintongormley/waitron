@@ -984,8 +984,9 @@ between the 32 bytes the box keeps and the 64 letters a person reads and types, 
   That text is exactly the passphrase `systemd-cryptenroll` enrols, so the unlock adapter sends
   these bytes rather than what was typed.
 - `parseDiskRecoveryKey`: typed text to 32 bytes, in a new array the caller zeroes. Letters are
-  read in either case, ASCII only; hyphens, spaces, tabs and line breaks are ignored anywhere. The
-  first other character is refused as `{ reason: "letter", position }`, its place counted from 1;
+  read in either case, ASCII only; hyphen-minus, ASCII space, tab, carriage return and line feed are
+  ignored anywhere. The first other character is refused as `{ reason: "letter", position }`, its
+  place counted in characters (code points) from 1;
   a count of letters other than 64 is refused as `{ reason: "length", letters }`; text over 4096
   UTF-16 code units (`DISK_KEY_TEXT_MAX`) is refused unread, with `letters: null`. A value that is not
   text throws `disk_recovery_key.invalid`. No answer holds a typed character or a key letter.
@@ -1142,12 +1143,23 @@ between the 32 bytes the box keeps and the 64 letters a person reads and types, 
 - First start either reads `systemd-cryptenroll --recovery-key`'s printed text back with
   `parseDiskRecoveryKey`, or enrols `diskRecoveryKeyPassphrase` of its own 32 random bytes; both
   routes put the formatted text in the key slot as its passphrase.
-- Slice 8's sheet takes `formatDiskRecoveryKey`'s text from the host (proposed), since `apps/server`
-  does not import from `scripts/`; its QR code holds that same text, so `parseDiskRecoveryKey`
-  reads a scan of it.
+- Slice 8's disk-key page is drawn by the host, and `apps/server` receives document bytes only (the
+  parent plan's `DiskDocumentDeps`). Proposed: the host draws it with `formatDiskRecoveryKey`'s
+  text and a QR code holding that same text, so `parseDiskRecoveryKey` reads a scan of it.
 - The screen's words for the `letter` and `length` refusals, in Spanish and English, come with the
   preboot screen.
 - The key-use record and the startup-fingerprint check before resealing wait for slice 1's recipe.
+- `disk-key.mjs`'s store (reading the record, and writing the key with `writeFile` and `rename`)
+  and `wifi-record.mjs`'s reader check their folder and then use the file by path, so a root
+  process can swap the folder in between. Slice 1's Linux adapters must either open relative to
+  the checked folder (`node:fs` on Node 26.13 has no such call, as PR 5's note says) or keep every
+  other writer out of those folders while they are used; the Wi-Fi folder is the one PR 5's
+  publisher writes, whose other writers PR 5's note leaves to slice 3.
+- Decisions recorded for review: a typed text is read more widely than systemd's own normaliser
+  (one with a hyphen missing still reads, since separators are ignored anywhere, and the screen
+  re-forms it through bytes before `cryptsetup` sees it) (D3); the
+  first unreadable character wins over a wrong count, and text over 4096 code units is refused
+  unread (D4).
 
 **Left open by PR 1's review (#2370):**
 

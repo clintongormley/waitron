@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { getRandomValues } from "node:crypto";
-import { TextEncoder } from "node:util";
+import { TextEncoder, inspect } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DISK_KEY_BYTES,
@@ -155,7 +155,13 @@ describe.each([
     const canary = new Uint8Array(33);
     canary.set(COUNTING_KEY);
     const error = expectInvalid(() => run(canary), "wrong-length");
-    const texts = [JSON.stringify(error), String(error), error.message, String(error.reason)];
+    const texts = [
+      JSON.stringify(error),
+      String(error),
+      error.message,
+      String(error.reason),
+      inspect(error, { depth: 10, showHidden: true }),
+    ];
     for (const text of texts)
       for (const secret of ["cbdefghi", "jklnrtuv", "0123456789abcdef"])
         expect(text).not.toContain(secret);
@@ -357,6 +363,7 @@ describe("parseDiskRecoveryKey keeps the key out of its answers", () => {
     const result = parseDiskRecoveryKey(text);
     expect(result.ok).toBe(false);
     expectNoKey(JSON.stringify(result));
+    expectNoKey(inspect(result, { depth: 10, showHidden: true }));
   });
 
   it("in its not-text error", () => {
@@ -369,6 +376,8 @@ describe("parseDiskRecoveryKey keeps the key out of its answers", () => {
     );
     expectNoKey(JSON.stringify(error));
     expectNoKey(String(error));
+    const shown = inspect(error, { depth: 10, showHidden: true });
+    for (const group of GROUPS) expect(shown).not.toContain(group);
   });
 });
 

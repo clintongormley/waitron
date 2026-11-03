@@ -117,8 +117,8 @@ const typedArrayLength = /** @type {(this: Uint8Array) => number} */ (
   ).get
 );
 
-/** @param {unknown} key @returns {number|null} null when the key is not a genuine Uint8Array */
-function genuineLength(key) {
+/** Pure. Never throws. @param {unknown} key @returns {number|null} null when the key is not a genuine Uint8Array */
+export function genuineLength(key) {
   return types.isUint8Array(key) ? typedArrayLength.call(key) : null;
 }
 
