@@ -288,7 +288,7 @@ held bill payments (`payments-api.ts:1184`), read every box's payments; each lis
 reader" check (`paymentAttemptIsLive`, `apps/server/src/till-sale.ts:1465`; `billPaymentIsLive`,
 `apps/server/src/bill-payments.ts:1260`) sees only this box. Both resolve routes (`payments-api.ts:1073` and `:1226`) reach the same
 `resolveAbandonedAttempt` call (`payments-api.ts:420`), so a manager could cancel a payment another
-box is still taking. Left open by A764 (A1018 Slice 4b).
+box is still taking. Left open by A764 (A1018 Slice 4b, #2422).
 
 ## Two concurrent passes of the SumUp provider's `resolvePending` over `listAttempting` (`packages/payments/src/store.ts`) do not both succeed
 

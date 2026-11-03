@@ -3960,7 +3960,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 
 - **A manager's stuck-payment resolution must act only on the collection owner's payments before a
   second box sells.** Both dashboard stuck lists read every box's payments, so a manager could
-  cancel a payment another box is still taking. Left open by A764 (A1018 Slice 4b).
+  cancel a payment another box is still taking. Left open by A764 (A1018 Slice 4b, #2422).
   [Detail](backlog/payments.md#a-managers-stuck-payment-resolution-must-act-only-on-the-collection-owners-payments-before-a-second-box-sells)
 
 - **Two concurrent passes of the SumUp provider's `resolvePending` over `listAttempting`
