@@ -5,7 +5,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { allergenName } from "../i18n/allergen-names.js";
 import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
 import { PASS_COLUMNS } from "../state/kitchen-columns.js";
-import type { PassBoard, PassCard, PassCardItem } from "../api/client.js";
+import type { DietProfile, PassBoard, PassCard, PassCardItem } from "../api/client.js";
 import {
   PASS_NOW,
   minutesAgo,
@@ -312,6 +312,50 @@ describe("A773 pass board widget: dishes", () => {
     expect(stripe("ready")).toEqual(["rgb(7, 8, 9)", "solid", "5px"]);
     expect(stripe("held")).toEqual(["rgb(1, 2, 3)", "solid", "5px"]);
     expect(stripe("dimmed")).toEqual(["rgb(4, 5, 6)", "solid", "5px"]);
+  });
+
+  it("draws a dimmed dish's dotted box in the muted text colour, not the faint border colour", async () => {
+    const el = await inProgress([
+      passItem({ id: "dimmed", stationName: "Bar", informational: true }),
+      passItem({ id: "own" }),
+    ]);
+    el.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+    el.style.setProperty("--wt-color-border", "rgb(4, 5, 6)");
+    const box = (id: string) => {
+      const style = getComputedStyle(itemOf(el, id));
+      return [style.borderTopColor, style.borderRightColor, style.borderBottomColor];
+    };
+    expect(box("dimmed")).toEqual(["rgb(1, 2, 3)", "rgb(1, 2, 3)", "rgb(1, 2, 3)"]);
+    expect(box("own")).toEqual(["rgb(4, 5, 6)", "rgb(4, 5, 6)", "rgb(4, 5, 6)"]);
+  });
+
+  it("mutes every part of a dimmed dish's diet line, and only a dimmed dish's", async () => {
+    const diet: DietProfile = {
+      vegan: "unknown",
+      vegetarian: "yes",
+      halal: "no",
+      kosher: "no",
+      contains: ["fish"],
+    };
+    const el = await inProgress([
+      passItem({ id: "dimmed", stationName: "Bar", informational: true, asServedDiet: diet }),
+      passItem({ id: "own", asServedDiet: diet }),
+    ]);
+    el.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
+    el.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
+    el.style.setProperty("--wt-color-success-text", "rgb(7, 8, 9)");
+    el.style.setProperty("--wt-color-warning-text", "rgb(10, 11, 12)");
+    const colours = (id: string) =>
+      [".diet-label", ".diet-badge", ".diet-contains", ".diet-pending"].map(
+        (part) => getComputedStyle(itemOf(el, id).querySelector(part)!).color,
+      );
+    expect(colours("dimmed")).toEqual(Array(4).fill("rgb(1, 2, 3)"));
+    expect(colours("own")).toEqual([
+      "rgb(1, 2, 3)",
+      "rgb(7, 8, 9)",
+      "rgb(1, 2, 3)",
+      "rgb(10, 11, 12)",
+    ]);
   });
 
   it("marks a forgotten dish in view by its age on the board's clock, dimmed or not, never by the server's band", async () => {
