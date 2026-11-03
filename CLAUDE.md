@@ -859,6 +859,12 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   working-time chain continues from its head. Guards: hour-selection/hour-clock/minute-selection-
   unknown-name suites (the last weaker than its name) and
   `packages/workforce/src/restore-continuation.test.ts`.
+- **A box holding a `node_handover_restriction` row starts restricted, before every worker; a
+  background duty is stopped through `apps/server/src/background-duties.ts`, signalled at a
+  stepdown or carrying a reason.** Guards: `apps/server/src/boot.restricted-quiet.test.ts` and
+  `handover-stepdown.test.ts`'s "every closer is either atStepdown or carries a reason", weaker
+  than their names: one five-second watch of named services, and a field's presence, not what the
+  duty does.
 - **Every filing-node start resets sales left “being sent” to waiting before the first filing pass.**
   Only one process may file; tools using `exclusive: false` file nothing. Guards:
   `apps/server/src/restart-reset.test.ts` and `apps/server/src/boot.test.ts`, weaker than the rule:
