@@ -473,12 +473,15 @@ the same column.
   Check them automatically after collection ends; keep the order locked until the outcome is known.
   Retain the manager check as a fallback. A confirmed cancellation advances the next attempt's key;
   a bank decline keeps its existing retry key. Automatic resolution has no person in its audit row.
-  Collection ownership is process-local. The provider sweep runs in every node role; only sale
-  recovery and bill completion check for primary. Before enabling a second venue node, restrict
-  provider cancellation to its collection owner or add coordination between nodes; the A1018 build
-  plan's [Slice 4b](../superpowers/plans/2026-11-02-a1018-handover-build.md#slice-4b--payment-collection-belongs-to-one-box-a764)
-  builds the collection owner. Today's venue has one node (CLAUDE.md §5); this is not a claim of
-  protection across nodes.
+  Each payment records the box that started it in `payments.node_id`: every payment insert takes a
+  required node id (`packages/payments/src/store.ts:45`). Each box's card sweep resolves only the
+  in-flight payments it owns: its own, those of boxes it has taken over from (none until the A1018
+  build plan's Task 5.9 supplies them), and payments naming no box only while it is the venue's
+  singleton primary (`listAttempting`, `packages/payments/src/store.ts:510`; `sweepOwners`,
+  `apps/server/src/boot.ts:511`). The sweep runs in every node role; only sale recovery and bill
+  completion check for primary. Coordination between two boxes collecting at the same time is not
+  built. A manager's stuck-payment resolution still acts on every box's payments; it has its own
+  entry under Payments in [the backlog](../backlog.md). Today's venue has one node (CLAUDE.md §5).
   [Implementation plan](../superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,
