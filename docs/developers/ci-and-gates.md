@@ -2525,7 +2525,8 @@ git alone, in `ubuntu:24.04` (git 2.43.0, libcurl 8.5.0 OpenSSL), each under `ti
 
 Margin for a full-history fetch: `git fetch` of all of `clintongormley/waitron` (292 MB `.git`)
 from this Mac took 14 s with limit 1000/20, and 15 s and 13 s with the window cut to 2 s — the
-2-second window never fired.
+2-second window never fired. (Since A1316, 3 November 2026, the two full-history checkouts are
+blobless: see [the section on them](#the-two-full-history-checkouts-skip-old-file-contents-a1316).)
 
 #### Why the stop step's pattern is not `pgrep -x git`
 
@@ -2738,8 +2739,11 @@ calculating a Git range themselves. This reduces the history requested by those 
 not establish the cause of a hosted checkout timeout, including the shallow-checkout failure
 in main run `40750935978`, till shard 3 (`123038600113`).
 
-The “uses full history only for change classification and sign-off” case in
-`scripts/ci-workflow.test.mjs` checks each literal checkout step in the workflow files. It is
+The “uses full history, without old file contents, only for change classification and
+sign-off” case in `scripts/ci-workflow.test.mjs` checks each literal checkout step in the workflow files.
+Since A1316 it also checks that both attempts in the two full-history jobs set
+`filter: blob:none` and that no other checkout sets a `filter` (see
+[the next section](#the-two-full-history-checkouts-skip-old-file-contents-a1316)). It is
 weaker than its name: it reads text, assumes omitted depth means one, and does not inspect
 external reusable workflows, composite actions or dynamically selected actions. It names the
 two full-history jobs and checks both attempts. Local controls reverted each of the 22 changed
@@ -2770,6 +2774,91 @@ attempt, so this conversion reduces requested history without eliminating checko
 | Source | Source's words | Use |
 | --- | --- | --- |
 | [Git Trace2 API](https://git-scm.com/docs/api-trace2#_enabling_a_target), checked 28 October 2026 | “`1` or `true` - Writes to `STDERR`.” | Send the event target to the existing step log without a separate artifact upload. |
+
+#### The two full-history checkouts skip old file contents (A1316)
+
+Both attempts of the `changes` job's checkout in `ci.yml` and the `dco` job's checkout in
+`licence.yml` set `filter: blob:none` beside `fetch-depth: 0`. That makes each a blobless
+partial clone: git downloads every commit and tree, and only the files of the checked-out
+commit. The `dco` job needs no file contents from history; the `changes` job needs them only
+for rename detection (see below). `changes` runs
+`scripts/ci-diff-paths.sh`, which reads commit ancestry (`git merge-base --is-ancestor`) and
+changed-file names (`git diff --name-only`); `dco` reads commit messages through
+`git rev-list` and `scripts/check-signoff.sh`. The two-minute attempt limits, low-speed
+settings, leftover-git stop and second attempt are unchanged.
+
+**What was measured on GitHub's runners** (licence workflow, job "Every commit is signed off",
+first checkout attempt, 3 November 2026):
+
+- 27 October, 22:36–23:51 UTC, 8 runs: 12–17 seconds.
+- 3 November, 09:41–16:19 UTC, 26 runs: 18–39 seconds (most 18–24).
+- From 16:31 UTC: 55 (`41675053575`); 120, timed out, on both attempts (`41680882273`, a main
+  run that failed); 82; 39; 120 and a second attempt of 120 that failed (`41685772545`,
+  attempt 1); 93; 95 (`41690570778`); 120 and a second attempt of 21 (`41692130454`); 22
+  (`41691903929`).
+- The stored pack after a full checkout was 444,478,492 bytes (`41641361130`, 13:06 UTC) and
+  445,365,285 bytes (`41690570778`, 18:06 UTC). The size did not change, so the slowdown was
+  not history growth. Its cause is unverified: these are stored pack sizes, and an `index-pack`
+  time does not separate waiting for data from local indexing.
+- In `41690570778`'s trace, `remote_refs` took 8.3 seconds and `fetch_refs` 85.0 seconds; the
+  `index-pack` of 121,287 objects ran 76.5 seconds. In `41692130454`'s successful
+  attempt `fetch_refs` took 19.6 seconds.
+
+**What was measured locally** (3 November 2026, a development Mac, github.com over HTTPS,
+git 2.56.0, emulating the action's fetch of all branches and tags (the action also passes
+`--no-tags`; this run did not) with `git -c protocol.version=2 fetch --prune --no-recurse-submodules [--filter=blob:none] origin
+'+refs/heads/*:refs/remotes/origin/*' '+refs/tags/*:refs/tags/*'`, then
+`git checkout --detach origin/main`):
+
+- Without a filter: fetch 37 seconds plus checkout 1 second; a 445,018,795-byte pack.
+- With `--filter=blob:none`: fetch 2 seconds (a 16,428,533-byte pack holding every commit and
+  tree) plus checkout 10 seconds, during which git fetched the checked-out commit's files;
+  57,415,032 bytes stored in total. Git set `remote.origin.promisor=true` and
+  `remote.origin.partialclonefilter=blob:none` by itself.
+
+Locally, then, the blobless checkout stored about an eighth of the bytes the full one did.
+That does not rule out a checkout timeout: the checked-out commit's files are still fetched
+under the same limits.
+
+**The jobs' own commands gave the same output on the blobless copy as on a full one.** Each
+check was stated first as what failure would look like: different output, a non-zero exit, or a
+large extra download.
+
+- `scripts/check-signoff.sh` over `origin/main~300..origin/main`: exit 0, output identical
+  (empty). `git log --format='%H%n%B' origin/main` with `GIT_NO_LAZY_FETCH=1` gave the same
+  SHA-1 (`f9d3ea7b…`) over 5,001 commits as the full copy. Control: `git show --stat HEAD~3`
+  with `GIT_NO_LAZY_FETCH=1` exited 128, so lazy fetching really was off and the messages needed
+  no file contents.
+- `scripts/ci-diff-paths.sh`'s pull-request path on `origin/feat/a1018-s3-start-check`: exit 0,
+  62 paths, identical to `git diff --name-only origin/main...origin/feat/a1018-s3-start-check` in
+  the full copy. Stored bytes grew from 57,415,032 to 59,330,612.
+- Its push-to-main path at `c42f6a40b7`: exit 0, the same baseline (`74046a654e`) and the same 12
+  paths as the full copy.
+- `git diff --name-only <c>^ <c>` for four commits that rename files (`a5422c5f6c`, `95ba4c803c`,
+  `2dece7303b`, `90f41f4907`): identical output each time. Three of them made one fetch each,
+  of 70,127, 46,985 and 16,794 bytes, each `git-remote-https` child taking about half a second.
+
+**One behaviour is new.** To pair renamed files, git's rename detection in
+`git diff --name-only` needs the contents of the added and deleted files, so in a blobless copy
+it fetches them from GitHub on demand (the extra bytes above). That happens in the `changes`
+job's classify step, outside the checkout's two-minute bounds and without the low-speed
+variables. It is bounded by the `changes` job's `timeout-minutes: 5`, and a failed diff fails
+the step (`set -euo pipefail` in `scripts/ci-diff-paths.sh` and in the classify step). On pull
+requests that step already made a network call, `git fetch --no-tags origin "$BASE_REF"`
+(`scripts/ci-diff-paths.sh:5`).
+
+| Source | Source's words | Use |
+| --- | --- | --- |
+| [`actions/checkout` `action.yml` at `3d3c42e5` (`v7`)](https://github.com/actions/checkout/blob/3d3c42e5aac5ba805825da76410c181273ba90b1/action.yml#L60-L64), checked 3 November 2026 | “Partially clone against a given filter. Overrides sparse-checkout if set.” | The `filter` input reaches the action's fetch (`src/git-source-provider.ts` sets `fetchOptions.filter = settings.filter`). |
+| [git fetch, `--filter`](https://git-scm.com/docs/git-fetch#Documentation/git-fetch.txt---filterfilter-spec), checked 3 November 2026 | “For example, `--filter=blob:none` will filter out all blobs (file contents) until needed by Git.” | The fetch leaves file contents behind until git needs them. |
+| [git partial clone design](https://git-scm.com/docs/partial-clone), checked 3 November 2026 | “Missing objects can later be "demand fetched" if/when needed.” | The checkout and rename detection fetch the files they need. |
+
+The guard is the “uses full history, without old file contents, only for change classification
+and sign-off” case, with the limits stated in the section above. Deleting the filter from each
+of the four steps in turn, and adding it to the `lint` job's two checkout attempts, each failed
+it: `pnpm exec vitest run scripts/ci-workflow.test.mjs -t "full history"` exited 1 for each of
+the six edits and passed on the unedited file (2 passed, 411 skipped; the other case that name
+filter matches, “reads a full history on the first attempt only”, reads a made-up snippet).
 
 ### The image build bounds its package installs
 

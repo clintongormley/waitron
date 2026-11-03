@@ -3826,7 +3826,7 @@ function checkoutAttempts(text) {
  * `# comment`.
  */
 describe("the workflows' checkouts", () => {
-  it("uses full history only for change classification and sign-off", () => {
+  it("uses full history, without old file contents, only for change classification and sign-off", () => {
     const historyReaders = ["ci.yml:changes", "licence.yml:dco"];
     const checkouts = workflowFiles.flatMap((name) =>
       jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) =>
@@ -3836,6 +3836,7 @@ describe("the workflows' checkouts", () => {
             job: `${name}:${id}`,
             step: step.step,
             depth: step.with["fetch-depth"] ?? "1",
+            filter: step.with.filter,
           })),
       ),
     );
@@ -3843,8 +3844,11 @@ describe("the workflows' checkouts", () => {
     expect([...new Set(checkouts.map(({ job }) => job))]).toEqual(
       expect.arrayContaining(historyReaders),
     );
-    for (const { job, step, depth } of checkouts) {
+    for (const { job, step, depth, filter } of checkouts) {
       expect(depth, `${job}: ${step}`).toBe(historyReaders.includes(job) ? "0" : "1");
+      expect(filter, `${job}: ${step} filter`).toBe(
+        historyReaders.includes(job) ? "blob:none" : undefined,
+      );
     }
   });
 
