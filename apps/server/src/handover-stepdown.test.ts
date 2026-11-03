@@ -456,6 +456,19 @@ describe("a stepdown", () => {
     });
   });
 
+  it("a close that finishes inside the deadline clears the deadline's timer and restarts once", async () => {
+    await begin();
+    const r = rig(suite.node);
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await r.app.request("/stepdown", { method: "POST" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(r.restart).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(SHUTDOWN_DEADLINE_MS + 1);
+    expect(r.restart).toHaveBeenCalledTimes(1);
+    expect(r.logs.map((l) => l.event)).not.toContain("handover.stepdown_close_timeout");
+  });
+
   it("two calls at once for the same binding step down once", async () => {
     await begin();
     const r = rig(suite.node);
