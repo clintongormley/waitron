@@ -7,6 +7,7 @@ import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/cre
 import { seedTenant } from "@waitron/db/testing/seed.js";
 import {
   connectedCardProviderSweep,
+  sweepOwners,
   withAutomaticCardRecovery,
   withPendingSweep,
   withStalePaymentRelease,
@@ -98,6 +99,22 @@ function fakeProvider(
 ): PaymentProvider {
   return { provider, resolvePending } as unknown as PaymentProvider;
 }
+
+describe("sweepOwners", () => {
+  const box = nodeId("22222222-2222-4222-8222-222222222222");
+
+  it("on the primary: this box, nobody taken over, and the rows naming no box", () => {
+    expect(sweepOwners(box, "primary")).toEqual({ nodeId: box, takenOverFrom: [], unowned: true });
+  });
+
+  it("on a secondary: this box only, never the rows naming no box", () => {
+    expect(sweepOwners(box, "secondary")).toEqual({
+      nodeId: box,
+      takenOverFrom: [],
+      unowned: false,
+    });
+  });
+});
 
 describe("withPendingSweep", () => {
   it("is a no-op (returns the inner report, logs nothing) when the enumerator yields no providers", async () => {
@@ -263,6 +280,31 @@ describe("withPendingSweep", () => {
     expect(log).toHaveBeenCalledWith("warn", "resolve_pending.failed", {
       error: "Error: sync boom",
     });
+  });
+
+  it("reads the owners again on each pass, so a change of role is seen at the next pass", async () => {
+    const box = nodeId("33333333-3333-4333-8333-333333333333");
+    let role: "primary" | "secondary" = "secondary";
+    const resolvePending = vi.fn(async () => ({
+      nextDueAt: null,
+      forwarded: 0,
+      declined: 0,
+      incidentsRaised: 0,
+    }));
+    const pass = withPendingSweep(
+      async () => REPORT,
+      async () => [fakeProvider("sumup", resolvePending)],
+      () => sweepOwners(box, role),
+      () => {},
+    );
+    const now = new Date();
+    await pass(now);
+    role = "primary";
+    await pass(now);
+    expect(resolvePending.mock.calls).toEqual([
+      [now, sweepOwners(box, "secondary")],
+      [now, sweepOwners(box, "primary")],
+    ]);
   });
 
   it("contains a throwing owners reader: no provider is swept and the inner report is returned", async () => {

@@ -96,6 +96,7 @@ import {
 import type { AlertSource, ModuleOperationHost, ModuleRouteContext } from "@waitron/module";
 import { DEFAULT_MAX_UPLOAD_BYTES } from "@waitron/media";
 import { AppError } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import {
   ALL_ALERT_CLAIMS,
   ALL_MODULES,
@@ -501,6 +502,14 @@ export async function buildCardProvider(
     return new SimulatorPaymentProvider(db);
   }
   return undefined;
+}
+
+/** The payments this box's card sweep may resolve: its own, and the rows naming no box only while
+ * it is the venue's singleton primary. Taking over from another box is not built yet.
+ *
+ * Exported for a direct test (`boot-pending-sweep.test.ts`). */
+export function sweepOwners(nodeId: NodeId, role: SingletonRole): CollectionOwners {
+  return { nodeId, takenOverFrom: [], unowned: role === "primary" };
 }
 
 /** Run each card provider's `resolvePending` sweep on every tick, around (not instead of) the
@@ -3253,11 +3262,7 @@ async function bootServer(
               contributions: CARD_PROVIDERS,
               simulator: cardProvider,
             }),
-            () => ({
-              nodeId: tradingContext.nodeId,
-              takenOverFrom: [],
-              unowned: holders.singletonRole.current === "primary",
-            }),
+            () => sweepOwners(tradingContext.nodeId, holders.singletonRole.current),
             log,
           ),
           () =>
