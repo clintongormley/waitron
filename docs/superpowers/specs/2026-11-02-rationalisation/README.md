@@ -619,6 +619,7 @@ behind these, with their evidence.
     stable id that a restore carries (`2026-11-01-a1301-remove-location.md:454-470`). If kept,
     under this design it is a plain field of `settings.venue`, carried by a restore and not by
     configuration transfer.
+    *Pointer 2026-11-04 (lane B):* the owner decided this on 2026-11-02 (Cloud assigns the id), replacing the recommendation above; see [`2026-11-04-a1301-venue-id-design.md`](../2026-11-04-a1301-venue-id-design.md).
 
 ## 11. Left to the builder
 

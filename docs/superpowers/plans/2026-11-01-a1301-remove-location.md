@@ -414,6 +414,14 @@ function no longer reads the scope. It fails before the change. It is marked
 - **Before S18 removes `TradingContext.locationId`:** the open design point "the venue's stable id"
   under "Carried to the schema plan" must be settled, because that field is today's Cloud pairing
   value and backup folder name.
+- **Amendment 2026-11-04 (lane B):** S18's plan is [`2026-11-04-a1301-s18-contract-cleanup.md`](2026-11-04-a1301-s18-contract-cleanup.md).
+  It departs from design §6's S18 row in three ways:
+  - it is six sub-slices, and five of them (S18a, S18b, S18d, S18e, S18f) are owner-landed. S18e
+    builds [the venue-id design](../specs/2026-11-04-a1301-venue-id-design.md);
+  - S18e adds a migration (the design's `cloud_venue` table), against this plan's "no migrations";
+  - S19 and the schema plan wait for more of S18. Under the default schedule that includes S18e,
+    so they wait for the design's approval. Under the cheaper schedule the S18 plan asks the owner
+    about, only S28 does.
 
 ## Notes for the S13–S15 plans
 
@@ -468,6 +476,13 @@ function no longer reads the scope. It fails before the change. It is marked
   area grep does not match `localVenueId`. **Controller's recommendation:** the venue keeps a stable
   id that a restore carries — today's location id moved onto the venue row — so the bucket folder
   and Cloud's pairing value do not change.
+  **Amendment 2026-11-04 (lane B, S18 planning):** the owner decided this on 2026-11-02, replacing
+  the controller's recommendation above. Waitron Cloud assigns the venue's id and the box stores it
+  when it pairs. Inside the box the venue needs no id. A box not connected to Cloud backs up where
+  its owner says, and no folder name is derived from a venue id. The decision is written up in
+  [`2026-11-04-a1301-venue-id-design.md`](../specs/2026-11-04-a1301-venue-id-design.md), which
+  awaits the owner's approval; it is built as S18e and followed by S18f in
+  [the S18 plan](2026-11-04-a1301-s18-contract-cleanup.md).
 - **S17's interim import rule** (a column whose foreign key points at `locations` is set to
   `venueLocationId(tx)`) goes when the columns go; S28's `venueLocationId` grep finds it.
 - **S22** re-keys `attendance_source_state`'s and `attendance_operation_facts`' indexes without
