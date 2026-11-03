@@ -1,4 +1,4 @@
-import type { StationQueueItem } from "../src/api/client.js";
+import type { CurrentOrderKitchen, StationQueueItem } from "../src/api/client.js";
 
 type KitchenStamps = Pick<StationQueueItem, "phase" | "requestedAt" | "readyAt" | "passControlled">;
 
@@ -21,4 +21,15 @@ export function withKitchenStamps(
   item: Omit<StationQueueItem, keyof KitchenStamps> & Partial<KitchenStamps>,
 ): StationQueueItem {
   return { ...kitchenStamps(item), ...item };
+}
+
+type CurrentKitchenStamps = Pick<CurrentOrderKitchen, "phase" | "requestedAt">;
+
+/** A current order's kitchen fields with the request fields {@link kitchenStamps} gives its state
+ *  and fire time, unless the fixture states its own. */
+export function withCurrentKitchenStamps(
+  kitchen: Omit<CurrentOrderKitchen, keyof CurrentKitchenStamps> & Partial<CurrentKitchenStamps>,
+): CurrentOrderKitchen {
+  const { phase, requestedAt } = kitchenStamps(kitchen);
+  return { phase, requestedAt, ...kitchen };
 }

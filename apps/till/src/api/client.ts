@@ -596,6 +596,9 @@ export interface CurrentOrderKitchen {
   firedAt: string | null;
   stationId: string | null;
   movable: boolean;
+  phase?: KitchenPhase;
+  /** Null while the item is held, or since it was recalled. */
+  requestedAt?: string | null;
 }
 
 /** A dish row of `GET /api/parties/:id/current-orders`, on any bill of the party but an abandoned
@@ -610,6 +613,9 @@ export interface CurrentOrderRow {
   /** Stored dish and extras total, after adjustments. */
   netAmount: string;
   readyAt: string | null;
+  /** The earliest initiation of its kitchen components once every one is initiated, else null;
+   *  `firedAt` for a dish with no kitchen work. */
+  requestedAt?: string | null;
   firedAt: string | null;
   nutrition?: LineNutrition;
   lineId: string;
