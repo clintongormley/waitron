@@ -20,6 +20,7 @@ import { OPERATOR, inTx, seat, setupPartyVenue } from "./testing/party-venue.js"
 import { readBillEditState } from "./bill-editing.js";
 import { submitGroups } from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { boardItems } from "./testing/pass-board-probe.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const original: KitchenAllergyBlock = {
@@ -129,18 +130,20 @@ describe("A669 reads HTTP", () => {
     };
     const queue = await read(`/api/stations/${f.station.id}/queue`, f.sessionCookie);
     expect(queue.items[0].items[0].allergy).toEqual(original);
-    const expo = await read("/api/expo/queue", f.sessionCookie);
-    expect(expo[0].groups[0].items[0].allergy).toEqual(original);
+    const expo = await read("/api/expo/board", f.sessionCookie);
+    expect(boardItems(expo.board).map((item) => item.allergy)).toEqual([original]);
     const station = await read("/api/device/station-screen", f.cookies.station);
     expect(
       station.stations.find((s: { id: string }) => s.id === f.station.id).queue[0].items[0].allergy,
     ).toEqual(original);
     for (const [path, cookie] of [
-      ["/api/device/pass-screen", f.cookies.pass],
-      ["/api/device/pass-monitor", f.cookies.monitor],
+      ["/api/device/pass-board", f.cookies.pass],
+      ["/api/device/pass-monitor-board", f.cookies.monitor],
     ]) {
-      const board = await read(path!, cookie!);
-      expect(board.orders[0].groups[0].items[0].allergy).toEqual(original);
+      const answer = await read(path!, cookie!);
+      expect(boardItems(answer.board, { inView: true }).map((item) => item.allergy)).toEqual([
+        original,
+      ]);
     }
   });
 

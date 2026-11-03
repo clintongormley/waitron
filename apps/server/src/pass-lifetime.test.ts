@@ -5,15 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 import { parties, passItemMarks, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { listPassMonitor, listPassScreen, type PassScope } from "./pass-board.js";
-import {
-  advanceTicketItem,
-  handOverOrder,
-  listExpoQueue,
-  markServed,
-  unmarkServed,
-  type ExpoOrder,
-} from "./working-order.js";
+import { readScopedPassBoard, withoutRelease, type PassScope } from "./pass-board.js";
+import type { PassBoard } from "./pass-card.js";
+import { boardCards, boardItems, EVERY } from "./testing/pass-board-probe.js";
+import { advanceTicketItem, handOverOrder, markServed, unmarkServed } from "./working-order.js";
 import {
   commandFor,
   counterOrder,
@@ -37,11 +32,9 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
 });
-const EVERY: PassScope = { stationIds: null, zoneIds: null };
 
-const items = (orders: ExpoOrder[]) =>
-  orders.flatMap((order) => [...order.courses, ...order.groups].flatMap((part) => part.items));
-const counts = (orders: ExpoOrder[]) => items(orders).map(({ id, qty }) => ({ id, qty }));
+const counts = (board: PassBoard) =>
+  boardItems(board, { inView: true }).map(({ id, qty }) => ({ id, qty }));
 
 describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", (service) => {
   it.each(["expo", "pass", "monitor"] as const)(
@@ -68,21 +61,16 @@ describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", 
       try {
         const read = () =>
           inTx(v, async (tx) => {
-            if (reader === "expo") return listExpoQueue(tx);
-            if (reader === "pass") {
-              return (await listPassScreen(tx, v.cfg, v.cfg.origin.deviceId, EVERY)).orders;
-            }
-            return (await listPassMonitor(tx, v.cfg, EVERY)).orders;
+            const board = await readScopedPassBoard(tx, v.cfg, EVERY);
+            return reader === "pass" ? board : withoutRelease(board);
           });
         const before = await read();
         expect(counts(before)).toEqual([{ id: item.id, qty: "1.000" }]);
-        expect(items(before).map((dish) => dish.state)).toEqual(["ready"]);
-        for (const order of before) {
-          expect(order[service === "table" ? "groups" : "courses"]).toHaveLength(1);
-          for (const section of [...order.groups, ...order.courses]) {
-            expect(section).not.toHaveProperty("away");
-            for (const dish of section.items) expect(dish).not.toHaveProperty("awayAt");
-          }
+        expect(boardItems(before).map((dish) => dish.state)).toEqual(["ready"]);
+        expect(boardCards(before)).toHaveLength(1);
+        for (const card of boardCards(before)) {
+          expect(card).not.toHaveProperty("away");
+          for (const dish of card.items) expect(dish).not.toHaveProperty("awayAt");
         }
         await inTx(v, async (tx) => {
           await tx
@@ -114,15 +102,11 @@ describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", 
   );
 });
 
-async function boards(
-  v: Pick<PartyVenue, "db" | "cfg">,
-  scope = EVERY,
-  deviceId = v.cfg.origin.deviceId,
-) {
-  return inTx(v, async (tx) => ({
-    screen: counts((await listPassScreen(tx, v.cfg, deviceId, scope)).orders),
-    monitor: counts((await listPassMonitor(tx, v.cfg, scope)).orders),
-  }));
+async function boards(v: Pick<PartyVenue, "db" | "cfg">, scope: PassScope = EVERY) {
+  return inTx(v, async (tx) => {
+    const board = await readScopedPassBoard(tx, v.cfg, scope);
+    return { screen: counts(board), monitor: counts(withoutRelease(board)) };
+  });
 }
 
 async function tableWork(quantity = "1", shape?: "grouped") {
@@ -167,7 +151,7 @@ describe("A773 lifetime", () => {
         .where(eq(ticketItems.id, item.id));
     });
     expect(await boards(v)).toEqual({ screen: expected, monitor: expected });
-    expect(counts(await inTx(v, (tx) => listExpoQueue(tx)))).toEqual(expected);
+    expect(counts(await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY)))).toEqual(expected);
   });
 
   it("shows only the remaining quantity, restores it on Undo and keeps the original ready time", async () => {
@@ -204,7 +188,7 @@ describe("A773 lifetime", () => {
     expect(ticketBefore.readyAt).not.toBeNull();
     await serve("2");
     expect(await boards(v)).toEqual({ screen: [], monitor: [] });
-    expect(counts(await inTx(v, (tx) => listExpoQueue(tx)))).toEqual([]);
+    expect(counts(await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY)))).toEqual([]);
   });
 
   it("removes unserved ready food when the paid party finishes", async () => {
@@ -220,7 +204,7 @@ describe("A773 lifetime", () => {
       await inTx(v, (tx) => tx.select().from(ticketItems).where(eq(ticketItems.id, item.id))),
     ).toHaveLength(1);
     expect(await boards(v)).toEqual({ screen: [], monitor: [] });
-    expect(counts(await inTx(v, (tx) => listExpoQueue(tx)))).toEqual([]);
+    expect(counts(await inTx(v, (tx) => readScopedPassBoard(tx, v.cfg, EVERY)))).toEqual([]);
   });
 
   it("keeps a paid merged family's dish until its surviving party finishes, through two merges", async () => {
