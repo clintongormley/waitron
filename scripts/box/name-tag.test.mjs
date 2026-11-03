@@ -14,6 +14,7 @@ import {
   encodeNameTag,
   findNameTag,
   planNameTagWrite,
+  usableText,
   usableVenueName,
 } from "./name-tag.mjs";
 
@@ -72,6 +73,18 @@ describe("usableVenueName", () => {
 
   it.each(UNUSABLE_NAMES)("%s → null", (_label, input) => {
     expect(usableVenueName(input)).toBeNull();
+  });
+});
+
+describe("usableText", () => {
+  it("takes its limit from the caller", () => {
+    expect(usableText("a".repeat(32), 32)).toBe(true);
+    expect(usableText("a".repeat(33), 32)).toBe(false);
+  });
+
+  it("counts a decomposed string as written, without composing it", () => {
+    expect(usableText("\u00C0", 1)).toBe(true);
+    expect(usableText("A\u0300", 1)).toBe(false);
   });
 });
 

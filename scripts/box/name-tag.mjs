@@ -2,7 +2,7 @@ import { TextDecoder, TextEncoder } from "node:util";
 import { exactRecord } from "./upgrades/contracts.mjs";
 
 /**
- * @typedef {{ name: string, live: boolean }} VenueTag  frozen; display only (spec §7.6)
+ * @typedef {{ name: string, live: boolean }} VenueTag  frozen (spec §7.6)
  */
 
 export const NAME_TAG_TYPE = "waitron-name-tag";
@@ -13,12 +13,12 @@ export const NAME_TAG_MAX_CODE_POINTS = 256;
 export const NAME_TAG_MAX_BYTES = 1100;
 /** cryptsetup v2.7.5 lib/luks2/luks2.h:28. */
 export const LUKS2_TOKENS_MAX = 32;
-/** Four times the largest JSON area LUKS2 lists. */
+/** Over four times the largest JSON area LUKS2 lists (4,092 KiB). */
 export const NAME_TAG_METADATA_MAX_BYTES = 16 * 1024 * 1024;
 
 const KEYS = ["type", "keyslots", "version", "name", "live"];
 // eslint-disable-next-line no-control-regex
-export const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F]/;
+const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F]/;
 
 /** @param {string} code @param {string} reason */
 function refusal(code, reason) {
@@ -38,15 +38,24 @@ function canonicalBytes(name, live) {
 }
 
 /**
+ * Pure. Does not normalise. Never throws.
+ * @param {unknown} value @param {number} maxCodePoints @returns {boolean}
+ */
+export function usableText(value, maxCodePoints) {
+  if (typeof value !== "string" || !value.isWellFormed() || CONTROL_CHARACTERS.test(value))
+    return false;
+  const length = [...value].length;
+  return length >= 1 && length <= maxCodePoints;
+}
+
+/**
  * Pure. The name's NFC form, or null when a tag cannot hold it. Never throws.
  * @param {unknown} value @returns {string|null}
  */
 export function usableVenueName(value) {
   if (typeof value !== "string") return null;
   const name = value.normalize("NFC");
-  if (!name.isWellFormed() || CONTROL_CHARACTERS.test(name)) return null;
-  const length = [...name].length;
-  return length >= 1 && length <= NAME_TAG_MAX_CODE_POINTS ? name : null;
+  return usableText(name, NAME_TAG_MAX_CODE_POINTS) ? name : null;
 }
 
 /** Each field is read once, so what is checked is what gets encoded. */
