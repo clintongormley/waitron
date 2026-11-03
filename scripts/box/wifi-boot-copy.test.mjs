@@ -56,6 +56,7 @@ const wifi = (overrides = {}) => ({
 const writeA = decideWifiBootCopy(wifi({ keyMgmt: "sae", psk: PASSWORD_A }));
 const writeB = decideWifiBootCopy(wifi({ keyMgmt: "sae", psk: PASSWORD_B }));
 const removeCable = decideWifiBootCopy({ kind: "cable-only" });
+const removeOpen = decideWifiBootCopy(wifi({ keyMgmt: null, psk: null }));
 const RECORDS = { A: writeA.bytes, B: writeB.bytes };
 
 const FIRST_STATUS = { state: "pending", reason: null, failure: null };
@@ -1210,26 +1211,54 @@ const removeFailureRows = [
 const runRemoveFailure = (op, nth) =>
   runWith({ record: "A", next: "B" }, removeCable, () => ({ [op]: failAt(op, nth) }));
 
-// [label, decision, overrides(f), last call(f)]
-/** @type {Array<[string, any, (f: any) => object, (f: any) => unknown[]]>} */
+// [label, decision, overrides(f), last call(f), whole log(f)]
+/** @type {Array<[string, any, (f: any) => object, (f: any) => unknown[], (f: any) => unknown[]]>} */
 const checkFailureRows = [
   [
     "the read-back's open of wifi.json",
     writeB,
     () => ({ open: failAt("open", 2) }),
     (f) => ["open", f.recordPath],
+    (f) => [
+      ...readerCallsOf(f),
+      ["lstat", f.folder],
+      ["lstat", f.nextPath],
+      ["syncDirectory", f.bootRoot],
+      ["writeFile", f.nextPath],
+      ["syncFile", f.nextPath],
+      ["rename", f.nextPath, f.recordPath],
+      ["syncDirectory", f.folder],
+      ...readerCallsOf(f),
+    ],
   ],
   [
     "the removal check's reader open of wifi.json",
     removeCable,
     () => ({ open: failAt("open", 2) }),
     (f) => ["open", f.recordPath],
+    (f) => [
+      ...readerCallsOf(f),
+      ["lstat", f.folder],
+      ["lstat", f.nextPath],
+      ["unlink", f.recordPath],
+      ["syncDirectory", f.folder],
+      ...readerCallsOf(f),
+    ],
   ],
   [
     "the removal check's own lstat of wifi.json.next",
     removeCable,
     (f) => ({ lstat: failAt("lstat", 2, INJECTED, f.nextPath) }),
     (f) => ["lstat", f.nextPath],
+    (f) => [
+      ...readerCallsOf(f),
+      ["lstat", f.folder],
+      ["lstat", f.nextPath],
+      ["unlink", f.recordPath],
+      ["syncDirectory", f.folder],
+      ...readerCallsOf(f),
+      ["lstat", f.nextPath],
+    ],
   ],
 ];
 const runCheckFailure = (decision, overrides) => runWith({ record: "A" }, decision, overrides);
@@ -1368,17 +1397,19 @@ describe("a failed step stops the publication there", () => {
 
   it.each(checkFailureRows)(
     "%s throws → publication-unverified, and the log ends there",
-    async (_label, decision, overrides, lastCall) => {
+    async (_label, decision, overrides, lastCall, wholeLog) => {
       const { f, log, status } = await runCheckFailure(decision, overrides);
       const reason = decision.kind === "remove" ? decision.reason : null;
       expectStatus(status, { state: "failed", reason, failure: "publication-unverified" });
       expect(log.at(-1)).toEqual(lastCall(f));
+      expect(log).toEqual(wholeLog(f));
     },
   );
 
   it("a writeFile that rejects with a plain string → io-failed; publish resolves", async () => {
-    const { f, status } = await runPlainStringRejection();
+    const { f, log, status } = await runPlainStringRejection();
     expectStatus(status, IO_FAILED_WRITE);
+    expect(log.at(-1)).toEqual(["writeFile", f.nextPath]);
     expectNoForm(
       [JSON.stringify(status), String(status), inspect(status)],
       passwordForms(PASSWORD_B),
@@ -1441,8 +1472,9 @@ describe("no status or error holds the password", () => {
       entries.push(await publisher.publish(/** @type {any} */ (build())).catch((error) => error));
     }
 
-    expect(entries.length).toBeGreaterThanOrEqual(29);
-    expect(entries.filter((entry) => entry instanceof Error)).toHaveLength(invalidDecisions.length);
+    expect(entries).toHaveLength(30);
+    expect(entries.filter((entry) => entry instanceof Error)).toHaveLength(13);
+    expect(invalidDecisions).toHaveLength(13);
     const forms = [...passwordForms(PASSWORD_A), ...passwordForms(PASSWORD_B)];
     for (const entry of entries) {
       expectNoForm(
@@ -1459,5 +1491,199 @@ describe("no status or error holds the password", () => {
     const written = await fixture();
     await written.make().publish(writeB);
     expect((await fs.readFile(written.recordPath)).toString("utf8")).toContain(PASSWORD_B);
+  });
+});
+
+/**
+ * An override for operation `name` whose `nth` call waits until `release()` and then calls the real
+ * operation; `reached` settles when that call starts.
+ */
+const gate = (name, nth = 1) => {
+  let seen = 0;
+  let open = () => {};
+  let arrive = () => {};
+  const held = new Promise((resolve) => (open = resolve));
+  const reached = new Promise((resolve) => (arrive = resolve));
+  const op = async (...args) => {
+    if (++seen === nth) {
+      arrive();
+      await held;
+    }
+    return REAL_IO[name](...args);
+  };
+  return { op, reached, release: () => open() };
+};
+
+/** A fixture's publisher whose io waits at operation `name`'s `nth` call. */
+async function gatedPublisher(fixtureArgs, name, nth = 1) {
+  const f = await fixture(fixtureArgs);
+  const held = gate(name, nth);
+  const counting = countingIo({ [name]: held.op });
+  return { f, held, log: counting.log, publisher: f.make({ io: counting.io }) };
+}
+
+const CURRENT = { state: "current", reason: null, failure: null };
+const writeLogOver = (f) => [
+  ...readerCallsOf(f),
+  ["lstat", f.folder],
+  ["lstat", f.nextPath],
+  ["syncDirectory", f.bootRoot],
+  ["writeFile", f.nextPath],
+  ["syncFile", f.nextPath],
+  ["rename", f.nextPath, f.recordPath],
+  ["syncDirectory", f.folder],
+  ...readerCallsOf(f),
+];
+
+describe("one publication at a time, and the status while one runs", () => {
+  it("is pending while a later publication runs, then that publication's outcome", async () => {
+    const f = await fixture();
+    const publisher = f.make();
+    expectStatus(await publisher.publish(writeA), CURRENT);
+    expectStatus(publisher.status(), CURRENT);
+    const publication = publisher.publish(writeB);
+    expectStatus(publisher.status(), FIRST_STATUS);
+    expectStatus(await publication, CURRENT);
+    expectStatus(publisher.status(), CURRENT);
+  });
+
+  it("stays pending until the last queued publication finishes, not at the first's outcome", async () => {
+    const { f, held, publisher } = await gatedPublisher({}, "unlink");
+    const first = publisher.publish(writeA);
+    const second = publisher.publish(removeCable);
+    expectStatus(await first, CURRENT);
+    const pending = { state: "pending", reason: "cable-only", failure: null };
+    expectStatus(publisher.status(), pending);
+    await held.reached;
+    expectStatus(publisher.status(), pending);
+    held.release();
+    const absent = { state: "absent", reason: "cable-only", failure: null };
+    expectStatus(await second, absent);
+    expectStatus(publisher.status(), absent);
+    await expectMissing(f.recordPath);
+  });
+
+  it("carries a running remove's reason while it is pending", async () => {
+    const { held, publisher } = await gatedPublisher({}, "unlink");
+    expectStatus(await publisher.publish(writeB), CURRENT);
+    const removal = publisher.publish(removeOpen);
+    await held.reached;
+    expectStatus(publisher.status(), { state: "pending", reason: "open", failure: null });
+    held.release();
+    expectStatus(await removal, { state: "absent", reason: "open", failure: null });
+  });
+
+  it("runs publications in call order: none of B's calls while A waits at its rename", async () => {
+    const { f, held, log, publisher } = await gatedPublisher({}, "rename");
+    const first = publisher.publish(writeA);
+    const second = publisher.publish(writeB);
+    await held.reached;
+    // Turns of the event loop in which B could start if it were not queued.
+    for (let turn = 0; turn < 20; turn++) await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(log).toEqual(writeLogOver(f).slice(0, 9));
+    expect(log.filter(([name, path]) => name === "lstat" && path === f.bootRoot)).toHaveLength(1);
+    held.release();
+    expectStatus(await first, CURRENT);
+    const last = await second;
+    expectStatus(last, CURRENT);
+    expect(log).toEqual([...writeLogOver(f), ...writeLogOver(f)]);
+    await expectBytes(f.recordPath, writeB.bytes);
+    await expectReaderLoads(f, writeB.bytes);
+    expectStatus(publisher.status(), last);
+  });
+
+  it("leaves the copy as the last call says, whatever was queued before it", async () => {
+    const f = await fixture({ record: "B" });
+    const publisher = f.make();
+    const answers = await Promise.all([
+      publisher.publish(writeB),
+      publisher.publish(removeCable),
+      publisher.publish(writeA),
+    ]);
+    expectStatus(answers[0], CURRENT);
+    expectStatus(answers[1], { state: "absent", reason: "cable-only", failure: null });
+    expectStatus(answers[2], CURRENT);
+    await expectBytes(f.recordPath, writeA.bytes);
+    await expectMissing(f.nextPath);
+    expectStatus(publisher.status(), CURRENT);
+  });
+
+  it("reports a failure, then the next publication's success", async () => {
+    const f = await fixture({ record: "A" });
+    const counting = countingIo({ rename: failAt("rename") });
+    const publisher = f.make({ io: counting.io });
+    expectStatus(await publisher.publish(writeB), IO_FAILED_WRITE);
+    expectStatus(publisher.status(), IO_FAILED_WRITE);
+    expectStatus(await publisher.publish(writeB), CURRENT);
+    expectStatus(publisher.status(), CURRENT);
+    await expectBytes(f.recordPath, writeB.bytes);
+    await expectMissing(f.nextPath);
+  });
+
+  it.each([
+    ["a Uint8Array, filled with spaces", () => Uint8Array.from(writeB.bytes), (bytes) => bytes],
+    [
+      "a Buffer view whose source is filled with spaces",
+      () => {
+        const source = Buffer.from(writeB.bytes);
+        return Object.assign(source.subarray(0), { source });
+      },
+      (bytes) => bytes.source,
+    ],
+  ])("takes the bytes at the call: %s while it waits", async (_label, build, toFill) => {
+    const { f, held, publisher } = await gatedPublisher({}, "rename");
+    const first = publisher.publish(writeA);
+    await held.reached;
+    const bytes = build();
+    const second = publisher.publish({ kind: "write", bytes });
+    toFill(bytes).fill(0x20);
+    held.release();
+    expectStatus(await first, CURRENT);
+    expectStatus(await second, CURRENT);
+    await expectBytes(f.recordPath, writeB.bytes);
+  });
+
+  it("refuses an invalid decision at once without disturbing the queue", async () => {
+    const { f, held, publisher } = await gatedPublisher({}, "rename");
+    const publication = publisher.publish(writeA);
+    await held.reached;
+    await expect(publisher.publish(/** @type {any} */ ({ kind: "write" }))).rejects.toEqual(
+      DECISION_INVALID,
+    );
+    expectStatus(publisher.status(), FIRST_STATUS);
+    held.release();
+    expectStatus(await publication, CURRENT);
+    expectStatus(publisher.status(), CURRENT);
+    await expectBytes(f.recordPath, writeA.bytes);
+  });
+
+  it("answers every status frozen, with exactly state, reason and failure, and no connectivity", async () => {
+    const { f, held, publisher } = await gatedPublisher({ record: "A" }, "unlink");
+    const statuses = [publisher.status()];
+    const removal = publisher.publish(removeCable);
+    await held.reached;
+    statuses.push(publisher.status());
+    held.release();
+    statuses.push(await removal, publisher.status());
+    statuses.push(await publisher.publish(writeB), publisher.status());
+    const failing = f.make({ io: countingIo({ rename: failAt("rename") }).io });
+    statuses.push(await failing.publish(writeA), failing.status());
+    expect(statuses.map(({ state }) => state)).toEqual([
+      "pending",
+      "pending",
+      "absent",
+      "absent",
+      "current",
+      "current",
+      "failed",
+      "failed",
+    ]);
+    for (const status of statuses) {
+      expect(Object.isFrozen(status)).toBe(true);
+      expect(Reflect.ownKeys(status).sort()).toEqual(["failure", "reason", "state"]);
+      for (const key of ["connected", "online", "reachable", "joined"]) {
+        expect(key in status).toBe(false);
+      }
+    }
   });
 });
