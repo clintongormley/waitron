@@ -95,7 +95,6 @@ export interface DeviceBinding {
   // Read from the device's profile; the device KIND is derived from it via `kindOfFormFactor`.
   formFactor: FormFactor;
   label: string;
-  locationId: string;
   deviceProfileId: string;
   capabilities: CapabilityFlag[];
 }
@@ -105,7 +104,6 @@ export const deviceProfileJoin = eq(deviceProfiles.id, devices.deviceProfileId);
 export const deviceBindingColumns = {
   formFactor: deviceProfiles.formFactor,
   label: devices.label,
-  locationId: devices.locationId,
   deviceProfileId: devices.deviceProfileId,
   capabilities: deviceProfiles.capabilities,
 };
@@ -152,7 +150,6 @@ export function toDeviceBinding(
     deviceId,
     formFactor: row.formFactor,
     label: row.label,
-    locationId: row.locationId,
     deviceProfileId: row.deviceProfileId,
     capabilities: row.capabilities as CapabilityFlag[],
   };

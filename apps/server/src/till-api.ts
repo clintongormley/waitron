@@ -1030,12 +1030,10 @@ export function allergyCommand(body: Record<string, unknown>): AllergyCommand | 
 
 async function recheckFireSession(
   tx: Transaction,
-  deps: TillApiDeps,
   session: Awaited<ReturnType<typeof requireSession>>,
 ) {
   await assertStillSignedIn(tx, session);
   const device = await assertDeviceStillProven(tx, { device: session.device, tokenHash: null });
-  if (device.locationId !== deps.cfg.locationId) throw new AppError("device.unauthorized", {});
   assertProfileAction(device, "take-orders");
   if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
     throw new AppError("device_profile.not_admitted", {});
@@ -1555,7 +1553,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const result = await withTransaction(deps.db, async (tx) => {
-        const device = await currentZoneDevice(tx, deps.cfg, session);
+        const device = await currentZoneDevice(tx, session);
         const selection = await VENUE_SERVICE.readDeviceZoneSelection(
           tx,
           deps.cfg,
@@ -2959,8 +2957,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             device: session.device,
             tokenHash: null,
           });
-          if (device.locationId !== deps.cfg.locationId)
-            throw new AppError("device.unauthorized", {});
           assertProfileAction(device, "take-orders");
           if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
             throw new AppError("device_profile.not_admitted", {});
@@ -3305,7 +3301,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const body = asObject(await readRawJsonBody<unknown>(c));
       const command = { ...groupCommand(personId, body), ...allergyCommand(body) };
       const fired = await withTransaction(deps.db, async (tx) => {
-        const current = await recheckFireSession(tx, deps, session);
+        const current = await recheckFireSession(tx, session);
         await checkZones(tx, deps.cfg, current, [{ partyId }]);
         return fireGroup(
           tx,
@@ -3488,8 +3484,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           device: session.device,
           tokenHash: null,
         });
-        if (device.locationId !== deps.cfg.locationId)
-          throw new AppError("device.unauthorized", {});
         assertProfileAction(device, "take-orders");
         if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
           throw new AppError("device_profile.not_admitted", {});
@@ -4123,7 +4117,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         allergy?: AllergyCommand["allergy"];
       }>(c);
       await withTransaction(deps.db, async (tx) => {
-        const current = await recheckFireSession(tx, deps, session);
+        const current = await recheckFireSession(tx, session);
         await checkZones(tx, deps.cfg, current, [{ orderId: id }]);
         await sendLines(
           tx,
@@ -4341,7 +4335,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const command = moveCommand(session.personId, body);
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          const current = await recheckFireSession(tx, deps, session);
+          const current = await recheckFireSession(tx, session);
           await checkZones(tx, deps.cfg, current, [{ orderId: billId }, { tableId: to.tableId }]);
           return previewBillMoveAllergy(
             tx,
@@ -4368,16 +4362,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const sendCfg = sendingCfg(cfg, c, session.device);
       const result = await withTransaction(deps.db, async (tx) => {
         const current =
-          command.allergy === undefined ? session : await recheckFireSession(tx, deps, session);
-        if (command.allergy !== undefined) {
-          const [source] = await tx
-            .select({ id: workingOrders.id })
-            .from(workingOrders)
-            .where(
-              and(eq(workingOrders.id, billId), eq(workingOrders.locationId, deps.cfg.locationId)),
-            );
-          if (source === undefined) throw new AppError("tab.not_open", { tabId: billId });
-        }
+          command.allergy === undefined ? session : await recheckFireSession(tx, session);
         await checkZones(tx, deps.cfg, current, [
           { orderId: billId },
           ...named(

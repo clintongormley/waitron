@@ -1047,11 +1047,6 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
   What the landed slices left, by owner:
 
-  - **S12a** (left by S11, #2411): the device admission checks in `order-kitchen-note-api.ts`,
-    `party-allergy-api.ts`, `line-cancel-api.ts`, `tender-refund-api.ts` and
-    `tender-refund-authorization.ts`, and the bill move route's source-bill location check in
-    `till-api.ts` (an allergy move), whose case "move refuses a source bill from another location"
-    in `till-api.allergy-move.test.ts` is deleted with it.
   - **S18:** the contract's node location ids remain for S18 (S3, #2387). Staffing's season,
     day-plan and month reads still hand venue-service a `{ locationId }` scope, which S6 and S8
     leave as an ignored `_cfg` and S18 removes, and its rota verbs keep theirs as an unread

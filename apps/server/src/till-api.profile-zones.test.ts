@@ -94,11 +94,11 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | PUT /api/parties/:id/allergy | surviving party | same suite: "checks party zones for PUT and serves an allowed control" |
  * | POST /api/parties/:id/allergy/send-preview | surviving party | same suite: "checks party zones for POST and serves an allowed control" |
  * | POST /api/bills/:id/move/allergy-preview | source bill and destination table | till-api.allergy-move.test.ts: "preview checks the source zone and admits an allowed control", "preview checks the destination zone and admits an allowed control" |
- * | GET /api/clock/state | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on state" |
- * | POST /api/clock/in | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on in" |
- * | POST /api/clock/out | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on out" |
- * | POST /api/clock/break-start | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on break-start" |
- * | POST /api/clock/break-end | none: own attendance at configured device location | till-clock-api.test.ts "rejects a profile without clock-in on break-end" |
+ * | GET /api/clock/state | none: own attendance | till-clock-api.test.ts "rejects a profile without clock-in on state" |
+ * | POST /api/clock/in | none: own attendance | till-clock-api.test.ts "rejects a profile without clock-in on in" |
+ * | POST /api/clock/out | none: own attendance | till-clock-api.test.ts "rejects a profile without clock-in on out" |
+ * | POST /api/clock/break-start | none: own attendance | till-clock-api.test.ts "rejects a profile without clock-in on break-start" |
+ * | POST /api/clock/break-end | none: own attendance | till-clock-api.test.ts "rejects a profile without clock-in on break-end" |
  * Clock-route allowed control: till-clock-api.test.ts "allows admitted staff with only clock-in and no service-zone access".
  * | POST /api/box-clock/challenge, /api/box-clock/confirm | none: the box's own clock, never a zone's | till-box-clock-api.test.ts "serves a staff member whose till's profile has no selling action" |
  * | GET /api/attendance/inbox | none: own record | till-attendance-api.test.ts "rejects a profile without clock-in on inbox" |

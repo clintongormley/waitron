@@ -39,12 +39,10 @@ import "./errors.js";
 
 async function admittedSession(
   tx: Transaction,
-  deps: TillApiDeps,
   session: Awaited<ReturnType<typeof requireSession>>,
 ) {
   await assertStillSignedIn(tx, session);
   const device = await assertDeviceStillProven(tx, { device: session.device, tokenHash: null });
-  if (device.locationId !== deps.cfg.locationId) throw new AppError("device.unauthorized", {});
   assertProfileAction(device, "take-orders");
   if (!(await canUseDeviceProfile(tx, device.deviceProfileId, session.personId)))
     throw new AppError("device_profile.not_admitted", {});
@@ -138,7 +136,7 @@ export function mountLineCancelApi(
         .queries("lineIds")
         ?.map((id) => requireBodyUuid(id, "lineIds").toLowerCase());
       const answer = await withTransaction(deps.db, async (tx) => {
-        const current = await admittedSession(tx, deps, session);
+        const current = await admittedSession(tx, session);
         await checkZones(tx, deps.cfg, current, [{ partyId }]);
         const context = await readCancellationContext(tx, partyId, lineId, lineIds);
         const [bill] = await tx
@@ -212,7 +210,7 @@ export function mountLineCancelApi(
         withIssuanceTransaction(
           deps.db,
           async (tx) => {
-            const current = await admittedSession(tx, deps, session);
+            const current = await admittedSession(tx, session);
             const cfg = sendingCfg(requestCfg(deps.cfg, current), c, current.device);
             await checkZones(tx, deps.cfg, current, [{ partyId }]);
             const refund =

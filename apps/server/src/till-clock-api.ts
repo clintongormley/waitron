@@ -27,7 +27,7 @@ import { reconcileAttendanceBeforeClock } from "./attendance-discovery.js";
 
 export interface TillClockApiDeps {
   db: Database;
-  cfg: { nodeId: string; locationId: string };
+  cfg: { nodeId: string };
   now: () => Date;
 }
 
@@ -68,7 +68,7 @@ async function expectedEntry(c: Context): Promise<string | null> {
   return value;
 }
 
-async function admit(tx: Transaction, deps: TillClockApiDeps, session: SignedIn): Promise<void> {
+async function admit(tx: Transaction, session: SignedIn): Promise<void> {
   await assertStillSignedIn(tx, session);
   const [current] = await tx
     .select(deviceBindingColumns)
@@ -76,8 +76,6 @@ async function admit(tx: Transaction, deps: TillClockApiDeps, session: SignedIn)
     .innerJoin(deviceProfiles, deviceProfileJoin)
     .where(eq(devices.id, session.deviceId));
   if (current === undefined) throw new AppError("device.unauthorized", {});
-  if (current.locationId !== deps.cfg.locationId)
-    throw new AppError("attendance.not_permitted", { personId: session.personId });
   assertProfileAction(toDeviceBinding(session.deviceId, current), "clock-in");
   if (!(await canUseDeviceProfile(tx, current.deviceProfileId, session.personId)))
     throw new AppError("attendance.not_permitted", { personId: session.personId });
@@ -89,7 +87,7 @@ export function mountTillClockApi(app: Hono, deps: TillClockApiDeps, log: Logger
       const session = await requireSession(deps, c, { action: "clock-in", passive: true });
       if (new URL(c.req.url).search !== "") invalid();
       const state = await withTransaction(deps.db, async (tx) => {
-        await admit(tx, deps, session);
+        await admit(tx, session);
         const at = deps.now();
         const read = await reconcileAttendanceBeforeClock(
           tx,
@@ -109,7 +107,7 @@ export function mountTillClockApi(app: Hono, deps: TillClockApiDeps, log: Logger
         const expectedEntryId = await expectedEntry(c);
         // Admission may change after authentication while this write waits for the venue lock.
         const result = await withTransaction(deps.db, async (tx) => {
-          await admit(tx, deps, session);
+          await admit(tx, session);
           const at = deps.now();
           const before =
             (await reconcileAttendanceBeforeClock(

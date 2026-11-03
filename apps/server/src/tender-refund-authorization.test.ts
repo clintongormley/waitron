@@ -6,7 +6,6 @@ import {
   devices,
   floorZones,
   invoiceSeries,
-  locations,
   saleSettlements,
   sales,
   saleSubstitutions,
@@ -298,18 +297,6 @@ describe("settled-tender refund authorization before reservation", () => {
     await store.db
       .update(devices)
       .set(kind === "disabled" ? { active: false } : { deletedAt: AT })
-      .where(eq(devices.id, cfg.origin.deviceId));
-    await refused(t, "device.unauthorized");
-  });
-  it("rejects a device moved to a different location", async () => {
-    const t = await target();
-    const [place] = await store.db
-      .insert(locations)
-      .values({ name: "Elsewhere", invoiceLocales: ["en-GB"], operationDescription: "Meals" })
-      .returning();
-    await store.db
-      .update(devices)
-      .set({ locationId: place!.id })
       .where(eq(devices.id, cfg.origin.deviceId));
     await refused(t, "device.unauthorized");
   });

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { deviceProfiles, devices, locations, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, withTransaction } from "@waitron/db";
 import { seedNode } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -132,7 +132,7 @@ describe("signed-in own till clock routes", () => {
     expect((await device())[0]!.lastSeenAt).not.toBe(lastSeenAt);
   });
 
-  it.each(["session", "profile", "person", "location"] as const)(
+  it.each(["session", "profile", "person"] as const)(
     "rechecks %s admission after the request queued behind another write",
     async (change) => {
       const bodyReached = deferred();
@@ -169,16 +169,6 @@ describe("signed-in own till clock routes", () => {
             .update(persons)
             .set({ status: "suspended" })
             .where(eq(persons.id, venue.personId));
-        if (change === "location") {
-          const [other] = await tx
-            .insert(locations)
-            .values({ name: "Moved", invoiceLocales: ["es"], operationDescription: "Restaurant" })
-            .returning({ id: locations.id });
-          await tx
-            .update(devices)
-            .set({ locationId: other!.id })
-            .where(eq(devices.id, venue.deviceId));
-        }
         entered.resolve();
         await releaseWriter.promise;
       });
@@ -403,7 +393,7 @@ describe("signed-in own till clock routes", () => {
     expect(verifyChain(rows)).toEqual({ ok: true });
   });
 
-  it("refuses a revoked person, ended session or device moved to another location", async () => {
+  it("refuses a revoked person or ended session", async () => {
     await suite.db
       .update(persons)
       .set({ status: "suspended" })
@@ -412,17 +402,6 @@ describe("signed-in own till clock routes", () => {
     expect(revoked.status).toBe(403);
     expect(await revoked.json()).toMatchObject({ error: { code: "attendance.not_permitted" } });
     await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, venue.personId));
-    const [other] = await suite.db
-      .insert(locations)
-      .values({ name: "Other", invoiceLocales: ["es"], operationDescription: "Restaurant" })
-      .returning({ id: locations.id });
-    await suite.db
-      .update(devices)
-      .set({ locationId: other!.id })
-      .where(eq(devices.id, venue.deviceId));
-    const moved = await request("in");
-    expect(moved.status).toBe(403);
-    expect(await moved.json()).toMatchObject({ error: { code: "attendance.not_permitted" } });
     await withTransaction(suite.db, (tx) =>
       tx
         .update(sessions)

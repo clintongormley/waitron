@@ -388,7 +388,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const session = await requireSession({ db: deps.db }, c, { passive: true });
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          const device = await currentZoneDevice(tx, deps.cfg, session);
+          const device = await currentZoneDevice(tx, session);
           return VENUE_SERVICE.readDeviceZoneSelection(tx, deps.cfg, device.deviceId);
         }),
       );
@@ -403,7 +403,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
         throw new AppError("device_zones.invalid", { field: "profileId" });
       return c.json(
         await withTransaction(deps.db, async (tx) => {
-          const device = await currentZoneDevice(tx, deps.cfg, session);
+          const device = await currentZoneDevice(tx, session);
           await assertNoPaymentInProgress(tx, device.deviceId);
           return VENUE_SERVICE.setDeviceZoneSelection(
             tx,

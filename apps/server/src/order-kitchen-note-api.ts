@@ -58,8 +58,6 @@ export function mountOrderKitchenNoteApi(
                 .innerJoin(deviceProfiles, deviceProfileJoin)
                 .where(eq(devices.id, session.deviceId));
               const device = toDeviceBinding(session.deviceId, row!);
-              if (device.locationId !== deps.cfg.locationId)
-                throw new AppError("device.unauthorized", {});
               assertProfileAction(device, "take-orders");
               if (!party) await requireKitchenNoteOrder(tx, id);
               const snapshot = party

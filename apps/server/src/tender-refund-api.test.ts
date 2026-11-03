@@ -5,7 +5,6 @@ import {
   devices,
   deviceProfiles,
   drawerOpens,
-  locations,
   sales,
   saleLines,
   saleSettlements,
@@ -230,16 +229,7 @@ it("connected retries keep the original reservation and key and look up before s
   expect(await originalFacts()).toEqual(before);
 });
 
-it.each([
-  "missing",
-  "ended",
-  "device",
-  "deleted",
-  "moved",
-  "retired",
-  "admission",
-  "suspended",
-] as const)(
+it.each(["missing", "ended", "device", "deleted", "retired", "admission", "suspended"] as const)(
   "refuses %s session/device/profile access on list, create, status and retry",
   async (kind) => {
     const t = await pendingCard();
@@ -267,15 +257,6 @@ it.each([
         .update(deviceProfiles)
         .set({ retiredAt: new Date().toISOString() })
         .where(eq(deviceProfiles.id, profileId));
-    if (kind === "moved") {
-      const [place] = await store.db
-        .select()
-        .from(locations)
-        .where(eq(locations.id, venue.cfg.locationId));
-      const id = randomUUID();
-      await store.db.insert(locations).values({ ...place!, id, name: "Elsewhere" });
-      await store.db.update(devices).set({ locationId: id }).where(eq(devices.id, venue.deviceId));
-    }
     if (kind === "admission") {
       await store.db
         .insert(deviceProfileAdmissionPersons)
