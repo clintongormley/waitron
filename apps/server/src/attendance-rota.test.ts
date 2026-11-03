@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { asc, eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, locations, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import {
@@ -24,18 +24,14 @@ const suite = useVenueDb({
 const backend = new WorkforceBackend();
 let app: Hono, locationId: string, personId: string, otherId: string, cookie: string;
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "04:00",
-      invoiceLocales: ["es"],
-      operationDescription: "Meals",
-    })
-    .returning();
-  locationId = location!.id;
+  await seedVenue(suite.db, {
+    name: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "04:00",
+    invoiceLocales: ["es"],
+    operationDescription: "Meals",
+  });
+  locationId = await venueLocationId(suite.db);
   const workers = await suite.db
     .insert(persons)
     .values([

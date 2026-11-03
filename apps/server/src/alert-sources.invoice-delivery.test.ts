@@ -5,17 +5,16 @@ import {
   type A4HoldCode,
   CORE_MIGRATIONS,
   invoiceDeliveries,
-  locations,
   pagePrinters,
   printAgents,
   printJobs,
   tenants,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { createPrinter, enqueuePrintJob, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
-import { locationId as brandLocation } from "@waitron/shared";
 import {
   claimInvoiceDelivery,
   expireInvoiceDeliveryClaims,
@@ -44,12 +43,13 @@ type Status = "queued" | "sending" | "sent" | "failed" | "unknown";
 async function venue() {
   await seedTenant(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved domicile" });
-  const [loc] = await suite.db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Sale on premises" })
-    .returning({ id: locations.id });
-  const locationId = loc!.id;
-  const nodeId = await seedNode(suite.db, brandLocation(locationId));
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Sale on premises",
+  });
+  const locationId = await venueLocationId(suite.db);
+  const nodeId = await seedNode(suite.db);
   const [agent] = await suite.db
     .insert(printAgents)
     .values({ locationId, name: "Back office agent", tokenHash: "scrypt$fixture" })

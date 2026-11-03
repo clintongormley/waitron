@@ -1,27 +1,15 @@
 // Reads on one transaction.
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  incidents,
-  locations,
-  withTransaction,
-  type Database,
-  type Transaction,
-} from "@waitron/db";
+import { incidents, withTransaction, type Database, type Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { listOpenIncidents, markIncidentHandled, recordIncident } from "@waitron/core";
 import { hashPin, persons } from "@waitron/identity";
 import type { AlertSource } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
-import {
-  AppError,
-  backupOrigin,
-  deviceOrigin,
-  locationId as brandLocationId,
-  type DeviceId,
-} from "@waitron/shared";
+import { AppError, backupOrigin, deviceOrigin, type DeviceId } from "@waitron/shared";
 import {
   HANDLED_WINDOW_MS,
   UNCLAIMED,
@@ -51,22 +39,13 @@ const registry = createAlertRegistry({
 });
 const EVERYTHING = new Set(["fiscal.view", "payments.manage", "diagnostics.view"]);
 
-async function seedVenue(): Promise<{ deviceId: DeviceId }> {
-  await seedTenant(db);
-  // Through the table definition: `locations.id` is a NOT NULL `$defaultFn` generator a raw insert
-  // never reaches.
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Sala",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const { deviceId } = await seedDevice(db, {
-    locationId: brandLocationId(location!.id),
-    label: "Caja 1",
+async function seedVenueWithTill(): Promise<{ deviceId: DeviceId }> {
+  await seedVenue(db, {
+    name: "Sala",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
   });
+  const { deviceId } = await seedDevice(db, { label: "Caja 1" });
   return { deviceId };
 }
 
@@ -142,7 +121,7 @@ describe("claims", () => {
 
 describe("readOpenAlerts", () => {
   it("shows a session only the areas it holds", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithTill();
     await raise(v, "payment.offline_forward_declined", "error", NOW);
     await raise(v, "fiscal.registro_rechazado", "error", NOW);
     await raise(v, "chain.verification_failed", "error", NOW);
@@ -162,7 +141,7 @@ describe("readOpenAlerts", () => {
   });
 
   it("builds an event alert from the incident", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithTill();
     await raise(v, "payment.offline_forward_declined", "error", NOW);
     const [incident] = await asApp((tx) => listOpenIncidents(tx));
     const [alert] = await asApp((tx) =>
@@ -183,7 +162,7 @@ describe("readOpenAlerts", () => {
   });
 
   it("links the held-payments alert to Payments, and no other payment check alert", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithTill();
     await raise(v, "payment.reconcile_held", "error", NOW);
     await raise(v, "payment.reconcile_orphan", "error", NOW);
     const alerts = await asApp((tx) =>
@@ -199,7 +178,7 @@ describe("readOpenAlerts", () => {
   });
 
   it("shows an old-backups-deleted alert in Backups to system.manage holders only", async () => {
-    await seedVenue();
+    await seedVenueWithTill();
     await asApp((tx) =>
       recordIncident(tx, {
         origin: backupOrigin(),
@@ -230,7 +209,7 @@ describe("readOpenAlerts", () => {
   });
 
   it("puts errors first, then the newest", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithTill();
     await raise(v, "payment.offline_forward_declined", "warning", new Date(NOW.getTime() - 1_000));
     await raise(v, "fiscal.registro_rechazado", "error", new Date(NOW.getTime() - 5_000));
     await raise(v, "chain.verification_failed", "error", new Date(NOW.getTime() - 2_000));
@@ -367,7 +346,7 @@ describe("readOpenAlerts", () => {
   });
 
   it("replaces a failing source with source_unavailable and keeps reading the others", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithTill();
     const log = vi.fn<Logger>();
     const failing: AlertSource = {
       area: "backup",
@@ -522,9 +501,8 @@ describe("readOpenAlerts", () => {
 
 describe("readHandledAlerts", () => {
   it("lists handled events from the last 30 days with who handled them", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithTill();
     const person = await asApp(async (tx) => {
-      // Through the table definition for the same reason as `seedVenue` above.
       const [p] = await tx
         .insert(persons)
         .values({ displayName: "Ada", pinHash: hashPin("1234"), role: "manager" })
@@ -563,7 +541,7 @@ describe("readHandledAlerts", () => {
   });
 
   it("shows a handled event with no recorded handler as handled by nobody", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithTill();
     await raise(v, "payment.offline_forward_declined", "error", NOW);
     const handledAt = new Date(NOW.getTime() - 60_000).toISOString();
     await db

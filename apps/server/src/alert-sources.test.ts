@@ -10,7 +10,6 @@ import {
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import {
   CORE_MIGRATIONS,
-  locations,
   printAgents,
   printJobs,
   printers,
@@ -18,9 +17,10 @@ import {
   stationPrinters,
   type Database,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import type { AlertSource } from "@waitron/module";
 import type { StreamStatus, StreamView } from "@waitron/stream";
 import {
@@ -705,11 +705,12 @@ function minsAgo(mins: number): string {
 }
 
 async function seedLocation(): Promise<string> {
-  const [row] = await suite.db
-    .insert(locations)
-    .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
-    .returning({ id: locations.id });
-  return row!.id;
+  await seedVenue(suite.db, {
+    name: "Counter",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Retail",
+  });
+  return venueLocationId(suite.db);
 }
 
 async function seedPrinter(t: {

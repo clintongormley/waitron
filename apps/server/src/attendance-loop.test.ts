@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
@@ -31,19 +31,15 @@ const deps = () => ({ db: suite.db, locationId, nodeId, now: () => now, isPrimar
 beforeEach(async () => {
   primary = true;
   await suite.db.execute(sql`drop trigger if exists reject_question`);
-  await seedTenant(suite.db);
-  const [place] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "05:00",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-    })
-    .returning();
-  locationId = place!.id;
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  await seedVenue(suite.db, {
+    name: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
+  locationId = await venueLocationId(suite.db);
+  nodeId = await seedNode(suite.db);
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: "Worker", pinHash: "scrypt$00$00" })
@@ -151,7 +147,7 @@ describe("attendance duty pass", () => {
     expect((await snapshot()).work).toMatchObject([{ deferredShiftIds: [] }]);
   });
   it("appends on this node while preserving an older node's open entry and chain", async () => {
-    const oldNode = await seedNode(suite.db, brandLocationId(locationId));
+    const oldNode = await seedNode(suite.db);
     await withTransaction(suite.db, (tx) =>
       backend.clockIn(tx, {
         nodeId: oldNode,

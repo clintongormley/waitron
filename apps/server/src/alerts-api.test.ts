@@ -13,7 +13,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { listOpenIncidents, markIncidentHandled, recordIncident } from "@waitron/core";
 import {
@@ -33,14 +33,7 @@ import {
   type CardProviderRuntimeDeps,
   type ReaderStatus,
 } from "@waitron/payments";
-import {
-  AppError,
-  deviceOrigin,
-  jobOrigin,
-  locationId as brandLocationId,
-  type DeviceId,
-  type Origin,
-} from "@waitron/shared";
+import { AppError, deviceOrigin, jobOrigin, type DeviceId, type Origin } from "@waitron/shared";
 import { SUMUP_CARD_PROVIDER } from "@waitron/payments-sumup";
 import { mountAlertsApi } from "./alerts-api.js";
 import {
@@ -90,20 +83,13 @@ interface Venue {
   admin: string;
 }
 
-async function seedVenue(): Promise<Venue> {
-  await seedTenant(db);
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Dining room",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const { deviceId } = await seedDevice(db, {
-    locationId: brandLocationId(location!.id),
-    label: "Till 1",
+async function seedVenueWithStaff(): Promise<Venue> {
+  await seedVenue(db, {
+    name: "Dining room",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
   });
+  const { deviceId } = await seedDevice(db, { label: "Till 1" });
   const cookie = (role: PersonRoleValue, name: string) =>
     withTransaction(db, async (tx) => {
       const [p] = await tx
@@ -174,7 +160,7 @@ describe("alert routes", () => {
   });
 
   it("lists open alerts for a manager", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     await raise(v, "payment.offline_forward_declined");
     await raise(v, "chain.verification_failed");
     const res = await get(appFor(), "/management-api/alerts", v.manager);
@@ -188,7 +174,7 @@ describe("alert routes", () => {
   });
 
   it("names a device alert's device and a job alert's source", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     await raise(v, "payment.offline_forward_declined");
     await raise(v, "fiscal.registro_rechazado", "error", jobOrigin("fiscal_filing"));
     const app = appFor();
@@ -209,7 +195,7 @@ describe("alert routes", () => {
   });
 
   it("still names a device that was revoked after the alert", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     await raise(v, "payment.offline_forward_declined");
     await db.update(devices).set({ active: false }).where(eq(devices.id, v.deviceId));
     const body = (await (await get(appFor(), "/management-api/alerts", v.manager)).json()) as {
@@ -219,7 +205,7 @@ describe("alert routes", () => {
   });
 
   it("answers not visible and empty to a session holding no alert permission", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     await raise(v, "payment.offline_forward_declined");
     const res = await get(appFor(), "/management-api/alerts", v.supervisor);
     expect(res.status).toBe(200);
@@ -227,7 +213,7 @@ describe("alert routes", () => {
   });
 
   it("marks an incident handled; it moves from open to handled with who and when", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const id = await raise(v, "payment.offline_forward_declined");
     const app = appFor();
     const res = await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager);
@@ -256,7 +242,7 @@ describe("alert routes", () => {
   });
 
   it("succeeds when the incident is already handled", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const id = await raise(v, "payment.offline_forward_declined");
     const app = appFor();
     expect(
@@ -277,7 +263,7 @@ describe("alert routes", () => {
       ],
       sources: [],
     });
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const id = await raise(v, "fiscal.registro_rechazado");
     const app = appFor(registry);
     const refused = await post(app, `/management-api/alerts/incidents/${id}/handled`, v.manager);
@@ -292,7 +278,7 @@ describe("alert routes", () => {
 
   it("shows and lets handle only payment alerts to a session holding payments.manage alone", async () => {
     roleOverride.set("supervisor", ["payments.manage"]);
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const payment = await raise(v, "payment.offline_forward_declined");
     const others = [
       await raise(v, "fiscal.registro_rechazado"),
@@ -336,7 +322,7 @@ describe("alert routes", () => {
   });
 
   it("answers alert.not_found to a session holding no alert permission, even for a real id", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const id = await raise(v, "fiscal.registro_rechazado");
     const res = await post(
       appFor(),
@@ -348,7 +334,7 @@ describe("alert routes", () => {
   });
 
   it("answers alert.not_found for an unknown and a malformed id", async () => {
-    const a = await seedVenue();
+    const a = await seedVenueWithStaff();
     const app = appFor();
     for (const id of ["00000000-0000-4000-8000-000000000000", "not-a-uuid"]) {
       const res = await post(app, `/management-api/alerts/incidents/${id}/handled`, a.manager);
@@ -390,7 +376,7 @@ describe("marking a wrongly dated sales alert handled with a note", () => {
   const note = (text: unknown) => JSON.stringify({ note: text });
 
   it("stores the trimmed note with the handling", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const id = await raise(v, MISDATED);
     const res = await postBody(appFor(), id, v.manager, note("  Checked with the accountant  "));
     expect(res.status).toBe(204);
@@ -401,7 +387,7 @@ describe("marking a wrongly dated sales alert handled with a note", () => {
   });
 
   it("accepts a note of 500 characters and refuses one of 501", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const app = appFor();
     const refusedId = await raise(v, MISDATED);
     await expectError(await postBody(app, refusedId, v.manager, note("x".repeat(501))), 400, {
@@ -417,7 +403,7 @@ describe("marking a wrongly dated sales alert handled with a note", () => {
   });
 
   it("stores no note for a whitespace-only note, an empty body, null, {} and an absent note", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const app = appFor();
     for (const body of [note("   \n\t "), "", "null", "{}", note(undefined)]) {
       const id = await raise(v, MISDATED);
@@ -430,7 +416,7 @@ describe("marking a wrongly dated sales alert handled with a note", () => {
   });
 
   it("refuses a note that is not a string under the note, and a body that is not an object as the body", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const app = appFor();
     const id = await raise(v, MISDATED);
     for (const body of [note(42), note(null), note(["x"])]) {
@@ -449,7 +435,7 @@ describe("marking a wrongly dated sales alert handled with a note", () => {
   });
 
   it("refuses a body that does not parse and leaves the incident open", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const id = await raise(v, MISDATED);
     await expectError(await postBody(appFor(), id, v.manager, '{note:"x"'), 400, {
       code: "management.request_invalid",
@@ -459,7 +445,7 @@ describe("marking a wrongly dated sales alert handled with a note", () => {
   });
 
   it("refuses a note on an incident already handled and stores nothing", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const app = appFor();
     const id = await raise(v, MISDATED);
     expect(
@@ -476,7 +462,7 @@ describe("marking a wrongly dated sales alert handled with a note", () => {
   });
 
   it("judges the session, visibility and claim before an over-long note", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const app = appFor();
     const id = await raise(v, MISDATED);
     const long = note("x".repeat(501));
@@ -507,7 +493,7 @@ describe("marking a wrongly dated sales alert handled with a note", () => {
   });
 
   it("refuses a note on another code's incident as not found, and handles it without one", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const app = appFor();
     const id = await raise(v, "printing.mystery");
     await expectError(await postBody(app, id, v.manager, note("Paper jam")), 404, {
@@ -540,7 +526,7 @@ describe("adding a note to a handled wrongly dated sales alert", () => {
     )[0]!.by;
 
   it("adds the trimmed note to an alert a person handled", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const app = appFor();
     const id = await raise(v, MISDATED);
     expect(
@@ -556,7 +542,7 @@ describe("adding a note to a handled wrongly dated sales alert", () => {
   });
 
   it("adds a note to an alert the box handled, keeping it the box's", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const id = await raise(v, MISDATED);
     await handle(id, null);
     expect((await postNote(appFor(), id, v.manager, note("Box closed it"))).status).toBe(204);
@@ -568,7 +554,7 @@ describe("adding a note to a handled wrongly dated sales alert", () => {
   });
 
   it("refuses a second note and keeps the first", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const app = appFor();
     const id = await raise(v, MISDATED);
     await handle(id, null);
@@ -581,7 +567,7 @@ describe("adding a note to a handled wrongly dated sales alert", () => {
   });
 
   it("refuses a note on an open alert and leaves it open", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const id = await raise(v, MISDATED);
     await expectError(await postNote(appFor(), id, v.manager, note("Too soon")), 409, {
       code: "alert.not_handled",
@@ -591,7 +577,7 @@ describe("adding a note to a handled wrongly dated sales alert", () => {
   });
 
   it("answers not found for a malformed id and an unknown one", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const app = appFor();
     for (const id of ["not-a-uuid", "99999999-9999-4999-8999-999999999999"]) {
       await expectError(await postNote(app, id, v.manager, note("x")), 404, {
@@ -602,7 +588,7 @@ describe("adding a note to a handled wrongly dated sales alert", () => {
   });
 
   it("answers not found for another code's handled alert and stores nothing", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const id = await raise(v, "printing.mystery");
     await handle(id, null);
     await expectError(await postNote(appFor(), id, v.manager, note("Paper jam")), 404, {
@@ -616,7 +602,7 @@ describe("adding a note to a handled wrongly dated sales alert", () => {
   });
 
   it("refuses a missing, empty or blank note, and a body that does not parse or is not an object", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const app = appFor();
     const id = await raise(v, MISDATED);
     await handle(id, null);
@@ -636,7 +622,7 @@ describe("adding a note to a handled wrongly dated sales alert", () => {
   });
 
   it("judges the session and the claim before an empty note", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const app = appFor();
     const id = await raise(v, MISDATED);
     await handle(id, null);
@@ -765,7 +751,7 @@ const liveGet = (app: Hono, cookie: string) =>
 
 describe("ongoing alert sources through the route", () => {
   it("returns a prompt reader's warning beside a timed-out reader within the alerts deadline", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     await seedLowReader("Counter");
     await seedLowReader("Terrace");
     let started!: () => void;
@@ -818,7 +804,7 @@ describe("ongoing alert sources through the route", () => {
   });
 
   it("answers with battery unavailable while a provider status remains held", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     await seedLowReader();
     await raise(v, "payment.offline_forward_declined");
     let entered!: () => void;
@@ -860,7 +846,7 @@ describe("ongoing alert sources through the route", () => {
   });
 
   it("keeps a low-battery reading when a provider status takes 39 seconds", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     await seedLowReader();
     let entered!: () => void;
     const started = new Promise<void>((resolve) => (entered = resolve));
@@ -894,7 +880,7 @@ describe("ongoing alert sources through the route", () => {
   });
 
   it("reports a SumUp reader's low battery through its real credential read", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const ring = loadKeyRing({
       WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -956,7 +942,7 @@ describe("ongoing alert sources through the route", () => {
   it("filters ongoing sources by permission: a payments.manage-only session sees only card_reader alerts", async () => {
     // Give the supervisor exactly the battery source's permission, then fire all four areas.
     roleOverride.set("supervisor", ["payments.manage"]);
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     await seedLowReader();
     await seedStuckPrintJob();
     const app = appFor(ongoingRegistry({ backupDisabled: true, awaitingCert: true }));
@@ -980,7 +966,7 @@ describe("ongoing alert sources through the route", () => {
   });
 
   it("isolates a throwing ongoing source: its area yields exactly one alert.source_unavailable and the others survive", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const working: AlertSource = {
       area: "printing",
       permission: "printer.manage",
@@ -1022,7 +1008,7 @@ describe("ongoing alert sources through the route", () => {
   });
 
   it("shows one unavailable alert when transaction and external sources fail in the same area", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const failing = (readOutsideTransaction: boolean): AlertSource => ({
       area: "card_reader",
       permission: "payments.manage",
@@ -1044,7 +1030,7 @@ describe("ongoing alert sources through the route", () => {
   });
 
   it("still raises restore.first_start_failed when the backups listing throws", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const registry = createAlertRegistry({
       claims: ALL_ALERT_CLAIMS,
       sources: [
@@ -1069,7 +1055,7 @@ describe("ongoing alert sources through the route", () => {
   });
 
   it("polls passively: the x-waitron-live GET does not extend the session, an ordinary GET does", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithStaff();
     const app = appFor(ongoingRegistry());
     const sid = v.manager.slice(MANAGEMENT_COOKIE.length + 1);
     // Age the session so a touch would visibly move its expiry.

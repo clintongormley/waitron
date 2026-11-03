@@ -1,9 +1,9 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { expect, it } from "vitest";
 import { Hono } from "hono";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, persons, sessions, IDENTITY_MIGRATIONS } from "@waitron/identity";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import { locationId, nodeId } from "@waitron/shared";
@@ -14,14 +14,14 @@ import { systemClock } from "./till-backend.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, IDENTITY_MIGRATIONS] });
 
 it("signs in normally in a venue where workforce has never been migrated", async () => {
-  await seedTenant(suite.db);
-  const [place] = await suite.db
-    .insert(locations)
-    .values({ name: "No workforce", invoiceLocales: ["en"], operationDescription: "Restaurant" })
-    .returning({ id: locations.id });
-  const placeId = locationId(place!.id);
-  const node = await seedNode(suite.db, placeId);
-  const device = await seedDevice(suite.db, { locationId: placeId });
+  await seedVenue(suite.db, {
+    name: "No workforce",
+    invoiceLocales: ["en"],
+    operationDescription: "Restaurant",
+  });
+  const placeId = locationId(await venueLocationId(suite.db));
+  const node = await seedNode(suite.db);
+  const device = await seedDevice(suite.db);
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: "Worker", pinHash: hashPin("1234") })

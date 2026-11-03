@@ -15,11 +15,12 @@ import {
   workingOrders,
   withTransaction,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons, sessions, hashSessionToken } from "@waitron/identity";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
@@ -80,20 +81,16 @@ async function evaluate() {
       .where(eq(attendanceDayWork.id, work.id));
 }
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [place] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "04:00",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-    })
-    .returning({ id: locations.id });
-  locationId = place!.id;
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
-  deviceId = (await seedDevice(suite.db, { locationId: brandLocationId(locationId) })).deviceId;
+  await seedVenue(suite.db, {
+    name: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "04:00",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
+  locationId = await venueLocationId(suite.db);
+  nodeId = await seedNode(suite.db);
+  deviceId = (await seedDevice(suite.db)).deviceId;
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: "Ana", pinHash: "scrypt$00$00", role: "admin" })
@@ -224,9 +221,13 @@ describe("durable attendance discovery", () => {
       orderId = newId(),
       draftId = newId();
     await suite.db.insert(parties).values({ id: partyId, openedBy: personId });
-    await suite.db
-      .insert(workingOrders)
-      .values({ id: orderId, source: "dashboard", locationId, nodeId, orderNumber: 1, partyId });
+    await seedWorkingOrder(suite.db, {
+      id: orderId,
+      source: "dashboard",
+      nodeId,
+      orderNumber: 1,
+      partyId,
+    });
     await run((tx) =>
       appendOrderAmendment(tx, {
         workingOrderId: orderId,
@@ -366,7 +367,7 @@ describe("durable attendance discovery", () => {
 
   it("reconciles the ended day of a shift begun on another node before clocking", async () => {
     const { reconcileAttendanceBeforeClock } = await import("./attendance-discovery.js");
-    const otherNode = await seedNode(suite.db, brandLocationId(locationId));
+    const otherNode = await seedNode(suite.db);
     await run((tx) => backend.clockIn(tx, { ...event("2026-01-05T08:00:00Z"), nodeId: otherNode }));
     expect(
       await run((tx) =>
@@ -460,9 +461,7 @@ describe("durable attendance discovery", () => {
 describe("mutable attendance source watches", () => {
   async function bill(state: "pending" | "received") {
     const orderId = newId();
-    await suite.db
-      .insert(workingOrders)
-      .values({ id: orderId, source: "dashboard", locationId, nodeId, orderNumber: 1 });
+    await seedWorkingOrder(suite.db, { id: orderId, source: "dashboard", nodeId, orderNumber: 1 });
     const [payment] = await suite.db
       .insert(billPayments)
       .values({
@@ -581,9 +580,7 @@ describe("mutable attendance source watches", () => {
   });
   it("rotates pending watches so the first unresolved bill does not starve a later outcome", async () => {
     const orderId = newId();
-    await suite.db
-      .insert(workingOrders)
-      .values({ id: orderId, source: "dashboard", locationId, nodeId, orderNumber: 1 });
+    await seedWorkingOrder(suite.db, { id: orderId, source: "dashboard", nodeId, orderNumber: 1 });
     const ids: string[] = [];
     for (let i = 0; i < 5; i++) {
       const id = newId();
@@ -707,9 +704,13 @@ it("does not dirty any day for a device-only party event without a bill payment"
   const partyId = newId(),
     orderId = newId();
   await suite.db.insert(parties).values({ id: partyId, openedBy: personId });
-  await suite.db
-    .insert(workingOrders)
-    .values({ id: orderId, partyId, source: "dashboard", locationId, nodeId, orderNumber: 1 });
+  await seedWorkingOrder(suite.db, {
+    id: orderId,
+    partyId,
+    source: "dashboard",
+    nodeId,
+    orderNumber: 1,
+  });
   await suite.db.insert(orderGroupEvents).values({
     partyId,
     kind: "reordered",
@@ -725,9 +726,7 @@ it("does not dirty any day for a device-only party event without a bill payment"
 it("qualifies a captured pending bill at its saved instant when the retained outcome arrives", async () => {
   const orderId = newId(),
     paymentId = newId();
-  await suite.db
-    .insert(workingOrders)
-    .values({ id: orderId, source: "dashboard", locationId, orderNumber: 1 });
+  await seedWorkingOrder(suite.db, { id: orderId, source: "dashboard", orderNumber: 1 });
   await suite.db.insert(billPayments).values({
     id: paymentId,
     workingOrderId: orderId,
@@ -808,9 +807,13 @@ it("a captured event still marks its day after its party loses every order", asy
     { id: partyId, openedBy: personId },
     { id: otherParty, openedBy: personId },
   ]);
-  await suite.db
-    .insert(workingOrders)
-    .values({ id: orderId, source: "dashboard", locationId, nodeId, orderNumber: 1, partyId });
+  await seedWorkingOrder(suite.db, {
+    id: orderId,
+    source: "dashboard",
+    nodeId,
+    orderNumber: 1,
+    partyId,
+  });
   await suite.db
     .insert(orderDrafts)
     .values({ id: draftId, partyId, ownerId: personId, state: "discarded" });

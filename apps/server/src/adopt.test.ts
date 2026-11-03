@@ -3,14 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import {
-  locations,
-  readDeploymentEnvironment,
-  stampDeployment,
-  tenants,
-  withTransaction,
-} from "@waitron/db";
+import { readDeploymentEnvironment, stampDeployment, tenants, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import {
   readMirrorLink,
   readNodeMode,
@@ -403,7 +398,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     await suite.db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "80000001K", legalName: "Incumbent SL" });
-    await suite.db.insert(locations).values({
+    await seedVenue(suite.db, {
       name: "Existing venue",
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",
@@ -484,7 +479,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     await suite.db
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "80000001K", legalName: "Incumbent SL" });
-    await suite.db.insert(locations).values({
+    await seedVenue(suite.db, {
       name: "Existing venue",
       invoiceLocales: ["en-GB"],
       operationDescription: "Hospitality",

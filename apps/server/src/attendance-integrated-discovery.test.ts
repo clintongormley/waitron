@@ -3,16 +3,14 @@ import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
   newId,
-  locations,
-  workingOrders,
   withTransaction,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
-import { seedTenant, seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
-import { locationId as brandLocationId } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
   attendanceOperationFacts,
@@ -30,28 +28,22 @@ let locationId: string, personId: string, nodeId: string, orderId: string;
 const requestAt = new Date("2026-01-05T11:00:00Z"),
   later = new Date("2026-01-09T12:00:00Z");
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [place] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "04:00",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-    })
-    .returning();
-  locationId = place!.id;
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
+  await seedVenue(suite.db, {
+    name: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "04:00",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
+  locationId = await venueLocationId(suite.db);
+  nodeId = await seedNode(suite.db);
   const [person] = await suite.db
     .insert(persons)
     .values({ displayName: "Collector", pinHash: "scrypt$00$00" })
     .returning();
   personId = person!.id;
   orderId = newId();
-  await suite.db
-    .insert(workingOrders)
-    .values({ id: orderId, source: "dashboard", locationId, nodeId, orderNumber: 1 });
+  await seedWorkingOrder(suite.db, { id: orderId, source: "dashboard", nodeId, orderNumber: 1 });
 });
 async function request() {
   return run((tx) =>

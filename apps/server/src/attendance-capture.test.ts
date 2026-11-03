@@ -2,12 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
-  locations,
   locationDayCutoverChanges,
   type Transaction,
+  venueLocationId,
   withTransaction,
 } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import {
@@ -37,20 +37,14 @@ async function capture(input: Parameters<AttendanceRecorder>[1]) {
   return run((tx) => recordAttendanceFact(tx, input));
 }
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const places = await suite.db
-    .insert(locations)
-    .values([
-      {
-        name: "Madrid",
-        timeZone: "Europe/Madrid",
-        dayCutover: "04:00",
-        invoiceLocales: ["es"],
-        operationDescription: "Restaurant",
-      },
-    ])
-    .returning({ id: locations.id });
-  [locationId] = places.map((r) => r.id) as [string];
+  await seedVenue(suite.db, {
+    name: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "04:00",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
+  locationId = await venueLocationId(suite.db);
   const people = await suite.db
     .insert(persons)
     .values([
