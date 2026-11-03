@@ -413,7 +413,7 @@ export function createWifiRecordReader(deps) {
     checkFolder(stats, 0o077);
 
     // Only root can write in a root-only folder, so only root could swap it between these checks
-    // and the open below, and root is already trusted (spec §7.5).
+    // and the open below.
     let handle;
     try {
       handle = await open(recordPath, OPEN_RECORD);
