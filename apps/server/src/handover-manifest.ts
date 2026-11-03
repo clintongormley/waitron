@@ -7,8 +7,8 @@ const DIGESTED = new Set(["backup.env", "modules.json"]);
 const RING = "secrets.env";
 
 /**
- * The manifest as this box reports it in a handover. `secrets.env` carries only its key versions,
- * never a key or a digest of one: a digest of a 32-byte random key would still identify it.
+ * `secrets.env` carries its key versions, not a digest: the receiving box must hold every version
+ * the sender lists, which a digest of the file cannot answer.
  */
 export async function buildNodeLocalManifest(
   stateDir: string,

@@ -38,6 +38,19 @@ function containsBytes(value: unknown): boolean {
   return false;
 }
 
+function expectedManifest(
+  ringVersions: number[],
+  digests: Record<"backup.env" | "modules.json", string | null>,
+): NodeLocalItem[] {
+  return NODE_LOCAL_MANIFEST.map((entry) => {
+    if (entry.item === "secrets.env") return { ...entry, ringVersions };
+    if (entry.item === "backup.env" || entry.item === "modules.json") {
+      return { ...entry, sha256: digests[entry.item] };
+    }
+    return { ...entry };
+  });
+}
+
 function stringsIn(value: unknown): string[] {
   if (typeof value === "string") return [value];
   if (value !== null && typeof value === "object") return Object.values(value).flatMap(stringsIn);
@@ -65,6 +78,12 @@ describe("buildNodeLocalManifest", () => {
     await writeFile(join(stateDir, "modules.json"), '{"enabled":[]}');
 
     const items = await buildNodeLocalManifest(stateDir, ring);
+    expect(items).toStrictEqual(
+      expectedManifest([2, 3], {
+        "backup.env": sha256("WAITRON_BACKUP_BUCKET=b\n"),
+        "modules.json": sha256('{"enabled":[]}'),
+      }),
+    );
     const texts = [...stringsIn(items), JSON.stringify(items)];
 
     expect(containsBytes(items)).toBe(false);
@@ -76,8 +95,6 @@ describe("buildNodeLocalManifest", () => {
       const asNumbers = JSON.stringify(key.toJSON().data).slice(1, -1);
       for (const text of texts) expect(text).not.toContain(asNumbers);
     }
-    expect(row(items, "secrets.env").ringVersions).toEqual([2, 3]);
-    expect(row(items, "secrets.env").sha256).toBeUndefined();
   });
 
   it("lists only the current version when no rotation is under way", async () => {
@@ -120,19 +137,9 @@ describe("buildNodeLocalManifest", () => {
 
   it("keeps every manifest row, in order, and adds values only to the three compared files", async () => {
     const items = await buildNodeLocalManifest(stateDir, ringWithRotation());
-    expect(
-      items.map(({ item, where, class: kind, treatment }) => ({
-        item,
-        where,
-        class: kind,
-        treatment,
-      })),
-    ).toEqual([...NODE_LOCAL_MANIFEST]);
-    for (const entry of items) {
-      if (["backup.env", "modules.json", "secrets.env"].includes(entry.item)) continue;
-      expect(entry).not.toHaveProperty("sha256");
-      expect(entry).not.toHaveProperty("ringVersions");
-    }
+    expect(items).toStrictEqual(
+      expectedManifest([2, 3], { "backup.env": null, "modules.json": null }),
+    );
   });
 
   it("refuses a state file it cannot read for a reason other than its absence", async () => {
