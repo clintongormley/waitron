@@ -27,7 +27,7 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     path: "/management-api/promote",
     boxes: ["mirror", "fenced"],
     authenticates:
-      "an administrator's password (and code when enrolled) in the body; a fenced box answers `promotion.node_fenced`",
+      "in the body, either the box's break-glass secret or the password (and code when enrolled) of a person holding `node.promote`; a promote module operation for this box takes the same choice, or, with `noParallelRecovery` on a box that prepares operations, the HTTPS and sign-in checks `node-operation-preparation.ts` makes; a fenced box answers `promotion.node_fenced`",
   },
   {
     method: "POST",

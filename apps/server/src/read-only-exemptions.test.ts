@@ -5,16 +5,14 @@ import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
-  locations,
-  nodes,
   openVenueDatabase,
   stampDeployment,
-  tenants,
   writeNodeMembership,
   type Database,
   type NodeDatabase,
   type VenueDatabase,
 } from "@waitron/db";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import { loadKeyRing } from "@waitron/credentials";
@@ -85,8 +83,6 @@ writeFileSync(
   join(STATE_ROOT, "modules.json"),
   JSON.stringify({ modules: { "fiscal-none": false } }),
 );
-const NODE_ID = "33333333-3333-4333-8333-333333333333";
-const LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const ORIGIN_NODE_ID = "77777777-7777-4777-8777-777777777777";
 const KEY_ENV = {
   WAITRON_HTTP_LANDING_PORT: "0",
@@ -94,7 +90,6 @@ const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_STATE_DIR: STATE_ROOT,
   WAITRON_ENV: "preproduction",
-  WAITRON_NODE_ID: NODE_ID,
   WAITRON_MIN_TICK_MS: "250",
   WAITRON_MAX_TICK_MS: "1000",
   WAITRON_SKIP_RETRY_MS: "250",
@@ -109,37 +104,33 @@ const RING = loadKeyRing({
 let migrationsRoot: string;
 const openStores: VenueDatabase[] = [];
 const venueDirs: string[] = [];
-let mirrorDir: string;
-let fencedDir: string;
+let mirror: { dir: string; nodeId: string };
+let fenced: { dir: string; nodeId: string };
 
-async function seededVenue(): Promise<[string, Database, NodeDatabase]> {
+async function seededVenue(): Promise<[string, string, Database, NodeDatabase]> {
   const directory = await mkdtemp(join(tmpdir(), "waitron-exemptions-venue-"));
   venueDirs.push(directory);
   await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
   const store = await openVenueDatabase(directory);
   openStores.push(store);
   const db = store.venue;
-  await db.insert(tenants).values({ id: 1, country: "ES", taxId: "90222222J", legalName: "SL" });
-  await db.insert(locations).values({
-    id: LOCATION_ID,
-    name: "Loc",
-    invoiceLocales: ["en"],
-    operationDescription: "Hospitality",
-  });
-  await db.insert(nodes).values({ id: NODE_ID, locationId: LOCATION_ID, name: "Node" });
+  await seedVenue(db);
+  const nodeId = await seedNode(db);
   await stampDeployment(db, "preproduction");
   // Every box holds its own node key; without one peer-status refuses before reading the query.
-  await establishNodeIdentity({ ownerDb: db, node: store.node, ring: RING }, NODE_ID);
-  return [directory, db, store.node];
+  await establishNodeIdentity({ ownerDb: db, node: store.node, ring: RING }, nodeId);
+  return [directory, nodeId, db, store.node];
 }
 
 /** `readNodeMembership` does not verify the signature, so a placeholder is fine. */
-const SELL_ONLY_CHART: SignedMembershipDocument = {
-  body: { term: 5, nodes: [{ nodeId: NODE_ID, contactUrl: "", standing: "sell-only" }] },
-  signerNodeId: NODE_ID,
-  signature: "self-placeholder-sig",
-  endorsements: [],
-};
+function sellOnlyChart(nodeId: string): SignedMembershipDocument {
+  return {
+    body: { term: 5, nodes: [{ nodeId, contactUrl: "", standing: "sell-only" }] },
+    signerNodeId: nodeId,
+    signature: "self-placeholder-sig",
+    endorsements: [],
+  };
+}
 
 beforeAll(async () => {
   const fromSource = migrationOptionsFor(manifestSets(), null);
@@ -150,10 +141,10 @@ beforeAll(async () => {
     });
   }
 
-  const [mDir, mDb, mNode] = await seededVenue();
-  mirrorDir = mDir;
-  await setNodeMode({ venue: mDb, node: mNode }, NODE_ID, "mirror");
-  await writeMirrorLink(mNode, NODE_ID, {
+  const [mDir, mId, mDb, mNode] = await seededVenue();
+  mirror = { dir: mDir, nodeId: mId };
+  await setNodeMode({ venue: mDb, node: mNode }, mId, "mirror");
+  await writeMirrorLink(mNode, mId, {
     relayUrl: "http://127.0.0.1:1/",
     boxHostname: "mirror-box.local",
     boxCaPem: mintSelfSignedServerCert({
@@ -165,10 +156,10 @@ beforeAll(async () => {
   });
 
   // A held chart marking this box sell-only: boot fences it and mounts the read-only gate.
-  const [fDir, fDb, fNode] = await seededVenue();
-  fencedDir = fDir;
-  await setSingletonRole({ venue: fDb, node: fNode }, NODE_ID, "primary");
-  await writeNodeMembership(fDb, SELL_ONLY_CHART);
+  const [fDir, fId, fDb, fNode] = await seededVenue();
+  fenced = { dir: fDir, nodeId: fId };
+  await setSingletonRole({ venue: fDb, node: fNode }, fId, "primary");
+  await writeNodeMembership(fDb, sellOnlyChart(fId));
 }, 180_000);
 
 afterAll(async () => {
@@ -193,16 +184,26 @@ async function post(base: string, path: string): Promise<{ status: number; code:
   return { status: response.status, code: body.error?.code };
 }
 
+/** The membership route answers a body holding no chart with a bare refusal, not an error code. */
+async function handEmptyChart(base: string): Promise<{ status: number; body: unknown }> {
+  const response = await fetch(`${base}/api/node/membership`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  return { status: response.status, body: await response.json() };
+}
+
 const GATED = { status: 403, code: "node.read_only" };
 // Preparation's own HTTPS check refuses a plain-HTTP call before it reads the body.
 const PREPARATION_REFUSAL = { status: 403, code: "authorization.not_permitted" };
 
-// `POST /api/node/membership` is listed but not yet mounted; its route's own case lands with it.
 describe("each listed route is reached on a real read-only start, and nothing else is", () => {
   it("on a mirror", async () => {
     const server = await startServer({
       ...KEY_ENV,
-      WAITRON_VENUE_DIR: mirrorDir,
+      WAITRON_VENUE_DIR: mirror.dir,
+      WAITRON_NODE_ID: mirror.nodeId,
       WAITRON_HTTP_PORT: String(await freePort()),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
@@ -213,6 +214,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         promote: await post(base, "/management-api/promote"),
         preparation: await post(base, "/management-api/promote/preparation"),
         peerStatus: await post(base, "/api/node/peer-status"),
+        membership: await handEmptyChart(base),
         // Listed for a fenced box only.
         retire: await post(base, "/api/box/retire"),
         unlisted: await post(base, "/management-api/catalogues"),
@@ -220,6 +222,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         promote: { status: 401, code: "password.invalid" },
         preparation: PREPARATION_REFUSAL,
         peerStatus: { status: 400, code: "handover.request_invalid" },
+        membership: { status: 200, body: { accepted: false } },
         retire: GATED,
         unlisted: GATED,
       });
@@ -231,7 +234,8 @@ describe("each listed route is reached on a real read-only start, and nothing el
   it("on a fenced box", async () => {
     const server = await startServer({
       ...KEY_ENV,
-      WAITRON_VENUE_DIR: fencedDir,
+      WAITRON_VENUE_DIR: fenced.dir,
+      WAITRON_NODE_ID: fenced.nodeId,
       WAITRON_HTTP_PORT: String(await freePort()),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
     });
@@ -243,12 +247,14 @@ describe("each listed route is reached on a real read-only start, and nothing el
         promote: await post(base, "/management-api/promote"),
         preparation: await post(base, "/management-api/promote/preparation"),
         peerStatus: await post(base, "/api/node/peer-status"),
+        membership: await handEmptyChart(base),
         unlisted: await post(base, "/management-api/catalogues"),
       }).toEqual({
         retire: { status: 401, code: "management_session.required" },
         promote: { status: 401, code: "password.invalid" },
         preparation: PREPARATION_REFUSAL,
         peerStatus: { status: 400, code: "handover.request_invalid" },
+        membership: { status: 200, body: { accepted: false } },
         unlisted: GATED,
       });
     } finally {
