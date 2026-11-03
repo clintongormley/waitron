@@ -1336,3 +1336,21 @@ Left as they were, from #827's review: unlike the two staff
   `#reloadProducts`, after awaited reads, so the stream that opened with the screen's other types
   is replaced once those reads answer. Decide whether the screen should watch those types from the
   start, and check other screens that watch after an awaited read the same way.
+
+## A1315. Bring every help bubble down to orientation, one area per PR
+
+Dashboard, till and server pages, in English and Spanish. The rule is in
+[conventions-ui.md](../developers/conventions-ui.md#a-help-bubble-orients): read the code a bubble
+describes first, move each dropped fact into its linked guide section, and list every changed text
+before and after.
+
+Left: the dashboard and server pages. Lane C's B4b rewrites the kitchen card, columns, pass and
+More menu Pass help, so this work leaves those alone.
+
+- **The till's Transfers help** (`help.more.transfers`): its last sentence, on the order counts, is
+  more than orientation, but `apps/till/src/i18n/help-strings.test.ts` (A757 slice 6) pins it word
+  for word, so shortening it is a choice for the owner.
+- **For the dashboard PR:** the dashboard's Spanish says «Barra» for the counter, the till
+  «Mostrador».
+- **No guide section to link yet:** the guide has no section on a device's profile, equipment,
+  department transfers or Fix my hours, nor on a zone's Reset.

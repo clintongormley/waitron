@@ -4325,21 +4325,12 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   #1871).** It is started from `apps/server/src/node-entry.ts`, outside `bootServer`.
 
 - **A1315. Bring every help bubble down to orientation, one area per PR** (dashboard, till, server
-  pages; English and Spanish). The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients):
-  read the code a bubble describes first, move each dropped fact into its linked guide section, and
-  list every changed text before and after. Done: setup (#2435), the till's counter, floor, menu
-  and order help (#2437), and the till's More menu, person and kitchen notices/merge help (this
-  PR: only Fix my hours changed, losing "or place", since its dialog offers a day alone), with the
-  three points #2437 left open: the Spanish Waiting orders help now says «de mostrador», the reset
-  dialog names tables with guests or still to clear, and the Send help keeps its `#after-period`
-  link (the facts #2437 took out of it are there; `#request-cooking` is about the kitchen screens).
-  Left: the dashboard, server pages, and lane C's kitchen card, columns and pass help (B4b). For
-  the dashboard PR: the dashboard's Spanish says «Barra» for the counter, the till «Mostrador».
-  Open from this PR: the More and person menu help cannot link the guide (a `wt-menu-row` badge,
-  A1247), and the guide has no section on a device's profile, equipment, department transfers or
-  Fix my hours, nor on a zone's Reset; the Transfers help's last sentence, on the order counts, is
-  pinned word for word by `apps/till/src/i18n/help-strings.test.ts` (A757 slice 6), so shortening it
-  is a choice for the owner.
+  pages; English and Spanish). The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients).
+  Done: setup (#2435) and the till's counter, floor, menu, order, More menu, person and kitchen
+  notices/merge help (#2437, #PRNUM), but for an owner choice on the Transfers help. Left: the
+  dashboard and server pages; lane C's B4b rewrites the kitchen card, columns, pass and More menu
+  Pass help.
+  [Detail](backlog/dashboard.md#a1315-bring-every-help-bubble-down-to-orientation-one-area-per-pr)
 
 - **`wt-combobox` without a search box never exposes `aria-required`**
   [Detail](backlog/dashboard.md#wt-combobox-without-a-search-box-never-exposes-aria-required)

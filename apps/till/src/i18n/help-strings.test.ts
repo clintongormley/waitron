@@ -56,6 +56,13 @@ describe("the till's help strings", () => {
     const saysRetenido = Object.entries(helpEs).filter(([, text]) => /retenid/i.test(text));
     expect(saysRetenido).toEqual([]);
   });
+
+  it("no Spanish help text says «pedido del mostrador»", () => {
+    const saysDel = Object.entries(helpEs).filter(([, text]) =>
+      /(?<!\p{L})pedidos? del mostrador(?!\p{L})/iu.test(text),
+    );
+    expect(saysDel).toEqual([]);
+  });
 });
 
 describe("the order screen's help", () => {
@@ -67,13 +74,6 @@ describe("the order screen's help", () => {
 describe("the order lists' help", () => {
   it("the Spanish Waiting orders help calls counter orders by the till's word for the counter", () => {
     expect(helpEs["help.counter.waiting_orders"]).toContain(es["tab.counter"].toLowerCase());
-  });
-
-  it("no Spanish help text calls counter orders «del mostrador», as the rest say «de mostrador»", () => {
-    const saysDel = Object.entries(helpEs).filter(([, text]) =>
-      /pedidos? del mostrador/iu.test(text),
-    );
-    expect(saysDel).toEqual([]);
   });
 
   const states = ["items", "unsent", "held", "waiting", "ready"] as const;

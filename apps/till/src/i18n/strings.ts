@@ -2903,7 +2903,7 @@ export const es: Record<StringKey, string> = {
   "floor.reset_plan": "Volver al plano {set}",
   "floor.reset_title": "¿Restablecer {zone}?",
   "floor.reset_body":
-    "Las libres vuelven ya; las que tienen clientes o están por recoger quedan por mover al quedar libres.",
+    "Las libres vuelven ya; las que tienen clientes o están por recoger aparecen Por mover al quedar libres.",
   "floor.reset_confirm": "Restablecer",
   "floor.guests": "Comensales",
   "floor.bills": "Cuentas",

@@ -271,7 +271,7 @@ it("speaks Spanish", async () => {
   await choose(el, "reset");
   expect(dialogOf(el, "reset").heading).toBe("¿Restablecer Terrace?");
   expect(text(dialogOf(el, "reset").querySelector("[data-reset-body]"))).toBe(
-    "Las libres vuelven ya; las que tienen clientes o están por recoger quedan por mover al quedar libres.",
+    "Las libres vuelven ya; las que tienen clientes o están por recoger aparecen Por mover al quedar libres.",
   );
   expect(text(dialogOf(el, "reset").querySelector("[data-reset-confirm]"))).toBe("Restablecer");
   expect(text(dialogOf(el, "reset").querySelector("[data-cancel]"))).toBe("Cancelar");
