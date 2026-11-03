@@ -5814,8 +5814,9 @@ own dish list instead of this widget.
 
 ### The kitchen screen's cards
 
-A kitchen screen draws the columns Overview, Waiting, Preparing and Ready that its layout shows, in the
-layout's order, and one card per station and
+A kitchen screen draws, in the layout's order, the columns its layout shows of the six it can draw:
+Overview, Waiting + Held (`waiting`), Waiting (`waitingOnly`), Held (`held`), Preparing and Ready;
+and one card per station and
 group across the group's bills; dishes with no group (a counter order, a bill with no party, or
 dishes moved in) make one card per station and bill (`kitchenCards`,
 `apps/till/src/state/kitchen-cards.ts`). A card sits in the column of its least advanced dish, a
@@ -5827,7 +5828,8 @@ with no party and no table (`isCounterOrder`), the allergy marker, each distinct
 (a bill's tables by their short names, in number order joined with "+", else the name a let-go
 delivery table kept, else its label;
 `cardPlaces`, `kitchen-cards.ts`; the station read's `tableShortNames`), the group's name, the course when every dish shares one, "Held, not released" when the group
-is held or no dish on the card is fired, and the minutes since its oldest fired dish; under it come the whole-ticket mark (while
+is held or no dish on the card is fired ("Waiting for the pass" instead when no dish is fired and
+every dish has been requested), and the minutes since its oldest fired dish; under it come the whole-ticket mark (while
 the heading can move something), each bill's kitchen note and printing problem, the dishes (course
 sub-heads only when the card has more than one course), and each bill's "Also on this order",
 Collect and Reprint where they apply, each naming its bill's number when the card merges bills (`#card`, `apps/till/src/widgets/station-queue.ts`). Its age band
@@ -5852,7 +5854,19 @@ fired Waiting and Preparing dishes by quantity, a dish whose unit shows counting
 with such a dish whose band is overdue or forgotten; it shows while either count is above nothing
 (`thousandthsToMake`, `lateCards`, `kitchen-cards.ts`; `#header`, `station-queue.ts`). A dish at its
 card's column shows no state word, a dish further on shows "Preparing" or "Ready", and a held dish on
-a card with a fired dish shows "Held, not released" (`#stateWord`, `station-queue.ts`).
+a card with a fired dish shows "Held, not released", or "Waiting for the pass" once requested
+(`#stateWord`, `station-queue.ts`).
+
+Which cards a column holds is its own (`DRAWN`, `station-queue.ts`). `waiting`, headed Waiting on
+the board and named "Waiting + Held" in Columns (`station.columns_waiting_held`), holds every card
+whose least advanced dish is Waiting: first the cards with a fired dish, then, only while it holds a
+card with none, the held part, then those held cards. The held part is an `h3` with
+`data-held-part` reading "Held · 2", the "·" hidden from screen readers and the count in
+`data-held-count` (`heldPart`, `apps/till/src/widgets/kitchen-board-parts.ts`), drawn in the column
+and in its tab panel alike; a collapsed column draws neither its cards nor the part. `waitingOnly`
+(`data-column="waiting-only"`, headed and named Waiting) holds only the Waiting cards with a fired
+dish, and `held` (`data-column="held"`, headed and named Held) only the cards with none. A shown
+column is drawn even when it holds no card, and a card two shown columns hold is drawn in both.
 
 The columns are drawn in the device's stored order. The screen reads each board's layout once,
 the first time that board is drawn, with `readColumnState` (`apps/till/src/state/kitchen-columns.ts`)
@@ -5877,6 +5891,16 @@ view: each tap sends `column-move` or `column-show`, and the screen applies `mov
 `setColumnVisible` and saves at once (`KitchenColumnLayouts`, `kitchen-column-layouts.ts`), so it holds no
 staged input, takes no draft scope and has no `*.unsaved.test.ts`; Done and Escape only close it.
 The screen closes it when its board is no longer drawn or the device changes.
+
+`STATION_COLUMNS` (`kitchen-columns.ts`) orders `overview`, `waiting`, `waitingOnly`, `held`,
+`preparing` and `ready`, and hides `waitingOnly` and `held`, so a device with no stored layout draws
+Overview, Waiting + Held, Preparing and Ready. The held part takes no column, so `columnsFit` counts
+the combined column once, held card or not. The pass board (`till-pass-board`,
+`apps/till/src/widgets/pass-board.ts`) has the same shape: `PASS_COLUMNS` orders `overview`,
+`toFire`, `held`, `toFireOnly`, `inProgress` and `ready`, and hides `overview`, `held` and
+`toFireOnly`; `toFire`, headed To fire and named "Held + To fire" in Columns
+(`pass.columns_held_to_fire`), draws the server's To fire cards, then the same `heldPart` and the
+server's held cards; `held` and `toFireOnly` draw the server's held or To fire cards alone.
 
 Overview is the first column by default (`STATION_COLUMNS`, `kitchen-columns.ts`), and a stored
 layout without it reads with it first, shown and open (`sanitise`). Its rows come from

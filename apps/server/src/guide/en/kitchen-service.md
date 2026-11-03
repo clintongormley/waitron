@@ -129,15 +129,21 @@ allow.
 The kitchen screen shows a card for each group of dishes a table sent, and one for each counter
 order. A card names its table by the table's short name; a counter order with no table reads
 **Counter #12**. A card sits in the column of its least advanced dish, **Waiting**, **Preparing** or
-**Ready**, with the card that has waited longest first. Tap a column's heading, which shows how
-many cards the column holds, to collapse it to a narrow strip that keeps its name and count
-(**Ready · 3**); tap it again to open it. The screen remembers which columns are collapsed, for each
-station, even after it restarts. Tap a dish to move it on one step, or tap
-the card's heading to move the card on: only the dishes holding it back move, so a dish already
-further on stays where it is. A card's top edge turns from green to amber as it waits, then its
-whole border red, by the station's late flags, and a forgotten card's border pulses; it holds still
-on a device set to reduce motion. A card whose dishes are all held is dashed, shows no minutes and
-waits under **Waiting** until the waiter [requests cooking](kitchen-service.md#request-cooking).
+**Ready**, with the card that has waited longest first. Its minutes count from when its first dish
+was sent to this station to be cooked, or moved here. Tap a column's heading, which shows how many
+cards the column holds, to collapse it to a narrow strip that keeps its name and count
+(**Ready · 3**); tap it again to open it. Tap a dish to move it on one step, or tap the card's
+heading to move the card on: only the dishes holding it back move, so a dish already further on
+stays where it is. On a **Whole ticket** card, a tap on a dish moves the card's dishes at the same
+stage. A card's top edge turns from green to amber as it waits, then its whole border red, by the
+station's late flags, and a forgotten card's border pulses; it holds still on a device set to
+reduce motion.
+
+A card whose dishes are all held is dashed and shows no minutes. It says **Held, not released**
+until the waiter [requests cooking](kitchen-service.md#request-cooking), and **Waiting for the
+pass** once the waiter has asked and the pass has not yet fired it. At first it sits at the bottom
+of **Waiting**, under a **Held** heading that shows only while something is held; if the screen
+shows the **Held** column, it sits there too.
 
 The first column, **Overview**, lists each dish waiting or being made with how many, so you can see
 at a glance how many of each to start. After a **+** it shows how many more are held
@@ -145,22 +151,29 @@ at a glance how many of each to start. After a **+** it shows how many more are 
 of them there are. Overview is a column like the others: tap its heading to collapse it, and move or
 hide it in **Columns**.
 
-Where the screen is too narrow for its columns, it shows one column at a time, and the columns
-become tabs in the same order (**Waiting · 2**). The first tab is chosen until you tap another. A
-hidden column has no tab, and a collapsed column's tab still shows its cards. Opening a collapsed
-column can leave the others too little room: the screen then turns to tabs and shows the column you
-opened. To see the columns side by side again on that screen, hide columns in **Columns** until
-they fit. A tab whose column holds a late card has a red bar under it; a collapsed column holding a
-late card has one across its top.
+Where the screen is too narrow for the columns switched on, it shows one column at a time, and the
+columns become tabs in the same order (**Waiting · 2**). A held card never turns the screen to tabs:
+its **Held** heading sits inside **Waiting** and takes no column of its own. The first tab is chosen
+until you tap another. A hidden column has no tab, and a collapsed column's tab still shows its
+cards. Opening a collapsed column can leave the others too little room: the screen then turns to
+tabs and shows the column you opened. To see the columns side by side again on that screen, hide
+columns in **Columns** until they fit. A tab whose column holds a late card has a red bar under it;
+a collapsed column holding a late card has one across its top.
 
 A row above the columns shows how many dishes are still to make and how many cards are late, and
 **Columns** at its end; above a single station's columns it also shows whether the station is open
 today, and on a kitchen screen that nobody signs in on, the station's name (unless the station is
 no longer available: then the line above its columns names it). Tap **Columns** to arrange the
-columns: the arrows move a column up or down the list, which is the order the screen shows them in,
-and **Show** hides or shows it. Each change shows at once and stays on this device; **Done** closes
-the window. A hidden column's cards still count in the row. With every column hidden, the row and
-**Columns** stay, so you can bring a column back.
+columns. It lists **Overview**, **Waiting + Held**, **Waiting**, **Held**, **Preparing** and
+**Ready**: the arrows move a column up or down the list, which is the order the screen shows them
+in, and **Show** shows or hides it. At first the screen shows Overview, Waiting + Held (headed
+**Waiting** on the screen), Preparing and Ready. A screen wide enough can show **Waiting** and
+**Held** as two columns instead: switch both on and switch **Waiting + Held** off. A column switched
+on is drawn even when it is empty. Two columns switched on that hold the same cards both show them:
+with **Waiting + Held** and **Held** both on, a held card shows in both. Each change shows at once;
+**Done** closes the window. This device keeps the order, the columns shown and the collapsed ones,
+for each board, even after the screen restarts. A hidden column's cards still count in the row.
+With every column hidden, the row and **Columns** stay, so you can bring a column back.
 
 Each card carries its order's kitchen note and any printing problem. On a till, a card also offers
 **Reprint**, and **Collect** once its order is paid and waiting to be collected; a kitchen screen
@@ -169,12 +182,14 @@ that nobody signs in on shows neither.
 ## Work the pass {#pass-screen}
 
 The pass shows a card for each group of dishes a table sends, across all of its bills, and one for
-each counter order. Its columns are **Held**, **To fire**, **In progress** and **Ready**, and a card
-moves along them as its dishes do: **Held** while every dish on it is held, **To fire** while it has
-dishes waiting for this pass to fire them, **In progress** while its dishes are at their stations,
-and **Ready** once every dish is ready. **Overview** is hidden until you show it in **Columns**, and
-then comes first. It leaves out dimmed dishes and counts the rest as the kitchen screen's does, with
-dishes held or waiting for the pass after the **+**.
+each counter order. At first it shows the columns **To fire**, **In progress** and **Ready**, and a
+card moves along them as its dishes do. A card whose dishes are all held sits at the bottom of
+**To fire**, under a **Held** heading that shows only while something is held; if the pass shows the
+**Held** column, it sits there too. A card is in **To fire** while it has dishes waiting for this
+pass to fire them, in **In progress** while its dishes are at their stations, and in **Ready** once
+every dish is ready. **Overview** is hidden until you show it in **Columns**, and then comes first.
+It leaves out dimmed dishes and counts the rest as the kitchen screen's does, with dishes held or
+waiting for the pass after the **+**.
 
 A card's heading says what the waiter sent, **New order**, **Next course** or **Added** (a held
 card says none of them), then its order number, table and group. Its minutes count from when the
@@ -197,26 +212,45 @@ from the till, or open Grill for today**, and **Fire** stays off until one of th
 extra going to a closed station of its own says **Grill is closed: Fire still sends it there**
 instead, and **Fire** stays on.
 
-Until a station this pass covers waits for the pass, nothing it covers is dimmed. Once one does,
-its dishes that wait for this pass show in full, and the pass dims the dishes of its stations that
-do not wait and dishes sent before their station began waiting: they say, for example, **Preparing
-· Already at Bar**. A dish from a station or service zone this pass does not cover shows only on a
+Nothing this pass covers is dimmed until a station it covers waits for the pass, or one of its
+cards holds a dish it covers that was sent to wait for the pass. From then on, its dishes that wait
+for this pass show in full, and the pass dims the dishes of its stations that do not wait and dishes
+sent before their station began waiting: they say, for example, **Preparing · Already at Bar**. A dish from a station or service zone this pass does not cover shows only on a
 card that also holds a dish this pass covers, and is always dimmed; while it waits for its own pass
 it says **Bar: waiting for its pass**. Dimmed dishes are there for information only.
 
+On a pass screen or a pass monitor, **Columns** also offers **Other stations' dishes**: **Use the
+profile's setting**, **Show** or **Hide**. **Hide** takes the dimmed dishes off the cards; while
+nothing this pass covers is dimmed, that is only dishes from stations and service zones it does not
+cover. A card stays in its column with its buttons even when **Hide** leaves it no dish, and its
+hidden dishes still count towards its colour and the overdue count. The choice is this device's own
+and replaces the one a manager chose for the device in the dashboard. There, under **Device
+profiles**, a profile's pass screen and pass monitor each have **Show other stations' dishes on the
+pass**, on at first; under **Devices**, a device's **Edit** window has the same setting for its pass
+screen or pass monitor, with **Use the profile's setting**, **Show** and **Hide**.
+
 On a card **In progress**, **Group ready** marks every sent dish of the table's group ready at every
 station, not only the ones this pass shows, and on a counter order **Course ready**, followed by the
-course's name, does the same for that course. **Fire** and these buttons show only on a device whose profile **Runs the pass**. On
-a till, a card that is not held also offers **Reprint** for each of its bills.
+course's name, does the same for that course. Dishes not yet sent to be cooked, held or waiting for
+the pass, stay as they are. **Fire** and these buttons show only on a device whose profile **Runs
+the pass**. On a till, a card that is not held also offers **Reprint** for each of its bills.
 
 A pass monitor shows the same board for watching, with no **Fire**, Ready or **Reprint** buttons. A
 till whose device has no pass screen or pass monitor opens **Pass** on every station and service
 zone, without **Fire**: only a pass screen fires.
 
-Tap a column's heading to collapse it, and use **Columns**, at the end of the row above the columns,
-to move or hide columns, as on the [kitchen screen](kitchen-service.md#kitchen-screen); this device
-keeps the layout for each board. Where the screen is too narrow for its columns, the pass shows them
-as sections of one list, in the same order, and you collapse a section by tapping its heading.
+Tap a column's heading to collapse it to a narrow strip that keeps its name and count; tap it again
+to open it. **Columns**, at the end of the row above the columns, lists **Overview**, **Held + To
+fire**, **Held**, **To fire**, **In progress** and **Ready**: the arrows move a column up or down the
+list, which is the order the pass shows them in, **Show** shows or hides it, and **Done** closes the
+window. **Held + To fire** is the column headed **To fire** on the board, with held cards at its
+bottom. A screen wide enough can show **Held** and **To fire** as two columns instead: switch both on
+and switch **Held + To fire** off. A column switched on is drawn even when it is empty. Two columns
+switched on that hold the same cards both show them: with **Held + To fire** and **To fire** both
+on, a card to fire shows in both. This device keeps the order, the columns
+shown and the collapsed ones, for each board. Only when the columns switched on do not fit the
+screen does the pass show them as sections of one list, in the same order; you collapse a section by
+tapping its heading.
 
 ## Get help on a kitchen screen {#kitchen-help}
 
@@ -270,7 +304,9 @@ person sending is not a manager, the till asks for a manager's PIN after **Kitch
 
 Request held food from the table's order screen. Station queues and the pass show held courses and groups
 without a Fire button. On a station queue, held dishes stay dimmed and cannot be advanced by
-tapping them; on the pass, a card whose dishes are all held waits in **Held**.
+tapping them; on the pass, a card whose dishes are all held sits under **Held** at the bottom of
+**To fire**, or in **Held** if the pass shows that column. On the table's order screen, a dish says
+**at the pass** while it, or one of its extras, waits for the pass to fire it.
 Once released, a dish can move through preparation to Ready at its station. A dish whose station
 waits for the pass goes to the pass's **To fire** column instead: see
 [Work the pass](kitchen-service.md#pass-screen).
