@@ -126,15 +126,7 @@ async function readCardRows(
   );
   const states = await VENUE_SERVICE.stationStates(tx, cfg, new Date(nowMs));
   return read.map(
-    ({
-      stationChosenAt,
-      stationRetainedAtRelease,
-      makeAtStationId,
-      servedAt,
-      deliveryTableId,
-      ...row
-    }) => {
-      void servedAt;
+    ({ stationChosenAt, stationRetainedAtRelease, makeAtStationId, deliveryTableId, ...row }) => {
       void deliveryTableId;
       const state = states.get(row.stationId);
       const rowPhase = phase(row);

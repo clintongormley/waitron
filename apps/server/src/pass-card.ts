@@ -8,7 +8,7 @@ import type { ExpoItem } from "./working-order.js";
 export type PassTarget =
   { kind: "group"; partyId: string; groupId: string } | { kind: "bill"; workingOrderId: string };
 
-/** As readPassBoard's ExpoCourse reads it; null for a dish in no course. */
+/** Null for a dish in no course. */
 export type PassCourse = { id: string; name: string | null; displayOrder: number | null } | null;
 
 /** One live kitchen item as the board and the release read it. */

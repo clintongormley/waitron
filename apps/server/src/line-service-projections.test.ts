@@ -23,7 +23,9 @@ import {
   unsnoozeReminder,
 } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { listExpoQueue, listStationQueue, readTabLines } from "./working-order.js";
+import { listStationQueue, readTabLines } from "./working-order.js";
+import { readScopedPassBoard } from "./pass-board.js";
+import { boardItems, EVERY } from "./testing/pass-board-probe.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import {
@@ -351,10 +353,8 @@ describe("charged cancellation read projections", () => {
       const items = queue.filter((row) => row.orderId === order.billId).flatMap((row) => row.items);
       expect(items.map((item) => item.quantity)).toEqual(cancelled === 3 ? [] : [quantity]);
     }
-    const pass = await inTx(venue, (tx) => listExpoQueue(tx));
-    const items = pass
-      .filter((row) => row.orderId === order.billId)
-      .flatMap((row) => row.groups.flatMap((group) => group.items));
+    const pass = await inTx(venue, (tx) => readScopedPassBoard(tx, venue.cfg, EVERY));
+    const items = boardItems(pass).filter((item) => item.orderId === order.billId);
     expect(items.map((item) => item.qty)).toEqual(cancelled === 3 ? [] : ["1.000", "2.000"]);
   });
 
