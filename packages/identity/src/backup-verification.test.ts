@@ -13,7 +13,7 @@ import {
 import { IDENTITY_BACKUP_VERIFICATION } from "./index.js";
 import { IDENTITY_MIGRATIONS } from "./migrations.js";
 import { IDENTITY_CLASSIFICATION } from "./classification.js";
-import { encryptTotpSecret } from "./mfa.js";
+import { decryptTotpSecret, encryptTotpSecret } from "./mfa.js";
 import { hashSecret } from "./secret-hash.js";
 import * as schema from "./schema/index.js";
 
@@ -194,6 +194,12 @@ function damage(statement: string, side: "before" | "after" | "both" = "both") {
       : [original, restored])
     suite.db.run(sql.raw(statement));
 }
+function tamper(stored: string): string {
+  const parts = stored.split(".");
+  const ciphertext = Buffer.from(parts[4]!, "base64url");
+  ciphertext[ciphertext.length - 1]! ^= 0x01;
+  return [...parts.slice(0, 4), ciphertext.toString("base64url")].join(".");
+}
 function verdict(data: string, secretStatus: string) {
   return {
     status:
@@ -222,15 +228,27 @@ describe("identity offline backup owner", () => {
       { name: "secrets/backup.env", presence: "optional" },
     ]);
   });
+  it("tampers a stored TOTP value even when its ciphertext ends in a zero byte", async () => {
+    let zeroEnding: string | undefined;
+    for (let attempt = 0; attempt < 100_000 && zeroEnding === undefined; attempt++) {
+      const candidate = encryptTotpSecret(secret, { version: 1, key: totpKey });
+      if (Buffer.from(candidate.split(".")[4]!, "base64url").at(-1) === 0) zeroEnding = candidate;
+    }
+    if (zeroEnding === undefined) throw new Error("no ciphertext ending in a zero byte appeared");
+    expect(zeroEnding.slice(0, -2) + "AA").toBe(zeroEnding);
+    const tampered = tamper(zeroEnding);
+    expect(tampered).not.toBe(zeroEnding);
+    const ring = { current: { version: 1, key: totpKey } };
+    expect(decryptTotpSecret(zeroEnding, ring)).toEqual({ secret, keyVersion: 1 });
+    expect(decryptTotpSecret(tampered, ring)).toBeNull();
+    damage(`update persons set totp_secret='${tampered}' where id='${person}'`);
+    await expect(run()).rejects.toMatchObject({ reason: "decryption_unavailable" });
+  });
   it.each(["before", "after", "both"] as const)(
     "authenticates an older person ciphertext in %s",
     async (side) => {
       damage(
-        "update persons set totp_secret='" +
-          encrypted.slice(0, -2) +
-          "AA' where id='" +
-          person +
-          "'",
+        "update persons set totp_secret='" + tamper(encrypted) + "' where id='" + person + "'",
         side,
       );
       await expect(run()).rejects.toMatchObject({
@@ -243,7 +261,7 @@ describe("identity offline backup owner", () => {
   it.each(["before", "after", "both"] as const)(
     "authenticates pending enrolment ciphertext in %s",
     async (side) => {
-      damage("update totp_enrollments set encrypted_secret='" + pending.slice(0, -2) + "AA'", side);
+      damage("update totp_enrollments set encrypted_secret='" + tamper(pending) + "'", side);
       await expect(run()).rejects.toMatchObject({ reason: "decryption_unavailable" });
     },
   );
