@@ -1975,6 +1975,34 @@ describe("the test shards", () => {
     }
   });
 
+  it("installs only Chromium's headless shell for the server's shards", () => {
+    const installs = job("test-server")
+      .body.filter((line) => line.includes("playwright install"))
+      .map((line) => line.trim());
+    expect(installs).toHaveLength(1);
+    expect(installs[0]).toContain(
+      "pnpm --filter @waitron/server exec playwright install chromium --only-shell",
+    );
+  });
+
+  it("restores the browser jobs' Playwright cache for the server's shards and never saves to it", () => {
+    const steps = workflowSteps(job("test-server").body.join("\n"));
+    const install = steps.findIndex((step) => step.command.includes("playwright install"));
+    const restore = steps.findIndex((step) => step.uses?.startsWith("actions/cache/restore@"));
+    expect(restore).toBeGreaterThan(-1);
+    expect(restore).toBeLessThan(install);
+    expect(steps.filter((step) => step.uses?.startsWith("actions/cache@"))).toEqual([]);
+
+    const shared = workflowSteps(job("test-ui").body.join("\n")).find((step) =>
+      step.uses?.startsWith("actions/cache@"),
+    );
+    expect(steps[restore].with).toEqual(shared.with);
+    expect(steps[restore].uses.split("@")[1]).toBe(shared.uses.split("@")[1]);
+    expect(steps.find((step) => step.id === "playwright-version")?.command).toContain(
+      "pnpm --filter @waitron/server exec playwright --version",
+    );
+  });
+
   it("were found, each with at least one filter", () => {
     expect(shards.length).toBeGreaterThan(1);
     for (const shard of shards) expect(shard.filters.length).toBeGreaterThan(0);
@@ -2386,7 +2414,7 @@ describe("the sharded jobs", () => {
       "@waitron/db": 3,
       "@waitron/fiscal-verifactu": 4,
       "@waitron/provisioning": 6,
-      "@waitron/server": 20,
+      "@waitron/server": 24,
       "@waitron/venue-service": 4,
       "@waitron/till": 7,
     });

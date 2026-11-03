@@ -5884,10 +5884,9 @@ For package distribution and the four-minute target, use the
 - **A1089 merge read-back: server coverage upload timed out.**
   [Detail](backlog/ci.md#a1089-merge-read-back-server-coverage-upload-timed-out).
 
-- **The first fiscal-hour end-to-end file exceeds the four-minute job budget on slow CI runners.**
-  Four successful main runs on 24 October measured the file alone at 248–250 seconds. Split or
-  reduce its repeated setup while preserving its restart assertions.
-  [Detail](backlog/ci.md#the-first-fiscal-hour-end-to-end-file-exceeds-the-job-budget).
+- **Find why each restart test in `apps/server/src/first-fiscal-hour.e2e.test.ts` and
+  `first-fiscal-hour-boot.e2e.test.ts` boots the real entry point twice.** Left open by A938 (#1930).
+  [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
 - **One failing success-branch check in the first-fiscal-setup end-to-end file ends its worker.**
   The later rows never run; the run still exits 1. Cause not found.
@@ -5952,12 +5951,12 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**
   [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run).
 
-- **A1252. Bring the remaining server jobs to about 4.5 minutes.**
-  Three later full main observations are complete; their maximum jobs take 278, 292 and 306 seconds.
-  Investigate the named backup, restore and first-fiscal setup suites plus job setup time before
-  choosing further packing or suite work. Preserve the held split and every behavioural assertion.
-  [Measurements and remaining work](backlog/ci.md#a1252-remaining-server-job-time-after-the-held-setup-split).
-  [Method](developers/ci-and-gates.md#refresh-after-the-held-setup-suites-grew).
+- **A1297. Confirm the server's twenty-four shards on two main runs.**
+  PR #2418 refreshed the duration table and moved `test-server` to twenty-four shards; its run
+  41556523522 took 143–244 s per ordinary server job. Record two consecutive full main runs with
+  every `test-server (N)` job at or under 270 seconds, or name the suite that cannot get there.
+  [Earlier measurements](backlog/ci.md#a1252-remaining-server-job-time-after-the-held-setup-split).
+  [Method](developers/ci-and-gates.md#the-servers-shards-twenty-four-after-a1297).
 
 - **The server's duration table needs a staleness warning.** Flag missing files and
   shards over four minutes from CI measurements; refreshing the table remains manual.

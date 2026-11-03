@@ -749,7 +749,7 @@ on the actual CI head to check those.
 Before calling a package green, verify its CI coverage result on the current head. Run
 `pnpm --filter <pkg> test:coverage` locally when investigating a failure. There is no single `test`
 job: `.github/workflows/ci.yml` runs `test-heavy` (`packages/db`) and `test-server`
-(`apps/server`) as three-way and twenty-way file shards, each with a `-merge` job that enforces the thresholds on
+(`apps/server`) as three-way and twenty-four-way file shards, each with a `-merge` job that enforces the thresholds on
 the merged blob (#216) — the files that need either downloaded binary (the stream loop and pause tests, the S3 rehearsal
 scenarios, the rehearsal's send gate and interrupt suites, and the S3 test server's suite) run in `test-server-stream` instead, whose
 blob joins the same merge. `test-dashboard` and `test-venue-service` are four-way and `test-till`
@@ -1629,7 +1629,8 @@ lines in runs 38177927525, 38171667214 and 38170124439: `src/bill-payments.test.
   above applied, left the busiest of six shards with about 870 s of file time (the old shard 5 held
   about 1,080 s, the old shard 2 about 740 s at a 3.7-minute median) and the busiest of eight with
   about 690 s. (Eleven since A801: see "Runners come in two speeds…" below. Sixteen, packed by
-  duration, since A938: see "The server's shards: sixteen, packed by measured duration" below.)
+  duration, from A938: see "The server's shards: sixteen, packed by measured duration" below.
+  Twenty-four since A1297.)
 
 Guards, each weaker than the rule: the 90-second warning above names a slow FILE but never fails a
 job; the "pin each sharded package's shard count" case in `scripts/ci-workflow.test.mjs` holds the
@@ -1749,8 +1750,8 @@ coverage and four workers, alternating old and new code twice on a busy machine 
 14–22): 670 and 747 s of CPU before, 650 and 554 s after. `test-server` went from eight shards to eleven: the same
 replay put the busiest of eleven at 864 file-seconds before the fixture change (nine: 1,136; ten:
 953; twelve: 945, because a cluster of heavy files then falls together). (Sixteen, packed by
-duration, since A938, 2026-10-21: see "The server's shards: sixteen, packed by measured duration"
-below.)
+duration, from A938, 2026-10-21: see "The server's shards: sixteen, packed by measured duration"
+below. Twenty-four since A1297.)
 
 What this does not fix: `src/invoice-pdf.test.ts` took 162 s on run 39068745456, a floor under
 whichever shard holds it. Local wall times were no guide here: the same old code took 138.7 s and
@@ -1798,7 +1799,35 @@ which CI's `changes` job answers `code=false` and runs no package's tests: the s
 72 to 199 s and the jobs 108 to 240 s, and `test-till-merge` passed over the seven blobs. The
 busiest was shard 4, as the replay put it, and at 240 s its job sits at the four-minute line.
 
+### The server's shards: twenty-four after A1297
+
+A1297 (3 November 2026) runs the server's ordinary tests in twenty-four
+duration-packed shards, up from twenty, after refreshing the duration table from
+attempts 1–3 of PR run 41551662181 (1,210 files). The coverage merge now expects
+twenty-five blobs: the twenty-four shards and the stream job.
+
+The choice comes from a packing model, not from a hosted run. It packed the files
+with the real `balancedShards` function over the refreshed table, then timed each
+shard with every file at its slowest of the three attempts: a shard's test step
+counted as its files' seconds divided by four workers plus 10.5 seconds, plus an
+assumed 39 or 51 seconds for the rest of the job. The slowest job came out at
+286–298 seconds for twenty shards, 265–277 for twenty-two, 257–269 for
+twenty-three and 248–260 for twenty-four. Twenty-four is the first count whose
+upper figure is at least ten seconds under 270. The model script is kept in the
+Task 5 comment on PR #2418.
+
+Measured on PR run 41556523522 (head `457069e8b6`): the twenty-four
+`test-server (N)` jobs took 143–244 seconds, and `test-server-merge` passed over
+the twenty-five blobs. That is one pull request run; A1297 is judged on two main
+runs.
+
+The shard-count check in `scripts/ci-workflow.test.mjs` pins twenty-four. It
+reads workflow text, not what Vitest runs.
+
 ### The server's shards: twenty after splitting the recovery suites
+
+The following A1137 measurements describe the earlier twenty-shard layout. The current
+layout is described [above](#the-servers-shards-twenty-four-after-a1297).
 
 When a server job exceeds four minutes, check whether one file dominates before
 adding runners. A1137 (2026-10-26) splits the slow recovery suites and runs twenty
@@ -1831,11 +1860,14 @@ split estimates gives a 240-second slowest job at twenty shards and 234 seconds
 at twenty-two, with the same assumed overhead. The pull request records final
 hosted timings; refresh from logs when the estimates drift again.
 
-The existing shard-count check in `scripts/ci-workflow.test.mjs` now pins twenty.
+The shard-count check in `scripts/ci-workflow.test.mjs` pinned twenty then.
 It reads workflow text; the duration sequencer's tree-walk guard still does not
 prove which files Vitest executes or that the estimates are fresh.
 
 ### Refresh after the held-setup suites grew
+
+The following A1252 measurements describe the twenty-shard layout and the duration table before
+A1297 refreshed it. The current layout is described [above](#the-servers-shards-twenty-four-after-a1297).
 
 A1252 (31 October 2026) keeps twenty shards. On the newest ten successful main
 runs that executed server tests, shard 7 took 239–552 seconds and shard 3 took
@@ -1874,7 +1906,7 @@ measurements above; the other entries retain the six-main medians.
 ### The server's shards: sixteen, packed by measured duration
 
 The following A938 measurements describe the earlier sixteen-shard layout. The current
-layout is described [above](#the-servers-shards-twenty-after-splitting-the-recovery-suites).
+layout is described [above](#the-servers-shards-twenty-four-after-a1297).
 
 A938 (2026-10-21). On six `main` runs (39425472781, 39444354037, 39449527877, 39500330558,
 39503634628, 39507125783) the slowest of the eleven `test-server (N)` jobs took 349 to 410 s, and on
@@ -2996,7 +3028,7 @@ every other gate false. `test-server`'s and `test-server-stream`'s `if:` ask for
 request, PR #682: its run for `1081bbb7c`, which changed `ci.yml`, docs and root scripts but neither
 installer, skipped the shards and `test-server-stream`; its next run, 36231025265, for a commit
 that added one line to `scripts/setup-litestream.mjs`, ran both and `test-server-merge`. The cost, read from the jobs' `if:` lines
-in `.github/workflows/ci.yml`: on a pull request an installer change runs the server shards (three then, six from A441, eight from A528, eleven from A801, sixteen since A938),
+in `.github/workflows/ci.yml`: on a pull request an installer change runs the server shards (three then, six from A441, eight from A528, eleven from A801, sixteen from A938, twenty from A1137, twenty-four since A1297),
 `test-server-stream`, `test-server-merge`, and `typecheck` and `bundle-smoke`, which ask for
 `code` alone; on its merge to `main` those two run again, the forced global scope runs every test job and `mutation-shared`, and
 the push runs `image` and, once `ci` passes, `publish`, which moves `:main` unless

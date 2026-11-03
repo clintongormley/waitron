@@ -1,6 +1,7 @@
 export {
   encryptArtifact,
   encryptArtifactAsync,
+  encryptArtifactWithSalt,
   decryptArtifact,
   KDF_BY_VERSION,
   VERSION,

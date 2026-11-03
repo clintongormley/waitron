@@ -24,7 +24,17 @@ export const ARTIFACT_HEADER_BYTES = AAD_LEN + TAG_LEN; // 49
 
 /** Encrypt bytes under a passphrase. Frame: MAGIC|version|salt|iv|tag|ciphertext (all binary). */
 export function encryptArtifact(plaintext: Uint8Array, passphrase: string): Buffer {
-  const salt = randomBytes(SALT_LEN);
+  return encryptArtifactWithSalt(plaintext, passphrase, randomBytes(SALT_LEN));
+}
+
+/** `encryptArtifact` under a salt the caller chose, with a fresh IV; product writers keep
+ * `encryptArtifact`'s fresh salt. A repeated salt lets a cached key derivation be reused. */
+export function encryptArtifactWithSalt(
+  plaintext: Uint8Array,
+  passphrase: string,
+  salt: Buffer,
+): Buffer {
+  if (salt.length !== SALT_LEN) throw new RangeError(`salt must be ${SALT_LEN} bytes`);
   return frameUnderKey(plaintext, salt, deriveKey(passphrase, salt, KDF_BY_VERSION[VERSION]));
 }
 

@@ -12,7 +12,8 @@ import { createFirstSetupBackupWorkspace } from "@waitron/provisioning";
 import { createFirstSetupModuleHost } from "../src/module-operation-host.js";
 import { createFirstSetupBackupRecovery } from "../src/first-setup-backup-recovery.js";
 import { request as ownerRequest } from "./first-fiscal.js";
-import { encryptArtifact, decryptArtifact } from "../src/artifact-cipher.js";
+import { decryptArtifact } from "../src/artifact-cipher.js";
+import { sealFixtureArtifact } from "./fixture-salt.js";
 import { packArchive, unpackArchive } from "../src/backup-archive.js";
 import { recoverySelectPastWaits } from "../src/testing/hour-test-clock.js";
 import { buildBackupVerificationTarget } from "../src/backup-verification-target.js";
@@ -55,7 +56,7 @@ export async function fixture(protocol: 1 | 2 = 2) {
       JSON.stringify({ reference: "prepared-hours", complete: true, records: [] }),
     ),
   });
-  const artifact = encryptArtifact(packArchive(entries), f.restore.recoveryKey);
+  const artifact = sealFixtureArtifact(packArchive(entries), f.restore.recoveryKey);
   const target = buildBackupVerificationTarget({
     modules: ALL_MODULES,
     migrationsRoot: null,

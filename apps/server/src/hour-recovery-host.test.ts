@@ -11,6 +11,7 @@ import {
   clock,
   compareWith,
   agreeInternet,
+  realSecretChecks,
 } from "../test/hour-recovery-host.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
 import { readFile, writeFile } from "node:fs/promises";
@@ -24,6 +25,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { readRecoveryKeyVerifier, setRecoveryKeyTx } from "@waitron/node-db";
+import { hashSecret, verifySecretAsync } from "@waitron/identity";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
@@ -933,4 +935,18 @@ it("a restore beside a leftover start-again note file names its minute as a box 
   expect(await recoverySelectPastWaits(clock, f.service, asBrowser)).toMatchObject({
     status: "selected",
   });
+});
+
+it("checks each secret against each stored hash for real once, and remembers the exact answer", async () => {
+  const stored = hashSecret("the remembered secret");
+  const another = hashSecret("the remembered secret");
+  realSecretChecks.mockClear();
+  expect(await verifySecretAsync("the remembered secret", stored)).toBe(true);
+  expect(await verifySecretAsync("the remembered secret", stored)).toBe(true);
+  expect(realSecretChecks).toHaveBeenCalledTimes(1);
+  expect(await verifySecretAsync("a wrong secret", stored)).toBe(false);
+  expect(await verifySecretAsync("a wrong secret", stored)).toBe(false);
+  expect(realSecretChecks).toHaveBeenCalledTimes(2);
+  expect(await verifySecretAsync("the remembered secret", another)).toBe(true);
+  expect(realSecretChecks).toHaveBeenCalledTimes(3);
 });

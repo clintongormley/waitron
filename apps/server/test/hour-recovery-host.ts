@@ -35,7 +35,8 @@ import {
 import "../src/operation-authentication.js";
 import { buildManifest } from "../src/backup-manifest.js";
 import { packArchive, unpackArchive } from "../src/backup-archive.js";
-import { decryptArtifact, encryptArtifact } from "../src/artifact-cipher.js";
+import { decryptArtifact } from "../src/artifact-cipher.js";
+import { sealFixtureArtifact } from "./fixture-salt.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "../src/recovery-backup-preview.js";
 import { restoreFromStream } from "../src/restore-stream.js";
 import { recoveryStreamSourceId } from "../src/recovery-source.js";
@@ -69,11 +70,39 @@ import {
   type HourTestClock,
 } from "../src/testing/hour-test-clock.js";
 
-const mocked = vi.hoisted(() => ({ internet: vi.fn() }));
+const mocked = vi.hoisted(() => ({ internet: vi.fn(), realSecretChecks: vi.fn() }));
 export const external: { internet: Mock } = mocked;
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
   observeInternetHourClock: mocked.internet,
 }));
+export const realSecretChecks: Mock<(secret: string, stored: string) => Promise<boolean>> =
+  mocked.realSecretChecks;
+/**
+ * Remembers every answer for the test file: the same secret against the same stored hash always
+ * gives the same answer.
+ */
+vi.mock("@waitron/identity", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/identity")>();
+  const answers = new Map<string, Map<string, Promise<boolean>>>();
+  return {
+    ...actual,
+    async verifySecretAsync(secret: string, stored: string): Promise<boolean> {
+      let bySecret = answers.get(stored);
+      if (bySecret === undefined) answers.set(stored, (bySecret = new Map()));
+      const remembered = bySecret.get(secret);
+      if (remembered !== undefined) {
+        // A remembered answer still yields one event-loop turn.
+        await new Promise((resolve) => setImmediate(resolve));
+        return remembered;
+      }
+      mocked.realSecretChecks(secret, stored);
+      const answer = actual.verifySecretAsync(secret, stored);
+      bySecret.set(secret, answer);
+      answer.catch(() => bySecret.delete(secret));
+      return answer;
+    },
+  };
+});
 vi.mock("@waitron/fiscal-verifactu/src/hour-release.js", () => ({
   readHourRelease: () => ({ instantMs: Date.parse("2026-10-15T00:00:00Z") }),
 }));
@@ -286,7 +315,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
   });
   const database = join(root, "archive.db");
   await suite.db.archiveTo(database);
-  const artifact = encryptArtifact(
+  const artifact = sealFixtureArtifact(
     packArchive([
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       { name: "db.dump", bytes: await readFile(database) },

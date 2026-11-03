@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { sql, eq, and } from "drizzle-orm";
-import { afterEach, expect } from "vitest";
+import { afterAll, afterEach, expect } from "vitest";
 import { invoiceSeries, openVenueDatabase, withTransaction } from "@waitron/db";
 import { applyMigrationSet } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
@@ -23,7 +23,8 @@ import { hourFirstFiscalFixture } from "./hour-first-fiscal.js";
 import { keepHourRecoveryDocument } from "./hour-recovery-delivery.js";
 import { MODULE, PASSWORD } from "./first-fiscal.js";
 import { createFirstSetupBackupRecovery } from "../src/first-setup-backup-recovery.js";
-import { encryptArtifact, decryptArtifact } from "../src/artifact-cipher.js";
+import { decryptArtifact } from "../src/artifact-cipher.js";
+import { sealFixtureArtifact } from "./fixture-salt.js";
 import { packArchive, unpackArchive } from "../src/backup-archive.js";
 import { establishNodeIdentity } from "../src/node-identity.js";
 import { seedTermZeroMembership } from "../src/membership-seed.js";
@@ -67,6 +68,35 @@ afterEach(async () => {
 
 const ACCOUNT_KEY = Buffer.alloc(32, 8).toString("base64");
 
+// Read at load, before a suite can point TMPDIR at a small disk it fills on purpose.
+const TEMPLATE_PARENT = tmpdir();
+let template: Promise<string> | undefined;
+let templateFolder: string | undefined;
+afterAll(async () => {
+  // A template that failed has already failed every test that awaited it.
+  await template?.catch(() => {});
+  if (templateFolder !== undefined) await rm(templateFolder, { recursive: true, force: true });
+  template = templateFolder = undefined;
+});
+
+/** A folder whose `venue.db` and `node.db` hold `TEST_MIGRATIONS`, migrated once per test file. */
+function migratedTemplate(): Promise<string> {
+  template ??= (async () => {
+    const folder = (templateFolder = await mkdtemp(join(TEMPLATE_PARENT, "held-setup-template-")));
+    const migrated = await openVenueDatabase(folder);
+    try {
+      for (const set of TEST_MIGRATIONS)
+        await applyMigrationSet(set.database === "node" ? migrated.node : migrated.venue, set);
+    } finally {
+      // Closing the last connection checkpoints each file and deletes its -wal, so the two
+      // database files alone hold everything.
+      await migrated.close();
+    }
+    return folder;
+  })();
+  return template;
+}
+
 /**
  * A first setup activated for real into `<venue>/venue.db` with every module, then a backup
  * recovery opened, prepared and stopped beside it.
@@ -82,11 +112,15 @@ export function heldSetup(
 export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSetup> {
   const status = options.status ?? "committed";
   const f = await archiveHost();
+  const migrated = await migratedTemplate();
+  await Promise.all(
+    ["venue.db", "node.db"].map((name) =>
+      copyFile(join(migrated, name), join(f.roots.venueDir, name)),
+    ),
+  );
   const held = await openVenueDatabase(f.roots.venueDir);
   let open = true;
   try {
-    for (const set of TEST_MIGRATIONS)
-      await applyMigrationSet(set.database === "node" ? held.node : held.venue, set);
     // A synthetic certificate stands in for the AEAT one, as `first-fiscal-interruption.test.ts` does.
     const modules = ALL_MODULES.map((module) =>
       module.name !== MODULE
@@ -255,7 +289,7 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
           JSON.stringify({ reference: "prepared-hours", complete: true, records: [] }),
         ),
       });
-      const artifact = encryptArtifact(packArchive(entries), f.restore.recoveryKey);
+      const artifact = sealFixtureArtifact(packArchive(entries), f.restore.recoveryKey);
       service = createFirstSetupBackupRecovery({
         ...f.roots,
         environment: "preproduction",
