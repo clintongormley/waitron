@@ -1582,7 +1582,7 @@ describe("setup-venue-screen layout", () => {
   });
 });
 
-it("can onboard an installed filing module with no description field", async () => {
+it("advances from a country whose filing module offers no description", async () => {
   const packs = VENUE_SETUP_COUNTRY_PACKS as CountryPack[];
   packs.push({
     ...SPARSE_PACK,

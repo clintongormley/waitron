@@ -153,6 +153,22 @@ describe("POST /setup-api/provision for country packs other than Spain", () => {
     expect(requests).toEqual([]);
   });
 
+  it("refuses a request that leaves out the operation description when the filing module has no default", async () => {
+    const app = new Hono();
+    const { deps: setupDeps, requests } = deps();
+    mountSetup(app, setupDeps, () => {});
+    const { operationDescription: _, ...body } = venue("gb");
+    void _;
+
+    const res = await post(app, { mode: "demo", venue: body });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "operationDescription" } },
+    });
+    expect(requests).toEqual([]);
+  });
+
   it("activates a live venue without a signing certificate when its regime seals none", async () => {
     const app = new Hono();
     const { deps: setupDeps, requests } = deps();

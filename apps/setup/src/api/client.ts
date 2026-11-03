@@ -229,7 +229,7 @@ export interface RecoveryBackupPreview {
 }
 
 export interface ConfigurationPreview {
-  venue: Omit<VenueDraft, "admin">;
+  venue: Omit<VenueDraft, "admin"> & { operationDescription: string };
   counts: Record<string, number>;
   reconnect: string[];
 }

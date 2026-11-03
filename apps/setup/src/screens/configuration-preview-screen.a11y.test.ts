@@ -14,6 +14,7 @@ const preview: ConfigurationPreview = {
     taxpayerDomicile: "Calle Fiscal 8, 28001 Madrid",
     name: "Prepared",
     invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant",
     fiscalTerritory: "ES-common",
     addressLine1: "Calle 1",
     addressLine2: null,
