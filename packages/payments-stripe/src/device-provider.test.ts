@@ -18,6 +18,7 @@ import {
 import { openIncidents } from "@waitron/core";
 import { FakeStripeDevice } from "./testing/fake-stripe-device.js";
 import { StripeOnDeviceProvider } from "./device-provider.js";
+import type { NodeId } from "@waitron/shared";
 import {
   billPaymentOfRow,
   freshNif,
@@ -37,10 +38,14 @@ function providerFor(client: FakeStripeDevice): StripeOnDeviceProvider {
   });
 }
 
-function collectParams(s: { deviceId: string; workingOrderId: string }, allowOffline?: boolean) {
+function collectParams(
+  s: { deviceId: string; workingOrderId: string; nodeId: NodeId },
+  allowOffline?: boolean,
+) {
   return {
     origin: deviceOrigin(s.deviceId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
+    nodeId: s.nodeId,
     amount: decimal("10.00"),
     ...(allowOffline === undefined ? {} : { allowOffline }),
   };
@@ -55,6 +60,7 @@ describe("StripeOnDeviceProvider.collect after a Terminal PaymentIntent of the o
         origin: deviceOrigin(s.deviceId),
         ...key,
         workingOrderId: s.workingOrderId,
+        nodeId: s.nodeId,
         amount: decimal("10.00"),
       });
       const row = await getPaymentByRef(tx, key);

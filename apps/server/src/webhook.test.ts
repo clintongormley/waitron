@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
 import { PAYMENTS_MIGRATIONS, insertInitiated } from "@waitron/payments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { decimal, deviceOrigin } from "@waitron/shared";
+import { decimal, deviceOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import { seedDevice, seedTenant, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import type { Logger, LogLevel } from "./logger.js";
 import { createHealthState, healthApp } from "./health.js";
@@ -66,8 +66,9 @@ async function seedInitiated(
   const sessionId = opts.sessionId ?? `cs_${randomUUID()}`;
   await seedVenue(db, { name: "Counter", invoiceLocales: ["es"], operationDescription: "Retail" });
   const { deviceId } = await seedDevice(db);
+  const nodeId = brandNodeId("11111111-1111-4111-8111-111111111111");
   await db.insert(nodes).values({
-    id: "11111111-1111-4111-8111-111111111111",
+    id: nodeId,
     locationId: await venueLocationId(db),
     name: "Webhook node",
   });
@@ -76,6 +77,7 @@ async function seedInitiated(
     insertInitiated(tx, {
       origin: deviceOrigin(deviceId),
       workingOrderId: wo.id,
+      nodeId,
       provider: "stripe",
       paymentRef: randomUUID(),
       externalRef: sessionId,
@@ -221,6 +223,7 @@ describe("while the box's clock reads behind its last sale", () => {
       insertInitiated(tx, {
         origin: deviceOrigin(venue.deviceId),
         workingOrderId: sold,
+        nodeId: venue.cfg.nodeId,
         provider: "stripe",
         paymentRef: randomUUID(),
         externalRef: sessionId,

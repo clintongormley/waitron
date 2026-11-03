@@ -1307,7 +1307,7 @@ set after that send is stored as today. Tests
 
 Not fiscal. The same gap as Task 2.4b, for the duties that move money item by item.
 
-**Files:** `packages/payments/src/provider.ts:250` (`resolvePending(now, signal?)`); each
+**Files:** `packages/payments/src/provider.ts:250` (`resolvePending(now, owners, signal?)`); each
 implementation checks the signal before each payment it settles
 (`packages/payments-stripe/src/provider.ts:255`, `packages/payments-sumup/src/provider.ts:314`; the
 simulator `packages/payments/src/simulator.ts:181`, `packages/payments-stripe/src/device-provider.ts:206`
@@ -1888,7 +1888,7 @@ the column null in tests.
 (`packages/payments/src/store.ts:507`) with only a provider name
 (`packages/payments-stripe/src/provider.ts:256`, `packages/payments-sumup/src/provider.ts:315`;
 the simulator answers zeros, `packages/payments/src/simulator.ts:181-184`). So the owner filter is
-threaded through: `PaymentProvider.resolvePending(now, signal?, owners: CollectionOwners)` (the signal arrives in Task 2.4c)
+threaded through: `PaymentProvider.resolvePending(now, owners: CollectionOwners)` (Task 2.4c's `signal?` goes after it)
 (`packages/payments/src/provider.ts:250`), each adapter passes `owners` to
 `listAttempting(tx, provider, owners)`, and `withPendingSweep` (`apps/server/src/boot.ts:505-512`)
 supplies it. `resolvePending` then sees only rows owned by this box: `node_id` equals this box's id, or `node_id` is one of the boxes this box

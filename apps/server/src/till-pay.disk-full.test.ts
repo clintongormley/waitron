@@ -227,6 +227,7 @@ describe("POST /api/pay while the full-disk stop holds", () => {
     await withTransaction(venue.db, (tx) =>
       insertCapturedPayment(tx, {
         origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
         workingOrderId: id,
         provider: "fake",
         paymentRef: `fake-${randomUUID()}`,

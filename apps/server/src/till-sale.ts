@@ -1038,6 +1038,7 @@ async function fileImmediateSale(
     const { provider, paymentRef } = await recordManualCardPayment(tx, {
       origin: cfg.origin,
       workingOrderId,
+      nodeId: cfg.nodeId,
       amount: decimal(priced.total),
       settledAt,
       externalRef: taken.externalRef,
@@ -1397,6 +1398,7 @@ async function payIntegrated(
     result = await deps.provider.collect({
       origin: cfg.origin,
       workingOrderId: brandWorkingOrderId(req.id),
+      nodeId: cfg.nodeId,
       amount: addDecimal(baseAmount, tip),
       ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
       ...(deps.deviceProfileId === undefined ? {} : { deviceProfileId: deps.deviceProfileId }),
@@ -2226,6 +2228,7 @@ async function runCollectOrder(
           const { provider, paymentRef } = await recordManualCardPayment(tx, {
             origin: cfg.origin,
             workingOrderId: req.id,
+            nodeId: cfg.nodeId,
             amount: outstanding.amountDue,
             settledAt,
             externalRef: req.tender.externalRef,

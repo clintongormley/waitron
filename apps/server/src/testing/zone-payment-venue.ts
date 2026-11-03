@@ -106,6 +106,7 @@ export async function zonePaymentVenue(db: Database) {
       if (captured)
         await insertCapturedPayment(tx, {
           origin: venue.cfg.origin,
+          nodeId: venue.cfg.nodeId,
           workingOrderId: id,
           provider: "fake",
           paymentRef: randomUUID(),

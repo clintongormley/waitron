@@ -1784,6 +1784,7 @@ describe("department transfer tab lifecycle", () => {
         await withTransaction(suite.db, (tx) =>
           insertCapturedPayment(tx, {
             origin: v.cfg.origin,
+            nodeId: v.cfg.nodeId,
             workingOrderId: f.tab,
             provider: "simulator",
             paymentRef: randomUUID(),

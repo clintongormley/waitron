@@ -210,6 +210,7 @@ async function seedSale(
     const paymentRef = randomUUID();
     await insertCapturedPayment(tx, {
       origin: cfg.origin,
+      nodeId: cfg.nodeId,
       workingOrderId,
       provider: payment.provider,
       paymentRef,

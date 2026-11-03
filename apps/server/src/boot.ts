@@ -78,6 +78,7 @@ import {
   cardReaders,
   type CardProviderContribution,
   type CardProviderRuntimeDeps,
+  type CollectionOwners,
   type PaymentProvider,
   type ReaderStatus,
 } from "@waitron/payments";
@@ -95,6 +96,7 @@ import {
 import type { AlertSource, ModuleOperationHost, ModuleRouteContext } from "@waitron/module";
 import { DEFAULT_MAX_UPLOAD_BYTES } from "@waitron/media";
 import { AppError } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import {
   ALL_ALERT_CLAIMS,
   ALL_MODULES,
@@ -502,33 +504,46 @@ export async function buildCardProvider(
   return undefined;
 }
 
+/** The payments this box's card sweep may resolve: its own, and the rows naming no box only while
+ * it is the venue's singleton primary. Taking over from another box is not built yet.
+ *
+ * Exported for a direct test (`boot-pending-sweep.test.ts`). */
+export function sweepOwners(nodeId: NodeId, role: SingletonRole): CollectionOwners {
+  return { nodeId, takenOverFrom: [], unowned: role === "primary" };
+}
+
 /** Run each card provider's `resolvePending` sweep on every tick, around (not instead of) the
  * singleton fiscal pass: a sell-only local secondary must sweep its own `attempting` card rows even
  * though it never drains or reconciles. Log-only, NOT a health-tracked `Duty`: every `ALL_DUTIES`
  * member is seeded on every node, so a duty that never runs on a no-card node would read stale and
  * fail `/health`. A stuck sweep surfaces only as `resolve_pending.failed`. The providers are
- * enumerated each pass, so one connected while the host runs is swept without a restart.
+ * enumerated each pass, so one connected while the host runs is swept without a restart. `owners`
+ * is read once per pass and limits every provider to the `attempting` rows this box owns, so a
+ * promotion or demotion in this process is seen at the next pass.
  *
  * Exported for a direct test (`boot-pending-sweep.test.ts`). */
 export function withPendingSweep(
   inner: (now: Date) => Promise<PassReport>,
   sweepProviders: () => Promise<readonly PaymentProvider[]>,
+  owners: () => CollectionOwners,
   log: Logger,
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
     const report = await inner(now);
-    // An enumeration failure is a sweep failure and never propagates: the fiscal `report` must be
-    // returned whatever the card backstop does.
+    // An owners or enumeration failure is a sweep failure and never propagates: the fiscal `report`
+    // must be returned whatever the card backstop does.
+    let owned: CollectionOwners;
     let providers: readonly PaymentProvider[];
     try {
+      owned = owners();
       providers = await sweepProviders();
     } catch (error) {
       log("warn", "resolve_pending.failed", { error: String(error) });
-      providers = [];
+      return report;
     }
     for (const provider of providers) {
       try {
-        const r = await provider.resolvePending(now);
+        const r = await provider.resolvePending(now, owned);
         log("info", "resolve_pending.complete", {
           provider: provider.provider,
           captured: r.forwarded,
@@ -3247,6 +3262,7 @@ async function bootServer(
               contributions: CARD_PROVIDERS,
               simulator: cardProvider,
             }),
+            () => sweepOwners(tradingContext.nodeId, holders.singletonRole.current),
             log,
           ),
           () =>

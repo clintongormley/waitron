@@ -126,6 +126,7 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
       insertCapturedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "held-1",
         externalRef: "ext-held-1",
@@ -171,6 +172,7 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
       insertCapturedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "held-2",
         externalRef: "ext-held-2",

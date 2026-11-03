@@ -535,6 +535,7 @@ describe("the receipt (ruling R13)", () => {
     await inTx(venue, (tx) =>
       insertCapturedPayment(tx, {
         origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
         workingOrderId: billId,
         provider: "simulator",
         paymentRef: `sim-${randomUUID()}`,

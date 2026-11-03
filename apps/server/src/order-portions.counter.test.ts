@@ -219,6 +219,7 @@ function cardDeps(charge: boolean): IntegratedPayDeps {
       await withTransaction(venue.db, (tx) =>
         insertCapturedPayment(tx, {
           origin: params.origin,
+          nodeId: params.nodeId,
           workingOrderId: params.workingOrderId,
           provider: "stripe",
           paymentRef,

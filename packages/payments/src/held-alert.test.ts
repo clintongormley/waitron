@@ -25,12 +25,13 @@ const SETTLED = new Date("2026-06-30T20:30:00.000Z");
 let refCounter = 0;
 
 async function aHeldPayment(foundAt: string, amount = "12.10", providerAmount = "11.95") {
-  const { workingOrderId, deviceId } = await seedWorkingOrder(suite.db, freshNif());
+  const { workingOrderId, deviceId, nodeId } = await seedWorkingOrder(suite.db, freshNif());
   const paymentRef = `held-${++refCounter}`;
   await withTransaction(suite.db, async (tx) => {
     await insertCapturedPayment(tx, {
       origin: deviceOrigin(deviceId),
       workingOrderId,
+      nodeId,
       provider: "stripe",
       paymentRef,
       amount: decimal(amount),

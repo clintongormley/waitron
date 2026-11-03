@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, deviceOrigin, workingOrderId } from "@waitron/shared";
 import {
@@ -10,7 +11,7 @@ import {
   getPaymentByRef,
   insertAttempting,
 } from "@waitron/payments";
-import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import { ownsEveryPayment, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { StripeTerminalProvider } from "./provider.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
 
@@ -30,6 +31,7 @@ async function params() {
   return {
     origin: deviceOrigin(seeded.deviceId),
     workingOrderId: workingOrderId(seeded.workingOrderId),
+    nodeId: seeded.nodeId,
     amount: decimal("12.10"),
     readerRef: "reader_unknown",
   };
@@ -68,7 +70,7 @@ describe("Stripe unknown outcomes", () => {
       ).toEqual({ outcome: "failed", cancelledAtProvider: true });
       return retrieve(id);
     });
-    expect(await provider(client).resolvePending(now)).toEqual({
+    expect(await provider(client).resolvePending(now, await ownsEveryPayment(suite.db))).toEqual({
       nextDueAt: null,
       forwarded: 1,
       declined: 0,
@@ -79,6 +81,34 @@ describe("Stripe unknown outcomes", () => {
     expect(
       (await suite.db.execute(sql`select count(*) as n from payment_resolutions`)).rows,
     ).toEqual([{ n: 2 }]);
+  });
+
+  it("leaves an attempting row another box owns alone, and its own box captures it", async () => {
+    const client = new FakeStripe();
+    const p = await params();
+    const paymentRef = randomUUID();
+    client.setIntent("pi_theirs", { status: "succeeded", amount: 1210, amountReceived: 1210 });
+    await withTransaction(suite.db, (tx) =>
+      insertAttempting(tx, { ...p, provider: "stripe", paymentRef, externalRef: "pi_theirs" }),
+    );
+    const otherBox = await seedNode(suite.db);
+    expect(
+      await provider(client).resolvePending(now, {
+        nodeId: otherBox,
+        takenOverFrom: [],
+        unowned: true,
+      }),
+    ).toEqual({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
+    expect((await row(paymentRef))?.state).toBe("attempting");
+    expect(
+      (
+        await provider(client).resolvePending(now, {
+          nodeId: p.nodeId,
+          takenOverFrom: [],
+          unowned: false,
+        })
+      ).forwarded,
+    ).toBe(1);
   });
 
   it.each(["process", "poll", "connection_error", "successful_reader_cancel"] as const)(
@@ -119,7 +149,7 @@ describe("Stripe unknown outcomes", () => {
     await withTransaction(suite.db, (tx) =>
       insertAttempting(tx, { ...p, provider: "stripe", paymentRef, externalRef: "pi_resolve" }),
     );
-    expect(await provider(client).resolvePending(now)).toEqual({
+    expect(await provider(client).resolvePending(now, await ownsEveryPayment(suite.db))).toEqual({
       nextDueAt: test.expected === "attempting" ? new Date(now.getTime() + 60_000) : null,
       forwarded: test.forwarded,
       declined: test.declined,
@@ -143,7 +173,7 @@ describe("Stripe unknown outcomes", () => {
       insertAttempting(tx, { ...p, provider: "stripe", paymentRef, externalRef: "pi_racing" }),
     );
     client.unreachableNext();
-    expect(await provider(client).resolvePending(now)).toEqual({
+    expect(await provider(client).resolvePending(now, await ownsEveryPayment(suite.db))).toEqual({
       nextDueAt: new Date(now.getTime() + 60_000),
       forwarded: 0,
       declined: 0,
@@ -151,7 +181,7 @@ describe("Stripe unknown outcomes", () => {
     });
     expect((await row(paymentRef))?.state).toBe("attempting");
     client.cancelRacesNext();
-    expect(await provider(client).resolvePending(now)).toEqual({
+    expect(await provider(client).resolvePending(now, await ownsEveryPayment(suite.db))).toEqual({
       nextDueAt: null,
       forwarded: 1,
       declined: 0,
@@ -178,7 +208,9 @@ describe("Stripe unknown outcomes", () => {
       sql`create trigger a764_refuse_resolution before insert on payment_resolutions begin select raise(abort, 'audit refused'); end`,
     );
     try {
-      await expect(provider(client).resolvePending(now)).rejects.toThrow("audit refused");
+      await expect(
+        provider(client).resolvePending(now, await ownsEveryPayment(suite.db)),
+      ).rejects.toThrow("audit refused");
       expect((await row(paymentRef))?.state).toBe("attempting");
       expect((await row(paymentRef))?.externalRef).toBe("pi_audit_refused");
       expect(
@@ -192,7 +224,9 @@ describe("Stripe unknown outcomes", () => {
     } finally {
       await suite.db.execute(sql`drop trigger a764_refuse_resolution`);
     }
-    expect((await provider(client).resolvePending(now)).declined).toBe(1);
+    expect(
+      (await provider(client).resolvePending(now, await ownsEveryPayment(suite.db))).declined,
+    ).toBe(1);
     expect((await provider(client).collect(p)).state).toBe("captured");
     expect(client.lastCreateIntent?.idempotencyKey).toBe(`wo_${p.workingOrderId}_r1`);
   });
@@ -224,7 +258,7 @@ describe("Stripe unknown outcomes", () => {
       amountReceived: 1210,
     });
 
-    const sweep = await terminal.resolvePending(now);
+    const sweep = await terminal.resolvePending(now, await ownsEveryPayment(suite.db));
 
     expect((await row(result.paymentRef))?.state).toBe("captured");
     expect(sweep).toEqual({ nextDueAt: null, forwarded: 1, declined: 0, incidentsRaised: 0 });
@@ -247,7 +281,7 @@ describe("Stripe unknown outcomes", () => {
       }),
     );
 
-    const sweep = await provider(client).resolvePending(now);
+    const sweep = await provider(client).resolvePending(now, await ownsEveryPayment(suite.db));
 
     expect(client.cancelledIntents).toEqual(["pi_abandoned_unknown"]);
     expect((await row(paymentRef))?.state).toBe("failed");
@@ -285,7 +319,7 @@ describe("Stripe unknown outcomes", () => {
     const collecting = provider(client).collect(await params());
     try {
       await entered;
-      const sweep = await provider(client).resolvePending(now);
+      const sweep = await provider(client).resolvePending(now, await ownsEveryPayment(suite.db));
       expect(sweep).toEqual({
         nextDueAt: new Date(now.getTime() + 60_000),
         forwarded: 0,
@@ -300,7 +334,9 @@ describe("Stripe unknown outcomes", () => {
     expect(result.state).toBe("attempting");
     const intent = await create.mock.results[0]!.value;
     client.setIntent(intent.id, { status: "succeeded", amount: 1210, amountReceived: 1210 });
-    expect((await provider(client).resolvePending(now)).forwarded).toBe(1);
+    expect(
+      (await provider(client).resolvePending(now, await ownsEveryPayment(suite.db))).forwarded,
+    ).toBe(1);
     expect((await row(result.paymentRef))?.state).toBe("captured");
   });
 });

@@ -34,12 +34,13 @@ import type { StripeClient } from "./client.js";
 import {
   billPaymentOfRow,
   freshNif,
+  ownsEveryPayment,
   readerOfRow,
   seedBillPayment,
   seedHeldReader,
   seedWorkingOrder,
 } from "@waitron/payments/test/seed.js";
-import type { DeviceOrigin } from "@waitron/shared";
+import type { DeviceOrigin, NodeId } from "@waitron/shared";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
@@ -67,6 +68,7 @@ async function collectParams(nif = freshNif()) {
   return {
     origin: deviceOrigin(s.deviceId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
+    nodeId: s.nodeId,
     amount: decimal("12.10"),
     readerRef: "reader_1",
     _seeded: s,
@@ -84,6 +86,7 @@ async function capturedPayment(externalRef: string): Promise<{ paymentRef: strin
     insertCapturedPayment(tx, {
       origin: deviceOrigin(seeded.deviceId),
       workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
       provider: "stripe",
       paymentRef,
       externalRef,
@@ -505,7 +508,12 @@ describe("StripeTerminalProvider.resolvePending", () => {
       client: new FakeStripe(),
       db: suite.db,
     });
-    expect(await provider.resolvePending(new Date("2026-07-24T10:00:00Z"))).toEqual({
+    expect(
+      await provider.resolvePending(
+        new Date("2026-07-24T10:00:00Z"),
+        await ownsEveryPayment(suite.db),
+      ),
+    ).toEqual({
       nextDueAt: null,
       forwarded: 0,
       declined: 0,
@@ -516,7 +524,8 @@ describe("StripeTerminalProvider.resolvePending", () => {
 
 /** The one `attempting` stripe row of a working order, as `collect` wrote it. */
 async function attemptingRowOf(workingOrderId: string): Promise<{ paymentRef: string }> {
-  const rows = await suite.db.transaction((tx) => listAttempting(tx, "stripe"));
+  const owners = await ownsEveryPayment(suite.db);
+  const rows = await suite.db.transaction((tx) => listAttempting(tx, "stripe", owners));
   const mine = rows.filter((r) => r.workingOrderId === workingOrderId);
   expect(mine).toHaveLength(1);
   return mine[0]!;
@@ -565,7 +574,7 @@ describe("StripeTerminalProvider.collect when a full disk refuses the capture's 
     expect(left?.state).toBe("attempting");
     expect((await fake.retrievePaymentIntent(left!.externalRef!)).status).toBe("succeeded");
 
-    await provider.resolvePending(new Date());
+    await provider.resolvePending(new Date(), await ownsEveryPayment(suite.db));
 
     expect((await rowFor(paymentRef))?.state).toBe("captured");
   });
@@ -678,15 +687,22 @@ const AUDIT = { personId: MANAGER };
 /** An `attempting` stripe row as a crash leaves it, optionally stamped with a PaymentIntent. */
 async function abandonedRow(
   externalRef: string | null,
-  on?: { workingOrderId: string; origin: DeviceOrigin },
+  on?: { workingOrderId: string; origin: DeviceOrigin; nodeId: NodeId },
 ): Promise<{ paymentRef: string; paymentId: string; workingOrderId: string }> {
   const seeded = on === undefined ? await seedWorkingOrder(suite.db, freshNif()) : undefined;
   const woId = on?.workingOrderId ?? seeded!.workingOrderId;
   const origin = on?.origin ?? deviceOrigin(seeded!.deviceId);
+  const nodeId = on?.nodeId ?? seeded!.nodeId;
   const paymentRef = `abandoned-${externalRef ?? "unstamped"}-${Math.random()}`;
   const key = { provider: "stripe", paymentRef };
   return withTransaction(suite.db, async (tx) => {
-    await insertAttempting(tx, { ...key, origin, workingOrderId: woId, amount: decimal("12.10") });
+    await insertAttempting(tx, {
+      ...key,
+      origin,
+      workingOrderId: woId,
+      nodeId,
+      amount: decimal("12.10"),
+    });
     if (externalRef !== null) await stampAttemptingRef(tx, key, externalRef);
     const row = await getPaymentByRef(tx, key);
     return { paymentRef, paymentId: row!.id, workingOrderId: woId };
@@ -1087,6 +1103,7 @@ describe("the Stripe idempotency key after a PaymentIntent was cancelled at Stri
         origin: p.origin,
         ...key,
         workingOrderId: p.workingOrderId,
+        nodeId: p.nodeId,
         amount: decimal("12.10"),
       });
       return (await getPaymentByRef(tx, key))!.id;

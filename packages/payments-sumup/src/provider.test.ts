@@ -9,6 +9,7 @@ import { AppError, decimal, diskFullIn } from "@waitron/shared";
 import { ChargeNotSavedError, PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import {
   billPaymentOfRow,
+  ownsEveryPayment,
   readerOfRow,
   seedBillPayment,
   seedHeldReader,
@@ -241,7 +242,7 @@ describe("SumUpCloudProvider.collect when a full disk refuses the capture's save
     expect(left.state).toBe("attempting");
     expect(left.externalRef).toMatch(/^ctx_/);
 
-    await provider.resolvePending(new Date());
+    await provider.resolvePending(new Date(), await ownsEveryPayment(suite.db));
 
     expect((await row(paymentRef)).state).toBe("captured");
   });

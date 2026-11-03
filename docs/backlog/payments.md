@@ -157,9 +157,9 @@ the original's `status` stays `SUCCESSFUL` (read on 2026-09-27 from three refund
 
 ## What M7b2 left open (a manager clearing a stuck card payment, #702)
 
-- SumUp has no permanent lock: its sweep resolves every `attempting` row against SumUp, and fails
-  one SumUp has never heard of after 15 minutes, with an incident. It leaves a row only while SumUp
-  keeps answering PENDING. The manager action refuses a SumUp payment
+- SumUp has no permanent lock: its sweep resolves every `attempting` row this box owns against
+  SumUp, and fails one SumUp has never heard of after 15 minutes, with an incident. It leaves a row
+  only while SumUp keeps answering PENDING. The manager action refuses a SumUp payment
   (`payment.resolve_unsupported`).
 - The add-reader dismissal tests (`packages/payments-sumup/src/dashboard/sumup-add-reader.test.ts`
   and its Stripe twin, `stripe-add-reader.test.ts`) have not been re-measured since #721 made
@@ -281,9 +281,20 @@ screens' reads are not limited, and it was not measured in a real browser agains
 provider. Left open by A260 (several card readers' status reads at once can use up the browser's
 connections to the box; W18c #1145 and W48 #1162).
 
-## Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is the SumUp provider's `resolvePending`) do not both succeed
+## A manager's stuck-payment resolution must act only on the collection owner's payments before a second box sells
 
-The second pass throws partway instead of skipping the rows the first resolved.
+The dashboard's two stuck lists, whole-order payments (`apps/server/src/payments-api.ts:1032`) and
+held bill payments (`payments-api.ts:1184`), read every box's payments; each list's "still at a
+reader" check (`paymentAttemptIsLive`, `apps/server/src/till-sale.ts:1465`; `billPaymentIsLive`,
+`apps/server/src/bill-payments.ts:1260`) sees only this box. Both resolve routes (`payments-api.ts:1073` and `:1226`) reach the same
+`resolveAbandonedAttempt` call (`payments-api.ts:420`), so a manager could cancel a payment another
+box is still taking. Left open by A764 (A1018 Slice 4b).
+
+## Two concurrent passes of the SumUp provider's `resolvePending` over `listAttempting` (`packages/payments/src/store.ts`) do not both succeed
+
+The second pass throws partway instead of skipping the rows the first resolved. The Stripe
+provider's `resolvePending` also reads `listAttempting` (`packages/payments-stripe/src/provider.ts:258`)
+but skips a row another pass resolved first (`payment.not_found`, `:269`).
 
 ## Loose ends left by B28's review (#1005), not acted on, under service Task 17 (#991)
 
@@ -473,12 +484,17 @@ the same column.
   Check them automatically after collection ends; keep the order locked until the outcome is known.
   Retain the manager check as a fallback. A confirmed cancellation advances the next attempt's key;
   a bank decline keeps its existing retry key. Automatic resolution has no person in its audit row.
-  Collection ownership is process-local. The provider sweep runs in every node role; only sale
-  recovery and bill completion check for primary. Before enabling a second venue node, restrict
-  provider cancellation to its collection owner or add coordination between nodes; the A1018 build
-  plan's [Slice 4b](../superpowers/plans/2026-11-02-a1018-handover-build.md#slice-4b--payment-collection-belongs-to-one-box-a764)
-  builds the collection owner. Today's venue has one node (CLAUDE.md §5); this is not a claim of
-  protection across nodes.
+  Each payment records the box that started it in `payments.node_id`: every payment insert takes a
+  required node id (`packages/payments/src/store.ts:45`). Each box's card sweep resolves only the
+  in-flight payments it owns: its own, those of boxes it has taken over from (none until the A1018
+  build plan's Task 5.9 supplies them), and payments naming no box only while it is the venue's
+  singleton primary (`listAttempting`, `packages/payments/src/store.ts:510`; `sweepOwners`,
+  `apps/server/src/boot.ts:511`). The sweep runs in every node role; only sale recovery and bill
+  completion check for primary. Coordination between two boxes collecting at the same time is not
+  built. A manager's stuck-payment resolution still acts on every box's payments, through both
+  dashboard lists (`apps/server/src/payments-api.ts:1032` for whole orders, `:1184` for held bill
+  payments) and both resolve routes (`:1073` and `:1226`); it has its own entry under Payments in
+  [the backlog](../backlog.md). Today's venue has one node (CLAUDE.md §5).
   [Implementation plan](../superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,

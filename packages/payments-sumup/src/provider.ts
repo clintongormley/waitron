@@ -6,6 +6,7 @@ import type { Database, Transaction } from "@waitron/db";
 import type {
   CardDetails,
   CollectParams,
+  CollectionOwners,
   ForwardResult,
   IncidentSink,
   PaymentProvider,
@@ -176,6 +177,7 @@ export class SumUpCloudProvider implements PaymentProvider {
       insertAttempting(tx, {
         origin: params.origin,
         workingOrderId: params.workingOrderId,
+        nodeId: params.nodeId,
         provider: SUMUP_PROVIDER,
         paymentRef,
         amount: params.amount,
@@ -288,10 +290,11 @@ export class SumUpCloudProvider implements PaymentProvider {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
   /**
-   * One pass over this provider's `attempting` rows. T1 lists them (unlocked); each is looked up at
-   * SumUp OUTSIDE any transaction — by the stamped poll key, else by OUR `payment_ref`
-   * (`foreign_transaction_id`) for a row that crashed before T1.5 — and resolved in its own short
-   * T2. The non-null case runs through `classify`, shared with `collect`'s poll:
+   * One pass over this provider's `attempting` rows that `owners` covers. T1 lists them
+   * (unlocked); each is looked up at SumUp OUTSIDE any transaction — by the stamped poll key, else
+   * by OUR `payment_ref` (`foreign_transaction_id`) for a row that crashed before T1.5 — and
+   * resolved in its own short T2. The non-null case runs through `classify`, shared with
+   * `collect`'s poll:
    *   captured → captured;  failed → failed, no incident;
    *   pending → left, `nextDueAt` set;  deferred (REFUNDED / unknown) → failed +
    *   `payment.pending_outcome_unactionable` (money may have moved through a payment that never
@@ -311,8 +314,8 @@ export class SumUpCloudProvider implements PaymentProvider {
    * `incidentsRaised` undercounts. Accepted: one open alert is enough to send a human to the
    * payments screen; the count is a log field, not a per-row guarantee.
    */
-  async resolvePending(now: Date): Promise<ForwardResult> {
-    const rows = await this.inTransaction((tx) => listAttempting(tx, SUMUP_PROVIDER));
+  async resolvePending(now: Date, owners: CollectionOwners): Promise<ForwardResult> {
+    const rows = await this.inTransaction((tx) => listAttempting(tx, SUMUP_PROVIDER, owners));
     if (rows.length === 0) {
       return { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     }

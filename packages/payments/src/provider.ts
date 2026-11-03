@@ -1,7 +1,7 @@
 // Side-effect only: registers this package's `payment.*` codes on the shared `ErrorParams`
 // registry and keeps ./errors.ts reachable from the public barrel (scripts/errors-reachable.test.ts).
 import "./errors.js";
-import type { Decimal, DeviceOrigin, WorkingOrderId } from "@waitron/shared";
+import type { Decimal, DeviceOrigin, NodeId, WorkingOrderId } from "@waitron/shared";
 
 /**
  * The lifecycle of one electronic tender, provider-neutral. `attempting` is written before an
@@ -41,6 +41,9 @@ export interface CollectParams {
   /** The device the payment is started on, written on the provider's `payments` row. */
   origin: DeviceOrigin;
   workingOrderId: WorkingOrderId;
+  /** The box starting the payment, written on the provider's `payments` rows as their collection
+   * owner. */
+  nodeId: NodeId;
   /** Tax-inclusive. Split tender is several `collect` calls against one working order, each with
    * its own amount. */
   amount: Decimal;
@@ -110,6 +113,17 @@ export interface ForwardResult {
   forwarded: number;
   declined: number;
   incidentsRaised: number;
+}
+
+/** Which `attempting` payments a box's card sweep may resolve. */
+export interface CollectionOwners {
+  /** This box. */
+  readonly nodeId: NodeId;
+  /** The boxes this box has taken over collection from. */
+  readonly takenOverFrom: readonly NodeId[];
+  /** Whether payments that name no box are this box's: true only while it is the venue's singleton
+   * primary. */
+  readonly unowned: boolean;
 }
 
 /**
@@ -245,9 +259,9 @@ export interface PaymentProvider {
   /** Resolve this provider's `attempting` rows whose outcome `collect` did not learn. One pass: each
    * row is polled at the processor and resolved `captured` or `failed`; a row the processor still
    * reports pending is left for the next pass (`nextDueAt`). `forwarded` counts rows captured,
-   * `declined` rows failed. An adapter whose `collect` never leaves a row `attempting` answers
-   * all-zeros. */
-  resolvePending(now: Date): Promise<ForwardResult>;
+   * `declined` rows failed. Only rows `owners` covers are read. An adapter whose `collect` never
+   * leaves a row `attempting` answers all-zeros. */
+  resolvePending(now: Date, owners: CollectionOwners): Promise<ForwardResult>;
 
   /** Settle one `attempting` row that nothing in this process is still driving — the caller
    * guarantees that — by asking the processor what became of it. A `captured` or `failed` outcome
@@ -300,6 +314,8 @@ export interface InitiateParams {
   /** The device the payment is started on, written on the provider's `payments` row. */
   origin: DeviceOrigin;
   workingOrderId: WorkingOrderId;
+  /** The box starting the payment, written on its `payments` row as the collection owner. */
+  nodeId: NodeId;
   amount: Decimal;
   paymentRef: string;
 }

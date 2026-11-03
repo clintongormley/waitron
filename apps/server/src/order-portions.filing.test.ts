@@ -239,6 +239,7 @@ function cardDeps(charge: boolean): IntegratedPayDeps {
       await withTransaction(venue.db, (tx) =>
         insertCapturedPayment(tx, {
           origin: params.origin,
+          nodeId: params.nodeId,
           workingOrderId: params.workingOrderId,
           provider: "stripe",
           paymentRef,
@@ -404,6 +405,7 @@ describe("A803 portions: filing a bill of portions", () => {
     await inTx(venue, (tx) =>
       insertCapturedPayment(tx, {
         origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
         workingOrderId: billId,
         provider: "stripe",
         paymentRef: `pi-${randomUUID()}`,

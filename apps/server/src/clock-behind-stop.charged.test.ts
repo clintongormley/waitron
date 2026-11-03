@@ -274,6 +274,7 @@ it("the automatic recovery files nothing during the stop, then files it", async 
   await withTransaction(venue.db, async (tx) => {
     await insertCapturedPayment(tx, {
       origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
       workingOrderId: billId,
       provider: "fake",
       paymentRef,

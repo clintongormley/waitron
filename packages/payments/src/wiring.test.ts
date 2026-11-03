@@ -90,6 +90,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
     const paid = await provider.collect({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("12.10"),
     });
     expect(paid.state).toBe("captured");
@@ -123,6 +124,7 @@ describe("collect -> recordSale -> associate (the payment seam, end to end)", ()
     const paid = await provider.collect({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("12.10"),
     });
     expect(paid.state).toBe("failed");

@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { AppError, decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
+import { AppError, decimal, deviceOrigin, jobOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { reconcilePayments, DEFAULT_SETTLEMENT_LAG_MS } from "./reconcile.js";
@@ -77,6 +77,7 @@ async function capture(seeded: Seeded, paymentRef: string, externalRef: string, 
     insertCapturedPayment(tx, {
       origin: deviceOrigin(seeded.deviceId),
       workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
       provider: PROVIDER,
       paymentRef,
       externalRef,
@@ -94,6 +95,7 @@ async function forwardedOffline(seeded: Seeded, paymentRef: string, externalRef:
     await insertAcceptedOffline(tx, {
       origin: deviceOrigin(seeded.deviceId),
       workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
       provider: PROVIDER,
       paymentRef,
       externalRef,
@@ -119,7 +121,7 @@ async function seedSecondTill(seeded: Seeded): Promise<Seeded> {
   return {
     locationId,
     deviceId,
-    nodeId: node2.rows[0].id,
+    nodeId: brandNodeId(node2.rows[0].id),
     workingOrderId: wo2.rows[0].id,
   };
 }
@@ -263,6 +265,7 @@ describe("reconcilePayments", () => {
       insertInitiated(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: PROVIDER,
         paymentRef: "p-init",
         amount: decimal("10.00"),
@@ -383,6 +386,7 @@ describe("reconcilePayments", () => {
       insertCapturedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: PROVIDER,
         paymentRef: "p-elsewhere",
         externalRef: "ext-2",

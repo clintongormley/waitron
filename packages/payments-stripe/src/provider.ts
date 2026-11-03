@@ -7,6 +7,7 @@ import type {
   AbandonedAttemptAudit,
   AbandonedAttemptOutcome,
   CollectParams,
+  CollectionOwners,
   ForwardResult,
   PaymentProvider,
   PaymentResult,
@@ -158,6 +159,7 @@ export class StripeTerminalProvider implements PaymentProvider {
       await insertAttempting(tx, {
         origin: params.origin,
         workingOrderId: params.workingOrderId,
+        nodeId: params.nodeId,
         provider: PROVIDER,
         paymentRef,
         amount: params.amount,
@@ -252,8 +254,8 @@ export class StripeTerminalProvider implements PaymentProvider {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
 
-  async resolvePending(now: Date): Promise<ForwardResult> {
-    const rows = await this.inTransaction((tx) => listAttempting(tx, PROVIDER));
+  async resolvePending(now: Date, owners: CollectionOwners): Promise<ForwardResult> {
+    const rows = await this.inTransaction((tx) => listAttempting(tx, PROVIDER, owners));
     let forwarded = 0;
     let declined = 0;
     let pending = false;

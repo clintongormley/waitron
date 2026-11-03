@@ -8,6 +8,7 @@ import { seedWorkingOrder, freshNif } from "@waitron/payments/test/seed.js";
 import { StripeReconciler } from "./reconciler.js";
 import { FakeStripeReport } from "./testing/fake-stripe-report.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
+import type { NodeId } from "@waitron/shared";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 
@@ -37,6 +38,7 @@ function reconciler(
 async function abandonedOrphan(params: {
   deviceId: string;
   workingOrderId: string;
+  nodeId: NodeId;
   paymentRef: string;
   externalRef: string;
 }): Promise<void> {
@@ -44,6 +46,7 @@ async function abandonedOrphan(params: {
     insertCapturedPayment(tx, {
       origin: deviceOrigin(params.deviceId),
       workingOrderId: params.workingOrderId,
+      nodeId: params.nodeId,
       provider: "stripe",
       paymentRef: params.paymentRef,
       externalRef: params.externalRef,
@@ -68,6 +71,7 @@ describe("StripeReconciler", () => {
       insertCapturedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "stripe",
         paymentRef: "ref-terminal",
         externalRef: "pi_terminal",
@@ -93,6 +97,7 @@ describe("StripeReconciler", () => {
       insertInitiated(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "stripe",
         paymentRef: "ref-hosted",
         externalRef: "cs_hosted",
@@ -165,6 +170,7 @@ describe("StripeReconciler", () => {
     await abandonedOrphan({
       deviceId: seeded.deviceId,
       workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
       paymentRef: "ref-hosted-orphan",
       externalRef: "cs_orphan",
     });
@@ -190,6 +196,7 @@ describe("StripeReconciler", () => {
     await abandonedOrphan({
       deviceId: seeded.deviceId,
       workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
       paymentRef: "ref-terminal-orphan",
       externalRef: "pi_terminal_orphan",
     });
@@ -216,6 +223,7 @@ describe("StripeReconciler", () => {
     await abandonedOrphan({
       deviceId: seeded.deviceId,
       workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
       paymentRef: "ref-unpaid-orphan",
       externalRef: "cs_unpaid",
     });

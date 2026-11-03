@@ -1224,6 +1224,7 @@ export async function takeBillPayment(
         await recordManualCardPayment(tx, {
           origin: cfg.origin,
           workingOrderId,
+          nodeId: cfg.nodeId,
           amount: centsToDecimal(payment.applied + payment.tip),
           settledAt: receivedAt,
           externalRef: req.externalRef,
@@ -1497,6 +1498,7 @@ export async function takeReaderBillPayment(
       result = await deps.provider.collect({
         origin: cfg.origin,
         workingOrderId: brandWorkingOrderId(workingOrderId),
+        nodeId: cfg.nodeId,
         amount: centsToDecimal(payment.applied + payment.tip),
         ...(deps.readerRef === undefined ? {} : { readerRef: deps.readerRef }),
         ...(deps.readerId === undefined ? {} : { readerId: deps.readerId }),

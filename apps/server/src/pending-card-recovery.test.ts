@@ -1,4 +1,5 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
 import { eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -50,6 +51,7 @@ async function retained(venue: BillVenue, manual = false, issued = false, placed
   await withTransaction(venue.db, async (tx) => {
     await insertCapturedPayment(tx, {
       origin: venue.cfg.origin,
+      nodeId: venue.cfg.nodeId,
       workingOrderId: id,
       provider: "stripe",
       paymentRef,
@@ -299,7 +301,7 @@ describe("automatic card capture recovery", () => {
         const result = await collect(params);
         const intent = await created.mock.results[0]!.value;
         client.setIntent(intent.id, { status: "succeeded", amount: 300, amountReceived: 300 });
-        await provider.resolvePending(venue.clock.now().instant);
+        await provider.resolvePending(venue.clock.now().instant, await ownsEveryPayment(suite.db));
         enter();
         await released;
         return result;
@@ -393,6 +395,7 @@ describe("automatic card capture recovery", () => {
       withPendingSweep(
         async () => ({ duties: [], nextDueAt: null }),
         async () => [provider],
+        () => ({ nodeId: cfg.nodeId, takenOverFrom: [], unowned: true }),
         () => {},
       ),
       () =>

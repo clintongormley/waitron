@@ -201,6 +201,7 @@ it("the signed hosted-payment exception to the clock stop cannot bypass zone adm
   await inTx(async (tx) => {
     await insertInitiated(tx, {
       origin: v.cfg.origin,
+      nodeId: v.cfg.nodeId,
       workingOrderId: id,
       provider: "stripe",
       paymentRef: randomUUID(),

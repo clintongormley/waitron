@@ -563,6 +563,7 @@ describe("a card-reader sale files and prints in the location's language when th
       await createOpenOrder(tx, venue.cfg, id, [{ menuItemId, quantity: "1" }], null, { zoneId });
       await insertCapturedPayment(tx, {
         origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
         workingOrderId: id,
         provider: "simulator",
         paymentRef: `sim-ref-${randomUUID()}`,
@@ -1768,6 +1769,7 @@ describe("a sale files in the receipt language saved on its order", () => {
       await inTx(venue, (tx) =>
         insertCapturedPayment(tx, {
           origin: venue.cfg.origin,
+          nodeId: venue.cfg.nodeId,
           workingOrderId: id,
           provider: "simulator",
           paymentRef: `sim-ref-${randomUUID()}`,
@@ -2121,6 +2123,7 @@ describe("a sale files in the receipt language saved on its order", () => {
         await inTx(venue, (tx) =>
           insertCapturedPayment(tx, {
             origin: venue.cfg.origin,
+            nodeId: venue.cfg.nodeId,
             workingOrderId: id,
             provider: "simulator",
             paymentRef: `sim-ref-${randomUUID()}`,

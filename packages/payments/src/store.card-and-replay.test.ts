@@ -32,6 +32,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
       insertCapturedPayment(tx, {
         origin: deviceOrigin(tenant.deviceId),
         workingOrderId: tenant.workingOrderId,
+        nodeId: tenant.nodeId,
         provider: "stripe",
         paymentRef: "replay-1",
         amount: decimal("10.00"),
@@ -66,6 +67,7 @@ describe("payments card columns", () => {
       await insertAttempting(tx, {
         origin: deviceOrigin(tenant.deviceId),
         workingOrderId: tenant.workingOrderId,
+        nodeId: tenant.nodeId,
         provider: "sumup_cloud",
         paymentRef: "card-ref-1",
         amount: decimal("1.00"),
@@ -91,6 +93,7 @@ describe("payments card columns", () => {
         await insertAttempting(tx, {
           origin: deviceOrigin(tenant.deviceId),
           workingOrderId: tenant.workingOrderId,
+          nodeId: tenant.nodeId,
           provider: "sumup_cloud",
           paymentRef: "card-ref-2",
           amount: decimal("1.00"),
@@ -113,6 +116,7 @@ describe("payments card columns", () => {
         await insertAttempting(tx, {
           origin: deviceOrigin(tenant.deviceId),
           workingOrderId: tenant.workingOrderId,
+          nodeId: tenant.nodeId,
           provider: "sumup_cloud",
           paymentRef: "card-ref-3",
           amount: decimal("1.00"),
@@ -136,6 +140,7 @@ describe("findCapturedPaymentForWorkingOrderAnyProvider", () => {
       await insertAttempting(tx, {
         origin: deviceOrigin(tenant.deviceId),
         workingOrderId: tenant.workingOrderId,
+        nodeId: tenant.nodeId,
         provider: "sumup_cloud",
         paymentRef: "any-ref-1",
         amount: decimal("1.00"),

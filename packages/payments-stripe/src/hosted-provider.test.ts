@@ -31,6 +31,7 @@ describe("StripeHostedProvider.initiate", () => {
     const res = await provider.initiate({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("12.10"),
       paymentRef,
     });
@@ -57,6 +58,7 @@ describe("StripeHostedProvider.initiate", () => {
     await provider.initiate({
       origin: deviceOrigin(seeded.deviceId),
       workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
+      nodeId: seeded.nodeId,
       amount: decimal("12.50"),
       paymentRef: "ref-meta",
     });

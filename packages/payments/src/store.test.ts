@@ -74,6 +74,7 @@ async function capture(seeded: Seeded, paymentRef: string, amount = "10.00") {
     insertCapturedPayment(tx, {
       origin: deviceOrigin(seeded.deviceId),
       workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
       provider: "fake",
       paymentRef,
       amount: decimal(amount),
@@ -123,6 +124,7 @@ describe("insertFailedPayment", () => {
       insertFailedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "p2",
         amount: decimal("10.00"),
@@ -255,6 +257,7 @@ describe("recordRefund", () => {
       insertFailedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "p10",
         amount: decimal("10.00"),
@@ -431,6 +434,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
       origin: deviceOrigin(s.deviceId),
       provider: "stripe",
       workingOrderId: s.workingOrderId,
+      nodeId: s.nodeId,
     };
     // A failed attempt must NOT match (a legitimately-declined card is re-chargeable).
     await suite.db.transaction((tx) =>
@@ -464,6 +468,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
       origin: deviceOrigin(s.deviceId),
       provider: "stripe",
       workingOrderId: s.workingOrderId,
+      nodeId: s.nodeId,
     };
     await suite.db.transaction((tx) =>
       insertAcceptedOffline(tx, {
@@ -483,6 +488,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
       origin: deviceOrigin(s.deviceId),
       provider: "stripe",
       workingOrderId: s.workingOrderId,
+      nodeId: s.nodeId,
     };
     await suite.db.transaction((tx) =>
       insertAttempting(tx, { ...key, paymentRef: "a1", amount: decimal("9.00") }),
@@ -499,6 +505,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
       origin: deviceOrigin(s.deviceId),
       provider: "stripe",
       workingOrderId: s.workingOrderId,
+      nodeId: s.nodeId,
     };
     await suite.db.transaction((tx) =>
       insertCapturedPayment(tx, {
@@ -529,6 +536,7 @@ describe("findCapturedPaymentForWorkingOrder", () => {
       origin: deviceOrigin(s.deviceId),
       provider: "stripe",
       workingOrderId: s.workingOrderId,
+      nodeId: s.nodeId,
     };
     await suite.db.insert(payments).values({
       workingOrderId: key.workingOrderId,
@@ -561,6 +569,7 @@ describe("insertCapturedPayment external_ref", () => {
       insertCapturedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "ext1",
         amount: decimal("10.00"),
@@ -591,6 +600,7 @@ describe("attempting lifecycle", () => {
       insertAttempting(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "a1",
         amount: decimal("12.10"),
@@ -609,6 +619,7 @@ describe("attempting lifecycle", () => {
         origin: deviceOrigin(seeded.deviceId),
         ...key,
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         amount: decimal("12.10"),
       }),
     );
@@ -634,6 +645,7 @@ describe("attempting lifecycle", () => {
         origin: deviceOrigin(seeded.deviceId),
         ...key,
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         amount: decimal("12.10"),
       }),
     );
@@ -667,6 +679,7 @@ describe("insertAttempting under the device profile the request was checked agai
       insertAttempting(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef,
         amount: decimal("12.10"),
@@ -728,6 +741,7 @@ describe("externalRef on read-back + failed refunds", () => {
         origin: deviceOrigin(seeded.deviceId),
         ...key,
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         amount: decimal("10.00"),
         settledAt: SETTLED,
         externalRef: "pi_ext",
@@ -799,6 +813,7 @@ describe("listAcceptedOffline", () => {
       insertAcceptedOffline(tx, {
         origin: deviceOrigin(s.deviceId),
         workingOrderId: s.workingOrderId,
+        nodeId: s.nodeId,
         provider: "fake",
         paymentRef: "lst-1",
         amount: decimal("10.00"),
@@ -814,7 +829,11 @@ describe("listAcceptedOffline", () => {
 describe("claimAcceptedOffline", () => {
   it("returns this provider's accepted_offline rows and writes nothing to any payment row", async () => {
     const s = await seedWorkingOrder(suite.db, freshNif());
-    const order = { origin: deviceOrigin(s.deviceId), workingOrderId: s.workingOrderId };
+    const order = {
+      origin: deviceOrigin(s.deviceId),
+      workingOrderId: s.workingOrderId,
+      nodeId: s.nodeId,
+    };
     await suite.db.transaction(async (tx) => {
       await insertAcceptedOffline(tx, {
         ...order,
@@ -858,6 +877,7 @@ describe("Mode 3 initiated lifecycle", () => {
       insertInitiated(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef,
         externalRef,
@@ -946,6 +966,7 @@ describe("Mode 3 initiated lifecycle", () => {
       insertCapturedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "manual",
         paymentRef: "m-1",
         amount: decimal("5.00"),
@@ -958,6 +979,7 @@ describe("Mode 3 initiated lifecycle", () => {
         insertCapturedPayment(tx, {
           origin: deviceOrigin(seeded.deviceId),
           workingOrderId: seeded.workingOrderId,
+          nodeId: seeded.nodeId,
           provider: "manual",
           paymentRef: "m-2",
           amount: decimal("6.00"),
@@ -1009,6 +1031,7 @@ describe("listReconcilable", () => {
       await insertAcceptedOffline(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "forwarded",
         amount: decimal("12.00"),
@@ -1033,6 +1056,7 @@ describe("listReconcilable", () => {
       insertInitiated(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "first-pending",
         amount: decimal("7.00"),
@@ -1043,6 +1067,7 @@ describe("listReconcilable", () => {
       insertCapturedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "second-held",
         amount: decimal("8.00"),
@@ -1073,6 +1098,7 @@ describe("listReconcilable", () => {
       insertInitiated(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "pending",
         amount: decimal("7.00"),
@@ -1093,6 +1119,7 @@ describe("listReconcilable", () => {
       await insertFailedPayment(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "nope",
         amount: decimal("3.00"),
@@ -1100,6 +1127,7 @@ describe("listReconcilable", () => {
       await insertAcceptedOffline(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "queued",
         amount: decimal("4.00"),
@@ -1203,6 +1231,7 @@ describe("existingReferences", () => {
       insertInitiated(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef,
         amount: decimal("5.00"),
@@ -1295,6 +1324,7 @@ describe("hasPaymentWithExternalRef", () => {
       insertInitiated(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "res-1",
         externalRef: "hosted-res-1",
@@ -1315,6 +1345,7 @@ describe("hasPaymentWithExternalRef", () => {
       insertInitiated(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "res-2",
         externalRef: "hosted-res-2",
@@ -1335,6 +1366,7 @@ describe("listAttempting / stampAttemptingRef", () => {
       await insertAttempting(tx, {
         origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
+        nodeId: t.nodeId,
         provider: "sumup",
         paymentRef: "ref-a",
         amount: decimal("10.00"),
@@ -1342,6 +1374,7 @@ describe("listAttempting / stampAttemptingRef", () => {
       await insertAttempting(tx, {
         origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
+        nodeId: t.nodeId,
         provider: "sumup",
         paymentRef: "ref-b",
         amount: decimal("11.00"),
@@ -1349,6 +1382,7 @@ describe("listAttempting / stampAttemptingRef", () => {
       await insertAttempting(tx, {
         origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
+        nodeId: t.nodeId,
         provider: "stripe",
         paymentRef: "ref-c",
         amount: decimal("12.00"),
@@ -1361,7 +1395,9 @@ describe("listAttempting / stampAttemptingRef", () => {
       });
       await stampAttemptingRef(tx, { provider: "sumup", paymentRef: "ref-a" }, "ctx_a");
     });
-    const rows = await suite.db.transaction((tx) => listAttempting(tx, "sumup"));
+    const rows = await suite.db.transaction((tx) =>
+      listAttempting(tx, "sumup", { nodeId: t.nodeId, takenOverFrom: [], unowned: false }),
+    );
     expect(rows.map((r) => [r.paymentRef, r.externalRef, r.amount])).toEqual([
       ["ref-a", "ctx_a", "10.00"],
     ]);
@@ -1377,6 +1413,7 @@ describe("listAttempting / stampAttemptingRef", () => {
         origin: deviceOrigin(t.deviceId),
         ...key,
         workingOrderId: t.workingOrderId,
+        nodeId: t.nodeId,
         amount: decimal("5.00"),
       });
       await captureAttempting(tx, { ...key, settledAt: new Date(), externalRef: "txn_e" });
@@ -1393,6 +1430,7 @@ describe("listAttempting / stampAttemptingRef", () => {
         origin: deviceOrigin(t.deviceId),
         ...key,
         workingOrderId: t.workingOrderId,
+        nodeId: t.nodeId,
         amount: decimal("5.00"),
       });
       const first = await stampAttemptingRef(tx, key, "pi_f");
@@ -1449,6 +1487,7 @@ describe("the link from a provider payment to its bill payment", () => {
       insert(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: name,
         amount: decimal("10.00"),
@@ -1474,6 +1513,7 @@ describe("the link from a provider payment to its bill payment", () => {
       insertAttempting(tx, {
         origin: deviceOrigin(seeded.deviceId),
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         provider: "fake",
         paymentRef: "linked",
         amount: decimal("12.50"),
@@ -1507,6 +1547,7 @@ describe("the link from a provider payment to its bill payment", () => {
         insertAttempting(tx, {
           origin: deviceOrigin(seeded.deviceId),
           workingOrderId: seeded.workingOrderId,
+          nodeId: seeded.nodeId,
           provider: "fake",
           paymentRef,
           amount: decimal(amount),
@@ -1537,6 +1578,7 @@ describe("the link from a provider payment to its bill payment", () => {
         insertAttempting(tx, {
           origin: deviceOrigin(seeded.deviceId),
           workingOrderId: seeded.workingOrderId,
+          nodeId: seeded.nodeId,
           provider: "fake",
           paymentRef,
           amount: decimal("10.00"),
@@ -1557,6 +1599,7 @@ describe("the link from a provider payment to its bill payment", () => {
         insertAttempting(tx, {
           origin: deviceOrigin(seeded.deviceId),
           workingOrderId: seeded.workingOrderId,
+          nodeId: seeded.nodeId,
           provider: "fake",
           paymentRef: "dangling",
           amount: decimal("10.00"),
@@ -1576,6 +1619,7 @@ describe("the link from a provider payment to its bill payment", () => {
         insertCapturedPayment(tx, {
           origin: deviceOrigin(seeded.deviceId),
           workingOrderId: seeded.workingOrderId,
+          nodeId: seeded.nodeId,
           provider: "fake",
           paymentRef,
           amount: decimal("30.00"),
@@ -1719,7 +1763,9 @@ describe("rows written within one millisecond", () => {
     const seeded = await seedTenant();
     const refs = await writePayments(seeded, "attempting", () => null);
 
-    const listed = await suite.db.transaction((tx) => listAttempting(tx, "fake"));
+    const listed = await suite.db.transaction((tx) =>
+      listAttempting(tx, "fake", { nodeId: seeded.nodeId, takenOverFrom: [], unowned: true }),
+    );
 
     expect(listed.map((row) => row.paymentRef)).toEqual(refs);
   });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
 import {
@@ -9,7 +10,7 @@ import {
   stampAttemptingRef,
 } from "@waitron/payments";
 import type { IncidentSink } from "@waitron/payments";
-import { freshNif, seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import { freshNif, ownsEveryPayment, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { FakeSumUp } from "./testing/fake-sumup.js";
 import { NOT_FOUND_GRACE_MS, RESOLVE_RETRY_MS, SumUpCloudProvider } from "./provider.js";
 
@@ -43,6 +44,7 @@ async function setup(incidentRecorded = true) {
       insertAttempting(tx, {
         origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
+        nodeId: t.nodeId,
         provider: "sumup",
         paymentRef,
         amount: decimal("7.00"),
@@ -73,7 +75,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
   it("captures a row SumUp now reports SUCCESSFUL, stamping the refundable transaction id", async () => {
     const { provider, attempting, state } = await setup();
     await attempting("a", { status: "SUCCESSFUL" });
-    const r = await provider.resolvePending(T0);
+    const r = await provider.resolvePending(T0, await ownsEveryPayment(suite.db));
     expect(r).toEqual({ nextDueAt: null, forwarded: 1, declined: 0, incidentsRaised: 0 });
     const row = await state("a");
     expect(row.state).toBe("captured");
@@ -81,10 +83,24 @@ describe("SumUpCloudProvider.resolvePending", () => {
     expect(row.settledAt).not.toBeNull();
   });
 
+  it("leaves an attempting row another box owns alone, and its own box captures it", async () => {
+    const { t, provider, attempting, state } = await setup();
+    await attempting("theirs", { status: "SUCCESSFUL" });
+    const otherBox = await seedNode(suite.db);
+    expect(
+      await provider.resolvePending(T0, { nodeId: otherBox, takenOverFrom: [], unowned: true }),
+    ).toEqual({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
+    expect((await state("theirs")).state).toBe("attempting");
+    expect(
+      (await provider.resolvePending(T0, { nodeId: t.nodeId, takenOverFrom: [], unowned: false }))
+        .forwarded,
+    ).toBe(1);
+  });
+
   it("carries the card block onto the payments row it captures", async () => {
     const { provider, attempting, state } = await setup();
     await attempting("card", { status: "SUCCESSFUL" });
-    expect((await provider.resolvePending(T0)).forwarded).toBe(1);
+    expect((await provider.resolvePending(T0, await ownsEveryPayment(suite.db))).forwarded).toBe(1);
     const row = await state("card");
     expect(row.state).toBe("captured");
     expect(row.cardScheme).toBe("VISA");
@@ -97,7 +113,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
     const { provider, attempting, state } = await setup();
     await attempting("f", { status: "FAILED" });
     await attempting("c", { status: "CANCELLED" });
-    expect(await provider.resolvePending(T0)).toEqual({
+    expect(await provider.resolvePending(T0, await ownsEveryPayment(suite.db))).toEqual({
       nextDueAt: null,
       forwarded: 0,
       declined: 2,
@@ -110,7 +126,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
   it("leaves a still-PENDING row alone and asks to be run again in RESOLVE_RETRY_MS", async () => {
     const { provider, attempting, state } = await setup();
     await attempting("p");
-    expect(await provider.resolvePending(T0)).toEqual({
+    expect(await provider.resolvePending(T0, await ownsEveryPayment(suite.db))).toEqual({
       nextDueAt: new Date(T0.getTime() + RESOLVE_RETRY_MS),
       forwarded: 0,
       declined: 0,
@@ -122,7 +138,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
   it("finds a crash-before-stamp row by OUR key (foreign_transaction_id) and resolves it", async () => {
     const { provider, attempting, state } = await setup();
     await attempting("u", { stamped: false, status: "SUCCESSFUL" });
-    expect((await provider.resolvePending(T0)).forwarded).toBe(1);
+    expect((await provider.resolvePending(T0, await ownsEveryPayment(suite.db))).forwarded).toBe(1);
     expect((await state("u")).state).toBe("captured");
   });
 
@@ -132,6 +148,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
       insertAttempting(tx, {
         origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
+        nodeId: t.nodeId,
         provider: "sumup",
         paymentRef: "ghost",
         amount: decimal("7.00"),
@@ -140,14 +157,19 @@ describe("SumUpCloudProvider.resolvePending", () => {
     // created_at is the DB's now(); swept at ~that same instant the row is inside the grace window,
     // so a not-found is deferred, not failed. (A fixed future `now` would be wall-clock-dependent —
     // past created_at+grace whenever the suite ran before it — so the sweep time is taken live.)
-    expect((await provider.resolvePending(new Date())).nextDueAt).not.toBeNull();
+    expect(
+      (await provider.resolvePending(new Date(), await ownsEveryPayment(suite.db))).nextDueAt,
+    ).not.toBeNull();
     expect((await state("ghost")).state).toBe("attempting");
     expect(raised).toHaveLength(0);
     // …and past created_at + grace the row is failed AND surfaced: a not-found we could not correlate
     // is an uncertain charge, not a proven non-event, so the sweep raises the same unactionable
     // incident (status "not_found") rather than concealing a possible charge.
     const later = new Date(Date.now() + NOT_FOUND_GRACE_MS + 1000);
-    expect(await provider.resolvePending(later)).toMatchObject({ declined: 1, incidentsRaised: 1 });
+    expect(await provider.resolvePending(later, await ownsEveryPayment(suite.db))).toMatchObject({
+      declined: 1,
+      incidentsRaised: 1,
+    });
     expect((await state("ghost")).state).toBe("failed");
     expect(raised).toHaveLength(1);
     expect(raised[0]).toMatchObject({ origin: jobOrigin("payment_check"), severity: "error" });
@@ -161,13 +183,14 @@ describe("SumUpCloudProvider.resolvePending", () => {
       insertAttempting(tx, {
         origin: deviceOrigin(t.deviceId),
         workingOrderId: t.workingOrderId,
+        nodeId: t.nodeId,
         provider: "sumup",
         paymentRef: "ghost-dup",
         amount: decimal("7.00"),
       }),
     );
     const later = new Date(Date.now() + NOT_FOUND_GRACE_MS + 1000);
-    expect(await provider.resolvePending(later)).toEqual({
+    expect(await provider.resolvePending(later, await ownsEveryPayment(suite.db))).toEqual({
       nextDueAt: null,
       forwarded: 0,
       declined: 1,
@@ -181,7 +204,10 @@ describe("SumUpCloudProvider.resolvePending", () => {
   it("REFUNDED resolves failed WITH a payment.pending_outcome_unactionable incident naming the payment check", async () => {
     const { provider, attempting, state, raised } = await setup();
     await attempting("r", { status: "REFUNDED" });
-    expect(await provider.resolvePending(T0)).toMatchObject({ declined: 1, incidentsRaised: 1 });
+    expect(await provider.resolvePending(T0, await ownsEveryPayment(suite.db))).toMatchObject({
+      declined: 1,
+      incidentsRaised: 1,
+    });
     expect((await state("r")).state).toBe("failed");
     expect(raised).toHaveLength(1);
     // toEqual (not toMatchObject) so the incident input's FULL key set is pinned — in particular that
@@ -205,12 +231,16 @@ describe("SumUpCloudProvider.resolvePending", () => {
       insertAttempting(tx, {
         origin: deviceOrigin(other.deviceId),
         workingOrderId: other.workingOrderId,
+        nodeId: other.nodeId,
         provider: "sumup",
         paymentRef: "second",
         amount: decimal("7.00"),
       }),
     );
-    await provider.resolvePending(new Date(Date.now() + NOT_FOUND_GRACE_MS + 1000));
+    await provider.resolvePending(
+      new Date(Date.now() + NOT_FOUND_GRACE_MS + 1000),
+      await ownsEveryPayment(suite.db),
+    );
     expect((await state("second")).state).toBe("failed");
     // Neither call names a device: both carry the payment check's origin, this code and no sale.
     expect(raised.map((input) => [input.origin, input.error.code, input.saleId])).toEqual([
@@ -222,7 +252,10 @@ describe("SumUpCloudProvider.resolvePending", () => {
   it("an unknown status resolves failed with an incident naming the value", async () => {
     const { provider, attempting, raised } = await setup();
     await attempting("x", { status: "CHARGE_BACK" });
-    expect(await provider.resolvePending(T0)).toMatchObject({ declined: 1, incidentsRaised: 1 });
+    expect(await provider.resolvePending(T0, await ownsEveryPayment(suite.db))).toMatchObject({
+      declined: 1,
+      incidentsRaised: 1,
+    });
     expect(raised[0]!.error.params).toEqual({ paymentRef: "x", status: "CHARGE_BACK" });
   });
 
@@ -231,7 +264,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
     await attempting("first", { status: "SUCCESSFUL" });
     await attempting("second", { status: "SUCCESSFUL" });
     fake.throwOnFindNext();
-    const r = await provider.resolvePending(T0);
+    const r = await provider.resolvePending(T0, await ownsEveryPayment(suite.db));
     expect(r.forwarded).toBe(1);
     expect(r.nextDueAt).not.toBeNull();
     const states = [(await state("first")).state, (await state("second")).state].sort();
@@ -240,7 +273,7 @@ describe("SumUpCloudProvider.resolvePending", () => {
 
   it("an empty sweep is all-zeros", async () => {
     const { provider } = await setup();
-    expect(await provider.resolvePending(T0)).toEqual({
+    expect(await provider.resolvePending(T0, await ownsEveryPayment(suite.db))).toEqual({
       nextDueAt: null,
       forwarded: 0,
       declined: 0,

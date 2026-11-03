@@ -24,6 +24,7 @@ describe("the sumup cloud adapter's reader requirement", () => {
       provider.collect({
         origin: deviceOrigin(t.deviceId),
         workingOrderId: brandWorkingOrderId(t.workingOrderId),
+        nodeId: t.nodeId,
         amount: decimal("10.00"),
       }),
     ).rejects.toThrow(/readerRef/);

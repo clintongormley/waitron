@@ -55,6 +55,7 @@ async function collect(
   return provider.collect({
     origin: deviceOrigin(s.deviceId),
     workingOrderId: brandWorkingOrderId(s.workingOrderId),
+    nodeId: s.nodeId,
     amount: decimal(amount),
     ...(allowOffline === undefined ? {} : { allowOffline }),
   });
@@ -101,6 +102,7 @@ describe("FakePaymentProvider.collect with a card reader", () => {
       provider.collect({
         origin: deviceOrigin(s.deviceId),
         workingOrderId: brandWorkingOrderId(s.workingOrderId),
+        nodeId: s.nodeId,
         amount: decimal("10.00"),
         allowOffline: true,
         readerId,
@@ -152,6 +154,7 @@ describe("FakePaymentProvider.collect with a card reader", () => {
         provider.collect({
           origin: deviceOrigin(s.deviceId),
           workingOrderId: brandWorkingOrderId(s.workingOrderId),
+          nodeId: s.nodeId,
           amount: decimal("10.00"),
           allowOffline: true,
           readerId,
@@ -175,6 +178,7 @@ describe("FakePaymentProvider.collect with a card reader", () => {
         insertAttempting(tx, {
           origin: deviceOrigin(other),
           workingOrderId: s.workingOrderId,
+          nodeId: s.nodeId,
           provider: "fake",
           paymentRef: `other-${script}`,
           amount: decimal("5.00"),
@@ -192,6 +196,7 @@ describe("FakePaymentProvider.collect with a card reader", () => {
         provider.collect({
           origin: deviceOrigin(s.deviceId),
           workingOrderId: brandWorkingOrderId(s.workingOrderId),
+          nodeId: s.nodeId,
           amount: decimal("10.00"),
           allowOffline: true,
           readerId,
@@ -257,6 +262,7 @@ describe("FakePaymentProvider.partialRefund", () => {
     const paid = await provider.collect({
       origin: deviceOrigin(seeded.deviceId),
       workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
+      nodeId: seeded.nodeId,
       amount: decimal("20.00"),
     });
     const refunded = await provider.partialRefund(paid.paymentRef, decimal("5.00"));
@@ -276,6 +282,7 @@ describe("FakePaymentProvider.collect for a bill payment", () => {
     return provider.collect({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("10.00"),
       billPaymentId,
     });
@@ -305,6 +312,7 @@ describe("FakePaymentProvider.collect for a bill payment", () => {
     const r = await provider.collect({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("10.00"),
       allowOffline: true,
       billPaymentId,
@@ -542,6 +550,7 @@ describe("FakePaymentProvider.resolveAbandonedAttempt", () => {
       insertAttempting(tx, {
         origin: deviceOrigin(s.deviceId),
         workingOrderId: s.workingOrderId,
+        nodeId: s.nodeId,
         provider: "fake",
         paymentRef,
         amount: decimal("10.00"),

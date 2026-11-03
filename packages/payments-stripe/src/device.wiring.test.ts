@@ -83,6 +83,7 @@ describe("on-device offline accept -> recordSale -> associate -> forward decline
     const paid = await provider.collect({
       origin: deviceOrigin(s.deviceId),
       workingOrderId: brandWorkingOrderId(s.workingOrderId),
+      nodeId: s.nodeId,
       amount: decimal("10.00"),
       allowOffline: true,
     });

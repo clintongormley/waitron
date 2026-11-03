@@ -17,12 +17,13 @@ const SETTLED = new Date("2026-10-17T20:30:00.000Z");
 let refCounter = 0;
 
 async function aCapturedPayment(amount = "12.10") {
-  const { workingOrderId, deviceId } = await seedWorkingOrder(suite.db, freshNif());
+  const { workingOrderId, deviceId, nodeId } = await seedWorkingOrder(suite.db, freshNif());
   const paymentRef = `held-${++refCounter}`;
   const paymentId = await withTransaction(suite.db, async (tx) => {
     await insertCapturedPayment(tx, {
       origin: deviceOrigin(deviceId),
       workingOrderId,
+      nodeId,
       provider: "stripe",
       paymentRef,
       amount: decimal(amount),

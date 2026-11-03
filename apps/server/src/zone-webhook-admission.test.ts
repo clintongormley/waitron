@@ -47,6 +47,7 @@ async function seed() {
     await insertInitiated(tx, {
       origin: deviceOrigin(deviceId),
       workingOrderId: order.id,
+      nodeId,
       provider: "stripe",
       paymentRef: randomUUID(),
       externalRef: sessionId,

@@ -22,6 +22,7 @@ async function setup() {
   const params = {
     origin: deviceOrigin(seeded.deviceId),
     workingOrderId: brandWorkingOrderId(seeded.workingOrderId),
+    nodeId: seeded.nodeId,
     amount: decimal("10.00"),
   };
   return { seeded, provider, params };

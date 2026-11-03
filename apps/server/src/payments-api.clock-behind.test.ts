@@ -233,6 +233,7 @@ it("asks the provider nothing about a real stuck payment while the clock reads b
     insertAttempting(tx, {
       origin,
       workingOrderId: brandWorkingOrderId(orderId),
+      nodeId: venue.cfg.nodeId,
       provider: "fake",
       paymentRef: randomUUID(),
       amount: decimal("3.00"),

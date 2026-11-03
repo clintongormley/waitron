@@ -122,6 +122,7 @@ async function aHeldPayment(
     await insertCapturedPayment(tx, {
       origin: deviceOrigin(v.seeded.deviceId),
       workingOrderId: order!.id,
+      nodeId: v.seeded.nodeId,
       provider: "stripe",
       paymentRef,
       amount: decimal(opts.amount),

@@ -317,6 +317,7 @@ function stubProvider(onCollect: () => Promise<void>): PaymentProvider {
       await withTransaction(suite.db, (tx) =>
         insertCapturedPayment(tx, {
           origin: params.origin,
+          nodeId: params.nodeId,
           workingOrderId: params.workingOrderId,
           provider: "stripe",
           paymentRef,
@@ -676,6 +677,7 @@ describe("the snapshot is taken when the line is added, on every till filing pat
       );
       await insertCapturedPayment(tx, {
         origin: v.cfg.origin,
+        nodeId: v.cfg.nodeId,
         workingOrderId: id,
         provider: "stripe",
         paymentRef: `pi-${randomUUID()}`,

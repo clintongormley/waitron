@@ -1,4 +1,5 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { randomUUID } from "node:crypto";
@@ -1140,7 +1141,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     // The sweep tick: fetch the provider (no reader) and resolve pending — exactly what
     // `connectedCardProviderSweep` does. This caches the provider; it must NOT poison it.
     const swept = await pool.get("stripe");
-    await swept.resolvePending(new Date());
+    await swept.resolvePending(new Date(), await ownsEveryPayment(suite.db));
 
     const workingOrderId = randomUUID();
     const payRes = await app.request("/api/pay", {
@@ -1330,6 +1331,56 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
         { simulationOutcome: "declined" },
       );
     });
+  });
+
+  it("records the card payment under this box's node id", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDepsWithPool(cfg, fakePool(cfg, new FakeStripe())), noopLog);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+    await connectStripe();
+    const reader = await seedReader();
+    await setChosenReader(deviceIdOf(deviceCookie), reader.id);
+
+    const workingOrderId = randomUUID();
+    const payRes = await app.request("/api/pay", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+      }),
+    });
+
+    expect(payRes.status).toBe(200);
+    expect(
+      suite.db.all(sql`select node_id from payments where working_order_id = ${workingOrderId}`),
+    ).toEqual([{ node_id: cfg.nodeId }]);
+  });
+
+  it("records a hand-keyed card sale's payment under this box's node id", async () => {
+    const { cfg, available, operatorId } = await setupVenue();
+    const each = available.find((p) => p.pricingUnit === "each")!;
+    const app = new Hono();
+    mountTillApi(app, apiDeps(cfg), noopLog);
+    const deviceCookie = await enrolTillCookie(cfg, await createTillProfile());
+    const cookie = await loginSession(app, cfg, operatorId, deviceCookie);
+
+    const res = await app.request("/api/sales", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
+      body: JSON.stringify({
+        lines: [{ menuItemId: each.menuItemId, quantity: "1" }],
+        tender: { method: "card", amount: "1.50" },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(suite.db.all(sql`select node_id from payments where provider = 'manual'`)).toEqual([
+      { node_id: cfg.nodeId },
+    ]);
   });
 
   it("demo/prepare drives the local simulator and stamps NO reader", async () => {
@@ -3490,6 +3541,38 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
       expect(decodeTicket(new Uint8Array(printed.documents[0]!))).toContain("VERI*FACTU");
     },
   );
+
+  it("records a placed order's hand-keyed card payment under this box's node id", async () => {
+    const { cfg, each, app, cookie, on } = await venueWithTill("ticket_then_pay");
+    const deviceCookie = await enrolDrawerTill(cfg);
+    const both = await on(deviceCookie);
+    const workingOrderId = randomUUID();
+    const park = await app.request("/api/working-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify({
+        id: workingOrderId,
+        lines: [{ menuItemId: each.menuItemId, quantity: "2" }],
+      }),
+    });
+    expect(park.status).toBe(200);
+    const placed = await app.request(`/api/working-orders/${workingOrderId}/place`, {
+      method: "POST",
+      headers: { cookie: both },
+    });
+    expect(placed.status).toBe(200);
+
+    const collected = await app.request(`/api/working-orders/${workingOrderId}/collect`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: both },
+      body: JSON.stringify({ tender: { method: "card", amount: "3.00" } }),
+    });
+
+    expect(collected.status).toBe(200);
+    expect(
+      suite.db.all(sql`select node_id from payments where working_order_id = ${workingOrderId}`),
+    ).toEqual([{ node_id: cfg.nodeId }]);
+  });
 
   it("a card sale at a device whose drawer printer has no drawer opens nothing, while another printer here has one", async () => {
     const { cfg, each, app, on } = await venueWithTill();

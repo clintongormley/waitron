@@ -27,6 +27,7 @@ describe("concurrent reversals of one payment", () => {
         origin: deviceOrigin(seeded.deviceId),
         ...key,
         workingOrderId: seeded.workingOrderId,
+        nodeId: seeded.nodeId,
         amount: decimal("20.00"),
         settledAt: SETTLED,
       }),

@@ -54,6 +54,7 @@ async function abandonedOrphan(paymentRef: string, externalRef: string): Promise
     insertCapturedPayment(tx, {
       origin: deviceOrigin(seeded.deviceId),
       workingOrderId: seeded.workingOrderId,
+      nodeId: seeded.nodeId,
       provider: "stripe",
       paymentRef,
       externalRef,

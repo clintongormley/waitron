@@ -5,7 +5,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { decimal, deviceOrigin, workingOrderId } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS, insertAttempting, payments } from "@waitron/payments";
-import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import { ownsEveryPayment, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { StripeTerminalProvider } from "./provider.js";
 import { FakeStripe } from "./testing/fake-stripe.js";
 
@@ -35,6 +35,7 @@ async function params() {
   return {
     origin: deviceOrigin(seeded.deviceId),
     workingOrderId: workingOrderId(seeded.workingOrderId),
+    nodeId: seeded.nodeId,
     amount: decimal("12.10"),
     readerRef: "reader_activity",
   };
@@ -78,6 +79,7 @@ describe("Stripe resolution ownership", () => {
         insertAttempting(tx, {
           origin: deviceOrigin(other.deviceId),
           workingOrderId: other.workingOrderId,
+          nodeId: other.nodeId,
           provider: "stripe",
           paymentRef,
           externalRef: "pi_other_venue",
@@ -133,7 +135,9 @@ describe("Stripe resolution ownership", () => {
         expect(
           phase === "before stamp" ? before.externalRef === null : /^pi_/.test(before.externalRef!),
         ).toBe(true);
-        expect(await provider(client).resolvePending(now)).toEqual({
+        expect(
+          await provider(client).resolvePending(now, await ownsEveryPayment(suite.db)),
+        ).toEqual({
           nextDueAt: new Date(now.getTime() + 60_000),
           forwarded: 0,
           declined: 0,
@@ -244,14 +248,16 @@ describe("Stripe resolution ownership", () => {
       const first = (
         firstKind === "manager"
           ? provider(client).resolveAbandonedAttempt(paymentRef, now, manager)
-          : provider(client).resolvePending(now)
+          : provider(client).resolvePending(now, await ownsEveryPayment(suite.db))
       ).catch(() => undefined);
       try {
         expect(
           await Promise.race([entered.promise.then(() => true), first.then(() => false)]),
         ).toBe(true);
         if (firstKind === "manager") {
-          expect(await provider(client).resolvePending(now)).toEqual({
+          expect(
+            await provider(client).resolvePending(now, await ownsEveryPayment(suite.db)),
+          ).toEqual({
             nextDueAt: new Date(now.getTime() + 60_000),
             forwarded: 0,
             declined: 0,
@@ -262,7 +268,9 @@ describe("Stripe resolution ownership", () => {
             outcome: "unknown",
             reason: "ambiguous",
           });
-          expect((await provider(client).resolvePending(now)).declined).toBe(0);
+          expect(
+            (await provider(client).resolvePending(now, await ownsEveryPayment(suite.db))).declined,
+          ).toBe(0);
         }
         expect(read).toHaveBeenCalledTimes(1);
         expect(client.cancelledIntents).toEqual([]);
@@ -274,7 +282,7 @@ describe("Stripe resolution ownership", () => {
         { person_id: firstKind === "manager" ? manager.personId : null, outcome: "failed" },
       ]);
       expect(client.cancelledIntents).toEqual(["pi_shared"]);
-      expect(await provider(client).resolvePending(now)).toEqual({
+      expect(await provider(client).resolvePending(now, await ownsEveryPayment(suite.db))).toEqual({
         nextDueAt: null,
         forwarded: 0,
         declined: 0,

@@ -27,12 +27,13 @@ const RECORDED_AT = "2026-10-19T10:00:00.000Z";
 let refCounter = 0;
 
 async function aPayment(): Promise<string> {
-  const { workingOrderId, deviceId } = await seedWorkingOrder(suite.db, freshNif());
+  const { workingOrderId, deviceId, nodeId } = await seedWorkingOrder(suite.db, freshNif());
   const paymentRef = `held-${++refCounter}`;
   return withTransaction(suite.db, async (tx) => {
     await insertAttempting(tx, {
       origin: deviceOrigin(deviceId),
       workingOrderId,
+      nodeId,
       provider: "stripe",
       paymentRef,
       amount: decimal("12.10"),

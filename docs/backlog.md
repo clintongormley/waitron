@@ -3958,10 +3958,15 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   to pay of the bill and optionally adds a tip, then hands it back or pays on the reader. Builds on
   A739's payment window (An amount) and the bill payments design's tips. Not designed.
 
-- **Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
-  the SumUp provider's `resolvePending`) do not both succeed**: the second pass throws partway
-  instead of skipping the rows the first resolved.
-  [Detail](backlog/payments.md#two-concurrent-passes-over-listattempting-packagespaymentssrcstorets-its-one-caller-is-the-sumup-providers-resolvepending-do-not-both-succeed)
+- **A manager's stuck-payment resolution must act only on the collection owner's payments before a
+  second box sells.** Both dashboard stuck lists read every box's payments, so a manager could
+  cancel a payment another box is still taking. Left open by A764 (A1018 Slice 4b).
+  [Detail](backlog/payments.md#a-managers-stuck-payment-resolution-must-act-only-on-the-collection-owners-payments-before-a-second-box-sells)
+
+- **Two concurrent passes of the SumUp provider's `resolvePending` over `listAttempting`
+  (`packages/payments/src/store.ts`) do not both succeed**: the second pass throws partway instead
+  of skipping the rows the first resolved.
+  [Detail](backlog/payments.md#two-concurrent-passes-of-the-sumup-providers-resolvepending-over-listattempting-packagespaymentssrcstorets-do-not-both-succeed)
 
 - **Loose ends left by A633.**
   [Detail](backlog/payments.md#loose-ends-left-by-a633)

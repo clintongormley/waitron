@@ -117,6 +117,7 @@ export class SimulatorPaymentProvider implements PaymentProvider {
     const common = {
       origin: params.origin,
       workingOrderId: params.workingOrderId,
+      nodeId: params.nodeId,
       provider: this.provider,
       paymentRef,
       amount: params.amount,

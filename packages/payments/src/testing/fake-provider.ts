@@ -236,6 +236,7 @@ export class FakePaymentProvider implements PaymentProvider {
     const common = {
       origin: params.origin,
       workingOrderId: params.workingOrderId,
+      nodeId: params.nodeId,
       provider: this.provider,
       paymentRef,
       amount: params.amount,
@@ -415,6 +416,7 @@ export class FakePaymentProvider implements PaymentProvider {
       await insertAcceptedOffline(tx, {
         origin: params.origin,
         workingOrderId: params.workingOrderId,
+        nodeId: params.nodeId,
         provider: this.provider,
         paymentRef,
         amount: params.amount,

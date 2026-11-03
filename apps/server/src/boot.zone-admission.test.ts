@@ -30,7 +30,7 @@ import {
   startManagementSession,
   managementSessions,
 } from "@waitron/identity";
-import { AppError, decimal, deviceOrigin } from "@waitron/shared";
+import { AppError, decimal, deviceOrigin, nodeId as brandNodeId } from "@waitron/shared";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { insertInitiated } from "@waitron/payments";
 import { generateSync } from "otplib";
@@ -594,6 +594,7 @@ describe("startup zone admission", () => {
       await insertInitiated(tx, {
         origin: deviceOrigin(deviceId),
         workingOrderId: order!.id,
+        nodeId: brandNodeId(NODE),
         provider: "stripe",
         paymentRef: randomUUID(),
         externalRef: reference,
