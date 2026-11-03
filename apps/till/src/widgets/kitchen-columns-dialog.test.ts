@@ -1,7 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import type { ColumnKey, ColumnState } from "../state/kitchen-columns.js";
+import { STATION_COLUMNS, type ColumnKey, type ColumnState } from "../state/kitchen-columns.js";
 import { cleanupWidgets, mountWidget, pageAt, resetPage, textRects } from "./test-helpers.js";
 import { stationColumnNames } from "./station-queue.js";
 import { TillKitchenColumnsDialog } from "./kitchen-columns-dialog.js";
@@ -213,4 +213,54 @@ describe("the Columns window", () => {
       setLocale(before);
     }
   });
+});
+
+describe("A773 held column", () => {
+  const stationDefaults = (): ColumnState => ({
+    order: [...STATION_COLUMNS.order],
+    hidden: [...STATION_COLUMNS.hidden],
+    collapsed: [...STATION_COLUMNS.collapsed],
+  });
+
+  it("offers the station's six columns, Waiting + Held shown and the separate Waiting and Held not", async () => {
+    const { el } = await mount({ layout: stationDefaults() });
+    expect(rows(el)).toEqual([
+      ["1", t("station.overview")],
+      ["2", t("station.columns_waiting_held")],
+      ["3", t("station.state.queued")],
+      ["4", t("pass.column.held")],
+      ["5", t("station.state.preparing")],
+      ["6", t("station.state.ready")],
+    ]);
+    const shown = STATION_COLUMNS.order.map(
+      (key) => part(el, `[data-column-show="${key}"]`).checked,
+    );
+    expect(shown).toEqual([true, true, false, false, true, true]);
+    const shows = heard<{ key: ColumnKey; visible: boolean }>(el, "column-show");
+    await userEvent.click(part(el, '[data-column-show="held"]'));
+    expect(shows).toEqual([{ key: "held", visible: true }]);
+  });
+
+  it.each(["en-GB", "es-ES"])(
+    "at 390 px each of the six names is drawn whole on one line, its row inside the window (%s)",
+    async (locale) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        await pageAt(390, 844);
+        const { el } = await mount({ layout: stationDefaults() });
+        const drawnRows = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-column-row]");
+        expect(drawnRows).toHaveLength(6);
+        for (const row of drawnRows) {
+          const name = row.querySelector("[data-column-name]")!;
+          const lineTops = new Set(textRects(name).map((line) => Math.round(line.top)));
+          expect(lineTops.size, name.textContent!).toBe(1);
+          expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+        }
+      } finally {
+        setLocale(before);
+        await resetPage();
+      }
+    },
+  );
 });

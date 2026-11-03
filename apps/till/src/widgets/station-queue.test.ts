@@ -5409,4 +5409,29 @@ describe("A773 held column", () => {
     expect(tab(el, "held")).not.toBeNull();
     expect(tab(el, "held")!.hasAttribute("data-late")).toBe(false);
   });
+
+  // Owner question 6 (a): each column draws what its name says, whatever else is shown.
+  it("overlapping columns each draw their own cards, and with neither held column shown held cards are drawn nowhere but counted in Overview", async () => {
+    // Six columns need more than a 1280 px board; this case is about what each draws, not the fit.
+    await pageAt(1600, 900);
+    const { el } = await mountBoard(scene(), ALL_SIX());
+    expect(tabbed(el)).toBe(false);
+    expect(ordersIn(el, "queued")).toEqual(["3", "1", "2"]);
+    expect(heldPart(el)).not.toBeNull();
+    expect(ordersIn(el, "held")).toEqual(["1", "2"]);
+    expect(ordersIn(el, "waiting-only")).toEqual(["3"]);
+    cleanupWidgets();
+
+    const neither = await mountBoard(scene(), {
+      order: ["overview", "waitingOnly", "preparing", "ready"],
+      hidden: [],
+      collapsed: [],
+    });
+    expect(drawn(neither.el)).toEqual(["overview", "waiting-only", "preparing", "ready"]);
+    expect(shadow(neither.el).querySelector('[data-card][data-order="1"]')).toBeNull();
+    expect(shadow(neither.el).querySelector('[data-card][data-order="2"]')).toBeNull();
+    expect(ordersIn(neither.el, "waiting-only")).toEqual(["3"]);
+    const held = shadow(neither.el).querySelector("[data-overview-row] [data-overview-held]");
+    expect(held?.textContent?.trim()).toBe("+3");
+  });
 });

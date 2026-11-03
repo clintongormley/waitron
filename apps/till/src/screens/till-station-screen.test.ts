@@ -4,7 +4,7 @@ import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { page, userEvent } from "vitest/browser";
 import type { WtDialog } from "@waitron/ui";
-import { cleanupWidgets, mountWidget, resetPage } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
 import { STATION_COLUMNS } from "../state/kitchen-columns.js";
 import type { TillKitchenColumnsDialog } from "../widgets/kitchen-columns-dialog.js";
 import { TillStationScreen } from "./till-station-screen.js";
@@ -5617,6 +5617,35 @@ describe("the Columns window on the till", () => {
       "held",
       "ready",
       "preparing",
+    ]);
+  });
+
+  it("the Columns window: Waiting and Held apart instead of Waiting + Held redraw the board at once and are kept on the device", async () => {
+    await pageAt(1280, 800);
+    const drawnColumns = (screen: TillStationScreen) =>
+      [
+        ...queueWidget(screen)!.shadowRoot!.querySelectorAll<HTMLElement>(
+          ".kanban > [data-column]",
+        ),
+      ].map((section) => section.dataset.column);
+    const { el } = await mountOperator();
+    await openColumns(el);
+    await pressInWindow(el, '[data-column-show="waitingOnly"]');
+    await pressInWindow(el, '[data-column-show="held"]');
+    await pressInWindow(el, '[data-column-show="waiting"]');
+    await queueWidget(el)!.updateComplete;
+    expect(drawnColumns(el)).toEqual(["overview", "waiting-only", "held", "preparing", "ready"]);
+    expect(JSON.parse(localStorage.getItem(columnsKey("st-1"))!).hidden).toEqual(["waiting"]);
+    cleanupWidgets();
+
+    const again = await mountOperator();
+    expect(queueWidget(again.el)!.columns.hidden).toEqual(["waiting"]);
+    expect(drawnColumns(again.el)).toEqual([
+      "overview",
+      "waiting-only",
+      "held",
+      "preparing",
+      "ready",
     ]);
   });
 
