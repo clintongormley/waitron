@@ -559,6 +559,9 @@ taxpayer.
 
 ### Task 8 (only when the owner supplies his name and NIF): fill the producer
 
+> **Superseded 2026-11-03 by "Task 8, amended" below** (the owner, 2026-11-02: the two values
+> never enter the repository or an image). Kept as written for the record.
+
 - [ ] Replace `PRODUCER_PENDING` in `SOFTWARE_IDENTITY` with `{ name: "<as the owner writes it>",
   nif: "<his NIF>" }`; keep `PRODUCER_PENDING` exported for the tests.
 - [ ] Add a case to `software-identity.test.ts`: `SOFTWARE_IDENTITY.producer` is not
@@ -573,3 +576,99 @@ taxpayer.
   This is a changed test check under the owner's 2026-10-05 rule; list it in the pull request.
 - [ ] Commit — `fiscal: the records name the owner as the software's producer`. In the same pull
   request if it is still open; otherwise its own fiscal pull request, which the owner lands.
+
+### Task 8, amended (2026-11-03): the producer's name and tax number reach a box privately
+
+**Why it changed.** The owner gave the two values on 2026-11-02 and chose to keep them out of
+everything public ("let's do b"): the repository is public, and so are the images
+`ghcr.io/clintongormley/waitron` and `waitron-print-agent`, so writing the values into
+`SOFTWARE_IDENTITY` or into the image at build time would publish them. They are held outside the
+repository, in a private file on the owner's machine. **Neither value may appear in the repository,
+a commit, a pull request, a CI log, a test fixture, the backlog, a plan or an image.** The tax number
+is a Spanish NIE (a foreign resident's identity number, which serves as the tax number).
+
+**Where the box reads them.** Two settings, `WAITRON_PRODUCER_NAME` and `WAITRON_PRODUCER_TAX_ID`, in
+the box's own `.env` — the host file beside `compose.yml` that is never committed and that
+`waitron.sh` keeps at mode 600 (`deploy/.env.example:1-2`, `deploy/waitron.sh:173-195`), where the
+backup recovery key already lives. `deploy/compose.yml` passes both into the app container the way
+it passes `WAITRON_BACKUP_RECOVERY_KEY` (`deploy/compose.yml:37-38`), and `software-identity.ts`
+reads them from the process environment at start, as `allocation-configuration.ts:180` already reads
+its settings. An empty value counts as unset (CLAUDE.md §3, "An empty value is a valid value"; compose
+hands an unset `${…:-}` over as an empty string).
+
+**How they get there on a real install.** `waitron.sh install --producer-file <path> [ref]` reads the
+two `KEY=value` lines from the operator's private file, line by line — never by sourcing it, because
+an unquoted value with a space in it breaks shell sourcing — and writes each into `.env` with
+`env_set` (atomic, 600). Later installs and updates keep them: `env_set` rewrites only its own key,
+and a reset leaves `.env` alone (`wipe_box` removes the volumes and the state folder only,
+`deploy/waitron.sh:791-813`). The option is refused with a plain message if the file is missing,
+unreadable, or lacks either line. Nothing prints either value: the install says only "producer
+details recorded".
+
+**What a start does with them.**
+
+| Both settings | What new records carry | Production start, published image | Development and preproduction |
+| --- | --- | --- | --- |
+| Unset (or empty) | The taxpayer's name and tax number, exactly as today | Refuses: `sif.producer_unset` (kept) | Trade as today |
+| Set and valid | The producer's name and tax number | Trades | Trade, filing the producer (so AEAT's test service sees the real values before go-live) |
+| One set without the other, or either invalid | — | Refuses: new `sif.producer_invalid` | Refuses: `sif.producer_invalid` |
+
+"Valid": the name, trimmed, has content and at most 120 characters (the library's limit for
+`SistemaInformatico.NombreRazon`, `@waitron/verifactu` 0.2.1 `dist/validate.js:458`); the tax number
+passes the library's `hasValidNifControl`. Refusing a bad value in every environment means a typo
+shows on the first preproduction start, not as a wrong producer in every record of a live venue.
+Both codes get a recovery-page title and action in English and Spanish
+(`apps/server/src/i18n/recovery-page.ts`); `sif.producer_unset`'s words change, because the cause is
+now this box's settings, not the version ("This box has not been given the name and tax number of
+Waitron's producer, so it cannot be used for real sales."). The error carries no value in its
+params, only which setting is missing or wrong.
+
+**An NIE passes both checks — measured 2026-11-03 with made-up numbers.** The library's
+`hasValidNifControl` (`@waitron/verifactu` 0.2.1 `dist/nif.js`) answered `true` for `X1234567L`,
+`Y1234567X` and `Z1234567R` (made up, each with its correct check letter) and `false` for
+`X1234567A`, the same number with a wrong letter — so the check can fail. The software's own
+`validateSpanishNif` accepts an NIE as kind `foreigner` (`packages/country-es/src/spain.ts:51-57`;
+its suite pins `X2482300W` as valid and `X2482300A` as a bad check letter,
+`packages/country-es/src/spain.test.ts:19,35`). The owner's real value was checked the same way by a
+script that printed only booleans: NIE shape, check letter passes.
+
+**Which test checks change, against the original Task 8.**
+
+- `apps/server/scripts/demo-seed/testing/spanish-practice-sales.golden.json` — **unchanged**: the
+  seed runs with neither setting, so its records keep the taxpayer's values.
+- `apps/server/src/taxpayer-rename.filing.test.ts:92-93` — **stays** (that suite sets neither
+  setting, so the block still follows the taxpayer); a new case with both settings set shows the
+  block keeping the producer across a rename.
+- `packages/fiscal-verifactu/src/software-identity.test.ts` — the `SOFTWARE_IDENTITY.producer`
+  constant becomes a reader of the environment; new cases for each row of the table, and for an
+  empty value counting as unset. The existing `producerFields` and `refuseUnsetProducer` cases keep
+  their expectations.
+- `packages/fiscal-verifactu/src/slot.test.ts:70,106` — keep their expectations.
+- `apps/server/src/recovery-surface.test.ts:344,470` — follow the new words, and gain the new code.
+- A guard that pins compose's environment list or `.env.example`'s lines (`scripts/deploy-image-env.test.ts`,
+  `scripts/backup-compose-env.test.ts`) gains the two names, if it pins a list; no existing value changes.
+- Test fixtures use made-up values only (`PRODUCER PERSON`, `X1234567L`).
+
+**The no-leak check, before every push.** Load both real values from the private file into
+variables and count matches in `git diff origin/main...HEAD` and in the branch's commit messages:
+expect 0. Control in the other direction: the same command run over a scratch file holding one of
+the values prints 1. Weaker than its name: it reads the diff and messages only, not CI logs or
+what a box writes. I found no log line in `packages/fiscal-verifactu/src` that writes a record's
+software block (a grep for log calls naming xml, sistema or body); not traced further.
+
+**Disclosed: a box installed without the file cannot trade for real.** It refuses with the recovery
+page at its first production start. That includes a replacement box restored from a backup and a
+spare box taking over in a handover (A1018), if their install missed the file — the values are a
+box setting, so a backup, the bucket stream and a handover do not carry them. The alternative that
+would carry them (also keeping them in the venue database, so a restore or takeover brings them
+back by itself) is the open owner question in `~/waitron-campaign/questions.md`, 2026-11-03.
+
+**Later slices.** The in-app declaration screen and the outside copy (design §4, slices 3 onward)
+read the producer from this same reader; the published declaration text holds placeholders filled at
+run time, never the values. A venue Waitron Cloud hosts gets the same two settings from Cloud's own
+private configuration.
+
+- [ ] Build only after the owner's answer, with implementers, test-first; the table above is the
+  case list.
+- [ ] Commit — `fiscal: the records name the software's producer from the box's private settings`.
+  Its own fiscal pull request, which the owner lands.
