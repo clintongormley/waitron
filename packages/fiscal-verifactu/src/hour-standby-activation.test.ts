@@ -530,3 +530,13 @@ it.each(["setup", "restore", "conflict-switch"])(
     expect(run).not.toHaveBeenCalled();
   },
 );
+
+it("a committed relinquished activation retried with a version 1 approval and no relinquished fact is refused", async () => {
+  await activate(relinquishedFixture(), "none", bases, { relinquished: true });
+  const before = await snapshot();
+  await expect(activate(fixture(), "committed")).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "event_mismatch" },
+  });
+  expect(await snapshot()).toEqual(before);
+});

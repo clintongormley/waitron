@@ -351,7 +351,7 @@ describe("an approval saying the old machine relinquished filing", () => {
       validate(
         input,
         { ...relinquished, oldMachineAbsent: true },
-        { ...relinquishedContext, mode: "initial-setup" },
+        { ...relinquishedContext, mode: "initial-setup", authority: { kind: "hour", token: {} } },
       ),
     ).toEqual({ ok: false, reason: "event_mismatch" });
   });
