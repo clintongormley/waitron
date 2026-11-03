@@ -1456,6 +1456,60 @@ describe("download outcomes (Review Focus 3)", () => {
     },
   );
 
+  describe("on a typed reinstall, where a write would erase a venue's disk", () => {
+    const typedToDownloading = [
+      waitronSeen(),
+      key(2_000),
+      ramReady(3_000),
+      submit("Bar Santet", 4_000),
+      online(5_000),
+      clockSet(true, FLOOR, 6_000),
+    ];
+
+    it.each([
+      ["signature", "release-signature", null],
+      ["checksum", "release-checksum", null],
+      ["too-large", "release-too-large", null],
+      ["installer-too-old", "installer-too-old", "1.4.0"],
+    ])("%s → refuse %s, and no write-owned-target in the run", (outcome, reason, version) => {
+      const decisions = play([
+        ...typedToDownloading,
+        released(outcome, 30_000, version),
+        tick(200_000),
+        choice("install-now", 200_001),
+      ]);
+      expect(decisions[6]).toMatchObject({
+        action: "refuse",
+        state: {
+          phase: "refused",
+          confirmed: "typed",
+          refusal: { reason, hardware: null, releaseVersion: version },
+        },
+      });
+      expect(writes(decisions)).toEqual([]);
+    });
+
+    it.each(["unavailable", "truncated"])(
+      "%s → download-retry, and no write-owned-target in the run",
+      (outcome) => {
+        const decisions = play([
+          ...typedToDownloading,
+          released(outcome, 30_000),
+          tick(89_999),
+          tick(90_000),
+        ]);
+        expect(decisions[6]).toMatchObject({
+          action: "wait",
+          message: DOWNLOAD_RETRY,
+          deadlineMs: 90_000,
+          state: { phase: "download-retry", confirmed: "typed" },
+        });
+        expect(decisions.slice(7).map((d) => d.action)).toEqual(["wait", "find-network"]);
+        expect(writes(decisions)).toEqual([]);
+      },
+    );
+  });
+
   it("no fallback: after signature, a further online or release-checked verified answers wait", () => {
     const decisions = play([
       ...TO_DOWNLOADING,
@@ -1633,6 +1687,16 @@ describe("the 60 seconds before an unattended erase", () => {
   it("a choice during the 60 seconds is ignored, and the erase still comes at 61000", () => {
     const decisions = play([...TO_VERIFIED, choice("power-off", 2_000), tick(61_000)]);
     expect(decisions[5]).toMatchObject({ action: "wait", state: { phase: "erase-countdown" } });
+    expect(decisions[6]).toMatchObject({ action: "write-owned-target", diskId: INTERNAL_ID });
+  });
+
+  it("a choice after the deadline with no tick before it → wait; only the tick writes", () => {
+    const decisions = play([...TO_VERIFIED, choice("power-off", 61_500), tick(61_501)]);
+    expect(decisions[5]).toMatchObject({
+      action: "wait",
+      diskId: null,
+      state: { phase: "erase-countdown" },
+    });
     expect(decisions[6]).toMatchObject({ action: "write-owned-target", diskId: INTERNAL_ID });
   });
 
