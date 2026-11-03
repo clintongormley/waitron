@@ -476,7 +476,7 @@ export class TillPassBoard extends LitElement {
           >${
             this.#help.on
               ? helpBadge("help.kitchen.columns", t("station.columns"), {
-                  guide: "kitchen-service.kitchen-screen",
+                  guide: "kitchen-service.pass-screen",
                 })
               : nothing
           }</span
@@ -665,7 +665,7 @@ export class TillPassBoard extends LitElement {
     if (!this.#help.on || this.#leverBadgeDrawn) return lever;
     this.#leverBadgeDrawn = true;
     return html`<span class="help-anchor help-inset lever-anchor"
-      >${lever}${helpBadge("help.pass.ready", label)}</span
+      >${lever}${helpBadge("help.pass.ready", label, { guide: "kitchen-service.pass-screen" })}</span
     >`;
   }
 

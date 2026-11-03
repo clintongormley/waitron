@@ -326,6 +326,30 @@ describe("A773 pass screen: help badges", () => {
   );
 
   it.each([
+    { lang: "en", text: helpEn },
+    { lang: "es", text: helpEs },
+  ])(
+    "the first Ready lever's and Columns' boxes link to /help/<language>/kitchen-service#pass-screen ($lang)",
+    async ({ lang, text }) => {
+      setLocale(lang);
+      const { el } = await mountPass();
+      await helpOn(el);
+      for (const [badge, key] of [
+        [badgeFor(el, t("expo.ready"))!, "help.pass.ready"],
+        [columnsBadge(el)!, "help.kitchen.columns"],
+      ] as const) {
+        expect(badge.mode).toBe("help-mode");
+        expect(badge.textContent).toBe(text[key]);
+        await userEvent.click(badge.shadowRoot!.querySelector("button")!);
+        expect(isOpen(badge)).toBe(true);
+        const link = badge.shadowRoot!.querySelector<HTMLAnchorElement>('[part="guide"]');
+        expect(link?.getAttribute("href")).toBe(`/help/${lang}/kitchen-service#pass-screen`);
+        expect(link?.textContent).toBe(text["help.guide_link"]);
+      }
+    },
+  );
+
+  it.each([
     { kind: "course", board: courseBoard, label: "expo.ready", count: 3 },
     { kind: "group", board: groupBoard, label: "expo.group_ready", count: 2 },
   ] as const)(

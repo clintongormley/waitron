@@ -5238,7 +5238,7 @@ describe("A773 held column", () => {
     { lang: "en", text: helpEn },
     { lang: "es", text: helpEs },
   ])(
-    "with help on, the first card's help says where held and requested cards sit ($lang)",
+    "with help on, the first card's help is the owner's station-card text ($lang)",
     async ({ lang, text }) => {
       const previousLocale = currentLocale();
       setLocale(lang);
@@ -5254,10 +5254,12 @@ describe("A773 held column", () => {
         expect(badge.textContent).toBe(text["help.kitchen.card"]);
         if (lang === "en") {
           expect(badge.textContent).toBe(
-            "Each card is a group a table sent, or a counter order. A card none of whose dishes has been sent to this station to be cooked is held, with a dashed border and no minutes: it sits under Held at the bottom of the Waiting column, or in the Held column if this screen shows one. It says Held, not released until a waiter requests cooking, and Waiting for the pass once the waiter has asked and the pass has not yet fired it. Every other card is in the column of its least advanced dish; its minutes count from when its first dish was sent to this station to be cooked, or moved here. Tap a dish to move it on one step (on a Whole ticket card, with every dish at its step), or the card's heading to move on the dishes holding it back. Its top edge turns from green to amber, then its whole border red, as the card waits, by the station's late flags.",
+            "Each card is an order from a table or the counter. Tap a dish to move it on a step, or the card's heading to move the whole card to the next column. On a Whole ticket card, the dishes move together. A dashed card is held: it hasn't been sent to cook yet. Cards turn amber, then red, the longer they wait.",
           );
         } else {
-          expect(badge.textContent).toContain(es["pass.waiting_for_pass"]);
+          expect(badge.textContent).toBe(
+            "Cada tarjeta es un pedido de una mesa o del mostrador. Toca un plato para avanzarlo un paso, o la cabecera de la tarjeta para pasar toda la tarjeta a la siguiente columna. En una tarjeta de Toda la comanda, los platos avanzan juntos. Una tarjeta con borde discontinuo está en espera: aún no se ha mandado a preparar. Las tarjetas pasan a ámbar y luego a rojo cuanto más esperan.",
+          );
         }
       } finally {
         setHelpMode(false);

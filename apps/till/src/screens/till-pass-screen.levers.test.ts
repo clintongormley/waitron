@@ -448,7 +448,8 @@ describe("A773 pass screen: levers", () => {
     const columns = badgeFor(el, t("station.columns"))!;
     expect(columns.textContent).toBe(helpText("help.kitchen.columns"));
     expect(columns.parentElement!.querySelector(":scope > [data-columns-open]")).not.toBeNull();
-    expect(columns.getAttribute("guide-href")).toBe("/help/en/kitchen-service#kitchen-screen");
+    expect(columns.getAttribute("guide-href")).toBe("/help/en/kitchen-service#pass-screen");
+    expect(ready[0]!.getAttribute("guide-href")).toBe("/help/en/kitchen-service#pass-screen");
   });
 
   it("with help on, the Ready badge is still drawn after the board is read again", async () => {
@@ -477,23 +478,30 @@ describe("A773 pass screen: levers", () => {
 
   it("the More menu's Pass help describes the new board, in both languages", () => {
     expect(helpEn["help.more.pass"]).toBe(
-      "Opens the pass: a card for each group a table sends, or each counter order, in columns from held to ready.",
+      "Opens the pass: a card for each order from a table or the counter, in columns from To fire to Ready.",
     );
-    expect(helpEs["help.more.pass"]).toContain(es["pass.column.held"].toLowerCase());
-    expect(helpEs["help.more.pass"]).toContain(es["pass.column.ready"].toLowerCase());
+    expect(helpEs["help.more.pass"]).toContain(es["pass.column.to_fire"]);
+    expect(helpEs["help.more.pass"]).toContain(es["pass.column.ready"]);
     expect(helpEs["help.more.pass"]).not.toContain("curso");
-    expect(helpEn["help.more.pass"]).toContain(en["pass.column.held"].toLowerCase());
+    expect(helpEn["help.more.pass"]).toContain(en["pass.column.to_fire"]);
+    expect(helpEn["help.more.pass"]).toContain(en["pass.column.ready"]);
   });
 
-  it("the pass's new help texts read the owner-approved words, in both languages", () => {
+  it("the pass's help texts read the words posted to the owner on 2026-11-03, in both languages", () => {
     expect(helpEn["help.pass.card"]).toBe(
-      "One card for each group a table sends, across its bills, or for each counter order. Its minutes count from when the waiter sent it, or on a Ready card from when its last dish was ready. The left edge takes the brand colour, then turns red, as its dishes wait, by their stations' late flags; a dish that waits too long says Forgotten. Dimmed dishes are shown for information only: dishes this pass does not cover and, once a station it covers waits for the pass, dishes of the stations that do not and dishes sent before their station began waiting.",
+      "Each card is an order from a table or the counter. Fire, where it shows, sends the card's dishes marked Waiting for the pass to their stations to be cooked. A dashed card is held: the waiter hasn't asked for it yet. A card's left edge changes colour, then turns red, the longer its dishes wait.",
     );
     expect(helpEs["help.pass.card"]).toBe(
-      "Una tarjeta por cada grupo que envía una mesa, en todas sus cuentas, o por cada pedido de mostrador. Sus minutos cuentan desde que el camarero lo envió o, en una tarjeta lista, desde que su último plato estuvo listo. El borde izquierdo toma el color de marca y luego pasa a rojo mientras sus platos esperan, según los avisos de demora de sus estaciones; un plato que espera demasiado dice Olvidado. Los platos atenuados se muestran solo como información: los que este pase no cubre y, cuando una estación que cubre espera al pase, los de las estaciones que no esperan y los enviados antes de que su estación empezara a esperar.",
+      "Cada tarjeta es un pedido de una mesa o del mostrador. Marchar, donde aparece, manda a sus estaciones los platos de la tarjeta que dicen Esperando al pase, para que los preparen. Una tarjeta con borde discontinuo está en espera: el camarero aún no la ha pedido. El borde izquierdo de una tarjeta cambia de color y luego pasa a rojo cuanto más esperan sus platos.",
     );
     expect(helpEs["help.more.pass"]).toBe(
-      "Abre el pase: una tarjeta por cada grupo que envía una mesa, o por cada pedido de mostrador, en columnas de en espera a listo.",
+      "Abre el pase: una tarjeta por cada pedido de una mesa o del mostrador, en columnas de Por marchar a Listo.",
+    );
+    expect(helpEn["help.pass.ready"]).toBe(
+      "Marks the food of this course or group ready at every station, including dishes this screen doesn't show. Dishes not yet sent to cook stay as they are.",
+    );
+    expect(helpEs["help.pass.ready"]).toBe(
+      "Marca como lista la comida de este curso o grupo en todas las estaciones, también los platos que esta pantalla no muestra. Los platos que aún no se han mandado a preparar se quedan como están.",
     );
   });
 });
