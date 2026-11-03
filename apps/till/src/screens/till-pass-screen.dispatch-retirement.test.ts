@@ -96,7 +96,12 @@ const cookingBoard = (kind: Kind): PassBoard =>
 const realSetTimeout = globalThis.setTimeout;
 
 async function mount(mode: Mode, board: PassBoard) {
-  const read = { board, stations: [], zones: null };
+  const read = {
+    board,
+    stations: [],
+    zones: null,
+    display: { showNonPassStations: true, nonPassStationsOverride: null },
+  };
   const api = {
     getExpoBoard: vi.fn().mockResolvedValue({ board }),
     getDeviceIdentity: vi.fn().mockResolvedValue({

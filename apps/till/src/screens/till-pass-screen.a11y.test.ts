@@ -151,6 +151,7 @@ const read = (board: PassBoard, slots: Partial<DevicePassBoard> = {}): DevicePas
   board,
   stations: [],
   zones: null,
+  display: { showNonPassStations: true, nonPassStationsOverride: null },
   ...slots,
 });
 

@@ -54,7 +54,12 @@ describe("whole-order instructions on pass boards", () => {
     async (mode) => {
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
       let note: string | null = "Train at 14:30 <keep together>";
-      const read = () => ({ board: board(note), stations: [], zones: null });
+      const read = () => ({
+        board: board(note),
+        stations: [],
+        zones: null,
+        display: { showNonPassStations: true, nonPassStationsOverride: null },
+      });
       const api = {
         getExpoBoard: vi.fn(async () => ({ board: board(note) })),
         getDeviceIdentity: vi.fn(async () => ({

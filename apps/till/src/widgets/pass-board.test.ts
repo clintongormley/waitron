@@ -322,6 +322,18 @@ describe("A773 pass board widget", () => {
     }
   });
 
+  it("draws a card Hide emptied with its heading, age and levers, and no dish line (D83)", async () => {
+    const emptied = passCard({ ...groupInProgress, requestedAt: minutesAgo(9), items: [] });
+    const el = await mountBoard({ board: passBoard({ inProgress: [emptied] }), showReprint: true });
+    const card = cardOf(el, emptied.key);
+    expect(card.querySelector(".number")!.textContent).toContain("15");
+    expect(card.querySelector(".label")!.textContent).toBe("T7");
+    expect(card.querySelector(".age")!.textContent).toBe(`9 ${t("station.min")}`);
+    expect(card.querySelector('[data-group-ready="g2"]')).not.toBeNull();
+    expect(card.querySelector('[data-reprint="order-4"]')).not.toBeNull();
+    expect(card.querySelectorAll("[data-item]")).toHaveLength(0);
+  });
+
   it("draws a held card dashed, untimed and without buttons, its dishes held", async () => {
     const el = await mountBoard({ board: passBoard({ held: [heldCard] }), showReprint: true });
     const card = cardOf(el, heldCard.key);

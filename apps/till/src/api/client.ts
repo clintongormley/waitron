@@ -2028,6 +2028,7 @@ export interface DevicePassBoard {
   stations: ScreenSlot[];
   /** null: no zone filter. */
   zones: ScreenSlot[] | null;
+  display: Pick<ResolvedKitchenScreen, "showNonPassStations" | "nonPassStationsOverride">;
 }
 
 /** A card's `releaseTicketItemIds` and `releaseContext`, sent back unchanged. */

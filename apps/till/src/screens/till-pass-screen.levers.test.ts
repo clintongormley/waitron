@@ -57,6 +57,7 @@ const deviceBoard = (board: PassBoard = leverBoard()): DevicePassBoard => ({
   board,
   stations: [],
   zones: null,
+  display: { showNonPassStations: true, nonPassStationsOverride: null },
 });
 
 const identity = (): DeviceIdentity => ({

@@ -198,6 +198,12 @@ export class TillPassScreen extends LitElement {
   @state() private tableChanged: { table?: string } | null = null;
   #tableChangedNext: { table?: string } | null = null;
   readonly #layouts = new KitchenColumnLayouts(PASS_COLUMNS);
+  #display?: DevicePassBoard["display"];
+
+  /** The last board read's choice of showing other stations' dishes. */
+  get display(): DevicePassBoard["display"] | undefined {
+    return this.#display;
+  }
 
   /** Re-renders the idle display so an item's band can climb between refreshes, with no refetch. */
   readonly #clock = new TickingClock(this);
@@ -296,7 +302,12 @@ export class TillPassScreen extends LitElement {
     try {
       const result: DevicePassBoard =
         boardId === "all"
-          ? { ...(await this.api.getExpoBoard({ signal })), stations: [], zones: null }
+          ? {
+              ...(await this.api.getExpoBoard({ signal })),
+              stations: [],
+              zones: null,
+              display: { showNonPassStations: true, nonPassStationsOverride: null },
+            }
           : boardId === "pass"
             ? await this.api.getDevicePassBoard({ signal })
             : await this.api.getDevicePassMonitorBoard({ signal });
@@ -322,6 +333,7 @@ export class TillPassScreen extends LitElement {
 
   #adoptBoard(read: DevicePassBoard): void {
     this.board = read.board;
+    this.#display = read.display;
     this.lostLines = lostLines(read);
     this.nothingLeft = nothingLeft(read);
     for (const key of this.#asks.keys()) if (!this.sending.has(key)) this.#dropAskIfChanged(key);

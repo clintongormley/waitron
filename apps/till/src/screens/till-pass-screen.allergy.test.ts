@@ -18,7 +18,12 @@ type Mode = "all" | "pass" | "monitor";
 
 /** `all`: a till on All stations; `pass`: a kitchen display's pass; `monitor`: a pass monitor. */
 async function mount(mode: Mode, board: PassBoard, theme: "light" | "dark" = "light") {
-  const read = { board, stations: [], zones: null };
+  const read = {
+    board,
+    stations: [],
+    zones: null,
+    display: { showNonPassStations: true, nonPassStationsOverride: null },
+  };
   const api = {
     getExpoBoard: vi.fn(async () => ({ board })),
     getDeviceIdentity: vi.fn(async () => ({ kitchenScreens: [] })),

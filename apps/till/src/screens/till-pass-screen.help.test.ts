@@ -113,7 +113,12 @@ const identity = (kind: "pass" | "pass_monitor"): DeviceIdentity => ({
 });
 
 function stubApi(board: PassBoard, overrides: Record<string, unknown> = {}) {
-  const read = { board, stations: [], zones: null };
+  const read = {
+    board,
+    stations: [],
+    zones: null,
+    display: { showNonPassStations: true, nonPassStationsOverride: null },
+  };
   return {
     getExpoBoard: vi.fn().mockResolvedValue({ board }),
     getDeviceIdentity: vi.fn().mockResolvedValue({ ...identity("pass"), kitchenScreens: [] }),
@@ -159,7 +164,12 @@ const mountPass = (board: PassBoard = courseBoard()) => {
     deviceMode: true,
     deviceName: "Pase",
     runsPass: true,
-    initialBoard: { board, stations: [], zones: null },
+    initialBoard: {
+      board,
+      stations: [],
+      zones: null,
+      display: { showNonPassStations: true, nonPassStationsOverride: null },
+    },
   }).then((mounted) => ({ ...mounted, api }));
 };
 
@@ -171,7 +181,12 @@ const mountMonitor = (board: PassBoard = courseBoard()) =>
     monitor: true,
     deviceName: "Pared",
     runsPass: true,
-    initialBoard: { board, stations: [], zones: null },
+    initialBoard: {
+      board,
+      stations: [],
+      zones: null,
+      display: { showNonPassStations: true, nonPassStationsOverride: null },
+    },
   });
 
 /** A till's or handheld's Pass, inside its card host. */

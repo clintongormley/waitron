@@ -51,7 +51,13 @@ const boardB = passBoard({ inProgress: [passCard({ key: "bill:b" })] });
 const deviceBoard = (
   board: PassBoard = boardA,
   slots: Partial<Pick<DevicePassBoard, "stations" | "zones">> = {},
-): DevicePassBoard => ({ board, stations: [], zones: null, ...slots });
+): DevicePassBoard => ({
+  board,
+  stations: [],
+  zones: null,
+  display: { showNonPassStations: true, nonPassStationsOverride: null },
+  ...slots,
+});
 
 function identity(kitchenScreens: ResolvedKitchenScreen[]): DeviceIdentity {
   return { deviceId: "dev-1", formFactor: "till", name: "Till 1", kitchenScreens };
@@ -286,6 +292,22 @@ describe("A773 pass screen", () => {
         expect(boardOf(el)!.shadowRoot!.querySelectorAll(ready)).toHaveLength(0);
       },
     );
+
+    it("carries the pass's display choice, and All stations' default, from each board read (D70)", () =>
+      withFakeTimers(async () => {
+        const hidden = { showNonPassStations: false, nonPassStationsOverride: false };
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          getDevicePassBoard: vi.fn().mockResolvedValue({ ...deviceBoard(), display: hidden }),
+        });
+        const el = await mount({ api });
+        expect(el.display).toEqual(hidden);
+        api.getDeviceIdentity.mockResolvedValue(identity([]));
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(boardOf(el)!.mode).toBe("all_stations");
+        expect(el.display).toEqual({ showNonPassStations: true, nonPassStationsOverride: null });
+      }));
 
     it("switches the read and clears the old board when the choice changes between refreshes", () =>
       withFakeTimers(async () => {
