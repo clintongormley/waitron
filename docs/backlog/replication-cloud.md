@@ -42,6 +42,9 @@ Left by Slice 2:
   restricted box never builds a `stepDown`, and nothing checks the binding's `sourceNodeId`
   against this box: the first route to reach `stepDown` (Slice 3's Task 3.3) must decide each,
   and whether `handover.operation_conflict`'s wording fits a stepdown's refusal.
+- `stepDown` throws the same error codes whether it refused at its first check (nothing stopped)
+  or after the gate closed (the box is restarting): a route must tell the two apart before acting
+  on the refusal, and Task 5.3's recording of `abandoned` depends on it.
 - A restricted box's `/health` body is the same as a box whose trading is not admitted yet, so an
   operator reading it cannot tell the two apart.
 - The `handover.stepping_down` refusal names no next step.
