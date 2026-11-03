@@ -54,8 +54,7 @@ export const payments = table(
     /* v8 ignore stop */
     // Null until the sale is written: the money moves first (`associatePaymentWithSale`).
     saleId: id("sale_id"),
-    // The collection owner: the box that started the payment. Nullable because a row with no owner
-    // is still swept, by the venue's primary alone.
+    // The collection owner: the box that started the payment.
     nodeId: id("node_id"),
     // Nullable: cash, manual card, and the Stripe phone-as-reader path name no physical reader.
     readerId: id("reader_id"),
