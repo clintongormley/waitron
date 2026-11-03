@@ -228,7 +228,7 @@ nor that either was updated with the screen.
 
 A page with no Spanish twin is shown in English to a Spanish reader, under one line saying so
 (`missingTwin` in `GUIDE_FRAME_WORDS` in `apps/server/src/i18n/guide-pages.ts`; the "serves the English page with one line saying so" case in
-`guide-pages.test.ts`). While every page in `GUIDE_PAGES` has a Spanish twin, a box never shows that line. A page
+`apps/server/src/guide-pages.test.ts`). While every page in `GUIDE_PAGES` has a Spanish twin, a box never shows that line. A page
 in the list with no English file is a broken build: the route answers its 500 page and logs
 `guide.page_missing`. A read that fails for any reason other than a missing file gets the same 500
 page and logs `guide.read_failed` with the language of the file it tried, the page and the error's

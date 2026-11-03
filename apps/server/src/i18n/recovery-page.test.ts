@@ -60,7 +60,7 @@ describe("recovery page wording", () => {
   });
 
   // Reads the module's source as text; it does not observe what loads at runtime.
-  it("source text imports types only, so the words never load the venue database", () => {
+  it("imports only types", () => {
     const source = readFileSync(new URL("./recovery-page.ts", import.meta.url), "utf8");
     const imports = source.split("\n").filter((line) => /^\s*import\b/.test(line));
     expect(imports.length).toBeGreaterThan(0);

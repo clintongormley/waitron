@@ -1,5 +1,7 @@
 # A913 — non-English text in general code: the audit
 
+_2026-11-03, A968: the guide frame's words and the recovery page's words now live in `apps/server/src/i18n/guide-pages.ts` and `apps/server/src/i18n/recovery-page.ts`; the two rows below record their earlier location._
+
 _2026-10-29, A964: kitchen-ticket frames and collection-number captions now live in `apps/server/src/i18n/kitchen-ticket.ts` and read the saved default content language at rendering. Spanish selects Spanish; other defaults or missing settings select English. Recorded names, frozen allergy translations and unit selection keep their own inputs. The inline-wording and `WAITRON_TILL_LOCALE` findings below describe the earlier tree._
 
 _2026-10-28, A965: the owner answered the sample-name question. Both names now follow the sample receipt language; the sample identifier and character-probe footer retain their values. This supersedes the pending-question note below._

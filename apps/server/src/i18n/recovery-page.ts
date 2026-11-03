@@ -136,9 +136,9 @@ export function holderStalledText(kind: VenueHolderKind | undefined): OperatorTe
  * Recorded before the server starts, so a boot that hangs still leaves the page something true to
  * say. Not an `AppError` code: nothing throws it.
  *
- * It lives in the same module as `OPERATOR_TEXT`, whose computed key below reads it, not in
- * `node-entry.ts` which writes it: exported from a module in an import cycle, the esbuild bundle
- * evaluated that key as `undefined`. `recovery-surface.ts` re-exports it.
+ * It lives in the module whose computed key below reads it, not in `node-entry.ts` which writes
+ * it: exported from there it closes an import cycle, and in the esbuild bundle the key then
+ * evaluates to `undefined`.
  */
 export const BOOT_INCOMPLETE = "server.boot_incomplete";
 
@@ -428,7 +428,8 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "Puede que algunos archivos ya estén en la carpeta apartada; todos siguen en el equipo. Pulsa «Reintentar un arranque normal» para terminar de moverlos, y después el equipo empieza una configuración inicial nueva. Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, también los archivos apartados.",
     },
   },
-  // The holder's own name, when `recovery.json` recorded one, replaces this row's in `operatorText`.
+  // The holder's own name, when `recovery.json` recorded one, replaces this row's in
+  // `operatorText` (`recovery-surface.ts`).
   [HOLDER_STALLED]: holderStalledText(undefined),
 };
 
