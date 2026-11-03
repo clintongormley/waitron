@@ -48,7 +48,7 @@ describe("A773 columns state: the device's kitchen columns", () => {
     const storage = fakeStorage();
     const state = readColumnState(storage, scope, STATION_COLUMNS);
     expect(state).toEqual({
-      order: ["overview", "waiting", "preparing", "ready"],
+      order: ["overview", "held", "waiting", "preparing", "ready"],
       hidden: [],
       collapsed: [],
     });
@@ -62,7 +62,7 @@ describe("A773 columns state: the device's kitchen columns", () => {
     const storage = fakeStorage();
     const saved: ColumnState = {
       ...readyCollapsed,
-      order: ["overview", "waiting", "preparing", "ready"],
+      order: ["overview", "held", "waiting", "preparing", "ready"],
     };
     saveColumnState(storage, scope, saved);
     expect(readColumnState(storage, scope, STATION_COLUMNS)).toEqual(saved);
@@ -330,5 +330,26 @@ describe("A773 pass view", () => {
     for (const screen of ["pass_monitor", "all_stations"] as const) {
       expect(readColumnState(storage, { ...base, screen }, PASS_COLUMNS)).toEqual(passDefaults);
     }
+  });
+});
+
+describe("A773 held column", () => {
+  const savedOrder = (order: ColumnState["order"]) => {
+    const storage = fakeStorage();
+    storage.values.set(st1Key, JSON.stringify({ version: 1, order, hidden: [], collapsed: [] }));
+    return readColumnState(storage, scope, STATION_COLUMNS);
+  };
+
+  it("gives a layout saved before Held the Held column right after Overview, shown", () => {
+    expect(savedOrder(["overview", "waiting", "preparing", "ready"])).toEqual({
+      order: ["overview", "held", "waiting", "preparing", "ready"],
+      hidden: [],
+      collapsed: [],
+    });
+    expect(savedOrder(["waiting", "preparing", "ready", "overview"])).toEqual({
+      order: ["waiting", "preparing", "ready", "overview", "held"],
+      hidden: [],
+      collapsed: [],
+    });
   });
 });

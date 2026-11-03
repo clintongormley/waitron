@@ -78,10 +78,35 @@ const NEXT: Record<TicketState, Exclude<TicketState, "queued"> | undefined> = {
 /** Kitchen-state order, which a dish's state word compares; the drawn order is {@link TillStationQueue.columns}. */
 const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
 
-const DRAWN: Partial<Record<ColumnKey, TicketState>> = {
-  waiting: "queued",
-  preparing: "preparing",
-  ready: "ready",
+interface DrawnColumn {
+  /** The section's `data-column`. */
+  column: TicketState | "held";
+  title: () => string;
+  holds: (card: KitchenCard) => boolean;
+}
+
+/** A card with no released dish is Held's, so Waiting holds only cards with a released dish (D78). */
+const DRAWN: Partial<Record<ColumnKey, DrawnColumn>> = {
+  held: {
+    column: "held",
+    title: () => t("pass.column.held"),
+    holds: (card) => card.since === null,
+  },
+  waiting: {
+    column: "queued",
+    title: () => t("station.state.queued"),
+    holds: (card) => card.column === "queued" && card.since !== null,
+  },
+  preparing: {
+    column: "preparing",
+    title: () => t("station.state.preparing"),
+    holds: (card) => card.column === "preparing",
+  },
+  ready: {
+    column: "ready",
+    title: () => t("station.state.ready"),
+    holds: (card) => card.column === "ready",
+  },
 };
 
 export type { MergedQueueGroup } from "../state/kitchen-cards.js";
@@ -90,9 +115,7 @@ export type { MergedQueueGroup } from "../state/kitchen-cards.js";
 export function stationColumnNames(): Map<ColumnKey, string> {
   return new Map([
     ["overview", t("station.overview")],
-    ...Object.entries(DRAWN).map(
-      ([key, state]) => [key as ColumnKey, t(`station.state.${state}` as const)] as const,
-    ),
+    ...Object.entries(DRAWN).map(([key, drawn]) => [key as ColumnKey, drawn.title()] as const),
   ]);
 }
 
@@ -689,6 +712,7 @@ export class TillStationQueue extends LitElement {
   #cardBadgeDrawn = false;
   /** The host's width and sizes, read before each drawing so the first is already tabs or columns. */
   #measured?: BoardMeasure;
+  #cards: KitchenCard[] = [];
   #resizing?: ResizeObserver;
   @state() private chosenTab?: ColumnKey;
   /** A collapsed column whose heading was just tapped: chosen if opening it turns the board to tabs. */
@@ -722,6 +746,7 @@ export class TillStationQueue extends LitElement {
   }
 
   override willUpdate(): void {
+    this.#cards = kitchenCards(this.groups);
     this.#measured = measureBoard(this);
     const tabs = this.groups.length > 0 && !this.#fits();
     if (this.#opening !== undefined && tabs && !this.#drewTabs) {
@@ -745,11 +770,14 @@ export class TillStationQueue extends LitElement {
     this.#focusTab = undefined;
   }
 
-  /** The columns this board can draw that are not hidden, in the layout's order. */
+  /** The columns this board can draw that are not hidden, in the layout's order; Held only while
+   * it holds a card, so a board with nothing held fits as it did before Held (D93). */
   #shown(): ColumnKey[] {
+    const holdsHeld = this.#cards.some((card) => card.since === null);
     return this.columns.order.filter(
       (key) =>
-        (key === "overview" || DRAWN[key] !== undefined) && !this.columns.hidden.includes(key),
+        (key === "overview" || (DRAWN[key] !== undefined && (key !== "held" || holdsHeld))) &&
+        !this.columns.hidden.includes(key),
     );
   }
 
@@ -881,7 +909,7 @@ export class TillStationQueue extends LitElement {
 
   override render() {
     this.#cardBadgeDrawn = false;
-    const cards = kitchenCards(this.groups);
+    const cards = this.#cards;
     return html`<div class="width-probe"></div>
       <div class="board-head" data-board-head>
         <slot name="lead"></slot>${this.#header(cards)}<span
@@ -1106,9 +1134,9 @@ export class TillStationQueue extends LitElement {
     const chosen =
       this.chosenTab !== undefined && shown.includes(this.chosenTab) ? this.chosenTab : shown[0]!;
     const rows = overviewRows(overviewDishes(cards));
-    const inColumn = (state: TicketState) => cards.filter((card) => card.column === state);
+    const inColumn = (drawn: DrawnColumn) => cards.filter(drawn.holds);
     const now = this.#clockNow();
-    const chosenState = DRAWN[chosen];
+    const chosenDrawn = DRAWN[chosen];
     return html`<div
         class="column-tabs"
         data-column-tabs
@@ -1116,11 +1144,10 @@ export class TillStationQueue extends LitElement {
         aria-label=${t("station.columns")}
       >
         ${shown.map((key) => {
-          const state = DRAWN[key];
-          const title =
-            state === undefined ? t("station.overview") : t(`station.state.${state}` as const);
-          const count = state === undefined ? rowsToMake(rows) : inColumn(state).length;
-          const late = state === undefined ? 0 : lateCards(inColumn(state), now);
+          const drawn = DRAWN[key];
+          const title = drawn === undefined ? t("station.overview") : drawn.title();
+          const count = drawn === undefined ? rowsToMake(rows) : inColumn(drawn).length;
+          const late = drawn === undefined ? 0 : lateCards(inColumn(drawn), now);
           return html`<button
             type="button"
             class="option column-tab"
@@ -1137,11 +1164,15 @@ export class TillStationQueue extends LitElement {
           </button>`;
         })}
       </div>
-      <section class="tab-panel" data-tab-panel=${chosen} data-column=${chosenState ?? "overview"}>
+      <section
+        class="tab-panel"
+        data-tab-panel=${chosen}
+        data-column=${chosenDrawn?.column ?? "overview"}
+      >
         ${
-          chosenState === undefined
+          chosenDrawn === undefined
             ? overviewList(rows)
-            : inColumn(chosenState).map((card) => this.#card(card))
+            : inColumn(chosenDrawn).map((card) => this.#card(card))
         }
       </section>`;
   }
@@ -1151,8 +1182,8 @@ export class TillStationQueue extends LitElement {
     return html`<div class="kanban">
       ${shown.map((key) => {
         const collapsed = this.columns.collapsed.includes(key);
-        const state = DRAWN[key];
-        if (state === undefined) {
+        const drawn = DRAWN[key];
+        if (drawn === undefined) {
           const rows = overviewRows(overviewDishes(cards));
           return html`<section
             class="column column-overview ${collapsed ? "collapsed" : ""}"
@@ -1164,15 +1195,15 @@ export class TillStationQueue extends LitElement {
             ${collapsed ? nothing : overviewList(rows)}
           </section>`;
         }
-        const inColumn = cards.filter((card) => card.column === state);
+        const inColumn = cards.filter(drawn.holds);
         const late = collapsed ? lateCards(inColumn, this.#clockNow()) : 0;
         return html`<section
-          class="column column-${state} ${collapsed ? "collapsed" : ""}"
-          data-column=${state}
+          class="column column-${drawn.column} ${collapsed ? "collapsed" : ""}"
+          data-column=${drawn.column}
         >
           ${columnHeading(
             key,
-            t(`station.state.${state}` as const),
+            drawn.title(),
             inColumn.length,
             collapsed,
             () => this.#toggleColumn(key),
