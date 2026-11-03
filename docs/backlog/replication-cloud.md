@@ -23,9 +23,11 @@ qualification on real boxes remains the owner's, after A947 3b/3c
 
 **Built so far:** Slice 0 (docs, main `b0e22a9feb`), Slice 1 (#2417: `@waitron/handover`, the
 handover tables in `node.db`, the server's handover store and signer), Slice 2 (the stepdown and
-the restricted start; no production route reaches `stepDown` yet) and Slice 4b (A764: every
-payment records the box that started it, and each box's card sweep resolves only the payments it
-owns; what it leaves open is under _Payments and card readers_ in [the backlog](../backlog.md)).
+the restricted start; no production route reaches `stepDown` yet), Slice 4b (A764: every payment
+records the box that started it, and each box's card sweep resolves only the payments it owns; what
+it leaves open is under _Payments and card readers_ in [the backlog](../backlog.md)) and Slice 9
+(S2's Parts F and G and three controls in `bench/sqlite-failover`; S2's row still reads FAIL, see
+below).
 Left for the slices that add the callers:
 - `beginHandover` stores the role it is given even when the binding names this box as the other
   side; the first caller must check the role against the binding.
@@ -62,6 +64,17 @@ Left by Slice 2:
   (`boot.restricted`'s files nothing; the two `handover-stepdown` files fake AEAT's transport),
   instead of sharing them through `apps/server/src/testing/` (`copyMigrationsRoot` already exists
   there).
+
+Left by Slice 9 (the S2 re-run, [research note](../research/2026-09-16-sqlite-failover-prototype.md#s2-re-run-with-a1018s-return-batch-2026-11-03)):
+- S2's row still reads FAIL. The new parts F (return batch from a fenced sender) and G (replay)
+  pass and all three controls fail, but the old parts D and E's second half still model the old
+  tail ship from an unfenced sender and still file a sale twice, as on 2026-09-18. Whether S2's
+  verdict is read off F and G alone (D and E then standing as controls for the retired design) is
+  the owner's call; until it is made, the plan's gate for Slices 10 and 11 is not met.
+- The third control (no "being sent" → "waiting" return) shows a record never filed, not a second
+  filing as Task 9.2 expected: the rig's filing run picks up only waiting rows.
+- No control drives the receiver's per-chain pause; a one-off run on a throwaway copy with the
+  pause ignored filed record 1 twice.
 
 **Amended Cloud agreement published, 2026-10-23 (D133):**
 [Cloud #323](https://github.com/waitron-io/waitron-cloud/pull/323), signed

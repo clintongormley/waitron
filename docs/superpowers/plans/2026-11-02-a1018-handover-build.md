@@ -134,6 +134,9 @@ says which A1018 slice replaces or narrows each.
 **Two questions, both answered (a) by the owner on 2 November 2026. Slice 12b is built; Task 7.4b
 is not.** Every other slice is the same under either answer.
 
+**2026-11-03:** Slice 9 left one more open question, whether S2's verdict is read off Parts F and G
+alone; it is under _Still unsettled_.
+
 **Dropped from the draft: "may a returned invoice come back as a tax record only?"** The approved
 design already answers it. §5: "Do not replay orders, payments, cash, drawer, stock, printing or
 other business side effects", and only "original immutable fiscal records and the fiscal chain
@@ -781,7 +784,7 @@ full path.
 | 7 | Emergency handover, server | **yes** | yes (`venue.db`, `handover` set) | 7 | 5 (real boxes: A947 3b; continuous copy: 3c) | — |
 | 8 | Emergency declaration page and guide | no | no | 4 | 6, 7 | — |
 | 9 | The S2 prototype re-run, fiscal-only | no | no | 3 | 0 | — |
-| 10 | Return batch: evidence, and the exchange both scenarios use | **yes** | no | 8 | 7, 9 | — |
+| 10 | Return batch: evidence, and the exchange both scenarios use | **yes** | no | 8 | 7, 9 | the owner's reading of S2 (Slice 9) |
 | 11 | Return batch: originals M2 never saw | **yes, loud** | yes (fiscal set) | 8 | 10 | — |
 | 12a | The reconciliation list, and lines beside the reports | no | no | 7 | 11 | — |
 | 12b | Returned invoices in the VAT return | **yes** | no | 2 | 12a | — (Q1 answered (a); pending the tax adviser) |
@@ -2885,6 +2888,22 @@ built").
   `git commit -s -m "docs: S2 passes with A1018's return batch; its controls fail as they should"`.
   **If S2 does not pass, Slices 10 and 11 are not built**; stop and report.
 
+#### Slice 9 as built (2026-11-03)
+
+The build departed from the task texts above in the first two ways; the last two record a choice
+and a limit the task texts left open. The task texts are left as written.
+
+- S2's row still reads FAIL: Parts F and G pass and the three controls fail, but the old Part D
+  and Part E's second half (the unfenced tail ship) still file a record twice. Whether the gate is read off F and G
+  alone waits for the owner; see the
+  [research note](../../research/2026-09-16-sqlite-failover-prototype.md#s2-re-run-with-a1018s-return-batch-2026-11-03).
+  Task 9.3's commit message was not used, because S2 did not pass.
+- The third control reports a record never filed rather than a second filing: the rig's filing
+  run picks up only waiting rows.
+- Part G builds the batch again from the same reported heads and applies the first batch a second
+  time.
+- No control drives the receiver's per-chain pause.
+
 ---
 
 ### Slice 10 — Return batch: evidence, and the exchange both scenarios use
@@ -3516,6 +3535,8 @@ the joint specification and Cloud's half.
 - **A return to a box other than the one the old box handed to** (M2 handed over to M3 before M1
   came back) is not built; Task 13.5 leaves M1 restricted and its records in its archive.
 - **Archive deletion** waits for A664's retention policy; nothing here deletes one.
+- **Whether S2's verdict is read off Parts F and G alone** (Slice 9 as built); until answered,
+  Slices 10 and 11 are not built.
 
 ---
 
