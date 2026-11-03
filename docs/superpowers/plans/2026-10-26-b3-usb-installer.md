@@ -1,3 +1,5 @@
+> 2026-11-03: PR 6's plan (the disk recovery key as systemd's letters, and reading a typed key back): [2026-11-03-b3-6-disk-key-letters.md](2026-11-03-b3-6-disk-key-letters.md); the passphrase is the formatted text itself, as `systemd-cryptenroll` enrols it, so the box re-forms a typed key before `cryptsetup` sees it (its D2).
+
 > 2026-11-03: PR 5's plan (publishing and removing the Wi-Fi boot copy, and its state) and its re-map against main: [2026-11-03-b3-5-wifi-publication.md](2026-11-03-b3-5-wifi-publication.md); a "no copy" answer of any reason, not only cable-only, removes `wifi.json` unless its checks refuse (its D7, D4).
 
 > 2026-11-03: PR 4's plan (the name tag's format as a LUKS2 token, and the Wi-Fi boot copy's writer format) and its re-map against main: [2026-11-03-b3-4-name-tag-wifi-copy.md](2026-11-03-b3-4-name-tag-wifi-copy.md).

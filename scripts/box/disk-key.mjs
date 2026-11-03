@@ -220,7 +220,7 @@ export function createDiskRecoveryStore(deps) {
     checkFolder(stats);
 
     // Only root can write in root-only parents, so only root could swap a folder between these
-    // checks and the open below, and root is already trusted (spec §7.5).
+    // checks and the open below.
     let handle;
     try {
       handle = await io.open(join(folder, `${diskUuid}.json`), OPEN_FILE);
