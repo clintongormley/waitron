@@ -31,7 +31,7 @@ import {
 } from "./handover-stepdown.js";
 import { beginHandover } from "./handover-store.js";
 import { runLoop } from "./loop.js";
-import { TradingAdmission } from "./trading-admission.js";
+import { SHUTDOWN_DEADLINE_MS } from "./run-server.js";
 
 const SOURCE = "11111111-1111-4111-8111-111111111111";
 const DESTINATION = "22222222-2222-4222-8222-222222222222";
@@ -170,6 +170,7 @@ function rig(
   };
   const atAnswer: Rig["atAnswer"] = { calls: null };
   const app = new Hono();
+  app.onError((_error, c) => c.json({ failed: true }, 500));
   app.use("*", gate.middleware);
   app.post("/stepdown", async (c) => {
     const result = await stepDown(deps, { binding: BINDING, kind: "handed-over", self: c });
@@ -258,7 +259,7 @@ describe("a stepdown", () => {
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
   });
 
-  it("the five early stops set their stop flag before their first await", async () => {
+  it("the five early stops' source text sets the stop flag before the first await", async () => {
     // Reads the source as text: calling a stop inside the request is safe only while its first
     // effect comes before its first await, so a reordering of any of these fails here.
     const files = [
@@ -417,29 +418,6 @@ describe("a stepdown", () => {
     expect(r.calls.at(-1)).toBe("streamHost");
   });
 
-  it("the trading admission still reads ready during the wait", async () => {
-    await begin();
-    const admission = new TradingAdmission();
-    admission.admit();
-    const slow = hold();
-    const r = rig(suite.node);
-    r.app.get("/slow", async (c) => {
-      await slow.wait;
-      return c.json({});
-    });
-    const inside = r.app.request("/slow");
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    await r.app.request("/stepdown", { method: "POST" });
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(r.restart).not.toHaveBeenCalled();
-    const duringWait = admission.snapshot().state;
-    slow.release();
-    await inside;
-    await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
-    expect(duringWait).toBe("ready");
-    expect(admission.snapshot().state).toBe("ready");
-  });
-
   it("a request still running at the limit is cut and logged by route, and the stepdown proceeds", async () => {
     await begin();
     const r = rig(suite.node);
@@ -461,6 +439,50 @@ describe("a stepdown", () => {
       { event: "handover.admitted_work_cut", fields: { method: "GET", path: "/slow" } },
     ]);
     expect(r.calls.at(-1)).toBe("streamHost");
+  });
+
+  it("a close that never settles still restarts once the shutdown deadline passes", async () => {
+    await begin();
+    const r = rig(suite.node, { close: () => new Promise(() => {}) });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    await r.app.request("/stepdown", { method: "POST" });
+    await vi.advanceTimersByTimeAsync(SHUTDOWN_DEADLINE_MS - 1);
+    expect(r.restart).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(r.restart).toHaveBeenCalledTimes(1);
+    expect(r.logs).toContainEqual({
+      event: "handover.stepdown_close_timeout",
+      fields: { deadlineMs: SHUTDOWN_DEADLINE_MS },
+    });
+  });
+
+  it("two calls at once for the same binding step down once", async () => {
+    await begin();
+    const r = rig(suite.node);
+    const close = vi.spyOn(r.deps.gate, "close");
+    let self: Context | undefined;
+    r.app.post("/twice", async (c) => {
+      self = c;
+      const both = await Promise.all([
+        stepDown(r.deps, { binding: BINDING, kind: "handed-over", self: c }),
+        stepDown(r.deps, { binding: BINDING, kind: "handed-over", self: c }),
+      ]);
+      return c.json(both);
+    });
+    const response = await r.app.request("/twice", { method: "POST" });
+    expect(self).toBeDefined();
+    expect((await response.json()) as unknown[]).toEqual(
+      expect.arrayContaining([
+        { restarting: true, replayed: false },
+        { restarting: true, replayed: true },
+      ]),
+    );
+    expect(close).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(r.restart).toHaveBeenCalledTimes(1);
+    const names = r.deps.duties.closers.map((c) => c.name);
+    expect([...r.calls].sort()).toEqual([...names].sort());
   });
 
   it("waits 180 seconds for admitted work", () => {

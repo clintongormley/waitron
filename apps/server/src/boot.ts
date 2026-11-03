@@ -1132,9 +1132,10 @@ async function bootServer(
   const handoverGate = createHandoverGate();
   // Ahead of every other middleware, so once a stepdown closes it nothing behind it runs.
   app.use("*", handoverGate.middleware);
-  // A fault in Waitron if called: the seam's route answered before the start finished.
+  // Filled in only when the full start finishes; a fault in Waitron if called before then or on a
+  // start that never fills it.
   let stepDownHere: (request: StepDownRequest) => Promise<StepDownResult> = () =>
-    Promise.reject(new Error("stepdown called before the start finished"));
+    Promise.reject(new Error("stepdown called on a start that has not provided one"));
   seams.stepdown?.mount(app, (request) => stepDownHere(request));
   const normalSetupRequests = new Set<Promise<void>>();
   // Ahead of the gate below, so a running backup recovery is named rather than "not ready".

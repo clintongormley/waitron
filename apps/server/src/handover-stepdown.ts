@@ -6,6 +6,7 @@ import { recordHandoverRestrictionTx } from "@waitron/node-db";
 import type { BackgroundDuties } from "./background-duties.js";
 import type { HandoverGate } from "./handover-gate.js";
 import { advanceHandoverTx } from "./handover-store.js";
+import { SHUTDOWN_DEADLINE_MS } from "./run-server.js";
 import type { Logger } from "./logger.js";
 
 export const HANDOVER_ADMITTED_WORK_LIMIT_MS = 180_000;
@@ -98,10 +99,25 @@ async function afterAnswer(deps: StepDownDeps): Promise<void> {
   try {
     const { remaining } = await deps.gate.settled(HANDOVER_ADMITTED_WORK_LIMIT_MS);
     for (const cut of remaining) deps.log("warn", "handover.admitted_work_cut", cut);
-    await deps.close();
+    await closeWithin(deps, SHUTDOWN_DEADLINE_MS);
   } catch (error) {
     deps.log("error", "handover.stepdown_close_failed", { errorCode: codeOf(error) });
   } finally {
     deps.restart();
+  }
+}
+
+/** The same bound a SIGTERM's shutdown has, so a close that never settles still restarts the box. */
+async function closeWithin(deps: StepDownDeps, limitMs: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cut = new Promise<"cut">((resolve) => {
+    timer = setTimeout(() => resolve("cut"), limitMs);
+  });
+  try {
+    if ((await Promise.race([deps.close(), cut])) === "cut") {
+      deps.log("warn", "handover.stepdown_close_timeout", { deadlineMs: limitMs });
+    }
+  } finally {
+    clearTimeout(timer);
   }
 }

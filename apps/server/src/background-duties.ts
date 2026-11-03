@@ -77,53 +77,56 @@ function once(close: () => unknown): () => unknown {
   };
 }
 
+const LOOP_WAIT =
+  "waits for a loop the aborts already signalled; a pass already running continues until it ends";
+
 export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
   const closers: BackgroundCloser[] = [
     {
       name: "pendingCardLoop",
       close: () => h.pendingCardLoop,
-      reason: "waits for a loop the aborts already stopped",
+      reason: LOOP_WAIT,
     },
     {
       name: "tenderRefundLoop",
       close: () => h.tenderRefundLoop,
-      reason: "waits for a loop the aborts already stopped",
+      reason: LOOP_WAIT,
     },
     {
       name: "attendanceLoop",
       close: () => h.attendanceLoop,
-      reason: "waits for a loop the aborts already stopped",
+      reason: LOOP_WAIT,
     },
     {
       name: "attendanceEmailLoop",
       close: () => h.attendanceEmailLoop,
-      reason: "waits for a loop the aborts already stopped",
+      reason: LOOP_WAIT,
     },
     {
       name: "certificateReminderLoop",
       close: () => h.certificateReminderLoop,
-      reason: "waits for a loop the aborts already stopped",
+      reason: LOOP_WAIT,
     },
     { name: "certificateDiagnosis", close: () => h.certificateDiagnosis?.stop(), atStepdown: true },
     {
       name: "invoiceEmailLoop",
       close: () => h.invoiceEmailLoop,
-      reason: "waits for a loop the aborts already stopped",
+      reason: LOOP_WAIT,
     },
     {
       name: "cloudWorker",
       close: () => h.cloudWorker,
-      reason: "waits for a loop the aborts already stopped",
+      reason: LOOP_WAIT,
     },
     {
       name: "cloudSnapshots",
       close: () => h.cloudSnapshots,
-      reason: "waits for a loop the aborts already stopped",
+      reason: LOOP_WAIT,
     },
     {
       name: "suggestionLoop",
       close: () => h.suggestionLoop,
-      reason: "waits for a loop the aborts already stopped",
+      reason: LOOP_WAIT,
     },
     {
       name: "unsubscribeFromChanges",
@@ -133,7 +136,8 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
     {
       name: "stopSealingNodeCommits",
       close: h.stopSealingNodeCommits,
-      reason: "seals this box's own commits, sending nothing outside",
+      reason:
+        "removes the hook that refreshes the sealed-state row in venue.db after a node.db commit; local, sends nothing outside the box",
     },
     // A refresh still running would otherwise run against the closed store and log a failure.
     {
@@ -146,12 +150,14 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
     {
       name: "appendOnlyWatch",
       close: () => h.appendOnlyWatch.stop(),
-      reason: "only reads this box's triggers",
+      reason:
+        "checks the append-only triggers and, on a mismatch, records a refusal and restarts the box; local, sends nothing outside the box",
     },
     {
       name: "freeSpaceWatch",
       close: () => h.freeSpaceWatch.stop(),
-      reason: "only reads this box's free space",
+      reason:
+        "on low space puts back the spare file and deletes old local backup archives; local, sends nothing outside the box",
     },
     { name: "boxEmails", close: () => h.boxEmails.stop(), atStepdown: true },
     {
@@ -164,7 +170,11 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
       close: () => h.tunnelController.abort(),
       reason: "the tunnel only carries requests, which the gate refuses",
     },
-    { name: "loop", close: () => h.loop, reason: "waits for a loop the aborts already stopped" },
+    {
+      name: "loop",
+      close: () => h.loop,
+      reason: LOOP_WAIT,
+    },
     {
       name: "tunnelWorker",
       close: () => h.tunnelWorker?.catch(() => {}),
