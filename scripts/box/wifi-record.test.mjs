@@ -1215,7 +1215,7 @@ describe("formatWifiRecord writes the form its reader loads", () => {
   });
 });
 
-/** Every canary password starts with CANARY, so its forms cover the whole password or any leading part. */
+/** Every canary password starts with CANARY. */
 const CANARY_FORMS = passwordForms("CANARY");
 
 /** @type {Array<[string, string, unknown, unknown]>} name, reason, network, the same refusal with a password holding CANARY (null when none can) */

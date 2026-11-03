@@ -939,8 +939,8 @@ folder or NetworkManager.
   NetworkManager settings, as an adapter would hand them over, into a copy to write or a named
   reason for none: cable only; an open network; NetworkManager's `none` (open or static WEP);
   dynamic WEP; OWE; enterprise; any other security type; a password the host cannot read; a WPA2
-  password of 8 to 63 characters outside printable ASCII; a WPA3 password over 256 bytes with no
-  control character; or another password the
+  password of 8 to 63 characters outside printable ASCII; a well-formed WPA3 password over 256 bytes
+  with no C0 control character or DEL; or another password the
   reader would refuse (`password-invalid`). The reader's three refusals are what become password
   reasons; an error the reader throws is not caught and reaches the caller.
 
