@@ -27,7 +27,25 @@ vi.mock("@hono/node-server", async () => {
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
-const calls = vi.hoisted(() => ({ authority: 0, sweep: 0, spawn: 0 }));
+const calls = vi.hoisted(() => ({ authority: 0, sweep: 0, spawn: 0, drain: 0 }));
+
+// Counts the fiscal drain's passes, each still running the real drain.
+vi.mock("@waitron/module", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/module")>();
+  return {
+    ...actual,
+    fiscalSlot: (...args: Parameters<typeof actual.fiscalSlot>) => {
+      const real = actual.fiscalSlot(...args);
+      return {
+        ...real,
+        drain: (...drainArgs: Parameters<typeof real.drain>) => {
+          calls.drain += 1;
+          return real.drain(...drainArgs);
+        },
+      };
+    },
+  };
+});
 
 // AEAT's clock reading is replaced by a stand-in that answers nothing, so no case reaches AEAT;
 // the watch checks often enough to ask within the quiet period.
@@ -90,6 +108,7 @@ interface Observed {
   authority: number;
   sweep: number;
   spawn: number;
+  drain: number;
   /** The status of a GET of `/` made during the quiet period. */
   pageStatus: number;
 }
@@ -114,7 +133,7 @@ async function venueHash(suite: VenueDb): Promise<string> {
 
 /**
  * Registers, in the calling `describe`, one start of a folder that a full start would stream,
- * sweep and ask AEAT's time for: it holds a bucket copy's settings and a membership, and a fiscal
+ * sweep, run the fiscal drain on and ask AEAT's time for: it holds a bucket copy's settings and a membership, and a fiscal
  * record a day ahead of the clock, which puts the box in a clock stop. `restricted` adds the
  * handover restriction row. The start runs for `QUIET_MS`, then venue.db's hash and the stand-ins'
  * counts are read for the describe's cases.
@@ -214,6 +233,7 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     calls.authority = 0;
     calls.sweep = 0;
     calls.spawn = 0;
+    calls.drain = 0;
     const hashBefore = await venueHash(suite);
     server = await startServer(env, env, {
       stream: { spawn, store: new SwitchableStore(() => new Date()) },
@@ -263,6 +283,10 @@ describe("a restricted start touches nothing outside and nothing in venue.db", (
   it("starts no Litestream child", () => {
     expect(observed().spawn).toBe(0);
   });
+
+  it("starts no fiscal pass", () => {
+    expect(observed().drain).toBe(0);
+  });
 });
 
 describe("control: the same folder without the restriction row", () => {
@@ -274,5 +298,9 @@ describe("control: the same folder without the restriction row", () => {
     expect(authority).toBeGreaterThan(0);
     expect(sweep).toBeGreaterThan(0);
     expect(spawn).toBeGreaterThan(0);
+  });
+
+  it("starts the fiscal drain", () => {
+    expect(observed().drain).toBeGreaterThan(0);
   });
 });

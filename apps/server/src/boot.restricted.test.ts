@@ -2,9 +2,9 @@ import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { withNodeTransaction } from "@waitron/db";
-import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { loadKeyRing } from "@waitron/credentials";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -22,28 +22,19 @@ vi.mock("@hono/node-server", async () => {
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
-// Counts the fiscal drain passes the box starts.
-const drain = vi.hoisted(() => ({ calls: 0 }));
-
+// The fiscal drain files nothing. `boot.restricted-quiet.test.ts` counts the real one's passes.
 vi.mock("@waitron/module", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/module")>();
   return {
     ...actual,
-    fiscalSlot: (...args: Parameters<typeof actual.fiscalSlot>) => {
-      const real = actual.fiscalSlot(...args);
-      return {
-        ...real,
-        drain: async () => {
-          drain.calls += 1;
-          return emptyDrainResult();
-        },
-      };
-    },
+    fiscalSlot: (...args: Parameters<typeof actual.fiscalSlot>) => ({
+      ...actual.fiscalSlot(...args),
+      drain: () => Promise.resolve(emptyDrainResult()),
+    }),
   };
 });
 
 const migrations = migrationOptionsFor(manifestSets(), null);
-const suite = useVenueDb({ migrations });
 
 const MIN_TICK_MS = 200;
 const KEY_ENV = {
@@ -54,21 +45,20 @@ const KEY_ENV = {
 let server: StartedServer | undefined;
 let scratch: string | undefined;
 
-afterEach(async () => {
+async function stop(): Promise<void> {
   try {
     if (server !== undefined) await server.close();
   } finally {
     server = undefined;
-    drain.calls = 0;
     if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     scratch = undefined;
   }
-});
+}
 
-async function boot(options: {
-  restricted: boolean;
-  seams?: StartServerSeams;
-}): Promise<{ port: number; venue: Venue }> {
+async function boot(
+  suite: VenueDb,
+  options: { restricted: boolean; seams?: StartServerSeams },
+): Promise<{ port: number; venue: Venue }> {
   beforeServerStarts();
   const venue = await setupVenue(suite.db);
   const nodeId = venue.cfg.nodeId;
@@ -127,8 +117,22 @@ async function boot(options: {
 }
 
 describe("a box holding a handover restriction starts restricted", () => {
+  // Every case here only reads, so they share one start.
+  const suite = useVenueDb({ migrations, resetPerTest: false });
+  let started: { port: number; venue: Venue } | undefined;
+  const start = () => {
+    if (started === undefined) throw new Error("the restricted start did not finish");
+    return started;
+  };
+
+  beforeAll(async () => {
+    started = await boot(suite, { restricted: true });
+  }, 60_000);
+
+  afterAll(stop);
+
   it("answers acceptingSales: false with its node id and term", async () => {
-    const { port, venue } = await boot({ restricted: true });
+    const { port, venue } = start();
     const response = await fetch(`http://127.0.0.1:${port}/api/node`);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
@@ -139,14 +143,14 @@ describe("a box holding a handover restriction starts restricted", () => {
   }, 60_000);
 
   it("answers /health healthy, saying it takes no sales", async () => {
-    const { port } = await boot({ restricted: true });
+    const { port } = start();
     const response = await fetch(`http://127.0.0.1:${port}/health`);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true, tradingAvailable: false });
   }, 60_000);
 
   it("refuses a till sign-in", async () => {
-    const { port } = await boot({ restricted: true });
+    const { port } = start();
     const response = await fetch(`http://127.0.0.1:${port}/api/session`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -156,7 +160,7 @@ describe("a box holding a handover restriction starts restricted", () => {
   }, 60_000);
 
   it("mounts no dashboard, till, print or device route", async () => {
-    const { port, venue } = await boot({ restricted: true });
+    const { port, venue } = start();
     const probes: [string, string][] = [
       ["GET", "/management-api/alerts"],
       ["GET", "/management-api/catalogue-settings"],
@@ -175,7 +179,7 @@ describe("a box holding a handover restriction starts restricted", () => {
   }, 60_000);
 
   it("serves its own page, naming the successor, at the address a person opens", async () => {
-    const { port } = await boot({ restricted: true });
+    const { port } = start();
     const response = await fetch(`http://127.0.0.1:${port}/`, {
       headers: { "Accept-Language": "en-GB" },
     });
@@ -186,20 +190,13 @@ describe("a box holding a handover restriction starts restricted", () => {
       "The box taking over the venue is <strong>00000000-0000-4000-8000-0000000000aa</strong>.",
     );
   }, 60_000);
-
-  it("starts no fiscal pass", async () => {
-    await boot({ restricted: true });
-    await new Promise((resolve) => setTimeout(resolve, 2 * MIN_TICK_MS + 2_000));
-    expect(drain.calls).toBe(0);
-  }, 60_000);
-
-  it("control: the same folder without the row starts the drain", async () => {
-    await boot({ restricted: false });
-    await vi.waitFor(() => expect(drain.calls).toBeGreaterThan(0), { timeout: 10_000 });
-  }, 60_000);
 });
 
 describe("a full start's stepdown, through its test seam", () => {
+  const suite = useVenueDb({ migrations });
+
+  afterEach(stop);
+
   it("answers the caller, then closes and restarts, with the restriction on disk", async () => {
     const restart = vi.fn();
     let nodeId = "";
@@ -225,7 +222,7 @@ describe("a full start's stepdown, through its test seam", () => {
           ),
       },
     };
-    const { port, venue } = await boot({ restricted: false, seams });
+    const { port, venue } = await boot(suite, { restricted: false, seams });
     nodeId = venue.cfg.nodeId;
     const answer = await fetch(`http://127.0.0.1:${port}/test-stepdown`, { method: "POST" });
     expect(await answer.json()).toEqual({ restarting: true, replayed: false });
@@ -242,7 +239,7 @@ describe("a full start's stepdown, through its test seam", () => {
     const restart = vi.fn(() => restarted());
     const restarting = new Promise<void>((done) => (restarted = done));
     let nodeId = "";
-    const { port, venue } = await boot({
+    const { port, venue } = await boot(suite, {
       restricted: false,
       seams: {
         stepdown: {
