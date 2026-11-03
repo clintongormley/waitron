@@ -872,15 +872,15 @@ and the real screen, network and disk adapters come with the Linux pull request.
   which goes back to starting the installed box after two minutes with no typing. Erasing that disk
   needs the venue's name from its name tag typed (compared after NFC normalisation, which makes the
   composed and decomposed spellings of an accented letter equal), or the erase word, compared
-  exactly as typed, when the tag cannot be read. A disk it cannot classify, or whose attachment is
-  unclear, also needs the erase word. A box whose TPM (the security chip) or Secure Boot is off
+  exactly as typed, when the tag cannot be read. A disk it cannot classify, or a blank or Windows
+  disk whose attachment is unclear, also needs the erase word. A box whose TPM (the security chip) or Secure Boot is off
   still starts an installed Waitron, but any install or reinstall on it is refused. The stick may
   come out only once the installer is wholly in memory; taken out earlier, the installer stops. The
   clock is set from the network before anything is downloaded; a failed setting, or a time earlier
   than the floor the installer is started with (`clockFloorMs`), is tried again a minute later, as
   is a download that is unavailable or cut short. Only a release that checked out leads to a write; a disk
-  erased with no question waits 60 seconds after that check, and a key stops it and offers «Instalar
-  ahora» or «Apagar». After the write the installer restarts into the box only once the stick is
+  erased with no question waits 60 seconds after that check, and a key stops it and offers the choices to
+  install now or power off (the spec's «Instalar ahora» and «Apagar»). After the write the installer restarts into the box only once the stick is
   out. `installerStatus` gives the public status page the step, whether the stick can come out, the
   stop reason, the firmware setting that is off and, for a too-old installer, the release's
   version; never a disk id, the venue's name or typed text. The four waits are the spec's calls, in
@@ -908,10 +908,11 @@ Should the stick start the installed box anyway, or stop and show the firmware m
 keeps the venue selling; stopping it tells someone the box has lost the protection its disk
 encryption relies on. The spec does not settle it: §5 step 2 lists the checks, and guard 3 says the
 stick starts Waitron "without leaving a venue dark". Today's message, «…vuelve a empezar», is
-written for installing; a box that already holds Waitron would need its own wording. The
-installer's decisions (PR 3) follow the start-it half of lane B's recommendation as one rule (D2):
+written for installing; a box that already holds Waitron would need its own wording. Until
+the owner answers, the installer's decisions (PR 3) follow the start-it half of lane B's 2026-11-01
+recommendation ("start it and raise an alert") as one rule (D2):
 the installed box starts after 15 seconds, the screen and the status page name the setting that is
-off, and a reinstall on such a box is refused. The opposite answer is a one-line change. The
+off, and a reinstall on such a box is refused. The opposite answer is a one-line change in the policy; its screen wording would still be new. The
 recommendation's alert is slice 3's: the installer writes nothing to the installed disk, so the
 installed box's host service must notice the setting itself.
 
@@ -971,7 +972,8 @@ installed box's host service must notice the setting itself.
 - The name tag's format sets the real length limit for a usable venue name (D8's 256 code points is
   a placeholder).
 - The network adapter reports `link` whenever a route appears, unasked. Otherwise a cable plugged
-  in after the start is seen only once the hotspot has opened at one minute, and a join whose one
+  in after the start is seen only at the first probe, a minute after the hotspot opens (two minutes
+  in), and a join whose one
   probe is answered before the box has its address reopens the hotspot when the join's minute runs
   out. It never sends the installer an `online` it did not ask for: an `online` outside the
   network step, for example during the 60-second wait, stops the install as out of order
@@ -979,10 +981,10 @@ installed box's host service must notice the setting itself.
 - The boot adapter checks for the stick again just before restarting: a stick put back in after
   the policy has ordered the start is not seen by the policy (guard 3 then catches the restart with
   the stick in).
-- On a refusal with no setting of its own (`sequence-invalid`, `write-failed`), the status page
+- On a refusal with no setting of its own (`sequence-invalid`, `usb-removed-early`), the status page
   still shows which firmware setting is off, beside the stop reason. The page's wording must not
   present the setting as the cause.
-- Decisions recorded for review: a lone disk of unknown attachment needs the erase word (D3); a
+- Decisions recorded for review: a lone blank or Windows disk of unknown attachment needs the erase word (D3); a
   Waitron disk with a foreign encrypted partition is never erased unattended (D18); a typed venue
   name is compared after NFC normalisation, and the erase word exactly as typed (D7).
 
