@@ -104,8 +104,14 @@ export class WtSegmentedControl extends LitElement {
   @property() hint = "";
   readonly #hintId = uniqueId("wt-segmented-hint");
   readonly #errorId = uniqueId("wt-segmented-error");
+  /** The row's size as the last fit left it: a report of that size has nothing new to measure. */
+  #fitted?: { width: number; height: number };
   /** A frame later: a change of size made inside a resize callback would be reported as a loop. */
-  readonly #resized = new ResizeObserver(() => requestAnimationFrame(() => this.#fit()));
+  readonly #resized = new ResizeObserver((entries) => {
+    const { inlineSize, blockSize } = entries.at(-1)!.borderBoxSize[0]!;
+    if (inlineSize === this.#fitted?.width && blockSize === this.#fitted.height) return;
+    requestAnimationFrame(() => this.#fit());
+  });
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -115,6 +121,7 @@ export class WtSegmentedControl extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     this.#resized.disconnect();
+    this.#fitted = undefined;
   }
 
   protected override firstUpdated(): void {
@@ -149,6 +156,8 @@ export class WtSegmentedControl extends LitElement {
     const wholeWords = group.getBoundingClientRect().width;
     group.toggleAttribute("data-measuring", false);
     group.toggleAttribute("data-squeezed", wholeWords > space + 0.5);
+    const { width, height } = group.getBoundingClientRect();
+    this.#fitted = { width, height };
   }
 
   override focus(options?: FocusOptions): void {
