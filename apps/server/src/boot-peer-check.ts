@@ -128,11 +128,13 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
     // Read from the signed status itself, whatever its chart: stopping is the safe side.
     if (operationFences(status.openOperation, nodeId)) return { answer: "F", counted };
     const verdict = verdicts.get(index);
-    // No chart, or one this box cannot trust, cannot vouch that no handover happened.
-    if (verdict === undefined || (!verdict.accepted && verdict.reason === "invalid"))
-      return { answer: "S", counted };
-    if (!verdict.accepted) return { answer: "=", counted };
-    return { answer: isFencedStanding(standingOf(verdict.document, nodeId)) ? "F" : "N", counted };
+    if (verdict?.accepted === true && isFencedStanding(standingOf(verdict.document, nodeId)))
+      return { answer: "F", counted };
+    // A part this box cannot read may report a takeover, so it cannot clear a wait. Nor can no
+    // chart, or one this box cannot trust: neither vouches that no handover happened.
+    if (!partsReadable(status) || verdict === undefined) return { answer: "S", counted };
+    if (verdict.accepted) return { answer: "N", counted };
+    return { answer: verdict.reason === "invalid" ? "S" : "=", counted };
   });
 
   if (answers.some((a) => a.answer === "F")) return "superseded";
@@ -176,45 +178,46 @@ export interface AskPeerStatusDeps {
   timeoutMs?: number;
 }
 
-function isObjectOrNull(value: unknown): boolean {
-  return value === null || (typeof value === "object" && !Array.isArray(value));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function isOperationStatus(value: unknown): value is PeerOperationStatus | null {
   if (value === null) return true;
-  if (typeof value !== "object" || Array.isArray(value)) return false;
-  const op = value as Record<string, unknown>;
+  if (!isRecord(value)) return false;
   return (
-    typeof op.sourceNodeId === "string" &&
-    (op.scenario === "controlled" || op.scenario === "emergency") &&
-    (HANDOVER_STATES as readonly unknown[]).includes(op.state)
+    typeof value.operationId === "string" &&
+    (value.role === "source" || value.role === "destination") &&
+    (value.scenario === "controlled" || value.scenario === "emergency") &&
+    (HANDOVER_STATES as readonly unknown[]).includes(value.state) &&
+    typeof value.sourceNodeId === "string" &&
+    typeof value.destinationNodeId === "string"
+  );
+}
+
+function isRestriction(value: unknown): boolean {
+  if (value === null) return true;
+  if (!isRecord(value)) return false;
+  return (
+    (value.kind === "handed-over" || value.kind === "superseded") &&
+    typeof value.successorNodeId === "string" &&
+    (value.operationId === null || typeof value.operationId === "string")
+  );
+}
+
+/** The chart is judged on its own (`isMembershipDocument`); these are the status's other parts. */
+function partsReadable(status: PeerStatusBody): boolean {
+  return (
+    isOperationStatus(status.openOperation) &&
+    isOperationStatus(status.requestedOperation) &&
+    isRestriction(status.restriction)
   );
 }
 
 /**
- * A part in a shape this box does not read is dropped, never the whole answer: a malformed chart
- * must not hide the peer's signed operation.
- */
-function statusBodyOf(value: unknown, nonce: string): PeerStatusBody | null {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-  const body = value as Record<string, unknown>;
-  if (body.nonce !== nonce) return null;
-  const operation = (v: unknown) => (isOperationStatus(v) ? v : null);
-  return {
-    heldMembership: isMembershipDocument(body.heldMembership) ? body.heldMembership : null,
-    restriction: isObjectOrNull(body.restriction)
-      ? (body.restriction as PeerStatusBody["restriction"])
-      : null,
-    openOperation: operation(body.openOperation),
-    requestedOperation: operation(body.requestedOperation),
-    nonce,
-  };
-}
-
-/**
  * The real `ask`: POST a signed query to the peer's `/api/node/peer-status` and keep the answer
- * only when it is a status signed by the box asked, under a key this box trusts, echoing the
- * query's nonce. Every other outcome is `null`.
+ * only when it is signed as a status by the box asked, under a key this box trusts, and echoes
+ * the query's nonce. Every other outcome is `null`.
  */
 export function askPeerStatus(
   deps: AskPeerStatusDeps,
@@ -236,7 +239,11 @@ export function askPeerStatus(
       if (!res.ok) return null;
       const verdict = verifyEnvelope<unknown>(await res.json(), "status", deps.publicKeyOf);
       if (!verdict.valid || verdict.signerNodeId !== peer.nodeId) return null;
-      return statusBodyOf(verdict.body, nonce);
+      // Passed on whole: `checkPeersAtStart` judges each part, so an unreadable one cannot hide
+      // what a readable one says.
+      return isRecord(verdict.body) && verdict.body.nonce === nonce
+        ? (verdict.body as unknown as PeerStatusBody)
+        : null;
     } catch {
       return null;
     }
