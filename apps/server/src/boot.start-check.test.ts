@@ -24,6 +24,8 @@ import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import type { PeerStatusBody } from "./peer-status-api.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { freePorts } from "./testing/free-ports.js";
+import { listener } from "./testing/ephemeral-listener.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 
@@ -32,7 +34,8 @@ vi.mock("@hono/node-server", async () => {
   return ephemeralHttpMock();
 });
 
-const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
+const { beforeServerStarts, startServer, startConfiguredServer, httpPort } =
+  ephemeralServerFixture();
 
 // The fiscal drain files nothing; these cases look only at how the box starts.
 vi.mock("@waitron/module", async (importOriginal) => {
@@ -59,6 +62,7 @@ let peer: Server | undefined;
 const scratch: string[] = [];
 
 afterEach(async () => {
+  listener.configured = false;
   try {
     if (server !== undefined) await server.close();
     if (peer !== undefined) await new Promise((done) => peer!.close(done));
@@ -110,7 +114,14 @@ interface Booted {
  */
 async function boot(
   suite: VenueDb,
-  options: { spareUrl: string; joined: boolean; pinned?: boolean; seams?: StartServerSeams },
+  options: {
+    spareUrl: string;
+    joined: boolean;
+    pinned?: boolean;
+    seams?: StartServerSeams;
+    /** A fixed HTTP port, bound as given rather than replaced by an ephemeral one. */
+    port?: number;
+  },
 ): Promise<Booted> {
   beforeServerStarts();
   const venue = await setupVenue(suite.db);
@@ -167,6 +178,7 @@ async function boot(
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
     WAITRON_MAX_TICK_MS: "600000",
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
+    ...(options.port === undefined ? {} : { WAITRON_HTTP_PORT: String(options.port) }),
   };
   const lines: Record<string, unknown>[] = [];
   const original = process.stdout.write.bind(process.stdout);
@@ -181,11 +193,20 @@ async function boot(
     return (original as (...args: unknown[]) => boolean)(chunk, ...rest);
   }) as typeof process.stdout.write;
   try {
-    server = await startServer(env, env, options.seams);
+    server =
+      options.port === undefined
+        ? await startServer(env, env, options.seams)
+        : await startConfiguredServer(env, env, options.seams);
+    // The fixture honours a fixed port only during the call; the normal start after a wait binds
+    // later, so the case keeps it honoured until its own end.
+    if (options.port !== undefined) listener.configured = true;
   } finally {
     process.stdout.write = original;
   }
-  const answer = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
+  // A configured listener may still be binding when the start returns.
+  const answer = await vi.waitFor(() =>
+    fetch(`http://127.0.0.1:${options.port ?? httpPort()}/api/node`),
+  );
   const { acceptingSales } = (await answer.json()) as { acceptingSales: unknown };
   return { nodeId, lines, acceptingSales };
 }
@@ -357,6 +378,41 @@ describe("the start check on a real start", () => {
       expect(health.tradingAvailable).toBeUndefined();
       await new Promise((done) => setTimeout(done, 50));
       expect(peerCheck).toHaveBeenCalledTimes(3);
+    }, 60_000);
+
+    it("on a fixed port, the normal start binds the port the waiting start released", async () => {
+      const [port] = await freePorts(1);
+      await boot(suite, {
+        spareUrl: OWN_URL,
+        joined: true,
+        port: port!,
+        seams: seams(waitThen({ result: "proceed", successorNodeId: null })),
+      });
+      await vi.waitFor(
+        async () => {
+          const node = await fetch(`http://127.0.0.1:${port}/api/node`);
+          expect(((await node.json()) as { acceptingSales: unknown }).acceptingSales).toBe(true);
+        },
+        { timeout: 30_000 },
+      );
+    }, 60_000);
+
+    it("a step after the wait that fails rejects fullyStarted with its error", async () => {
+      let answer: () => void = () => {};
+      const peerCheck = waitThen();
+      peerCheck.mockReturnValueOnce(
+        new Promise((done) => (answer = () => done({ result: "proceed", successorNodeId: null }))),
+      );
+      await boot(suite, { spareUrl: OWN_URL, joined: true, seams: seams(peerCheck) });
+      expect(server!.fullyStarted).toBeDefined();
+      // The first node.db read after the wait is the mirror link's.
+      suite.node.run(sql`alter table node_mirror_link rename to node_mirror_link_aside`);
+      try {
+        answer();
+        await expect(server!.fullyStarted).rejects.toThrow(/node_mirror_link/);
+      } finally {
+        suite.node.run(sql`alter table node_mirror_link_aside rename to node_mirror_link`);
+      }
     }, 60_000);
 
     it("a re-ask that answers superseded with a successor records the restriction and starts restricted", async () => {

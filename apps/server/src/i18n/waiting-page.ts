@@ -28,6 +28,6 @@ export const WAITING_PAGE_WORDS: Readonly<
       "No hará ventas ni enviará nada a Hacienda hasta saber si ",
       " ha pasado a llevar el local. Vuelve a comprobarlo cada 15 segundos.",
     ],
-    otherBox: "el otro equipo",
+    otherBox: "otro equipo",
   },
 };

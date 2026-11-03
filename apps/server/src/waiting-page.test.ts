@@ -7,9 +7,9 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { readPeerNames, waitingPageRoute } from "./waiting-page.js";
 
-async function page(names: readonly string[], language: string): Promise<string> {
+async function page(names: readonly (string | null)[], language: string): Promise<string> {
   const app = new Hono();
-  waitingPageRoute(names)(app);
+  waitingPageRoute(() => Promise.resolve(names))(app);
   const res = await app.request("/", { headers: { "accept-language": language } });
   expect(res.headers.get("cache-control")).toBe("no-store");
   return res.text();
@@ -32,18 +32,27 @@ describe("the waiting page", () => {
   it("with no box to name, waits for the other box", async () => {
     expect(await page([], "en-GB")).toContain("<h1>This box is waiting for the other box</h1>");
   });
+
+  it("a box with no name is the other box, never its id", async () => {
+    expect(await page([null, null], "es-ES")).toContain(
+      "<h1>Este equipo está esperando a otro equipo</h1>",
+    );
+    expect(await page(["Bar", null], "en-GB")).toContain(
+      "<h1>This box is waiting for Bar and the other box</h1>",
+    );
+  });
 });
 
 describe("readPeerNames", () => {
   const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
-  it("reads a box's name, and gives its id where it has no row or no name", async () => {
+  it("reads a box's name, and gives null where it has no row or no name", async () => {
     const venue = await setupVenue(suite.db);
     const own = venue.cfg.nodeId;
     await suite.db.update(nodes).set({ name: "Main" }).where(eq(nodes.id, own));
     expect(await readPeerNames(suite.db, [])).toEqual([]);
-    expect(await readPeerNames(suite.db, [own, "unknown-box"])).toEqual(["Main", "unknown-box"]);
+    expect(await readPeerNames(suite.db, [own, "unknown-box"])).toEqual(["Main", null]);
     await suite.db.update(nodes).set({ name: "" }).where(eq(nodes.id, own));
-    expect(await readPeerNames(suite.db, [own])).toEqual([own]);
+    expect(await readPeerNames(suite.db, [own])).toEqual([null]);
   });
 });

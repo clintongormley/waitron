@@ -430,6 +430,11 @@ export interface StartedServer {
    * itself is not waited for) and the venue store is closed; rejects if any of that fails.
    */
   close(): Promise<void>;
+  /**
+   * Present when the start answered while it waited for its peers: settles when the rest of the
+   * start has finished, and rejects with the error that failed it.
+   */
+  fullyStarted?: Promise<void>;
 }
 
 /** The mode-specific half of `close()` (see `makeStartedServer`). */
@@ -979,7 +984,8 @@ export interface StartServerSeams {
  * The one place the real implementations meet.
  *
  * Boot failures ESCAPE, deliberately: invalid config, an unloadable key ring, a failed migration or
- * a venue database it cannot open exit non-zero and let the supervisor decide. A host that boots
+ * a venue database it cannot open reject this call, or, for a box that answered while it waited for
+ * its peers, the returned server's `fullyStarted`, and the caller decides. A host that boots
  * half-configured and retries in the background is a host whose operator believes it is working.
  */
 export async function startServer(
@@ -988,11 +994,11 @@ export async function startServer(
   seams: StartServerSeams = {},
 ): Promise<StartedServer> {
   const undoOnFailure: Array<() => Promise<void>> = [];
-  let waiting: WaitingAnnouncement | undefined;
+  let waiting: StartedServer | undefined;
   let announced: () => void = () => {};
   const waitBegan = new Promise<void>((resolve) => (announced = resolve));
-  const booted = bootServer(env, base, seams, undoOnFailure, (announcement) => {
-    waiting = announcement;
+  const booted = bootServer(env, base, seams, undoOnFailure, (whileWaiting) => {
+    waiting = whileWaiting;
     announced();
   }).catch(async (error: unknown) => {
     // Newest first, so anything that runs on the venue store stops before the store closes. An undo
@@ -1009,26 +1015,22 @@ export async function startServer(
   await Promise.race([booted, waitBegan]);
   if (waiting === undefined) return await booted;
   // A box that waits for its peers has started: it answers while the rest of its start waits.
-  const { server: whileWaiting, failedLater } = waiting;
+  const whileWaiting = waiting;
   let current: StartedServer = whileWaiting;
-  const continued = booted.then((server) => {
+  const fullyStarted = booted.then((server) => {
     current = server;
-  }, failedLater);
+  });
+  // The caller that starts the process reads the failure; this only keeps it from being unhandled.
+  const continued = fullyStarted.catch(() => {});
   return {
     health: whileWaiting.health,
+    fullyStarted,
     close: async () => {
       await whileWaiting.close();
       await continued;
       await current.close();
     },
   };
-}
-
-/** Handed out by a start that waits for its peers, before the rest of the start goes on. */
-interface WaitingAnnouncement {
-  server: StartedServer;
-  /** Takes a failure in the part of the start that runs after the wait. */
-  failedLater: (error: unknown) => void;
 }
 
 /**
@@ -1040,7 +1042,7 @@ async function bootServer(
   base: NodeJS.ProcessEnv,
   seams: StartServerSeams,
   undoOnFailure: Array<() => Promise<void>>,
-  announceWaiting: (announcement: WaitingAnnouncement) => void,
+  announceWaiting: (whileWaiting: StartedServer) => void,
 ): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
@@ -1800,7 +1802,6 @@ async function bootServer(
         : seams.peerCheck();
     let outcome = await checkPeers();
     if (outcome.result === "wait") {
-      const restart = seams.stepdown?.restart ?? restartProcess;
       const fencedAtWait = isFenced(await readNodeMembership(db), node.nodeId);
       const waitingStart = startWaiting({
         health,
@@ -1809,7 +1810,8 @@ async function bootServer(
         nodeId: node.nodeId,
         environment: config.environment,
         readMembership: () => readNodeMembership(db),
-        waitingFor: await readPeerNames(db, outcome.waitingOn ?? []),
+        waitingOn: outcome.waitingOn ?? [],
+        namesOf: (ids) => readPeerNames(db, ids),
         routes: [
           (waitingApp) =>
             mountPeerStatusApi(
@@ -1853,16 +1855,10 @@ async function bootServer(
           };
         },
         closeStore: () => store.close(),
-        restart,
+        restart: seams.stepdown?.restart ?? restartProcess,
         log,
       });
-      announceWaiting({
-        server: waitingStart.server,
-        failedLater: (error) => {
-          log("error", "waiting_start.continue_failed", { errorCode: codeOf(error) });
-          restart();
-        },
-      });
+      announceWaiting(waitingStart.server);
       const end = await waitingStart.ended;
       if (end.kind === "stopped") return waitingStart.server;
       outcome = end.kind === "checked" ? end.outcome : { result: "proceed", successorNodeId: null };

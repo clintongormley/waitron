@@ -670,6 +670,59 @@ describe("runEntry", () => {
     });
   });
 
+  describe("a start that answers while it waits for its peers", () => {
+    function waitingStart() {
+      let finish: () => void = () => {};
+      let fail: (error: unknown) => void = () => {};
+      const fullyStarted = new Promise<void>((resolve, reject) => {
+        finish = resolve;
+        fail = reject;
+      });
+      return { server: { close: () => Promise.resolve(), fullyStarted }, finish, fail };
+    }
+
+    it("is counted as stayed up only once the rest of its start has finished", async () => {
+      const started = waitingStart();
+      const d = deps({ startServer: vi.fn(() => Promise.resolve(started.server)) });
+      const entry = runEntry(d);
+      await vi.waitFor(() => expect(d.installShutdownHandlers).toHaveBeenCalled());
+      await new Promise((done) => setTimeout(done, 20));
+      expect(d.scheduleStayedUp).not.toHaveBeenCalled();
+      started.finish();
+      await entry;
+      expect(d.scheduleStayedUp).toHaveBeenCalledTimes(1);
+    });
+
+    it("a failure after the wait records its code, reports it and rejects, never counted as stayed up", async () => {
+      const started = waitingStart();
+      const writeRecoveryState = vi.fn<(stateDir: string, next: RecoveryState) => Promise<void>>(
+        () => Promise.resolve(),
+      );
+      const reportFailure = vi.fn();
+      const d = deps({
+        writeRecoveryState,
+        reportFailure,
+        startServer: vi.fn(() => Promise.resolve(started.server)),
+      });
+      const entry = runEntry(d);
+      await vi.waitFor(() => expect(d.installShutdownHandlers).toHaveBeenCalled());
+      started.fail(
+        new Error("Failed query", {
+          cause: Object.assign(new Error("no such column: legal_name"), {
+            errcode: 1,
+            code: "ERR_SQLITE_ERROR",
+          }),
+        }),
+      );
+      await expect(entry).rejects.toThrow("Failed query");
+      expect(writeRecoveryState.mock.calls.at(-1)![1].lastErrorCode).toBe(
+        "provisioning.schema_mismatch",
+      );
+      expect(reportFailure).toHaveBeenCalledWith(expect.stringContaining("Failed query"));
+      expect(d.scheduleStayedUp).not.toHaveBeenCalled();
+    });
+  });
+
   it("persists the classified code, not `unknown`, for a raw driver failure", async () => {
     // Typed, not a bare `vi.fn(() => …)`: an untyped mock's `mock.calls` entries are a zero-length
     // tuple, so `[1]` is a typecheck error rather than the state we want to read.

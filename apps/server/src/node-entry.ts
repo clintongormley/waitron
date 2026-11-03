@@ -108,10 +108,7 @@ export interface EntryDeps {
   /** Reads the holder file beside `venue.lock`; defaults to the real reader. */
   readVenueHolder?: (venueDir: string) => VenueHolder | null;
   now?: () => Date;
-  startServer: (
-    env: NodeJS.ProcessEnv,
-    base?: NodeJS.ProcessEnv,
-  ) => Promise<{ close(): Promise<void> }>;
+  startServer: (env: NodeJS.ProcessEnv, base?: NodeJS.ProcessEnv) => Promise<StartedEntryServer>;
   serveRecovery: (app: Hono, opts: RecoveryServeOptions) => Promise<unknown>;
   installShutdownHandlers: (server: { close(): Promise<void> }) => void;
   /** Runs `onStayedUp` once the process has survived `ms` — see the counter rule in `runEntry`. */
@@ -133,6 +130,12 @@ export interface EntryDeps {
   statfs?: Statfs;
   /** The spare file's size; defaults to `SPARE_SPACE_BYTES`, and `0` keeps none. */
   spareBytes?: number;
+}
+
+/** What a start hands back; `fullyStarted` is present when it answers before its start finishes. */
+interface StartedEntryServer {
+  close(): Promise<void>;
+  fullyStarted?: Promise<void>;
 }
 
 /* v8 ignore start -- the real process binding; every test supplies its own `exit` instead */
@@ -297,9 +300,10 @@ async function releaseSpareToStart(
  *    read-only; the recovery level still precedes ordinary database opens.
  * 2. The failure counter is written before ordinary boot's first step, never only in a failure handler:
  *    a boot that hangs never throws, and would restart-loop without ever reaching the page.
- * 3. It clears only from the stayed-up callback — `startServer` resolved and the process then
- *    survived `STAYED_UP_MS`. Clearing on "started" alone would let a module throwing seconds in
- *    reset the counter on every attempt.
+ * 3. It clears only from the stayed-up callback — `startServer` resolved, the server's
+ *    `fullyStarted` (present on a box that answered while it waited for its peers) settled, and the
+ *    process then survived `STAYED_UP_MS`. Clearing on "started" alone would let a module throwing
+ *    seconds in reset the counter on every attempt.
  * 4. The ahead check runs after `runStagedRestore` and `runStagedReset`, which replace or remove
  *    the venue files, and before `startServer`, which migrates and then queries the schema. It
  *    judges a database nothing has migrated yet, which the one-directional comparison in
@@ -637,7 +641,38 @@ async function runAdmittedEntry(
   // Marks where this attempt's lines begin, so the page never presents an earlier run's as its own.
   page("info", "server.boot_started");
 
-  let server: { close(): Promise<void> };
+  const failStart = async (error: unknown): Promise<void> => {
+    // Both channels first, so the real reason survives even if the state write fails.
+    const detail = failureDetail(error);
+    (deps.reportFailure ?? (() => {}))(detail);
+    const code = await startFailureCode(error, [deps.stateDir, deps.venueDir], deps.statfs);
+    page("error", "server.boot_failed", { errorCode: code, detail });
+    if (code === "storage.disk_full") {
+      await freeSpaceAtStart({
+        stateDir: deps.stateDir,
+        venueDir: deps.venueDir,
+        logDir,
+        floor: deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR,
+        force: true,
+        venueHeld,
+        now,
+        statfs: deps.statfs,
+        lockVenue: deps.lockVenue ?? lockVenueDatabase,
+        readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
+        log: deps.log,
+      });
+    }
+    if (typeof error === "object" && error !== null) recordedCodes.set(error, code);
+    const at = now();
+    if (code === "provisioning.database_in_use") {
+      await recordRefusal(deps, attempt, at);
+    } else {
+      // The pre-boot count stands — one attempt is one failure, not two — now with the code.
+      await persistState(deps, (current) => withFailureCode(current, code, at));
+    }
+  };
+
+  let server: StartedEntryServer;
   try {
     const migrationsRoot = deps.migrationsRoot ?? DEFAULT_MIGRATIONS_ROOT;
 
@@ -691,38 +726,19 @@ async function runAdmittedEntry(
         .catch(() => {});
     }
   } catch (error) {
-    // Both channels first, so the real reason survives even if the state write fails.
-    const detail = failureDetail(error);
-    (deps.reportFailure ?? (() => {}))(detail);
-    const code = await startFailureCode(error, [deps.stateDir, deps.venueDir], deps.statfs);
-    page("error", "server.boot_failed", { errorCode: code, detail });
-    if (code === "storage.disk_full") {
-      await freeSpaceAtStart({
-        stateDir: deps.stateDir,
-        venueDir: deps.venueDir,
-        logDir,
-        floor: deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR,
-        force: true,
-        venueHeld,
-        now,
-        statfs: deps.statfs,
-        lockVenue: deps.lockVenue ?? lockVenueDatabase,
-        readVenueHolder: deps.readVenueHolder ?? readVenueHolder,
-        log: deps.log,
-      });
-    }
-    if (typeof error === "object" && error !== null) recordedCodes.set(error, code);
-    const at = now();
-    if (code === "provisioning.database_in_use") {
-      await recordRefusal(deps, attempt, at);
-    } else {
-      // The pre-boot count stands — one attempt is one failure, not two — now with the code.
-      await persistState(deps, (current) => withFailureCode(current, code, at));
-    }
+    await failStart(error);
     throw error;
   }
 
   deps.installShutdownHandlers(server);
+  // A box waiting for its peers has answered, but its start has not finished: a failure after the
+  // wait is a failed start, and the wait alone is not staying up.
+  try {
+    await server.fullyStarted;
+  } catch (error) {
+    await failStart(error);
+    throw error;
+  }
   deps.scheduleStayedUp(STAYED_UP_MS, () => void persistState(deps, stayedUpClear));
 }
 

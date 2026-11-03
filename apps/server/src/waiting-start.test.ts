@@ -24,7 +24,14 @@ const CHART = {
   endorsements: [],
 } as unknown as SignedMembershipDocument;
 
-const WAIT: StartPeerCheckOutcome = { result: "wait", successorNodeId: null };
+const TERRACE_ID = "00000000-0000-4000-8000-0000000000dd";
+const NAMES: Record<string, string> = { [SPARE_ID]: "Spare", [TERRACE_ID]: "Terrace" };
+
+const WAIT: StartPeerCheckOutcome = {
+  result: "wait",
+  successorNodeId: null,
+  waitingOn: [SPARE_ID],
+};
 const PROCEED: StartPeerCheckOutcome = { result: "proceed", successorNodeId: null };
 
 const migrations = migrationOptionsFor(manifestSets(), null);
@@ -44,7 +51,8 @@ function harness(
     nodeId: NODE_ID,
     environment: "preproduction",
     readMembership: () => Promise.resolve(CHART),
-    waitingFor: ["Spare"],
+    waitingOn: [SPARE_ID],
+    namesOf: (ids) => Promise.resolve(ids.map((id) => NAMES[id] ?? null)),
     routes: [],
     node: undefined as never,
     recheck,
@@ -63,7 +71,8 @@ function harness(
 
 describe("the waiting start", () => {
   it("waits, answering `acceptingSales: false` with its term", async () => {
-    const h = harness(() => Promise.resolve(WAIT));
+    const recheck = vi.fn(() => Promise.resolve(WAIT));
+    const h = harness(recheck);
     const node = await h.app().request("/api/node");
     expect(await node.json()).toEqual({
       nodeId: NODE_ID,
@@ -86,6 +95,33 @@ describe("the waiting start", () => {
     await h.waiting.server.close();
     expect(await h.waiting.ended).toEqual({ kind: "stopped" });
     expect(h.closeStore).toHaveBeenCalledTimes(1);
+    const asked = recheck.mock.calls.length;
+    await new Promise((done) => setTimeout(done, 50));
+    expect(recheck).toHaveBeenCalledTimes(asked);
+  });
+
+  it("a close during a re-ask closes the store only once the re-ask has settled", async () => {
+    const log = vi.fn();
+    let answer: (outcome: StartPeerCheckOutcome) => void = () => {};
+    const recheck = vi.fn(() => new Promise<StartPeerCheckOutcome>((done) => (answer = done)));
+    const h = harness(recheck, { log });
+    await vi.waitFor(() => expect(recheck).toHaveBeenCalledTimes(1));
+    const closed = h.waiting.server.close();
+    await new Promise((done) => setTimeout(done, 20));
+    expect(h.closeStore).not.toHaveBeenCalled();
+    answer(WAIT);
+    await closed;
+    expect(h.closeStore).toHaveBeenCalledTimes(1);
+    expect(recheck).toHaveBeenCalledTimes(1);
+  });
+
+  it("a re-ask that waits on other boxes names them on the page", async () => {
+    const h = harness(() => Promise.resolve({ ...WAIT, waitingOn: [TERRACE_ID] }));
+    await vi.waitFor(async () => {
+      const page = await h.app().request("/", { headers: { "accept-language": "en-GB" } });
+      expect(await page.text()).toContain("<h1>This box is waiting for Terrace</h1>");
+    });
+    await h.waiting.server.close();
   });
 
   it("restarts when a peer answers: the start goes on, with its listeners and timer gone", async () => {

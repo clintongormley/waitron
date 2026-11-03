@@ -6,8 +6,11 @@ import { WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import { escapeHtml } from "./recovery-surface.js";
 
-/** Each box's name from this box's `nodes` rows, or its id where it has no row or no name. */
-export async function readPeerNames(venue: Database, ids: readonly string[]): Promise<string[]> {
+/** Each box's name from this box's `nodes` rows, or `null` where it has no row or no name. */
+export async function readPeerNames(
+  venue: Database,
+  ids: readonly string[],
+): Promise<(string | null)[]> {
   if (ids.length === 0) return [];
   const rows = await venue
     .select({ id: nodes.id, name: nodes.name })
@@ -16,16 +19,17 @@ export async function readPeerNames(venue: Database, ids: readonly string[]): Pr
   const named = new Map(rows.map((r) => [r.id, r.name]));
   return ids.map((id) => {
     const name = named.get(id);
-    return name === undefined || name === "" ? id : name;
+    return name === undefined || name === "" ? null : name;
   });
 }
 
-function renderPage(names: readonly string[], locale: SupportedLocale): string {
+function renderPage(names: readonly (string | null)[], locale: SupportedLocale): string {
   const text = WAITING_PAGE_WORDS[locale];
+  const shown = [...new Set(names.map((name) => name ?? text.otherBox))];
   const other =
-    names.length === 0
+    shown.length === 0
       ? text.otherBox
-      : new Intl.ListFormat(locale, { type: "conjunction" }).format(names);
+      : new Intl.ListFormat(locale, { type: "conjunction" }).format(shown);
   const title = `${text.title[0]}${other}${text.title[1]}`;
   return `<!doctype html>
 <html lang="${locale}">
@@ -43,14 +47,16 @@ function renderPage(names: readonly string[], locale: SupportedLocale): string {
 `;
 }
 
-/** The page a person opening a box that waits for its peers sees. */
-export function waitingPageRoute(names: readonly string[]): (app: Hono) => void {
+/** The page a person opening a box that waits for its peers sees; `names` is read per request. */
+export function waitingPageRoute(
+  names: () => Promise<readonly (string | null)[]>,
+): (app: Hono) => void {
   return (app) => {
-    app.get("/", (c) => {
+    app.get("/", async (c) => {
       const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
       c.header("Cache-Control", "no-store");
       c.header("Vary", "Accept-Language");
-      return c.html(renderPage(names, locale));
+      return c.html(renderPage(await names(), locale));
     });
   };
 }

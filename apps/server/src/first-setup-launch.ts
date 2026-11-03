@@ -25,14 +25,14 @@ export async function startServerOrFirstSetupResolution(
     startServer?: (
       env: NodeJS.ProcessEnv,
       base: NodeJS.ProcessEnv,
-    ) => Promise<{ close(): Promise<void> }>;
+    ) => Promise<{ close(): Promise<void>; fullyStarted?: Promise<void> }>;
     serveResolution?: (
       app: Hono,
       options: RecoveryServeOptions,
     ) => Promise<{ close(): Promise<void> }>;
     requestRestart?: () => void;
   } = {},
-): Promise<{ close(): Promise<void> }> {
+): Promise<{ close(): Promise<void>; fullyStarted?: Promise<void> }> {
   const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
   const venueDir = resolveConfigDir(env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
   const log = createLogger(

@@ -31,8 +31,10 @@ export interface WaitingStartDeps {
   nodeId: string;
   environment: DeploymentEnvironment;
   readMembership: () => Promise<SignedMembershipDocument | null>;
-  /** The names the page gives the boxes this one waits for. */
-  waitingFor: readonly string[];
+  /** The boxes this one waits for, as the check that began the wait named them. */
+  waitingOn: readonly string[];
+  /** The page's name for each box, or `null` where it has none. */
+  namesOf: (ids: readonly string[]) => Promise<readonly (string | null)[]>;
   /** The peer routes, mounted on the waiting start's own app. */
   routes: ((app: Hono, hooks: WaitingHooks) => void)[];
   node: NodeDatabase;
@@ -81,7 +83,8 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     },
     log,
   );
-  waitingPageRoute(deps.waitingFor)(app);
+  let waitingOn = deps.waitingOn;
+  waitingPageRoute(() => deps.namesOf(waitingOn))(app);
 
   let resolveEnd: (end: WaitEnd) => void = () => {};
   const ended = new Promise<WaitEnd>((resolve) => (resolveEnd = resolve));
@@ -90,6 +93,8 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   // written never continues the start the stepdown is about to restart.
   let steppingDown = false;
   let timer: NodeJS.Timeout | undefined;
+  // The store stays open until a re-ask that is reading or saving through it has settled.
+  let asking: Promise<unknown> = Promise.resolve();
 
   const leave = async (end: WaitEnd): Promise<void> => {
     if (leaving) return;
@@ -100,8 +105,10 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     } catch (error) {
       log("warn", "waiting_start.close_failed", { errorCode: codeOf(error) });
     }
-    if (end.kind === "stopped") await deps.closeStore();
-    else deps.health.takesNoSales = false;
+    if (end.kind === "stopped") {
+      await asking;
+      await deps.closeStore();
+    } else deps.health.takesNoSales = false;
     resolveEnd(end);
   };
 
@@ -129,8 +136,10 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
 
   const ask = async (): Promise<void> => {
     let outcome: StartPeerCheckOutcome | null = null;
+    const pending = deps.recheck();
+    asking = pending.catch(() => {});
     try {
-      outcome = await deps.recheck();
+      outcome = await pending;
     } catch (error) {
       log("warn", "waiting_start.recheck_failed", { errorCode: codeOf(error) });
     }
@@ -139,13 +148,14 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
       await leave({ kind: "checked", outcome });
       return;
     }
+    if (outcome?.waitingOn !== undefined) waitingOn = outcome.waitingOn;
     timer = setTimeout(() => void ask(), deps.intervalMs);
   };
 
   deps.health.takesNoSales = true;
   const listeners = deps.listen(app);
   timer = setTimeout(() => void ask(), deps.intervalMs);
-  log("info", "waiting_start.waiting", { waitingFor: deps.waitingFor });
+  log("info", "waiting_start.waiting", { waitingOn });
 
   return {
     server: {
