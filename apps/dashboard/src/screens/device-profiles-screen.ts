@@ -55,6 +55,7 @@ import type {
   PersonSummary,
   Printer,
   ProfileEquipmentDefaults,
+  ProfileKitchenScreen,
   ProfileKitchenScreens,
   ProfilePrinterLists,
   ProfileReaderList,
@@ -202,8 +203,9 @@ const KITCHEN_LIST_FIELDS: readonly EditorField[] = KITCHEN_SCREEN_KINDS.flatMap
 });
 
 /**
- * The screens as compared for "changed": ids in any order, and on a till or handheld a station or
- * pass screen on every station and every zone left out, since having no row means the same there.
+ * The screens as compared for "changed": ids in any order, other stations' dishes shown left out
+ * since an entry without the value shows them, and on a till or handheld a station or pass screen
+ * on every station and every zone showing them left out, since having no row means the same there.
  */
 function comparableScreens(
   screens: ProfileKitchenScreens,
@@ -213,11 +215,19 @@ function comparableScreens(
   for (const kind of KITCHEN_SCREEN_KINDS) {
     const scope = screens[kind];
     if (scope === undefined) continue;
-    if (ordering && kind !== "pass_monitor" && scope.stationIds === null && scope.zoneIds === null)
+    const hides = scope.showNonPassStations === false;
+    if (
+      ordering &&
+      kind !== "pass_monitor" &&
+      scope.stationIds === null &&
+      scope.zoneIds === null &&
+      !hides
+    )
       continue;
     out[kind] = {
       stationIds: scope.stationIds === null ? null : [...scope.stationIds].sort(),
       zoneIds: scope.zoneIds === null ? null : [...scope.zoneIds].sort(),
+      ...(hides ? { showNonPassStations: false } : {}),
     };
   }
   return out;
@@ -235,7 +245,7 @@ function switchedOnScreens(
     if (scope === undefined) continue;
     const stationIds = scope.stationIds === null ? null : scope.stationIds.filter(stationOn);
     const zoneIds = scope.zoneIds === null ? null : scope.zoneIds.filter(zoneOn);
-    out[kind] = { stationIds, zoneIds };
+    out[kind] = { ...scope, stationIds, zoneIds };
   }
   return out;
 }
@@ -752,6 +762,9 @@ export class DeviceProfilesScreen extends LitElement {
           : typeof params.reason === "string"
             ? FIELD_BY_REASON[params.reason]
             : undefined;
+    else if (code === "management.request_invalid" && params.field === "kitchenScreens")
+      // Only a dashboard bug sends a malformed entry, so no field of the form can mend it.
+      field = undefined;
     else if (
       code === "management.request_invalid" ||
       code === "device_profile.access_invalid" ||
@@ -1314,11 +1327,11 @@ export class DeviceProfilesScreen extends LitElement {
   }
 
   /** A kind with no row reads as every station and every zone, which is what it means on a till. */
-  #scopeOf(kind: KitchenScreenKind): KitchenScreenScope {
+  #scopeOf(kind: KitchenScreenKind): ProfileKitchenScreen {
     return this.draftKitchenScreens[kind] ?? EVERY;
   }
 
-  #setScreen(kind: KitchenScreenKind, scope: KitchenScreenScope | undefined): void {
+  #setScreen(kind: KitchenScreenKind, scope: ProfileKitchenScreen | undefined): void {
     const next = { ...this.draftKitchenScreens };
     if (scope === undefined) delete next[kind];
     else next[kind] = scope;
@@ -1352,6 +1365,11 @@ export class DeviceProfilesScreen extends LitElement {
       ? null
       : this.scopeChoices.zones.filter((zone) => zone.active).map((zone) => zone.id);
     this.#setScreen(kind, { ...this.#scopeOf(kind), zoneIds });
+  }
+
+  #onShowOtherStations(event: CustomEvent<{ checked: boolean }>, kind: KitchenScreenKind): void {
+    event.stopPropagation();
+    this.#setScreen(kind, { ...this.#scopeOf(kind), showNonPassStations: event.detail.checked });
   }
 
   #onListed(
@@ -2033,6 +2051,18 @@ export class DeviceProfilesScreen extends LitElement {
               "zone",
               t("device_profiles.kitchen_zones"),
             )
+      }
+      ${
+        kind === "station"
+          ? nothing
+          : html`<wt-switch
+              data-test="profile-${slug}-other-stations"
+              name="showNonPassStations"
+              label=${t("device_profiles.show_other_stations")}
+              .checked=${scope.showNonPassStations ?? true}
+              @wt-change=${(e: CustomEvent<{ checked: boolean }>) =>
+                this.#onShowOtherStations(e, kind)}
+            ></wt-switch>`
       }
     </div>`;
   }

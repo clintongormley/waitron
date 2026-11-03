@@ -929,7 +929,13 @@ export interface KitchenScreenScope {
  * kinds listed; on a till or handheld a missing station or pass screen bounds nothing, while a pass
  * monitor is offered only when listed.
  */
-export type ProfileKitchenScreens = Partial<Record<KitchenScreenKind, KitchenScreenScope>>;
+export type ProfileKitchenScreens = Partial<Record<KitchenScreenKind, ProfileKitchenScreen>>;
+
+/** A pass or pass monitor entry carries whether the pass shows other stations' dishes; absent on
+ * a write keeps what is stored, or true for a new entry. A station entry never carries it. */
+export interface ProfileKitchenScreen extends KitchenScreenScope {
+  showNonPassStations?: boolean;
+}
 
 export interface DeviceKitchenScreen extends KitchenScreenScope {
   kind: KitchenScreenKind;

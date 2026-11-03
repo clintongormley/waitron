@@ -657,6 +657,34 @@ describe("the device profile editor's Save", () => {
     expect(await state(el)).toEqual(quiet);
   });
 
+  it("on a kitchen profile, wakes on the pass monitor's other-stations switch, quiets when it is back, and sends it inside that entry", async () => {
+    const { el, api } = await openEdit("p2");
+    expect(checked(el, "profile-pass-monitor-other-stations")).toBe(true);
+    expect(await state(el)).toEqual(quiet);
+    await change(el, "profile-pass-monitor-other-stations", false);
+    expect(await state(el)).toEqual(ready);
+    await change(el, "profile-pass-monitor-other-stations", true);
+    expect(await state(el)).toEqual(quiet);
+    await change(el, "profile-pass-monitor-other-stations", false);
+    await press(el);
+    expect(vi.mocked(api.updateDeviceProfile).mock.calls[0]![6]).toEqual({
+      kitchenScreens: {
+        station: { stationIds: ["s1"], zoneIds: null },
+        pass_monitor: { stationIds: null, zoneIds: null, showNonPassStations: false },
+      },
+    });
+  });
+
+  it("on a till, wakes on the pass screen's other-stations switch and goes quiet when it is back on", async () => {
+    const { el } = await openEdit();
+    await change(el, "cap-show-expo", true);
+    await change(el, "profile-pass-screen-other-stations", false);
+    expect(await state(el)).toEqual(ready);
+    await change(el, "profile-pass-screen-other-stations", true);
+    await change(el, "cap-show-expo", false);
+    expect(await state(el)).toEqual(quiet);
+  });
+
   it("sends nothing and marks nothing when an untouched Save's host is clicked", async () => {
     const { el, api } = await openEdit();
     save(el).click();
