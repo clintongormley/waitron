@@ -1842,14 +1842,9 @@ const partyOrder: StationQueueGroup = {
 };
 
 describe("till-station-queue — a seated party's groups", () => {
-  const groupsIn = (el: TillStationQueue, state: string) =>
-    [
-      ...el
-        .shadowRoot!.querySelector(`[data-column="${state}"]`)!
-        .querySelectorAll<HTMLElement>("[data-card]"),
-    ].map((card) => card.dataset.cardGroup);
-  const card = (el: TillStationQueue, group: string) =>
-    el.shadowRoot!.querySelector<HTMLElement>(`[data-card][data-card-group="${group}"]`)!;
+  const cards = (el: TillStationQueue) => [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-card]"),
+  ];
 
   it("keeps permanent heading numbers when firing positions change", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
@@ -1875,10 +1870,8 @@ describe("till-station-queue — a seated party's groups", () => {
       stationId: "st-1",
       ...{ fireControl: "kitchen" },
     });
-    expect(groupsIn(el, "held")).toEqual(["g-4", "g-3"]);
-    expect(groupsIn(el, "queued")).toEqual(["none"]);
-    expect(groupsIn(el, "preparing")).toEqual(["g-2"]);
-    expect(card(el, "g-4").querySelector(".ticket-head")!.textContent).toContain(
+    expect(cards(el).map((c) => c.dataset.cardGroup)).toEqual(["none", "g-4", "g-3", "g-2"]);
+    expect(cards(el)[1]!.querySelector(".ticket-head")!.textContent).toContain(
       `${t("table.group_n").replace("{n}", "4")} · Terrace 7`,
     );
     expect(el.shadowRoot!.querySelector('[data-fire-group="g-4"]')).toBeNull();
@@ -1889,10 +1882,8 @@ describe("till-station-queue — a seated party's groups", () => {
       groups: [partyOrder],
       stationId: "st-1",
     });
-    expect(groupsIn(el, "held")).toEqual(["g-3", "g-4"]);
-    expect(groupsIn(el, "queued")).toEqual(["none"]);
-    expect(groupsIn(el, "preparing")).toEqual(["g-2"]);
-    const [moved, held, fired] = [card(el, "none"), card(el, "g-3"), card(el, "g-2")];
+    expect(cards(el).map((c) => c.dataset.cardGroup)).toEqual(["none", "g-3", "g-4", "g-2"]);
+    const [moved, held, , fired] = cards(el);
     expect(moved!.querySelector(".group-name")).toBeNull();
     expect(moved!.querySelector('[data-item="it-moved"]')).not.toBeNull();
     expect(fired!.querySelector(".ticket-head")!.textContent).toContain(
@@ -1912,10 +1903,7 @@ describe("till-station-queue — a seated party's groups", () => {
       groups: [partyOrder],
       stationId: "st-1",
     });
-    const held = el
-      .shadowRoot!.querySelector('[data-column="held"]')!
-      .querySelector<HTMLElement>('[data-card][data-card-group="g-3"]');
-    const fired = card(el, "g-2");
+    const [, held, , fired] = cards(el);
     expect(held!.querySelector("[data-group-held]")!.textContent).toContain(
       t("station.group_held"),
     );
@@ -2924,7 +2912,7 @@ describe("the board's cards", () => {
     );
   });
 
-  it("draws a held group's card dashed in Held, with no minutes", async () => {
+  it("draws a held group's card dashed in Waiting, with no minutes", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [
         bill("wo-1", 5, [
@@ -2937,12 +2925,9 @@ describe("the board's cards", () => {
       stationId: "st-1",
       now: Date.parse("2026-08-17T10:07:00.000Z"),
     });
-    const groupsIn = (state: string) =>
-      cardsIn(column(el, state)).map((card) => card.dataset.cardGroup);
-    expect(groupsIn("queued")).toEqual(["g-4"]);
-    expect(groupsIn("held")).toEqual(["g-3"]);
-    const [mixed] = cardsIn(column(el, "queued"));
-    const [held] = cardsIn(column(el, "held"));
+    const cards = cardsIn(column(el, "queued"));
+    expect(cards.map((card) => card.dataset.cardGroup)).toEqual(["g-4", "g-3"]);
+    const [mixed, held] = cards;
     expect(held!.classList.contains("held")).toBe(true);
     expect(getComputedStyle(held!).borderTopStyle).toBe("dashed");
     expect(held!.querySelector(".age")).toBeNull();
@@ -2968,11 +2953,9 @@ describe("the board's cards", () => {
       stationId: "st-1",
       now: Date.parse("2026-08-17T10:07:00.000Z"),
     });
-    const waiting = cardsIn(column(el, "queued"));
-    expect(waiting.map((card) => card.dataset.cardGroup)).toEqual(["g-3"]);
-    const [mixed] = waiting;
-    const held = cardsIn(column(el, "held"));
-    expect(held.map((card) => card.dataset.cardGroup)).toEqual(["g-2", "none"]);
+    const cards = cardsIn(column(el, "queued"));
+    expect(cards.map((card) => card.dataset.cardGroup)).toEqual(["g-3", "g-2", "none"]);
+    const [mixed, ...held] = cards;
     for (const card of held) {
       expect(card.classList.contains("held")).toBe(true);
       expect(card.querySelector("[data-card-head]")).toBeNull();
@@ -3178,8 +3161,7 @@ describe("the board's cards", () => {
       ],
       stationId: "st-1",
     });
-    const [mixed] = cardsIn(column(el, "queued"));
-    const [held] = cardsIn(column(el, "held"));
+    const [mixed, held] = cardsIn(column(el, "queued"));
     expect(mixed!.dataset.cardGroup).toBe("g-1");
     expect(flat(stateWord(mixed!, "kept-back")!)).toBe(t("station.group_held"));
     expect(mixed!.querySelector('button[data-item="kept-back"]')).toBeNull();
@@ -3233,7 +3215,11 @@ describe("the board's cards", () => {
           },
         ],
         stationId: "st-1",
-        columns: { order: [...STATION_COLUMNS.order], hidden, collapsed: [] },
+        columns: {
+          order: [...STATION_COLUMNS.order],
+          hidden: [...STATION_COLUMNS.hidden, ...hidden],
+          collapsed: [],
+        },
       });
       // The station screen's own padding, inside the page's.
       host.style.paddingInline = "var(--wt-space-4)";
@@ -3989,7 +3975,7 @@ describe("the board's columns", () => {
       groups,
       stationId: "st-1",
       columns: {
-        order: ["overview", "held", "waiting", "preparing", "ready"],
+        order: ["overview", "toFire", "waiting", "preparing", "ready"],
         hidden: [],
         collapsed: [],
       },
@@ -4007,13 +3993,8 @@ describe("the board's columns", () => {
       ],
       stationId: "st-1",
     });
-    expect(cardsIn(column(el, "queued"))).toHaveLength(1);
-    expect(flat(column(el, "queued").querySelector("[data-column-count]")!)).toBe("1");
-    expect(cardsIn(column(el, "held"))).toHaveLength(1);
-    expect(flat(column(el, "held").querySelector("[data-column-count]")!)).toBe("1");
-    expect(column(el, "held").querySelector(".column-title")!.textContent).toBe(
-      t("pass.column.held"),
-    );
+    expect(cardsIn(column(el, "queued"))).toHaveLength(2);
+    expect(flat(column(el, "queued").querySelector("[data-column-count]")!)).toBe("2");
     expect(flat(column(el, "preparing").querySelector("[data-column-count]")!)).toBe("0");
     expect(column(el, "queued").querySelector(".column-title")!.textContent).toBe(
       t("station.state.queued"),
@@ -4116,7 +4097,7 @@ describe("the board's columns", () => {
 
 describe("the Overview column", () => {
   const withOverview = {
-    order: ["overview", "held", "waiting", "preparing", "ready"],
+    order: ["overview", "waiting", "preparing", "ready"],
     hidden: [],
     collapsed: [],
   } as const;
@@ -4605,16 +4586,12 @@ describe("the board's narrow tabs", () => {
     const previousLocale = currentLocale();
     setLocale("es-ES");
     try {
-      const { el } = await mountBoard(
-        { ...layout(), order: ["overview", "held", "waiting", "preparing", "ready"] },
-        scene,
-      );
+      const { el } = await mountBoard(layout(), scene);
       const text = (button: HTMLElement) => button.textContent!.replace(/\s+/g, " ").trim();
       expect(t("station.overview")).not.toBe(english.overview);
       expect(t("station.state.queued")).not.toBe(english.waiting);
       expect(text(tabs(el)[0]!)).toBe(`${t("station.overview")} · 4`);
-      expect(text(tab(el, "waiting"))).toBe(`${t("station.state.queued")} · 2`);
-      expect(text(tab(el, "held"))).toBe(`${t("pass.column.held")} · 2`);
+      expect(text(tab(el, "waiting"))).toBe(`${t("station.state.queued")} · 4`);
     } finally {
       setLocale(previousLocale);
     }
@@ -4734,7 +4711,7 @@ describe("the board's header row and hidden columns", () => {
     expect(asked[0]!.detail.opener).toBe(columnsButton(el));
     expect(el.columns).toBe(columns);
     expect(columns).toEqual({
-      order: ["overview", "held", "waiting", "preparing", "ready"],
+      order: ["overview", "waiting", "waitingOnly", "held", "preparing", "ready"],
       hidden: [],
       collapsed: [],
     });
@@ -4774,8 +4751,9 @@ describe("the board's header row and hidden columns", () => {
     expect(STATION_COLUMNS.order.every((key) => names.has(key))).toBe(true);
     expect([...names]).toEqual([
       ["overview", t("station.overview")],
+      ["waiting", t("station.columns_waiting_held")],
+      ["waitingOnly", t("station.state.queued")],
       ["held", t("pass.column.held")],
-      ["waiting", t("station.state.queued")],
       ["preparing", t("station.state.preparing")],
       ["ready", t("station.state.ready")],
     ]);
@@ -4865,12 +4843,10 @@ describe("the late bar", () => {
 
   it("the late bar: Overview's tab and a held card's column never carry it", async () => {
     await pageAt(390, 844);
-    const { el } = await mountBoard(
-      { order: [...STATION_COLUMNS.order], hidden: [], collapsed: [] },
-      [ageBill(5, [ageDish("held-dish", 0, { firedAt: null })])],
-    );
+    const { el } = await mountBoard(layout(), [
+      ageBill(5, [ageDish("held-dish", 0, { firedAt: null })]),
+    ]);
     expect(shadow(el).querySelector("[data-column-tabs]")).not.toBeNull();
-    expect(shadow(el).querySelector('[data-column-tab="held"]')).not.toBeNull();
     expect(marked(el)).toEqual([]);
   });
 
@@ -5072,14 +5048,11 @@ describe("A773 held column", () => {
     ageBill(2, [requestedDish("asked-1", 4)]),
     ageBill(3, [ageDish("sent-1", 18), heldDish("kept-1", 18)]),
   ];
-  const released = () => [
-    ageBill(1, [ageDish("held-1", 3, { group: { ...heldGroup, state: "fired" } })]),
-  ];
   const mountBoard = (
     groups: StationQueueGroup[],
     columns: { order: ColumnKey[]; hidden: ColumnKey[]; collapsed: ColumnKey[] } = {
       order: [...STATION_COLUMNS.order],
-      hidden: [],
+      hidden: [...STATION_COLUMNS.hidden],
       collapsed: [],
     },
   ) =>
@@ -5089,6 +5062,11 @@ describe("A773 held column", () => {
       now: AGE_NOW,
       columns,
     });
+  const APART: { order: ColumnKey[]; hidden: ColumnKey[]; collapsed: ColumnKey[] } = {
+    order: ["overview", "held", "waitingOnly", "preparing", "ready"],
+    hidden: [],
+    collapsed: [],
+  };
   const shadow = (el: TillStationQueue) => el.shadowRoot!;
   const column = (el: TillStationQueue, name: string) =>
     shadow(el).querySelector<HTMLElement>(`[data-column="${name}"]`);
@@ -5108,11 +5086,25 @@ describe("A773 held column", () => {
     shadow(el).querySelector<HTMLButtonElement>(`[data-column-tab="${key}"]`);
   const flat = (node: Element) => node.textContent!.replace(/\s+/g, " ").trim();
 
-  it("draws a held card and a Requested card in Held, dashed and untimed; a card with a released dish stays in its column", async () => {
+  it("by default draws held cards in Waiting after the timed ones, dashed and untimed, with no Held or separate Waiting column", async () => {
     const { el } = await mountBoard(scene());
-    expect(drawn(el)).toEqual(["overview", "held", "queued", "preparing", "ready"]);
+    expect(drawn(el)).toEqual(["overview", "queued", "preparing", "ready"]);
+    expect(ordersIn(el, "queued")).toEqual(["3", "1", "2"]);
+    for (const order of ["1", "2"]) {
+      const card = column(el, "queued")!.querySelector<HTMLElement>(`[data-order="${order}"]`)!;
+      expect(card.classList.contains("held")).toBe(true);
+      expect(getComputedStyle(card).borderTopStyle).toBe("dashed");
+      expect(card.querySelector(".age")).toBeNull();
+    }
+    expect(column(el, "held")).toBeNull();
+    expect(column(el, "waiting-only")).toBeNull();
+  });
+
+  it("draws a held card and a Requested card in Held, dashed and untimed; a card with a released dish stays in its column", async () => {
+    const { el } = await mountBoard(scene(), APART);
+    expect(drawn(el)).toEqual(["overview", "held", "waiting-only", "preparing", "ready"]);
     expect(ordersIn(el, "held")).toEqual(["1", "2"]);
-    expect(ordersIn(el, "queued")).toEqual(["3"]);
+    expect(ordersIn(el, "waiting-only")).toEqual(["3"]);
     for (const card of column(el, "held")!.querySelectorAll<HTMLElement>("[data-card]")) {
       expect(card.classList.contains("held")).toBe(true);
       expect(getComputedStyle(card).borderTopStyle).toBe("dashed");
@@ -5125,10 +5117,10 @@ describe("A773 held column", () => {
 
   it("narrow tabs: Held has its tab in the layout's order with its count, and shows the held cards", async () => {
     await pageAt(390, 844);
-    const { el } = await mountBoard(scene());
-    expect(tabKeys(el)).toEqual(["overview", "held", "waiting", "preparing", "ready"]);
+    const { el } = await mountBoard(scene(), APART);
+    expect(tabKeys(el)).toEqual(["overview", "held", "waitingOnly", "preparing", "ready"]);
     expect(flat(tab(el, "held")!)).toBe(`${t("pass.column.held")} · 2`);
-    expect(flat(tab(el, "waiting")!)).toBe(`${t("station.state.queued")} · 1`);
+    expect(flat(tab(el, "waitingOnly")!)).toBe(`${t("station.state.queued")} · 1`);
     await userEvent.click(tab(el, "held")!);
     await el.updateComplete;
     const panel = shadow(el).querySelector<HTMLElement>("[data-tab-panel]")!;
@@ -5139,100 +5131,22 @@ describe("A773 held column", () => {
     ).toEqual(["1", "2"]);
   });
 
-  it("draws Held only while it holds a card, and a chosen Held tab moves to the first when it goes", async () => {
-    const wide = await mountBoard(released());
-    expect(column(wide.el, "held")).toBeNull();
-    expect(drawn(wide.el)).toEqual(["overview", "queued", "preparing", "ready"]);
-    wide.el.groups = scene();
-    await wide.el.updateComplete;
-    expect(column(wide.el, "held")).not.toBeNull();
-    cleanupWidgets();
-
-    await pageAt(390, 844);
-    const { el } = await mountBoard(scene());
-    await userEvent.click(tab(el, "held")!);
-    await el.updateComplete;
-    expect(tab(el, "held")!.getAttribute("aria-pressed")).toBe("true");
-    el.groups = released();
-    await el.updateComplete;
-    expect(tab(el, "held")).toBeNull();
-    expect(tabKeys(el)).toEqual(["overview", "waiting", "preparing", "ready"]);
-    expect(tab(el, "overview")!.getAttribute("aria-pressed")).toBe("true");
-    expect(shadow(el).querySelector<HTMLElement>("[data-tab-panel]")!.dataset.tabPanel).toBe(
-      "overview",
-    );
-  });
-
-  it("at a 1024 px station display a held card turns the board into tabs, and its release brings the columns back", async () => {
-    await pageAt(1024, 844);
-    const { el, host } = await mountBoard(scene());
-    // The station screen's own padding, inside the page's.
-    host.style.paddingInline = "var(--wt-space-4)";
-    el.requestUpdate();
-    await el.updateComplete;
-    expect(el.getBoundingClientRect().width).toBe(944);
-    expect(shadow(el).querySelector("[data-column-tabs]")).not.toBeNull();
-    expect(shadow(el).querySelector(".kanban")).toBeNull();
-    el.groups = released();
-    await el.updateComplete;
-    expect(shadow(el).querySelector(".kanban")).not.toBeNull();
-    expect(shadow(el).querySelector("[data-column-tabs]")).toBeNull();
-  });
-
-  it("at a 1024 px station display a focused heading keeps the focus as a held card turns the board to tabs and back", async () => {
-    await pageAt(1024, 844);
-    const { el, host } = await mountBoard(released());
-    host.style.paddingInline = "var(--wt-space-4)";
-    el.requestUpdate();
-    await el.updateComplete;
-    const heading = (key: string) =>
-      shadow(el).querySelector<HTMLButtonElement>(`[data-column-toggle="${key}"]`);
-    heading("waiting")!.focus();
-
-    el.groups = scene();
-    await el.updateComplete;
-    expect(shadow(el).querySelector("[data-column-tabs]")).not.toBeNull();
-    expect(shadow(el).activeElement).toBe(tab(el, "waiting"));
-
-    el.groups = released();
-    await el.updateComplete;
-    expect(shadow(el).querySelector(".kanban")).not.toBeNull();
-    expect(shadow(el).activeElement).toBe(heading("waiting"));
-
-    el.groups = scene();
-    await el.updateComplete;
-    tab(el, "held")!.focus();
-    el.groups = released();
-    await el.updateComplete;
-    expect(heading("held")).toBeNull();
-    expect(shadow(el).activeElement).toBe(heading("overview"));
-  });
-
   it("a hidden Held draws neither the held cards nor a Held tab, and the Columns window still lists it", async () => {
     const hidden = {
-      order: [...STATION_COLUMNS.order],
+      order: [...APART.order],
       hidden: ["held" as ColumnKey],
       collapsed: [],
     };
     const wide = await mountBoard(scene(), hidden);
-    expect(drawn(wide.el)).toEqual(["overview", "queued", "preparing", "ready"]);
+    expect(drawn(wide.el)).toEqual(["overview", "waiting-only", "preparing", "ready"]);
     expect(shadow(wide.el).querySelector('[data-order="1"]')).toBeNull();
     expect(shadow(wide.el).querySelector('[data-order="2"]')).toBeNull();
     cleanupWidgets();
 
     await pageAt(390, 844);
     const { el } = await mountBoard(scene(), hidden);
-    expect(tabKeys(el)).toEqual(["overview", "waiting", "preparing", "ready"]);
+    expect(tabKeys(el)).toEqual(["overview", "waitingOnly", "preparing", "ready"]);
     expect(stationColumnNames().get("held")).toBe(t("pass.column.held"));
-  });
-
-  it("leaves out a saved column it cannot draw", async () => {
-    const { el } = await mountBoard(scene(), {
-      order: ["overview", "held", "toFire", "waiting", "preparing", "ready"],
-      hidden: [],
-      collapsed: [],
-    });
-    expect(drawn(el)).toEqual(["overview", "held", "queued", "preparing", "ready"]);
   });
 
   // A requested group's card, a card mixing a requested and a held dish, and a released card
@@ -5259,15 +5173,15 @@ describe("A773 held column", () => {
     shadow(el).querySelector(`[data-item="${id}"] .line-state`)?.textContent?.trim();
 
   it("a card in Held says Waiting for the pass when every dish on it is Requested, else Held, not released", async () => {
-    const { el } = await mountBoard(wordsScene());
+    const { el } = await mountBoard(wordsScene(), APART);
     expect(ordersIn(el, "held")).toEqual(["1", "2"]);
     expect(note(el, 1)).toBe(t("pass.waiting_for_pass"));
     expect(note(el, 2)).toBe(t("station.group_held"));
   });
 
   it("on a released card a Requested dish says Waiting for the pass and a held one Held, not released; a dish in Held says nothing", async () => {
-    const { el } = await mountBoard(wordsScene());
-    expect(ordersIn(el, "queued")).toEqual(["3"]);
+    const { el } = await mountBoard(wordsScene(), APART);
+    expect(ordersIn(el, "waiting-only")).toEqual(["3"]);
     expect(lineWord(el, "line-asked")).toBe(t("pass.waiting_for_pass"));
     expect(lineWord(el, "line-kept")).toBe(t("station.group_held"));
     expect(lineWord(el, "sent")).toBeUndefined();
@@ -5278,7 +5192,7 @@ describe("A773 held column", () => {
   });
 
   it("Overview counts a Requested dish after the +, as it counts a held one", async () => {
-    const { el } = await mountBoard([ageBill(1, [asked("asked-a", "Squid")])]);
+    const { el } = await mountBoard([ageBill(1, [asked("asked-a", "Squid")])], APART);
     const row = shadow(el).querySelector<HTMLElement>("[data-overview-row]")!;
     expect(row.querySelector("[data-overview-making]")?.textContent?.trim() ?? "0").toBe("0");
     expect(row.querySelector("[data-overview-held]")!.textContent!.trim()).toBe("+1");
@@ -5288,7 +5202,7 @@ describe("A773 held column", () => {
     const previousLocale = currentLocale();
     setLocale("es");
     try {
-      const { el } = await mountBoard(wordsScene());
+      const { el } = await mountBoard(wordsScene(), APART);
       expect(column(el, "held")!.querySelector(".column-title")!.textContent).toBe(
         es["pass.column.held"],
       );
@@ -5309,7 +5223,7 @@ describe("A773 held column", () => {
       const previousLocale = currentLocale();
       setLocale(lang);
       try {
-        const { el } = await mountBoard(wordsScene());
+        const { el } = await mountBoard(wordsScene(), APART);
         setHelpMode(true);
         await el.updateComplete;
         const cards = [...shadow(el).querySelectorAll<HTMLElement>("[data-card]")];

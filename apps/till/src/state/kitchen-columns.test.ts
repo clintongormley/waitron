@@ -48,8 +48,8 @@ describe("A773 columns state: the device's kitchen columns", () => {
     const storage = fakeStorage();
     const state = readColumnState(storage, scope, STATION_COLUMNS);
     expect(state).toEqual({
-      order: ["overview", "held", "waiting", "preparing", "ready"],
-      hidden: [],
+      order: ["overview", "waiting", "waitingOnly", "held", "preparing", "ready"],
+      hidden: ["waitingOnly", "held"],
       collapsed: [],
     });
     expect(state).toEqual(STATION_COLUMNS);
@@ -62,7 +62,7 @@ describe("A773 columns state: the device's kitchen columns", () => {
     const storage = fakeStorage();
     const saved: ColumnState = {
       ...readyCollapsed,
-      order: ["overview", "held", "waiting", "preparing", "ready"],
+      order: ["overview", "waiting", "waitingOnly", "held", "preparing", "ready"],
     };
     saveColumnState(storage, scope, saved);
     expect(readColumnState(storage, scope, STATION_COLUMNS)).toEqual(saved);
@@ -340,15 +340,20 @@ describe("A773 held column", () => {
     return readColumnState(storage, scope, STATION_COLUMNS);
   };
 
-  it("gives a layout saved before Held the Held column right after Overview, shown", () => {
+  it("reads a saved layout with the new columns hidden after the column they follow", () => {
     expect(savedOrder(["overview", "waiting", "preparing", "ready"])).toEqual({
-      order: ["overview", "held", "waiting", "preparing", "ready"],
-      hidden: [],
+      order: ["overview", "waiting", "waitingOnly", "held", "preparing", "ready"],
+      hidden: ["waitingOnly", "held"],
       collapsed: [],
     });
     expect(savedOrder(["waiting", "preparing", "ready", "overview"])).toEqual({
-      order: ["waiting", "preparing", "ready", "overview", "held"],
-      hidden: [],
+      order: ["waiting", "waitingOnly", "held", "preparing", "ready", "overview"],
+      hidden: ["waitingOnly", "held"],
+      collapsed: [],
+    });
+    expect(savedOrder(["overview", "held", "waiting", "preparing", "ready"])).toEqual({
+      order: ["overview", "held", "waiting", "waitingOnly", "preparing", "ready"],
+      hidden: ["waitingOnly"],
       collapsed: [],
     });
   });

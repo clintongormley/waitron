@@ -1,5 +1,5 @@
 export type ColumnKey =
-  "overview" | "held" | "toFire" | "inProgress" | "ready" | "waiting" | "preparing";
+  "overview" | "held" | "toFire" | "inProgress" | "ready" | "waiting" | "waitingOnly" | "preparing";
 
 export interface ColumnScope {
   venueId: string;
@@ -15,8 +15,8 @@ export interface ColumnState {
 }
 
 export const STATION_COLUMNS: ColumnState = {
-  order: ["overview", "held", "waiting", "preparing", "ready"],
-  hidden: [],
+  order: ["overview", "waiting", "waitingOnly", "held", "preparing", "ready"],
+  hidden: ["waitingOnly", "held"],
   collapsed: [],
 };
 

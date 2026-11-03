@@ -80,31 +80,44 @@ const COLUMNS: readonly TicketState[] = ["queued", "preparing", "ready"];
 
 interface DrawnColumn {
   /** The section's `data-column`. */
-  column: TicketState | "held";
+  column: TicketState | "held" | "waiting-only";
   title: () => string;
+  /** The Columns window's name, which tells the combined Waiting from the separate one. */
+  name: () => string;
   holds: (card: KitchenCard) => boolean;
 }
 
-/** A card with no released dish is Held's, so Waiting holds only cards with a released dish (D78). */
+/** Keyed in the Columns window's order. `waiting` keeps held cards (D94), which sort after the
+ * timed ones; `waitingOnly` and `held` split it apart. */
 const DRAWN: Partial<Record<ColumnKey, DrawnColumn>> = {
-  held: {
-    column: "held",
-    title: () => t("pass.column.held"),
-    holds: (card) => card.since === null,
-  },
   waiting: {
     column: "queued",
     title: () => t("station.state.queued"),
+    name: () => t("station.columns_waiting_held"),
+    holds: (card) => card.column === "queued",
+  },
+  waitingOnly: {
+    column: "waiting-only",
+    title: () => t("station.state.queued"),
+    name: () => t("station.state.queued"),
     holds: (card) => card.column === "queued" && card.since !== null,
+  },
+  held: {
+    column: "held",
+    title: () => t("pass.column.held"),
+    name: () => t("pass.column.held"),
+    holds: (card) => card.since === null,
   },
   preparing: {
     column: "preparing",
     title: () => t("station.state.preparing"),
+    name: () => t("station.state.preparing"),
     holds: (card) => card.column === "preparing",
   },
   ready: {
     column: "ready",
     title: () => t("station.state.ready"),
+    name: () => t("station.state.ready"),
     holds: (card) => card.column === "ready",
   },
 };
@@ -115,7 +128,7 @@ export type { MergedQueueGroup } from "../state/kitchen-cards.js";
 export function stationColumnNames(): Map<ColumnKey, string> {
   return new Map([
     ["overview", t("station.overview")],
-    ...Object.entries(DRAWN).map(([key, drawn]) => [key as ColumnKey, drawn.title()] as const),
+    ...Object.entries(DRAWN).map(([key, drawn]) => [key as ColumnKey, drawn.name()] as const),
   ]);
 }
 
@@ -773,14 +786,11 @@ export class TillStationQueue extends LitElement {
     this.#refocus = undefined;
   }
 
-  /** The columns this board can draw that are not hidden, in the layout's order; Held only while
-   * it holds a card (D93). The fit, the tabs and the columns all read this one list. */
+  /** The columns this board can draw that are not hidden, in the layout's order. */
   #shown(): ColumnKey[] {
-    const holdsHeld = this.#cards.some((card) => card.since === null);
     return this.columns.order.filter(
       (key) =>
-        (key === "overview" || (DRAWN[key] !== undefined && (key !== "held" || holdsHeld))) &&
-        !this.columns.hidden.includes(key),
+        (key === "overview" || DRAWN[key] !== undefined) && !this.columns.hidden.includes(key),
     );
   }
 

@@ -41,13 +41,14 @@ function heard<T>(el: Element, name: string): T[] {
 describe("the Columns window", () => {
   it("lists the columns it has names for, in the layout's order, numbered", async () => {
     const { el } = await mount({
-      layout: layout({ order: ["ready", "held", "toFire", "waiting", "preparing"] }),
+      layout: layout({ order: ["ready", "held", "toFire", "waitingOnly", "waiting", "preparing"] }),
     });
     expect(rows(el)).toEqual([
       ["1", t("station.state.ready")],
       ["2", t("pass.column.held")],
       ["3", t("station.state.queued")],
-      ["4", t("station.state.preparing")],
+      ["4", t("station.columns_waiting_held")],
+      ["5", t("station.state.preparing")],
     ]);
   });
 
@@ -76,7 +77,7 @@ describe("the Columns window", () => {
     await el.updateComplete;
     expect(rows(el).map(([, name]) => name)).toEqual([
       t("station.state.ready"),
-      t("station.state.queued"),
+      t("station.columns_waiting_held"),
       t("station.state.preparing"),
     ]);
   });

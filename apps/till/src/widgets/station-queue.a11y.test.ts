@@ -537,7 +537,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
         ],
         stationId: "st-1",
         columns: {
-          order: ["overview", "held", "waiting", "preparing", "ready"],
+          order: ["overview", "waiting", "preparing", "ready"],
           hidden: [],
           collapsed: [],
         },
