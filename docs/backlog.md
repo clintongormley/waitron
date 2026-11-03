@@ -4314,7 +4314,13 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **A1315. Bring every help bubble down to orientation, one area per PR** (dashboard, till, setup,
   server pages; English and Spanish). The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients):
   read the code a bubble describes first, move each dropped fact into its linked guide section, and
-  list every changed text before and after.
+  list every changed text before and after. Setup is done (A1315 PR 2); the setup app has no guide
+  links, so its bubbles drop only what the screen itself shows when people try.
+
+- **The setup venue screen keeps an operation-description field it never shows.** `#shows` in
+  `apps/setup/src/screens/venue-screen.ts` leaves `operationDescription` out, so its help string
+  `venue.help.operation_description` (EN and ES) is never displayed; say whether the field and its
+  strings should go (A1315 PR 2 shortened the string rather than widen its scope).
 
 - **`wt-combobox` without a search box never exposes `aria-required`**
   [Detail](backlog/dashboard.md#wt-combobox-without-a-search-box-never-exposes-aria-required)
