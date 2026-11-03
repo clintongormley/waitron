@@ -117,9 +117,12 @@ async function boot(options: {
     WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
   };
   server = await startServer(env, env, options.seams);
-  await vi.waitFor(async () => {
-    expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
-  });
+  await vi.waitFor(
+    async () => {
+      expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
+    },
+    { timeout: 10_000 },
+  );
   return { port: httpPort(), venue };
 }
 

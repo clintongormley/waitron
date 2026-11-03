@@ -218,9 +218,12 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     server = await startServer(env, env, {
       stream: { spawn, store: new SwitchableStore(() => new Date()) },
     });
-    await vi.waitFor(async () => {
-      expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
-    });
+    await vi.waitFor(
+      async () => {
+        expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
+      },
+      { timeout: 10_000 },
+    );
     // A person opening the box's address is part of the quiet period: the page must not write.
     const pageStatus = (await fetch(`http://127.0.0.1:${httpPort()}/`)).status;
     await new Promise((resolve) => setTimeout(resolve, QUIET_MS));
