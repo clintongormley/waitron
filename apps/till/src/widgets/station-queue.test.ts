@@ -5048,6 +5048,9 @@ describe("A773 held column", () => {
     ageBill(2, [requestedDish("asked-1", 4)]),
     ageBill(3, [ageDish("sent-1", 18), heldDish("kept-1", 18)]),
   ];
+  const released = () => [
+    ageBill(1, [ageDish("held-1", 3, { group: { ...heldGroup, state: "fired" } })]),
+  ];
   const mountBoard = (
     groups: StationQueueGroup[],
     columns: { order: ColumnKey[]; hidden: ColumnKey[]; collapsed: ColumnKey[] } = {
@@ -5113,6 +5116,15 @@ describe("A773 held column", () => {
     expect(column(el, "held")!.querySelector(".column-title")!.textContent).toBe(
       t("pass.column.held"),
     );
+    expect(column(el, "waiting-only")!.querySelector(".column-title")!.textContent).toBe(
+      t("station.state.queued"),
+    );
+    cleanupWidgets();
+
+    const empty = await mountBoard(released(), APART);
+    expect(drawn(empty.el)).toEqual(["overview", "held", "waiting-only", "preparing", "ready"]);
+    expect(flat(column(empty.el, "held")!.querySelector("[data-column-count]")!)).toBe("0");
+    expect(ordersIn(empty.el, "held")).toEqual([]);
   });
 
   it("narrow tabs: Held has its tab in the layout's order with its count, and shows the held cards", async () => {
@@ -5129,6 +5141,11 @@ describe("A773 held column", () => {
     expect(
       [...panel.querySelectorAll<HTMLElement>("[data-card]")].map((card) => card.dataset.order),
     ).toEqual(["1", "2"]);
+    cleanupWidgets();
+
+    const byDefault = await mountBoard(scene());
+    expect(tabKeys(byDefault.el)).toEqual(["overview", "waiting", "preparing", "ready"]);
+    expect(flat(tab(byDefault.el, "waiting")!)).toBe(`${t("station.state.queued")} · 3`);
   });
 
   it("a hidden Held draws neither the held cards nor a Held tab, and the Columns window still lists it", async () => {
@@ -5146,6 +5163,9 @@ describe("A773 held column", () => {
     await pageAt(390, 844);
     const { el } = await mountBoard(scene(), hidden);
     expect(tabKeys(el)).toEqual(["overview", "waitingOnly", "preparing", "ready"]);
+    expect(tab(el, "held")).toBeNull();
+    expect(shadow(el).querySelector('[data-order="1"]')).toBeNull();
+    expect(shadow(el).querySelector('[data-order="2"]')).toBeNull();
     expect(stationColumnNames().get("held")).toBe(t("pass.column.held"));
   });
 
