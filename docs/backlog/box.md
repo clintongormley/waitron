@@ -902,6 +902,11 @@ and the letters-to-bytes decoder; the public CA download and its help page; the 
 and the startup-fingerprint check before resealing; the real `cryptsetup`, observation,
 boot-mount, certificate-file and listener adapters; joining Wi-Fi; the address fallback; the four
 preboot rig cases; and the key-memory measurements.
+PR 3 left for later, from its plan's "Out": the installer's screens, words, `LEEME`, printed card
+and progress figures; typing the recovery key on the reinstall screen to see the disk's last sale
+and unsent records; the real in-memory, stick, keyboard, clock, download, write, boot and hotspot
+adapters and the `waitron-instalar.local` status page; joining Wi-Fi and staging the first Wi-Fi
+boot copy; and the source-history floor on reinstall, still gated on A1042.
 
 **For the owner: a box that already holds Waitron, with its TPM or Secure Boot switched off.**
 Should the stick start the installed box anyway, or stop and show the firmware message? Starting it
@@ -926,9 +931,9 @@ installed box's host service must notice the setting itself.
 - The spec's `deploy/waitron.sh` line numbers have moved; the recipe pull request re-reads them.
 - Slice 8's recovery-document files are gone (A1187 part 1 replaced them with the recovery pack);
   slice 8 re-maps onto `backup-recovery-pack-*.ts` and `recovery-pack-card.ts`.
-- A lone disk whose attachment is `unknown` counts as internal, so it can be the disk the installer
-  erases; and a Waitron disk whose two partition tables were both wiped reads as blank. The Linux
-  observation adapter decides how to look for an encryption header in that case.
+- A lone disk whose attachment is `unknown` counts as internal; PR 3's decisions never erase one
+  without something typed (D3). A Waitron disk whose two partition tables were both wiped reads as
+  blank; the Linux observation adapter decides how to look for an encryption header in that case.
 
 **For later slices, from PR 2's [re-map against main](../superpowers/plans/2026-11-03-b3-2-preboot-logic.md#re-map-against-main-on-2026-11-03):**
 

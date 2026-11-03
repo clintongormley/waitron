@@ -600,7 +600,7 @@ describe("events a phase does not name", () => {
   });
 });
 
-describe("final phases (D14)", () => {
+describe("final phases", () => {
   it("answers every later event after refuse disk-multiple with wait and the refusal's message", () => {
     const later = [
       { kind: "tick", atMs: AT + 1 },
@@ -625,7 +625,7 @@ describe("final phases (D14)", () => {
   });
 });
 
-describe("sequence (D13)", () => {
+describe("sequence", () => {
   it("refuses a second observed after a Waitron path with sequence-invalid", () => {
     const decisions = play([
       observed(survey([completeWaitronDisk()])),
@@ -883,7 +883,7 @@ describe("the reinstall screen", () => {
   it.each([
     ['"bar santet" (case)', "bar santet"],
     ['"Bar Santet " (trailing space)', "Bar Santet "],
-    ['"ERASE-CONFIRM" with a readable name (D7)', "ERASE-CONFIRM"],
+    ['"ERASE-CONFIRM" with a readable name', "ERASE-CONFIRM"],
   ])("%s → mismatch", (_name, text) => {
     const decisions = play([waitronSeen(), key(5_000), submit(text, 6_000)]);
     expect(decisions[2]).toMatchObject({
@@ -949,7 +949,7 @@ describe("the reinstall screen", () => {
     expect(typed[2].state).toMatchObject({ phase: "loading", confirmed: "typed" });
   });
 
-  it("a long name typed decomposed (D8): 256 code points typed in 768 units → matches", () => {
+  it("a long name typed decomposed: 256 code points typed in 768 units → matches", () => {
     const typedText = "e\u0323\u0302".repeat(256);
     expect(typedText.length).toBe(768);
     const decisions = play([
@@ -960,7 +960,7 @@ describe("the reinstall screen", () => {
     expect(decisions[2].state).toMatchObject({ phase: "loading", confirmed: "typed" });
   });
 
-  it("over-long text (M5): a 513-unit submit → mismatch, and the state keeps none of it", () => {
+  it("over-long text: a 513-unit submit → mismatch, and the state keeps none of it", () => {
     const decisions = play([
       waitronSeen(null),
       key(5_000),
@@ -981,7 +981,7 @@ describe("the reinstall screen", () => {
   });
 });
 
-describe("hardware off on a box that holds Waitron (D2)", () => {
+describe("hardware off on a box that holds Waitron", () => {
   it('tpm "disabled", no key → boot-installed at 15 s, the message carries hardware "no-tpm"', () => {
     const decisions = play([waitronSeen(SANTET, { tpm: "disabled" }), tick(16_000)]);
     expect(decisions[0].message.params.hardware).toBe("no-tpm");
@@ -1077,7 +1077,7 @@ describe("the unknown disk", () => {
     expect(last(decisions).state.phase).toBe("awaiting-erase-word");
   });
 
-  it("over-long text (M5): a 513-unit submit → mismatch, and the state keeps none of it", () => {
+  it("over-long text: a 513-unit submit → mismatch, and the state keeps none of it", () => {
     const decisions = play([damagedSeen(), submit("CANARY-".padEnd(513, "x"), 2_000)]);
     expect(decisions[1]).toMatchObject({
       action: "confirm-erase",
@@ -1230,7 +1230,7 @@ describe("in memory first (Review Focus 4)", () => {
   });
 });
 
-describe("early removal (D12)", () => {
+describe("early removal", () => {
   const early = {
     key: "installer.refused",
     params: { reason: "usb-removed-early", hardware: null, releaseVersion: null },
@@ -1557,7 +1557,7 @@ describe("download outcomes (Review Focus 3)", () => {
   });
 });
 
-describe("out-of-turn adapter results (D13)", () => {
+describe("out-of-turn adapter results", () => {
   const sequenceInvalid = { reason: "sequence-invalid", hardware: null, releaseVersion: null };
 
   it("release-checked while in clock → refuse sequence-invalid", () => {
@@ -1646,7 +1646,7 @@ describe("the 60 seconds before an unattended erase", () => {
     ]);
   });
 
-  it("a key at 61500 with no tick before it (I1) → confirm-erase, erase-stopped, and no write-owned-target in the run", () => {
+  it("a key at 61500 with no tick before it → confirm-erase, erase-stopped, and no write-owned-target in the run", () => {
     const decisions = play([...TO_VERIFIED, key(61_500), tick(61_501), tick(200_000)]);
     expect(decisions[5]).toEqual({
       action: "confirm-erase",
@@ -1673,7 +1673,7 @@ describe("the 60 seconds before an unattended erase", () => {
     expect(writes(decisions)).toEqual([]);
   });
 
-  it("a second verification at 2000 (M2) → refuse sequence-invalid, and no write-owned-target in the run", () => {
+  it("a second verification at 2000 → refuse sequence-invalid, and no write-owned-target in the run", () => {
     const decisions = play([...TO_VERIFIED, released("verified", 2_000), tick(61_000)]);
     expect(decisions[5]).toMatchObject({
       action: "refuse",
@@ -1701,7 +1701,7 @@ describe("the 60 seconds before an unattended erase", () => {
     expect(decisions[6]).toMatchObject({ action: "write-owned-target", diskId: INTERNAL_ID });
   });
 
-  it("D9: clock-set with utcMs 1_900_000_000_000 at 10000, verified at 20000 → the deadline is 80000", () => {
+  it("clock-set with utcMs 1_900_000_000_000 at 10000, verified at 20000 → the deadline is 80000", () => {
     const decisions = play([
       windowsSeen(0),
       ramReady(0),
@@ -1716,7 +1716,7 @@ describe("the 60 seconds before an unattended erase", () => {
   });
 });
 
-describe("after a key stops the 60 seconds (D6)", () => {
+describe("after a key stops the 60 seconds", () => {
   const stopped = [...TO_VERIFIED, key(30_000)];
 
   it("a key at 30000 → confirm-erase, installer.erase_stopped; ticks, keys and lines to 3600000 → wait only", () => {
@@ -1776,7 +1776,7 @@ describe("after a key stops the 60 seconds (D6)", () => {
   });
 });
 
-describe("a typed confirmation erases once the download is verified (D4)", () => {
+describe("a typed confirmation erases once the download is verified", () => {
   it("unknown disk, the erase word, ram-ready, online, clock set, verified → write-owned-target at once", () => {
     const decisions = play([
       observed(survey([waitronWith(luks(damaged(), damaged()))])),
@@ -1936,7 +1936,7 @@ describe("guard 2: no final restart while the stick is in (Review Focus 4)", () 
   });
 });
 
-describe("the public status (D15)", () => {
+describe("the public status", () => {
   const stateAfter = (events) => last(play(events)).state;
 
   it("a new state → observing, nothing else", () => {
@@ -1997,7 +1997,7 @@ describe("the public status (D15)", () => {
     });
   });
 
-  it('a Waitron disk with tpm "disabled" during its 15 seconds (I2) → hardware no-tpm, no stop reason', () => {
+  it('a Waitron disk with tpm "disabled" during its 15 seconds → hardware no-tpm, no stop reason', () => {
     expect(installerStatus(stateAfter([waitronSeen(SANTET, { tpm: "disabled" })]))).toEqual({
       stage: "waitron-found",
       safeToRemove: false,
@@ -2331,13 +2331,13 @@ const RUNS = [
     unattended: true,
   },
   {
-    name: "a second verification during the 60 seconds (M2)",
+    name: "a second verification during the 60 seconds",
     ends: "refuse:sequence-invalid",
     events: [...verified(), released("verified", 2_000), tick(61_000), tick(62_000)],
     unattended: true,
   },
   {
-    name: "a key at 61500 with no tick at 61000 (I1), then install-now",
+    name: "a key at 61500 with no tick at 61000, then install-now",
     ends: "write-owned-target",
     events: [...verified(), key(61_500), tick(61_501), choice("install-now", 70_000)],
     unattended: true,

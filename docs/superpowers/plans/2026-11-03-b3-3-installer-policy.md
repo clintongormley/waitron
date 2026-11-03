@@ -119,7 +119,7 @@ The six-slice plan was written on 2026-10-26, before PR 1 and PR 2. This re-map 
 
    The first two gate the verifier; the last two are fields the same pull request must define alongside them. A partial verifier would have to invent the signature format at least. Decision D1: leave `release-list.mjs` out entirely.
 10. **The Wi-Fi network's name travels as hex.** PR 2's record format carries the network name as `ssidHex`, "1-32 bytes", because "a network name is up to 32 arbitrary bytes and need not be UTF-8" (`scripts/box/wifi-record.mjs:9`, `:22-23`). Task 6's `join-requested` event uses the same `ssidHex` rule.
-11. **Spec line numbers used here, checked by reading on 2026-11-03:** the order of steps, lines 210–222; guard 1, 226–232; guard 2, 233–239; guard 3, 240–269; §5.2, 273–292; §5.3, 296–323; §5.4, 327–349; §5.5, 353–355; §5.6, 359–369; §7.6, 849–857; §7.7, 861–877.
+11. **Spec line numbers used here, checked by reading on 2026-11-03** (before this branch added its two-line dated pointer at the spec's top; add 2 for the spec as merged): the order of steps, lines 210–222; guard 1, 226–232; guard 2, 233–239; guard 3, 240–269; §5.2, 273–292; §5.3, 296–323; §5.4, 327–349; §5.5, 353–355; §5.6, 359–369; §7.6, 849–857; §7.7, 861–877.
 
 ### Decisions where the parent plan or spec left a choice
 
@@ -563,7 +563,7 @@ export function networkStatus(state);
     - slice 3's host service raises an alert on an installed box whose TPM or Secure Boot is off (D2's other half);
     - the Linux pull request's translation file sets the erase word (the spec's «BORRAR») passed as `eraseWord`, which is one word for both the Spanish and the English screen: a different English word would need the policy's option to change (for example, to a list of accepted words), not only the translation file (D7); it also supplies the disk's model and size for the 60-second message;
     - the name tag's format sets the real length limit for a usable venue name (D8's 256 code points is a placeholder);
-    - decisions recorded for review: a lone disk of unknown attachment needs the erase word (D3); a Waitron disk with a foreign encrypted partition is never erased unattended (D18); typed confirmations are compared exactly after NFC (D7).
+    - decisions recorded for review: a lone blank or Windows disk of unknown attachment needs the erase word (D3); a Waitron disk with a foreign encrypted partition is never erased unattended (D18); a typed venue name is compared after NFC normalisation, and the erase word exactly as typed (D7).
 - [ ] **Step 3: Pointers.** At the top of the spec and of the six-slice plan, above the 2026-11-03 PR 2 line, add: `> 2026-11-03: PR 3's plan (the installer's decisions and its network fallback decisions; the signed release list deferred) and its re-map against main: [2026-11-03-b3-3-installer-policy.md](…).` Do not rewrite either historical body (CLAUDE.md §6, docs).
 - [ ] **Step 4: Guides and CLAUDE.md.** No guide changes: nothing a person sees changed. No CLAUDE.md line unless an implementing task paid for a new trap; if one did, add one line plus a pointer.
 - [ ] **Step 5: Commit** in this branch (it is not a docs-only branch): `docs(backlog): record B3's installer decisions and what still waits for the release list and Linux`.

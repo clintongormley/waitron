@@ -1,6 +1,6 @@
 import { exactRecord, safeInteger } from "./upgrades/contracts.mjs";
 
-/** Spec §5.3 item 2 (line 300) and item 4 (line 322); joinWithin reuses the one minute (D16). The spec's calls, not separately the owner's. */
+/** Spec §5.3 items 2 and 4; joinWithin reuses the one minute. The spec's calls, not separately the owner's. */
 export const NETWORK_TIMINGS_MS = Object.freeze({
   hotspotAfter: 60_000,
   retryEvery: 60_000,

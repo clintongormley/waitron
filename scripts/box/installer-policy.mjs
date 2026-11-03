@@ -1,7 +1,7 @@
 import { classifyDisk } from "./disk-state.mjs";
 import { exactRecord, safeInteger } from "./upgrades/contracts.mjs";
 
-/** Spec §5.1 guard 3 (line 247), §5.1 (lines 264-266), §5.2 (lines 276-279), §5.3 item 4 (line 322). The spec's calls, not separately the owner's. */
+/** Spec §5.1 guard 3, §5.2 and §5.3 item 4. The spec's calls, not separately the owner's. */
 export const INSTALLER_TIMINGS_MS = Object.freeze({
   waitronStart: 15_000,
   reinstallIdle: 120_000,
@@ -10,7 +10,7 @@ export const INSTALLER_TIMINGS_MS = Object.freeze({
 });
 
 /**
- * @typedef {{ name: string, live: boolean }} VenueTag  decoded from the frozen internal disk's name tag; display only (spec §7.6)
+ * @typedef {{ name: string, live: boolean }} VenueTag  decoded from the frozen internal disk's name tag (spec §7.6)
  * @typedef {'observing'|'refused'|'waitron-found'|'reinstall-screen'|'awaiting-erase-word'|'loading'|'network'
  *   |'clock'|'clock-retry'|'downloading'|'download-retry'|'erase-countdown'|'erase-stopped'|'writing'
  *   |'remove-usb'|'booting'|'powering-off'} InstallerPhase
@@ -27,7 +27,7 @@ export const INSTALLER_TIMINGS_MS = Object.freeze({
  * @property {boolean} clockSet
  * @property {number|null} deadlineMs
  * @property {null|{reason:string, hardware:'no-tpm'|'secure-boot-off'|null, releaseVersion:string|null}} refusal
- * @property {{key:string, params:object}} message  the last message, repeated by final phases (D14)
+ * @property {{key:string, params:object}} message  the last message, repeated by final phases
  * @typedef {'wait'|'find-network'|'set-clock'|'download'|'confirm-erase'|'write-owned-target'|'boot-installed'|'power-off'|'refuse'} InstallerAction
  * @typedef {object} InstallerDecision  frozen
  * @property {InstallerAction} action
@@ -296,13 +296,13 @@ function reinstallScreen(state, atMs, mismatch) {
   });
 }
 
-/** M5. @param {string} text @returns {string|null} the NFC text, or null when it is too long */
+/** @param {string} text @returns {string|null} the NFC text, or null when it is too long */
 function typedFits(text) {
   const normalised = text.normalize("NFC");
   return normalised.length <= MAX_TYPED_UNITS ? normalised : null;
 }
 
-/** D7. The text is compared and dropped. @param {InstallerState} state @param {string} text */
+/** The text is compared and dropped. @param {InstallerState} state @param {string} text */
 function typedMatches(state, text) {
   const normalised = typedFits(text);
   if (normalised === null) return false;
@@ -317,7 +317,7 @@ function typedConfirmation(state) {
   return enterLoading(state, { confirmed: "typed" });
 }
 
-/** D10, D11. @param {InstallerState} state @param {number} atMs @param {'clock-retry'|'download-retry'} phase */
+/** @param {InstallerState} state @param {number} atMs @param {'clock-retry'|'download-retry'} phase */
 function retryLater(state, atMs, phase) {
   return decide(state, "wait", {
     phase,
@@ -488,12 +488,12 @@ export function nextInstallerStep(state, event) {
 }
 
 /**
- * @typedef {object} InstallerStatus  frozen; what the public status page may show (spec §5.6, D15)
+ * @typedef {object} InstallerStatus  frozen; what the public status page may show (spec §5.6)
  * @property {InstallerPhase} stage
  * @property {boolean} safeToRemove  ramReady and a confirmed path, until a final phase
  * @property {string|null} stopReason
- * @property {'no-tpm'|'secure-boot-off'|null} hardware  from the refusal or the target (D2)
- * @property {string|null} releaseVersion  for installer-too-old only (M12)
+ * @property {'no-tpm'|'secure-boot-off'|null} hardware  from the refusal or the target
+ * @property {string|null} releaseVersion  for installer-too-old only
  */
 
 /** Pure. The page is open to anyone on the network: no disk id, venue name or typed text. @param {unknown} state @returns {InstallerStatus} */
