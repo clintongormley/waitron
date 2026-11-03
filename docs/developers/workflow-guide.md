@@ -328,7 +328,7 @@ pins rather than a comment asserting it (``never names a code `boot-failure.ts` 
 version-mismatch failure — a database NEWER than the image, not older — does not reach this line at
 all: it throws `provisioning.database_ahead`, an `AppError` with no engine result code, and its
 operator text deliberately never suggests wiping anything ("Restore it from a backup, or
-reinstall", `apps/server/src/recovery-surface.ts` — owner decision 2026-09-10, because a real
+reinstall", `apps/server/src/i18n/recovery-page.ts` — owner decision 2026-09-10, because a real
 venue's fiscal records cannot be re-created).
 
 The print agent's dev launcher treats the inherited `WAITRON_STATE_DIR` as the server's box state
