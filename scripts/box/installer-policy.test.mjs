@@ -589,7 +589,8 @@ describe("events a phase does not name", () => {
       ["wait", true, true],
       ["wait", true, false],
     ]);
-    const [removed, inserted] = play([
+    const [, removed, inserted] = play([
+      { kind: "ram-ready", atMs: AT },
       { kind: "usb-removed", atMs: AT },
       { kind: "usb-inserted", atMs: AT },
     ]);
@@ -769,6 +770,19 @@ describe("guard 3: a box that already holds Waitron", () => {
     });
   });
 
+  it.each([16_000, 16_500])(
+    "a submit at %i with no tick before it → confirm-erase, reinstall-screen",
+    (atMs) => {
+      const decisions = play([waitronSeen(), submit("x", atMs)]);
+      expect(decisions[1]).toMatchObject({
+        action: "confirm-erase",
+        deadlineMs: atMs + 120_000,
+        message: reinstallMessage(),
+        state: { phase: "reinstall-screen", confirmed: null },
+      });
+    },
+  );
+
   it("ignores a choice in the 15 seconds", () => {
     const decisions = play([waitronSeen(), { kind: "choice", atMs: 2_000, choice: "install-now" }]);
     expect(decisions[1]).toMatchObject({ action: "wait", state: { phase: "waitron-found" } });
@@ -802,6 +816,31 @@ describe("the reinstall screen", () => {
       ["wait", 246_000],
       ["wait", 246_000],
     ]);
+  });
+
+  it("a correct name submitted after the idle deadline but before the tick is accepted", () => {
+    const decisions = play([
+      waitronSeen(),
+      key(5_000),
+      submit("Bar Santet", 126_000),
+      tick(126_001),
+    ]);
+    expect(decisions[2]).toMatchObject({
+      action: "wait",
+      message: LOADING,
+      state: { phase: "loading", confirmed: "typed", deadlineMs: null },
+    });
+    expect(decisions[3]).toMatchObject({ action: "wait", state: { phase: "loading" } });
+  });
+
+  it("a key after a mismatching submit keeps mismatch true in the message", () => {
+    const decisions = play([waitronSeen(), key(5_000), submit("nope", 6_000), key(7_000)]);
+    expect(decisions[3]).toMatchObject({
+      action: "wait",
+      deadlineMs: 127_000,
+      message: reinstallMessage({ mismatch: true }),
+      state: { phase: "reinstall-screen", message: reinstallMessage({ mismatch: true }) },
+    });
   });
 
   it('a scanner\'s line "8412345678905" submitted on the screen → mismatch true, no erase path', () => {
@@ -854,9 +893,9 @@ describe("the reinstall screen", () => {
 
   it("the name typed with a decomposed accent when the tag holds the composed one → matches", () => {
     const decisions = play([
-      waitronSeen({ name: "Bar Àngels", live: false }),
+      waitronSeen({ name: "Bar \u00C0ngels", live: false }),
       key(5_000),
-      submit("Bar Àngels", 6_000),
+      submit("Bar A\u0300ngels", 6_000),
     ]);
     expect(decisions[2].state).toMatchObject({ phase: "loading", confirmed: "typed" });
   });
@@ -896,7 +935,7 @@ describe("the reinstall screen", () => {
   );
 
   it("a long accented name: waitron_found carries the whole name, no key boots, typed exactly it confirms", () => {
-    const name = "À".repeat(30) + " " + "é".repeat(29);
+    const name = "\u00C0".repeat(30) + " " + "\u00E9".repeat(29);
     const venueTag = { name, live: true };
     const alone = play([waitronSeen(venueTag), tick(16_000)]);
     expect(alone[0].message.params.venueName).toBe(name);
@@ -909,10 +948,10 @@ describe("the reinstall screen", () => {
   });
 
   it("a long name typed decomposed (D8): 256 code points typed in 768 units → matches", () => {
-    const typedText = "ệ".repeat(256);
+    const typedText = "e\u0323\u0302".repeat(256);
     expect(typedText.length).toBe(768);
     const decisions = play([
-      waitronSeen({ name: "ệ".repeat(256), live: true }),
+      waitronSeen({ name: "\u1EC7".repeat(256), live: true }),
       key(5_000),
       submit(typedText, 6_000),
     ]);
@@ -1011,6 +1050,14 @@ describe("the unknown disk", () => {
     });
   });
 
+  it("compares the erase word exactly: a decomposed spelling of an accented word does not confirm", () => {
+    const options = { ...OPTIONS, eraseWord: "ERASÉ" };
+    const decomposed = play([damagedSeen(), submit("ERASÉ", 2_000)], options);
+    expect(decomposed[1].state).toMatchObject({ phase: "awaiting-erase-word", confirmed: null });
+    const exact = play([damagedSeen(), submit("ERASÉ", 2_000)], options);
+    expect(exact[1].state).toMatchObject({ phase: "loading", confirmed: "typed" });
+  });
+
   it("keeps attachmentUnclear in the mismatch message", () => {
     const decisions = play([
       observed(survey([blankDisk({ attachment: "unknown" })])),
@@ -1035,5 +1082,459 @@ describe("the unknown disk", () => {
       message: { key: "installer.unknown_disk", params: { mismatch: true } },
     });
     expect(JSON.stringify(decisions[1].state)).not.toContain("CANARY");
+  });
+});
+
+const FLOOR = OPTIONS.clockFloorMs;
+const ramReady = (atMs) => ({ kind: "ram-ready", atMs });
+const usbRemoved = (atMs) => ({ kind: "usb-removed", atMs });
+const online = (atMs) => ({ kind: "online", atMs });
+const clockSet = (ok, utcMs, atMs) => ({ kind: "clock-set", atMs, ok, utcMs });
+const released = (outcome, atMs, releaseVersion = null) => ({
+  kind: "release-checked",
+  atMs,
+  outcome,
+  releaseVersion,
+});
+const windowsSeen = (atMs = AT) => observed(survey([windowsDisk()]), null, atMs);
+const SAFE_TO_REMOVE = { key: "installer.safe_to_remove", params: {} };
+const SETTING_CLOCK = { key: "installer.setting_clock", params: {} };
+const DOWNLOADING = { key: "installer.downloading", params: {} };
+const FINDING_NETWORK = { key: "installer.finding_network", params: {} };
+const CLOCK_RETRY = { key: "installer.clock_retry", params: { seconds: 60 } };
+const DOWNLOAD_RETRY = { key: "installer.download_retry", params: { seconds: 60 } };
+const TO_DOWNLOADING = [
+  windowsSeen(),
+  ramReady(2_000),
+  online(3_000),
+  clockSet(true, FLOOR, 4_000),
+];
+const windowsState = (overrides) => ({
+  ...loading("windows").state,
+  ramReady: true,
+  ...overrides,
+});
+const messageKeys = (decisions) => decisions.map((d) => d.message.key);
+
+describe("in memory first (Review Focus 4)", () => {
+  it("Windows disk observed at 0, no ram-ready, ticks to 600000 → only wait, and installer.safe_to_remove never appears", () => {
+    const ticks = Array.from({ length: 60 }, (_, i) => tick((i + 1) * 10_000));
+    const decisions = play([windowsSeen(0), ...ticks]);
+    expect(decisions.every((d) => d.action === "wait")).toBe(true);
+    expect(messageKeys(decisions)).not.toContain("installer.safe_to_remove");
+    expect(last(decisions).state.phase).toBe("loading");
+  });
+
+  it("ram-ready at 3000 → find-network with installer.safe_to_remove", () => {
+    const decisions = play([windowsSeen(), ramReady(3_000)]);
+    expect(decisions[1]).toEqual({
+      action: "find-network",
+      diskId: null,
+      message: SAFE_TO_REMOVE,
+      deadlineMs: null,
+      state: windowsState({ phase: "network", atMs: 3_000, message: SAFE_TO_REMOVE }),
+    });
+  });
+
+  it("ram-ready at 0, then Windows observed at 1000 → find-network at once", () => {
+    const decisions = play([ramReady(0), windowsSeen()]);
+    expect(decisions[0]).toMatchObject({ action: "wait", state: { phase: "observing" } });
+    expect(decisions[1]).toEqual({
+      action: "find-network",
+      diskId: null,
+      message: SAFE_TO_REMOVE,
+      deadlineMs: null,
+      state: windowsState({ phase: "network", message: SAFE_TO_REMOVE }),
+    });
+  });
+
+  it("a repeated ram-ready changes nothing", () => {
+    const decisions = play([windowsSeen(), ramReady(2_000), ramReady(3_000)]);
+    expect(decisions[2]).toEqual({
+      ...decisions[1],
+      action: "wait",
+      state: { ...decisions[1].state, atMs: 3_000 },
+    });
+  });
+
+  it("a Waitron disk with ram-ready → no installer.safe_to_remove before a typed confirmation", () => {
+    const decisions = play([
+      waitronSeen(),
+      ramReady(2_000),
+      key(5_000),
+      submit("nope", 6_000),
+      tick(7_000),
+    ]);
+    expect(decisions[1]).toMatchObject({
+      action: "wait",
+      state: { phase: "waitron-found", ramReady: true },
+    });
+    expect(messageKeys(decisions)).not.toContain("installer.safe_to_remove");
+    noWriteNorNetwork(decisions);
+  });
+
+  it("after the venue name is typed → find-network with installer.safe_to_remove", () => {
+    const decisions = play([
+      waitronSeen(),
+      ramReady(2_000),
+      key(5_000),
+      submit("Bar Santet", 6_000),
+    ]);
+    expect(decisions[3]).toEqual({
+      action: "find-network",
+      diskId: null,
+      message: SAFE_TO_REMOVE,
+      deadlineMs: null,
+      state: {
+        ...waitronFound({ venueTag: SANTET }).state,
+        phase: "network",
+        atMs: 6_000,
+        ramReady: true,
+        confirmed: "typed",
+        deadlineMs: null,
+        message: SAFE_TO_REMOVE,
+      },
+    });
+  });
+
+  it("an unknown disk with ram-ready → find-network once the erase word is typed", () => {
+    const decisions = play([
+      observed(survey([foreignLuksDisk()])),
+      ramReady(2_000),
+      submit("ERASE-CONFIRM", 3_000),
+    ]);
+    expect(decisions[1]).toMatchObject({
+      action: "wait",
+      state: { phase: "awaiting-erase-word" },
+    });
+    expect(decisions[2]).toMatchObject({
+      action: "find-network",
+      message: SAFE_TO_REMOVE,
+      state: { phase: "network", confirmed: "typed" },
+    });
+  });
+
+  it("a refused box (two disks) with ram-ready → never installer.safe_to_remove", () => {
+    const second = disk({ diskId: SECOND_ID });
+    for (const events of [
+      [ramReady(0), observed(survey([windowsDisk(), second]))],
+      [observed(survey([windowsDisk(), second])), ramReady(2_000), online(3_000)],
+    ]) {
+      const decisions = play(events);
+      expect(messageKeys(decisions)).not.toContain("installer.safe_to_remove");
+      expect(last(decisions).state.refusal.reason).toBe("disk-multiple");
+      noWriteNorNetwork(decisions);
+    }
+  });
+});
+
+describe("early removal (D12)", () => {
+  const early = {
+    key: "installer.refused",
+    params: { reason: "usb-removed-early", hardware: null, releaseVersion: null },
+  };
+
+  it("usb-removed before ram-ready on the Windows path → refuse usb-removed-early", () => {
+    const decisions = play([windowsSeen(), usbRemoved(2_000), ramReady(3_000), online(4_000)]);
+    expect(decisions[1]).toEqual({
+      action: "refuse",
+      diskId: null,
+      message: early,
+      deadlineMs: null,
+      state: {
+        ...loading("windows").state,
+        phase: "refused",
+        atMs: 2_000,
+        refusal: early.params,
+        message: early,
+      },
+    });
+    expect(decisions.slice(2).map((d) => d.action)).toEqual(["wait", "wait"]);
+  });
+
+  it("the same on the Waitron path during the 15 seconds → refuse usb-removed-early, and no boot-installed follows", () => {
+    const decisions = play([waitronSeen(), usbRemoved(2_000), tick(16_000), tick(200_000)]);
+    expect(decisions[1]).toMatchObject({
+      action: "refuse",
+      message: early,
+      state: { phase: "refused" },
+    });
+    expect(decisions.slice(2).map((d) => d.action)).toEqual(["wait", "wait"]);
+  });
+
+  it("usb-removed before the survey → refuse usb-removed-early", () => {
+    expect(play([usbRemoved(AT)])[0]).toMatchObject({ action: "refuse", message: early });
+  });
+
+  it("usb-removed after ram-ready → wait, and the run continues to set-clock on online", () => {
+    const decisions = play([windowsSeen(), ramReady(2_000), usbRemoved(3_000), online(4_000)]);
+    expect(decisions[2]).toEqual({
+      action: "wait",
+      diskId: null,
+      message: SAFE_TO_REMOVE,
+      deadlineMs: null,
+      state: windowsState({
+        phase: "network",
+        atMs: 3_000,
+        usbPresent: false,
+        message: SAFE_TO_REMOVE,
+      }),
+    });
+    expect(decisions[3]).toMatchObject({
+      action: "set-clock",
+      state: { phase: "clock", usbPresent: false },
+    });
+  });
+});
+
+describe("the clock before the download", () => {
+  it("online → set-clock, never download first", () => {
+    const decisions = play([windowsSeen(), ramReady(2_000), online(3_000)]);
+    expect(decisions[2]).toEqual({
+      action: "set-clock",
+      diskId: null,
+      message: SETTING_CLOCK,
+      deadlineMs: null,
+      state: windowsState({ phase: "clock", atMs: 3_000, message: SETTING_CLOCK }),
+    });
+  });
+
+  it("clock-set ok with utcMs equal to the floor → download", () => {
+    const decisions = play(TO_DOWNLOADING);
+    expect(decisions[3]).toEqual({
+      action: "download",
+      diskId: null,
+      message: DOWNLOADING,
+      deadlineMs: null,
+      state: windowsState({
+        phase: "downloading",
+        atMs: 4_000,
+        clockSet: true,
+        message: DOWNLOADING,
+      }),
+    });
+  });
+
+  it("utcMs one below the floor → clock-retry", () => {
+    const decisions = play([
+      windowsSeen(),
+      ramReady(2_000),
+      online(3_000),
+      clockSet(true, FLOOR - 1, 4_000),
+    ]);
+    expect(decisions[3]).toEqual({
+      action: "wait",
+      diskId: null,
+      message: CLOCK_RETRY,
+      deadlineMs: 64_000,
+      state: windowsState({
+        phase: "clock-retry",
+        atMs: 4_000,
+        deadlineMs: 64_000,
+        message: CLOCK_RETRY,
+      }),
+    });
+  });
+
+  it("clock-set ok: false at 10000 → wait with deadline 70000; tick at 70000 → find-network; online → set-clock again", () => {
+    const decisions = play([
+      windowsSeen(),
+      ramReady(2_000),
+      online(3_000),
+      clockSet(false, null, 10_000),
+      tick(69_999),
+      tick(70_000),
+      online(71_000),
+    ]);
+    expect(decisions.slice(3).map((d) => [d.action, d.deadlineMs, d.state.phase])).toEqual([
+      ["wait", 70_000, "clock-retry"],
+      ["wait", 70_000, "clock-retry"],
+      ["find-network", null, "network"],
+      ["set-clock", null, "clock"],
+    ]);
+    expect(decisions[3].message).toEqual(CLOCK_RETRY);
+    expect(decisions[5]).toEqual({
+      action: "find-network",
+      diskId: null,
+      message: FINDING_NETWORK,
+      deadlineMs: null,
+      state: windowsState({ phase: "network", atMs: 70_000, message: FINDING_NETWORK }),
+    });
+  });
+
+  it("once the clock is set, a later online goes straight to download", () => {
+    const decisions = play([
+      ...TO_DOWNLOADING,
+      released("unavailable", 5_000),
+      tick(65_000),
+      online(66_000),
+    ]);
+    expect(last(decisions)).toEqual({
+      action: "download",
+      diskId: null,
+      message: DOWNLOADING,
+      deadlineMs: null,
+      state: windowsState({
+        phase: "downloading",
+        atMs: 66_000,
+        clockSet: true,
+        message: DOWNLOADING,
+      }),
+    });
+  });
+});
+
+describe("download outcomes (Review Focus 3)", () => {
+  const later = [
+    online(31_000),
+    released("verified", 32_000),
+    tick(200_000),
+    ramReady(200_001),
+    usbRemoved(200_002),
+    key(200_003),
+    { kind: "write-finished", atMs: 200_004, ok: true },
+  ];
+
+  it.each([
+    ["signature", "release-signature"],
+    ["checksum", "release-checksum"],
+    ["too-large", "release-too-large"],
+  ])("%s → refuse %s, and every later event answers wait", (outcome, reason) => {
+    const decisions = play([...TO_DOWNLOADING, released(outcome, 30_000), ...later]);
+    const refusal = { reason, hardware: null, releaseVersion: null };
+    const message = { key: "installer.refused", params: refusal };
+    expect(decisions[4]).toEqual({
+      action: "refuse",
+      diskId: null,
+      message,
+      deadlineMs: null,
+      state: windowsState({ phase: "refused", atMs: 30_000, clockSet: true, refusal, message }),
+    });
+    expect(
+      decisions.slice(5).every((d) => d.action === "wait" && d.message === decisions[4].message),
+    ).toBe(true);
+    expect(decisions.map((d) => d.action)).not.toContain("write-owned-target");
+  });
+
+  it('installer-too-old with releaseVersion "1.4.0" → the refusal\'s params carry "1.4.0"', () => {
+    const decisions = play([...TO_DOWNLOADING, released("installer-too-old", 30_000, "1.4.0")]);
+    const refusal = { reason: "installer-too-old", hardware: null, releaseVersion: "1.4.0" };
+    expect(decisions[4]).toMatchObject({
+      action: "refuse",
+      message: { key: "installer.refused", params: refusal },
+      state: { phase: "refused", refusal },
+    });
+  });
+
+  it.each(["unavailable", "truncated"])(
+    "%s at 30000 → deadline 90000, then find-network at 90000",
+    (outcome) => {
+      const decisions = play([
+        ...TO_DOWNLOADING,
+        released(outcome, 30_000),
+        tick(89_999),
+        tick(90_000),
+      ]);
+      expect(decisions[4]).toEqual({
+        action: "wait",
+        diskId: null,
+        message: DOWNLOAD_RETRY,
+        deadlineMs: 90_000,
+        state: windowsState({
+          phase: "download-retry",
+          atMs: 30_000,
+          clockSet: true,
+          deadlineMs: 90_000,
+          message: DOWNLOAD_RETRY,
+        }),
+      });
+      expect(decisions.slice(5).map((d) => [d.action, d.state.phase, d.message.key])).toEqual([
+        ["wait", "download-retry", "installer.download_retry"],
+        ["find-network", "network", "installer.finding_network"],
+      ]);
+    },
+  );
+
+  it("no fallback: after signature, a further online or release-checked verified answers wait", () => {
+    const decisions = play([
+      ...TO_DOWNLOADING,
+      released("signature", 30_000),
+      online(31_000),
+      released("verified", 32_000),
+    ]);
+    expect(decisions.slice(5).map((d) => d.action)).toEqual(["wait", "wait"]);
+    expect(decisions.slice(4).map((d) => d.action)).not.toContain("download");
+    expect(decisions.map((d) => d.action)).not.toContain("write-owned-target");
+  });
+
+  it("until Task 4's rule replaces it, verified answers wait and stays downloading", () => {
+    const decisions = play([...TO_DOWNLOADING, released("verified", 30_000)]);
+    expect(decisions[4]).toMatchObject({ action: "wait", state: { phase: "downloading" } });
+  });
+
+  it("a key or a tick while finding the network or setting the clock answers wait", () => {
+    const decisions = play([
+      windowsSeen(),
+      ramReady(2_000),
+      key(2_500),
+      tick(2_600),
+      online(3_000),
+      key(3_500),
+      tick(3_600),
+    ]);
+    expect(decisions.slice(2).map((d) => [d.action, d.state.phase])).toEqual([
+      ["wait", "network"],
+      ["wait", "network"],
+      ["set-clock", "clock"],
+      ["wait", "clock"],
+      ["wait", "clock"],
+    ]);
+  });
+
+  it("a person's key, line or choice while downloading answers wait", () => {
+    const decisions = play([
+      ...TO_DOWNLOADING,
+      key(5_000),
+      submit("ERASE-CONFIRM", 6_000),
+      { kind: "choice", atMs: 7_000, choice: "install-now" },
+    ]);
+    expect(decisions.slice(4).map((d) => [d.action, d.state.phase])).toEqual([
+      ["wait", "downloading"],
+      ["wait", "downloading"],
+      ["wait", "downloading"],
+    ]);
+  });
+});
+
+describe("out-of-turn adapter results (D13)", () => {
+  const sequenceInvalid = { reason: "sequence-invalid", hardware: null, releaseVersion: null };
+
+  it("release-checked while in clock → refuse sequence-invalid", () => {
+    const decisions = play([
+      windowsSeen(),
+      ramReady(2_000),
+      online(3_000),
+      released("verified", 4_000),
+    ]);
+    expect(decisions[3]).toMatchObject({
+      action: "refuse",
+      state: { phase: "refused", refusal: sequenceInvalid },
+    });
+  });
+
+  it("write-finished while in downloading → refuse sequence-invalid", () => {
+    const decisions = play([...TO_DOWNLOADING, { kind: "write-finished", atMs: 5_000, ok: true }]);
+    expect(decisions[4]).toMatchObject({
+      action: "refuse",
+      state: { phase: "refused", refusal: sequenceInvalid },
+    });
+  });
+
+  it("online while in waitron-found → refuse sequence-invalid", () => {
+    const decisions = play([waitronSeen(), online(2_000)]);
+    expect(decisions[1]).toMatchObject({
+      action: "refuse",
+      state: { phase: "refused", refusal: sequenceInvalid },
+    });
   });
 });

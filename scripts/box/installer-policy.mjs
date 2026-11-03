@@ -161,9 +161,12 @@ function decide(state, action, changes = {}) {
   });
 }
 
-/** @param {InstallerState} state @param {string} reason @param {string|null} hardware */
-function refuse(state, reason, hardware) {
-  const details = { reason, hardware, releaseVersion: null };
+/**
+ * @param {InstallerState} state @param {string} reason @param {string|null} hardware
+ * @param {string|null} [releaseVersion]
+ */
+function refuse(state, reason, hardware, releaseVersion = null) {
+  const details = { reason, hardware, releaseVersion };
   return decide(state, "refuse", {
     phase: "refused",
     deadlineMs: null,
@@ -223,10 +226,22 @@ function observe(state, event) {
       target,
       message: message("installer.unknown_disk", { attachmentUnclear, mismatch: false }),
     });
+  return enterLoading(state, { target, confirmed: "unattended" });
+}
+
+/** Spec §5 step 3: the stick may come out only once the installer is wholly in memory. @param {InstallerState} state @param {object} changes */
+function enterLoading(state, changes) {
+  if (state.ramReady)
+    return decide(state, "find-network", {
+      ...changes,
+      phase: "network",
+      deadlineMs: null,
+      message: message("installer.safe_to_remove"),
+    });
   return decide(state, "wait", {
+    ...changes,
     phase: "loading",
-    target,
-    confirmed: "unattended",
+    deadlineMs: null,
     message: message("installer.loading"),
   });
 }
@@ -258,25 +273,63 @@ function reinstallScreen(state, atMs, mismatch) {
   });
 }
 
-/** D7, M5. The text is compared and dropped. @param {InstallerState} state @param {string} text */
+/** M5. @param {string} text */
+const typedFits = (text) => text.normalize("NFC").length <= MAX_TYPED_UNITS;
+
+/** D7. The text is compared and dropped. @param {InstallerState} state @param {string} text */
 function typedMatches(state, text) {
-  const normalised = text.normalize("NFC");
-  if (normalised.length > MAX_TYPED_UNITS) return false;
+  if (!typedFits(text)) return false;
   const venueTag = /** @type {NonNullable<InstallerState["target"]>} */ (state.target).venueTag;
-  return venueTag === null ? text === state.eraseWord : normalised === venueTag.name;
+  return venueTag === null ? text === state.eraseWord : text.normalize("NFC") === venueTag.name;
 }
 
 /** @param {InstallerState} state */
 function typedConfirmation(state) {
   const { hardware } = /** @type {NonNullable<InstallerState["target"]>} */ (state.target);
   if (hardware !== null) return refuse(state, hardware, hardware);
+  return enterLoading(state, { confirmed: "typed" });
+}
+
+/** D10, D11. @param {InstallerState} state @param {number} atMs @param {'clock-retry'|'download-retry'} phase */
+function retryLater(state, atMs, phase) {
   return decide(state, "wait", {
-    phase: "loading",
-    confirmed: "typed",
-    deadlineMs: null,
-    message: message("installer.loading"),
+    phase,
+    deadlineMs: atMs + INSTALLER_TIMINGS_MS.retry,
+    message: message(
+      phase === "clock-retry" ? "installer.clock_retry" : "installer.download_retry",
+      {
+        seconds: INSTALLER_TIMINGS_MS.retry / 1000,
+      },
+    ),
   });
 }
+
+/** @param {InstallerState} state @param {any} event */
+function findNetworkAgain(state, event) {
+  if (event.kind !== "tick" || event.atMs < /** @type {number} */ (state.deadlineMs))
+    return undefined;
+  return decide(state, "find-network", {
+    phase: "network",
+    deadlineMs: null,
+    message: message("installer.finding_network"),
+  });
+}
+
+/** @param {InstallerState} state */
+function download(state) {
+  return decide(state, "download", {
+    phase: "downloading",
+    clockSet: true,
+    message: message("installer.downloading"),
+  });
+}
+
+const RELEASE_REFUSALS = Object.freeze({
+  signature: "release-signature",
+  checksum: "release-checksum",
+  "too-large": "release-too-large",
+  "installer-too-old": "installer-too-old",
+});
 
 /** @type {Record<string, (state: InstallerState, event: any) => InstallerDecision|undefined>} */
 const PHASE_RULES = {
@@ -302,13 +355,37 @@ const PHASE_RULES = {
   },
   "awaiting-erase-word": (state, event) => {
     if (event.kind !== "submit") return undefined;
-    if (typedMatches(state, event.text)) return typedConfirmation(state);
+    if (typedFits(event.text) && event.text === state.eraseWord) return typedConfirmation(state);
     const { attachmentUnclear } = /** @type {NonNullable<InstallerState["target"]>} */ (
       state.target
     );
     return decide(state, "confirm-erase", {
       message: message("installer.unknown_disk", { attachmentUnclear, mismatch: true }),
     });
+  },
+  network: (state, event) => {
+    if (event.kind !== "online") return undefined;
+    if (state.clockSet) return download(state);
+    return decide(state, "set-clock", {
+      phase: "clock",
+      message: message("installer.setting_clock"),
+    });
+  },
+  clock: (state, event) => {
+    if (event.kind !== "clock-set") return undefined;
+    if (event.ok && event.utcMs >= state.clockFloorMs) return download(state);
+    return retryLater(state, event.atMs, "clock-retry");
+  },
+  "clock-retry": findNetworkAgain,
+  "download-retry": findNetworkAgain,
+  downloading: (state, event) => {
+    if (event.kind !== "release-checked") return undefined;
+    const { outcome, releaseVersion } = event;
+    if (outcome === "unavailable" || outcome === "truncated")
+      return retryLater(state, event.atMs, "download-retry");
+    const reason = RELEASE_REFUSALS[/** @type {keyof typeof RELEASE_REFUSALS} */ (outcome)];
+    if (reason !== undefined) return refuse(state, reason, null, releaseVersion);
+    return undefined;
   },
 };
 
@@ -334,8 +411,14 @@ export function nextInstallerStep(state, event) {
   if (adapterPhase !== undefined && adapterPhase !== timed.phase)
     return refuse(timed, "sequence-invalid", null);
   if (e.kind === "observed") return observe(timed, e);
-  if (e.kind === "ram-ready") return decide(timed, "wait", { ramReady: true });
-  if (e.kind === "usb-removed") return decide(timed, "wait", { usbPresent: false });
+  if (e.kind === "ram-ready") {
+    const ready = makeState({ ...timed, ramReady: true });
+    return ready.phase === "loading" ? enterLoading(ready, {}) : decide(ready, "wait");
+  }
+  if (e.kind === "usb-removed")
+    return timed.ramReady
+      ? decide(timed, "wait", { usbPresent: false })
+      : refuse(timed, "usb-removed-early", null);
   if (e.kind === "usb-inserted") return decide(timed, "wait", { usbPresent: true });
   const rules = PHASE_RULES[/** @type {keyof typeof PHASE_RULES} */ (timed.phase)];
   return rules?.(timed, e) ?? decide(timed, "wait");
