@@ -1342,8 +1342,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este equipo ya ha pasado el local a otro equipo. No puede seguir como equipo principal.",
   },
   "handover.peer_unknown": {
-    en: "This server does not know the server that asked for its state, so it did not answer. Nothing was changed.",
-    es: "Este servidor no conoce al servidor que preguntó por su estado, así que no ha respondido. No se ha cambiado nada.",
+    en: "This server does not accept that request from the server that sent it, so it did not answer. Nothing was changed.",
+    es: "Este servidor no acepta esa solicitud del servidor que la ha enviado, así que no ha respondido. No se ha cambiado nada.",
   },
   "handover.not_stepped_down": {
     en: "The old box has not handed over its work in this handover, so it will not send its final copy of the venue. Nothing was changed.",

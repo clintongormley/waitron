@@ -1,7 +1,7 @@
 /**
  * A box's own state — its `node.db` tables, the `local` tables inside `venue.db`, named files in its
  * state folder, and Litestream's folder beside `venue.db` — and what the receiving box (M2) does
- * with each after a handover. One row per exact table or file name. The root guard
+ * with each after a handover. One row per table or file. The root guard
  * `scripts/handover-manifest-complete.test.ts` fails when a `node.db` or `local` table, a recovery
  * file, an optional backup file or a file behind a module's backup source has no row; other
  * state-folder files are not checked.
@@ -69,7 +69,7 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     where: "venue.db",
     class: "rebuildable",
     treatment:
-      "inside the copy; a dashboard signal deleted by the transaction that wrote it; a leftover row is delivered once on M2, harmlessly",
+      "inside the copy; a dashboard signal deleted by the transaction that wrote it; a leftover row is delivered once on M2",
   },
   {
     item: "node_sealed_state",
@@ -110,7 +110,7 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     where: "state",
     class: "transferred",
     treatment:
-      "earlier: the key ring reached M2 at joining; the indicator lists the ring's key versions and M2 refuses handover.key_ring_mismatch when it lacks one",
+      "earlier: the key ring reached M2 at joining; the indicator lists the ring's key versions",
   },
   {
     item: "trading.env",
@@ -128,21 +128,20 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     item: "backup.env",
     where: "state",
     class: "transferred",
-    treatment:
-      "compared: the indicator carries its digest; a difference waits handover.backup_settings_differ",
+    treatment: "compared: the indicator carries its digest",
   },
   {
     item: "modules.json",
     where: "state",
     class: "transferred",
-    treatment: "compared, as backup.env; M2 refuses a module set that differs",
+    treatment: "compared: the indicator carries its digest",
   },
   {
     item: "module-preparation-state.json",
     where: "state",
     class: "transferred",
     treatment:
-      "M1's retained minute selections are not in the copy, and placed as module-evidence the restore way they do not reach promotion, so the spare reuses an abandoned selection's name when its checked clock reads that minute; Task 5.7 merges M1's retained selections into M2's own file before activation (owner question open)",
+      "M1's retained minute selections are not in the copy, and placed as module-evidence the restore way they do not reach promotion, so the spare reuses an abandoned selection's name when its checked clock reads that minute",
   },
   {
     item: "module-evidence/<module>/<source>.json",

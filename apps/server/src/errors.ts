@@ -163,21 +163,28 @@ declare module "@waitron/shared" {
      * as the main box: it cannot undo a handover it knows of.
      */
     "handover.known_handover": { successorNodeId: string };
-    /** A box's signed query came from a key this box's stored keys and held chart do not vouch for. */
+    /**
+     * A box's signed query came from a key this box's stored keys and held chart do not vouch for;
+     * on the handover source routes, also a box it vouches for that is not the operation's
+     * destination.
+     */
     "handover.peer_unknown": Record<string, never>;
     /**
      * A final copy was asked of a box that has not stepped down for this operation: its
      * restriction is missing, is not a handed-over one, or names another operation, successor or
      * membership term; or this box holds no source record of the operation, or that record's
-     * binding names another operation, another source or another destination. Answered 409.
+     * binding names another operation, another source or another destination.
      */
     "handover.not_stepped_down": { operationId: string };
-    /** A box asked for the final copy of a handover operation this box holds no record of. */
+    /**
+     * A box asked for the final copy, or its indicator, of a handover operation this box holds no
+     * record of.
+     */
     "handover.operation_unknown": { operationId: string };
     /**
      * The final copy's file was missing or differed from the indicator, and a copy taken again
      * from venue.db does not match the indicator either: venue.db changed after the indicator was
-     * signed. Answered 409.
+     * signed.
      */
     "handover.final_copy_changed": { operationId: string };
     /**

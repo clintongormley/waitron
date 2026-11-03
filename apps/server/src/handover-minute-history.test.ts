@@ -315,7 +315,8 @@ it("control: one minute after both of M1's names the spare selects a fresh name"
   expect([await firstName(), encodeMinuteIdentity(later)]).not.toContain(selected.identity);
 });
 
-// Pins the measured fact behind Ruling R3, not a wanted behaviour.
+// Pins today's behaviour, not a wanted one: the manifest's module-preparation-state.json row
+// rests on it.
 it("a name M1 selected and never activated is not in the copy, and the spare without M1's file reuses it", async () => {
   const s = spareService();
   await admit(s);
@@ -349,7 +350,8 @@ it("with M1's selections in the spare's own preparation file, the spare waits pa
   );
 });
 
-// Pins the measured fact behind Ruling R3, not a wanted behaviour.
+// Pins today's behaviour, not a wanted one: the manifest's module-preparation-state.json row
+// rests on it.
 it("M1's history placed as the restore path places it (module-evidence) is not read by the promotion: the name is reused", async () => {
   const s = spareService();
   await admit(s);
