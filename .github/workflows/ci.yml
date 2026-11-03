@@ -1290,7 +1290,7 @@ jobs:
           sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk-start-again"
           sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-start-again"
           mkdir -p "$RUNNER_TEMP/full-disk-from-spare"
-          sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk-from-spare"
+          sudo mount -t tmpfs -o size=48m tmpfs "$RUNNER_TEMP/full-disk-from-spare"
           sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-from-spare"
           mkdir -p "$RUNNER_TEMP/full-disk-backup-room"
           sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk-backup-room"

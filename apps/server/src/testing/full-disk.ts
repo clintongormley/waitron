@@ -94,7 +94,7 @@ function namedFolder(
   };
 }
 
-function hdiutilImage(): { ok: true; disk: SmallDisk } {
+function hdiutilImage(sizeMiB: number): { ok: true; disk: SmallDisk } {
   const base = mkdtempSync(join(tmpdir(), "wt-full-disk-"));
   const image = join(base, "disk.dmg");
   const mount = join(base, "mnt");
@@ -111,7 +111,7 @@ function hdiutilImage(): { ok: true; disk: SmallDisk } {
     run([
       "create",
       "-size",
-      "32m",
+      `${sizeMiB}m`,
       "-fs",
       "HFS+",
       "-volname",
@@ -138,13 +138,15 @@ function hdiutilImage(): { ok: true; disk: SmallDisk } {
 /**
  * A filesystem of 64 MiB or less that the tests may fill, or why there is none. Each file that fills
  * one names its own variable, so one file's fill never takes the room another's case measures.
+ * `imageMiB` sizes the macOS image only; a named folder is whatever size its filesystem is.
  */
 export function openSmallDisk(
   variable = "WAITRON_FULL_DISK_DIR",
+  imageMiB = 32,
 ): { ok: true; disk: SmallDisk } | { ok: false; reason: string } {
   const dir = process.env[variable];
   if (dir !== undefined && dir !== "") return namedFolder(variable, dir);
-  if (process.platform === "darwin") return hdiutilImage();
+  if (process.platform === "darwin") return hdiutilImage(imageMiB);
   return {
     ok: false,
     reason: `no small filesystem: set ${variable} to one of 64 MiB or less`,

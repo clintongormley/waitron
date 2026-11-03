@@ -1411,7 +1411,8 @@ fill in a second.
   holds more than 64 MiB (`blocks × frsize` from `statfs`), so a typo naming a large disk is
   refused, and they work inside a fresh `wt-full-disk-*` folder there that they remove at the end.
   The limit refuses a large filesystem; it does not check that the folder is the one you meant.
-- Without it, on macOS, they make their own: a 32 MiB HFS+ image, `disk.dmg`, in a fresh
+- Without it, on macOS, they make their own: a 32 MiB HFS+ image unless the file asks for another
+  size (`openSmallDisk`'s second argument), `disk.dmg`, in a fresh
   `wt-full-disk-*` folder under the system's temporary folder, created with `hdiutil create -size
   32m -fs HFS+ -volname wt-full-disk -layout NONE` and attached at `mnt` beside it with
   `hdiutil attach -nobrowse -noautoopen`. No `sudo` is needed (F1 below). At the end they detach it
@@ -1465,10 +1466,13 @@ passes `spareBytes: 0` for none, as the discarded-recovery case without a spare 
 boots and the tills are stopped; without one the full-disk page is served; after a release the
 stop holds across a restart; and the running box writes the spare back and lifts it. It needs the
 `@hono/node-server` module mock, which must not reach the other two files, so it is a file of its
-own. It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_FROM_SPARE")`, and CI mounts a third 32 MiB tmpfs
-at `$RUNNER_TEMP/full-disk-from-spare` in the same step. The boot-from-zero case uses the real 8 MiB
+own. It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_FROM_SPARE", 48)`, and CI mounts a third tmpfs
+at `$RUNNER_TEMP/full-disk-from-spare` in the same step. Its filesystem is 48 MiB on both paths, not
+32: on 2026-11-03 (A1313) a 32 MiB macOS image held the migrated venue (4374528 bytes) and the
+6 MiB spare with only 21987328 bytes free, less than the no-release case's 21.5 MiB, so its fill
+wrote nothing and the case failed. The boot-from-zero case uses the real 8 MiB
 spare (a boot of its venue with 8 MiB free resolved with about 4 MiB left; 4 MiB was refused). The
-restart, no-release and write-back cases use a 6 MiB spare, because on a 32 MiB image a booted server holding
+restart, no-release and write-back cases use a 6 MiB spare, because on the 32 MiB image this file used before A1313 a booted server holding
 its 4 MiB change log leaves about 23.18 MiB free, so the real 24 MiB write-back rule cannot be met.
 The two cases that rest on free space being above 16 MiB (the restart and the no-release case)
 assert it while the server is up, so a run on the edge fails rather than passing on free space alone. Two cases (A1167) give a box a 1 MiB spare and a backup folder on the small disk, fill to 6 MiB free, and check that the start deletes the oldest archive and keeps the spare, and that after `venue.db` is replaced it deletes none and releases the spare. These figures are HFS+; CI's tmpfs is the first Linux run.

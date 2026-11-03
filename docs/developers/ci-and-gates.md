@@ -2967,7 +2967,8 @@ rehearsal's send gate and interrupt suites, `apps/server/src/aws-send-gate.e2e.t
 `apps/server/src/start-full-disk.e2e.test.ts`, `apps/server/src/start-again-full-disk.e2e.test.ts`
 and `apps/server/src/start-from-spare.e2e.test.ts`, and the backup-room file,
 `apps/server/src/backup-room.e2e.test.ts`,
-which need a small filesystem the job mounts rather than a binary: one 32 MiB tmpfs each, named in
+which need a small filesystem the job mounts rather than a binary: one tmpfs each, 48 MiB for
+`start-from-spare.e2e.test.ts` and 32 MiB for the others, named in
 `WAITRON_FULL_DISK_DIR`, `WAITRON_FULL_DISK_DIR_START_AGAIN`, `WAITRON_FULL_DISK_DIR_FROM_SPARE`
 and `WAITRON_FULL_DISK_DIR_BACKUP_ROOM`
 ([testing-guide.md](testing-guide.md#the-full-disk-start-tests-run-on-a-small-filesystem)).

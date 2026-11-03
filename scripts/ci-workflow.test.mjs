@@ -2690,22 +2690,22 @@ describe("the job of the tests that need Litestream, versitygw or a small filesy
 
   // Each real-disk file fills its own filesystem, so one file's fill never takes another's room.
   it.each([
-    ["full-disk", "WAITRON_FULL_DISK_DIR"],
-    ["full-disk-start-again", "WAITRON_FULL_DISK_DIR_START_AGAIN"],
-    ["full-disk-from-spare", "WAITRON_FULL_DISK_DIR_FROM_SPARE"],
-    ["full-disk-backup-room", "WAITRON_FULL_DISK_DIR_BACKUP_ROOM"],
+    ["full-disk", "WAITRON_FULL_DISK_DIR", "32m"],
+    ["full-disk-start-again", "WAITRON_FULL_DISK_DIR_START_AGAIN", "32m"],
+    ["full-disk-from-spare", "WAITRON_FULL_DISK_DIR_FROM_SPARE", "48m"],
+    ["full-disk-backup-room", "WAITRON_FULL_DISK_DIR_BACKUP_ROOM", "32m"],
   ])(
     "mounts a small filesystem at %s before it runs them, and names it to the tests as %s",
-    (dir, variable) => {
+    (dir, variable, size) => {
       const body = stream().body;
       const code = (line) => !line.trim().startsWith("#");
       const run = body.findIndex((line) => code(line) && line.includes("test:shard"));
       const mount = body.findIndex(
         (line) =>
           code(line) &&
-          line.trim() === `sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/${dir}"`,
+          line.trim() === `sudo mount -t tmpfs -o size=${size} tmpfs "$RUNNER_TEMP/${dir}"`,
       );
-      expect(mount, `no step mounts a 32m tmpfs at $RUNNER_TEMP/${dir}`).toBeGreaterThan(-1);
+      expect(mount, `no step mounts a ${size} tmpfs at $RUNNER_TEMP/${dir}`).toBeGreaterThan(-1);
       expect(mount, "the small filesystem must be mounted before the tests run").toBeLessThan(run);
       const at = (text) => body.findIndex((line) => code(line) && line.trim() === text);
       expect(at(`mkdir -p "$RUNNER_TEMP/${dir}"`), `no mkdir of ${dir} before its mount`).toBe(

@@ -1,5 +1,6 @@
 // Needs a filesystem of 64 MiB or less: the folder WAITRON_FULL_DISK_DIR_FROM_SPARE names, or on
-// macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). Without one each case
+// macOS a disk image the harness makes with hdiutil (`./testing/full-disk.ts`). Both are 48 MiB, so
+// the venue, the 6 MiB spare and the cases' 21.5 MiB of free room fit. Without one each case
 // is reported SKIPPED; with CI=true or WAITRON_REQUIRE_FULL_DISK=1 it FAILS instead (testing-guide.md,
 // "The full-disk start tests run on a small filesystem"). Its own filesystem: two files filling one
 // at once can fail each other.
@@ -59,7 +60,7 @@ let migrationsRoot: string | undefined;
 
 beforeAll(async () => {
   insecure = new Agent({ connect: { rejectUnauthorized: false } });
-  opened = openSmallDisk("WAITRON_FULL_DISK_DIR_FROM_SPARE");
+  opened = openSmallDisk("WAITRON_FULL_DISK_DIR_FROM_SPARE", 48);
   if (opened.ok) disk = opened.disk;
   else if (!REQUIRE_FULL_DISK) console.warn(`start-from-spare tests SKIPPED: ${opened.reason}`);
   migrationsRoot = await mkdtemp(join(tmpdir(), "wt-start-from-spare-migrations-"));
@@ -260,7 +261,6 @@ describe("a box started from its spare file", () => {
     const box = await placeBox(small, "no-release");
     await (await start(box, 6 * MiB)).close();
     expect(statSync(spareIn(box)).size).toBe(6 * MiB);
-    // On the macOS image one venue and the spare leave about 21.2 MiB, so this fill may write nothing.
     small.fill(21.5 * MiB);
     expect(small.free()).toBeGreaterThan(21 * MiB);
     expect(small.free()).toBeLessThan(FULL_DISK_BYTES + 6 * MiB);
