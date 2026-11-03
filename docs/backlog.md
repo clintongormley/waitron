@@ -741,15 +741,13 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A237. Nothing guards the hint-or-"?" rule across screens (owner 2026-10-03)** — OPEN.
 
-- **Some setup "?" buttons fit neither of the hint-or-"?" rule's reasons** — left open by A1315
-  PR 2. The three file pickers (backup, configuration export, certificate) and the restore
-  confirmation tick box have no text box for a hint, and the province's dropdown starts empty.
-  Decide whether they keep the "?" (the shared `wt-file-input` takes a hint).
-
 - **The setup venue screen keeps an operation-description field it never shows** — left open by
-  A1315 PR 2. `#shows` in `apps/setup/src/screens/venue-screen.ts` leaves `operationDescription`
-  out, so `venue.help.operation_description` (EN and ES) is never displayed; decide whether the
-  field and its strings go.
+  A1315 PR 2. The owner wants it gone (2026-11-03), but the setup route refuses a body without it
+  (`asString` in `apps/server/src/setup-api.ts`). Setup fills it with the filing module's default
+  ("Venta en establecimiento"), and that stored value is the fallback the invoice builders use when
+  a caller passes no description (`packages/core/src/operation-description.ts`). The proposal waiting
+  for the owner: the setup route fills in that default itself when the field is absent, and setup
+  drops the field, its default lookup and its strings.
 
 - **The setup role screen shows its choices as cards with buttons, not `wt-choice-row` rows**
   (`apps/setup/src/screens/role-screen.ts`, reached from Join or recover). Split out of A237.

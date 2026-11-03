@@ -95,8 +95,10 @@ filled in, uses `wt-help-tooltip`, whose button closes on outside click or Escap
 Venue settings' Venue card is the exception: it starts filled in and has no "?" (owner, 2026-10-16,
 A755; design-system.md, Forms).
 
-Nothing guards that hint-or-"?" rule across screens (backlog A237), and some setup "?" buttons
-fit neither of its reasons (backlog, setup area).
+A control with no text box to hold a hint keeps its "?": a file picker, a tick box, a dropdown that
+starts empty (owner, 2026-11-03, on setup's three file pickers, restore tick box and province).
+
+Nothing guards that hint-or-"?" rule across screens (backlog A237).
 
 Outside the setup wizard that "?" takes `mode="help-mode"`, so it shows only while help is on
 (A582; design-system.md, Help mode). Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its

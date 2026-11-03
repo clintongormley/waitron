@@ -3430,7 +3430,8 @@ above.
 
 A short explanation of a field is its hint (below), not a question-mark button (owner, 2026-10-03).
 Use `wt-help-tooltip` for an explanation too long for a hint, and for a field that starts filled in,
-where a hint would never show. Outside the setup wizard it takes `mode="help-mode"`, so it shows
+where a hint would never show, and for a control with no text box to hold a hint — a file picker,
+a tick box, a dropdown that starts empty (owner, 2026-11-03). Outside the setup wizard it takes `mode="help-mode"`, so it shows
 only while help is on (see Help mode). The setup wizard's shop step decides which field gets which in its
 `FIELD_HINT` and `FIELD_HELP` maps for its text fields. The location name is in both: `#field` gives
 it the "?" and no hint in Demo, where it starts filled in, and the hint otherwise. The
