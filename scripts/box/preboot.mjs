@@ -91,12 +91,12 @@ const OPTIONS_CODE = "unlock.options_invalid";
 /**
  * @typedef {object} UnlockGateOptions
  * @property {unknown} observation  handed to freezeUnlockTarget; a refusal makes a refused gate, not a throw
- * @property {() => number} now  milliseconds on a clock that never jumps; production uses performance.now()
+ * @property {() => number} now  milliseconds on a clock that never jumps; the preboot service is to pass performance.now()
  * @property {(handle: UnlockHandle, key: Uint8Array) => Promise<boolean>} verify  must finish with key before it settles
  * @property {(handle: UnlockHandle, key: Uint8Array) => Promise<void>} open  must finish with key before it settles
  * @typedef {object} UnlockResult  frozen
  * @property {'opened'|'wrong-key'|'wait'|'refused-state'} kind
- * @property {number|null} retryAt  wrong-key and wait: the deadline on now()'s clock, which is monotonic, so an HTTP answer sends the time remaining, never this number; null while verify or open runs
+ * @property {number|null} retryAt  wrong-key and wait: the deadline on now()'s clock; an HTTP adapter must send the time remaining, never this number; null while verify or open runs
  * @property {string|null} reason  refused-state only
  * @typedef {object} UnlockStatus  frozen
  * @property {'ready'|'waiting'|'verifying'|'opened'|'closed'|'refused'} state  'verifying' while verify or open runs

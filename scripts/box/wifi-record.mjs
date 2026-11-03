@@ -237,7 +237,7 @@ export function createWifiRecordReader(deps) {
       throw error;
     }
     if (`${root.dev}:${root.ino}` !== rootId) throw refusedRead("root-changed");
-    // The boot partition is normally 0755, so only group and other writes are refused here.
+    // Others may read the boot root, so only group and other writes are refused here.
     checkFolder(root, 0o022);
   }
 

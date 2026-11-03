@@ -65,7 +65,7 @@ describe("parseWifiRecord loads version 1", () => {
 
   it.each([
     ["a WPA2 record", {}],
-    ["a WPA3 record with a non-ASCII password", { keyMgmt: "sae", psk: "contraseña Àngels" }],
+    ["a WPA3 record with a non-ASCII password", { keyMgmt: "sae", psk: "Crème brûlée Àngels" }],
     ["a 32-byte network name", { ssidHex: SSID_32 }],
     ["an 8-character password", { psk: "12345678" }],
     ["a 63-character password", { psk: "~ ".repeat(31) + "!" }],
@@ -209,7 +209,7 @@ describe("parseWifiRecord refuses a record it does not support", () => {
   /** @type {Array<[string, () => Uint8Array]>} */
   const cases = [
     ["a WPA2 password holding a tab", () => recordBytes({ psk: "pass\tword" })],
-    ["a WPA2 password holding ñ", () => recordBytes({ psk: "contraseña" })],
+    ["a WPA2 password holding ñ", () => recordBytes({ psk: "piñata-party" })],
     [
       "a WPA2 password of 32 emoji (64 UTF-16 units, 32 characters)",
       () => recordBytes({ psk: "😀".repeat(32) }),

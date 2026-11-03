@@ -1437,7 +1437,9 @@ describe("key-leak sweep", () => {
     expect(source).not.toMatch(/\b(console|setTimeout|setInterval|setImmediate|queueMicrotask)\b/);
   });
 
-  // No test can read the gate's private variables, so a second copy of the key is refused here.
+  // No test can read the gate's private variables, so this reads preboot.mjs as text. Weaker than
+  // its title: it refuses only the spellings below, and a copy made another way (Uint8Array.of,
+  // .map, a loop into a plain array) passes.
   it("preboot.mjs makes one copy of a key, through Uint8Array.from, and no other buffer", () => {
     const source = readFileSync(new URL("./preboot.mjs", import.meta.url), "utf8");
     expect(source.match(/\bUint8Array\.from\(/g)).toHaveLength(1);

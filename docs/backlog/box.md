@@ -832,9 +832,11 @@ large release assets and the A940/A947/A798 coordination.
 - `preboot.mjs`: the preboot unlock gate. `freezeUnlockTarget` decides, once, from PR 1's
   whole-machine observation, which disk may be opened: the one Waitron disk whose encryption UUID
   matches the expected one, carried by nothing else on any attachment, after first start is
-  complete. `createUnlockGate` runs one check at a time behind one wait shared by every screen,
-  the proposed 2/4/8/16/32/60 seconds (`UNLOCK_DELAYS_MS`, spec §7.5, not the owner's choice), and
-  clears every copy of a typed key when its attempt ends. The fixed `prebootUnlockGate` refuses
+  complete. `createUnlockGate` runs one check at a time, and every route that holds the same gate
+  shares its wait: the proposed 2/4/8/16/32/60 seconds (`UNLOCK_DELAYS_MS`, spec §7.5, not the
+  owner's choice). It zeroes the caller's key array before `submit` returns, and its own copy when
+  the attempt ends. The tests cannot see a copy kept in the gate's private variables, and say
+  nothing about what an adapter, the browser or the operating system keeps. The fixed `prebootUnlockGate` refuses
   with `adapter-missing` until the Linux adapters exist.
 - `preboot-locked.mjs`: what a locked box answers. `freezeLockedTarget` checks the two
   certificates before anything listens: the recovery certificate is signed by the box's CA (by
@@ -842,14 +844,15 @@ large release assets and the A940/A947/A798 coordination.
   certificate is self-signed, names only `waitron.local`, and does not share the recovery
   certificate's key (one carrying the CA's key is already refused as CA-signed or not
   self-signed). `decideLockedRequest` sends `waitron.local` to the one recovery address with a 302,
-  refuses other methods (405) and other names (421), and answers 503 `unlock.remote_unavailable`
-  when there is no recovery address. Host and TLS names outside printable ASCII match nothing.
+  refuses other methods (405) and other names (421), and answers plain-HTTP GET and HEAD with 503
+  `unlock.remote_unavailable` when the installation id or the recovery certificate is refused. Host and TLS names outside printable ASCII match nothing.
 - `wifi-record.mjs`: version 1 of the boot copy's Wi-Fi record. `parseWifiRecord` accepts only
   `wpa-psk` and `sae` networks; `createWifiRecordReader` reads only
-  `/boot/waitron-recovery/wifi.json`, never the staging copy `wifi.json.next`, from a boot mount
-  it has checked. A mount check that throws, or whose answer throws when read, is
-  `mount-unverified`. The fixed `readActiveWifiRecord` answers `mount-unverified` with no file
-  call until the Linux pull request adds the mount check.
+  `waitron-recovery/wifi.json` under the boot root it is given, never the staging copy
+  `wifi.json.next`, after checking that boot mount. A mount check that throws, or whose answer
+  throws when read, is `mount-unverified`. The fixed `readActiveWifiRecord` uses `/boot`, which the
+  Linux pull request confirms, and answers `mount-unverified` with no file call until that pull
+  request adds the mount check.
 
 Still waiting, all needing a Linux machine with KVM, OVMF and swtpm, or the hardware: the recipe and
 dracut files; the rig entry point (`bench/box-installer/run.mjs`) and disk fixtures; the real

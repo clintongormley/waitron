@@ -73,7 +73,7 @@ const pem = {};
 let folder;
 
 beforeAll(async () => {
-  folder = await fs.realpath(await fs.mkdtemp(join(tmpdir(), "preboot-locked-")));
+  folder = await fs.realpath(await fs.mkdtemp(join(tmpdir(), "b3-preboot-locked-")));
   const script = join(folder, "fixtures.sh");
   await fs.writeFile(script, FIXTURES);
   execFileSync("sh", [script], {
@@ -259,7 +259,7 @@ describe("freezeLockedTarget", () => {
   });
 
   describe("the recovery certificate", () => {
-    it("impostorRecovery (issuer name matches, another key signed it) → recovery-not-ca-signed", () => {
+    it("impostorRecovery (issuer name and key identifier copied, another key signed it) → recovery-not-ca-signed", () => {
       const impostor = new X509Certificate(cert("impostorRecovery"));
       expect(impostor.checkIssued(new X509Certificate(cert("ca")))).toBe(true);
       expect(freezeLockedTarget(input({ recoveryCertificate: cert("impostorRecovery") }))).toEqual(
