@@ -926,19 +926,21 @@ folder or NetworkManager.
   `findNameTag` reads it from `cryptsetup luksDump --dump-json-metadata` output and answers `null`
   for none, for two or more, and for output it cannot read. `planNameTagWrite` names only
   Waitron's own tokens or a free token number, replaces before it removes, refuses when all 32
-  token numbers are taken, and refuses a header whose token numbers are not exactly 0 to 31. For a
+  token numbers are taken, and refuses a header holding a token number written other than "0" to
+  "31" (for example "007" or "32"). For a
   venue name the tag cannot hold (empty, over 256 code points, or with a control character such as
   a tab) the plan writes no tag and removes any that is there, and the installer's decisions (PR
   3) ask for the erase word on a disk with no readable tag. `usableVenueName` is that name rule;
   the installer's decisions now take it, with its 256-code-point limit
-  (`NAME_TAG_MAX_CODE_POINTS`) and its control-character pattern, from `name-tag.mjs` instead of
-  their own copy.
+  (`NAME_TAG_MAX_CODE_POINTS`), and the text check under it (`usableText`), which the erase-word
+  check uses too, from `name-tag.mjs` instead of their own copy.
 - `wifi-record.mjs`: `formatWifiRecord` writes version 1 only in the form `parseWifiRecord` loads,
   from the values it checked, and refuses anything else. `decideWifiBootCopy` turns the box's
   NetworkManager settings, as an adapter would hand them over, into a copy to write or a named
   reason for none: cable only; an open network; NetworkManager's `none` (open or static WEP);
   dynamic WEP; OWE; enterprise; any other security type; a password the host cannot read; a WPA2
-  password outside printable ASCII; a WPA3 password over 256 bytes; or another password the
+  password of 8 to 63 characters outside printable ASCII; a WPA3 password over 256 bytes with no
+  control character; or another password the
   reader would refuse (`password-invalid`). The reader's three refusals are what become password
   reasons; an error the reader throws is not caught and reaches the caller.
 
@@ -993,6 +995,9 @@ folder or NetworkManager.
   run them.
 - Slice 3's host service raises an alert on an installed box whose TPM or Secure Boot is off (the
   owner's decision of 2026-11-03).
+- The Linux pull request's translation file words `installer.waitron_found` when its `hardware` is
+  set: the spec's firmware messages end «…vuelve a empezar» and are written for installing, not for
+  a box that goes on to start.
 - The Linux pull request's translation file sets the erase word (the spec's «BORRAR»), passed as
   `eraseWord`. It is one word for both the Spanish and the English screen: a different English word
   would need the policy's option to change (for example, to a list of accepted words), not only the
@@ -1149,7 +1154,7 @@ The owner's four answers: no reserved
 
 **Full-disk write stop (owner, 2026-10-21, A798-B slice 3, #1950):** refusing before the card reader on a full disk or a clock before 28-10-2024, and every till write once a save has failed for a full disk or the box started with less than 16 MiB free — the design's wider stop, which the owner chose on 2026-10-21.
 
-- **A box that already holds Waitron but has its TPM or Secure Boot switched off still starts (owner, 2026-11-03).** The stick starts the installed Waitron after 15 seconds so the venue keeps selling; the screen and the status page name the setting that is off; slice 3's host service raises the alert; a reinstall on that box stays refused. Built as the installer's decision D2 in B3 PR 3 (`scripts/box/installer-policy.mjs`, #2426) and kept as built. The 15 seconds, two minutes, 60 seconds and one minute stay the spec's proposals; the owner was not asked about them. ([B3 PR 4's plan](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md), D13.)
+- **A box that already holds Waitron but has its TPM or Secure Boot switched off still starts (owner, 2026-11-03).** The stick starts the installed Waitron after 15 seconds so the venue keeps selling; the installer's message and the status page carry the setting that is off; slice 3's host service raises the alert; a reinstall on that box stays refused. Built as the installer's decision D2 in B3 PR 3 (`scripts/box/installer-policy.mjs`, #2426) and kept as built. The 15 seconds, two minutes, 60 seconds and one minute stay the spec's proposals; the owner was not asked about them. ([B3 PR 4's plan](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md), D13.)
 - **Cloud verification keeps worker threads denied (owner, 2026-10-22, A1004).** Only the fresh
   disposable venue copy omits its watchdog; it still takes the venue lock. Ordinary server and
   restore opens retain monitoring. Cloud must pin the implementing release and requalify its
