@@ -115,8 +115,7 @@ export interface ForwardResult {
   incidentsRaised: number;
 }
 
-/** Which `attempting` payments a box's sweep may resolve, so that with two boxes one never cancels
- * or captures a payment the other is still driving. */
+/** Which `attempting` payments a box's card sweep may resolve. */
 export interface CollectionOwners {
   /** This box. */
   readonly nodeId: NodeId;

@@ -290,10 +290,11 @@ export class SumUpCloudProvider implements PaymentProvider {
     return Promise.resolve({ nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 });
   }
   /**
-   * One pass over this provider's `attempting` rows. T1 lists them (unlocked); each is looked up at
-   * SumUp OUTSIDE any transaction — by the stamped poll key, else by OUR `payment_ref`
-   * (`foreign_transaction_id`) for a row that crashed before T1.5 — and resolved in its own short
-   * T2. The non-null case runs through `classify`, shared with `collect`'s poll:
+   * One pass over this provider's `attempting` rows that `owners` covers. T1 lists them
+   * (unlocked); each is looked up at SumUp OUTSIDE any transaction — by the stamped poll key, else
+   * by OUR `payment_ref` (`foreign_transaction_id`) for a row that crashed before T1.5 — and
+   * resolved in its own short T2. The non-null case runs through `classify`, shared with
+   * `collect`'s poll:
    *   captured → captured;  failed → failed, no incident;
    *   pending → left, `nextDueAt` set;  deferred (REFUNDED / unknown) → failed +
    *   `payment.pending_outcome_unactionable` (money may have moved through a payment that never

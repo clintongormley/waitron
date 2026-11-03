@@ -21,9 +21,11 @@ were answered (a) by the owner on 2026-11-02: Q1, returned invoices count in mod
 qualification on real boxes remains the owner's, after A947 3b/3c
 ([owner task](../superpowers/plans/2026-11-02-a1018-handover-build.md#owner-task-physical-qualification-on-real-boxes)).
 
-**Built so far:** Slice 0 (docs, main `b0e22a9feb`) and Slice 1 (#2417: `@waitron/handover`, the
-handover tables in `node.db`, the server's handover store and signer). Nothing calls Slice 1's code
-yet. Left for the slices that add the callers:
+**Built so far:** Slice 0 (docs, main `b0e22a9feb`), Slice 1 (#2417: `@waitron/handover`, the
+handover tables in `node.db`, the server's handover store and signer) and Slice 4b (A764: every
+payment records the box that started it, and each box's card sweep resolves only the payments it
+owns; what it leaves open is under _Payments and card readers_ in [the backlog](../backlog.md)).
+Nothing calls Slice 1's code yet. Left for the slices that add the callers:
 - `beginHandover` stores the role it is given even when the binding names this box as the other
   side; the first caller must check the role against the binding.
 - A delayed `waitHandover` can overwrite the waiting reason a later step recorded.
