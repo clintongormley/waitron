@@ -68,6 +68,8 @@ export interface PassDeps {
    */
   monotonicMs: () => number;
   log: Logger;
+  /** The loop's stop signal: once aborted, the pass starts no reconcile. */
+  signal?: AbortSignal;
 }
 
 export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
@@ -109,32 +111,34 @@ export async function runPass(deps: PassDeps, now: Date): Promise<PassReport> {
     }),
   );
 
-  duties.push(
-    await attempt(RECONCILE_DUTY, now, deps.log, deps.monotonicMs, async () => {
-      const result = await deps.reconcile(now);
-      for (const skipped of result.skipped) {
-        deps.log("warn", "reconcile.pair_skipped", skipped);
-      }
-      // A bare count of `result.ran` cannot tell a clean sweep from runs abandoned for good.
-      const ranByOutcome = { succeeded: 0, failed: 0, parked: 0 };
-      for (const record of result.ran) {
-        ranByOutcome[record.outcome] += 1;
-        logNonSucceededRun(deps.log, record);
-      }
-      deps.log("info", "reconcile.complete", {
-        ran: ranByOutcome,
-        deferred: result.deferred,
-        beyondHorizon: result.beyondHorizon,
-        skipped: result.skipped.length,
-        nextDueAt: result.nextDueAt?.toISOString() ?? null,
-      });
-      return {
-        nextDueAt: result.nextDueAt,
-        skipped: result.skipped.length,
-        parked: ranByOutcome.parked,
-      };
-    }),
-  );
+  if (deps.signal?.aborted !== true) {
+    duties.push(
+      await attempt(RECONCILE_DUTY, now, deps.log, deps.monotonicMs, async () => {
+        const result = await deps.reconcile(now);
+        for (const skipped of result.skipped) {
+          deps.log("warn", "reconcile.pair_skipped", skipped);
+        }
+        // A bare count of `result.ran` cannot tell a clean sweep from runs abandoned for good.
+        const ranByOutcome = { succeeded: 0, failed: 0, parked: 0 };
+        for (const record of result.ran) {
+          ranByOutcome[record.outcome] += 1;
+          logNonSucceededRun(deps.log, record);
+        }
+        deps.log("info", "reconcile.complete", {
+          ran: ranByOutcome,
+          deferred: result.deferred,
+          beyondHorizon: result.beyondHorizon,
+          skipped: result.skipped.length,
+          nextDueAt: result.nextDueAt?.toISOString() ?? null,
+        });
+        return {
+          nextDueAt: result.nextDueAt,
+          skipped: result.skipped.length,
+          parked: ranByOutcome.parked,
+        };
+      }),
+    );
+  }
 
   const nextDueAt = earliest(duties.map((entry) => entry.nextDueAt));
   deps.log("info", "pass.complete", {

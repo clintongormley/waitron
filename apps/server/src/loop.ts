@@ -74,9 +74,9 @@ export async function runLoop(deps: LoopDeps): Promise<void> {
       deps.log("error", "pass.threw", { errorCode: codeOf(error) });
       nextDueAt = startedAt;
     }
-    // Checked AFTER the pass: a signal arriving mid-pass lets the pass finish (the duties are
-    // crash-safe, but a clean finish still beats abandoning a partially-submitted batch) and skips
-    // the sleep entirely.
+    // Checked AFTER the pass, so a signal arriving mid-pass skips the sleep. Within that pass, a
+    // batch already sent is still answered and stored; boot hands the same signal to the drain and
+    // `runPass`, so no further batch is sent and the reconcile does not start.
     if (deps.signal.aborted) break;
     const sleepMs = sleepMsFor(nextDueAt, deps.now(), deps.minTickMs, deps.maxTickMs);
     deps.log("info", "loop.sleeping", { sleepMs });

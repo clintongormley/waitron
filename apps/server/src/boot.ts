@@ -3249,6 +3249,7 @@ async function bootServer(
   });
   undoOnFailure.push(() => menuActivation.stop());
 
+  const controller = new AbortController();
   // `config.environment` is the value `assertDeploymentMatches` pinned against the database at boot.
   //
   // The restart reset runs only on a node that files: the pass below calls this drain behind both
@@ -3264,6 +3265,7 @@ async function bootServer(
           skipRetryMs: config.skipRetryMs,
           log,
           observeAuthorityTime: authorityClock.observe,
+          signal: controller.signal,
         },
         at,
       ),
@@ -3271,7 +3273,6 @@ async function bootServer(
     log,
   });
 
-  const controller = new AbortController();
   const loop = runLoop({
     // Drain and reconcile run ONLY on the node holding `singleton_role = 'primary'`, read per pass so
     // a promotion starts them on the next tick; any other node gets an empty pass that still advances
@@ -3304,6 +3305,7 @@ async function bootServer(
             awaitingCert: awaitingFiscalCert,
             monotonicMs: () => performance.now(),
             log,
+            signal: controller.signal,
           },
           at,
         ),

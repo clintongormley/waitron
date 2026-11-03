@@ -134,6 +134,50 @@ describe("FISCAL_SLOT.drain", () => {
   });
 });
 
+describe("FISCAL_SLOT.drain with a stop signal", () => {
+  const suite = useVenueDb({ migrations: TEST_MIGRATIONS, timeoutMs: 120_000 });
+  const installed = makeAuthority().issue({ notAfter: new Date("2027-01-01T00:00:00Z") });
+  const ring = loadKeyRing({
+    WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+    WAITRON_CREDENTIALS_KEY_VERSION: "1",
+  });
+
+  async function drainDueRecord(signal?: AbortSignal) {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1, entorno: "preproduction" });
+    await sealAeatSecret(
+      { db: suite.db, ring, nodeId: seeded.nodeId },
+      {
+        pfxBase64: installed.pfx.toString("base64"),
+        passphrase: installed.passphrase,
+        certKind: "sello",
+      },
+    );
+    refusedFetch.mockClear();
+    await FISCAL_SLOT.drain(
+      {
+        db: suite.db,
+        ring,
+        environment: "preproduction",
+        skipRetryMs: 300_000,
+        ...(signal === undefined ? {} : { signal }),
+      },
+      new Date("2026-07-21T00:01:00Z"),
+    );
+  }
+
+  it("control: with no signal, the due record is sent", async () => {
+    await drainDueRecord();
+    expect(refusedFetch).toHaveBeenCalled();
+  });
+
+  it("hands the signal to the drain, which then sends nothing", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    await drainDueRecord(controller.signal);
+    expect(refusedFetch).not.toHaveBeenCalled();
+  });
+});
+
 describe("FISCAL_SLOT.resetInFlight", () => {
   const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 

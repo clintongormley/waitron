@@ -76,7 +76,7 @@ export const FISCAL_SLOT: FiscalContribution = {
   // (one TLS pool per pass with due work, released in `finally`) and hands `runDrain` only the
   // vault-scoped `resolveClient`. `environment` doubles as `runDrain`'s `Entorno` guard and
   // `aeatEndpointFor`'s host selector — the same `"production" | "preproduction"` union — so no cast.
-  drain: async ({ db, ring, environment, skipRetryMs, log, observeAuthorityTime }, now) => {
+  drain: async ({ db, ring, environment, skipRetryMs, log, observeAuthorityTime, signal }, now) => {
     const resolver = aeatClientResolver(
       {
         db,
@@ -88,7 +88,10 @@ export const FISCAL_SLOT: FiscalContribution = {
       log,
     );
     try {
-      return await runDrain({ db, resolveClient: resolver.resolve, skipRetryMs, environment }, now);
+      return await runDrain(
+        { db, resolveClient: resolver.resolve, skipRetryMs, environment, signal },
+        now,
+      );
     } finally {
       await resolver.closeAll();
     }

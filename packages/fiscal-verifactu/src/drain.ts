@@ -118,6 +118,8 @@ export interface DrainDeps {
    * A test seam, so a suite can exercise the over-the-cap split without seeding 1000+ rows.
    */
   maxRegistrosPorEnvio?: number;
+  /** Once aborted, the pass claims no further batch; a batch already sent is answered and stored. */
+  signal?: AbortSignal;
 }
 
 /** A due `envios` row joined to enough of its registro to rebuild and order it. `probe` marks a
@@ -174,7 +176,16 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
     try {
       await flushTechnicalFailure(deps.db, deps.environment);
       const client = await deps.resolveClient();
-      await drainDue(deps.db, client, deps.environment, now, result, maxPorEnvio, deps.skipRetryMs);
+      await drainDue(
+        deps.db,
+        client,
+        deps.environment,
+        now,
+        result,
+        maxPorEnvio,
+        deps.skipRetryMs,
+        deps.signal,
+      );
       bumpNextDue(result, await nextProbeAt(deps.db, now, deps.environment));
     } catch (error) {
       rememberTechnicalFailure(deps.db, deps.environment, now, []);
@@ -225,6 +236,7 @@ async function drainDue(
   result: DrainResult,
   maxPorEnvio: number,
   skipRetryMs: number,
+  signal: AbortSignal | undefined,
 ): Promise<void> {
   // Commits before anything else in this pass reads `envios`, so a recovered row is an ordinary
   // `pendiente` row to the later transactions.
@@ -254,6 +266,12 @@ async function drainDue(
   // re-examined next time rather than assumed still blocked.
   const blockedSifIds = new Set<string>();
   while (dueCount > 0) {
+    // Before any send, return: storing `now + t` would move AEAT's wait later for a send that
+    // never happened. After one, break, so the wait AEAT set is stored.
+    if (signal?.aborted === true) {
+      if (result.batchesSent === 0) return;
+      break;
+    }
     // Retried until something is sendable or nothing was claimed: a window can hold only rows of
     // chains the environment guard just blocked, and the growing `blockedSifIds` lets the next
     // SELECT reach past them. Bounded: each empty round either blocks a new chain or moves its rows

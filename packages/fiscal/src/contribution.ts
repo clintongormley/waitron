@@ -32,6 +32,8 @@ export interface FiscalDutyDeps {
     sentAt: Date;
     receivedAt: Date;
   }) => void;
+  /** Once aborted, a running drain sends no further batch to the tax authority. */
+  readonly signal?: AbortSignal;
 }
 
 export interface FiscalCertificateAnswer {
