@@ -639,6 +639,31 @@ describe("createUnlockGate key shape", () => {
     await pending;
   });
 
+  it.each([
+    [
+      "an array whose buffer was transferred away",
+      () => {
+        const key = goodKey();
+        key.buffer.transfer();
+        return key;
+      },
+    ],
+    [
+      "a fixed-length array over a resizable buffer shrunk under it",
+      () => {
+        const buffer = new ArrayBuffer(32, { maxByteLength: 32 });
+        const key = new Uint8Array(buffer, 0, 32);
+        key.set(KEY_BYTES);
+        buffer.resize(0);
+        return key;
+      },
+    ],
+  ])("answers wrong-key without checking or throwing for %s", async (_name, make) => {
+    const h = harness({ verify: async () => true });
+    expect(await h.at(0, make())).toEqual(answer("wrong-key", 2000));
+    expect(h.verify).not.toHaveBeenCalled();
+  });
+
   it("copies the real bytes of a genuine subclass whose iterator lies", async () => {
     class LyingIterator extends Uint8Array {
       *[Symbol.iterator]() {
@@ -916,6 +941,17 @@ describe("createUnlockGate close", () => {
     expect(c.h.open).not.toHaveBeenCalled();
     expect(isZeros(c.held)).toBe(true);
     expect(c.h.gate.status()).toEqual(status("closed"));
+  });
+
+  it("close while the checker is pending, and the checker then answers false: answers closed, counts no failure", async () => {
+    const c = heldHarness();
+    const pending = c.h.at(0);
+    c.h.gate.close();
+    c.check.resolve(false);
+    expect(await pending).toEqual(answer("refused-state", null, "closed"));
+    expect(c.h.gate.status()).toEqual(status("closed"));
+    expect(isZeros(c.held)).toBe(true);
+    expect(c.h.open).not.toHaveBeenCalled();
   });
 
   it("close while the checker is pending, and the checker then rejects: answers closed", async () => {

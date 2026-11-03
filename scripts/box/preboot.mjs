@@ -218,7 +218,8 @@ function buildGate(resolveTarget, now, verify, open) {
       const bytes = /** @type {Uint8Array} */ (key);
       const refusal = admit(length);
       if (refusal) {
-        if (length !== null) wipe(bytes);
+        // A released buffer reads length 0 and refuses fill; it holds no bytes to clear.
+        if (length) wipe(bytes);
         return refusal;
       }
       // The one copy, made only for a key that goes to verify, and before the caller's is wiped.
@@ -253,7 +254,7 @@ function buildGate(resolveTarget, now, verify, open) {
     },
     /** For the preboot service's shutdown only: a closed gate stays closed until a restart. */
     close() {
-      if (!ended) closed = true;
+      closed = true;
     },
   });
 }
