@@ -974,7 +974,7 @@ and removes real files, through file operations a test can replace.
   file call until the Linux pull request adds the boot-mount check.
 
 **Built so far (2026-11-03), PR 6.** [PR 6](../superpowers/plans/2026-11-03-b3-6-disk-key-letters.md)
-adds `scripts/box/disk-recovery-key.mjs`, called by nothing yet. It turns the disk recovery key
+(#2433) adds `scripts/box/disk-recovery-key.mjs`, called by nothing yet. It turns the disk recovery key
 between the 32 bytes the box keeps and the 64 letters a person reads and types, using systemd's
 16-letter set in systemd's order (`DISK_KEY_LETTERS`).
 
