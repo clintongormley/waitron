@@ -914,4 +914,26 @@ describe("A773 at the pass", () => {
     expect(await state("l-flan", "held")).toBe(es["table.group_held"]);
     expect(await state("l-croq")).toBe(es["table.group_fired_ago"].replace("{n}", "25"));
   });
+
+  it("says a dish is at the pass while one of its kitchen items waits there, though its own has fired", async () => {
+    const burger = row("l-burger", "Burger", "1.000", {
+      firedAt: null,
+      requestedAt: "2026-09-28T20:08:00.000Z",
+      kitchen: {
+        stationId: null,
+        movable: false,
+        state: "queued",
+        firedAt: "2026-09-28T20:10:00.000Z",
+        phase: "waiting",
+        requestedAt: "2026-09-28T20:10:00.000Z",
+      },
+    });
+    const { el } = await mountSent({ currentOrders: current({ ungrouped: [burger] }) });
+    const panel = await unfoldSent(el);
+    expect(text(panel.shadowRoot!.querySelector('[data-fired-line="l-burger"] .status')!)).toBe(
+      t("table.at_the_pass"),
+    );
+    await openSentDish(el, "l-burger", "fired");
+    expect(text(q(el, "[data-sent-line-status]")!)).toBe(t("table.at_the_pass"));
+  });
 });

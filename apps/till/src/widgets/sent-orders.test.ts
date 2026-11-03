@@ -1091,4 +1091,50 @@ describe("A773 at the pass", () => {
     );
     expect(status("[data-held-line=held]")).toBe(es["table.group_held"]);
   });
+
+  it("says a dish is at the pass while one of its kitchen items waits there, though its own has fired", async () => {
+    const el = await mount(
+      current([
+        row("burger", {
+          firedAt: null,
+          requestedAt: at(44),
+          kitchen: {
+            state: "queued",
+            firedAt: at(45),
+            stationId: "grill",
+            movable: false,
+            phase: "waiting",
+            requestedAt: at(45),
+          },
+        }),
+      ]),
+    );
+    await click(el, "[data-sent-toggle]");
+    expect(
+      find(el, "[data-fired-line=burger] .status").textContent!.replace(/\s+/g, " ").trim(),
+    ).toBe("at the pass");
+  });
+
+  it("does not say a dish is at the pass until the waiter has released it", async () => {
+    const el = await mount(
+      current([
+        row("burger", {
+          released: false,
+          firedAt: null,
+          kitchen: {
+            state: "queued",
+            firedAt: null,
+            stationId: "grill",
+            movable: false,
+            phase: "requested",
+            requestedAt: at(45),
+          },
+        }),
+      ]),
+    );
+    await click(el, "[data-sent-toggle]");
+    expect(
+      find(el, "[data-fired-line=burger] .status").textContent!.replace(/\s+/g, " ").trim(),
+    ).toBe("Fired");
+  });
 });

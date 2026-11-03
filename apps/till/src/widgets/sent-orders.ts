@@ -518,8 +518,7 @@ export class TillSentOrders extends LitElement {
       );
       return t("table.row_ready_ago").replace("{n}", String(minutes));
     }
-    const kitchen = slice.row.kitchen;
-    if (slice.row.released && kitchen?.firedAt === null && kitchen.requestedAt !== null) {
+    if (slice.row.released && slice.row.firedAt === null && slice.row.requestedAt !== null) {
       return t("table.at_the_pass");
     }
     return slice.row.firedAt === null

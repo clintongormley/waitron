@@ -2416,7 +2416,7 @@ describe("till-table-order-screen", () => {
       });
 
       it("a fired dish with no fired time reads Fired", async () => {
-        const { panel } = await mountProgress({ firedAt: null });
+        const { panel } = await mountProgress({ firedAt: null, requestedAt: null });
         expect(state(panel, "l-beer")).toBe(t("table.group_fired"));
       });
 

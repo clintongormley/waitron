@@ -13,13 +13,14 @@ export const fired = "2026-09-28T19:50:00.000Z";
 export const now = Date.parse("2026-09-28T20:15:00.000Z");
 
 /** A row fixture's overrides; a kitchen may leave out its request fields, which follow its stamps. */
-export type RowOverrides = Partial<RowFixture>;
+export type RowOverrides = Partial<RowFixture> & Partial<Pick<CurrentOrderRow, "requestedAt">>;
 type RowFixture = Omit<CurrentOrderRow, "kitchen" | "requestedAt"> & {
   kitchen: Parameters<typeof withCurrentKitchenStamps>[0] | null;
 };
 
-/** A dish row whose request time is {@link rowRequestedAt}. */
+/** A dish row whose request time is {@link rowRequestedAt} unless the fixture states one. */
 export function row(lineId: string, name: string, quantity: string, over: RowOverrides = {}) {
+  const { requestedAt, ...rest } = over;
   const shaped: RowFixture = {
     billStatus: "open",
     netAmount: grossOf("2.00", quantity),
@@ -38,13 +39,16 @@ export function row(lineId: string, name: string, quantity: string, over: RowOve
     kitchen: { stationId: null, movable: false, state: "queued", firedAt: fired },
     note: null,
     extras: [],
-    ...over,
+    ...rest,
   };
   const kitchen = shaped.kitchen === null ? null : withCurrentKitchenStamps(shaped.kitchen);
   return {
     ...shaped,
     kitchen,
-    requestedAt: rowRequestedAt({ firedAt: shaped.firedAt, kitchen }),
+    requestedAt:
+      requestedAt === undefined
+        ? rowRequestedAt({ firedAt: shaped.firedAt, kitchen })
+        : requestedAt,
   } satisfies CurrentOrderRow;
 }
 
