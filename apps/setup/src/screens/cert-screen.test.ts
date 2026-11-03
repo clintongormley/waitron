@@ -86,18 +86,8 @@ describe("setup-cert-screen", () => {
   it("explains the passphrase with a hint in the empty field and no ?", async () => {
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     const passphrase = q(el, "[data-test=passphrase]")!;
-    expect(passphrase.getAttribute("hint")).toBe("The password chosen when exporting the file");
+    expect(passphrase.getAttribute("hint")).toBe("The passphrase set when exporting");
     expect(passphrase.querySelector("wt-help-tooltip")).toBeNull();
-    cleanupWidgets();
-    setLocale("es-ES");
-    try {
-      const { el: es } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
-      expect(q(es, "[data-test=passphrase]")!.getAttribute("hint")).toBe(
-        "La contraseña que elegiste al exportar el archivo",
-      );
-    } finally {
-      setLocale("en-GB");
-    }
   });
 
   it("gives the certificate passphrase a stable non-login name", async () => {
@@ -567,6 +557,14 @@ it.each(["en-GB", "es-ES"] as const)(
 
 describe("setup-cert-screen in Spanish", () => {
   afterEach(() => setLocale("en-GB"));
+
+  it("explains the passphrase with a Spanish hint", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    expect(q(el, "[data-test=passphrase]")!.getAttribute("hint")).toBe(
+      "La contraseña que elegiste al exportar",
+    );
+  });
 
   it("shows its heading, fields, messages and export help in Spanish", async () => {
     setLocale("es-ES");

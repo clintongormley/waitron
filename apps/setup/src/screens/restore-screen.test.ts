@@ -126,7 +126,7 @@ describe("SetupRestoreScreen", () => {
       type: "password",
     });
     expect(key!.shadowRoot!.querySelector("input")!.autocomplete).toBe("off");
-    expect(key!.getAttribute("hint")).toBe("The key saved with this backup");
+    expect(key!.getAttribute("hint")).toBe("The key that unlocks this backup");
     expect(key!.querySelector("wt-help-tooltip")).toBeNull();
     const reveal = key!.querySelector<HTMLElement>("wt-button[slot=end]")!;
     expect(reveal.getAttribute("aria-label")).toBe("Show recovery key");
@@ -538,7 +538,7 @@ describe("SetupRestoreScreen in Spanish", () => {
     setLocale("es-ES");
     const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
     expect(q(el, 'wt-input[name="recovery-key"]')!.getAttribute("hint")).toBe(
-      "La clave guardada con esta copia",
+      "La clave que abre esta copia",
     );
   });
 

@@ -118,10 +118,11 @@ export const venueEn = {
   "venue.help.day_cutover":
     "Sales before this time belong to the previous business day. Keep 04:00 if you finish trading after midnight.",
   "venue.help.series_code":
-    "This prefix identifies ordinary invoices, for example FS/1. Keep FS unless you need another series.",
-  "venue.help.full_series_code": "This prefix identifies full invoices, for example FF/1.",
+    "This prefix identifies ordinary invoices, for example FS/1. Use letters, numbers, / _ . or -, up to 21 characters. Keep FS unless you need another series.",
+  "venue.help.full_series_code":
+    "This prefix identifies full invoices, for example FF/1. Use letters, numbers, / _ . or -, up to 21 characters.",
   "venue.help.rectificative_series_code":
-    "This prefix identifies correction invoices, for example FR/1. Keep FR unless you need another series.",
+    "This prefix identifies correction invoices, for example FR/1. Use letters, numbers, / _ . or -, up to 21 characters. Keep FR unless you need another series.",
 
   "venue.error.invoice_locales": "Choose the receipt language.",
   "venue.error.tax_id": "Enter a valid tax ID for the selected country.",
@@ -190,7 +191,7 @@ export const venueEn = {
   "cert.loaded_named": "Certificate loaded — {name}.",
   "cert.passphrase_label": "Certificate passphrase",
   "cert.passphrase_required": "Enter the certificate passphrase.",
-  "cert.passphrase_hint": "The password chosen when exporting the file",
+  "cert.passphrase_hint": "The passphrase set when exporting",
   "cert.show_passphrase": "Show certificate passphrase",
   "cert.hide_passphrase": "Hide certificate passphrase",
   "cert.kind_label": "Certificate type",
@@ -361,11 +362,11 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "venue.help.day_cutover":
     "Las ventas anteriores a esta hora pertenecen al día comercial anterior. Deja las 04:00 si cierras después de medianoche.",
   "venue.help.series_code":
-    "Este prefijo identifica las facturas ordinarias, por ejemplo FS/1. Deja FS salvo que necesites otra serie.",
+    "Este prefijo identifica las facturas ordinarias, por ejemplo FS/1. Usa letras, números, / _ . o -, hasta 21 caracteres. Deja FS salvo que necesites otra serie.",
   "venue.help.full_series_code":
-    "Este prefijo identifica las facturas completas, por ejemplo FF/1.",
+    "Este prefijo identifica las facturas completas, por ejemplo FF/1. Usa letras, números, / _ . o -, hasta 21 caracteres.",
   "venue.help.rectificative_series_code":
-    "Este prefijo identifica las facturas rectificativas, por ejemplo FR/1. Deja FR salvo que necesites otra serie.",
+    "Este prefijo identifica las facturas rectificativas, por ejemplo FR/1. Usa letras, números, / _ . o -, hasta 21 caracteres. Deja FR salvo que necesites otra serie.",
 
   "venue.error.invoice_locales": "Elige el idioma del recibo.",
   "venue.error.tax_id": "Introduce un número de identificación fiscal válido para el país elegido.",
@@ -437,7 +438,7 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
   "cert.loaded_named": "Certificado cargado — {name}.",
   "cert.passphrase_label": "Contraseña del certificado",
   "cert.passphrase_required": "Introduce la contraseña del certificado.",
-  "cert.passphrase_hint": "La contraseña que elegiste al exportar el archivo",
+  "cert.passphrase_hint": "La contraseña que elegiste al exportar",
   "cert.show_passphrase": "Mostrar la contraseña del certificado",
   "cert.hide_passphrase": "Ocultar la contraseña del certificado",
   "cert.kind_label": "Tipo de certificado",

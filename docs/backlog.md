@@ -739,9 +739,24 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   creation/provisioning writers refuse a zone not on its country's list.
   [Detail](backlog/setup.md#a-venues-time-zone-must-come-from-its-country-packs-list-a166-owner-2026-10-01)
 
-- **Remaining "?" buttons that should be hints (A237, owner 2026-10-03)** — OPEN. Other screens'
-  "?" buttons were not reviewed against the rule.
-  [Detail](backlog/setup.md#remaining--buttons-that-should-be-hints-a237-owner-2026-10-03)
+- **A237. Nothing guards the hint-or-"?" rule across screens (owner 2026-10-03)** — OPEN.
+
+- **Some setup "?" buttons fit neither of the hint-or-"?" rule's reasons** — left open by A1315
+  PR 2. The three file pickers (backup, configuration export, certificate) and the restore
+  confirmation tick box have no text box for a hint, and the province's dropdown starts empty.
+  Decide whether they keep the "?" (the shared `wt-file-input` takes a hint).
+
+- **The setup venue screen keeps an operation-description field it never shows** — left open by
+  A1315 PR 2. `#shows` in `apps/setup/src/screens/venue-screen.ts` leaves `operationDescription`
+  out, so `venue.help.operation_description` (EN and ES) is never displayed; decide whether the
+  field and its strings go.
+
+- **The setup role screen shows its choices as cards with buttons, not `wt-choice-row` rows**
+  (`apps/setup/src/screens/role-screen.ts`, reached from Join or recover). Split out of A237.
+
+- **The certificate help page the setup wizard opens writes the browser's warning as “not secure”
+  in quotes** (`/setup/trust`, `apps/server/src/trust-page.ts`), where the wizard's first screen
+  (#1107) writes Not secure without them. Split out of A237.
 
 - **No test covers the setup review screen's value cell's own centring** — left open by A243
   (W33, #1143).
@@ -4311,16 +4326,10 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **A1248. The failed-start recovery page does not serve the guides (left open by A582 slice 3,
   #1871).** It is started from `apps/server/src/node-entry.ts`, outside `bootServer`.
 
-- **A1315. Bring every help bubble down to orientation, one area per PR** (dashboard, till, setup,
-  server pages; English and Spanish). The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients):
+- **A1315. Bring every help bubble down to orientation, one area per PR** (dashboard, till, server
+  pages; English and Spanish). The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients):
   read the code a bubble describes first, move each dropped fact into its linked guide section, and
-  list every changed text before and after. Setup is done (A1315 PR 2); the setup app has no guide
-  links, so its bubbles drop only what the screen itself shows when people try.
-
-- **The setup venue screen keeps an operation-description field it never shows.** `#shows` in
-  `apps/setup/src/screens/venue-screen.ts` leaves `operationDescription` out, so its help string
-  `venue.help.operation_description` (EN and ES) is never displayed; say whether the field and its
-  strings should go (A1315 PR 2 shortened the string rather than widen its scope).
+  list every changed text before and after.
 
 - **`wt-combobox` without a search box never exposes `aria-required`**
   [Detail](backlog/dashboard.md#wt-combobox-without-a-search-box-never-exposes-aria-required)

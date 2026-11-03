@@ -170,26 +170,6 @@ existing venue retains its saved zone (`applyPreparedVenue`,
 `packages/provisioning/src/configuration-transfer.ts`); importing venue details is a creation concern,
 not an edit through that applicator.
 
-## Remaining "?" buttons that should be hints (A237, owner 2026-10-03)
-
-**OPEN.** The rule — a short
-explanation is the field's hint, and the "?" button is only for one too long for a hint or a field
-that starts filled in — nothing enforces it. A1315 PR 2 judged every setup "?" left after the first
-four screens: the connect screen's four fields, the backup restore screen's recovery key, the bucket
-restore screen's kit, the configuration import's passphrase and the certificate passphrase became
-hints (each starts empty; the connect screen refills its fields only from the operator's own refused
-request). The "?" stays on the file pickers (backup file, configuration export, certificate file),
-which have no text box for a hint; on the environment and certificate-type dropdowns and the venue
-screen's fields with a "?", which start filled in; and on the receipt-language choice and the restore
-confirmation checkbox, which have no text box. What is left open is a guard. The dashboard's "?" buttons, Department and Starting zone on the device profile form among them,
-are help-mode badges since A582's slice 2b, which settles A237's dashboard half (A582
-design §7). A243 removed every "?" button from the setup review
-screen. Separately, the role screen
-(`apps/setup/src/screens/role-screen.ts`), reached from Join or recover, still shows its choices as
-cards with buttons rather than `wt-choice-row` rows. The certificate help page the setup wizard opens
-(`/setup/trust`, drawn by `apps/server/src/trust-page.ts`) still writes the browser's warning as
-“not secure” in quotes, where the wizard's first screen (#1107) now writes Not secure without them.
-
 ## No test covers the setup review screen's value cell's own centring
 
 Left open: no test covers the value cell's own centring (`align-self: center` on the value in
