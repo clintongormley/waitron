@@ -76,6 +76,25 @@ Left by Slice 9 (the S2 re-run, [research note](../research/2026-09-16-sqlite-fa
 - No control drives the receiver's per-chain pause; a one-off run on a throwaway copy with the
   pause ignored filed record 1 twice.
 
+Left open by Slice 5a (the relinquished fact: a promotion whose old box relinquished filing stores
+a version 2 approval):
+- A binding that carries `oldMachineRelinquished` is handled two ways. The emergency and
+  first-setup context builders drop the key after `...binding`, so a version 1 approval is
+  accepted; the cloud restore check (`cloud-preparation.ts`) keeps it, so the request is refused
+  `event_mismatch`. (Paper export and cloud first setup drop it too, but refuse such a binding
+  before they build the context.) Neither writes a version 2 row. Pick one behaviour for all of
+  them.
+- The context builders put their fixed fields before `...binding`, so a binding key such as `mode`
+  would override one (`emergency-preparation.ts`); no test shows the binding's key checks stop that.
+- `initial-setup.ts`'s override of the fact has no test of its own (the mode check refuses that
+  case anyway).
+- In `hour-recovery-preparation.ts`, removing `promotion &&` from the offline rule or from `select`
+  fails no test (the first is redundant).
+- `node-operation-preparation.test.ts` has no promotion case that passes
+  `oldMachineRelinquished: false` explicitly.
+- `backup-verification-history.test.ts`'s `relinquishedPromotion` helper repeats about 55 lines of
+  `activation()`.
+
 **Amended Cloud agreement published, 2026-10-23 (D133):**
 [Cloud #323](https://github.com/waitron-io/waitron-cloud/pull/323), signed
 `08a2a0d4290cf7fbd54a87d2493b6d9727f8f7ec`, publishes the
