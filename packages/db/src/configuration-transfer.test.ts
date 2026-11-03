@@ -149,6 +149,28 @@ describe("validateCoreConfiguration", () => {
     ).not.toThrow();
   });
 
+  it.each([null, true, "1", 2, -1])(
+    "A773 station policy: refuses an imported waits_for_pass of %j",
+    (waits_for_pass) => {
+      expect(() =>
+        validateCoreConfiguration({ kitchen_stations: [{ waits_for_pass }] }),
+      ).toThrowError(
+        expect.objectContaining({
+          code: "setup.request_invalid",
+          params: { field: "kitchen_stations.waits_for_pass" },
+        }),
+      );
+    },
+  );
+
+  it("A773 station policy: accepts 0, 1 and an absent waits_for_pass", () => {
+    expect(() =>
+      validateCoreConfiguration({
+        kitchen_stations: [{ waits_for_pass: 0 }, { waits_for_pass: 1 }, {}],
+      }),
+    ).not.toThrow();
+  });
+
   it("accepts an empty bundle", () => {
     expect(() => validateCoreConfiguration({})).not.toThrow();
   });
@@ -272,10 +294,10 @@ describe("CORE_CONFIGURATION_TRANSFER", () => {
     expect(CORE_CONFIGURATION_TRANSFER.afterImport).toBe(storeTableShortNameKeys);
   });
 
-  it("A773 phases: a station's pass waiting is not carried", () => {
+  it("A773 station policy: a station's pass waiting is carried", () => {
     expect(
-      CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "kitchen_stations")?.omit,
-    ).toEqual(["waits_for_pass"]);
+      CORE_CONFIGURATION_TRANSFER.tables.find((table) => table.name === "kitchen_stations"),
+    ).toEqual({ name: "kitchen_stations", leaveBehindWhenFalse: "active" });
   });
 
   it("leaves a deleted printer behind and never carries its poll credential", () => {

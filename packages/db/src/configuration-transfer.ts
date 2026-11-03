@@ -27,6 +27,8 @@ export function validateCoreConfiguration(
       throw new AppError("setup.request_invalid", {
         field: "kitchen_stations.changes_after_sending",
       });
+    if (row.waits_for_pass !== undefined && row.waits_for_pass !== 0 && row.waits_for_pass !== 1)
+      throw new AppError("setup.request_invalid", { field: "kitchen_stations.waits_for_pass" });
   }
   for (const table of ["kitchen_courses", "kitchen_stations", "floor_zones"])
     for (const row of tables[table] ?? [])
@@ -63,12 +65,7 @@ export const CORE_CONFIGURATION_TRANSFER = {
   kind: "tables",
   tables: [
     { name: "catalogues" },
-    {
-      name: "kitchen_stations",
-      leaveBehindWhenFalse: "active",
-      // Left out until PR C exposes the setting: a bundle carrying it is refused.
-      omit: ["waits_for_pass"],
-    },
+    { name: "kitchen_stations", leaveBehindWhenFalse: "active" },
     { name: "kitchen_courses", leaveBehindWhenFalse: "active" },
     { name: "categories" },
     // The catalogue module's `afterImport` sets `name_key` from the name.

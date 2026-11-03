@@ -2653,6 +2653,115 @@ it("refuses an imported changes after sending outside the three values before wr
   ).toEqual([]);
 });
 
+it("A773 station policy: transfers each station's pass waiting", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, (tx) =>
+    tx.insert(kitchenStations).values([
+      { locationId: source.locationId, name: "Grill", waitsForPass: true },
+      { locationId: source.locationId, name: "Cold", waitsForPass: false },
+    ]),
+  );
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-23T12:00:00Z"),
+    versions,
+  );
+  expect(transferred.tables.kitchen_stations).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ name: "Grill", waits_for_pass: 1 }),
+      expect.objectContaining({ name: "Cold", waits_for_pass: 0 }),
+    ]),
+  );
+  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db
+    .select({ name: kitchenStations.name, waitsForPass: kitchenStations.waitsForPass })
+    .from(kitchenStations)
+    .where(inArray(kitchenStations.name, ["Grill", "Cold"]))
+    .orderBy(kitchenStations.name);
+  expect(imported).toEqual([
+    { name: "Cold", waitsForPass: false },
+    { name: "Grill", waitsForPass: true },
+  ]);
+});
+
+it("A773 station policy: a copy without waits_for_pass imports every station not waiting", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  await withTransaction(suite.db, (tx) =>
+    tx.insert(kitchenStations).values([
+      { locationId: source.locationId, name: "Grill", waitsForPass: true },
+      { locationId: source.locationId, name: "Cold", waitsForPass: false },
+    ]),
+  );
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-23T12:00:00Z"),
+    versions,
+  );
+  for (const row of transferred.tables.kitchen_stations!) delete row.waits_for_pass;
+  await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+    db: targetSuite.db,
+    modules: ALL_MODULES,
+    beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
+  });
+  const imported = await targetSuite.db
+    .select({ name: kitchenStations.name, waitsForPass: kitchenStations.waitsForPass })
+    .from(kitchenStations)
+    .orderBy(kitchenStations.name);
+  expect(imported.map((station) => station.name)).toEqual(
+    expect.arrayContaining(["Cold", "Grill"]),
+  );
+  expect(imported.every((station) => station.waitsForPass === false)).toBe(true);
+});
+
+it("A773 station policy: refuses an imported waits_for_pass outside 0 and 1 before writing anything", async () => {
+  const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
+  const transferred = await buildConfigurationBundle(
+    suite.db,
+    source,
+    ALL_MODULES,
+    new Date("2026-10-23T12:00:00Z"),
+    versions,
+  );
+  const station = transferred.tables.kitchen_stations![0]!;
+  station.waits_for_pass = "yes";
+  await expect(
+    applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
+    }),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "kitchen_stations.waits_for_pass" },
+  });
+  expect((await targetSuite.db.execute(sql`select count(*) as n from tenants`)).rows).toEqual([
+    { n: 0 },
+  ]);
+  expect(
+    (await targetSuite.db.execute(sql`select count(*) as n from kitchen_stations`)).rows,
+  ).toEqual([{ n: 0 }]);
+});
+
 it("A725 allocates omitted imported colours after reserving explicit colours later in the bundle", async () => {
   const source = await applyVenue(planVenue(venue("B13572468"), ALL_MODULES), {
     db: suite.db,
