@@ -948,28 +948,30 @@ folder or NetworkManager.
 (#PR5) adds one host library under `scripts/box/`, none of it called yet. Unlike PR 4's, it writes
 and removes real files, through file operations a test can replace.
 
-- `disk-key.mjs` exports its default file operations as `hostFileIo`, so both stores share one
-  flush implementation; nothing else in it changed.
+- `disk-key.mjs` exports its default file operations as `hostFileIo`, so both modules share one
+  set of default file operations; nothing else in it changed.
 - `wifi-boot-copy.mjs`: `createWifiBootCopyPublisher` takes `decideWifiBootCopy`'s answer (PR 4)
   and checks it first: a copy whose bytes `parseWifiRecord` does not load, a reason not on
   `WIFI_NO_COPY_REASONS` (now exported by `wifi-record.mjs`), or any other shape is rejected with
   `wifi_copy.decision_invalid`, before any file call. It runs PR 2's reader first, so the boot
   mount, folder and record rules are the reader's; a copy the reader finds damaged (corrupt,
   unsupported or oversized) is replaced or removed, not refused. It then checks the folder again
-  and the staging name `wifi.json.next`: a symbolic link, folder, named pipe, second hard link,
-  wrong owner or wrong permissions at `wifi.json`, `wifi.json.next` or the folder refuses with no
-  write (`failed`, with the reason), for a removal as for a write. A copy is written to
+  and the staging name `wifi.json.next`. Anything but a regular single-link file at `wifi.json` or
+  `wifi.json.next` (a symbolic link, folder, named pipe or second hard link), a symbolic link or
+  non-folder at the folder, or a wrong owner or wrong permissions at any of the three refuses with
+  no write (`failed`, with the reason), for a removal as for a write. A copy is written to
   `wifi.json.next` with the `wx` flag (fail if the name exists) and mode `0600`, flushed, renamed
   to `wifi.json`, the folder flushed, and read back; a missing folder is made with mode `0700`
-  first. An unchanged copy is not rewritten, only the two folders flushed. Every "no copy" answer,
-  not only cable-only, removes `wifi.json` and any `wifi.json.next`, flushes the folder and checks
-  both are gone; with no folder it answers `absent` with no write. The folder and other files in it
-  are never touched. A failed step stops there with no clean-up, and the next publication removes
-  what it left (tested after a stop at every step). `status()` answers `pending`, `current`,
-  `absent` or `failed`, with the "no copy" reason and the failure, and nothing about whether the
-  box is connected; it is `pending` until the first publication finishes and while one runs.
-  Publications run one at a time, in call order. The fixed `publishWifiBootCopy` answers `failed`
-  / `mount-unverified` with no file call until the Linux pull request adds the boot-mount check.
+  first. An unchanged copy with no leftover staging file is not rewritten, only the two folders
+  flushed. Every "no copy" answer, not only cable-only, removes `wifi.json` and any
+  `wifi.json.next`, flushes the folder and checks both are gone; with no folder it answers `absent`
+  with no write. The folder is never removed, and no other name in it is touched. A failed step
+  stops there with no clean-up, and the next publication removes what it left (tested after a stop
+  at every step). `status()` answers `pending`, `current`, `absent` or `failed`, with the "no copy"
+  reason and the failure, and nothing about whether the box is connected; it is `pending` until the
+  first publication finishes and while one runs. Publications run one at a time, in call order.
+  The fixed `publishWifiBootCopy` answers a valid decision with `failed` / `mount-unverified` and no
+  file call until the Linux pull request adds the boot-mount check.
 
 **A box that already holds Waitron, with its TPM or Secure Boot switched off:** the owner decided on 2026-11-03; see [Decisions and deliberate limits](#decisions-and-deliberate-limits).
 
@@ -1080,12 +1082,12 @@ and removes real files, through file operations a test can replace.
   after every Wi-Fi change it applies or sees, with `decideWifiBootCopy` of NetworkManager's
   current settings; slice 2's installer publishes the first copy at handoff. Until then the state
   is `pending`.
-- The durable pending intent on `@host-state` (the separate host mount inside the encrypted disk) is slice 3's, beside
-  the live NetworkManager change it covers. Proposed (D11): it records only that a change began
-  and ended, with no password, so it cannot replay an obsolete one and needs no key beyond the disk
-  encryption that already holds `@host-state`. Its shape waits for the live NetworkManager change
-  it covers, not for a way to test it: PR 1's store shows an `@host-state` record can be built and
-  tested with an injected mount check.
+- The durable pending intent on `@host-state` (the separate host mount inside the encrypted disk)
+  is slice 3's, beside the live NetworkManager change it covers. Proposed (D11): it records only
+  that a change began and ended, with no password, so it cannot replay an obsolete one and needs no
+  key beyond the disk encryption that already holds `@host-state`. Its shape waits for the live
+  NetworkManager change it covers, not for a way to test it: PR 1's store shows an `@host-state`
+  record can be built and tested with an injected mount check.
 - The host reports a live-network change and the copy's state as two outcomes, with recovery
   availability separately (spec §7.5), and treats Wi-Fi unlock as available only when the state is
   `current` (proposed).
