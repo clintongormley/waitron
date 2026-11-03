@@ -2269,7 +2269,7 @@ greps and adds any new reader to this table):
 | Reader | Where | Accepts after this slice |
 | --- | --- | --- |
 | allocation validation | `allocation-envelope.ts:192-215` (`approvalShape`), the event check `:383-391`, the "old machine" rules `:392-395` | Task 5a.2: version 1 always except in a relinquished context; version 2 only in one |
-| backup verification of stored allocations | `backup-verification-history.ts:125-152`, including its "absent or offline" refusal `:142`; the approval is read at `:287`, inside the table loop `:465-467` | versions 1 and 2, the refusal widened to "absent, offline or relinquished" (this task) |
+| backup verification of stored allocations | `backup-verification-history.ts:125-152`, including its "absent or offline" refusal `:142`; the approval is read at `:287`, inside the table loop `:465-467` | version 1 as today; version 2 only in the shape a relinquished promotion writes (`oldMachineRelinquished: true`, `oldMachineOffline: false`, `oldMachineAbsent: false`) and only on an `hour` row (this task; fix round 1 narrowed it from "absent, offline or relinquished") |
 | declared paper evidence | `declared-paper-evidence.ts:181-205` (version check `:195`) | version 1 only, unchanged (paper approvals are never promotions); guarded |
 | initial setup | `initial-setup.ts:188-196` and `:224-245` (version check `:239`) | version 1 only, unchanged; guarded |
 | old Cloud receipts | `cloud-evidence.ts:270-290` (version check `:279`) | version 1 only, unchanged (Cloud never signs version 2); guarded |
@@ -2292,7 +2292,9 @@ Tests in `backup-verification-history.test.ts`, `declared-paper-preparation.test
   version 2 relinquished approval verifies" (fails today: the reader accepts version 1 only).
 - [ ] **Step 2: Write the guards.** In `backup-verification-history.test.ts`: "a stored version 1
   approval verifies as today"; "a stored version 2 approval saying neither offline, absent nor
-  relinquished is refused". For each unchanged reader, in its suite: "a version 2 approval is
+  relinquished is refused"; and (fix round 1) version 2 in any other shape (relinquished false with
+  offline true; a restore's or a first setup's approval relabelled version 2) or on an emergency row
+  is refused. For each unchanged reader, in its suite: "a version 2 approval is
   refused" (so it cannot slip in where no promotion belongs).
 - [ ] **Step 3: Run** `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/backup-verification-history.test.ts src/declared-paper-preparation.test.ts src/initial-setup.test.ts src/cloud-evidence.test.ts src/conflict-recovery-contract.test.ts` — the Step 1 test FAILS, the guards PASS.
 - [ ] **Step 4: Implement.**
