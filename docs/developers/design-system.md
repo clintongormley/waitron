@@ -2512,6 +2512,9 @@ the pass's are in `till-pass-screen.a11y.test.ts`).
 - The setup wizard keeps always mode. Every other badge takes `mode="help-mode"`. Guard:
   `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads literals as text; what it
   does not see is in [conventions-ui.md](conventions-ui.md).
+- What a badge says orients and no more: the main points in a few short sentences, anything
+  people would not find by trying, and a link to the guide for the rest (owner, 2026-11-03;
+  [conventions-ui.md](conventions-ui.md#a-help-bubble-orients)).
 - In a right-to-left page the badge hangs over the top left corner (it is placed with
   `inset-inline-end`).
 

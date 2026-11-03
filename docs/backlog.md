@@ -4311,6 +4311,11 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
 - **A1248. The failed-start recovery page does not serve the guides (left open by A582 slice 3,
   #1871).** It is started from `apps/server/src/node-entry.ts`, outside `bootServer`.
 
+- **A1315. Bring every help bubble down to orientation, one area per PR** (dashboard, till, setup,
+  server pages; English and Spanish). The rule is in [conventions-ui.md](developers/conventions-ui.md#a-help-bubble-orients):
+  read the code a bubble describes first, move each dropped fact into its linked guide section, and
+  list every changed text before and after.
+
 - **`wt-combobox` without a search box never exposes `aria-required`**
   [Detail](backlog/dashboard.md#wt-combobox-without-a-search-box-never-exposes-aria-required)
 

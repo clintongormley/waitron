@@ -248,6 +248,10 @@ called weaker than its name, the topic file lists what it does not see.
 - **A `wt-help-tooltip` outside the setup wizard carries `mode="help-mode"`**, so it shows only while
   help is on (owner, 2026-10-18, A582 design §7). Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads
   literals as text; what it misses is in [conventions-ui.md](docs/developers/conventions-ui.md).
+- **A help bubble orients: the main points in a few short sentences, anything people would not find
+  by trying, and a link to the guide for the rest** (owner, 2026-11-03, A1315). Write it from the
+  code that does what it describes, never from memory. Nothing guards it.
+  [Receipt](docs/developers/conventions-ui.md#a-help-bubble-orients).
 - **A screen change updates its guide in English and, where a twin exists, Spanish.**
   Every section heading carries a shared `{#id}`; dashboard/till links use each app's `help-guide.ts`.
   Guards: `apps/server/src/guide-content.test.ts` and `scripts/guide-links.test.ts`, weaker than their
