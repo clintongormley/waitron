@@ -893,7 +893,8 @@ and the real screen, network and disk adapters come with the Linux pull request.
   while it is open tries the internet again every minute. A join a person asks for that fails, or
   gives no internet within a minute, reopens the hotspot, and `networkStatus` says which of the two
   happened. Each join carries a new number, and its result must carry it back; a result for an
-  earlier join, for example one that arrives after that join ran out of time, is ignored. The decisions name the network to join but never carry its password, which stays with
+  earlier join of the same network state, for example one that arrives after that join ran out of
+  time, is ignored. The decisions name the network to join but never carry its password, which stays with
   the adapter. The waits are in `NETWORK_TIMINGS_MS`.
 
 Still waiting, all needing a Linux machine with KVM, OVMF and swtpm, or the hardware: the recipe and
@@ -906,7 +907,7 @@ and the letters-to-bytes decoder; the public CA download and its help page; the 
 and the startup-fingerprint check before resealing; the real `cryptsetup`, observation,
 boot-mount, certificate-file and listener adapters; joining Wi-Fi; the address fallback; the four
 preboot rig cases; and the key-memory measurements.
-PR 3 left for later, from its plan's "Out": the installer's screens, words, `LEEME`, printed card
+PR 3 left for later, from its plan's "Out", among them: the installer's screens, words, `LEEME`, printed card
 and progress figures; typing the recovery key on the reinstall screen to see the disk's last sale
 and unsent records; the real in-memory, stick, keyboard, clock, download, write, boot and hotspot
 adapters and the `waitron-instalar.local` status page; joining Wi-Fi and staging the first Wi-Fi
@@ -991,7 +992,8 @@ installed box's host service must notice the setting itself.
   `release-checked` carry the `requestId` of the `find-network`, `set-clock` or `download` decision
   that asked for them, and `join-result` carries the `joinId` of its `join`. In the installer's
   decisions, an answer to an earlier request that arrives after a newer one stops the install; in
-  the network decisions, an answer to an earlier join is ignored.
+  the network decisions, an answer to an earlier join is ignored. Join numbers start again at 0 in
+  each new network state, so the adapter drops any join result left over from an earlier one.
 - The boot adapter checks for the stick again just before restarting: a stick put back in after
   the policy has ordered the start is not seen by the policy (guard 3 then catches the restart with
   the stick in).
