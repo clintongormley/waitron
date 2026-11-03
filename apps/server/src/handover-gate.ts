@@ -15,7 +15,7 @@ export interface HandoverGate {
  * boundary's response shape directly rather than thrown.
  */
 export function createHandoverGate(): HandoverGate {
-  const inside = new Map<Context, { method: string; path: string }>();
+  const inside = new Set<Context>();
   const atZero = new Set<() => void>();
   let allowed: ((c: Context) => boolean) | null = null;
 
@@ -33,7 +33,7 @@ export function createHandoverGate(): HandoverGate {
           "Cache-Control": "no-store",
         });
       }
-      inside.set(c, { method: c.req.method, path: c.req.path });
+      inside.add(c);
       try {
         await next();
       } finally {
@@ -58,7 +58,9 @@ export function createHandoverGate(): HandoverGate {
         };
         const timer = setTimeout(() => {
           atZero.delete(wake);
-          resolve({ remaining: [...inside.values()].map((r) => ({ ...r })) });
+          resolve({
+            remaining: [...inside].map((c) => ({ method: c.req.method, path: c.req.path })),
+          });
         }, limitMs);
         atZero.add(wake);
       }),

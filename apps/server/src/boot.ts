@@ -559,9 +559,7 @@ export function withPendingSweep(
     }
     for (const provider of providers) {
       try {
-        const r = await (signal === undefined
-          ? provider.resolvePending(now, owned)
-          : provider.resolvePending(now, owned, signal));
+        const r = await provider.resolvePending(now, owned, signal);
         log("info", "resolve_pending.complete", {
           provider: provider.provider,
           captured: r.forwarded,

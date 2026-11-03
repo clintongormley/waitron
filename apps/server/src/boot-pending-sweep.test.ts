@@ -201,7 +201,7 @@ describe("withPendingSweep", () => {
 
     expect(report).toBe(REPORT);
     expect(resolvePending).toHaveBeenCalledTimes(1);
-    expect(resolvePending).toHaveBeenCalledWith(now, OWNERS);
+    expect(resolvePending).toHaveBeenCalledWith(now, OWNERS, undefined);
     expect(log).toHaveBeenCalledWith("info", "resolve_pending.complete", {
       provider: "sumup",
       captured: 2,
