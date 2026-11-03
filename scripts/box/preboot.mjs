@@ -218,7 +218,7 @@ function buildGate(resolveTarget, now, verify, open) {
       const bytes = /** @type {Uint8Array} */ (key);
       const refusal = admit(length);
       if (refusal) {
-        // A released buffer reads length 0 and refuses fill; it holds no bytes to clear.
+        // A view over a released or shrunk buffer reads length 0, reaches no bytes and refuses fill.
         if (length) wipe(bytes);
         return refusal;
       }

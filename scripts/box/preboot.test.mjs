@@ -1134,14 +1134,14 @@ describe("key-leak sweep", () => {
       c.texts.push(
         [label, String(value)],
         [label, JSON.stringify(value) ?? ""],
-        [label, inspect(value, { depth: 10 })],
+        [label, inspect(value, { depth: 10, showHidden: true })],
       );
     c.error = (label, error) =>
       c.texts.push(
         [label, String(error?.message)],
         [label, String(error?.stack)],
         [label, JSON.stringify(error) ?? ""],
-        [label, inspect(error, { depth: 10 })],
+        [label, inspect(error, { depth: 10, showHidden: true })],
       );
     c.look = (label, gate) => {
       c.texts.push([`${label} gate`, inspect(gate, { depth: 10, showHidden: true })]);
@@ -1429,5 +1429,22 @@ describe("key-leak sweep", () => {
       'import { exactRecord } from "./upgrades/contracts.mjs";',
     ]);
     expect(source).not.toMatch(/\brequire\s*\(|\bawait\s+import\s*\(|\bprocess\.\w/);
+  });
+
+  // The sweep's spies end one event-loop turn after the last step, so nothing may be scheduled later.
+  it("preboot.mjs names no console and schedules no later work", () => {
+    const source = readFileSync(new URL("./preboot.mjs", import.meta.url), "utf8");
+    expect(source).not.toMatch(/\b(console|setTimeout|setInterval|setImmediate|queueMicrotask)\b/);
+  });
+
+  // No test can read the gate's private variables, so a second copy of the key is refused here.
+  it("preboot.mjs makes one copy of a key, through Uint8Array.from, and no other buffer", () => {
+    const source = readFileSync(new URL("./preboot.mjs", import.meta.url), "utf8");
+    expect(source.match(/\bUint8Array\.from\(/g)).toHaveLength(1);
+    expect(source.match(/\bstructuredClone\(/g)).toEqual(["structuredClone("]);
+    expect(source).toContain("structuredClone(observation)");
+    expect(source).not.toMatch(
+      /\bnew\s+(\w*Array|ArrayBuffer|SharedArrayBuffer|DataView)\b|\bBuffer\b|\.(slice|subarray|set|copyWithin|toReversed|toSorted)\s*\(|\bArray\.from\(|\.\.\.\s*(bytes|copy|key)\b/,
+    );
   });
 });
