@@ -71,6 +71,7 @@ jobs:
         continue-on-error: true
         with:
           fetch-depth: 0
+          filter: blob:none
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -84,6 +85,7 @@ jobs:
         timeout-minutes: 2
         with:
           fetch-depth: 0
+          filter: blob:none
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
