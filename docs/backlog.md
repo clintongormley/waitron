@@ -6329,8 +6329,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
 
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
-  2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: F3,
-  S18, S19 and the schema slices S20–S28; every other slice has landed.
+  2026-11-01, high priority; nothing new is built on locations meanwhile). Still open: S18,
+  S19 and the schema slices S20–S28; every other slice has landed.
   [Design](superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](superpowers/plans/2026-11-01-a1301-remove-location.md).
   [Detail](backlog/architecture.md#a1301-remove-the-location-concept-the-venue-holds-everything-a-location-held)

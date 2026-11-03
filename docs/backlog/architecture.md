@@ -1036,7 +1036,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
-  slices. Still open: F3, S18, S19 and the schema slices S20–S28; every other slice has landed.
+  slices. Still open: S18, S19 and the schema slices S20–S28; every other slice has landed.
   `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
   `venueLocationId` are on main for the remaining consumer slices (S1, #2379).
   `@waitron/db/testing/seed.js` has `seedVenue` and `seedWorkingOrder`, and
