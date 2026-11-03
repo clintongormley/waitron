@@ -270,7 +270,7 @@ person sending is not a manager, the till asks for a manager's PIN after **Kitch
 
 Request held food from the table's order screen. Station queues and the pass show held courses and groups
 without a Fire button. On a station queue, held dishes stay dimmed and cannot be advanced by
-tapping them; on the pass they wait in **Held**.
+tapping them; on the pass, a card whose dishes are all held waits in **Held**.
 Once released, a dish can move through preparation to Ready at its station. A dish whose station
 waits for the pass goes to the pass's **To fire** column instead: see
 [Work the pass](kitchen-service.md#pass-screen).

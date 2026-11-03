@@ -404,15 +404,23 @@ export class TillPassBoard extends LitElement {
     if (this.#viewsFrom?.every((input, at) => input === from[at]) !== true) {
       this.#viewsFrom = from;
       this.#views = passCardViews(this.board, this.mode, this.runsPass, this.now);
-      this.#rows = new Map(
-        [...this.#views.values()].flat().map((view) => [view, rows(view.items)] as const),
-      );
+      this.#rows = new Map();
       this.#overdue = passOverdueCount(this.#views);
     }
     if (this.#overviewFrom !== this.board) {
       this.#overviewFrom = this.board;
       this.#overview = overviewRows(passOverviewDishes(this.board));
     }
+  }
+
+  /** Built when a card is first drawn, so a collapsed or hidden column's cards cost nothing. */
+  #rowsOf(view: CardView): ItemView[][] {
+    let built = this.#rows.get(view);
+    if (built === undefined) {
+      built = rows(view.items);
+      this.#rows.set(view, built);
+    }
+    return built;
   }
 
   override render() {
@@ -501,7 +509,7 @@ export class TillPassBoard extends LitElement {
           : nothing,
       )}
       <ul class="items">
-        ${this.#rows.get(view)!.map((members) => this.#item(members))}
+        ${this.#rowsOf(view).map((members) => this.#item(members))}
       </ul>
       ${this.#fire(view)}${this.#groupReady(view)}${view.courseReady.map((course) =>
         this.#courseReady(view, course),

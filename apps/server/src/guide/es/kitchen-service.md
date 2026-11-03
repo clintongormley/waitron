@@ -302,7 +302,7 @@ quien envía no es encargado, el terminal pide el PIN de un encargado tras **La 
 
 Pide los platos en espera desde el pedido de la mesa. Las colas de las estaciones y el pase muestran los pases
 y grupos en espera sin botón Marchar. En las colas de las estaciones, los platos en espera se muestran
-atenuados y no avanzan al tocarlos; en el pase esperan en **En espera**.
+atenuados y no avanzan al tocarlos; en el pase, una tarjeta con todos sus platos en espera está en **En espera**.
 Una vez enviados a preparar, puedes avanzar los platos hasta Listo en su estación. Un plato cuya
 estación espera al pase va en cambio a la columna **Por marchar** del pase: consulta
 [Trabaja en el pase](kitchen-service.md#pass-screen).

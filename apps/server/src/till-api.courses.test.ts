@@ -647,7 +647,7 @@ function itemsByName(order: { items: PassCardItem[] }): Map<string, PassCardItem
 }
 
 describe("KDS-3 expo routes: the All stations board + whole-course ready", () => {
-  it("GET /api/expo/board carries every dish of the order; each carries its station name, course and release", async () => {
+  it("GET /api/expo/board carries every dish of the order; each carries its station name, course and fired time", async () => {
     const orderId = await placeOrder([SOPA, FILETE, PAN]);
     const order = await expoOrder(orderId);
     const items = itemsByName(order);
