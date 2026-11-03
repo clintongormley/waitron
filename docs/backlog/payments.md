@@ -281,7 +281,7 @@ screens' reads are not limited, and it was not measured in a real browser agains
 provider. Left open by A260 (several card readers' status reads at once can use up the browser's
 connections to the box; W18c #1145 and W48 #1162).
 
-## Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is the SumUp provider's `resolvePending`) do not both succeed
+## Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its callers are the SumUp and Stripe providers' `resolvePending`) do not both succeed
 
 The second pass throws partway instead of skipping the rows the first resolved.
 
@@ -480,8 +480,10 @@ the same column.
   singleton primary (`listAttempting`, `packages/payments/src/store.ts:510`; `sweepOwners`,
   `apps/server/src/boot.ts:511`). The sweep runs in every node role; only sale recovery and bill
   completion check for primary. Coordination between two boxes collecting at the same time is not
-  built. A manager's stuck-payment resolution still acts on every box's payments; it has its own
-  entry under Payments in [the backlog](../backlog.md). Today's venue has one node (CLAUDE.md §5).
+  built. A manager's stuck-payment resolution still acts on every box's payments, through both
+  dashboard lists (`apps/server/src/payments-api.ts:1032` for whole orders, `:1184` for held bill
+  payments) and both resolve routes (`:1073` and `:1226`); it has its own entry under Payments in
+  [the backlog](../backlog.md). Today's venue has one node (CLAUDE.md §5).
   [Implementation plan](../superpowers/plans/2026-10-17-a764-stripe-unknown-outcome.md).
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,

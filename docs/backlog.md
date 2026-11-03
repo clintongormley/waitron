@@ -3959,14 +3959,19 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   A739's payment window (An amount) and the bill payments design's tips. Not designed.
 
 - **A manager's stuck-payment resolution must act only on the collection owner's payments before a
-  second box sells.** The dashboard's stuck list (`apps/server/src/payments-api.ts:1032`) and its
-  `resolveAbandonedAttempt` call (`payments-api.ts:420`) read and act on every box's attempting
-  payments, so a manager could cancel one another box is still taking. Left open by A764 (A1018 Slice 4b).
+  second box sells.** The dashboard's two stuck lists, whole-order payments
+  (`apps/server/src/payments-api.ts:1032`) and held bill payments (`payments-api.ts:1184`), read
+  every box's payments; the bill-payment list's "still at a reader" check
+  (`billPaymentIsLive`, `apps/server/src/bill-payments.ts:1260`) sees only this box. Both resolve
+  routes (`payments-api.ts:1073` and `:1226`) reach the same `resolveAbandonedAttempt` call
+  (`payments-api.ts:420`), so a manager could cancel a payment another box is still taking. Left
+  open by A764 (A1018 Slice 4b).
 
-- **Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its one caller is
-  the SumUp provider's `resolvePending`) do not both succeed**: the second pass throws partway
-  instead of skipping the rows the first resolved.
-  [Detail](backlog/payments.md#two-concurrent-passes-over-listattempting-packagespaymentssrcstorets-its-one-caller-is-the-sumup-providers-resolvepending-do-not-both-succeed)
+- **Two concurrent passes over `listAttempting` (`packages/payments/src/store.ts`; its callers are
+  the SumUp and Stripe providers' `resolvePending`, `packages/payments-sumup/src/provider.ts:317`
+  and `packages/payments-stripe/src/provider.ts:258`) do not both succeed**: the second pass throws
+  partway instead of skipping the rows the first resolved.
+  [Detail](backlog/payments.md#two-concurrent-passes-over-listattempting-packagespaymentssrcstorets-its-callers-are-the-sumup-and-stripe-providers-resolvepending-do-not-both-succeed)
 
 - **Loose ends left by A633.**
   [Detail](backlog/payments.md#loose-ends-left-by-a633)
