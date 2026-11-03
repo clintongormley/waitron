@@ -77,12 +77,6 @@ Left by Slice 9 (the S2 re-run, [research note](../research/2026-09-16-sqlite-fa
 
 Left open by Slice 5a (the relinquished fact: a promotion whose old box relinquished filing stores
 a version 2 approval):
-- A binding that carries `oldMachineRelinquished` is handled two ways. The emergency context
-  builder (`emergency-preparation.ts`) drops the key after `...binding`, so a version 1 approval is
-  accepted; the cloud restore check (`cloud-preparation.ts`) keeps it, so the request is refused
-  `event_mismatch`. (Paper export, first setup and cloud first setup drop it too, but refuse such a
-  binding before they build the context.) Neither writes a version 2 row. Pick one behaviour for
-  both.
 - The context builders put their fixed fields before `...binding`, so a binding key such as `mode`
   would override one (`emergency-preparation.ts`); no test shows the binding's key checks stop that.
 - In `hour-recovery-preparation.ts`, removing `promotion &&` from the offline rule or from `select`
@@ -487,6 +481,31 @@ emailed notice in `apps/server/src/i18n/invoice-email-notice.ts`, since the prov
 receives what staff type into the till's address search and which suggestion they pick. Left
 open by A1171.
 
+## The waiting start's loose ends
+
+Left open by A1018 Slice 3, each read in review rather than run:
+- A refused stepdown leaves `steppingDown` set (`apps/server/src/waiting-start.ts`), which stops
+  the re-ask and turns a carry-on away, so the box stays waiting until its process restarts.
+- A stepdown request in flight on the waiting app after the wait ended (a carry-on finished, or a
+  peer answered) writes the restriction and restarts the box, but its close does nothing, so the
+  continuing start runs until the restart. Untested.
+- `node-entry` releases its venue-folder hold when the waiting server returns
+  (`apps/server/src/node-entry.ts`, its rule 5), before the start has finished; the open store holds
+  the venue lock meanwhile.
+- The dev entry's relaunch path into `failedLater` (`apps/server/src/first-setup-launch.ts`) has no
+  test of its own; it uses the same wrapper as the tested first launch.
+
+## The peer-status route's minor follow-ups
+
+Left open by A1018 Slice 3 (`apps/server/src/peer-status-api.ts`):
+- A bad signature from a box the chart knows answers 403 `handover.peer_unknown`, not 401.
+- `operationId` is checked as a 1–64 character string, not as a UUID.
+- The route reads a body of any size, reads the chart and unseals this box's key before the
+  signature is checked; a small body limit, or checking the envelope's shape first, would bound it.
+- `boot.adoption-allocation.test.ts` imports from `@waitron/db` twice, and its pending-adoption
+  case repeats its sibling's setup; `boot.restricted.test.ts`'s full-start case checks only the
+  answer's shape, not its signature.
+
 ## A1185: a venue not yet connected sees no prices
 
 The Cloud services screen shows the plan
@@ -547,6 +566,12 @@ _2026-11-01: built in A947 slice 3a._ Joining pins the main box's key in `node.d
 against this box's own key and that pinned key (`assertHeldDocumentTrusted`,
 `apps/server/src/membership-trust.ts`). Its limits are A1275 and A1276.
 
+- **A stray "relinquished" fact outside a promotion is left handled two ways** (owner,
+  2026-11-03, answer (a) to Slice 5a's choice). A binding that carries `oldMachineRelinquished`:
+  the emergency context builder (`packages/fiscal-verifactu/src/emergency-preparation.ts`) drops
+  the key after `...binding` and stores an ordinary version 1 approval; the cloud restore check
+  (`packages/fiscal-verifactu/src/cloud-preparation.ts`) keeps it and refuses the request
+  `event_mismatch`. Neither writes a version 2 row, and no product code sends such a binding.
 - **Translate all keeps the suggestion routes’ existing primary checks** (owner, 2026-10-15,
   lane B question 3, answer (a)). Do not add a separate primary check to discarding a suggestion;
   follow the sibling translation-save route and the shared read-only guard for writes.

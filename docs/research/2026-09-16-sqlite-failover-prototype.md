@@ -1070,7 +1070,8 @@ words naming Part D and Part E's second half as controls; every value in it is t
 **S3 threw on some runs on this machine that day**, with `database disk image is malformed`, so
 the exit was 1 on those runs. Across every whole-table run with litestream installed, S3 threw in
 1 of 7 runs with S2's file as it was before this change and in 4 of 7 with the new one, the
-alternating set of six included. So it also throws with the old file; whether the new file makes
+alternating set of six included. Of the old file's 7, only 3 have saved output (1 threw, 2
+passed); the other 4 passes rest on unsaved runs. So it also throws with the old file; whether the new file makes
 it more frequent is not settled by those counts. Run alone twice, it passed both times. Why it
 throws is not investigated here; it is a backlog entry under _Replication, failover and the cloud_.
 

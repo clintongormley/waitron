@@ -284,6 +284,8 @@ the owner.
    arbitrary readers today (`apps/server/src/management-api.ts:1040-1044`, which asks for a
    manager's password); a box asks a peer by signing a short query with its own node key, which
    the peer checks against the keys its own chart vouches for (Slice 3).
+   2026-11-03 (Ruling R18): `GET /api/till`, which needs no sign-in, now carries the held chart;
+   an owner choice, pending. See "Slice 3 as built".
 5. **The start check counts only peers that finished joining** — a routable box in the chart
    whose `nodes` row this box's `venue.db` holds (fact 3 above). Why: the chart already lists a
    half-joined spare at the main box's own address (fact 2), so the draft's rule would have made
@@ -299,6 +301,8 @@ the owner.
    `randomUUID()` in `apps/server/src/reserved-identity.ts:37-40`, and the rejoin wipe clears
    `trading.env`, `rejoin-command.ts:138`), but a cold restore brings back `trading.env` with the
    node id in it (`RECOVERY_FILES`, `apps/server/src/state-secrets.ts:16-23`) (review round 4).
+   2026-11-03 (Ruling R21): a peer at `sell-only` in a held chart this box signed as serving
+   primary is also asked and not counted. See "Slice 3 as built".
 6. **The person drives an activation from a page M2 serves.** M2 names its new series from its
    own minute after another machine's clock agrees (CLAUDE.md §5), and the second clock it accepts
    is a browser's, read by challenge, never one on the same machine
@@ -1732,7 +1736,7 @@ The build departed from the task texts above in these ways; the task texts are l
   `boxCaPem`). Otherwise it connects over TLS without checking the certificate. In that case the
   answer is trusted only because its signed envelope verifies and echoes the query's nonce, and the
   query carries no credential. The cost: an active attacker on the venue's network can read a
-  peer's chart and restriction, but cannot forge them. The alternative, an owner choice, is to
+  peer's chart, restriction, and open and requested operations, but cannot forge them. The alternative, an owner choice, is to
   carry the spare's authority to the main box at adoption.
 - **A main box holds no key for its spare (Ruling R13).** `peerKeyOf`
   (`apps/server/src/handover-signing.ts`) knows this box's own key, a pinned main-box key, and keys
@@ -1748,10 +1752,41 @@ The build departed from the task texts above in these ways; the task texts are l
   beside the check, not only for a box with no counted peer. Both can only demote the box.
 - **Known limit: a restart between the chart and the restriction.** The check saves a newer
   fencing chart to `venue.db` before the restriction reaches `node.db`. A restart between the two
-  never writes the restriction: at the next start the chart is no longer newer, so no peer's answer
-  is F. That box does not take the restricted start or show its page. It comes up fenced by the
-  held chart instead: `boot.ts` demotes its singleton role to secondary, `singletonPass` runs no
+  never writes the restriction: at the next start the chart is no longer newer, so a peer's chart
+  gives no F. A peer's open operation that names this box as its source still does
+  (`operationFences`, `apps/server/src/boot-peer-check.ts`). Without one, that box does not take the
+  restricted start or show its page. It comes up fenced by the held chart instead: `boot.ts` demotes its singleton role to secondary, `singletonPass` runs no
   filing on a secondary, and `/api/node` reports `acceptingSales: false`.
+- **A wait ends in the same process (Ruling R14).** Carrying on, and a peer's later answer, go on
+  with the start in the process that waited: the waiting start closes its own app, listeners and
+  15-second re-ask timer first. So "for this start only" (decision 10) is the process's life, and
+  any later start asks the peers again. `startServer` returns the waiting server with a
+  `fullyStarted` promise, and `node-entry` starts its stayed-up timer only after that settles; a
+  failure after the wait is a failed start. A newer fencing chart sent to the waiting start writes
+  the restriction and restarts the process, whose next start is the restricted start.
+- **A carry-on waits for a re-ask in flight (Ruling R16).** If that re-ask's outcome is not `wait`,
+  it wins: `proceed` goes on with the start and `superseded` refuses with
+  `handover.known_handover`, and neither records the carry-on event.
+- **The carry-on form** is served over HTTPS only, as promote and Start again are, accepts a
+  recovery code in place of the authenticator's code, and refuses a person without `node.promote`
+  with "Your role does not let you choose which box runs the venue. Sign in here as an
+  administrator to carry on."
+- **The waiting and restricted starts carry the full start's CORS layer (Ruling R17)**, built from
+  the same origin allow-list, so a till served by another box can hand them a newer chart.
+- **`GET /api/till` carries the held chart (Ruling R18)**, as Task 3.6 says, although the route
+  needs no sign-in. Everything new it exposes is public-key material; the box ids, addresses,
+  standings and term were already readable without sign-in. An owner choice, disclosed in the PR.
+- **Guide ids (Ruling R19).** The sections are `{#waiting}` and `{#carry-on}` in both
+  `servers.md` guides; the plan's `{#waiting-for-the-other-box}` is not used.
+- **Suites that start a box (Ruling R20).** The suite command printed 26 files; Task 3.7 took the
+  first 13 and Task 3.8 the last 13. Only `boot.promote.test.ts` failed, and Ruling R21 made it
+  pass unchanged.
+- **A box asks, but does not count, the box its own promotion demoted (Ruling R21).** A peer at
+  `sell-only` in a held chart this box signed, naming this box the serving primary, is asked and
+  not counted. `sell-only` enters a chart only through a promotion
+  (`packages/membership/src/standings.ts:15`), which first requires the person's statement that the
+  old box is neutralised (`assertFenced`, `apps/server/src/promote.ts`). A newer chart from the
+  demoted box still stops this box.
 
 ---
 
