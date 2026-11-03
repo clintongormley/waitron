@@ -246,6 +246,29 @@ it("a controlled promotion stores a version 2 approval saying the old box relinq
   });
 });
 
+it("a promotion whose facts say both offline and relinquished stores the version 2 approval with offline false", async () => {
+  const { selected, stored } = await selectAndActivate(
+    hostWith({ oldMachineOffline: true, oldMachineRelinquished: true }),
+    promotion,
+    "administrator",
+  );
+  const relinquished = {
+    version: 2,
+    eventId: "promotion",
+    sourceId: primary.nodeId,
+    targetNodeId: standby.nodeId,
+    operatorId: "administrator",
+    oldMachineOffline: false,
+    oldMachineAbsent: false,
+    oldMachineRelinquished: true,
+    noParallelRecovery: true,
+    confirmedAt: "2026-10-16T12:00:00.000Z",
+    incidentEvidence: "hour/promotion",
+  };
+  expect(selected).toEqual(relinquished);
+  expect(stored).toEqual(relinquished);
+});
+
 it("select and prepare build the same version 2 input, so a relinquished promotion is not refused event_mismatch", async () => {
   const operations = hostWith({ oldMachineRelinquished: true });
   await withOperationAuthority(promotion, "administrator", async (authority) => {
