@@ -45,6 +45,8 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
     "copies a backup into a scratch folder it removes",
   "apps/server/src/first-setup-database-holdings.ts":
     "reads the live database; removes only its scratch folder",
+  "apps/server/src/handover-capture.ts":
+    "removes only its own unsigned final copy under the state folder's handover folder",
   "apps/server/src/node-entry.ts": "names venue.db in prose and `docker compose run --rm`",
   "apps/server/src/recovery-preparation.ts":
     "reads the live database; removes only its staging folder",
