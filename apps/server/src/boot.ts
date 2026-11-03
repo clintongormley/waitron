@@ -372,6 +372,7 @@ import { BackupSupervisor } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { loadBoxEnv } from "./box-env.js";
 import { readOnlyGate } from "./read-only-gate.js";
+import { isReadOnlyExempt } from "./read-only-exemptions.js";
 import { isFenced } from "./membership-fence.js";
 import { endMirrorViewer, ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
@@ -1843,17 +1844,8 @@ async function bootServer(
       "*",
       // A mirror gates by mode, per request, so a live promotion lifts it; a fenced node gates on the
       // boot-captured `fenced`, and leaves the fence only through a fresh boot.
-      readOnlyGate(
-        isReadOnly,
-        // Retirement and promote writes use their own authentication gates.
-        (c) =>
-          (fenced && c.req.method === "POST" && c.req.path === "/api/box/retire") ||
-          // Exempt on a fenced node too, so it answers the precise `promotion.node_fenced` rather
-          // than a generic gate 403.
-          (c.req.method === "POST" &&
-            ["/management-api/promote", "/management-api/promote/preparation"].includes(
-              c.req.path,
-            )),
+      readOnlyGate(isReadOnly, (c) =>
+        isReadOnlyExempt(c.req, { mirror: holders.mode.current === "mirror", fenced }),
       ),
     );
   }
