@@ -482,7 +482,6 @@ function subject(personId: string): PersonalDataSubject {
     language: "en",
     at: new Date("2026-10-25T12:00:00.000Z"),
     timeZone: "UTC",
-    locationId: place.locationId,
   };
 }
 

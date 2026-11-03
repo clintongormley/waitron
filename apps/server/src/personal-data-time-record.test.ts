@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
-import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons, startManagementSession } from "@waitron/identity";
@@ -31,7 +31,7 @@ const START = "2026-01-01";
 const END = "2026-03-21";
 const COLLEAGUE_NAME = "Colleague Canary";
 const logger = vi.fn();
-let locationId: string, martaId: string, colleagueId: string, cookie: string;
+let martaId: string, colleagueId: string, cookie: string;
 
 beforeEach(async () => {
   await seedVenue(suite.db, {
@@ -40,7 +40,6 @@ beforeEach(async () => {
     operationDescription: "Sale on premises",
     timeZone: "Europe/Madrid",
   });
-  locationId = await venueLocationId(suite.db);
   const nodeId = await seedNode(suite.db);
   const [marta, colleague] = await suite.db
     .insert(persons)
@@ -87,7 +86,6 @@ function subject(patch: Partial<PersonalDataSubject> = {}): PersonalDataSubject 
     language: "en",
     at: AT,
     timeZone: "Europe/Madrid",
-    locationId,
     ...patch,
   };
 }
@@ -197,10 +195,6 @@ describe("the server's working-time part", () => {
       expect(content).not.toContain("18:43");
       expect(content).not.toContain("19:43");
     }
-  });
-
-  it("builds no files when the node has no location", async () => {
-    expect(await files({ locationId: null })).toEqual([]);
   });
 
   it("adds no part without workforce, nor without workforce-es", () => {

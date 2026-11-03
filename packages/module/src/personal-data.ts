@@ -11,8 +11,6 @@ export interface PersonalDataSubject {
   readonly at: Date;
   /** The venue's IANA time zone, or "UTC" when it cannot be read. */
   readonly timeZone: string;
-  /** This node's location, or null when this node has no row. */
-  readonly locationId: string | null;
 }
 export interface PersonalDataFile {
   /** A name this part declared in `files`. */

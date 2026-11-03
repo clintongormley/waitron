@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { loadKeyRing } from "@waitron/credentials";
-import { locations, openVenueDatabase, tenants, type VenueDatabase } from "@waitron/db";
+import { openVenueDatabase, readVenue, tenants, type VenueDatabase } from "@waitron/db";
 import { manifestSets } from "@waitron/migrations";
 import { assertNotAhead } from "@waitron/provisioning";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
@@ -206,19 +206,15 @@ async function scratchFolder(stateDir: string, prefix: string): Promise<string> 
   return mkdtemp(join(stateDir, prefix));
 }
 
-async function readRestoredVenue(store: VenueDatabase, venueId: string): Promise<RestoredVenue> {
+async function readRestoredVenue(store: VenueDatabase): Promise<RestoredVenue> {
   const [tenant] = await store.venue
     .select({ legalName: tenants.legalName, taxId: tenants.taxId })
     .from(tenants)
     .where(eq(tenants.id, 1));
-  const [location] = await store.venue
-    .select({ name: locations.name })
-    .from(locations)
-    .where(eq(locations.id, venueId));
   return {
     legalName: tenant?.legalName ?? "",
     taxId: tenant?.taxId ?? "",
-    venueName: location?.name ?? "",
+    venueName: (await readVenue(store.venue)).name,
   };
 }
 
@@ -227,12 +223,11 @@ async function readRestoredVenue(store: VenueDatabase, venueId: string): Promise
 async function readRestoredCopy(args: {
   directory: string;
   nodeId: string;
-  venueId: string;
   migrationsRoot: string | null;
   checkIntegrity: (store: VenueDatabase) => Promise<string[]>;
   log: Logger;
 }): Promise<{ sealed: Uint8Array; venue: RestoredVenue }> {
-  const { nodeId, venueId } = args;
+  const { nodeId } = args;
   let store: VenueDatabase;
   try {
     store = await openVenueDatabase(args.directory);
@@ -248,7 +243,7 @@ async function readRestoredCopy(args: {
     );
     const sealed = table.rows.length === 0 ? null : await readSealedStateRow(store.venue, nodeId);
     if (sealed === null) throw new AppError("restore.stream_state_missing", { nodeId });
-    return { sealed, venue: await readRestoredVenue(store, venueId) };
+    return { sealed, venue: await readRestoredVenue(store) };
   } finally {
     await store.close();
   }
@@ -320,7 +315,6 @@ export async function prepareStreamRestore(deps: PrepareStreamDeps): Promise<Pre
     const { sealed, venue } = await readRestoredCopy({
       directory: scratch,
       nodeId,
-      venueId: kit.venueId,
       migrationsRoot: deps.migrationsRoot,
       checkIntegrity: deps.checkIntegrity ?? checkIntegrity,
       log: deps.log,

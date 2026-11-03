@@ -27,7 +27,6 @@ const subject = (personId: string) => ({
   language: "en" as const,
   at: new Date("2026-10-24T10:00:00.000Z"),
   timeZone: "UTC",
-  locationId: null,
 });
 
 async function download(personId: string): Promise<{ name: string; text: string }[]> {

@@ -23,8 +23,6 @@ export function timeRecordPersonalData(modules: readonly WaitronModule[]): Perso
   const part: ModulePersonalData = {
     files: TIME_RECORD_FILES,
     async prepare(tx, subject) {
-      const { locationId } = subject;
-      if (locationId === null) return async () => [];
       const [days] = await tx
         .select({
           first: sql<string | null>`min(${localDay})`,

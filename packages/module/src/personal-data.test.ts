@@ -19,7 +19,6 @@ const subject: PersonalDataSubject = {
   language: "en",
   at: new Date("2026-10-24T10:00:00Z"),
   timeZone: "Europe/Madrid",
-  locationId: "location-1",
 };
 
 const stub = (

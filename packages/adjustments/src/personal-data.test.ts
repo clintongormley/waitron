@@ -21,7 +21,6 @@ const subject = (personId: string) => ({
   language: "en" as const,
   at: new Date("2026-10-24T10:00:00.000Z"),
   timeZone: "UTC",
-  locationId: null,
 });
 
 /** Prepares inside a write-lock turn and builds after it, as `sendPersonalData` does. */

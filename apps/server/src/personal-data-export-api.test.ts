@@ -160,7 +160,7 @@ describe("GET /management-api/me/personal-data/export", () => {
     ]);
     expect(files["profile.json"]).toContain("marta@example.test");
     expect(subjects).toEqual([
-      { personId: martaId, language: "en", at: NOW, timeZone: "Europe/Madrid", locationId },
+      { personId: martaId, language: "en", at: NOW, timeZone: "Europe/Madrid" },
     ]);
   });
 
@@ -175,7 +175,7 @@ describe("GET /management-api/me/personal-data/export", () => {
       PERSONAL_DATA_README_WORDS.es.title.replace("{venue}", "Test SL"),
     );
     expect(subjects).toEqual([
-      { personId: martaId, language: "es", at: NOW, timeZone: "Europe/Madrid", locationId },
+      { personId: martaId, language: "es", at: NOW, timeZone: "Europe/Madrid" },
     ]);
   });
 
@@ -272,17 +272,6 @@ describe("GET /management-api/me/personal-data/export", () => {
     await refused(response, 401, "management_session.required");
   });
 
-  it("dates the file in UTC with no location when this node has no row", async () => {
-    const response = await ask(mounted({ nodeId: "no-such-node" }));
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-disposition")).toBe(
-      'attachment; filename="marta-lopez-2026-10-04.zip"',
-    );
-    expect(subjects).toEqual([
-      { personId: martaId, language: "en", at: NOW, timeZone: "UTC", locationId: null },
-    ]);
-  });
-
   it("dates the file in UTC when the venue's stored zone is unknown", async () => {
     await suite.db
       .update(locations)
@@ -294,9 +283,8 @@ describe("GET /management-api/me/personal-data/export", () => {
     expect(response.headers.get("content-disposition")).toBe(
       'attachment; filename="marta-lopez-2026-10-04.zip"',
     );
-    expect(subjects).toEqual([
-      { personId: martaId, language: "en", at: NOW, timeZone: "UTC", locationId },
-    ]);
+    expect(subjects).toEqual([{ personId: martaId, language: "en", at: NOW, timeZone: "UTC" }]);
+    expect(subjects[0]).not.toHaveProperty("locationId");
   });
 
   it("names the file for the real date when the box's clock reads 1970", async () => {
