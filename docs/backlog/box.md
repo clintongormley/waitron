@@ -862,7 +862,7 @@ large release assets and the A940/A947/A798 coordination.
   request adds the mount check.
 
 **Built so far (2026-11-03), PR 3.** [PR 3](../superpowers/plans/2026-11-03-b3-3-installer-policy.md)
-(#PR3) adds two more host libraries under `scripts/box/`, none called yet. Both are pure decisions:
+(#2426) adds two more host libraries under `scripts/box/`, none called yet. Both are pure decisions:
 they take events (a key pressed, a timer firing, an adapter's report) and answer what to do next,
 and the real screen, network and disk adapters come with the Linux pull request.
 
