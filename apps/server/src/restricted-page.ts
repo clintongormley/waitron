@@ -8,7 +8,7 @@ import {
   readHandoverRestriction,
   type HandoverOperationState,
 } from "@waitron/node-db";
-import { createErrorBoundary } from "@waitron/server-kit";
+import { codeOf } from "@waitron/server-kit";
 import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
@@ -42,6 +42,8 @@ const PAGE_TEXT: Readonly<
       /** The body's words before and after the successor's name. */
       body: readonly [string, string];
       progress: string;
+      /** The heading of the page answered when this one cannot be read. */
+      failed: string;
     }
   >
 > = {
@@ -52,6 +54,7 @@ const PAGE_TEXT: Readonly<
       ".",
     ],
     progress: "Progress",
+    failed: "This page could not be shown.",
   },
   "es-ES": {
     title: "El local ya no funciona con este equipo",
@@ -60,6 +63,7 @@ const PAGE_TEXT: Readonly<
       ".",
     ],
     progress: "Progreso",
+    failed: "No se ha podido mostrar esta página.",
   },
 };
 
@@ -202,17 +206,36 @@ ${steps}
 `;
 }
 
+function renderFailure(locale: SupportedLocale): string {
+  const heading = PAGE_TEXT[locale].failed;
+  return `<!doctype html>
+<html lang="${locale}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(heading)}</title>
+<style>:root { color-scheme: light dark; }</style>
+</head>
+<body>
+<h1>${escapeHtml(heading)}</h1>
+</body>
+</html>
+`;
+}
+
 /** The page a person opening a stepped-down box sees. It offers nothing to do: none is needed. */
 export function restrictedPageRoute(deps: RestrictedPageDeps): (app: Hono) => void {
-  const run = createErrorBoundary({}, "restricted_page.failed");
   return (app) => {
-    app.get("/", (c) =>
-      run(c, deps.log, async () => {
-        const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
-        c.header("Cache-Control", "no-store");
-        c.header("Vary", "Accept-Language");
+    app.get("/", async (c) => {
+      const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
+      c.header("Cache-Control", "no-store");
+      c.header("Vary", "Accept-Language");
+      try {
         return c.html(renderPage(await readView(deps), locale));
-      }),
-    );
+      } catch (error) {
+        deps.log("error", "restricted_page.failed", { errorCode: codeOf(error) });
+        return c.html(renderFailure(locale), 500);
+      }
+    });
   };
 }

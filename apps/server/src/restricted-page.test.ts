@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, nodes, withNodeTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, nodes, withNodeTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { HandoverBinding } from "@waitron/handover";
@@ -53,17 +53,21 @@ async function handOver(successor: string): Promise<void> {
   );
 }
 
-const logged: { level: string; event: string }[] = [];
+const logged: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
 
-async function page(language: string): Promise<{ status: number; html: string }> {
+function request(language: string, venue: Database = suite.db): Promise<Response> {
   const app = new Hono();
   restrictedPageRoute({
-    venue: suite.db,
+    venue,
     node: suite.node,
     nodeId: NODE,
-    log: (level, event) => logged.push({ level, event }),
+    log: (level, event, fields) => logged.push({ level, event, fields }),
   })(app);
-  const response = await app.request("/", { headers: { "Accept-Language": language } });
+  return Promise.resolve(app.request("/", { headers: { "Accept-Language": language } }));
+}
+
+async function page(language: string): Promise<{ status: number; html: string }> {
+  const response = await request(language);
   return { status: response.status, html: await response.text() };
 }
 
@@ -185,12 +189,48 @@ describe("the restricted box's own page", () => {
     expect(html).toContain("1 Jan 2020, 00:00: Stopped sending invoice records to the tax agency");
   });
 
-  it("answers a failure to read through the error boundary, which logs it", async () => {
+  it.each([
+    ["en-GB", "en-GB", "This page could not be shown."],
+    ["es-ES", "es-ES", "No se ha podido mostrar esta página."],
+  ])(
+    "answers a failure to read with a page in the reader's language (%s), and logs it",
+    async (language, lang, heading) => {
+      // No restriction row: the read fails the way a fault in Waitron would.
+      logged.length = 0;
+      const response = await request(language);
+      expect(response.status).toBe(500);
+      expect(response.headers.get("content-type")).toMatch(/^text\/html/);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      const html = await response.text();
+      expect(html).toContain(`<html lang="${lang}">`);
+      expect(html).toContain(`<h1>${heading}</h1>`);
+      expect(html).not.toContain("server.internal");
+      expect(logged).toEqual([
+        { level: "error", event: "restricted_page.failed", fields: { errorCode: "unknown" } },
+      ]);
+    },
+  );
+
+  it("answers a failure to read from the venue's copy with the same page", async () => {
+    await handOver(await seedSuccessor("Bar counter box"));
     logged.length = 0;
-    const { status, html } = await page("en-GB");
-    expect(status).toBe(500);
-    expect(html).not.toContain("<h1>");
-    expect(logged).toEqual([{ level: "error", event: "restricted_page.failed" }]);
+    const venue = new Proxy(suite.db, {
+      get: (target, key) => {
+        if (key === "select") {
+          return () => {
+            throw new Error("disk I/O error");
+          };
+        }
+        const value: unknown = Reflect.get(target, key);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const response = await request("en-GB", venue);
+    expect(response.status).toBe(500);
+    expect(await response.text()).toContain("<h1>This page could not be shown.</h1>");
+    expect(logged).toEqual([
+      { level: "error", event: "restricted_page.failed", fields: { errorCode: "unknown" } },
+    ]);
   });
 
   it("lists no step for a supersession learnt from a newer list of machines alone", async () => {
