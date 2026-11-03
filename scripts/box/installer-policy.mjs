@@ -1,4 +1,5 @@
 import { classifyDisk } from "./disk-state.mjs";
+import { usableVenueName } from "./name-tag.mjs";
 import { exactRecord, safeInteger } from "./upgrades/contracts.mjs";
 
 /** Spec §5.1 guard 3, §5.2 and §5.3 item 4. The spec's calls, not separately the owner's. */
@@ -194,8 +195,8 @@ function refuse(state, reason, hardware, releaseVersion = null) {
 /** @param {{name: string, live: boolean}|null} tag @returns {VenueTag|null} */
 function usableTag(tag) {
   if (tag === null) return null;
-  const name = tag.name.normalize("NFC");
-  return usableText(name, 256) ? Object.freeze({ name, live: tag.live }) : null;
+  const name = usableVenueName(tag.name);
+  return name === null ? null : Object.freeze({ name, live: tag.live });
 }
 
 /** @param {InstallerState} state @param {any} event */
