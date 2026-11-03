@@ -43,7 +43,6 @@ async function mount() {
     firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({ environment: "preproduction", needs: ["venue"] }),
-    getVenueDefaults: vi.fn().mockResolvedValue({}),
     startCloudRecovery: vi.fn().mockResolvedValue(approved),
     cloudRecoveryStatus: vi.fn().mockResolvedValue(approved),
     startCloudRecoveryAgain: vi.fn().mockResolvedValue(approved),

@@ -22,7 +22,6 @@ function stubApi(): SetupApi {
     getStatus: vi
       .fn()
       .mockResolvedValue({ provisioned: false, environment: "preproduction", needs: ["venue"] }),
-    getVenueDefaults: vi.fn().mockResolvedValue({}),
   } as unknown as SetupApi;
 }
 

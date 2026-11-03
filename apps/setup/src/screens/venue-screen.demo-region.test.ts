@@ -27,7 +27,6 @@ async function fill(el: SetupVenueScreen, key: string, value: string) {
 async function mount(draft: DeepPartial<ProvisionBody> = { mode: "demo" }) {
   const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft,
-    defaults: { verifactu: { operationDescription: "Restaurant service" } },
   });
   return el;
 }

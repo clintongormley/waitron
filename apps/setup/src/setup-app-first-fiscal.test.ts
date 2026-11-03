@@ -694,7 +694,12 @@ it("tests email as the current owner without sending a replacement administrator
 it("claims a staged preview's venue with only the venue fields the claim accepts", async () => {
   const { admin, ...exported } = venue;
   const preview = {
-    venue: { ...exported, dayCutover: "05:00:00", somethingNew: "not a setup field" },
+    venue: {
+      ...exported,
+      operationDescription: "Venta en establecimiento",
+      dayCutover: "05:00:00",
+      somethingNew: "not a setup field",
+    },
     counts: { products: 4 },
     reconnect: [],
   };
@@ -729,7 +734,6 @@ it("claims a staged preview's venue with only the venue fields the claim accepts
       "invoiceLocales",
       "legalName",
       "name",
-      "operationDescription",
       "postalCode",
       "province",
       "rectificativeSeriesCode",

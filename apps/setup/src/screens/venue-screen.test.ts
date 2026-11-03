@@ -15,14 +15,7 @@ import type { CountryPack } from "@waitron/country";
 import type { ProvisionBody } from "../api/client.js";
 
 async function mountWidget<T extends HTMLElement>(tag: string, props: Partial<T>, theme?: Theme) {
-  return mountWidgetBase<T>(
-    tag,
-    {
-      defaults: { verifactu: { operationDescription: "Venta en establecimiento" } },
-      ...props,
-    } as Partial<T>,
-    theme,
-  );
+  return mountWidgetBase<T>(tag, props, theme);
 }
 
 type Emitted = { kind: "patch" | "goto" | "advance"; detail: unknown };
@@ -119,7 +112,6 @@ const EXPECTED_LOCATION = {
   name: "Calle Mayor",
   fiscalTerritory: "ES-common",
   invoiceLocales: ["es-ES"],
-  operationDescription: "Venta en establecimiento",
   addressLine1: "Calle Mayor 1",
   addressLine2: null,
   postalCode: "28013",
@@ -151,7 +143,6 @@ describe("setup country admission", () => {
       });
       const events = collect(host);
       expect(dropdown(el, "country").options.map(({ value }) => value)).toEqual(["ES"]);
-      expect(q(el, "[data-test=defaults-error]")).toBeNull();
       q(el, "[data-test=next]")!.click();
       await el.updateComplete;
       await (dropdown(el, "country") as Dropdown & { updateComplete: Promise<unknown> })
@@ -196,6 +187,22 @@ describe("setup-venue-screen", () => {
       { kind: "patch", detail: { patch: { venue: EXPECTED_VENUE } } },
       { kind: "advance", detail: null },
     ]);
+  });
+
+  it.each([
+    ["a fresh draft", {}],
+    [
+      "a draft that holds one",
+      { venue: { operationDescription: "Old venue description" } } as DeepPartial<ProvisionBody>,
+    ],
+  ] as const)("puts no operation description in the venue patch from %s", async (_, draft) => {
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { draft });
+    const events = collect(host);
+    await fillValid(el);
+    q(el, "[data-test=next]")!.click();
+    expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
+    const venue = (events[0]!.detail as { patch: ProvisionBody }).patch.venue;
+    expect(Object.keys(venue)).not.toContain("operationDescription");
   });
 
   it("renders onboarding-ready countries and all Spanish provinces as stable-code choices", async () => {
@@ -334,7 +341,6 @@ describe("setup-venue-screen", () => {
   it("emits the same screen-agnostic advance for a demo draft (no in-screen routing)", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "demo" },
-      defaults: { verifactu: { operationDescription: "Venta en establecimiento" } },
     });
     const events = collect(host);
     for (const [field, value] of Object.entries({
@@ -359,7 +365,6 @@ describe("setup-venue-screen", () => {
         name: "Plaza Vieja",
         fiscalTerritory: "ES-common",
         invoiceLocales: ["ca-ES"],
-        operationDescription: "Bar",
         addressLine1: "Plaza Vieja 3",
         addressLine2: "Local B",
         postalCode: "08002",
@@ -845,11 +850,9 @@ describe("setup-venue-screen form errors", () => {
 });
 
 describe("A2 shop form", () => {
-  const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
   it("asks for the taxpayer domicile separately from the location address in Prepare", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "prepare" },
-      defaults,
     });
     const events = collect(host);
     await fillValid(el);
@@ -865,7 +868,6 @@ describe("A2 shop form", () => {
     for (const mode of ["demo", "prepare", "live"] as const) {
       const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
         draft: { mode },
-        defaults,
       });
       expect(q(el, "[data-test=tillName]"), mode).toBeNull();
       expect(el.shadowRoot!.textContent, mode).not.toMatch(/till name/i);
@@ -873,7 +875,7 @@ describe("A2 shop form", () => {
     }
   });
   it("prefills the invoice series and day cutover", async () => {
-    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { defaults });
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     for (const [field, value] of Object.entries({
       seriesCode: "FS",
       fullSeriesCode: "FF",
@@ -886,7 +888,6 @@ describe("A2 shop form", () => {
   it("collects only a venue name and address in Demo, taking the country's fixed demo identity", async () => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "demo" },
-      defaults,
     });
     const events = collect(host);
     for (const field of [
@@ -916,19 +917,17 @@ describe("A2 shop form", () => {
     expect(venue.seriesCode).toBe("FS");
     expect(venue.fullSeriesCode).toBe("FF");
     expect(venue.rectificativeSeriesCode).toBe("FR");
-    expect(venue.operationDescription).toBe("Venta en establecimiento");
     const validation = getVenueSetupCountryPack("ES")!.taxIdentifier!.validate(venue.taxId);
     expect(validation).toEqual({ valid: true, normalized: venue.taxId, kind: "entity" });
     const returned = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "demo", venue },
-      defaults,
     });
     const replay = collect(returned.host);
     q(returned.el, "[data-test=next]")!.click();
     expect((replay[0]!.detail as { patch: ProvisionBody }).patch.venue).toEqual(venue);
   });
   it("explains each missing text field and provides a hint and visible required markers", async () => {
-    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { defaults });
+    const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     q(el, "[data-test=next]")!.click();
     await el.updateComplete;
     const expected = {
@@ -964,10 +963,8 @@ it.each(["prepare", "live"] as const)(
   },
 );
 it("starts the Demo venue name as the demo location, which the operator may keep or change", async () => {
-  const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
   const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft: { mode: "demo" },
-    defaults,
   });
   expect((q(el, "[data-test=name]") as HTMLInputElement).value).toBe("Casa Delgado");
   const events = collect(host);
@@ -1027,7 +1024,6 @@ it.each(["prepare", "live"] as const)(
 it("sends the current country's demo identity in Demo, not a tax ID or legal name the draft held", async () => {
   const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft: { mode: "demo", venue: { taxId: "B12345674", legalName: "Otra Empresa SL" } },
-    defaults: { verifactu: { operationDescription: "Venta en establecimiento" } },
   });
   const events = collect(host);
   for (const [field, value] of Object.entries({
@@ -1040,39 +1036,6 @@ it("sends the current country's demo identity in Demo, not a tax ID or legal nam
   const venue = (events[0]!.detail as { patch: ProvisionBody }).patch.venue;
   expect(venue.taxId).toBe("B00000000");
   expect(venue.legalName).toBe("Waitron Demo S.L.");
-});
-it("takes a late installed bootstrap without overwriting authored fields", async () => {
-  const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", { defaults: {} });
-  const events = collect(host);
-  await fillValid(el);
-  el.defaults = { verifactu: { operationDescription: "Late bootstrap" } };
-  await el.updateComplete;
-  expect(q(el, "[data-test=operationDescription]")).toBeNull();
-  q(el, "[data-test=next]")!.click();
-  expect((events[0]!.detail as { patch: ProvisionBody }).patch.venue.operationDescription).toBe(
-    "Late bootstrap",
-  );
-  expect((events[0]!.detail as { patch: ProvisionBody }).patch.venue.city).toBe("Madrid");
-});
-
-it("offers a retry when Demo defaults are unavailable, without generating a partial venue", async () => {
-  const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
-    draft: { mode: "demo" },
-    defaults: {},
-  });
-  const events = collect(host);
-  for (const [field, value] of Object.entries({
-    name: "Calle Mayor",
-    addressLine1: "Calle Mayor 1",
-    postalCode: "28013",
-    city: "Madrid",
-  }))
-    await type(el, field, value);
-  q(el, "[data-test=next]")!.click();
-  await el.updateComplete;
-  expect(events).toEqual([]);
-  expect(q(el, "[data-test=retry-defaults]")).not.toBeNull();
-  expect(el.shadowRoot!.activeElement).toBe(q(el, "[role=alert]"));
 });
 it("shows a Demo legal-name refusal above Next, leaving the venue name unmarked", async () => {
   const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
@@ -1095,7 +1058,6 @@ it.each([
   async (invalidField, message) => {
     const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
       draft: { mode: "demo" },
-      defaults: { verifactu: { operationDescription: "Venta en establecimiento" } },
       invalidField,
     });
     const events = collect(host);
@@ -1116,10 +1078,9 @@ it.each([
   },
 );
 
-it("explains an unsupported Demo province instead of asking to reload defaults", async () => {
+it("explains an unsupported Demo province", async () => {
   const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft: { mode: "demo" },
-    defaults: { verifactu: { operationDescription: "Venta en establecimiento" } },
   });
   const events = collect(host);
   for (const [field, value] of Object.entries({
@@ -1133,7 +1094,6 @@ it("explains an unsupported Demo province instead of asking to reload defaults",
   await el.updateComplete;
   expect(events).toEqual([]);
   expect(dropdown(el, "province").error).toContain("not available");
-  expect(q(el, "[data-test=retry-defaults]")).toBeNull();
 });
 
 it("derives invoice language from the retained province after leaving Demo", async () => {
@@ -1242,17 +1202,6 @@ it("submits the form when Enter is pressed in a field", async () => {
   ]);
 });
 
-it("asks the shell to reload the Demo defaults when the retry is pressed", async () => {
-  const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
-    draft: { mode: "demo" },
-    defaults: {},
-  });
-  const requests: Event[] = [];
-  host.addEventListener("setup-defaults-requested", (event) => requests.push(event));
-  q(el, "[data-test=retry-defaults]")!.click();
-  expect(requests).toHaveLength(1);
-});
-
 it("drops the server's mark when the shell withdraws the refused field", async () => {
   const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     invalidField: "seriesCode",
@@ -1267,7 +1216,6 @@ it("drops the server's mark when the shell withdraws the refused field", async (
 it("refuses a draft country that has no venue-setup pack and derives nothing from it", async () => {
   const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
     draft: { venue: { country: "GB", province: "Kent" } },
-    defaults: { verifactu: { operationDescription: "Venta en establecimiento" } },
   });
   const events = collect(host);
   expect(q(el, "[data-test=operationDescription]")).toBeNull();
@@ -1344,7 +1292,6 @@ it("emits a country pack with no provinces or validators as the operator typed i
               name: "Harbour",
               fiscalTerritory: "ZZ-main",
               invoiceLocales: ["zz-ZZ"],
-              operationDescription: "Venta en establecimiento",
               addressLine1: "1 Quay",
               addressLine2: null,
               postalCode: " zz-9 ",
@@ -1635,46 +1582,7 @@ describe("setup-venue-screen layout", () => {
   });
 });
 
-describe("department descriptions leave onboarding", () => {
-  it.each(["prepare", "live"] as const)(
-    "uses the installed bootstrap without a sales-description field in %s",
-    async (mode) => {
-      const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
-        draft: { mode, venue: { operationDescription: "Old venue description" } },
-        defaults: { verifactu: { operationDescription: "Installed bootstrap" } },
-      });
-      const events = collect(host);
-      expect(q(el, "[data-test=operationDescription]")).toBeNull();
-      for (const [field, value] of Object.entries(VALID)) {
-        if (field !== "operationDescription") await type(el, field, value);
-      }
-      q(el, "[data-test=next]")!.click();
-      expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
-      expect((events[0]!.detail as { patch: ProvisionBody }).patch.venue.operationDescription).toBe(
-        "Installed bootstrap",
-      );
-    },
-  );
-  it("offers the bootstrap retry in Prepare and emits no partial venue", async () => {
-    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
-      draft: { mode: "prepare" },
-      defaults: {},
-    });
-    const events = collect(host);
-    for (const [field, value] of Object.entries(VALID)) {
-      if (field !== "operationDescription") await type(el, field, value);
-    }
-    expect(q(el, "[data-test=retry-defaults]")).not.toBeNull();
-    q(el, "[data-test=next]")!.click();
-    expect(events).toEqual([]);
-    el.defaults = { verifactu: { operationDescription: "Installed bootstrap" } };
-    await el.updateComplete;
-    q(el, "[data-test=next]")!.click();
-    expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
-  });
-});
-
-it("can onboard an installed filing module with no description field", async () => {
+it("advances from a country whose filing module offers no description", async () => {
   const packs = VENUE_SETUP_COUNTRY_PACKS as CountryPack[];
   packs.push({
     ...SPARSE_PACK,
@@ -1683,9 +1591,7 @@ it("can onboard an installed filing module with no description field", async () 
     ],
   });
   try {
-    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
-      defaults: { none: { operationDescription: "" } },
-    });
+    const { el, host } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const events = collect(host);
     await type(el, "country", "ZZ");
     for (const [field, value] of Object.entries({
@@ -1705,10 +1611,6 @@ it("can onboard an installed filing module with no description field", async () 
       await type(el, field, value);
     q(el, "[data-test=next]")!.click();
     expect(events.map(({ kind }) => kind)).toEqual(["patch", "advance"]);
-    expect((events[0]!.detail as { patch: ProvisionBody }).patch.venue.operationDescription).toBe(
-      "",
-    );
-    expect(q(el, "[data-test=retry-defaults]")).toBeNull();
   } finally {
     packs.pop();
   }

@@ -42,7 +42,6 @@ const provisionBody: ProvisionBody = {
     name: "Deli",
     fiscalTerritory: "ES-common",
     invoiceLocales: ["es-ES"],
-    operationDescription: "Restaurante",
     addressLine1: "Calle Mayor 1",
     addressLine2: null,
     postalCode: "28001",
@@ -89,17 +88,6 @@ describe("SetupApi", () => {
     const api = new SetupApi("", fetchImpl);
     expect(await api.getStatus()).toEqual(status);
     expect(fetchImpl).toHaveBeenCalledWith("/setup-api/status", {
-      method: "GET",
-      credentials: "include",
-    });
-  });
-
-  it("getVenueDefaults GETs /setup-api/venue-defaults and returns the parsed defaults", async () => {
-    const defaults = { verifactu: { operationDescription: "Venta en establecimiento" } };
-    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(defaults));
-    const api = new SetupApi("", fetchImpl);
-    expect(await api.getVenueDefaults()).toEqual(defaults);
-    expect(fetchImpl).toHaveBeenCalledWith("/setup-api/venue-defaults", {
       method: "GET",
       credentials: "include",
     });

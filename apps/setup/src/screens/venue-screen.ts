@@ -43,7 +43,7 @@ import {
 } from "../form-styles.js";
 import { dispatchSetupAdvance, dispatchSetupGoto, dispatchSetupPatch } from "../events.js";
 import type { DeepPartial } from "../setup-app.js";
-import type { VenueDefaults, ProvisionBody } from "../api/client.js";
+import type { ProvisionBody } from "../api/client.js";
 import { VENUE_SERVER_FIELDS, type ServerField } from "../server-fields.js";
 
 type TextField =
@@ -52,7 +52,6 @@ type TextField =
   | "legalName"
   | "taxpayerDomicile"
   | "name"
-  | "operationDescription"
   | "addressLine1"
   | "addressLine2"
   | "postalCode"
@@ -73,7 +72,6 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   legalName: "off",
   taxpayerDomicile: "off",
   name: "off",
-  operationDescription: "off",
   addressLine1: "off",
   addressLine2: "off",
   postalCode: "off",
@@ -85,7 +83,9 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
   rectificativeSeriesCode: "off",
 };
 
-type FieldKey = TextField | "invoiceLocales";
+type FormField = TextField | "invoiceLocales";
+/** A value the server can refuse that this form does not hold; its refusal is shown above Next. */
+type FieldKey = FormField | "operationDescription";
 
 /** The venue's own address, or the business's one-line registered address. */
 type AddressSearch = "address" | "domicile";
@@ -107,11 +107,10 @@ interface VenueForm {
 }
 
 /** Demo fills these itself, so its form does not show them. */
-const DEMO_HIDDEN: ReadonlySet<FieldKey> = new Set<FieldKey>([
+const DEMO_HIDDEN: ReadonlySet<FormField> = new Set<FormField>([
   "taxId",
   "legalName",
   "taxpayerDomicile",
-  "operationDescription",
   "invoiceLocales",
   "dayCutover",
   "seriesCode",
@@ -163,7 +162,6 @@ const FIELD_HINT: Record<HintedField, StringKey> = {
 const FIELD_HELP: Record<HelpedField, StringKey> = {
   country: "venue.help.country",
   name: "venue.help.name",
-  operationDescription: "venue.help.operation_description",
   province: "venue.help.province",
   dayCutover: "venue.help.day_cutover",
   seriesCode: "venue.help.series_code",
@@ -178,7 +176,6 @@ const FIELD_NOUNS: Record<TextField, StringKey> = {
   legalName: "venue.field.legal_name",
   taxpayerDomicile: "venue.field.taxpayer_domicile",
   name: "venue.field.name",
-  operationDescription: "venue.field.operation_description",
   addressLine1: "venue.field.address_line1",
   addressLine2: "venue.field.address_line2",
   postalCode: "venue.field.postal_code",
@@ -257,7 +254,6 @@ export class SetupVenueScreen extends LitElement {
   ];
 
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
-  @property({ attribute: false }) defaults: VenueDefaults = {};
   /** Address suggestions; without one the address search fields stay hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
 
@@ -268,20 +264,6 @@ export class SetupVenueScreen extends LitElement {
 
   get #demo(): boolean {
     return this.draft.mode === "demo";
-  }
-
-  #descriptionDefault(): string {
-    const filing =
-      this.#jurisdiction()?.modules?.filing ??
-      this.#pack()?.fiscalJurisdictions.find(({ supported }) => supported)?.modules?.filing;
-    return filing === undefined ? "" : (this.defaults[filing]?.operationDescription ?? "");
-  }
-
-  #defaultsMissing(): boolean {
-    const jurisdiction =
-      this.#jurisdiction() ?? this.#pack()?.fiscalJurisdictions.find(({ supported }) => supported);
-    const filing = jurisdiction?.modules?.filing;
-    return filing !== undefined && this.defaults[filing] === undefined;
   }
 
   /** A server-side venue error that names no field, routed back by the shell and shown above
@@ -298,7 +280,6 @@ export class SetupVenueScreen extends LitElement {
     legalName: "",
     taxpayerDomicile: "",
     name: "",
-    operationDescription: "",
     addressLine1: "",
     addressLine2: "",
     postalCode: "",
@@ -320,7 +301,7 @@ export class SetupVenueScreen extends LitElement {
   @state() private foreignAddress?: { readonly which: AddressSearch; readonly country: string };
 
   // `refusal` is kept whole, not copied: its `message` is translated on each read.
-  @state() private serverInvalid?: { readonly key: TextField; readonly refusal: ServerField };
+  @state() private serverInvalid?: { readonly key: FieldKey; readonly refusal: ServerField };
 
   #demoVenueNameSource: "automatic" | "custom" = "automatic";
   #seeded = false;
@@ -364,7 +345,6 @@ export class SetupVenueScreen extends LitElement {
     const values: Record<TextField | "invoiceLocales" | "demoVenueNameSource", string | null> = {
       ...form.values,
       demoVenueNameSource: this.#demo ? form.demoVenueNameSource : null,
-      operationDescription: "",
       taxId: tax?.valid ? tax.normalized : form.values.taxId,
       postalCode: postal?.valid ? postal.normalized : form.values.postalCode,
       province: area?.name ?? form.values.province,
@@ -409,7 +389,6 @@ export class SetupVenueScreen extends LitElement {
       this.#seedFromDraft();
       this.#followDemoName(this.#pack(), this.#area(this.#pack()));
     }
-    this.values = { ...this.values, operationDescription: this.#descriptionDefault() };
     this.#baseline ??= this.#snapshot(this.#current());
     // Only when the shell hands down a NEW value: re-deriving on every update would put back a mark
     // the operator has already cleared by editing the field.
@@ -449,7 +428,6 @@ export class SetupVenueScreen extends LitElement {
       legalName: venue.legalName ?? this.values.legalName,
       taxpayerDomicile: venue.taxpayerDomicile ?? this.values.taxpayerDomicile,
       name: venue.name ?? this.values.name,
-      operationDescription: venue.operationDescription ?? this.values.operationDescription,
       addressLine1: venue.addressLine1 ?? this.values.addressLine1,
       addressLine2: venue.addressLine2 ?? this.values.addressLine2,
       postalCode: venue.postalCode ?? this.values.postalCode,
@@ -624,8 +602,8 @@ export class SetupVenueScreen extends LitElement {
     return key !== "operationDescription" && !(this.#demo && DEMO_HIDDEN.has(key));
   }
 
-  #invalidFields(): Set<FieldKey> {
-    const invalid = new Set<FieldKey>();
+  #invalidFields(): Set<FormField> {
+    const invalid = new Set<FormField>();
     for (const key of REQUIRED_TEXT_FIELDS) {
       if (this.#demo && key === "taxpayerDomicile") continue;
       if (this.values[key].trim() === "") invalid.add(key);
@@ -704,10 +682,6 @@ export class SetupVenueScreen extends LitElement {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
-    if (this.#defaultsMissing()) {
-      this.shadowRoot?.querySelector<HTMLElement>("[data-test=defaults-error]")?.focus();
-      return;
-    }
     const pack = this.#pack();
     const area = this.#area(pack);
     const postalValidation = pack?.postalCode?.validate(this.values.postalCode);
@@ -732,7 +706,6 @@ export class SetupVenueScreen extends LitElement {
         name: this.values.name,
         fiscalTerritory: selectedJurisdiction.id,
         invoiceLocales: this.#receiptLanguages(this.#receiptRules(pack, area)),
-        operationDescription: this.values.operationDescription,
         addressLine1: this.values.addressLine1,
         addressLine2,
         postalCode: normalizedPostalCode,
@@ -757,7 +730,7 @@ export class SetupVenueScreen extends LitElement {
     dispatchSetupGoto(this, "admin");
   }
 
-  #fieldMessage(key: FieldKey): string {
+  #fieldMessage(key: FormField): string {
     if (key === "invoiceLocales") return t("venue.error.invoice_locales");
     if (this.values[key].trim() === "")
       return format("venue.enter_field", { field: t(FIELD_NOUNS[key]) });
@@ -854,18 +827,6 @@ export class SetupVenueScreen extends LitElement {
       <h1>${t("venue.heading")}</h1>
       <p class="intro">${this.#demo ? t("venue.intro_demo") : t("venue.intro")}</p>
 
-      ${
-        this.#defaultsMissing()
-          ? html`<p role="alert" tabindex="-1" data-test="defaults-error">
-                ${t("venue.defaults_not_loaded")}
-              </p>
-              <wt-button
-                data-test="retry-defaults"
-                @click=${() => this.dispatchEvent(new CustomEvent("setup-defaults-requested", { bubbles: true, composed: true }))}
-                >${t("venue.retry_defaults")}</wt-button
-              >`
-          : nothing
-      }
       ${this.#demo ? nothing : html`<h2>${t("venue.section.business")}</h2>`}
       <wt-combobox
         class="field"

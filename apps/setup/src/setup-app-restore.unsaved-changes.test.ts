@@ -27,7 +27,6 @@ async function mount() {
     firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({ environment: "preproduction", needs: ["venue"] }),
-    getVenueDefaults: vi.fn().mockResolvedValue({}),
     restore: vi.fn().mockResolvedValue({ restoreStaged: true, restarting: true }),
   } as unknown as SetupApi;
   const { el, host } = await mountWidget<SetupApp>("setup-app", { api });

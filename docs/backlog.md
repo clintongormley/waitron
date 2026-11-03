@@ -741,13 +741,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A237. Nothing guards the hint-or-"?" rule across screens (owner 2026-10-03)** — OPEN.
 
-- **The setup venue screen keeps an operation-description field it never shows** — left open by
-  A1315 PR 2. The owner wants it gone (2026-11-03), but the setup route refuses a body without it
-  (`asString` in `apps/server/src/setup-api.ts`). Setup fills it with the filing module's default
-  ("Venta en establecimiento"), and that stored value is the fallback the invoice builders use when
-  a caller passes no description (`packages/core/src/operation-description.ts`). The proposal waiting
-  for the owner: the setup route fills in that default itself when the field is absent, and setup
-  drops the field, its default lookup and its strings.
+- **The setup route `GET /setup-api/venue-defaults` has no production reader** — left open by
+  A1315 PR 5, which took setup's only call to it away (`apps/server/src/setup-api.ts`). Retiring it
+  means moving `apps/server/src/first-setup-backup-handoff.test.ts`'s paused-API probe to another
+  setup GET and removing the route's two direct cases in `apps/server/src/setup-api.test.ts`.
 
 - **The setup role screen shows its choices as cards with buttons, not `wt-choice-row` rows**
   (`apps/setup/src/screens/role-screen.ts`, reached from Join or recover). Split out of A237.

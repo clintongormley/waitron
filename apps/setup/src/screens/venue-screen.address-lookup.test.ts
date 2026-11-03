@@ -55,7 +55,6 @@ async function mount(
   draft: DeepPartial<ProvisionBody> = {},
 ): Promise<SetupVenueScreen> {
   const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {
-    defaults: { verifactu: { operationDescription: "Venta en establecimiento" } },
     draft,
     ...props,
   } as Partial<SetupVenueScreen>);

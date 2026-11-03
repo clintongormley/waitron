@@ -33,7 +33,6 @@ async function mount(request?: AdoptBody, step: "address" | "login" = "address")
     firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({ environment: "preproduction", needs: ["venue"] }),
-    getVenueDefaults: vi.fn().mockResolvedValue({}),
     adopt: vi
       .fn()
       .mockResolvedValue({ adopted: true, breakGlassSecret: "test-recovery", restarting: true }),

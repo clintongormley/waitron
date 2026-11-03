@@ -38,10 +38,14 @@ What constrains the next change to the wizard:
   `-<installation number>` and `stripOwnSuffixes` would then re-number a trailing `-<digits>`, so
   default to **FS** (factura simplificada — every till sale is `TipoFactura` F2) and **FR**
   (rectificativa). Nothing in the dashboard can change or add a series today.
-- **`operation_description` comes from the installed fiscal contribution.** Setup supplies its
-  bootstrap value internally. Product sales use the description you save in the **Receipts** tab
-  of each department's dialog, or the fiscal module's default description when the department has
-  none; the generic location field is not their fallback.
+- **`operation_description` comes from the installed fiscal contribution.** The setup routes fill
+  in the filing module's default when the request has none (`parseVenue`,
+  `apps/server/src/setup-api.ts`). The wizard's venue form never adds it; a first setup carried
+  over from an earlier attempt copies that attempt's stored venue, which holds it
+  (`#acceptFirstIdentity` and `#replaceFirstSetup` in `apps/setup/src/setup-app.ts`). Product
+  sales use the description you save in the **Receipts** tab of each department's dialog, or the
+  fiscal module's default description when the department has none; the generic location field is
+  not their fallback.
 
 ## Open owner call — setup always stores a language on the account
 
@@ -127,8 +131,8 @@ The shell routes
   a refused `seriesCode`, `rectificativeSeriesCode` or `operationDescription` back to the venue
   screen whatever the mode (`apps/setup/src/setup-app.ts`, the venue case of the refusal routing).
   The refusal's sentence shows above Next and pressing Next moves on to the review screen, which
-  sends the same series codes and description again, so the operator has nothing to change if the
-  server refused them. The venue screen's half is pinned by the `shows a Demo refusal of the hidden
+  sends the same series codes again, so the operator has nothing to change if the server refused
+  them. The venue screen's half is pinned by the `shows a Demo refusal of the hidden
 %s above Next, and pressing Next tries again` cases in `apps/setup/src/screens/venue-screen.test.ts`;
   the move to the review screen (`#onAdvance` in `setup-app.ts`) was read, not run. Whether the
   server ever refuses Demo's fixed series codes is not established.

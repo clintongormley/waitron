@@ -497,7 +497,6 @@ const lines = (app: Parameters<typeof q>[0], name: string) =>
 const GETS = [
   "/setup-api/status",
   "/setup-api/discovery",
-  "/setup-api/venue-defaults",
   "/setup-api/first-setup/status",
   "/setup-api/first-setup/resolution",
   "/setup-api/first-setup/resolution/backup/activity",

@@ -787,9 +787,7 @@ registered as `venue-service:week`, and the others register theirs when they exi
     buttons, because it also reports a refused Turn off, when no form is open; the cloud services
     screen (`apps/dashboard/src/screens/cloud-services-screen.ts`) has no form, only buttons, and
     shows a refusal as a plain alert. The setup wizard's screens with no fields — review, fiscal
-    test, connection and provisioning — keep their refusal paragraph, and in Demo the venue screen's
-    "Demo invoice settings have not loaded yet." alert stays above the form, as a load failure
-    rather than a refusal.
+    test, connection and provisioning — keep their refusal paragraph.
   - The till's split step keeps its Split button disabled before any press until a dish is picked,
     on purpose, because it counts a selection rather than checking a field; the transfer step's
     confirm button does the same.

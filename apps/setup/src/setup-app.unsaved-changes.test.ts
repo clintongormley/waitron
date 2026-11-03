@@ -32,7 +32,6 @@ async function mount() {
     firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({ environment: "preproduction", needs: ["venue"] }),
-    getVenueDefaults: vi.fn().mockResolvedValue({}),
     provision: vi.fn().mockResolvedValue({ provisioned: true, restarting: true }),
   } as unknown as SetupApi;
   const { el, host } = await mountWidget<SetupApp>("setup-app", { api });
@@ -318,7 +317,6 @@ async function modeDraft(mode: "demo" | "prepare" | "live" = "prepare") {
       taxId: "B12345674",
       seriesCode: "SALE",
       rectificativeSeriesCode: "CREDIT",
-      operationDescription: "Restaurant",
       dayCutover: "04:00",
       invoiceLocales: ["es-ES", "en-GB"],
     },
@@ -343,7 +341,6 @@ function authoredDraft(mode: "demo" | "prepare" | "live"): DeepPartial<Provision
       taxId: "B12345674",
       seriesCode: "SALE",
       rectificativeSeriesCode: "CREDIT",
-      operationDescription: "Restaurant",
       dayCutover: "04:00",
       invoiceLocales: ["es-ES", "en-GB"],
     },
@@ -767,7 +764,8 @@ describe("setup root lifecycle and import", () => {
     await expect.poll(() => (el as unknown as State).screen).toBe("configuration-preview");
     expect(stage).toHaveBeenCalledExactlyOnceWith(artifact, "import proof");
     expect(unload()).toBe(true);
-    const importedVenue = { ...importedConfiguration.venue };
+    const { operationDescription: _, ...importedVenue } = importedConfiguration.venue;
+    void _;
     expect((el as unknown as State).draft).toEqual({
       mode: "prepare",
       configurationImport: true,
@@ -776,7 +774,6 @@ describe("setup root lifecycle and import", () => {
         admin: initialAdmin,
         name: "Prepared",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurant",
         fiscalTerritory: "ES-common",
         addressLine1: "Calle 1",
         addressLine2: null,

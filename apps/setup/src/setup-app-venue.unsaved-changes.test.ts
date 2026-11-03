@@ -25,7 +25,6 @@ const initialVenue = {
   name: "Calle Mayor",
   fiscalTerritory: "ES-common",
   invoiceLocales: ["es-ES"],
-  operationDescription: "Delicatessen",
   addressLine1: "Calle Mayor 1",
   addressLine2: null,
   postalCode: "28013",
@@ -53,9 +52,6 @@ async function mount(
     firstSetupOfferings: vi.fn().mockResolvedValue({ modules: [] }),
     getDiscovery: vi.fn().mockResolvedValue({ caDownloadAvailable: false }),
     getStatus: vi.fn().mockResolvedValue({ environment: "preproduction", needs: ["venue"] }),
-    getVenueDefaults: vi
-      .fn()
-      .mockResolvedValue({ verifactu: { operationDescription: "Delicatessen" } }),
     provision: vi.fn(),
   } as unknown as SetupApi;
   const { el, host } = await mountWidget<SetupApp>("setup-app", { api });
@@ -167,37 +163,6 @@ describe("setup venue unsaved changes", () => {
     expect(unload()).toBe(false);
   });
 
-  it("loaded description defaults keep an untouched child clean", async () => {
-    const draft = { mode: "prepare" as const, venue: structuredClone(initialVenue) };
-    delete (draft.venue as Partial<typeof initialVenue>).operationDescription;
-    const { el, venue } = await mount(draft);
-    expect(unload()).toBe(false);
-    Object.assign(el, { venueDefaults: { verifactu: { operationDescription: "Loaded default" } } });
-    await el.updateComplete;
-    await venue.updateComplete;
-    expect(field(venue, "operationDescription")).toBeNull();
-    expect(leaveCoordinatorFor(venue)!.isDirty([venue])).toBe(false);
-    expect(unload()).toBe(false);
-    back(venue);
-    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
-    expect(warning(el).open).toBe(false);
-  });
-
-  it("loaded defaults leave another authored field protected", async () => {
-    const draft = { mode: "prepare" as const, venue: structuredClone(initialVenue) };
-    delete (draft.venue as Partial<typeof initialVenue>).operationDescription;
-    const { el, venue } = await mount(draft);
-    await edit(venue, "city", "Authored city");
-    Object.assign(el, { venueDefaults: { verifactu: { operationDescription: "Loaded default" } } });
-    await el.updateComplete;
-    await venue.updateComplete;
-    back(venue);
-    await expect.poll(() => warning(el).open).toBe(true);
-    await choose(el, "discard");
-    await expect.poll(() => (el as unknown as State).screen).toBe("admin");
-    expect(field(venue, "city").value).toBe("Madrid");
-    expect(field(venue, "operationDescription")).toBeNull();
-  });
   it.each([
     ["taxId", "A58818501"],
     ["legalName", "New legal name"],

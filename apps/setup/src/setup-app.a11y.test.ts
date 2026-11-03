@@ -17,7 +17,6 @@ function stubApi(): SetupApi {
       environment: "preproduction",
       needs: ["venue"],
     } satisfies SetupStatus),
-    getVenueDefaults: vi.fn().mockResolvedValue({ verifactu: { operationDescription: "Venta" } }),
   } as unknown as SetupApi;
 }
 
