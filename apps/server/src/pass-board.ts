@@ -246,7 +246,7 @@ export async function firedPassDishes(
 }
 
 /** The watched zone of each order the rows belong to, each order asked about once. */
-function rowsWatchZones(
+export function rowsWatchZones(
   tx: Transaction,
   cfg: TradingContext,
   rows: readonly { orderId: string; partyId: string | null; deliveryTableId: string | null }[],

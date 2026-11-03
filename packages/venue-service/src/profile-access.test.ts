@@ -857,4 +857,21 @@ describe("A773 station policy: readProfilesZones", () => {
     ]);
     await expect(scoped((tx) => readProfilesZones(tx, []))).resolves.toEqual(new Map());
   });
+
+  it("lists two or more zones in readProfileZones's order, by position before name", async () => {
+    const venue = await seedVenueWithZones();
+    const access = (profileId: string, input: ProfileServiceAccessInput) =>
+      scoped((tx) => setProfileServiceAccess(tx, venue.cfg, profileId, input));
+    const everyZone = await seedProfile();
+    await access(everyZone, restaurantScope(venue));
+    const listed = await seedProfile();
+    await access(listed, restaurantScope(venue, { allowedZoneIds: [venue.dining, venue.terrace] }));
+
+    const answers = await scoped((tx) => readProfilesZones(tx, [everyZone, listed]));
+    for (const profileId of [everyZone, listed]) {
+      const one = await scoped((tx) => readProfileZones(tx, venue.cfg, profileId));
+      expect(answers.get(profileId)).toEqual(one.allowedZoneIds);
+      expect(answers.get(profileId)).toEqual([venue.terrace, venue.dining]);
+    }
+  });
 });

@@ -12,11 +12,11 @@ import {
 import type { Transaction } from "@waitron/db";
 import { deviceBindingColumns, deviceProfileJoin, toDeviceBinding } from "./device-session.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { passScopeOf, passSees, type PassScope } from "./pass-board.js";
+import { passScopeOf, passSees, rowsWatchZones, type PassScope } from "./pass-board.js";
 import { requestedItem } from "./kitchen-phase.js";
 import { passReleaseRefusal } from "./pass-release.js";
+import { byText } from "./text-order.js";
 import type { TradingContext } from "./trading-context.js";
-import { orderWatchZones } from "./watch-zones.js";
 import { liveKitchenDish } from "./working-order.js";
 
 /** A waiting station and zone no pass device could fire. */
@@ -31,7 +31,8 @@ export interface PassCoverageGap {
  *  zone), and each station and zone where a live dish waits for the pass, that no pass device
  *  covers, by zone order (no zone last), then station name and id. A pass device is active, passes
  *  the Fire's profile check (`passReleaseRefusal`) and has an available pass screen; it covers a
- *  station and zone its screen sees, where its profile's zone list allows that zone. */
+ *  station and zone its screen sees, where its profile's zone list allows that zone. A pair in no
+ *  zone needs no allowance from the list, as at the Fire (`assertSubjectZones`). */
 export async function readPassCoverage(
   tx: Transaction,
   cfg: TradingContext,
@@ -41,7 +42,7 @@ export async function readPassCoverage(
     .from(kitchenStations)
     .where(and(eq(kitchenStations.active, true), eq(kitchenStations.waitsForPass, true)));
   const dishes = await tx
-    .select({
+    .selectDistinct({
       orderId: workingOrders.id,
       partyId: workingOrders.partyId,
       deliveryTableId: workingOrders.deliveryTableId,
@@ -98,14 +99,7 @@ export async function readPassCoverage(
         zoneId: zone.id,
         zoneName: zone.name,
       });
-  const dishZones = await orderWatchZones(tx, cfg, [
-    ...new Map(
-      dishes.map(({ orderId, partyId, deliveryTableId }) => [
-        orderId,
-        { id: orderId, partyId, deliveryTableId },
-      ]),
-    ).values(),
-  ]);
+  const dishZones = await rowsWatchZones(tx, cfg, dishes);
   const zoneNames = new Map(allZones.map((zone) => [zone.id, zone.name]));
   for (const dish of dishes) {
     const zoneId = dishZones.get(dish.orderId) ?? null;
@@ -132,10 +126,7 @@ export async function readPassCoverage(
     .sort(
       (a, b) =>
         rankOf(a.zoneId) - rankOf(b.zoneId) ||
-        byCodeUnit(a.stationName, b.stationName) ||
-        byCodeUnit(a.stationId, b.stationId),
+        byText(a.stationName, b.stationName) ||
+        byText(a.stationId, b.stationId),
     );
 }
-
-/** Code-unit order, as the database's binary collation sorts. */
-const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);

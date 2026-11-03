@@ -35,6 +35,7 @@ import type { PassCard } from "./pass-card.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import { readPassCoverage, type PassCoverageGap } from "./pass-coverage.js";
 import { deleteStation } from "./station-delete.js";
+import { byText } from "./text-order.js";
 import { markServed } from "./working-order.js";
 import "./errors.js";
 
@@ -120,13 +121,10 @@ async function gaps(
     .sort(
       (a, b) =>
         zoneIndex(a.zoneId) - zoneIndex(b.zoneId) ||
-        byCodeUnit(a.stationName, b.stationName) ||
-        byCodeUnit(a.stationId, b.stationId),
+        byText(a.stationName, b.stationName) ||
+        byText(a.stationId, b.stationId),
     );
 }
-
-/** The database's binary collation, which `localeCompare` is not. */
-const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 describe("A773 station policy: pass coverage", () => {
   it("case 1: no station waits, so nothing is a gap, even with no pass device", async () => {
@@ -354,6 +352,46 @@ describe("A773 station policy: pass coverage", () => {
     ]);
   });
 
+  it("orders a switched-off zone's dishes in its place under its name, binary text order within a zone, and no zone last", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const T = venue.party.zoneId;
+    const C = venue.counter.zoneId;
+    const renamed = { grill: "Álvaro", fryer: "Zeta", kitchen: "bar", bar: "Bar" } as const;
+    await withTransaction(db, async (tx) => {
+      for (const [station, name] of Object.entries(renamed))
+        await tx
+          .update(kitchenStations)
+          .set({ name })
+          .where(eq(kitchenStations.id, venue.stations[station as keyof typeof renamed]));
+      await tx.update(floorZones).set({ displayOrder: 1 }).where(eq(floorZones.id, T));
+      await tx.update(floorZones).set({ displayOrder: 2 }).where(eq(floorZones.id, C));
+    });
+    await waiting(venue, "grill", "fryer", "kitchen", "bar");
+    await burgerAtTable(venue, "fire");
+    await counterDishInNoZone(venue);
+    await withTransaction(db, (tx) =>
+      tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, T)),
+    );
+    const gap = (
+      station: keyof typeof renamed,
+      zoneId: string | null,
+      zoneName: string | null,
+    ) => ({
+      stationId: venue.stations[station],
+      stationName: renamed[station],
+      zoneId,
+      zoneName,
+    });
+    expect(await coverage(venue)).toEqual([
+      gap("grill", T, "Test tables"),
+      gap("bar", C, "Test counter"),
+      gap("fryer", C, "Test counter"),
+      gap("kitchen", C, "Test counter"),
+      gap("grill", C, "Test counter"),
+      gap("grill", null, null),
+    ]);
+  });
+
   it("case 12: with no active zone, a waiting station needs an every-zone pass", async () => {
     const venue = await setupSplitExtrasVenue();
     await waiting(venue, "grill");
@@ -366,6 +404,19 @@ describe("A773 station policy: pass coverage", () => {
       { stationId: venue.stations.grill, stationName: "Grill", zoneId: null, zoneName: null },
     ]);
     await passOn(venue, "Every pass", null);
+    expect(await coverage(venue)).toEqual([]);
+  });
+
+  it("case 12: with no active zone, a till pass whose zone list is left empty still covers the no-zone pair", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    const pass = await tablesTillPass(venue);
+    await withTransaction(db, (tx) =>
+      tx.update(floorZones).set({ active: false }).where(eq(floorZones.active, true)),
+    );
+    expect(
+      await withTransaction(db, (tx) => VENUE_SERVICE.readProfilesZones(tx, [pass.profileId])),
+    ).toEqual(new Map([[pass.profileId, []]]));
     expect(await coverage(venue)).toEqual([]);
   });
 
@@ -414,14 +465,7 @@ describe("A773 station policy: pass coverage", () => {
   it("dishes case 5: a dish in no zone needs an every-zone pass", async () => {
     const venue = await setupSplitExtrasVenue();
     await waiting(venue, "grill");
-    await withTransaction(db, async (tx) => {
-      const counterId = await fireNewOrder(tx, venue.cfg, [
-        { productId: venue.products.burger, quantity: "1" },
-      ]);
-      await tx.execute(
-        sql`delete from order_service_contexts where working_order_id = ${counterId}`,
-      );
-    });
+    await counterDishInNoZone(venue);
     await stopWaiting(venue);
     await passOn(venue, "Tables pass", [venue.stations.grill], [venue.party.zoneId]);
     await passOn(venue, "Counter pass", [venue.stations.grill], [venue.counter.zoneId]);
@@ -430,6 +474,24 @@ describe("A773 station policy: pass coverage", () => {
     ]);
     await passOn(venue, "Every pass", null);
     expect(await coverage(venue)).toEqual([]);
+  });
+
+  it("dishes case 5: a till pass limited to the tables zone covers a dish in no zone, and its Fire releases it", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill");
+    const counterId = await counterDishInNoZone(venue);
+    await stopWaiting(venue);
+    const pass = await tablesTillPass(venue);
+    expect(await coverage(venue)).toEqual([]);
+    const card = (await toFire(venue, pass.by)).find(
+      (candidate) => candidate.target.kind === "bill",
+    )!;
+    expect(card.target).toEqual({ kind: "bill", workingOrderId: counterId });
+    const [item] = await db
+      .select({ id: ticketItems.id })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, counterId));
+    expect(await release(venue, pass.by, card)).toEqual({ releasedTicketItemIds: [item!.id] });
   });
 
   it("dishes case 6: a dish served in full is no gap", async () => {
@@ -504,6 +566,16 @@ const burgerAtTable = (venue: Venue, release: "fire" | "hold") =>
       .where(eq(ticketItems.workingOrderLineId, group.lineIds[0]!));
     expect(item!.requestedAt === null).toBe(release === "hold");
     return { lineId: group.lineIds[0]!, orderId: item!.orderId };
+  });
+
+/** A Grill burger fired on a counter order whose service context is gone, so it has no zone. */
+const counterDishInNoZone = (venue: Venue) =>
+  withTransaction(db, async (tx) => {
+    const counterId = await fireNewOrder(tx, venue.cfg, [
+      { productId: venue.products.burger, quantity: "1" },
+    ]);
+    await tx.execute(sql`delete from order_service_contexts where working_order_id = ${counterId}`);
+    return counterId;
   });
 
 const stopWaiting = (venue: Venue) =>
