@@ -1,9 +1,10 @@
 /**
- * A box's own state — its `node.db` tables, the `local` tables inside `venue.db`, and the state
- * files a backup carries — and what the receiving box (M2) does with each after a handover. One row
- * per exact table or file name. The root guard `scripts/handover-manifest-complete.test.ts` fails
- * when a `node.db` or `local` table, a recovery file, an optional backup file or a file behind a
- * module's backup source has no row; other state-folder files are not checked.
+ * A box's own state — its `node.db` tables, the `local` tables inside `venue.db`, files in its state
+ * folder, and Litestream's folder beside `venue.db` — and what the receiving box (M2) does with each
+ * after a handover. One row per exact table or file name. The root guard
+ * `scripts/handover-manifest-complete.test.ts` fails when a `node.db` or `local` table, a recovery
+ * file, an optional backup file or a file behind a module's backup source has no row; other
+ * state-folder files are not checked.
  */
 export interface NodeLocalManifestRow {
   readonly item: string;

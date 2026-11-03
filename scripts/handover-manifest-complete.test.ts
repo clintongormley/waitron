@@ -8,9 +8,9 @@ import { RECOVERY_FILES } from "../apps/server/src/state-secrets.js";
 /**
  * A box's own state that the handover manifest does not name is state nobody decided about: M2
  * would silently keep, drop or inherit it. Reads its lists from their sources, so a new `node.db`
- * or `local` table, a new name in `RECOVERY_FILES` or `OPTIONAL_BACKUP_STATE`, or a new module
- * backup source fails here until the manifest has a row for it. A state-folder file outside those
- * lists is not seen.
+ * or `local` table, or a new name in `RECOVERY_FILES` or `OPTIONAL_BACKUP_STATE`, fails here until
+ * the manifest has a row for it, and a module backup source of a kind this guard does not map
+ * fails until the guard maps it. A state-folder file outside those lists is not seen.
  */
 
 type Where = (typeof NODE_LOCAL_MANIFEST)[number]["where"];

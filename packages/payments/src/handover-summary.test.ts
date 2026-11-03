@@ -255,6 +255,24 @@ describe("summariseOpenPayments", () => {
     expect(summary.refunds).toEqual([]);
   });
 
+  it("lists a pending bill refund whose bill payment has no provider row, with no provider references", async () => {
+    const uncharged = await seedBillPayment(suite.db, seeded);
+    const refundId = await billRefund(uncharged, "pending", null);
+
+    const summary = await summarise();
+
+    expect(summary.billRefunds).toEqual([
+      {
+        refundId,
+        billPaymentId: uncharged,
+        provider: null,
+        paymentRef: null,
+        processorRef: null,
+        sentAt: null,
+      },
+    ]);
+  });
+
   it("lists no bill refund in another state", async () => {
     const billPaymentId = await chargedBillPayment("sumup", "sumup-ref", "txn-1");
     const others = billPaymentRefundState.enumValues.filter((state) => state !== "pending");

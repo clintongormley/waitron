@@ -1358,8 +1358,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Los datos del local en este servidor cambiaron después de hacer la copia final, así que no ha enviado la copia. No se ha cambiado nada. Vuelve a empezar el cambio de servidor.",
   },
   "handover.summary_failed": {
-    en: "The handover stopped, because this server could not read part of the venue's data from its copy. Nothing was sent or changed. Start the handover again.",
-    es: "El cambio de servidor se ha parado, porque este servidor no ha podido leer parte de los datos del local en su copia. No se ha enviado ni cambiado nada. Vuelve a empezar el cambio de servidor.",
+    en: "This server could not read part of the venue's data from its final copy, so it sent neither the copy nor its description. Its venue data is unchanged. Asking again makes it take a new copy and read that.",
+    es: "Este servidor no ha podido leer parte de los datos del local en su copia final, así que no ha enviado ni la copia ni su descripción. Sus datos del local no han cambiado. Si se vuelve a pedir, hará una copia nueva y la leerá.",
   },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",

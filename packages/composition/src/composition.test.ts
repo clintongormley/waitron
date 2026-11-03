@@ -25,6 +25,7 @@ import {
   FISCAL_VOCABULARY,
   FISCAL_ALERTS,
   FISCAL_STAFF_NOTICES,
+  VERIFACTU_HANDOVER,
 } from "@waitron/fiscal-verifactu";
 import {
   IDENTITY_MIGRATIONS,
@@ -41,7 +42,7 @@ import {
   selectTimeRecordExport,
   validatePersonalDataParts,
 } from "@waitron/module";
-import { PAYMENTS_ALERTS, PAYMENTS_MIGRATIONS } from "@waitron/payments";
+import { PAYMENTS_ALERTS, PAYMENTS_HANDOVER, PAYMENTS_MIGRATIONS } from "@waitron/payments";
 import { SCHEDULER_MIGRATIONS } from "@waitron/scheduler";
 import {
   STAFFING_CHANGE_SOURCES,
@@ -242,6 +243,23 @@ describe("ALL_MODULES configuration transfer contribution", () => {
         code: "setup.request_invalid",
         params: { field: "kitchen_stations.colour" },
       }),
+    );
+  });
+});
+
+describe("ALL_MODULES handover seat", () => {
+  it("fiscal-verifactu and payments declare their handover contributions, by reference, and no other module does", () => {
+    const declared = ALL_MODULES.filter((m) => m.handover !== undefined).map((m) => [
+      m.name,
+      m.handover,
+    ]);
+    expect(declared).toEqual([
+      ["payments", PAYMENTS_HANDOVER],
+      ["fiscal-verifactu", VERIFACTU_HANDOVER],
+    ]);
+    expect(ALL_MODULES.find((m) => m.name === "payments")?.handover).toBe(PAYMENTS_HANDOVER);
+    expect(ALL_MODULES.find((m) => m.name === "fiscal-verifactu")?.handover).toBe(
+      VERIFACTU_HANDOVER,
     );
   });
 });

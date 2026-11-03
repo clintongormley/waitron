@@ -14,7 +14,7 @@ function byName(modules: readonly WaitronModule[]): WaitronModule[] {
   return [...modules].sort((a, b) => (a.name < b.name ? -1 : 1));
 }
 
-/** Callers pass the enabled modules: a disabled module's tables are not in the copy. */
+/** Callers pass the enabled modules. */
 export async function collectHandoverSummaries(
   modules: readonly WaitronModule[],
   query: BackupQuery,

@@ -1,6 +1,7 @@
-// Does a spare activated from M1's database copy avoid every minute name M1 used, without M1's
-// module-preparation-state.json? Each case puts the spare's clock on the minute of M1's later
-// name, where a reused name prints `selected` with that name and an avoided one prints `waiting`.
+// Does a spare promoted from M1's database copy avoid every minute name M1 used, without M1's
+// module-preparation-state.json? Each case but the control puts the spare's clock on the minute of
+// M1's later name, where a reused name prints `selected` with that name and an avoided one prints
+// `waiting`.
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -42,7 +43,9 @@ import { persons, hashPassword } from "@waitron/identity";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { establishNodeIdentity } from "./node-identity.js";
+import { createDeploymentHolders } from "./deployment-holders.js";
 import { createNodeOperationPreparation } from "./node-operation-preparation.js";
+import { promoteMirrorToPrimary } from "./promote.js";
 
 const external = vi.hoisted(() => ({ internet: vi.fn() }));
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
@@ -80,7 +83,7 @@ const SPARE_FILE = "module-preparation-state.json";
 let root: string;
 let key: { name: string; secret: string };
 
-/** One of M1's own minute selections, kept in M1's state as its preparation host keeps it. */
+/** One of M1's own minute selections, kept in the `{ binding, value }` shape. */
 async function selectOnM1(eventId: string, activate: boolean) {
   let value: unknown = null;
   const held = { ...joinBinding, action: "setup", eventId, targetNodeId: primary.nodeId };
@@ -249,7 +252,30 @@ async function spareSelects(s: ReturnType<typeof spareService>) {
     context,
     { action: "select", comparisonId: compared.id },
     { onBox: true },
-  )) as { status: string; identity?: string; targetMs?: number };
+  )) as { status: string; identity?: string; targetMs?: number; input?: unknown };
+}
+/** The spare's promotion, activating the selection `select` answered. */
+async function sparePromotes(s: ReturnType<typeof spareService>, input: unknown) {
+  return s.withPromotion(
+    { binding, input },
+    { breakGlass: key.secret },
+    context,
+    (modules, runner) =>
+      promoteMirrorToPrimary(
+        {
+          db: suite.db,
+          node: suite.node,
+          nodeId: standby.nodeId,
+          ring,
+          modules,
+          holders: createDeploymentHolders("mirror", "secondary"),
+          log: () => {},
+          persistTradingEnv: async () => {},
+          withModuleOperations: runner,
+        },
+        { oldNodeNeutralised: true },
+      ),
+  );
 }
 /** M1's later name, recorded in the copy as a retired installation of M1's. */
 async function recordLaterNameInCopy(minute: number) {
@@ -289,13 +315,20 @@ it("control: one minute after both of M1's names the spare selects a fresh name"
   expect([await firstName(), encodeMinuteIdentity(later)]).not.toContain(selected.identity);
 });
 
+// Pins the measured fact behind Ruling R3, not a wanted behaviour.
 it("a name M1 selected and never activated is not in the copy, and the spare without M1's file reuses it", async () => {
   const s = spareService();
   await admit(s);
   const abandoned = await selectOnM1("abandoned", false);
   m1Revisions.push(abandoned.revision);
   vi.setSystemTime(minuteOf(abandoned.identity));
-  expect(await spareSelects(s)).toMatchObject({ status: "selected", identity: abandoned.identity });
+  const selected = await spareSelects(s);
+  expect(selected).toMatchObject({ status: "selected", identity: abandoned.identity });
+  await sparePromotes(s, selected.input);
+  const sif = await suite.db.select().from(registroSif);
+  expect(sif.find((row) => row.nodeId === standby.nodeId)?.numeroInstalacion).toBe(
+    abandoned.identity,
+  );
 });
 
 it("with M1's selections in the spare's own preparation file, the spare waits past that name", async () => {
@@ -316,6 +349,7 @@ it("with M1's selections in the spare's own preparation file, the spare waits pa
   );
 });
 
+// Pins the measured fact behind Ruling R3, not a wanted behaviour.
 it("M1's history placed as the restore path places it (module-evidence) is not read by the promotion: the name is reused", async () => {
   const s = spareService();
   await admit(s);
