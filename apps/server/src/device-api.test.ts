@@ -1446,6 +1446,8 @@ describe("Device API — the device-guarded routes", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [],
         zones: null,
       },
@@ -1479,6 +1481,8 @@ describe("Device API — the device-guarded routes", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [
           {
             id: venue.defaultStationId,
@@ -2344,6 +2348,8 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
           everyStation: false,
           everyZone: true,
           profileEveryStation: false,
+          showNonPassStations: true,
+          nonPassStationsOverride: null,
           stations: [
             {
               id: venue.defaultStationId,
@@ -2385,6 +2391,8 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
           everyStation: true,
           everyZone: true,
           profileEveryStation: true,
+          showNonPassStations: true,
+          nonPassStationsOverride: null,
           stations: [
             {
               id: venue.defaultStationId,
@@ -4270,6 +4278,8 @@ describe("a device's approved profiles and switching its active one", () => {
           everyStation: false,
           everyZone: false,
           profileEveryStation: false,
+          showNonPassStations: true,
+          nonPassStationsOverride: null,
           stations: [
             {
               id: venue.defaultStationId,

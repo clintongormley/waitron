@@ -359,6 +359,8 @@ describe("the pass screen's device routes", () => {
         everyStation: false,
         everyZone: false,
         profileEveryStation: false,
+        showNonPassStations: true,
+        nonPassStationsOverride: null,
         stations: [],
         zones: null,
       },

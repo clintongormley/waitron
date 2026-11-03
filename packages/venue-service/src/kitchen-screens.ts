@@ -374,10 +374,15 @@ async function placesHere(tx: Transaction): Promise<{ stations: Place[]; zones: 
   return { stations, zones };
 }
 
+/** A device's stored choice of one kind, with its stored display value (null: the profile's). */
+interface StoredChoice extends KitchenScreenScope {
+  readonly showNonPassStations: boolean | null;
+}
+
 async function readChoices(
   tx: Transaction,
   deviceIds: readonly string[],
-): Promise<Map<string, Map<KitchenScreenKind, KitchenScreenScope>>> {
+): Promise<Map<string, Map<KitchenScreenKind, StoredChoice>>> {
   const rows = await tx
     .select()
     .from(deviceKitchenScreens)
@@ -394,7 +399,7 @@ async function readChoices(
     list: readonly T[],
     row: { deviceId: string; screen: KitchenScreenKind },
   ) => list.filter((entry) => entry.deviceId === row.deviceId && entry.screen === row.screen);
-  const choices = new Map<string, Map<KitchenScreenKind, KitchenScreenScope>>(
+  const choices = new Map<string, Map<KitchenScreenKind, StoredChoice>>(
     deviceIds.map((id) => [id, new Map()]),
   );
   for (const row of rows) {
@@ -404,6 +409,7 @@ async function readChoices(
         row.screen === "station" || row.everyZone
           ? null
           : of(zones, row).map((entry) => entry.zoneId),
+      showNonPassStations: row.showNonPassStations,
     });
   }
   return choices;
@@ -427,7 +433,7 @@ async function readEffectiveChoices(
   tx: Transaction,
   deviceIds: readonly string[],
   removals?: readonly Removal[],
-): Promise<Map<string, Map<KitchenScreenKind, KitchenScreenScope>>> {
+): Promise<Map<string, Map<KitchenScreenKind, StoredChoice>>> {
   return lessRemovals(
     await readChoices(tx, deviceIds),
     removals ?? (await readRemovals(tx, deviceIds)),
@@ -435,9 +441,9 @@ async function readEffectiveChoices(
 }
 
 function lessRemovals(
-  choices: Map<string, Map<KitchenScreenKind, KitchenScreenScope>>,
+  choices: Map<string, Map<KitchenScreenKind, StoredChoice>>,
   removals: readonly Removal[],
-): Map<string, Map<KitchenScreenKind, KitchenScreenScope>> {
+): Map<string, Map<KitchenScreenKind, StoredChoice>> {
   for (const [deviceId, choice] of choices) {
     for (const [kind, scope] of choice) {
       const ofKind = removals.filter((row) => row.deviceId === deviceId && row.screen === kind);
@@ -456,7 +462,7 @@ function lessRemovals(
         ofKind.map((row) => row.zoneId),
       );
       if (stationIds?.length === 0 || zoneIds?.length === 0) choice.delete(kind);
-      else choice.set(kind, { stationIds, zoneIds });
+      else choice.set(kind, { ...scope, stationIds, zoneIds });
     }
   }
   return choices;
@@ -670,7 +676,7 @@ export async function readDevicesKitchenScreens(
 /** The targets' removal rows and effective choices, as a caller that already read them passes on. */
 interface DeviceReads {
   readonly removals: readonly Removal[];
-  readonly choices: Map<string, Map<KitchenScreenKind, KitchenScreenScope>>;
+  readonly choices: Map<string, Map<KitchenScreenKind, StoredChoice>>;
 }
 
 async function readDeviceState(
@@ -709,6 +715,12 @@ async function resolveDevices(
       const removedZones = new Set(ofKind.flatMap((row) => row.zoneId ?? []));
       const chosen = choice.get(kind);
       const bound = offered[kind];
+      const nonPassStationsOverride =
+        chosen === undefined || !hasDisplay(kind) ? null : chosen.showNonPassStations;
+      const display = {
+        nonPassStationsOverride,
+        showNonPassStations: nonPassStationsOverride ?? bound?.showNonPassStations ?? true,
+      };
       if (chosen === undefined) {
         return {
           kind,
@@ -718,6 +730,7 @@ async function resolveDevices(
           profileEveryStation: false,
           stations: slots(places.stations, [], null, removedStations),
           zones: removedZones.size === 0 ? null : slots(places.zones, [], null, removedZones),
+          ...display,
         };
       }
       const everyZone =
@@ -738,6 +751,7 @@ async function resolveDevices(
           kind === "station" || everyZone
             ? null
             : slots(places.zones, chosen.zoneIds, bound?.zoneIds ?? null, removedZones),
+        ...display,
       };
     };
     resolved.set(

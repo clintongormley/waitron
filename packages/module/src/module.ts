@@ -632,6 +632,11 @@ export interface ResolvedKitchenScreen {
   readonly stations: readonly ScreenSlot[];
   /** null: no zone filter; otherwise zone order. */
   readonly zones: readonly ScreenSlot[] | null;
+  /** The device's own stored choice of showing other stations' dishes; null when it holds none
+   *  (or no choice of this kind), and always null on a station screen. */
+  readonly nonPassStationsOverride: boolean | null;
+  /** `nonPassStationsOverride`, else the profile's row of this kind, else true. */
+  readonly showNonPassStations: boolean;
 }
 
 export type KitchenNoteScope = { workingOrderId: string } | { partyId: string };
