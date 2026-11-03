@@ -5677,6 +5677,21 @@ Not in any track until the standalone primary is done.
   Slice 9's S2 re-run from its new Parts F and G, and S2 reads PASS; Slices 10 and 11 may be built.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
+- **A947 3b must make the held chart vouch for a joined box's key, or the main box can never check
+  its answer and waits at every start.** The start check verifies a peer's signed status with
+  `peerKeyOf` (`apps/server/src/handover-signing.ts`): this box's own key, the main-box key a spare
+  pins at adoption, and keys the held chart's endorsements vouch for. A main box holds none of
+  these for its spare, so once 3b makes a spare finish joining, the spare's answers count as
+  silent. No box has a joined peer before 3b. Left open by A1018 Slice 3 (Ruling R13).
+
+- **The boot peer reconcile cannot reach a real box's certificate.** `fetchPeerMembershipDocument`
+  (`apps/server/src/membership-reconcile.ts:66`) calls the plain global `fetch`, which refuses a
+  leaf from a box's own authority, and it sets no time limit. `git blame` shows the line from
+  e82588f349 (2026-09-08, "Outbox → native logical replication", #280), so it predates A1018. The
+  start check's transport (`askPeerStatus`, `apps/server/src/boot-peer-check.ts`) pins the
+  authority a spare holds, or skips the check behind its signed answer. Found by A1018 Slice 3's
+  review.
+
 - **A1185: a venue not yet connected sees no prices.** Left open by A1185.
   [Detail](backlog/replication-cloud.md#a1185-a-venue-not-yet-connected-sees-no-prices)
 

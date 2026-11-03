@@ -1723,6 +1723,36 @@ routable standing **and** a `nodes` row exists for it, and shared seeds write ro
   coverage. PR first line: FISCAL, and "changes Ruling C7 for a box with a joined peer; no box
   has one before A947 3b".
 
+#### Slice 3 as built (2026-11-03)
+
+The build departed from the task texts above in these ways; the task texts are left as written.
+
+- **The peer ask's transport (Ruling R12).** `askPeerStatus` pins the peer's authority certificate
+  when this box holds it: a spare holds its main box's, from adoption (the mirror link's
+  `boxCaPem`). Otherwise it connects over TLS without checking the certificate. In that case the
+  answer is trusted only because its signed envelope verifies and echoes the query's nonce, and the
+  query carries no credential. The cost: an active attacker on the venue's network can read a
+  peer's chart and restriction, but cannot forge them. The alternative, an owner choice, is to
+  carry the spare's authority to the main box at adoption.
+- **A main box holds no key for its spare (Ruling R13).** `peerKeyOf`
+  (`apps/server/src/handover-signing.ts`) knows this box's own key, a pinned main-box key, and keys
+  the held chart's endorsements vouch for. A main box has none of these for a spare, so a joined
+  spare's answer counts as silent, and the check waits. No counted peer exists before A947 3b.
+  3b must make the held chart vouch for the joined box's key, or pin it. Without that, every start
+  of a two-box venue waits. The test fixtures that pin a peer's key say they stand in for that step.
+- **Whom a superseded box names.** The successor is the serving primary of the chart the box holds
+  after the check, unless that is this box. A peer's takeover can arrive before its chart, and then
+  the successor is the first peer whose own operation stopped this box. If neither exists, the box
+  takes Ruling R7's path.
+- **The boot peer reconcile still runs** for every box that is not a mirror and has a mirror link,
+  beside the check, not only for a box with no counted peer. Both can only demote the box.
+- **Known limit: a restart between the chart and the restriction.** The check saves a newer
+  fencing chart to `venue.db` before the restriction reaches `node.db`. A restart between the two
+  never writes the restriction: at the next start the chart is no longer newer, so no peer's answer
+  is F. That box does not take the restricted start or show its page. It comes up fenced by the
+  held chart instead: `boot.ts` demotes its singleton role to secondary, `singletonPass` runs no
+  filing on a secondary, and `/api/node` reports `acceptingSales: false`.
+
 ---
 
 ### Slice 4 — The final copy and its indicator
