@@ -19,12 +19,9 @@ import {
   type ColumnScope,
   type ColumnState,
   PASS_COLUMNS,
-  moveColumn,
-  readColumnState,
-  saveColumnState,
-  setColumnVisible,
   toggleColumnCollapsed,
 } from "../state/kitchen-columns.js";
+import { KitchenColumnLayouts } from "../state/kitchen-column-layouts.js";
 import type {
   DevicePassBoard,
   PassBoard,
@@ -200,8 +197,7 @@ export class TillPassScreen extends LitElement {
   /** The refresh sentence, with the table a Ready refusal names; Fire's names none. */
   @state() private tableChanged: { table?: string } | null = null;
   #tableChangedNext: { table?: string } | null = null;
-  /** Each board's layout, read from storage once and never again on a refresh. */
-  readonly #columns = new Map<string, ColumnState>();
+  readonly #layouts = new KitchenColumnLayouts(PASS_COLUMNS);
 
   /** Re-renders the idle display so an item's band can climb between refreshes, with no refetch. */
   readonly #clock = new TickingClock(this);
@@ -492,41 +488,17 @@ export class TillPassScreen extends LitElement {
     return this.now ?? this.#clock.now;
   }
 
-  /** The getter itself throws where the browser refuses storage altogether. */
-  #deviceStorage(): Storage | null {
-    try {
-      return localStorage;
-    } catch {
-      return null;
-    }
-  }
-
   #columnScope(boardId: BoardId): ColumnScope | null {
     if (!this.deviceId || !this.serverOrigin) return null;
     return { venueId: this.serverOrigin, deviceId: this.deviceId, screen: SCOPES[boardId] };
   }
 
   #columnsFor(boardId: BoardId): ColumnState {
-    const scope = this.#columnScope(boardId);
-    const key = scope === null ? `memory|${boardId}` : JSON.stringify(scope);
-    let layout = this.#columns.get(key);
-    if (layout === undefined) {
-      const storage = scope === null ? null : this.#deviceStorage();
-      layout =
-        scope !== null && storage !== null
-          ? readColumnState(storage, scope, PASS_COLUMNS)
-          : PASS_COLUMNS;
-      this.#columns.set(key, layout);
-    }
-    return layout;
+    return this.#layouts.get(this.#columnScope(boardId), boardId);
   }
 
-  /** A refused store leaves the layout in memory. */
   #keepColumns(boardId: BoardId, layout: ColumnState): void {
-    const scope = this.#columnScope(boardId);
-    this.#columns.set(scope === null ? `memory|${boardId}` : JSON.stringify(scope), layout);
-    const storage = scope === null ? null : this.#deviceStorage();
-    if (scope !== null && storage !== null) saveColumnState(storage, scope, layout);
+    this.#layouts.keep(this.#columnScope(boardId), boardId, layout);
     this.requestUpdate();
   }
 
@@ -674,16 +646,13 @@ export class TillPassScreen extends LitElement {
       .opener=${open.opener}
       @column-move=${(event: Event) => {
         event.stopPropagation();
-        const { key, direction } = (
-          event as CustomEvent<{ key: ColumnKey; direction: "up" | "down" }>
-        ).detail;
-        this.#keepColumns(boardId, moveColumn(this.#columnsFor(boardId), key, direction));
+        this.#layouts.applyMove(this.#columnScope(boardId), boardId, event);
+        this.requestUpdate();
       }}
       @column-show=${(event: Event) => {
         event.stopPropagation();
-        const { key, visible } = (event as CustomEvent<{ key: ColumnKey; visible: boolean }>)
-          .detail;
-        this.#keepColumns(boardId, setColumnVisible(this.#columnsFor(boardId), key, visible));
+        this.#layouts.applyShow(this.#columnScope(boardId), boardId, event);
+        this.requestUpdate();
       }}
       @close=${(event: Event) => {
         event.stopPropagation();
