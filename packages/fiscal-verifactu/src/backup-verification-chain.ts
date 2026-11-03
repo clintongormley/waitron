@@ -166,3 +166,5 @@ export async function verifyBackupFiscalChains(
     }))
   );
 }
+
+export { walk as walkFiscalChains };

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { ModuleHandoverContribution } from "@waitron/module";
 import type { BackupQuery, BackupValue } from "@waitron/store";
+import { checkFiscalChains } from "./handover-chain-check.js";
 
 /** The states `envios_estado_ck` admits. */
 export const ENVIO_STATES = [
@@ -110,4 +111,7 @@ export async function summariseChains(query: BackupQuery): Promise<ChainSummary[
   return summaries;
 }
 
-export const VERIFACTU_HANDOVER: ModuleHandoverContribution = { summarise: summariseChains };
+export const VERIFACTU_HANDOVER: ModuleHandoverContribution = {
+  summarise: summariseChains,
+  checkCopy: checkFiscalChains,
+};
