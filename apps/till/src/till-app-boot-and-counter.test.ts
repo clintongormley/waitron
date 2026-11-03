@@ -3901,6 +3901,7 @@ describe("department transfers across operator lifetimes", () => {
         note: "No salt",
         firedAt: null,
         courseId: null,
+        requestedAt: null,
       },
     ],
   };
