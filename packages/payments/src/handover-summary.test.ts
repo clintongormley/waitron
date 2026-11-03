@@ -4,13 +4,19 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, tenderRefunds, tenders } from "@waitron/db";
+import {
+  billPaymentRefunds,
+  billPaymentRefundState,
+  CORE_MIGRATIONS,
+  tenderRefunds,
+  tenders,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { archiveTo, openBackupQuery } from "@waitron/store";
 import { PAYMENTS_HANDOVER, summariseOpenPayments, type OpenPayments } from "./handover-summary.js";
 import { PAYMENTS_MIGRATIONS } from "./migrations.js";
 import { paymentState, payments } from "./schema/payments.js";
-import { seedSale, seedWorkingOrder, type Seeded } from "../test/seed.js";
+import { seedBillPayment, seedSale, seedWorkingOrder, type Seeded } from "../test/seed.js";
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] });
 let directory: string | undefined;
@@ -100,6 +106,50 @@ async function refund(
   return row!.id;
 }
 
+/** A card bill payment and the provider row that charged it; `externalRef` is the processor's own. */
+async function chargedBillPayment(provider: string, ref: string, externalRef: string | null) {
+  const billPaymentId = await seedBillPayment(suite.db, seeded);
+  await suite.db.insert(payments).values({
+    workingOrderId: seeded.workingOrderId,
+    source: "device",
+    deviceId: seeded.deviceId,
+    provider,
+    paymentRef: ref,
+    externalRef,
+    amount: 1000,
+    state: "captured",
+    billPaymentId,
+  });
+  return billPaymentId;
+}
+
+async function billRefund(
+  billPaymentId: string,
+  state: (typeof billPaymentRefundState.enumValues)[number],
+  sentAt: string | null,
+) {
+  const [row] = await suite.db
+    .insert(billPaymentRefunds)
+    .values({
+      billPaymentId,
+      submissionId: `submission-${Math.random()}`,
+      fingerprint: "fingerprint",
+      appliedAmount: 300,
+      reason: "Wrong dish",
+      authorizedBy: "11111111-1111-1111-1111-111111111111",
+      requestedBy: "11111111-1111-1111-1111-111111111111",
+      source: "device",
+      deviceId: seeded.deviceId,
+      state,
+      sentAt,
+      sendCount: sentAt === null ? 0 : 1,
+      completedAt: state === "completed" ? STAMPED : null,
+      failedAt: state === "failed" ? STAMPED : null,
+    })
+    .returning({ id: billPaymentRefunds.id });
+  return row!.id;
+}
+
 describe("summariseOpenPayments", () => {
   it("lists every payment in attempting, initiated and accepted_offline with its provider reference", async () => {
     const expected = [];
@@ -125,6 +175,7 @@ describe("summariseOpenPayments", () => {
 
     expect(summary.payments).toEqual(expected);
     expect(summary.refunds).toEqual([]);
+    expect(summary.billRefunds).toEqual([]);
     expect(JSON.parse(JSON.stringify(summary))).toEqual(summary);
   });
 
@@ -163,9 +214,63 @@ describe("summariseOpenPayments", () => {
     expect(summary.payments).toEqual([]);
   });
 
+  it("lists every pending bill refund with the references its provider is asked by", async () => {
+    const sumup = await chargedBillPayment("sumup", "sumup-ref", "txn-1");
+    const simulator = await chargedBillPayment("simulator", "sim-ref", null);
+    const sent = await billRefund(sumup, "pending", STAMPED);
+    const unsent = await billRefund(sumup, "pending", null);
+    const own = await billRefund(simulator, "pending", STAMPED);
+
+    const summary = await summarise();
+
+    expect(summary.billRefunds).toEqual(
+      [
+        {
+          refundId: sent,
+          billPaymentId: sumup,
+          provider: "sumup",
+          paymentRef: "sumup-ref",
+          processorRef: "txn-1",
+          sentAt: STAMPED,
+        },
+        {
+          refundId: unsent,
+          billPaymentId: sumup,
+          provider: "sumup",
+          paymentRef: "sumup-ref",
+          processorRef: "txn-1",
+          sentAt: null,
+        },
+        {
+          refundId: own,
+          billPaymentId: simulator,
+          provider: "simulator",
+          paymentRef: "sim-ref",
+          processorRef: "sim-ref",
+          sentAt: STAMPED,
+        },
+      ].sort((x, y) => (x.refundId < y.refundId ? -1 : 1)),
+    );
+    expect(summary.payments).toEqual([]);
+    expect(summary.refunds).toEqual([]);
+  });
+
+  it("lists no bill refund in another state", async () => {
+    const billPaymentId = await chargedBillPayment("sumup", "sumup-ref", "txn-1");
+    const others = billPaymentRefundState.enumValues.filter((state) => state !== "pending");
+    expect(others.length).toBe(billPaymentRefundState.enumValues.length - 1);
+    for (const state of others) await billRefund(billPaymentId, state, STAMPED);
+    const open = await billRefund(billPaymentId, "pending", STAMPED);
+
+    const summary = await summarise();
+
+    expect(summary.billRefunds.map((row) => row.refundId)).toEqual([open]);
+  });
+
   it("writes nothing", async () => {
     await payment("attempting", "sumup", "ref-quiet");
     await refund("pending", "card", { provider: "sumup", ref: "pay-quiet" });
+    await billRefund(await chargedBillPayment("sumup", "bill-quiet", null), "pending", null);
     const path = await copy();
     const digest = () =>
       [path, `${path}-wal`, `${path}-shm`].map((file) =>
@@ -175,6 +280,7 @@ describe("summariseOpenPayments", () => {
     const summary = await summarise(path);
     expect(summary.payments).toHaveLength(1);
     expect(summary.refunds).toHaveLength(1);
+    expect(summary.billRefunds).toHaveLength(1);
     expect(digest()).toEqual(before);
     expect(before[0]).not.toBeNull();
   });

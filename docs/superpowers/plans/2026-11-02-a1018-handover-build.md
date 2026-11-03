@@ -1875,9 +1875,12 @@ fiscal chains".
 module's descriptor (`packages/composition/src/modules.ts:262`). Test
 `packages/payments/src/handover-summary.test.ts`.
 
-**Interfaces — Produces:** `summariseOpenPayments(tx): Promise<{ payments: { paymentId: string; provider: string; reference: string | null; state: "attempting" | "initiated" | "accepted_offline" }[]; refunds: { refundId: string; provider: string | null; providerPaymentRef: string | null }[] }>`,
-each ordered by id. `refunds` are `tender_refunds` rows in state `pending`
-(`packages/db/src/schema/tender-refunds.ts:23,88-98`).
+**Interfaces — Produces:** `summariseOpenPayments(query: BackupQuery): Promise<{ payments: { paymentId: string; provider: string; reference: string; state: "attempting" | "initiated" | "accepted_offline" }[]; refunds: { refundId: string; provider: string | null; providerPaymentRef: string | null }[]; billRefunds: { refundId: string; billPaymentId: string; provider: string | null; paymentRef: string | null; processorRef: string | null; sentAt: string | null }[] }>`,
+each ordered by id. `refunds` are `tender_refunds` rows with method `card` in state `pending`
+(`packages/db/src/schema/tender-refunds.ts:23,88-98`); `billRefunds` are every pending
+`bill_payment_refunds` row (only a card refund is saved pending, `apps/server/src/bill-refunds.ts`),
+with the provider, payment reference and processor reference (`external_ref`, else the payment
+reference) that `bill-payments-loop.ts` looks it up by, and `sent_at` (null: never sent).
 
 - [ ] **Step 1: Write the failing tests.** "lists every payment in `attempting`, `initiated` and
   `accepted_offline` with its provider reference"; "lists no payment in another state"; "lists
