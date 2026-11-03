@@ -17,6 +17,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readFindBills, readFindBill } from "./find-bill-bills.js";
 import { parseBillsQuery } from "./find-bill-query.js";
@@ -296,16 +297,12 @@ describe("Find Bills SQL paging", () => {
         .where(eq(workingOrderLines.workingOrderId, party.tabId)),
     );
     const unzoned = await inTx(venue, async (tx) => {
-      const [row] = await tx
-        .insert(workingOrders)
-        .values({
-          source: "operator_script",
-          locationId: venue.cfg.locationId,
-          nodeId: venue.cfg.nodeId,
-          orderNumber: 999,
-          label: "No context",
-        })
-        .returning({ id: workingOrders.id });
+      const row = await seedWorkingOrder(tx, {
+        source: "operator_script",
+        nodeId: venue.cfg.nodeId,
+        orderNumber: 999,
+        label: "No context",
+      });
       return row!.id;
     });
     const [line] = await inTx(venue, (tx) =>
@@ -404,15 +401,11 @@ describe("Find Bills SQL paging", () => {
         .update(workingOrderLines)
         .set({ lineTotal: 200 })
         .where(eq(workingOrderLines.workingOrderId, two));
-      const [row] = await tx
-        .insert(workingOrders)
-        .values({
-          source: "operator_script",
-          locationId: venue.cfg.locationId,
-          nodeId: venue.cfg.nodeId,
-          orderNumber: 999,
-        })
-        .returning({ id: workingOrders.id });
+      const row = await seedWorkingOrder(tx, {
+        source: "operator_script",
+        nodeId: venue.cfg.nodeId,
+        orderNumber: 999,
+      });
       return row!.id;
     });
     expect(
@@ -572,16 +565,12 @@ describe("Find Bills SQL paging", () => {
   it("sorts and filters distinct recorded zones while keeping no-zone rows last", async () => {
     const counter = await parked(venue, "Caña");
     const party = await seatedWith(venue, "Tarta");
-    const [noZone] = await inTx(venue, (tx) =>
-      tx
-        .insert(workingOrders)
-        .values({
-          source: "operator_script",
-          locationId: venue.cfg.locationId,
-          nodeId: venue.cfg.nodeId,
-          orderNumber: 999,
-        })
-        .returning({ id: workingOrders.id }),
+    const noZone = await inTx(venue, (tx) =>
+      seedWorkingOrder(tx, {
+        source: "operator_script",
+        nodeId: venue.cfg.nodeId,
+        orderNumber: 999,
+      }),
     );
     await inTx(venue, async (tx) => {
       await tx.update(floorZones).set({ name: "Alpha" }).where(eq(floorZones.id, venue.zoneId));

@@ -22,6 +22,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -307,16 +308,8 @@ describe("Discard resolves the whole owned draft atomically", () => {
 
   it("keeps another owner's other-bill draft while the current owner discards recalled dishes", async () => {
     const p = await setup();
-    const [otherBill] = await inTx(venue, (tx) =>
-      tx
-        .insert(workingOrders)
-        .values({
-          source: "dashboard",
-          orderNumber: 2,
-          partyId: p.partyId,
-          locationId: venue.cfg.locationId,
-        })
-        .returning(),
+    const otherBill = await inTx(venue, (tx) =>
+      seedWorkingOrder(tx, { source: "dashboard", orderNumber: 2, partyId: p.partyId }),
     );
     const saved = await call(
       "PUT",

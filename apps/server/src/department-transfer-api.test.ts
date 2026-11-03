@@ -23,6 +23,7 @@ import {
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { hashPin, persons, setProfileAdmission, sessions } from "@waitron/identity";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import {
@@ -144,14 +145,10 @@ async function ready() {
       receivingProfileId: profiles[1]!,
       destinationDepartmentIds: [],
     });
-    const [tab] = await tx
-      .insert(workingOrders)
-      .values({
-        locationId: v.cfg.locationId,
-        source: "operator_script",
-        orderNumber: ++nextOrderNumber,
-      })
-      .returning();
+    const tab = await seedWorkingOrder(tx, {
+      source: "operator_script",
+      orderNumber: ++nextOrderNumber,
+    });
     await recordOrderServiceContext(tx, v.cfg, tab!.id, az.id);
     return {
       a: a.id,
@@ -1483,14 +1480,10 @@ describe("department-wide sent transfer discovery", () => {
   it("discovers every sent tab after acceptance and a fresh source login without destination browsing", async () => {
     const f = await ready();
     const first = await pending(f);
-    const [secondTab] = await suite.db
-      .insert(workingOrders)
-      .values({
-        locationId: v.cfg.locationId,
-        source: "operator_script",
-        orderNumber: ++nextOrderNumber,
-      })
-      .returning();
+    const secondTab = await seedWorkingOrder(suite.db, {
+      source: "operator_script",
+      orderNumber: ++nextOrderNumber,
+    });
     await withTransaction(suite.db, (tx) =>
       recordOrderServiceContext(tx, v.cfg, secondTab!.id, f.az),
     );

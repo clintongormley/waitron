@@ -3,8 +3,9 @@ import sharp from "sharp";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, locations, tenants, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, tenants, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS, contentLanguages } from "@waitron/catalogue";
 import {
   IDENTITY_MIGRATIONS,
@@ -67,20 +68,18 @@ async function fixture(
   await suite.db
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "B12345678", legalName: "Venue SL" });
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: randomUUID(),
-      invoiceLocales: ["gl-ES"],
-      operationDescription: "Bootstrap",
-      addressLine1: "Calle Uno 1",
-      postalCode: "28013",
-      city: "Madrid",
-      province: "Madrid",
-    })
-    .returning();
+  await seedVenue(suite.db, {
+    name: randomUUID(),
+    invoiceLocales: ["gl-ES"],
+    operationDescription: "Bootstrap",
+    addressLine1: "Calle Uno 1",
+    postalCode: "28013",
+    city: "Madrid",
+    province: "Madrid",
+  });
+  const venueId = await venueLocationId(suite.db);
   const cfg: TradingContext = {
-    locationId: locationId(location!.id),
+    locationId: locationId(venueId),
     nodeId: nodeId(randomUUID()),
     locale: "es-ES",
     invoiceLocales: ["gl-ES"],
