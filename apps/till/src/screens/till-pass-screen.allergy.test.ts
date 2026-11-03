@@ -4,6 +4,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { TillPassBoard } from "../widgets/pass-board.js";
 import { allergyBlock, allergyBoard } from "../../test/kitchen-allergy-fixtures.js";
+import { passCard, passItem } from "../../test/pass-board-fixtures.js";
 import type { TillPassScreen } from "./till-pass-screen.js";
 import "./till-pass-screen.js";
 
@@ -43,8 +44,19 @@ async function mount(mode: Mode, board: PassBoard, theme: "light" | "dark" = "li
 describe("A669 boards pass", () => {
   for (const kind of ["bill", "group"] as const)
     for (const mode of ["all", "pass", "monitor"] as const)
-      it(`marks a ${kind} card's head once for its allergy and draws every dish on ${mode}`, async () => {
-        const { root } = await mount(mode, allergyBoard(kind));
+      it(`marks a ${kind} card's head once for its allergy, leaves a card without one unmarked and draws every dish on ${mode}`, async () => {
+        const board = allergyBoard(kind);
+        const plain = passCard({
+          key: "bill:plain",
+          target: { kind: "bill", workingOrderId: "plain" },
+          orders: [{ orderId: "plain", orderNumber: 2, tableLabel: "T2", kitchenNote: null }],
+          items: [passItem({ id: "plain-item", orderId: "plain" })],
+        });
+        const { root } = await mount(mode, { ...board, inProgress: [...board.inProgress, plain] });
+        expect(
+          root().querySelector('[data-card="bill:plain"] [data-item="plain-item"]'),
+        ).not.toBeNull();
+        expect(root().querySelector('[data-card="bill:plain"] [data-allergy-marker]')).toBeNull();
         const card = root().querySelector(
           `[data-card="${kind === "bill" ? "bill:bill-1" : "group:group-1"}"]`,
         )!;

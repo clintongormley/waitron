@@ -148,6 +148,12 @@ describe("A773 no dispatch presentation", () => {
         expect(root().querySelector("[data-card]")!.classList.contains("age-forgotten")).toBe(true);
         expect(root().querySelector("[data-overdue-count]")!.textContent).toContain("1");
         expect(root().querySelector(`${AWAY}, [data-ready], [data-group-ready]`)).toBeNull();
+        const readyCard = root().querySelector('[data-column="ready"] [data-card]')!;
+        const buttons = [...readyCard.querySelectorAll("button, wt-button, [role='button']")];
+        // A till reprints the bill; a kitchen display and a monitor draw no button on a Ready card.
+        expect(buttons.map((button) => button.getAttribute("data-reprint"))).toEqual(
+          mode === "all" || mode === "pass" ? ["bill-1"] : [],
+        );
       });
 
   for (const kind of ["course", "group"] as const)

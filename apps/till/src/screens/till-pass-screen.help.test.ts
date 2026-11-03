@@ -414,6 +414,10 @@ describe("A773 pass screen: help badges", () => {
     const { el } = await mountEmbedded(wideBoard());
     await helpOn(el);
     const card = cards(el)[0]!;
+    expect(card.getBoundingClientRect().width).toBeCloseTo(
+      boardOf(el).getBoundingClientRect().width,
+      0,
+    );
     expect(card.getBoundingClientRect().right).toBeLessThanOrEqual(window.innerWidth);
     const shown = allBadges(el).filter((badge) => badge.getBoundingClientRect().width > 0);
     expect(new Set(shown)).toEqual(

@@ -2,7 +2,7 @@ import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setHelpMode } from "@waitron/ui";
 import type { WtHelpTooltip } from "@waitron/ui";
-import type { DevicePassBoard, PassBoard, PassCard, TillApi } from "../api/client.js";
+import type { DevicePassBoard, PassBoard, PassCard, PassCardItem, TillApi } from "../api/client.js";
 import {
   cleanupWidgets,
   expectNoA11yViolations,
@@ -30,6 +30,54 @@ const zones = [
   { id: "z-2", name: "Sala", available: true },
 ];
 
+/** Every dish detail the board draws: cross-station references of each kind, an extra, as-served
+ * allergens, diet badges, the contains-meat chip and the "not reviewed" note, and a dish note. */
+const detailed = {
+  fresh: {
+    crossRefs: [
+      {
+        kind: "with" as const,
+        name: "CHIPS",
+        perDish: 2,
+        stationName: "Fryer",
+        addAllergens: { gluten: { kinds: ["wheat" as const] } },
+      },
+      { kind: "for" as const, name: "BURG", stationName: "Grill" },
+      { kind: "for" as const, name: "AGUA", stationName: null },
+    ],
+    modifiers: [{ descriptions: { "es-ES": "Sin gluten" } }],
+    asServed: { allergens: { milk: {} }, pending: false },
+    asServedDiet: {
+      vegan: "no" as const,
+      vegetarian: "yes" as const,
+      contains: [],
+      halal: "yes" as const,
+    },
+  },
+  forgotten: {
+    asServed: { allergens: {}, pending: true },
+    asServedDiet: {
+      vegan: "unknown" as const,
+      vegetarian: "unknown" as const,
+      contains: ["meat" as const],
+    },
+    note: "poco hecho por dentro",
+  },
+} satisfies Record<string, Partial<PassCardItem>>;
+
+/** Requires the board to draw {@link detailed}'s details, so an axe run covers them. */
+function expectDishDetails(root: ShadowRoot): void {
+  expect(root.querySelectorAll("[data-crossref]")).toHaveLength(3);
+  expect(root.querySelector(".item-modifiers .modifier")).not.toBeNull();
+  expect(root.querySelector("[data-item-allergens] .allergen-chip")).not.toBeNull();
+  expect(root.querySelector(".extra-allergens .allergen-chip")).not.toBeNull();
+  expect(root.querySelector('[data-diet="vegetarian"]')).not.toBeNull();
+  expect(root.querySelector('[data-diet="halal"]')).not.toBeNull();
+  expect(root.querySelector('[data-diet-contains="meat"]')).not.toBeNull();
+  expect(root.querySelector("[data-diet-pending]")).not.toBeNull();
+  expect(root.querySelector("[data-note]")).not.toBeNull();
+}
+
 /** To fire, a fresh In progress card with a course to mark ready, and a forgotten one. */
 const populated = (): PassBoard =>
   passBoard({
@@ -44,7 +92,7 @@ const populated = (): PassBoard =>
       }),
     ],
     inProgress: [
-      passCard({ items: [passItem({ id: "it-fresh", name: "Croquetas" })] }),
+      passCard({ items: [passItem({ id: "it-fresh", name: "Croquetas", ...detailed.fresh })] }),
       passCard({
         key: "bill:wo-old",
         target: { kind: "bill", workingOrderId: "wo-old" },
@@ -57,6 +105,7 @@ const populated = (): PassBoard =>
             orderId: "wo-old",
             queuedAt: minutesAgo(40),
             requestedAt: minutesAgo(40),
+            ...detailed.forgotten,
           }),
         ],
       }),
@@ -161,6 +210,7 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
     expect(inBoard(el).querySelector(".lever")).not.toBeNull();
     expect(inBoard(el).querySelector("[data-pass-fire]")).not.toBeNull();
     expect(el.shadowRoot!.querySelectorAll("[data-unavailable]")).toHaveLength(2);
+    expectDishDetails(inBoard(el));
     await expectNoA11yViolations(host);
     await userEvent.click(inBoard(el).querySelector<HTMLElement>("[data-ready]")!);
     await flush(el);
@@ -181,6 +231,7 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
     const { el, host } = await mount({ api, runsPass: true });
     expect(el.shadowRoot!.querySelectorAll("[data-unavailable]")).toHaveLength(2);
     expect(inBoard(el).querySelector(".lever")).not.toBeNull();
+    expectDishDetails(inBoard(el));
     await expectNoA11yViolations(host);
   });
 
@@ -207,6 +258,7 @@ describe.each(["light", "dark"] as const)("till-pass-screen a11y (%s theme)", (t
     const { el, host } = await mount({ api, runsPass: true });
     expect(inBoard(el).querySelector(".age-forgotten")).not.toBeNull();
     expect(inBoard(el).querySelector(".lever")).not.toBeNull();
+    expectDishDetails(inBoard(el));
     await expectNoA11yViolations(host);
   });
 
@@ -302,7 +354,19 @@ describe.each(["light", "dark"] as const)("the pass's help badges a11y (%s theme
   async function mount(width: number, monitor: boolean) {
     await pageAt(width, width === 390 ? 844 : 900);
     setHelpMode(true);
-    const board = read(passBoard({ inProgress: [passCard(), groupCard("g-2", 2)] }));
+    const board = read(
+      passBoard({
+        inProgress: [
+          passCard({
+            items: [
+              passItem({ id: "it-a", lineId: "line-a", ...detailed.fresh }),
+              passItem({ id: "it-b", lineId: "line-b", ...detailed.forgotten }),
+            ],
+          }),
+          groupCard("g-2", 2),
+        ],
+      }),
+    );
     const mounted = await mountWidget<TillPassScreen>(
       "till-pass-screen",
       {
@@ -341,6 +405,7 @@ describe.each(["light", "dark"] as const)("the pass's help badges a11y (%s theme
   ] as const)("help on at %i on %s has no violations", async (width, _, monitor, badges) => {
     const { el, host } = await mount(width, monitor);
     expect(await shown(el)).toHaveLength(badges);
+    expectDishDetails(inBoard(el));
     await expectNoA11yViolations(host);
   });
 });
