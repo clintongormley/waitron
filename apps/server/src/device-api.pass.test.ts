@@ -806,6 +806,8 @@ describe("A773 pass display policy", () => {
     const read = await shown(f, f.a.cookie, "/api/device/pass-board");
     expect(items(read).sort()).toEqual([burger, paella].sort());
     expect(hiddenIds(read.board)).toEqual([]);
+    expect(boardCards(read.board).length).toBeGreaterThan(0);
+    for (const card of boardCards(read.board)) expect(card).not.toHaveProperty("hiddenItems");
     expect(read.display).toEqual({ showNonPassStations: false, nonPassStationsOverride: false });
   });
 
@@ -996,6 +998,23 @@ describe("A773 pass display policy: the device's own route", () => {
       204,
     );
     expect(await valueOf(till.id)).toEqual([["pass", false]]);
+  });
+
+  it("refuses a till with no pass screen and nobody signed in device.unauthorized, as its board read does", async () => {
+    const f = await fixture();
+    const till = await f.device("Till", f.till, {});
+    const board = await f.app.request("/api/device/pass-board", {
+      headers: { cookie: till.cookie },
+    });
+    expect({ status: board.status, body: await board.json() }).toEqual({
+      status: 401,
+      body: { error: { code: "device.unauthorized", params: {} } },
+    });
+    await refused(
+      () => put(f.app, till.cookie, { kind: "pass", showNonPassStations: false }),
+      401,
+      { code: "device.unauthorized", params: {} },
+    );
   });
 
   it("refuses a device without a screen of the kind it names device.unauthorized", async () => {

@@ -14,6 +14,7 @@ import {
   passCard,
   passItem,
 } from "../../test/pass-board-fixtures.js";
+import { allergyBlock } from "../../test/kitchen-allergy-fixtures.js";
 import type { TillPassBoard } from "./pass-board.js";
 import "./pass-board.js";
 
@@ -363,6 +364,30 @@ describe("A773 pass board widget", () => {
     expect(card.querySelector('[data-ready="course-mains"]')!.textContent!.trim()).toBe(
       `${t("expo.ready")} Mains`,
     );
+  });
+
+  it("marks the head of a card Hide emptied for its hidden dish's allergy, as Show would (D83)", async () => {
+    const hidden = passCard({
+      ...billInProgress,
+      items: [],
+      hiddenItems: [
+        passItem({
+          id: "cold-allergic",
+          orderId: "order-5",
+          stationName: "Cold",
+          stationId: "st-cold",
+          state: "preparing",
+          phase: "preparing",
+          informational: true,
+          passControlled: false,
+          allergy: allergyBlock,
+        }),
+      ],
+    });
+    const el = await mountBoard({ board: passBoard({ inProgress: [hidden] }) });
+    const card = cardOf(el, hidden.key);
+    expect(card.querySelectorAll("[data-item]")).toHaveLength(0);
+    expect(card.querySelectorAll(".ticket-head [data-allergy-marker]")).toHaveLength(1);
   });
 
   it("draws a held card dashed, untimed and without buttons, its dishes held", async () => {

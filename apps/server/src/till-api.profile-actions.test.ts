@@ -138,7 +138,8 @@ import {
  * A management reprint (`POST /management-api/orders/:id/reprint`) checks `print-receipt` on the
  * device cookie it carries, if any (`orders-reprint.test.ts`).
  *
- * Not action-gated, so a signed-in person (or, for a display's reads, the device) is enough: every
+ * Not action-gated, so a signed-in person (or, for a display's reads and its own display choice,
+ * the device) is enough: every
  * read, including a display's `GET /api/device/stations`, `GET /api/device/pass-board` and
  * `GET /api/device/pass-monitor-board`, and the till's All stations board `GET /api/expo/board`
  * and `GET /api/invoice-delivery-options`, the POST previews (`/payments/preview`,

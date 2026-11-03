@@ -21,12 +21,13 @@ export interface ItemView {
 }
 export interface CardView {
   card: PassCard;
-  /** The dishes drawn; a dish Hide hid is counted for `band` and `courseReady` but not drawn. */
   column: "held" | "toFire" | "inProgress" | "ready";
   kindWord: string | null;
   ageFrom: string | null;
   ageWord: "minutes" | "ready" | null;
   band: TimingBand | null;
+  allergy: boolean;
+  /** The dishes drawn; a dish Hide hid counts for `band`, `allergy` and `courseReady`, undrawn. */
   items: ItemView[];
   fire: { shown: boolean; enabled: boolean };
   groupReady: boolean;
@@ -115,6 +116,20 @@ function readyCourses(card: PassCard, dishes: readonly PassCardItem[]): CourseRe
     .map(({ orderId, courseId, name }) => ({ orderId, courseId, name }));
 }
 
+/** The server's first two dish keys (the order, then its course, nulls first), so a dish Hide
+ *  moved to `hiddenItems` keeps its place among the drawn ones. */
+function inCardOrder(card: PassCard, dishes: PassCardItem[]): PassCardItem[] {
+  const orderIndex = new Map(card.orders.map(({ orderId }, index) => [orderId, index]));
+  const course = (item: PassCardItem) => item.course?.displayOrder ?? null;
+  return dishes.sort((a, b) => {
+    const [ca, cb] = [course(a), course(b)];
+    return (
+      orderIndex.get(a.orderId)! - orderIndex.get(b.orderId)! ||
+      (ca === cb ? 0 : ca === null ? -1 : cb === null ? 1 : ca - cb)
+    );
+  });
+}
+
 function cardView(
   card: PassCard,
   column: PassColumn,
@@ -124,6 +139,10 @@ function cardView(
 ): CardView {
   const items = card.items.map((item) => itemView(item, now));
   const hidden = (card.hiddenItems ?? []).map((item) => itemView(item, now));
+  const dishes =
+    card.hiddenItems === undefined
+      ? card.items
+      : inCardOrder(card, [...card.items, ...card.hiddenItems]);
   const fireShown = column === "toFire" && mode === "pass" && runsPass;
   const levers = column === "inProgress" && mode !== "monitor" && runsPass;
   const age: Pick<CardView, "ageFrom" | "ageWord"> =
@@ -138,10 +157,11 @@ function cardView(
     kindWord: card.kind === "held" ? null : t(KIND_WORDS[card.kind]),
     ...age,
     band: cardBand([...items, ...hidden]),
+    allergy: dishes.some((item) => item.visible && item.allergy !== null),
     items,
     fire: { shown: fireShown, enabled: fireShown && card.releaseTicketItemIds.length > 0 },
     groupReady: levers && card.target.kind === "group",
-    courseReady: levers ? readyCourses(card, [...card.items, ...(card.hiddenItems ?? [])]) : [],
+    courseReady: levers ? readyCourses(card, dishes) : [],
   };
 }
 

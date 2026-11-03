@@ -498,8 +498,7 @@ export class TillPassBoard extends LitElement {
               ${order.tableLabel ? html`<span class="label">${order.tableLabel}</span>` : nothing}`,
         )}
         ${card.group === undefined ? nothing : html`<span class="group-name">${groupName(card.group)}</span>`}
-        ${kitchenAllergyMarker(view.items.some(({ item }) => item.visible && item.allergy !== null))}
-        ${this.#age(view)}
+        ${kitchenAllergyMarker(view.allergy)} ${this.#age(view)}
       </div>
       ${card.orders.map((order) =>
         order.kitchenNote
