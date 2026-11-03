@@ -717,8 +717,8 @@ export class TillStationQueue extends LitElement {
   @state() private chosenTab?: ColumnKey;
   /** A collapsed column whose heading was just tapped: chosen if opening it turns the board to tabs. */
   #opening?: ColumnKey;
-  /** The tab that takes the focus from the heading its column was opened with, which the tabs remove. */
-  #focusTab?: ColumnKey;
+  /** The column whose tab or heading takes the focus from a heading or tab the next drawing removes. */
+  #refocus?: ColumnKey;
   #drewTabs = false;
 
   override connectedCallback(): void {
@@ -749,29 +749,32 @@ export class TillStationQueue extends LitElement {
     this.#cards = kitchenCards(this.groups);
     this.#measured = measureBoard(this);
     const tabs = this.groups.length > 0 && !this.#fits();
-    if (this.#opening !== undefined && tabs && !this.#drewTabs) {
-      this.chosenTab = this.#opening;
-      const focused = (this.renderRoot as ShadowRoot).activeElement;
-      if (focused instanceof HTMLElement && focused.dataset.columnToggle === this.#opening) {
-        this.#focusTab = this.#opening;
-      }
-    }
+    if (this.#opening !== undefined && tabs && !this.#drewTabs) this.chosenTab = this.#opening;
     this.#opening = undefined;
-    this.#drewTabs = tabs;
     const shown = this.#shown();
+    const focused = (this.renderRoot as ShadowRoot).activeElement;
+    const focusedKey =
+      focused instanceof HTMLElement
+        ? ((focused.dataset.columnToggle ?? focused.dataset.columnTab) as ColumnKey | undefined)
+        : undefined;
+    if (focusedKey !== undefined && (tabs !== this.#drewTabs || !shown.includes(focusedKey))) {
+      this.#refocus = shown.includes(focusedKey) ? focusedKey : shown[0];
+    }
+    this.#drewTabs = tabs;
     if (tabs && this.chosenTab !== undefined && !shown.includes(this.chosenTab)) {
       this.chosenTab = shown[0]!;
     }
   }
 
   override updated(): void {
-    if (this.#focusTab === undefined) return;
-    this.renderRoot.querySelector<HTMLElement>(`[data-column-tab="${this.#focusTab}"]`)!.focus();
-    this.#focusTab = undefined;
+    if (this.#refocus === undefined) return;
+    const target = this.#drewTabs ? "data-column-tab" : "data-column-toggle";
+    this.renderRoot.querySelector<HTMLElement>(`[${target}="${this.#refocus}"]`)?.focus();
+    this.#refocus = undefined;
   }
 
   /** The columns this board can draw that are not hidden, in the layout's order; Held only while
-   * it holds a card, so a board with nothing held fits as it did before Held (D93). */
+   * it holds a card (D93). The fit, the tabs and the columns all read this one list. */
   #shown(): ColumnKey[] {
     const holdsHeld = this.#cards.some((card) => card.since === null);
     return this.columns.order.filter(

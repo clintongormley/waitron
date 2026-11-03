@@ -4114,7 +4114,7 @@ describe("the board's columns", () => {
 
 describe("the Overview column", () => {
   const withOverview = {
-    order: ["overview", "waiting", "preparing", "ready"],
+    order: ["overview", "held", "waiting", "preparing", "ready"],
     hidden: [],
     collapsed: [],
   } as const;
@@ -4863,10 +4863,12 @@ describe("the late bar", () => {
 
   it("the late bar: Overview's tab and a held card's column never carry it", async () => {
     await pageAt(390, 844);
-    const { el } = await mountBoard(layout(), [
-      ageBill(5, [ageDish("held-dish", 0, { firedAt: null })]),
-    ]);
+    const { el } = await mountBoard(
+      { order: [...STATION_COLUMNS.order], hidden: [], collapsed: [] },
+      [ageBill(5, [ageDish("held-dish", 0, { firedAt: null })])],
+    );
     expect(shadow(el).querySelector("[data-column-tabs]")).not.toBeNull();
+    expect(shadow(el).querySelector('[data-column-tab="held"]')).not.toBeNull();
     expect(marked(el)).toEqual([]);
   });
 
@@ -5173,6 +5175,35 @@ describe("A773 held column", () => {
     await el.updateComplete;
     expect(shadow(el).querySelector(".kanban")).not.toBeNull();
     expect(shadow(el).querySelector("[data-column-tabs]")).toBeNull();
+  });
+
+  it("at a 1024 px station display a focused heading keeps the focus as a held card turns the board to tabs and back", async () => {
+    await pageAt(1024, 844);
+    const { el, host } = await mountBoard(released());
+    host.style.paddingInline = "var(--wt-space-4)";
+    el.requestUpdate();
+    await el.updateComplete;
+    const heading = (key: string) =>
+      shadow(el).querySelector<HTMLButtonElement>(`[data-column-toggle="${key}"]`);
+    heading("waiting")!.focus();
+
+    el.groups = scene();
+    await el.updateComplete;
+    expect(shadow(el).querySelector("[data-column-tabs]")).not.toBeNull();
+    expect(shadow(el).activeElement).toBe(tab(el, "waiting"));
+
+    el.groups = released();
+    await el.updateComplete;
+    expect(shadow(el).querySelector(".kanban")).not.toBeNull();
+    expect(shadow(el).activeElement).toBe(heading("waiting"));
+
+    el.groups = scene();
+    await el.updateComplete;
+    tab(el, "held")!.focus();
+    el.groups = released();
+    await el.updateComplete;
+    expect(heading("held")).toBeNull();
+    expect(shadow(el).activeElement).toBe(heading("overview"));
   });
 
   it("a hidden Held draws neither the held cards nor a Held tab, and the Columns window still lists it", async () => {
