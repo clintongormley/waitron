@@ -113,9 +113,11 @@ against a config `writeConfig` did not write (which would otherwise reach litest
 credentials and come back as a store error). A later task that needs one of them should pin it or
 delete it.
 
-**`scenarios` exits 0 on a clean tree since 2026-11-03**, when S2 began reading PASS (see "What S2
-measures, and what it does not" below). Before that it exited 1 on every clean run, because S2's
-verdict was FAIL. A 1 now means a critical scenario failed or threw.
+**Since 2026-11-03 S2 no longer makes a clean run exit 1**: it reads PASS (see "What S2 measures,
+and what it does not" below). Before that every clean run exited 1, because S2's verdict was FAIL.
+A clean run can still exit 1: on 2026-11-03 S3 threw `database disk image is malformed` on some
+whole-table runs on one machine, cause not investigated (the backlog's _Replication, failover and
+the cloud_ area). A 1 means a critical scenario failed or threw; read the table for which.
 
 `TESTCONTAINERS_RYUK_DISABLED=true` is required locally (`CLAUDE.md` §4), and it turns off the reaper
 that would otherwise clean up after an interrupted run. Scenarios run one at a time and each that opens a store stops it
@@ -1080,7 +1082,11 @@ is not the measurement, and it may differ from run to run.
 > are now controls of the retired design: each asserts that it files a record twice, and one that
 > does not makes the scenario throw, which the runner reports as a critical FAIL row titled `threw`.
 > The verdict counts second filings only in the parts that are not controls. Where the rest of this
-> section says S2's verdict is FAIL, it describes the scenario before this change.
+> section says S2's verdict is FAIL, or that Part D or Part E's second half is measured rather than
+> asserted, it describes the scenario before this change. The mutation list's first entry, forcing
+> `diffTail`'s high-water mark to 0, was run again after it, on 2026-11-03: the scenario now
+> throws, `| s2_no_double_submit | threw | FAIL | control: the retired refreshed-summary ship files record 1 twice |`,
+> exit 1.
 
 **S2's verdict is FAIL, and that is a result rather than a broken harness.** The rig found a way the
 loop as modelled here submits one sale to the tax agency twice. The scenario records it instead of

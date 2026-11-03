@@ -1509,6 +1509,8 @@ topologies the decision applies as written.
 > **A1018, 2026-11-02:** the tail is fiscal-only, and the S2 re-run gains a third control — see the dated A1018 block at the top.
 >
 > **A1018 Slice 9, 2026-11-03:** the re-run is in the [results note](../../research/2026-09-16-sqlite-failover-prototype.md#s2-re-run-with-a1018s-return-batch-2026-11-03): Parts F and G pass and the three controls fail; S2's row is still FAIL on Part D and Part E's second half, and whether the gate is read off F and G is the owner's call.
+>
+> **A1018 Slice 9, 2026-11-03, later:** the owner reads the gate from Parts F and G. Part D and Part E's second half are now controls of the retired design, expected to file twice, and S2 reads PASS — see the [results note](../../research/2026-09-16-sqlite-failover-prototype.md#s2-reads-pass-the-owners-reading-2026-11-03).
 
 The topology design's tail shipper (§5.2) stands: one direction, once per return, `ledger` tables
 only, rows keyed by the sender's node, parents before children, applied in one transaction. The

@@ -5834,6 +5834,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   Waitron ↔ Waitron Cloud contract before assigning them.
   [Detail](backlog/replication-cloud.md#loose-ends-left-by-the-sqlite-failover-loop-prototype-gate)
 
+- **The bench's S3 sometimes throws `database disk image is malformed`.** Seen 2026-11-03 on one
+  Mac in 5 of 14 whole-table `bench/sqlite-failover` runs, including 1 of 7 with S2's file from
+  before A1018 Slice 3, so it predates that branch; S3 run alone passed 2 of 2. Cause not
+  investigated.
+
 - **Task 1a** — Deny's delete is the one join-request node filter no test fails without. Holders
   torn by a concurrent promotion, credential sealing and scheduler takeover remain unverified.
   [Detail](backlog/replication-cloud.md#task-1a--node-filters-and-unverified-concurrency-claims)

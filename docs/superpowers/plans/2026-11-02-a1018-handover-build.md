@@ -732,7 +732,7 @@ Task 5.10's simulation runs it against a stand-in AEAT, and Slice 5 changes no d
 | Reports | `packages/reporting/src/daily-close.ts:15-35`, `cash-up.ts:18-40`, `vat-return.ts:29-45` | daily close (frozen, hash-chained), cash-up, VAT return over `sales` only |
 | Payments | `packages/payments/src/schema/payments.ts:28-58` | states incl. `attempting`, `initiated`, `accepted_offline`; `node_id` exists, no writer sets it |
 | Servers screen | `apps/dashboard/src/screens/servers-screen.ts:23-36` | Remove and Clear only |
-| Prototype S2 | `bench/sqlite-failover/src/scenarios/s2_no_double_submit.ts` | recorded FAIL (`docs/research/2026-09-16-sqlite-failover-prototype.md:37`); PASS since 2026-11-03 (Slice 9 as built) |
+| Prototype S2 | `bench/sqlite-failover/src/scenarios/s2_no_double_submit.ts` | recorded FAIL (`docs/research/2026-09-16-sqlite-failover-prototype.md`, the results table); PASS since 2026-11-03 (Slice 9 as built) |
 
 ---
 

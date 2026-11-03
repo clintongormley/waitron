@@ -1068,9 +1068,11 @@ Exit status **0**, no stderr line. S2's detail differs from the earlier run abov
 words naming Part D and Part E's second half as controls; every value in it is the same.
 
 **S3 threw on some runs on this machine that day**, with `database disk image is malformed`, so
-the exit was 1 on those runs. It did so with S2's file as it was before this change too: in six
-whole-table runs alternating the two versions of S2's file, S3 threw once with the old one and
-once with the new one. Run alone twice, it passed both times. Why is not investigated here.
+the exit was 1 on those runs. Across every whole-table run with litestream installed, S3 threw in
+1 of 7 runs with S2's file as it was before this change and in 4 of 7 with the new one, the
+alternating set of six included. So it also throws with the old file; whether the new file makes
+it more frequent is not settled by those counts. Run alone twice, it passed both times. Why it
+throws is not investigated here; it is a backlog entry under _Replication, failover and the cloud_.
 
 ---
 
@@ -1079,7 +1081,7 @@ once with the new one. Run alone twice, it passed both times. Why is not investi
 ```bash
 export TESTCONTAINERS_RYUK_DISABLED=true
 pnpm --filter @waitron/bench-sqlite-failover setup:litestream   # once per checkout
-pnpm --filter @waitron/bench-sqlite-failover scenarios                   # the table; exits 1 on S2
+pnpm --filter @waitron/bench-sqlite-failover scenarios                   # the table; exited 1 on S2 until 2026-11-03
 pnpm --silent --filter @waitron/bench-sqlite-failover scenarios --json   # the same run, machine-readable
 ```
 
