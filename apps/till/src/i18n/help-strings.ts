@@ -57,7 +57,6 @@ export const helpEn = {
     "Switches between a board for each station and one board for all of them, where each dish names its station. This device remembers the choice.",
   "help.pass.card":
     "One card for each group a table sends, across its bills, or for each counter order. Its minutes count from when the waiter sent it, or on a Ready card from when its last dish was ready. The left edge takes the brand colour, then turns red, as its dishes wait, by their stations' late flags; a dish that waits too long says Forgotten. Dimmed dishes are shown for information only: dishes this pass does not cover and, once a station it covers waits for the pass, dishes of the stations that do not and dishes sent before their station began waiting.",
-  "help.pass.cards_part": "Order cards",
   "help.pass.ready":
     "Marks every fired dish of this course or group Ready, at every station, not only the ones this screen shows. Held dishes do not change.",
 } as const;
@@ -119,7 +118,6 @@ export const helpEs: Record<HelpKey, string> = {
     "Cambia entre un tablero por estación y un solo tablero para todas, donde cada plato indica su estación. Este dispositivo recuerda la elección.",
   "help.pass.card":
     "Una tarjeta por cada grupo que envía una mesa, en todas sus cuentas, o por cada pedido de mostrador. Sus minutos cuentan desde que el camarero lo envió o, en una tarjeta lista, desde que su último plato estuvo listo. El borde izquierdo toma el color de marca y luego pasa a rojo mientras sus platos esperan, según los avisos de demora de sus estaciones; un plato que espera demasiado dice Olvidado. Los platos atenuados se muestran solo como información: los que este pase no cubre y, cuando una estación que cubre espera al pase, los de las estaciones que no esperan y los enviados antes de que su estación empezara a esperar.",
-  "help.pass.cards_part": "Tarjetas de pedido",
   "help.pass.ready":
     "Marca como listos todos los platos ya marchados de este curso o grupo, en todas las estaciones, no solo las que muestra esta pantalla. Los platos en espera no cambian.",
 };

@@ -4,7 +4,6 @@ export const GUIDE_LINKS = {
   "products.nutrition-at-the-till": { page: "products", section: "nutrition-at-the-till" },
   "kitchen-service.kitchen-screen": { page: "kitchen-service", section: "kitchen-screen" },
   "kitchen-service.corrections": { page: "kitchen-service", section: "corrections" },
-  "kitchen-service.service-lifetime": { page: "kitchen-service", section: "service-lifetime" },
   "kitchen-service.pass-screen": { page: "kitchen-service", section: "pass-screen" },
 } as const;
 

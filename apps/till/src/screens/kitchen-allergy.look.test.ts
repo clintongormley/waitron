@@ -4,10 +4,13 @@ import type { TillApi } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillStationQueue } from "../widgets/station-queue.js";
-import { TillExpoScreen } from "./till-expo-screen.js";
-import { allergyNotice, allergyOrder, allergyQueue } from "../../test/kitchen-allergy-fixtures.js";
+import type { TillPassBoard } from "../widgets/pass-board.js";
+import { TillPassScreen } from "./till-pass-screen.js";
+import { allergyBoard, allergyNotice, allergyQueue } from "../../test/kitchen-allergy-fixtures.js";
 
 const locale = currentLocale();
+const passRoot = (el: TillPassScreen) =>
+  el.shadowRoot!.querySelector<TillPassBoard>("till-pass-board")!.shadowRoot!;
 afterEach(() => {
   cleanupWidgets();
   setLocale(locale);
@@ -22,7 +25,7 @@ describe("A669 kitchen blocks LOOK", () => {
           setLocale(language);
           for (const surface of ["board", "all", "pass", "monitor"] as const) {
             cleanupWidgets();
-            let el: TillStationQueue | TillExpoScreen;
+            let el: TillStationQueue | TillPassScreen;
             if (surface === "board") {
               const group = allergyQueue();
               group.items[0]!.allergy = {
@@ -38,41 +41,33 @@ describe("A669 kitchen blocks LOOK", () => {
                 theme,
               ));
             } else {
-              const orders = [allergyOrder()];
-              const board = () => ({
-                orders: orders.map((order) => ({
-                  ...order,
-                  courses: order.courses.map((course) => ({ ...course, allReady: false })),
-                  groups: [],
-                })),
-                stations: [],
-                zones: null,
-              });
+              const board = () => ({ board: allergyBoard(), stations: [], zones: null });
               const api = {
-                getExpoQueue: vi.fn(async () => orders),
+                getExpoBoard: vi.fn(async () => ({ board: allergyBoard() })),
                 getDeviceIdentity: vi.fn(async () => ({ kitchenScreens: [] })),
-                getDevicePassScreen: vi.fn(async () => board()),
-                getDevicePassMonitor: vi.fn(async () => board()),
+                getDevicePassBoard: vi.fn(async () => board()),
+                getDevicePassMonitorBoard: vi.fn(async () => board()),
               } as unknown as TillApi;
-              ({ el } = await mountWidget<TillExpoScreen>(
-                "till-expo-screen",
+              const { el: pass } = await mountWidget<TillPassScreen>(
+                "till-pass-screen",
                 {
                   api,
                   deviceName: "Kitchen pass",
                   deviceMode: surface === "pass",
                   monitor: surface === "monitor",
-                  ...(surface === "pass" ? { initialDevicePass: board() } : {}),
-                  ...(surface === "monitor" ? { initialDevicePassMonitor: board() } : {}),
+                  ...(surface === "pass" || surface === "monitor" ? { initialBoard: board() } : {}),
                 },
                 theme,
-              ));
+              );
+              el = pass;
               await vi.waitFor(() =>
-                expect(el.shadowRoot!.querySelector('[data-item="ticked"]')).not.toBeNull(),
+                expect(passRoot(pass).querySelector('[data-item="ticked"]')).not.toBeNull(),
               );
             }
             await document.fonts.ready;
             await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-            const blocks = el.shadowRoot!.querySelectorAll<HTMLElement>("[data-kitchen-allergy]");
+            const root = el instanceof TillPassScreen ? passRoot(el) : el.shadowRoot!;
+            const blocks = root.querySelectorAll<HTMLElement>("[data-kitchen-allergy]");
             expect(blocks.length).toBeGreaterThan(0);
             for (const block of blocks) {
               expect(block.getBoundingClientRect().right).toBeLessThanOrEqual(width);

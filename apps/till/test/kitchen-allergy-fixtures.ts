@@ -1,5 +1,5 @@
 import type { KitchenAllergyBlock } from "@waitron/module";
-import type { ExpoOrder, KitchenNotice, PassBoard, StationQueueGroup } from "../src/api/client.js";
+import type { KitchenNotice, PassBoard, StationQueueGroup } from "../src/api/client.js";
 import { ALLERGEN_NAMES } from "../src/i18n/allergen-names.js";
 import { passBoard, passCard, passItem } from "./pass-board-fixtures.js";
 
@@ -66,39 +66,6 @@ export function allergyQueue(): StationQueueGroup {
         course: null,
         firedAt: allergyTime,
         queuedAt: allergyTime,
-      },
-    ],
-  };
-}
-export function allergyOrder(): ExpoOrder {
-  const group = allergyQueue();
-  return {
-    kitchenNote: group.kitchenNote,
-    orderId: group.orderId,
-    orderNumber: group.orderNumber,
-    tableLabel: group.label ?? undefined,
-    openedMinutes: 2,
-    worstBand: "fresh",
-    groups: [],
-    courses: [
-      {
-        courseId: null,
-        courseName: null,
-        displayOrder: null,
-        fired: true,
-        items: group.items.map((item) => ({
-          id: item.id,
-          allergy: item.allergy,
-          name: item.name,
-          qty: item.quantity,
-          stationName: "Grill",
-          state: item.state,
-          firedAt: item.firedAt,
-          note: item.note,
-          queuedAt: allergyTime,
-          thresholds: allergyThresholds,
-          band: "fresh",
-        })),
       },
     ],
   };
