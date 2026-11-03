@@ -171,6 +171,17 @@ describe("a box holding a handover restriction starts restricted", () => {
     }
   }, 60_000);
 
+  it("serves its own page, naming the successor, at the address a person opens", async () => {
+    const { port } = await boot({ restricted: true });
+    const response = await fetch(`http://127.0.0.1:${port}/`, {
+      headers: { "Accept-Language": "en-GB" },
+    });
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain("<h1>This box has handed over</h1>");
+    expect(html).toContain("The venue now runs on 00000000-0000-4000-8000-0000000000aa.");
+  }, 60_000);
+
   it("starts no fiscal pass", async () => {
     await boot({ restricted: true });
     await new Promise((resolve) => setTimeout(resolve, 2 * MIN_TICK_MS + 2_000));

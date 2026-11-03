@@ -198,6 +198,7 @@ import {
   startFreeSpaceWatch,
 } from "./free-space-watch.js";
 import { mountNodeApi } from "./node-api.js";
+import { restrictedPageRoute } from "./restricted-page.js";
 import { startRestricted } from "./restricted-start.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
@@ -1691,7 +1692,7 @@ async function bootServer(
       nodeId: config.node.nodeId,
       environment: config.environment,
       readMembership: () => readNodeMembership(db),
-      routes: [],
+      routes: [restrictedPageRoute({ venue: db, node: store.node, nodeId: config.node.nodeId })],
       log,
       listen: (restrictedApp) => {
         const server = startTradingListener(config, restrictedApp, now, log);
