@@ -151,13 +151,20 @@ second told to set the checklist aside).
 9. **Every gap between the editor's fields is pinned except the one before Late flags.**
    `station-editor.test.ts` pins Done on the screen after the Late flags fieldset and before the rest
    of order switch (`:661-665`), the order rest → MOVED → grouping → held (`:579-580`, `:597-599`),
-   and Changes after sending as the last field (`:713-714`, "last before the buttons"). Nothing pins
-   what comes between the printers field (`station-editor.ts:645-650`) and the fieldset (`:651`).
+   and Changes after sending as the last field (`:713-714`, "last before the buttons"). No order
+   pin covers the gap between the printers field (`station-editor.ts:645-650`) and the fieldset
+   (`:651`), but a count pin does: "at %ipx (printers managed: %s) the minutes, notes and read-out
+   end where the fields end" counts the `.note` blocks, `toHaveLength(canManagePrinters ? 3 : 2)`
+   (`station-editor.test.ts:993-995`); the plan review's probe E2 (D105's switch and note added)
+   turned three of its cases red and every order pin stayed green.
    `wt-switch` has no `error` property (`packages/ui/src/components/wt-switch.ts:113-122`).
 
-10. **The table's headings are pinned as whole lists.** `station-table.test.ts:52`, `:78`;
-    `prep-stations-screen.test.ts:516`, `:3097-3100`. `:517-518` checks the headings contain none of
-    "Waiting", "Being made", "Ready", "Late", "Oldest".
+10. **The table's headings are pinned as whole lists, six times.** `station-table.test.ts:52`,
+    `:78`, `:148`, `:163`; `prep-stations-screen.test.ts:516`, `:3097-3100` (`rg -n '"Shown on"|"Se
+    muestra en"' packages/venue-service/src -g '*.test.ts'`). `:517-518` checks the headings contain
+    none of "Waiting", "Being made", "Ready", "Late", "Oldest". Two phone-width cases hold the table
+    inside the screen: "keeps the table inside %s %s %ipx" (`station-table.test.ts:112-132`) and
+    "keeps the table with its read-outs inside %s %ipx" (`:165-…`).
 
 11. **Probe P1: which existing checks pin a station's whole shape.** With
     `waitsForPass: kitchenStations.waitsForPass` added to `listStations`' select, `pnpm --filter
@@ -204,7 +211,28 @@ second told to set the checklist aside).
     release.", `2026-10-19-a773-2-firing-and-pass.md:59`) were never approved. Approved words reused
     here: «Marchar» (Fire), «pantalla de pase» (`strings.ts:1135`), "Runs the pass" / «Lleva el pase»
     (`apps/dashboard/src/i18n/strings.ts:2545`, `:6339`), "Devices" / «Dispositivos» (`prep.devices`,
-    `strings.ts:319`, `:1229`), Yes/No (`venue.yes`/`venue.no`, `:436-437`, `:1350-1351`).
+    `strings.ts:319`, `:1229`), Yes/No (`venue.yes`/`venue.no`, `:436-437`, `:1350-1351`). The
+    owner has since approved PR C's two wording tables as written ("Owner answers").
+
+16. **A profile's zone list binds only a till or handheld pass with a department.**
+    `readProfileZones` answers "every zone" for a shared display (a kitchen display) and for a
+    profile with no department or starting zone (`packages/venue-service/src/profile-access.ts:91-97`);
+    otherwise its zones are the department's `zone_service_policies` rows whose zone and department
+    are active, narrowed by `device_profile_zones` unless the profile serves every zone (`:99-121`).
+    `setProfileServiceAccess` refuses any department or zone on a shared display (`:274-277`) and a
+    zone list without a department and starting zone (`:279-294`). A non-KDS Fire also needs a person
+    signed in (`pass-release.ts:52-53`); `pass-release.test.ts` builds such a pass with
+    `signedInTillPass` (`:577-589`) and limits its zones with `serveElsewhere` (`:591-604`).
+
+17. **The split-extras fixture already has two zones and a seated party.** `setupSplitExtrasVenue`
+    offers its products in a "tables" zone and a "counter" zone and seats a party at a table in the
+    first (`apps/server/src/testing/split-extras-venue.ts:209-216`; `venue.party.zoneId`,
+    `venue.counter.zoneId`). `fireNewOrder` opens a counter-zone order (`:229-231`). A kitchen-screen
+    choice of `zoneIds: []` is refused `kitchen_screen.invalid` (`checkedChoice`,
+    `packages/venue-service/src/kitchen-screens.ts:520-531`), so "no zone left" is built as a listed
+    zone then deactivated, as `pass-release.test.ts:325-366` does ("refuses a pass with no zone left,
+    and a dish in no zone to a zone-limited pass", which also builds a zone-less counter order by
+    deleting its `order_service_contexts` row, `:339-341`).
 
 ## Scope
 
@@ -243,7 +271,11 @@ retirement.
   present and is neither `0` nor `1` (`null`, `true`, `"1"`, `2` all refuse) with
   `setup.request_invalid` `{ field: "kitchen_stations.waits_for_pass" }`, before anything is
   written. `0` and `1` are what the export writes (finding 3), pinned by the round-trip case. An
-  absent key imports the default, false. No format change: a format-10 copy without the key is
+  absent key imports the default, false. This is deliberately stricter than the station's other
+  flags, which the import does not check at all (`packages/db/src/configuration-transfer.ts:16-30`)
+  and whose JSON `true` the import would bind as `1` (`bindable`,
+  `packages/provisioning/src/configuration-transfer.ts:210-213`): a copy is made by the export, which
+  never writes `true`, so anything else is a hand-edited file and is refused rather than guessed at. No format change: a format-10 copy without the key is
   still a correct copy (finding 3); a copy with the key, read by a box built before PR C, is refused
   by that box's `omit` with `setup.request_invalid` naming the field, which is an explicit refusal,
   not a wrong import.
@@ -255,15 +287,28 @@ retirement.
   as today. `readPassCoverage` counts a device as a pass device when it is active, its profile gives
   `passReleaseRefusal(…) === null`, and its resolved `pass` screen (`readDevicesKitchenScreens`) is
   `available`. A pair is covered when some pass device has `passSees(passScopeOf(screen), pair)` and
-  the pair's zone is null or allowed by `readZoneScope(tx, cfg, profileId)` (null scope: every zone).
-  A till counts though its Fire also needs a person signed in: that is a sign-in, not a setting.
-  `readZoneScope` is read once per distinct profile among the pass devices.
+  the pair's zone is null or allowed by the device profile's zone list (null: every zone), the list
+  `assertSubjectZones` checks through `readZoneScope`. That list binds only a till or handheld
+  profile with a department and starting zone; a kitchen display's, and a profile's without a
+  department, is every zone (finding 16). A till counts though its Fire also needs a person signed
+  in: that is a sign-in, not a setting. **No read per profile.** A new venue-service function
+  `readProfilesZones(tx, profileIds): Promise<Map<string, string[] | null>>` (beside
+  `readProfileZones` in `profile-access.ts`, exposed on the `VENUE_SERVICE` seat with no `cfg`,
+  as B4's new seat took none) answers every profile's `allowedZoneIds` in two queries whatever the
+  number of profiles: one for the profiles and their service access, one for the allowed zones of
+  the profiles that have a department, grouped by profile. A venue-service case holds it equal to
+  `readProfileZones(…).allowedZoneIds` profile by profile, so the Fire's check and the warning's
+  cannot drift. `assertSubjectZones` is unchanged.
 
 - **D101 Which pairs must be covered.** (a) Each active waiting station with each active floor zone.
   If the venue has no active zone, each active waiting station with "no zone", which only an
   every-zone pass covers. (b) Each requested dish that is live (`liveKitchenDish()` and
-  `requestedItem()`), whatever its station's setting now and whether its station or zone is still
-  active, with its order's watched zone (null allowed, needing an every-zone pass). A station that
+  `requestedItem()`), whatever its station's setting now and whether its zone is still active, with
+  its order's watched zone (null allowed, needing an every-zone pass). A requested dish at a
+  deactivated station cannot arise: deleting a station refuses `station.work_in_progress` while any
+  of its items has `fired_at` null (`apps/server/src/station-delete.ts:58-70`), and the editor
+  cannot set `active` (`kitchen.ts:194-195`). The read does not filter by station `active`, and no
+  case builds that state. A station that
   is closed today stays in (a): closing is a day state, and the pass card already says what to do
   about a dish at a closed station (B3). Held dishes and dishes already released are not pairs.
   Known limit, reasoned not measured: an order taken with no service zone while the venue has zones
@@ -283,36 +328,41 @@ retirement.
 
 - **D104 The dashboard reads it passively, in its own watch.** `PrepStationsApi.readPassCoverage():
   Promise<PassCoverageGap[]>` sends `GET`, `{ passive: true }` always (an automatic read, never a
-  person's action). `QUERY_DEPENDENCIES["pass-coverage"]` lists the configuration tables the answer
-  depends on: `kitchen_stations`, `floor_zones`, `devices`, `device_profiles`,
-  `device_profile_service_access`, `device_profile_zones`, `device_kitchen_screens`,
-  `device_kitchen_screen_stations`, `device_kitchen_screen_zones`, `device_kitchen_screen_removals`,
-  `device_profile_kitchen_screens`, `device_profile_kitchen_screen_stations`,
-  `device_profile_kitchen_screen_zones`. It deliberately leaves out `ticket_items` and the order
-  tables, which change with every dish during service; the 60-second `refreshMs` picks up a
-  requested dish's gap. The screen holds a second `QueryController` for it, so its failure never
+  person's action). `QUERY_DEPENDENCIES["pass-coverage"]` lists, reader by reader, the tables the
+  answer's configured half reads:
+
+  | Reader | Tables |
+  | --- | --- |
+  | the waiting stations and active zones | `kitchen_stations`, `floor_zones` |
+  | the pass devices and their profiles' action and flag | `devices`, `device_profiles` |
+  | `readDevicesKitchenScreens` (`readChoices`, `readRemovals`, `readStored`, `placesHere`, `kitchen-screens.ts:63-110`, `:362-445`) | `device_kitchen_screens`, `device_kitchen_screen_stations`, `device_kitchen_screen_zones`, `device_kitchen_screen_removals`, `device_profile_kitchen_screens`, `device_profile_kitchen_screen_stations`, `device_profile_kitchen_screen_zones` (plus the two above) |
+  | `readProfilesZones` (as `readProfileZones`, `profile-access.ts:71-121`) | `device_profile_service_access`, `device_profile_zones`, `zone_service_policies`, `departments` (plus `device_profiles`, `floor_zones`) |
+
+  It deliberately leaves out `ticket_items` and the order tables, which change with every dish
+  during service; the 60-second `refreshMs` picks up a requested dish's gap (`refreshMs` polls even
+  with live data, `packages/dashboard-kit/src/live-data.ts:81-87`). The screen holds a second `QueryController` for it, so its failure never
   shows `prep.load_error` and the routing read's recovery never clears it. A failed read shows one
-  line in the warning's place (Owner question 2); the next successful read replaces it. After a
+  line in the warning's place (Owner answer 2); the next successful read replaces it. After a
   station save the screen re-reads it with the routing (both `#load` paths). It never touches an
   editor's draft.
 
 - **D105 The switch's place in the editor.** A `wt-switch name="waitsForPass"` and a
   `<p class="note" data-test="waits-for-pass-hint">` go between the printers field (and its
-  "printers need an active station" note) and the Late flags fieldset, the one gap no existing check
-  pins (finding 9), so no order pin changes. It joins `Draft`, `equal`, `sendable` and the
+  "printers need an active station" note) and the Late flags fieldset, the one gap no order pin
+  covers (finding 9), so no order pin changes; the `.note` count pin does (Changed test checks). It joins `Draft`, `equal`, `sendable` and the
   `changed` field union as `printHeldWork` does; Save stays disabled through `saveActionState` until
   it differs from the opened value; flipping it back makes Save quiet again. A refusal naming
   `waitsForPass` can only come from a bug (the editor sends a boolean); it shows on the line above
   the buttons, as a refusal naming `printHeldWork` does (`stationRefusalField` places neither).
 
 - **D106 The table's column.** `prep-station-table` gains a column keyed `waitsForPass`, headed
-  "Waits for the pass", between Shown on and Actions, reading `venue.yes` / `venue.no`. The four
-  whole-list heading pins gain it (Changed test checks).
+  "Waits for the pass", between Shown on and Actions, reading `venue.yes` / `venue.no`. The six
+  whole-list heading pins gain it (finding 10, Changed test checks).
 
 - **D107 The warning's place and shape.** Under the page heading and above the tabs, so it shows on
   Stations and Routing alike, a `<section data-test="pass-coverage" class="warning" role="status">`
   with one `<p>` per zone that has gaps: the zone's stations joined by `listOf`
-  (`painter-labels.ts:9-13`), the sentence from Owner question 2, and "Devices" as a link to
+  (`painter-labels.ts:9-13`), the sentence from Owner answer 2, and "Devices" as a link to
   `/manage/devices` (the table already links there, `prep-stations-screen.ts:687-690`). Nothing when
   the list is empty. `.warning` is the page's existing class (`prep-stations-screen.ts:156-158`).
 
@@ -327,7 +377,11 @@ retirement.
   sentence's `file:line` in the task's report): where the switch is, what a waiting station's dishes
   do, that the change affects later requests only (D98), what covers a station and zone (D100), that
   saving with a gap is allowed and the Prep stations page warns, and that a configuration copy
-  carries the setting. `#pass-screen` and `#request-cooking` link to it where they first say "a dish
+  carries the setting. Fixing a gap takes two steps on two pages, and the section names both: under
+  **Device profiles**, the device's profile offers a pass screen and has **Runs the pass** on (and,
+  for a till or handheld profile limited to a department, that department serves the zone); under
+  **Devices**, the device picks the pass screen and its stations and zones. The warning's link
+  stays "Devices", as the owner approved; the guide carries the profile step. `#pass-screen` and `#request-cooking` link to it where they first say "a dish
   whose station waits for the pass"; `#service-lifetime`'s list of station settings gains it.
 
 ## Departures from the master plan
@@ -339,8 +393,10 @@ retirement.
 | "Consume A756 PR 6 … and PR 8 Recall policy" | nothing | both landed and drawn (finding 13) |
 | Coverage: stations × zones, monitor and forbidden profiles excluded | also the profile's own zone list and the device's `active` | the Fire checks both (finding 4); a warning that disagrees with Fire is wrong |
 | "update provisioning station field readers" | none | the schema default is already false (finding 2) |
-| Coverage words: "No pass covers {stations} in {zone}. Food may wait for release." | a sentence that names what to do (Owner question 2) | CLAUDE.md: say what happened and what to do |
+| Coverage words: "No pass covers {stations} in {zone}. Food may wait for release." | a sentence that names what to do (Owner answer 2, approved) | CLAUDE.md: say what happened and what to do |
 | "station input … add `waitsForPass`" | the route accepts it; Add station's form does not offer it | A756 built default (finding 2) |
+| "column/read-only state" | no read-only case | the Prep stations screen has no read-only mode: it declares no `readPermission` (`packages/venue-service/src/dashboard/index.ts:79-84`), and everyone who may open it (`venue_service.manage`, manager and up, `packages/venue-service/src/permissions.ts:6`) may change a station |
+| profile zones via `readZoneScope` per profile | one batched `readProfilesZones` | no read per profile (D100) |
 
 ## Consumer audit
 
@@ -373,12 +429,21 @@ pins and the migration case changed.
 | `packages/db/src/configuration-transfer.test.ts:275-279` "A773 phases: a station's pass waiting is not carried" | `omit` equals `["waits_for_pass"]` | retitled "A773 station policy: a station's pass waiting is carried"; the whole `kitchen_stations` declaration `toEqual({ name: "kitchen_stations", leaveBehindWhenFalse: "active" })` | D99 |
 | `apps/server/src/kitchen.test.ts:235` and `:410` | whole station shape | gains `waitsForPass: false`, every other value unchanged | D98 (P1) |
 | `apps/server/src/station-order-migration.test.ts:53-56`, `:248-261` (set-up, not an assertion) | final `setsAsOf` keeps the station migrations up to `_station_ready_warning` | also keeps `_requested_release` | D98 (P2) |
-| `packages/venue-service/src/dashboard/station-table.test.ts:52`, `:78` | `["Name","Printed on","Shown on","Actions"]` / Spanish | `"Waits for the pass"` / `«Espera al pase»` (or the owner's words) inserted before Actions | D106 |
+| `packages/venue-service/src/dashboard/station-table.test.ts:52`, `:78`, `:148`, `:163` | `["Name","Printed on","Shown on","Actions"]` / Spanish | `"Waits for the pass"` / `"Espera al pase"` inserted before Actions | D106 |
 | `packages/venue-service/src/dashboard/prep-stations-screen.test.ts:516`, `:3097-3100` | same lists | same insertion | D106 |
+| `packages/venue-service/src/service.test.ts:22-…` "exposes every generic ordering capability" | the seat's sorted key list | gains `"readProfilesZones"` in sorted place | D100 |
+| `packages/venue-service/src/dashboard/station-editor.test.ts:993-995` ("at %ipx (printers managed: %s) the minutes, notes and read-out end where the fields end") | `.note` count `canManagePrinters ? 3 : 2` | `canManagePrinters ? 4 : 3`; the rest of the case (every block lines up with the name field at 390 and 1280 px) unchanged, and now also holds the new switch and its line | D105 (review probe E2) |
 
 Fixtures that grow (no assertion changes): every `PrepStation`/`StationEditorStation` literal in
 `packages/venue-service/src/dashboard/*.test.ts` and `packages/venue-service/test/station-delete-test-helpers.ts`
 gains `waitsForPass: false` (`rg -l "changesAfterSending:" packages/venue-service` lists them).
+Every stub of the Prep stations screen's API or of its requests gains the coverage read answering
+`[]` (Task 7), or the page draws the read-failure line: `prep-stations-screen.a11y.test.ts:135`,
+`:325`, `:420`, `:489`; `prep-stations-screen.unsaved.test.ts:111`;
+`packages/venue-service/test/station-delete-test-helpers.ts:103`;
+`apps/dashboard/src/dashboard-app.unsaved-changes.test.ts:996-1009` (its request stub throws
+`Unexpected request` for any other path); `apps/dashboard/src/dashboard-app.test.ts:4309`, `:4358`
+(their stubs already answer `[]`, so they need nothing, but Task 7 runs them).
 
 ## Guard suites (the final task runs each; earlier tasks run the ones they name)
 
@@ -392,18 +457,17 @@ gains `waitsForPass: false` (`rg -l "changesAfterSending:" packages/venue-servic
 - `scripts/errors-reachable.test.ts` and `scripts/alert-codes.test.ts` are not needed: no new error
   or alert code. `scripts/personal-log-params.test.ts` is not needed: no new log field.
 
-## Owner questions
+## Owner answers
 
-None blocks building: each task builds the recommended words, and only the named tasks' landing
-waits on the answer. The driver posts them to `~/waitron-campaign-c/questions.md`, one at a time,
-each with its worked example.
+The owner approved both tables below exactly as written ("WATCHER 2026-11-03 ~23:35" in
+`~/waitron-campaign-c/questions.md:1829-1830`: "'Y' to both tables as written … PR C may land on them
+once built and green"). No landing waits on words. Tasks 5–7 build these words exactly.
 
-**Question 1 of 2 — the station editor's switch and the stations table (blocks the landing of
-Tasks 5 and 6).** Worked example: the manager opens Grill in Prep stations; under Printers is a
+**Answer 1 of 2 — the station editor's switch and the stations table (approved).** Worked example: the manager opens Grill in Prep stations; under Printers is a
 switch "Waits for the pass", with the line under it; the stations table gains a column "Waits for
 the pass" reading Yes for Grill and No for Bar.
 
-| Where | English (recommended) | Spanish (recommended) |
+| Where | English (approved) | Spanish (approved) |
 | --- | --- | --- |
 | Switch label and column heading | Waits for the pass | Espera al pase |
 | Line under the switch | Its dishes wait at the pass until the pass fires them. | Sus platos esperan en el pase hasta que el pase los marcha. |
@@ -412,12 +476,12 @@ the pass" reading Yes for Grill and No for Bar.
 "Waits for the pass" is the spec's own name for the setting (§5); «Espera al pase» is the master
 plan's proposal and matches the approved «Esperando al pase».
 
-**Question 2 of 2 — the warning on the Prep stations page (blocks the landing of Task 7).** Worked
+**Answer 2 of 2 — the warning on the Prep stations page (approved).** Worked
 example: Grill and Cold wait for the pass. The only pass screen covers Grill and Cold in Inside, not
 the Terrace. Above the tabs: "Nothing fires dishes from Grill and Cold in Terrace: no pass screen
 covers them there. Set one up under Devices." (Devices is a link.)
 
-| Case | English (recommended) | Spanish (recommended) |
+| Case | English (approved) | Spanish (approved) |
 | --- | --- | --- |
 | A zone | Nothing fires dishes from {stations} in {zone}: no pass screen covers them there. Set one up under Devices. | Nadie marcha los platos de {stations} en {zone}: ninguna pantalla de pase los cubre allí. Configura una en Dispositivos. |
 | Dishes with no service zone | Nothing fires dishes from {stations} that have no service zone: only a pass screen on every service zone covers them. Set one up under Devices. | Nadie marcha los platos de {stations} sin zona de servicio: solo los cubre una pantalla de pase con todas las zonas de servicio. Configura una en Dispositivos. |
@@ -495,7 +559,10 @@ boolean })`; `updateStation(tx, cfg, id, { …, waitsForPass?: boolean })`; POST
      changes-after-sending refusal case checks).
 - [ ] **RED.** `pnpm --filter @waitron/db exec vitest run src/configuration-transfer.test.ts -t 'A773 station policy'`;
   `pnpm --filter @waitron/server exec vitest run src/configuration-transfer.test.ts -t 'A773 station policy'`.
-  Today case 3 fails on the refused column and cases 2 and 5 on no refusal of their own field.
+  Today case 3 fails on the refused column and case 2 on no refusal. Case 5 **passes today**, through
+  the `omit` (`checkedRows`, `packages/provisioning/src/configuration-transfer.ts:555-557`, refuses
+  an omitted column with the same code and field; the plan review's probe E3 ran it green on main);
+  once the `omit` goes, it is the server-level proof that the new check refuses before writing.
 - [ ] **Minimal implementation.** Remove `omit` and its comment; add the check to
   `validateCoreConfiguration`'s station loop.
 - [ ] **GREEN.** Both files unfiltered, plus `apps/server/src/configuration-import.test.ts` and
@@ -506,10 +573,12 @@ boolean })`; `updateStation(tx, cfg, id, { …, waitsForPass?: boolean })`; POST
   script accepts a file list (read `packages/db/package.json` first); otherwise leave mutation to CI
   and say so in the commit body.
 - [ ] **Mutation controls.** Accept `null` → case 2's `null` red. Accept any number → `2` and `-1`
-  red. Put the `omit` back → case 3 red.
+  red. Put the `omit` back → case 3 red. With the `omit` removed, delete the new `waits_for_pass`
+  check from `validateCoreConfiguration` → case 5 red (no refusal; the station row is written), and
+  case 4 stays green.
 - [ ] **Commit.** `A configuration copy carries each station's choice to wait for the pass and refuses a value other than 0 or 1 (A773-2 PR C)`.
 
-## Task 3a: one rule for what the pass's Fire allows, and the configured pairs (about 55 calls)
+## Task 3a1: one rule for what the pass's Fire allows, and the configured pairs on kitchen displays (about 50 calls)
 
 **Files.** `apps/server/src/pass-release.ts`; create `apps/server/src/pass-coverage.ts` and
 `pass-coverage.test.ts`.
@@ -518,80 +587,126 @@ boolean })`; `updateStation(tx, cfg, id, { …, waitsForPass?: boolean })`; POST
 `export function passReleaseRefusal(device: { formFactor: FormFactor; capabilities: readonly string[] }): "prepare-orders" | "run-the-pass" | null`;
 `export interface PassCoverageGap { stationId: string; stationName: string; zoneId: string | null; zoneName: string | null }`;
 `export async function readPassCoverage(tx: Transaction, cfg: TradingContext): Promise<PassCoverageGap[]>`.
+In this task the profile-zone half of D100 is not built yet (every profile here is a kitchen
+display, whose list is every zone, finding 16).
 
-Fixture (in the test file): `setupSplitExtrasVenue()` (Grill, Fryer, Kitchen, Bar), two zones
-created with `createServiceZone` (Inside, Terrace), pass devices enrolled with
-`enrolDeviceForTest(db, cfg, { name, profileId, kitchenScreen })` on profiles inserted as
-`pass-release.test.ts` does (`device()`, `:129-150`, `passOn`, `:152-157`, `profiledPass()`, `:556`), waiting set with
-`setStationsWaitForPass`.
+Fixture (in the test file): `setupSplitExtrasVenue()` (stations Grill, Fryer, Kitchen, Bar; its own
+two zones, written below as **T** = `venue.party.zoneId`, the "tables" zone, and **C** =
+`venue.counter.zoneId`; finding 17). No other zone is created. Kitchen-display pass devices are
+enrolled as `pass-release.test.ts`'s `device()` and `passOn()` do (`:129-157`, `formFactor: "kds"`,
+`ALL_PASS` capabilities); waiting is set with `setStationsWaitForPass`. Expected lists are written
+in D102's order (T and C in their `floor_zones` display order; read it once in the test rather than
+assuming).
 
 - [ ] **Failing tests** (`describe("A773 station policy: pass coverage", …)`):
   1. No station waits → `[]`, even with no pass device.
-  2. Grill waits, no pass device → gaps Grill×Inside, Grill×Terrace, in zone order.
-  3. An every-station every-zone KDS pass → `[]`.
-  4. A pass on Grill with zones [Inside] → only Grill×Terrace. Its zones `[]` → both zones. Its
-     stations [Bar] → both zones.
-  5. Hot and cold: Grill and Cold-side (Fryer) wait; pass A on Grill every zone, pass B on Fryer
-     zone Inside → only Fryer×Terrace.
+  2. Grill waits, no pass device → gaps Grill×T and Grill×C.
+  3. An every-station every-zone pass → `[]`.
+  4. A pass on Grill with zones [T] → only Grill×C. A pass on Bar only (every zone) → both gaps. A
+     pass on Grill listing only T, then T deactivated (`floorZones.active = false`, as
+     `pass-release.test.ts:363-365`) → its scope has no zone left; with C still active the answer is
+     Grill×C only (T is no longer an active zone, so it is no pair).
+  5. Hot and cold: Grill and Fryer wait; pass A on Grill every zone, pass B on Fryer zone [T] → only
+     Fryer×C.
   6. The same every-zone screen as a `pass_monitor` → both gaps (a monitor does not cover).
-  7. A profile without `run-the-pass`, and separately without `prepare-orders` → both gaps.
+  7. A profile without `run-the-pass`, and separately without `prepare-orders` (profiles built as
+     `profiledPass`, `:556`) → both gaps.
   8. The pass device disabled (`devices.active = false`) → both gaps.
   9. The pass screen taken by a profile narrowing (`available: false`, as "refuses a pass screen a
      narrowing took", `pass-release.test.ts:641`) → both gaps.
-  10. The pass device's profile allowed only Inside (`setProfileServiceAccess(…, { allowedZoneIds:
-      [inside] })`) with an every-zone screen → only Grill×Terrace.
-  11. Grill waits but is deactivated → `[]` (no pair (a)).
-  12. A venue with no active zone, Grill waits, a pass with zones [] → Grill×no zone; with an
-      every-zone pass → `[]`.
-  13. Agreement with Fire: for case 10's device, a Terrace order's requested Grill dish is refused
-      by `releasePassItems` with `service_zone.not_allowed` and an Inside one is released (the
-      warning names exactly the pair the Fire refuses).
 - [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/pass-coverage.test.ts`
-  — fails: the module does not exist yet, so first add `readPassCoverage` returning `[]` and
-  `passReleaseRefusal` as the moved loop, then rerun: cases 2 and 4–12 fail on assertions.
+  — first add `readPassCoverage` returning `[]` and `passReleaseRefusal` as the moved loop, so the
+  file imports; then cases 2 and 4–9 fail on assertions.
 - [ ] **Minimal implementation.** Move the loop into `passReleaseRefusal` and call it from
-  `releasePassItems`. `readPassCoverage`: active waiting stations; active zones (order of D102);
+  `releasePassItems`. `readPassCoverage`: active waiting stations; active zones (D102's order);
   active devices joined to profiles (`deviceBindingColumns`, `deviceProfileJoin`); keep those whose
-  refusal is null; `VENUE_SERVICE.readDevicesKitchenScreens(tx, cfg, ids)`; `readZoneScope` per
-  distinct kept profile; the pairs of D101 (a); the covered test of D100; sort per D102.
+  refusal is null; `VENUE_SERVICE.readDevicesKitchenScreens(tx, cfg, ids)`; D101 (a)'s pairs; the
+  `passSees` half of D100's covered test; sort per D102.
 - [ ] **GREEN.** `src/pass-coverage.test.ts` and `src/pass-release.test.ts` unfiltered;
   `pnpm --filter @waitron/server typecheck`.
 - [ ] **Mutation controls.** Drop the `available` check → case 9 red. Accept `pass_monitor` → case
   6 red. Drop the active-device filter → case 8 red. Drop the `prepare-orders` entry from
   `passReleaseRefusal` → case 7 and `pass-release.test.ts` "refuses a profile without the action,
-  the flag, a person or the party's zone, writing nothing" red. Drop the profile zone check → cases
-  10 and 13's agreement red. Read inactive stations → case 11 red.
-- [ ] **Commit.** `The coverage read names each waiting station and zone no pass screen's Fire could release, using the Fire's own checks (A773-2 PR C)`.
+  the flag, a person or the party's zone, writing nothing" red. Read inactive zones → case 4's
+  deactivated-T half red.
+- [ ] **Commit.** `The coverage read names each waiting station and zone no kitchen display's pass could fire, using the Fire's own checks (A773-2 PR C)`.
+
+## Task 3a2: a till pass's own zones, in one read, and a venue with no zone (about 55 calls)
+
+**Files.** `packages/venue-service/src/profile-access.ts` and `profile-access.test.ts` (node),
+`packages/venue-service/src/service.ts` (seat entry) and `service.test.ts` (its seat-name pin,
+Changed test checks), `packages/module/src/module.ts` (seat
+signature); `apps/server/src/pass-coverage.ts`, `pass-coverage.test.ts`.
+
+**Interfaces.** `readProfilesZones(tx: Transaction, profileIds: readonly string[]): Promise<Map<string, string[] | null>>`
+(D100; no `cfg`); an unknown id is absent from the map.
+
+- [ ] **Failing tests.**
+  1. venue-service (node): "A773 station policy: readProfilesZones answers each profile as
+     readProfileZones does" — a kitchen-display profile, a till profile with no department, a till
+     profile with a department serving every zone, and a till profile with a zone list holding one
+     zone that is then deactivated and one in a department that is then deactivated: for each, the
+     map's value `toEqual`s `(await readProfileZones(tx, cfg, id)).allowedZoneIds`; the empty id
+     list answers an empty map.
+  2. server, case 10: a till pass built as `signedInTillPass` (`pass-release.test.ts:577-589`) with
+     an every-station every-zone pass screen, its profile limited to T's own department with
+     `allowedZoneIds: [T]` and starting zone T (`setProfileServiceAccess`, read T's department from
+     `zone_service_policies`; C must be in another department, so check that in the test) → only
+     Grill×C.
+  3. server, case 13, agreement with Fire: for case 10's device, a requested Grill dish on C (a
+     counter order, `fireNewOrder`) is refused by `releasePassItems` with `service_zone.not_allowed`
+     and one at the party's table on T (`placeGroups(…, { release: "fire" })`, as
+     `pass-release.test.ts:330-336`) is released.
+  4. server, case 12: Grill waits; both fixture zones deactivated → Grill×no zone with case 4's
+     pass that listed only T; add an every-zone pass → `[]`.
+- [ ] **RED.** `pnpm --filter @waitron/venue-service exec vitest run --project node src/profile-access.test.ts src/service.test.ts -t 'A773 station policy'`;
+  `pnpm --filter @waitron/server exec vitest run src/pass-coverage.test.ts -t 'case 1[0-3]'` (title
+  the server cases "case 10", "case 12", "case 13"). Cases 2 and 4 fail; case 3 is a pin of the
+  Fire (green), whose control is below.
+- [ ] **Minimal implementation.** `readProfilesZones` in two queries (D100); the seat entry;
+  `readPassCoverage` reads it once for the kept profiles and applies the zone half of D100; the
+  no-active-zone pairs of D101 (a).
+- [ ] **GREEN.** The venue-service files and `src/pass-coverage.test.ts` unfiltered,
+  `src/pass-release.test.ts`; typecheck server, venue-service and module; `pnpm exec vitest run
+  scripts/module-seams.test.ts`.
+- [ ] **Mutation controls.** Drop the profile-zone check in `readPassCoverage` → case 2 red (and
+  case 3 then shows the warning disagreeing with the Fire). Make `readProfilesZones` answer `null`
+  for a profile whose department is inactive → case 1 red. Skip D101 (a)'s no-zone rule → case 4
+  red.
+- [ ] **Commit.** `A till pass's own service zones bound what the coverage warning counts, read for every profile at once (A773-2 PR C)`.
 
 ## Task 3b: dishes already waiting for the pass (about 45 calls)
 
 **Files.** `apps/server/src/pass-coverage.ts`, `pass-coverage.test.ts`.
 
-- [ ] **Failing tests** (same describe).
-  1. Grill waits, a table on the Terrace asks for a Grill dish (B1's request path: `fireNewOrder`
-     from `testing/split-extras-venue.ts` with Grill waiting); then Grill stops waiting → gap
-     Grill×Terrace remains while the dish waits, with no pass device.
-  2. Same, with a pass on Grill in Inside only → Grill×Terrace; give it Terrace → `[]`.
+Requests are made as `pass-release.test.ts:325-342` makes them: at the party's table (zone T) with
+`placeGroups(tx, venue.cfg, venue.party.partyId, { operatorId: OPERATOR, groups: [{ lines: [dish(venue,
+"burger")], release: "fire" }] })`, and a counter order (zone C) with `fireNewOrder`; a zone-less
+counter order by deleting its `order_service_contexts` row (`:339-341`).
+
+- [ ] **Failing tests** (same describe; title each with "dishes").
+  1. Grill waits; a Grill dish is requested at the party's table; then Grill stops waiting → gap
+     Grill×T remains while the dish waits, with no pass device (and no Grill×C: nothing waits there
+     and Grill no longer waits).
+  2. Same, with a pass on Grill in [C] only → Grill×T; a pass on Grill in [T] → `[]`.
   3. The pass releases the dish (`releasePassItems`) → the gap goes (released dishes are not pairs).
-  4. A held Grill dish (not asked for) at a station that no longer waits → `[]`.
-  5. A dish with no zone (an order with no party, delivery table or service context; insert it as
-     `pass-board.requested.test.ts` builds a zone-less order, or the plain `working_orders` insert
-     in `station-order-migration.test.ts`'s `populate`) requested at Grill → Grill×no zone with a
-     zone-restricted pass; an every-zone pass → `[]`.
-  6. The dish's station deactivated while it waits → its gap stays, named by the station's stored
-     name.
-  7. The dish served in full, or its order abandoned → `[]` (`liveKitchenDish`).
-  8. A pair that is both configured and requested is listed once.
-- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/pass-coverage.test.ts -t 'dishes'`
-  (title each case with "dishes"); cases 1, 2, 5, 6 fail.
+  4. A held Grill dish (`release: "hold"`) at a station that no longer waits → `[]`.
+  5. A zone-less counter order's requested Grill dish → Grill×no zone with the pass on Grill in [T]
+     and [C]; add an every-zone pass → `[]`.
+  6. The dish served in full, or its order abandoned → `[]` (`liveKitchenDish`).
+  7. A pair that is both configured and requested (Grill still waits, a dish requested at T) is
+     listed once.
+  (No case for a dish at a deactivated station: D101 (b), the product cannot reach it.)
+- [ ] **RED.** `pnpm --filter @waitron/server exec vitest run src/pass-coverage.test.ts -t 'dishes'`;
+  cases 1, 2 and 5 fail.
 - [ ] **Minimal implementation.** Read live requested items (`liveKitchenDish()` and
   `requestedItem()`, joined as `scopedItems` joins, `pass-board.ts:176-195`), their orders' zones
-  through `orderWatchZones`, the stations' and zones' names whatever `active`; merge with Task 3a's
-  pairs before the covered test.
+  through `orderWatchZones`, the stations' and zones' names whatever `active`; merge with the
+  configured pairs before the covered test.
 - [ ] **GREEN.** `src/pass-coverage.test.ts` unfiltered; typecheck.
 - [ ] **Mutation controls.** Drop `requestedItem()` (read every live dish) → case 4 red. Drop
-  `liveKitchenDish()` → case 7 red. Read the zone as null always → case 2 red. Skip the de-duplication
-  → case 8 red.
+  `liveKitchenDish()` → case 6 red. Read the zone as null always → case 2 red. Skip the
+  de-duplication → case 7 red.
 - [ ] **Commit.** `The coverage read also names each station and zone where dishes already wait for a pass that cannot fire them (A773-2 PR C)`.
 
 ## Task 4: the route and the dashboard's read (about 35 calls)
@@ -656,13 +771,15 @@ fixtures per "Changed test checks".
      unchanged → the switch keeps the change and Save stays enabled.
   9. `station-editor.a11y.test.ts`: a new state "waits for the pass" (switch on) in both themes,
      through the file's existing state loop.
+  10. The changed count pin `station-editor.test.ts:993-995` (`4 : 3`, Changed test checks), whose
+      alignment checks then hold the new switch and its line at 390 and 1280 px.
 - [ ] **RED.** `memory_pressure | grep free`, then
   `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/station-editor.test.ts src/dashboard/station-editor.save-state.test.ts src/dashboard/station-editor.unsaved.test.ts src/dashboard/prep-stations-screen.test.ts src/dashboard/prep-stations-screen.unsaved.test.ts -t 'A773 station policy'`.
-- [ ] **Minimal implementation.** D105, with the Owner question 1 defaults; `prep.waits_for_pass`
+- [ ] **Minimal implementation.** D105, with Owner answer 1's approved words; `prep.waits_for_pass`
   and `prep.waits_for_pass_hint` in both catalogue blocks.
 - [ ] **GREEN.** The five files unfiltered, plus `station-editor.a11y.test.ts`; venue-service
   typecheck; `pnpm exec vitest run scripts/native-form-fields.test.ts scripts/english-only.test.ts`.
-- [ ] **Mutation controls.** Drop `waitsForPass` from `equal` → case 2's "put back" red. Drop it
+- [ ] **Mutation controls.** Drop the hint `<p class="note">` → case 1 and the count pin red. Drop `waitsForPass` from `equal` → case 2's "put back" red. Drop it
   from `sendable` → case 2's detail red. Seed the draft from `false` instead of the station → case
   1 and 7 red. Reset the draft on every `station` change → case 8 red.
 - [ ] **Commit.** `The station editor switches a station's waiting for the pass on and off (A773-2 PR C)`.
@@ -677,14 +794,15 @@ heading reuses `prep.waits_for_pass`); tests `station-table.test.ts`, `station-t
   1. `station-table.test.ts` "A773 station policy: shows whether each station waits for the pass":
      two stations, true and false; the cells (`data-test="waits-for-pass-<id>"`) read Yes and No; in
      Spanish Sí and No.
-  2. The four heading pins (Changed test checks).
+  2. The six heading pins (Changed test checks).
   3. `station-table.a11y.test.ts`: the existing states with one station waiting, both themes.
 - [ ] **RED.** `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/station-table.test.ts -t 'A773 station policy'`.
 - [ ] **Minimal implementation.** D106.
 - [ ] **GREEN.** `station-table.test.ts`, `station-table.a11y.test.ts`, `prep-stations-screen.test.ts`,
-  `prep-stations-screen.a11y.test.ts` unfiltered. The existing "keeps the table inside %s %s %ipx"
-  case (`station-table.test.ts:112-132`, titled at `:120`) must stay green unedited: if the column pushes the table
-  past 390 px, fix the column (shorter cell, wrap), never the test. `pnpm exec vitest run
+  `prep-stations-screen.a11y.test.ts` unfiltered. Both phone-width cases must stay green unedited:
+  "keeps the table inside %s %s %ipx" (`station-table.test.ts:112-132`) and "keeps the table with
+  its read-outs inside %s %ipx" (`:165-…`, the likelier to overflow); if the column pushes the
+  table past 390 px, fix the column (shorter cell, wrap), never the tests. `pnpm exec vitest run
   scripts/pinned-actions-column.test.ts`.
 - [ ] **Mutation controls.** Read `!station.waitsForPass` → case 1 red. Put the column after
   Actions → the heading pins red.
@@ -696,6 +814,9 @@ heading reuses `prep.waits_for_pass`); tests `station-table.test.ts`, `station-t
 `prep-stations-screen.test.ts`, `prep-stations-screen.a11y.test.ts`, the screen's test `api()`
 stub gains `readPassCoverage: vi.fn().mockResolvedValue([])`.
 
+- [ ] **Stubs first.** Add the coverage read answering `[]` to every stub "Changed test checks"
+  lists under fixtures (Prep stations a11y, unsaved, the station-delete helper, and
+  `apps/dashboard/src/dashboard-app.unsaved-changes.test.ts`'s path list).
 - [ ] **Failing tests** (`describe("A773 station policy: the pass coverage warning", …)`).
   1. Gaps Grill×Terrace and Cold×Terrace and Grill×no zone → two lines, in that order: "Nothing
      fires dishes from Grill and Cold in Terrace: …" and the no-zone line; each line's "Devices" is
@@ -707,20 +828,27 @@ stub gains `readPassCoverage: vi.fn().mockResolvedValue([])`.
      clear it, nor does the routing read's recovery (D104; CLAUDE.md "remembers which one set it").
   5. After a successful station save the screen reads coverage again (`readPassCoverage` called once
      more after `updateStation` resolves).
-  6. With `LiveData`: the coverage watch subscribes with exactly `QUERY_DEPENDENCIES["pass-coverage"]`
-     and `refreshMs: 60_000`; an invalidation re-reads it through the passive client while an open
-     editor's changed switch stays changed.
+  6. Refresh, checked against the readers, not against the constant. (a) `QUERY_DEPENDENCIES["pass-coverage"]`
+     `toEqual`s a list written out in the test from D104's reader table, each table beside the
+     reader that reads it in a comment. (b) With `LiveData`, a change of type `zone_service_policies`
+     (`readProfilesZones`), one of type `device_kitchen_screen_removals` (`readDevicesKitchenScreens`)
+     and one of type `devices` each re-read coverage once, through the passive client, while an open
+     editor's changed switch stays changed. (c) A change of type `ticket_items` does not re-read it
+     (D104's deliberate omission). (d) The watch's `refreshMs` is `60_000`.
   7. Without live data, the 60-second reload also re-reads coverage (fake timers, as the routing
      timer's existing case does).
   8. `prep-stations-screen.a11y.test.ts`: the warning shown, both themes.
 - [ ] **RED.** `pnpm --filter @waitron/venue-service exec vitest run --project browser src/dashboard/prep-stations-screen.test.ts -t 'pass coverage warning'`.
-- [ ] **Minimal implementation.** D104 and D107, with the Owner question 2 defaults
+- [ ] **Minimal implementation.** D104 and D107, with Owner answer 2's approved words
   (`prep.pass_gap`, `prep.pass_gap_no_zone`, `prep.pass_gap_error`, both blocks).
 - [ ] **GREEN.** `prep-stations-screen.test.ts`, `prep-stations-screen.a11y.test.ts`,
-  `prep-stations-screen.unsaved.test.ts` unfiltered; venue-service typecheck;
+  `prep-stations-screen.unsaved.test.ts` unfiltered; `pnpm --filter @waitron/dashboard exec vitest
+  run src/dashboard-app.unsaved-changes.test.ts src/dashboard-app.test.ts` (outside every other
+  focused run; CI's scope decides whether they run there); venue-service and dashboard typecheck;
   `pnpm exec vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts scripts/english-only.test.ts`.
 - [ ] **Mutation controls.** Share the routing `QueryController` → case 4 red. Drop the re-read
-  after save → case 5 red. Group by station instead of zone → case 1 red.
+  after save → case 5 red. Group by station instead of zone → case 1 red. Drop `departments` from
+  the constant → case 6 (a) red.
 - [ ] **Commit.** `The Prep stations page warns when no pass screen can fire a waiting station's dishes in a zone (A773-2 PR C)`.
 
 ## Task 8: the guide (about 35 calls)
@@ -731,7 +859,9 @@ stub gains `readPassCoverage: vi.fn().mockResolvedValue([])`.
   with its `file:line` in the commit body: the switch (`station-editor.ts`), later requests only
   (`kitchen-release.ts` `requestStamps`), what a waiting station's dishes show (the station's Held
   "Waiting for the pass", the pass's To fire), what covers (`pass-coverage.ts`, D100), the warning
-  (`prep-stations-screen.ts`), the copy (`configuration-transfer.ts`).
+  (`prep-stations-screen.ts`), the copy (`configuration-transfer.ts`), and the two fixing steps of
+  D110 (Device profiles: offers a pass screen, Runs the pass, a department's zones; Devices: the
+  pass screen's stations and zones), each from the dashboard screen and server check that does it.
 - [ ] Write D110's section in both languages with the shared id `{#station-waits}`; add the links
   from `#pass-screen` and `#request-cooking`; add the setting to `#service-lifetime`'s list. Keep
   every other sentence as it is.
@@ -763,7 +893,8 @@ stub gains `readPassCoverage: vi.fn().mockResolvedValue([])`.
   `configuration-transfer.test.ts`, `configuration-import.test.ts`, `guide-content.test.ts`,
   `guide-pages.test.ts`; db `configuration-transfer.test.ts`; venue-service `--project browser`
   `station-editor*.test.ts`, `station-table*.test.ts`, `prep-stations-screen*.test.ts`,
-  `routing-client.test.ts` (memory first).
+  `routing-client.test.ts` (memory first); venue-service node `profile-access.test.ts`,
+  `service.test.ts`; dashboard `dashboard-app.unsaved-changes.test.ts`, `dashboard-app.test.ts`.
 - [ ] Guards: every file named in "Guard suites".
 - [ ] Fiscal controls, unedited: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts`;
   `git diff 2ea0d1bd76 -- packages/fiscal-verifactu` is empty.
@@ -783,15 +914,15 @@ stub gains `readPassCoverage: vi.fn().mockResolvedValue([])`.
 
 - **Master Task 10 coverage.** Station type, input, patch, editor save → Tasks 1, 5; absent create
   false, explicit null refused → Task 1; `readPassCoverage` and its route and authority → Tasks 3a,
-  3b, 4; hot/cold, zones, every versus empty, disabled device/profile/screen, monitor-only → Task 3a
-  cases 4–10, 12; outstanding requests regardless of setting, null zone → Task 3b; saving uncovered
+  3b, 4; hot/cold, zones, every versus none left, disabled device/profile/screen, monitor-only →
+  Tasks 3a1 cases 4–9 and 3a2 cases 10–12; outstanding requests regardless of setting, null zone → Task 3b; saving uncovered
   settings succeeds with a warning → Task 5 case 7 saves with no coverage read involved, Task 7 shows
-  the warning; column and read-only state → Task 6; import and provisioning → Task 2, finding 2;
+  the warning; column → Task 6; read-only state → a departure (the screen has no read-only mode); import and provisioning → Task 2, finding 2;
   live refresh without resetting a dirty draft → Task 5 case 8, Task 7 case 6; G → Task 8; LOOK →
   Task 9; A756 → D109.
 - **Every "Left for PR C" point.** B4's: the switch (Task 5), removing D9's `omit` with the boolean
   validation (Task 2), the coverage warning (Tasks 3a–4, 7). B1's D9 → Task 2. B1's "PR C's
-  station-editor words … are asked by those PRs" → Owner questions 1–2. B3's "B4 must fix before PR
+  station-editor words … are asked by those PRs" → Owner answers 1–2 (approved 2026-11-03 ~23:35). B3's "B4 must fix before PR
   C" was built by B4's D68 (`2026-11-02-a773-2b4-pass-screens.md:371-378`).
 - **Commands run** (in this worktree at `2ea0d1bd76`): the `rg` of finding 1 and the consumer
   audit; `rg -n waitsForPass apps/till`; `git show 6037aa68ad -- packages/provisioning/src/configuration-transfer.ts | grep version`;
@@ -802,5 +933,40 @@ stub gains `readPassCoverage: vi.fn().mockResolvedValue([])`.
   checks (finding 4), the readers' line numbers, and whether `station-table`'s phone-width case
   holds with a fifth column (Task 6 measures it).
 - **What this plan does not know yet.** Whether A1301 S18 lands first (Task 0 rebases); the
-  owner's words (built on the recommended defaults); whether `@waitron/db`'s mutation script takes a
-  file list (Task 2 reads it).
+  whether `@waitron/db`'s mutation script takes a file list (Task 2 reads it).
+
+## Revision 1 (2026-11-03, plan review)
+
+Answers the fresh-context review (`~/waitron-campaign-c/a773-2c-plan-review.md`: 0 Critical,
+6 Important, 7 Minor). Each finding was checked against the code before applying it; none was
+rejected.
+
+- **I1.** Finding 9 corrected: a `.note` count pin (`station-editor.test.ts:993-995`) covers the
+  gap D105 uses. Added to Changed test checks (`3 : 2` → `4 : 3`) and to Task 5 (case 10, a control).
+- **I2.** Two more heading pins (`station-table.test.ts:148`, `:163`; six in all, finding 10, D106)
+  in Changed test checks; Task 6 names both phone-width cases as must stay green unedited.
+- **I3.** Findings 16–17 added. Task 3a/3b fixtures rebuilt on `setupSplitExtrasVenue`'s own two
+  zones (T and C, no new zones); "zones `[]`" replaced by a listed zone then deactivated (the empty
+  list is refused, `kitchen-screens.ts:520-531`); requests at the party's table through
+  `placeGroups(…, { release: "fire" })` and counter orders through `fireNewOrder`.
+- **I4.** D100 says the profile's zone list binds only a till or handheld pass with a department.
+  Task 3a split into 3a1 (kitchen displays, cases 1–9) and 3a2 (cases 10, 12, 13 on a signed-in
+  till pass limited to T's department, built as `signedInTillPass`/`serveElsewhere` build theirs).
+- **I5.** `zone_service_policies` and `departments` added to D104's list, which is now a
+  reader-by-reader table; Task 7 case 6 checks the constant against a list written from the readers
+  and checks one change type per reader, plus `ticket_items` not refreshing.
+- **I6.** Task 2's RED line corrected (case 5 passes today through the `omit`); a control added that
+  reddens it once the `omit` is gone and the new check is deleted.
+- **M1.** No read per profile: a batched `readProfilesZones` on the venue-service seat (no `cfg`),
+  held equal to `readProfileZones` per profile (Task 3a2); the seat-name pin
+  (`service.test.ts:22-…`) is a new Changed test check.
+- **M2.** D110 and Task 8: the guide names both fixing steps, Device profiles and Devices; the
+  approved warning keeps its one link.
+- **M3.** D101 (b): a requested dish at a deactivated station is unreachable
+  (`station-delete.ts:58-70`); Task 3b's case dropped.
+- **M4.** The API and request stubs that need the coverage read are listed under fixtures; Task 7
+  adds them first and runs the two `apps/dashboard` files.
+- **M5.** "Read-only state" recorded as a departure: the screen has no read-only mode.
+- **M6.** "Owner questions" became "Owner answers": the owner approved both tables as written
+  (`questions.md:1829-1830`, 2026-11-03 ~23:35); no landing waits on words.
+- **M7.** D99 says why refusing a JSON `true` is deliberately stricter than the sibling flags.
