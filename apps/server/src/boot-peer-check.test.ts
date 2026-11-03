@@ -1,0 +1,736 @@
+import { describe, expect, it, vi } from "vitest";
+import { signEnvelope, type HandoverState } from "@waitron/handover";
+import {
+  generateNodeKeyPair,
+  signDocumentBody,
+  type AcceptResult,
+  type NodeStanding,
+  type RoutableServer,
+  type SignedMembershipDocument,
+  type TrustSet,
+} from "@waitron/membership";
+import {
+  askPeerStatus,
+  checkPeersAtStart,
+  persistingAccept,
+  type CheckPeersDeps,
+} from "./boot-peer-check.js";
+import type { PeerOperationStatus, PeerStatusBody } from "./peer-status-api.js";
+
+const SELF = "m1";
+const SPARE = "m2";
+const OLD = "m0";
+const OWN_ORIGIN = "https://box.local:8443";
+const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+function chart(
+  term: number,
+  nodes: readonly [string, NodeStanding, string?][],
+  revoked?: string[],
+): SignedMembershipDocument {
+  return {
+    body: {
+      term,
+      nodes: nodes.map(([nodeId, standing, url]) => ({
+        nodeId,
+        standing,
+        contactUrl: url ?? `https://${nodeId}.local`,
+      })),
+      ...(revoked === undefined ? {} : { revoked }),
+    },
+    signerNodeId: SELF,
+    signature: "stand-in",
+    endorsements: [],
+  };
+}
+
+const HELD = chart(3, [
+  [SELF, "serving-primary", OWN_ORIGIN],
+  [SPARE, "serving-secondary"],
+]);
+
+function status(
+  heldMembership: SignedMembershipDocument | null,
+  openOperation: PeerOperationStatus | null = null,
+): PeerStatusBody {
+  return { heldMembership, restriction: null, openOperation, requestedOperation: null, nonce: "x" };
+}
+
+function operation(
+  scenario: "controlled" | "emergency",
+  state: HandoverState,
+  sourceNodeId = SELF,
+): PeerOperationStatus {
+  return {
+    operationId: OP,
+    role: "destination",
+    scenario,
+    state,
+    sourceNodeId,
+    destinationNodeId: SPARE,
+  };
+}
+
+/** A stand-in for the real verify-and-persist: the term decides, and an accepted chart is held. */
+function heldStore(initial: SignedMembershipDocument | null, untrusted = new Set<number>()) {
+  let current = initial;
+  const accept = vi.fn(async (doc: SignedMembershipDocument): Promise<AcceptResult> => {
+    if (untrusted.has(doc.body.term))
+      return { accepted: false, reason: "invalid", failure: "untrusted_signer" };
+    if (current !== null && doc.body.term <= current.body.term)
+      return { accepted: false, reason: "not_newer" };
+    current = doc;
+    return { accepted: true, document: doc };
+  });
+  return { accept, held: () => current };
+}
+
+type Answers = Record<string, PeerStatusBody | null | "hang" | "throw">;
+
+function deps(
+  over: Partial<CheckPeersDeps> & { answers?: Answers; joinedIds?: string[] } = {},
+): CheckPeersDeps & { asked: string[] } {
+  const asked: string[] = [];
+  const answers = over.answers ?? {};
+  const joinedIds = new Set(over.joinedIds ?? [SPARE]);
+  const store = heldStore(over.held ?? HELD);
+  return {
+    held: HELD,
+    nodeId: SELF,
+    ownOrigin: OWN_ORIGIN,
+    joined: async (id) => joinedIds.has(id),
+    activatedFrom: new Set(),
+    ask: async (peer: RoutableServer) => {
+      asked.push(peer.nodeId);
+      const answer = answers[peer.nodeId] ?? null;
+      if (answer === "hang") return new Promise<never>(() => {});
+      if (answer === "throw") throw new Error("connection refused");
+      return answer;
+    },
+    accept: store.accept,
+    openOperation: false,
+    timeoutMs: 50,
+    ...over,
+    asked,
+  };
+}
+
+const NEWER_SERVING = chart(4, [
+  [SELF, "serving-primary", OWN_ORIGIN],
+  [SPARE, "serving-secondary"],
+]);
+const NEWER_FENCING = chart(4, [
+  [SELF, "sell-only", OWN_ORIGIN],
+  [SPARE, "serving-primary"],
+]);
+const SAME = HELD;
+
+// M2's held chart after it activated: M1 (the source) is sell-only, still routable.
+const M2_HELD = chart(5, [
+  [OLD, "sell-only"],
+  [SELF, "serving-primary", OWN_ORIGIN],
+]);
+
+describe("checkPeersAtStart — one case per cell of the decision table", () => {
+  it("counted F → superseded", async () => {
+    const d = deps({ answers: { [SPARE]: status(NEWER_FENCING) } });
+    expect(await checkPeersAtStart(d)).toBe("superseded");
+  });
+
+  it("counted N → proceed, and the newer chart is held", async () => {
+    const store = heldStore(HELD);
+    const d = deps({ answers: { [SPARE]: status(NEWER_SERVING) }, accept: store.accept });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+    expect(store.held()).toBe(NEWER_SERVING);
+  });
+
+  it("counted = → proceed", async () => {
+    const d = deps({ answers: { [SPARE]: status(SAME) } });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+  });
+
+  it("counted S → wait", async () => {
+    const d = deps({ answers: { [SPARE]: null } });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+    expect(d.asked).toEqual([SPARE]);
+  });
+
+  const m2 = (answer: PeerStatusBody | null) =>
+    deps({
+      held: M2_HELD,
+      activatedFrom: new Set([OLD]),
+      joinedIds: [OLD],
+      answers: { [OLD]: answer },
+    });
+
+  it("asked-only F → superseded", async () => {
+    const fencing = chart(6, [
+      [OLD, "serving-primary"],
+      [SELF, "sell-only", OWN_ORIGIN],
+    ]);
+    expect(await checkPeersAtStart(m2(status(fencing)))).toBe("superseded");
+  });
+
+  it("asked-only N → proceed, and the newer chart is held", async () => {
+    const newer = chart(6, [
+      [OLD, "sell-only"],
+      [SELF, "serving-primary", OWN_ORIGIN],
+    ]);
+    const store = heldStore(M2_HELD);
+    const d = { ...m2(status(newer)), accept: store.accept };
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+    expect(store.held()).toBe(newer);
+  });
+
+  it("asked-only = → proceed", async () => {
+    expect(await checkPeersAtStart(m2(status(chart(2, [[OLD, "serving-primary"]]))))).toBe(
+      "proceed",
+    );
+  });
+
+  it("asked-only S → proceed (rule 3: no counted peer)", async () => {
+    const d = m2(null);
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+    expect(d.asked).toEqual([OLD]);
+  });
+});
+
+describe("checkPeersAtStart — how the contributions combine", () => {
+  const both = chart(5, [
+    [OLD, "sell-only"],
+    [SELF, "serving-primary", OWN_ORIGIN],
+    [SPARE, "serving-secondary"],
+  ]);
+
+  it("counted S with asked-only = waits (rule 5)", async () => {
+    const d = deps({
+      held: both,
+      activatedFrom: new Set([OLD]),
+      joinedIds: [OLD, SPARE],
+      answers: { [OLD]: status(both), [SPARE]: null },
+    });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("counted = with asked-only F is superseded (rule 1)", async () => {
+    const fencing = chart(6, [
+      [OLD, "serving-primary"],
+      [SELF, "evicted", OWN_ORIGIN],
+      [SPARE, "serving-secondary"],
+    ]);
+    const d = deps({
+      held: both,
+      activatedFrom: new Set([OLD]),
+      joinedIds: [OLD, SPARE],
+      answers: { [OLD]: status(fencing), [SPARE]: status(both) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("superseded");
+  });
+
+  it("an open operation with this box as source never proceeds (rule 2), even with = from the peer", async () => {
+    const d = deps({ openOperation: true, answers: { [SPARE]: status(SAME) } });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("an open source operation still yields to an F answer (rule 1 before rule 2)", async () => {
+    const d = deps({ openOperation: true, answers: { [SPARE]: status(NEWER_FENCING) } });
+    expect(await checkPeersAtStart(d)).toBe("superseded");
+  });
+
+  it("an open source operation with no chart at all waits (rule 2 before rule 3)", async () => {
+    const d = deps({ held: null, openOperation: true });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("a box with no chart and no open operation proceeds and asks nobody (rule 3)", async () => {
+    const d = deps({ held: null });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+    expect(d.asked).toEqual([]);
+  });
+
+  it("one counted peer answering = is enough when another is silent (rule 4)", async () => {
+    const three = chart(3, [
+      [SELF, "serving-primary", OWN_ORIGIN],
+      [SPARE, "serving-secondary"],
+      ["m3", "serving-secondary"],
+    ]);
+    const d = deps({
+      held: three,
+      joinedIds: [SPARE, "m3"],
+      answers: { [SPARE]: null, m3: status(three) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+  });
+});
+
+describe("checkPeersAtStart — what counts as silent", () => {
+  it("a peer that never answers within the time limit is S", async () => {
+    const d = deps({ answers: { [SPARE]: "hang" }, timeoutMs: 20 });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("a peer whose ask throws (a refusal or a transport error) is S", async () => {
+    const d = deps({ answers: { [SPARE]: "throw" } });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("a peer at this box's own address is S without asking", async () => {
+    const held = chart(3, [
+      [SELF, "serving-primary", OWN_ORIGIN],
+      [SPARE, "serving-secondary", `${OWN_ORIGIN}/`],
+    ]);
+    const d = deps({ held, answers: { [SPARE]: status(held) } });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+    expect(d.asked).toEqual([]);
+  });
+
+  it("a peer whose address is not a URL is still asked, and its answer counts", async () => {
+    const held = chart(3, [
+      [SELF, "serving-primary", OWN_ORIGIN],
+      [SPARE, "serving-secondary", "box two"],
+    ]);
+    const d = deps({ held, answers: { [SPARE]: status(held) } });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+    expect(d.asked).toEqual([SPARE]);
+  });
+
+  it("with no time limit given, an answer that comes promptly still counts", async () => {
+    const d = deps({ answers: { [SPARE]: status(SAME) } });
+    delete d.timeoutMs;
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+  });
+
+  it("a counted peer with an empty address is S without asking", async () => {
+    const held = chart(3, [
+      [SELF, "serving-primary", OWN_ORIGIN],
+      [SPARE, "serving-secondary", ""],
+    ]);
+    const d = deps({ held, answers: { [SPARE]: status(held) } });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+    expect(d.asked).toEqual([]);
+  });
+
+  it("a peer that answers with a chart signed by an unknown key counts as no answer", async () => {
+    const store = heldStore(HELD, new Set([4]));
+    const d = deps({ answers: { [SPARE]: status(NEWER_SERVING) }, accept: store.accept });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+    expect(store.held()).toBe(HELD);
+  });
+
+  it("a peer whose standing is evicted, or whose id is revoked, is not asked", async () => {
+    const held = chart(
+      3,
+      [
+        [SELF, "serving-primary", OWN_ORIGIN],
+        [SPARE, "evicted"],
+        ["m3", "serving-secondary"],
+      ],
+      ["m3"],
+    );
+    const d = deps({ held, joinedIds: [SPARE, "m3"] });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+    expect(d.asked).toEqual([]);
+  });
+});
+
+describe("checkPeersAtStart — the review's cases", () => {
+  it("a main box whose chart lists a pending spare at the same address, with no nodes row for it, proceeds and asks nobody", async () => {
+    const held = chart(3, [
+      [SELF, "serving-primary", OWN_ORIGIN],
+      [SPARE, "serving-secondary", OWN_ORIGIN],
+    ]);
+    const d = deps({ held, joinedIds: [] });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+    expect(d.asked).toEqual([]);
+  });
+
+  it("control: the same chart with a nodes row for the spare and no answer waits", async () => {
+    const held = chart(3, [
+      [SELF, "serving-primary", OWN_ORIGIN],
+      [SPARE, "serving-secondary", OWN_ORIGIN],
+    ]);
+    const d = deps({ held, joinedIds: [SPARE] });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("a box with no node.db row but a chart that lists a joined spare waits (A1274)", async () => {
+    // No node.db row: no open operation and nothing activated, so only the chart and venue.db speak.
+    const d = deps({ openOperation: false, activatedFrom: new Set(), joinedIds: [SPARE] });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("a stale chart from a till does not clear a wait: only the chart's boxes are asked", async () => {
+    const store = heldStore(HELD);
+    const d = deps({ answers: { [SPARE]: null }, accept: store.accept });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+    expect(d.asked).toEqual([SPARE]);
+    expect(store.accept).not.toHaveBeenCalled();
+  });
+
+  it("a box that activated as destination does not count the operation's source, and proceeds with that source switched off", async () => {
+    const d = deps({
+      held: M2_HELD,
+      joinedIds: [OLD],
+      activatedFrom: new Set([OLD]),
+      answers: { [OLD]: null },
+    });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+    expect(d.asked).toEqual([OLD]);
+  });
+
+  it("control: the same chart and rows without the activated operation waits", async () => {
+    const d = deps({ held: M2_HELD, joinedIds: [OLD], answers: { [OLD]: null } });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("a destination whose operation is activated and still return_pending proceeds", async () => {
+    // A destination's own operation is not `openOperation` (that names a source operation).
+    const d = deps({
+      held: M2_HELD,
+      joinedIds: [OLD],
+      activatedFrom: new Set([OLD]),
+      openOperation: false,
+      answers: { [OLD]: null },
+    });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+  });
+
+  it("after the prepared repair, the box proceeds once its counted peer answers = (rule 4)", async () => {
+    const d = deps({ openOperation: false, answers: { [SPARE]: status(SAME) } });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+  });
+
+  it("after the prepared repair, with that peer silent, the box waits (rule 5)", async () => {
+    const d = deps({ openOperation: false, answers: { [SPARE]: null } });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("a peer whose controlled operation naming this box as source is still at prepared is not F: the box proceeds", async () => {
+    const d = deps({ answers: { [SPARE]: status(SAME, operation("controlled", "prepared")) } });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+  });
+
+  it("control: the same peer at copy_accepted gives superseded", async () => {
+    const d = deps({
+      answers: { [SPARE]: status(SAME, operation("controlled", "copy_accepted")) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("superseded");
+  });
+
+  it("a controlled operation past copy_accepted (filing_assumed) naming this box is F", async () => {
+    const d = deps({
+      answers: { [SPARE]: status(SAME, operation("controlled", "filing_assumed")) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("superseded");
+  });
+
+  it("a peer at emergency_declared naming this box as source is F", async () => {
+    const d = deps({
+      answers: { [SPARE]: status(SAME, operation("emergency", "emergency_declared")) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("superseded");
+  });
+
+  it("an emergency operation still at prepared naming this box is not F", async () => {
+    const d = deps({ answers: { [SPARE]: status(SAME, operation("emergency", "prepared")) } });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+  });
+
+  it("an operation naming another box as source is not F", async () => {
+    const d = deps({
+      answers: { [SPARE]: status(SAME, operation("emergency", "activated", "someone-else")) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+  });
+
+  it("a box in activatedFrom that answers with a newer chart fencing this box gives superseded", async () => {
+    const fencing = chart(6, [
+      [OLD, "serving-primary"],
+      [SELF, "sell-only", OWN_ORIGIN],
+    ]);
+    const d = deps({
+      held: M2_HELD,
+      joinedIds: [OLD],
+      activatedFrom: new Set([OLD]),
+      answers: { [OLD]: status(fencing) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("superseded");
+  });
+
+  it("a box in activatedFrom that does not answer, with no counted peer, leaves the result proceed", async () => {
+    const d = deps({ held: M2_HELD, activatedFrom: new Set([OLD]), joinedIds: [] });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+    expect(d.asked).toEqual([OLD]);
+  });
+
+  it("two newer charts: the newest is held and decides, so an older fencing one is not F", async () => {
+    const three = chart(3, [
+      [SELF, "serving-primary", OWN_ORIGIN],
+      [SPARE, "serving-secondary"],
+      ["m3", "serving-secondary"],
+    ]);
+    const olderFencing = chart(4, [
+      [SELF, "sell-only", OWN_ORIGIN],
+      [SPARE, "serving-primary"],
+    ]);
+    const newestServing = chart(5, [
+      [SELF, "serving-primary", OWN_ORIGIN],
+      [SPARE, "serving-secondary"],
+    ]);
+    const store = heldStore(three);
+    const d = deps({
+      held: three,
+      joinedIds: [SPARE, "m3"],
+      accept: store.accept,
+      answers: { [SPARE]: status(olderFencing), m3: status(newestServing) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("proceed");
+    expect(store.held()).toBe(newestServing);
+  });
+});
+
+describe("persistingAccept", () => {
+  const pair = generateNodeKeyPair();
+  const trust: TrustSet = { [SELF]: pair.publicKey };
+  function signed(term: number): SignedMembershipDocument {
+    const body = {
+      term,
+      nodes: [{ nodeId: SELF, contactUrl: OWN_ORIGIN, standing: "serving-primary" as const }],
+    };
+    return {
+      body,
+      signerNodeId: SELF,
+      signature: signDocumentBody(body, pair.privateKey),
+      endorsements: [],
+    };
+  }
+
+  it("persists a verified, newer chart and reports it accepted", async () => {
+    const persist = vi.fn(async () => true);
+    const accept = persistingAccept({ held: signed(3), trustSet: trust, persist });
+    const doc = signed(4);
+    expect(await accept(doc)).toEqual({ accepted: true, document: doc });
+    expect(persist).toHaveBeenCalledWith(doc);
+  });
+
+  it("a box holding no chart yet accepts and persists a verified one", async () => {
+    const persist = vi.fn(async () => true);
+    const accept = persistingAccept({ held: null, trustSet: trust, persist });
+    expect(await accept(signed(1))).toMatchObject({ accepted: true });
+    expect(persist).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports not_newer when the store already holds a chart at least as new", async () => {
+    const accept = persistingAccept({
+      held: signed(3),
+      trustSet: trust,
+      persist: async () => false,
+    });
+    expect(await accept(signed(4))).toEqual({ accepted: false, reason: "not_newer" });
+  });
+
+  it("refuses a chart signed by a key it does not trust, persisting nothing", async () => {
+    const stranger = generateNodeKeyPair();
+    const body = signed(4).body;
+    const forged = {
+      body,
+      signerNodeId: SELF,
+      signature: signDocumentBody(body, stranger.privateKey),
+      endorsements: [],
+    };
+    const persist = vi.fn(async () => true);
+    const accept = persistingAccept({ held: signed(3), trustSet: trust, persist });
+    expect(await accept(forged)).toMatchObject({ accepted: false, reason: "invalid" });
+    expect(persist).not.toHaveBeenCalled();
+  });
+
+  it("does not persist a chart that is not newer than the one held", async () => {
+    const persist = vi.fn(async () => true);
+    const accept = persistingAccept({ held: signed(3), trustSet: trust, persist });
+    expect(await accept(signed(3))).toEqual({ accepted: false, reason: "not_newer" });
+    expect(persist).not.toHaveBeenCalled();
+  });
+});
+
+describe("askPeerStatus", () => {
+  const selfKeys = generateNodeKeyPair();
+  const peerKeys = generateNodeKeyPair();
+  const strangerKeys = generateNodeKeyPair();
+  const PEER: RoutableServer = {
+    nodeId: SPARE,
+    url: "https://m2.local/",
+    standing: "serving-secondary",
+  };
+  const NONCE = "q".repeat(32);
+  const keys: Record<string, string> = { [SELF]: selfKeys.publicKey, [SPARE]: peerKeys.publicKey };
+
+  function answerWith(make: (query: { nonce: string }) => unknown, statusCode = 200) {
+    const calls: { url: string; body: unknown }[] = [];
+    const fetchFn = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { body: { nonce: string } };
+      calls.push({ url: String(url), body });
+      return new Response(JSON.stringify(make(body.body)), { status: statusCode });
+    });
+    return { calls, fetchFn };
+  }
+
+  function ask(fetchFn: typeof fetch, timeoutMs = 1000) {
+    return askPeerStatus({
+      sign: async (body) =>
+        signEnvelope("query", body, { nodeId: SELF, privateKey: selfKeys.privateKey }),
+      publicKeyOf: (id) => keys[id],
+      fetch: fetchFn,
+      nonce: () => NONCE,
+      now: () => 1_000,
+      timeoutMs,
+    });
+  }
+
+  const body = (nonce: string): PeerStatusBody => ({
+    heldMembership: HELD,
+    restriction: null,
+    openOperation: null,
+    requestedOperation: null,
+    nonce,
+  });
+  const sign = (b: PeerStatusBody, nodeId = SPARE, privateKey = peerKeys.privateKey) =>
+    signEnvelope("status", b as never, { nodeId, privateKey });
+
+  it("posts a signed query to the peer's status route and returns the verified answer", async () => {
+    const { calls, fetchFn } = answerWith((q) => sign(body(q.nonce)));
+    expect(await ask(fetchFn)(PEER)).toEqual(body(NONCE));
+    expect(calls[0]!.url).toBe("https://m2.local/api/node/peer-status");
+    expect(calls[0]!.body).toMatchObject({
+      purpose: "waitron.handover.query.v1",
+      signerNodeId: SELF,
+      body: { nonce: NONCE, atMs: 1_000 },
+    });
+  });
+
+  it("an unsigned answer is null", async () => {
+    const { fetchFn } = answerWith((q) => body(q.nonce));
+    expect(await ask(fetchFn)(PEER)).toBeNull();
+  });
+
+  it("an answer signed by a key nobody vouches for is null", async () => {
+    const { fetchFn } = answerWith((q) => sign(body(q.nonce), SPARE, strangerKeys.privateKey));
+    expect(await ask(fetchFn)(PEER)).toBeNull();
+  });
+
+  it("an answer signed by a different trusted box than the one asked is null", async () => {
+    const { fetchFn } = answerWith((q) => sign(body(q.nonce), SELF, selfKeys.privateKey));
+    expect(await ask(fetchFn)(PEER)).toBeNull();
+  });
+
+  it("an answer echoing a different nonce is null", async () => {
+    const { fetchFn } = answerWith(() => sign(body("z".repeat(32))));
+    expect(await ask(fetchFn)(PEER)).toBeNull();
+  });
+
+  it("an answer whose body is not a status is null", async () => {
+    const { fetchFn } = answerWith((q) =>
+      signEnvelope("status", { nonce: q.nonce, heldMembership: "nope" } as never, {
+        nodeId: SPARE,
+        privateKey: peerKeys.privateKey,
+      }),
+    );
+    expect(await ask(fetchFn)(PEER)).toBeNull();
+  });
+
+  const op = operation("controlled", "copy_accepted");
+  it.each<[string, (nonce: string) => unknown]>([
+    ["a body that is a string", () => "status"],
+    ["a body that is a list", () => []],
+    ["a restriction that is a list", (n) => ({ ...body(n), restriction: [] })],
+    ["an open operation that is a string", (n) => ({ ...body(n), openOperation: "x" })],
+    ["an open operation that is a list", (n) => ({ ...body(n), openOperation: [] })],
+    [
+      "an open operation with no source",
+      (n) => ({ ...body(n), openOperation: { ...op, sourceNodeId: 1 } }),
+    ],
+    [
+      "an open operation with an unknown scenario",
+      (n) => ({ ...body(n), openOperation: { ...op, scenario: "x" } }),
+    ],
+    [
+      "an open operation with an unknown state",
+      (n) => ({ ...body(n), openOperation: { ...op, state: "x" } }),
+    ],
+    ["a requested operation that is a string", (n) => ({ ...body(n), requestedOperation: "x" })],
+  ])("a signed answer carrying %s is null", async (_label, make) => {
+    const { fetchFn } = answerWith((q) =>
+      signEnvelope("status", make(q.nonce) as never, {
+        nodeId: SPARE,
+        privateKey: peerKeys.privateKey,
+      }),
+    );
+    expect(await ask(fetchFn)(PEER)).toBeNull();
+  });
+
+  it("a signed answer carrying an operation in either scenario is kept", async () => {
+    for (const scenario of ["controlled", "emergency"] as const) {
+      const answer = {
+        ...body(NONCE),
+        openOperation: { ...op, scenario },
+        requestedOperation: { ...op, scenario },
+      };
+      const { fetchFn } = answerWith(() => sign(answer));
+      expect(await ask(fetchFn)(PEER)).toEqual(answer);
+    }
+  });
+
+  it("with no stand-ins it uses the global fetch, a fresh 32-character nonce and the clock", async () => {
+    const seen: { nonce: string; atMs: number }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const q = (JSON.parse(String(init?.body)) as { body: { nonce: string; atMs: number } })
+          .body;
+        seen.push(q);
+        return new Response(JSON.stringify(sign(body(q.nonce))), { status: 200 });
+      }),
+    );
+    try {
+      const real = askPeerStatus({
+        sign: async (b) =>
+          signEnvelope("query", b, { nodeId: SELF, privateKey: selfKeys.privateKey }),
+        publicKeyOf: (id) => keys[id],
+      });
+      const before = Date.now();
+      expect(await real(PEER)).not.toBeNull();
+      await real(PEER);
+      expect(seen[0]!.nonce).toMatch(/^[0-9a-f]{32}$/);
+      expect(seen[1]!.nonce).not.toBe(seen[0]!.nonce);
+      expect(seen[0]!.atMs).toBeGreaterThanOrEqual(before);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("a refusal (503 handover.stepping_down) is null", async () => {
+    const { fetchFn } = answerWith(() => ({ error: { code: "handover.stepping_down" } }), 503);
+    expect(await ask(fetchFn)(PEER)).toBeNull();
+  });
+
+  it("a transport error is null", async () => {
+    const fetchFn = vi.fn(async () => {
+      throw new TypeError("fetch failed");
+    });
+    expect(await ask(fetchFn)(PEER)).toBeNull();
+  });
+
+  it("a body that is not JSON is null", async () => {
+    const fetchFn = vi.fn(async () => new Response("<html>", { status: 200 }));
+    expect(await ask(fetchFn)(PEER)).toBeNull();
+  });
+
+  it("a peer that does not answer within the time limit is null", async () => {
+    const fetchFn = vi.fn(
+      (_url: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        }),
+    );
+    expect(await ask(fetchFn, 20)(PEER)).toBeNull();
+  });
+});
