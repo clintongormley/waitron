@@ -14,6 +14,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedNode } from "@waitron/db/testing/seed.js";
 import {
   billPaymentLines,
   billPaymentRefunds,
@@ -24,7 +25,6 @@ import {
   drawerOpens,
   invoiceSeries,
   pagePrinters,
-  nodes,
   parties,
   printJobs,
   products,
@@ -1847,14 +1847,8 @@ describe("the invoice at full payment (design §8 test 8)", () => {
     async (invoiceType) => {
       const billId = await tabWith("Chuletón");
       await inTx(async (tx) => {
-        const [node] = await tx
-          .insert(nodes)
-          .values({ locationId: venue.cfg.locationId, name: "Other issuing node" })
-          .returning({ id: nodes.id });
-        await tx
-          .update(workingOrders)
-          .set({ nodeId: node!.id })
-          .where(eq(workingOrders.id, billId));
+        const nodeId = await seedNode(tx);
+        await tx.update(workingOrders).set({ nodeId }).where(eq(workingOrders.id, billId));
       });
       const before = await inTx((tx) =>
         tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),

@@ -16,6 +16,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons } from "@waitron/identity";
 import {
@@ -62,15 +63,11 @@ async function fixture() {
       operatorId: venue.operatorId,
       guestCount: 2,
     });
-    const [other] = await tx
-      .insert(workingOrders)
-      .values({
-        source: "dashboard",
-        orderNumber: 2,
-        partyId: party.partyId,
-        locationId: venue.cfg.locationId,
-      })
-      .returning();
+    const other = await seedWorkingOrder(tx, {
+      source: "dashboard",
+      orderNumber: 2,
+      partyId: party.partyId,
+    });
     return { ...party, otherId: other!.id };
   });
 }

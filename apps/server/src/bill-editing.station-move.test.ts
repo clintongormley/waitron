@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -215,15 +216,11 @@ describe("station movement checks bill editing authority", () => {
   it("a colleague's other bill at this table does not block the requested bill", async () => {
     const p = await fixture();
     const other = await inTx(venue, async (tx) => {
-      const [row] = await tx
-        .insert(workingOrders)
-        .values({
-          locationId: venue.cfg.locationId,
-          partyId: p.partyId,
-          source: "dashboard",
-          orderNumber: 2,
-        })
-        .returning();
+      const row = await seedWorkingOrder(tx, {
+        partyId: p.partyId,
+        source: "dashboard",
+        orderNumber: 2,
+      });
       await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, row!.id, venue.zoneId);
       return { ...p, tabId: row!.id };
     });

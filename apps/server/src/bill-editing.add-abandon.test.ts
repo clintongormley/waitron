@@ -3,6 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { billPayments, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -196,15 +197,11 @@ for (const op of operations)
 it("adding to the current editor's bill preserves both independently owned outboxes", async () => {
   const p = await fixture();
   const other = await inTx(venue, async (tx) => {
-    const [bill] = await tx
-      .insert(workingOrders)
-      .values({
-        source: "dashboard",
-        orderNumber: 2,
-        partyId: p.partyId,
-        locationId: venue.cfg.locationId,
-      })
-      .returning();
+    const bill = await seedWorkingOrder(tx, {
+      source: "dashboard",
+      orderNumber: 2,
+      partyId: p.partyId,
+    });
     await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, bill!.id, venue.zoneId);
     return bill!;
   });

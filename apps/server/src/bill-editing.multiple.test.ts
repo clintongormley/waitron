@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest";
 import {
   billEditStates,
   CORE_MIGRATIONS,
-  locations,
   orderDraftLines,
   orderDrafts,
   parties,
@@ -13,6 +12,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import {
@@ -44,10 +44,11 @@ const expectedOf = ({ billId, editorVersion, draftId, draftRevision }: BillEditS
 
 async function fixture(owners: ("Ana" | "Luis" | null)[]) {
   return inTx(async (tx) => {
-    const [location] = await tx
-      .insert(locations)
-      .values({ name: "Dining room", invoiceLocales: ["en"], operationDescription: "Restaurant" })
-      .returning();
+    await seedVenue(tx, {
+      name: "Dining room",
+      invoiceLocales: ["en"],
+      operationDescription: "Restaurant",
+    });
     const [ana, luis, sam] = await tx
       .insert(persons)
       .values([{ displayName: "Ana" }, { displayName: "Luis" }, { displayName: "Sam" }])
@@ -56,10 +57,9 @@ async function fixture(owners: ("Ana" | "Luis" | null)[]) {
     const states: BillEditState[] = [];
     for (const [index, owner] of owners.entries()) {
       const billId = ids[index]!;
-      await tx.insert(workingOrders).values({
+      await seedWorkingOrder(tx, {
         id: billId,
         source: "dashboard",
-        locationId: location!.id,
         partyId: party!.id,
         orderNumber: index + 1,
       });

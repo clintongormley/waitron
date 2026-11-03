@@ -16,8 +16,9 @@ import {
   setNodePublicKey,
   stampDeployment,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons, verifySecretAsync } from "@waitron/identity";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
@@ -94,12 +95,14 @@ beforeEach(async () => {
   loadedKey = KEY;
   await seedTenant(suite.db);
   await stampDeployment(suite.db, "preproduction");
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Sala", invoiceLocales: ["es"], operationDescription: "Restaurant" })
-    .returning({ id: locations.id });
-  const nodeId = await seedNode(suite.db, locationId(location!.id));
-  node = { nodeId, locationId: locationId(location!.id) };
+  await seedVenue(suite.db, {
+    name: "Sala",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
+  const venueId = await venueLocationId(suite.db);
+  const nodeId = await seedNode(suite.db);
+  node = { nodeId, locationId: locationId(venueId) };
   await setNodePublicKey(suite.db, nodeId, "SIGNER_PUBLIC_KEY");
   keyInForce = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, nodeId);
   await withTransaction(suite.db, async (tx) => {
