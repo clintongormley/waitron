@@ -914,7 +914,7 @@ adapters and the `waitron-instalar.local` status page; joining Wi-Fi and staging
 boot copy; and the source-history floor on reinstall, still gated on A1042.
 
 **Built so far (2026-11-03), PR 4.** [PR 4](../superpowers/plans/2026-11-03-b3-4-name-tag-wifi-copy.md)
-(#PR4) adds one host library under `scripts/box/` and extends PR 2's Wi-Fi record module, none of
+(#2430) adds one host library under `scripts/box/` and extends PR 2's Wi-Fi record module, none of
 it called yet. Like PR 3's, both are pure: they read bytes or settings handed to them and answer
 bytes or a plan, and nothing in this pull request reads or writes a real disk header, a boot
 folder or NetworkManager.
