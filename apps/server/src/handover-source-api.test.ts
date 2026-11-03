@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { chmod, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import type { FileHandle } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withNodeTransaction, writeNodeMembership } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
@@ -32,6 +33,15 @@ import { captureFinalCopy, type CaptureDeps } from "./handover-capture.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+
+const files = vi.hoisted(() => ({ rename: vi.fn(), open: vi.fn(), rm: vi.fn() }));
+vi.mock("node:fs/promises", async (original) => {
+  const real = await original<typeof import("node:fs/promises")>();
+  files.rename.mockImplementation(real.rename);
+  files.open.mockImplementation(real.open);
+  files.rm.mockImplementation(real.rm);
+  return { ...real, rename: files.rename, open: files.open, rm: files.rm };
+});
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x6).toString("base64"),
@@ -76,7 +86,10 @@ interface Boxes {
 }
 
 /** This box, stepped down for OP to `destination`, with a chart listing it and one other box. */
-async function boxes({ steppedDown = true } = {}): Promise<Boxes> {
+async function boxes({
+  steppedDown = true,
+  modules = MODULES as readonly WaitronModule[],
+} = {}): Promise<Boxes> {
   const db = suite.db;
   await seedVenue(db);
   const self = await seedNode(db);
@@ -136,7 +149,7 @@ async function boxes({ steppedDown = true } = {}): Promise<Boxes> {
     stateDir,
     ring: RING,
     nodeId: self,
-    modules: MODULES,
+    modules,
   };
   const app = new Hono();
   mountHandoverSourceApi(app, deps, () => {});
@@ -194,6 +207,7 @@ describe("the final copy and its indicator, served to the selected box only", ()
     const copyResponse = await ask(app, "final-copy", destination);
     expect(copyResponse.status).toBe(200);
     expect(copyResponse.headers.get("content-type")).toBe("application/octet-stream");
+    expect(copyResponse.headers.get("content-length")).toBe(String(indicator.body.snapshot.bytes));
     const bytes = new Uint8Array(await copyResponse.arrayBuffer());
     expect(bytes.length).toBe(indicator.body.snapshot.bytes);
     expect(sha256(bytes)).toBe(indicator.body.snapshot.sha256);
@@ -250,7 +264,104 @@ describe("the final copy and its indicator, served to the selected box only", ()
       expect(response.status).toBe(403);
       expect(await errorCode(response)).toBe("handover.peer_unknown");
     });
+
+    it(`a module summary that fails is a 500 for the ${route}`, async () => {
+      const failing: WaitronModule = {
+        ...MODULES[0],
+        handover: {
+          summarise: () => Promise.reject(new Error("the module's tables could not be read")),
+        },
+      };
+      const { app, destination } = await boxes({ modules: [failing] });
+      const response = await ask(app, route, destination);
+      expect(response.status).toBe(500);
+      expect(await errorCode(response)).toBe("handover.summary_failed");
+    });
   }
+
+  it("a retake left behind by an earlier crash is removed when the copy is taken again", async () => {
+    const { app, deps, destination } = await boxes();
+    const indicator = await captureFinalCopy(deps, OP);
+    await rm(copyPath());
+    await writeFile(`${copyPath()}.retake-crashed`, "a crashed retake");
+    await writeFile(`${copyPath()}.retake-crashed.partial`, "a crashed copy");
+    const response = await ask(app, "final-copy", destination);
+    expect(response.status).toBe(200);
+    expect(sha256(new Uint8Array(await response.arrayBuffer()))).toBe(
+      indicator.body.snapshot.sha256,
+    );
+    expect(await readdir(join(stateDir, "handover", OP))).toEqual(["venue.db"]);
+  });
+
+  it("a request made while another retakes the copy leaves that retake alone, and both are served", async () => {
+    const { app, deps, destination } = await boxes();
+    const indicator = await captureFinalCopy(deps, OP);
+    await rm(copyPath());
+    const realOpen = files.open.getMockImplementation()!;
+    const realRm = files.rm.getMockImplementation()!;
+    // The second request is sent while the first holds its retake unopened, which waits until
+    // something removes the retake or a fifth of a second has passed.
+    let second: Promise<Response> | undefined;
+    let removedRetake: () => void = () => {};
+    const removed = new Promise<void>((resolve) => (removedRetake = resolve));
+    let held = false;
+    files.rm.mockImplementation(async (path: string, ...rest: unknown[]) => {
+      await realRm(path, ...rest);
+      if (path.includes(".retake-")) removedRetake();
+    });
+    files.open.mockImplementation(async (path: string, ...rest: unknown[]) => {
+      if (!held && path.includes(".retake-")) {
+        held = true;
+        second = ask(app, "final-copy", destination);
+        await Promise.race([removed, new Promise((resolve) => setTimeout(resolve, 200))]);
+      }
+      return realOpen(path, ...rest);
+    });
+    let responses: Response[];
+    try {
+      const first = await ask(app, "final-copy", destination);
+      responses = [first, await second!];
+    } finally {
+      files.open.mockImplementation(realOpen);
+      files.rm.mockImplementation(realRm);
+    }
+    for (const response of responses) {
+      expect(response.status).toBe(200);
+      expect(sha256(new Uint8Array(await response.arrayBuffer()))).toBe(
+        indicator.body.snapshot.sha256,
+      );
+    }
+    expect(await readdir(join(stateDir, "handover", OP))).toEqual(["venue.db"]);
+  });
+
+  it("a retake whose rename fails closes the file it opened and leaves no retake", async () => {
+    const { app, deps, destination } = await boxes();
+    await captureFinalCopy(deps, OP);
+    await rm(copyPath());
+    const opened: FileHandle[] = [];
+    const realOpen = files.open.getMockImplementation()!;
+    const realRename = files.rename.getMockImplementation()!;
+    files.open.mockImplementation(async (...args: unknown[]) => {
+      const handle = (await realOpen(...args)) as FileHandle;
+      opened.push(handle);
+      return handle;
+    });
+    files.rename.mockImplementation(async (from: string, to: string) => {
+      if (from.includes(".retake-") && to === copyPath()) throw new Error("the disk refused");
+      return realRename(from, to);
+    });
+    try {
+      const response = await ask(app, "final-copy", destination);
+      expect(response.status).toBe(500);
+      expect(await errorCode(response)).toBe("server.internal");
+    } finally {
+      files.open.mockImplementation(realOpen);
+      files.rename.mockImplementation(realRename);
+    }
+    expect(opened.length).toBeGreaterThan(0);
+    expect(opened.map((handle) => handle.fd)).toEqual(opened.map(() => -1));
+    expect(await readdir(join(stateDir, "handover", OP))).toEqual([]);
+  });
 
   it("a copy file that went missing is taken again and served when it matches the indicator", async () => {
     const { app, deps, destination } = await boxes();

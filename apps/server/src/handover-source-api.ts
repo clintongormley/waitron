@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { open, rename, rm, type FileHandle } from "node:fs/promises";
+import { open, readdir, rename, rm, type FileHandle } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import type { Context, Hono } from "hono";
 import type { FinalStateIndicator } from "@waitron/handover";
@@ -66,6 +67,19 @@ async function openIfMatching(
   return null;
 }
 
+/** This process's retakes, by copy path, run one at a time. */
+const retakes = new Map<string, Promise<unknown>>();
+
+function inRetakeTurn<T>(path: string, fn: () => Promise<T>): Promise<T> {
+  const turn = (retakes.get(path) ?? Promise.resolve()).then(fn, fn);
+  const settled = turn.catch(() => {});
+  retakes.set(path, settled);
+  void settled.then(() => {
+    if (retakes.get(path) === settled) retakes.delete(path);
+  });
+  return turn;
+}
+
 /**
  * The final copy, opened, holding exactly the bytes the indicator names. A copy that went missing
  * or changed is taken again from venue.db, which yields the same bytes while venue.db is
@@ -80,15 +94,43 @@ async function openFinalCopy(
   const path = finalCopyPath(deps.stateDir, operationId);
   const held = await openIfMatching(path, snapshot);
   if (held !== null) return held;
-  const retake = `${path}.retake-${randomUUID()}`;
+  return inRetakeTurn(path, async () => {
+    const retaken = await openIfMatching(path, snapshot);
+    if (retaken !== null) return retaken;
+    // One process owns the venue folder and its retakes take turns, so any retake file found
+    // here was left by a run that stopped part way.
+    await removeLeftoverRetakes(path);
+    return retake(deps, operationId, path, snapshot);
+  });
+}
+
+async function removeLeftoverRetakes(path: string): Promise<void> {
+  const prefix = `${basename(path)}.retake-`;
+  for (const name of await readdir(dirname(path))) {
+    if (name.startsWith(prefix)) await rm(join(dirname(path), name), { force: true });
+  }
+}
+
+async function retake(
+  deps: CaptureDeps,
+  operationId: string,
+  path: string,
+  snapshot: FinalStateIndicator["snapshot"],
+): Promise<FileHandle> {
+  const retakePath = `${path}.retake-${randomUUID()}`;
   try {
-    await deps.venue.archiveTo(retake);
-    const handle = await openIfMatching(retake, snapshot);
+    await deps.venue.archiveTo(retakePath);
+    const handle = await openIfMatching(retakePath, snapshot);
     if (handle === null) throw new AppError("handover.final_copy_changed", { operationId });
-    await rename(retake, path);
+    try {
+      await rename(retakePath, path);
+    } catch (error) {
+      await handle.close();
+      throw error;
+    }
     return handle;
   } finally {
-    await rm(retake, { force: true });
+    await rm(retakePath, { force: true });
   }
 }
 

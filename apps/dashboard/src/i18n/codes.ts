@@ -1346,16 +1346,16 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este servidor no conoce al servidor que preguntó por su estado, así que no ha respondido. No se ha cambiado nada.",
   },
   "handover.not_stepped_down": {
-    en: "This server has not handed over its work in this handover, so it took no final copy of the venue. Nothing was changed.",
-    es: "Este servidor no ha pasado su trabajo en este cambio de servidor, así que no ha hecho la copia final del local. No se ha cambiado nada.",
+    en: "The old box has not handed over its work in this handover, so it took no final copy of the venue. Nothing was changed.",
+    es: "El equipo antiguo no ha pasado su trabajo en este cambio de servidor, así que no ha hecho la copia final del local. No se ha cambiado nada.",
   },
   "handover.operation_unknown": {
     en: "This server holds no record of that handover, so it sent nothing. Nothing was changed.",
     es: "Este servidor no tiene constancia de ese cambio de servidor, así que no ha enviado nada. No se ha cambiado nada.",
   },
   "handover.final_copy_changed": {
-    en: "This server's venue data changed after it made its final copy, so it did not send the copy. Nothing was changed. Start the handover again.",
-    es: "Los datos del local en este servidor cambiaron después de hacer la copia final, así que no ha enviado la copia. No se ha cambiado nada. Vuelve a empezar el cambio de servidor.",
+    en: "The old box's venue data changed after it made its final copy, so it did not send the copy. Nothing was changed.",
+    es: "Los datos del local en el equipo antiguo cambiaron después de hacer la copia final, así que no ha enviado la copia. No se ha cambiado nada.",
   },
   "handover.summary_failed": {
     en: "This server could not read part of the venue's data from its final copy, so it sent neither the copy nor its description. Its venue data is unchanged. Asking again makes it take a new copy and read that.",

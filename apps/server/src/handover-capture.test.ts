@@ -28,6 +28,7 @@ import {
   appendHandoverEventTx,
   NODE_MIGRATIONS,
   nodeHandoverEvents,
+  nodeHandoverRestriction,
   recordHandoverRestrictionTx,
 } from "@waitron/node-db";
 import {
@@ -127,7 +128,12 @@ async function box(): Promise<string> {
 
 async function restrict(
   self: string,
-  row: Partial<{ operationId: string; kind: "handed-over" | "superseded"; successor: string }> = {},
+  row: Partial<{
+    operationId: string;
+    kind: "handed-over" | "superseded";
+    successor: string;
+    term: number;
+  }> = {},
 ): Promise<void> {
   await withNodeTransaction(suite.node, (tx) =>
     recordHandoverRestrictionTx(tx, {
@@ -135,7 +141,7 @@ async function restrict(
       operationId: row.operationId ?? OP,
       kind: row.kind ?? "handed-over",
       successorNodeId: row.successor ?? DESTINATION,
-      membershipTerm: 3,
+      membershipTerm: row.term ?? 3,
     }),
   );
 }
@@ -199,7 +205,7 @@ function crashingNode(): NodeDatabase {
   });
 }
 
-/** Another handle on the same node file, as a second process would hold. */
+/** Another handle on the same node connection and write queue, with its own single-flight map. */
 function otherHandle(): NodeDatabase {
   return new Proxy(suite.node, {
     get: (target, key) => {
@@ -266,7 +272,7 @@ describe("capturing a stepped-down box's final copy", () => {
     expect(copies()).toBe(1);
   });
 
-  it("two captures that do not share a process record one event and both answer it", async () => {
+  it("two captures through separate node handles on one connection record one event and both answer it", async () => {
     const self = await steppedDown();
     const [a, b] = await Promise.all([
       captureFinalCopy(deps(self, { node: otherHandle(), now: () => 1 }), OP),
@@ -341,14 +347,37 @@ describe("capturing a stepped-down box's final copy", () => {
     ]);
   });
 
-  it("carries this box's own-state manifest", async () => {
+  it("carries the own-state manifest read from this box's state folder", async () => {
     const self = await steppedDown();
+    await writeFile(join(stateDir, "modules.json"), '{"enabled":["core"]}');
     const envelope = await captureFinalCopy(deps(self), OP);
     expect(envelope.body.nodeLocal).toEqual(
       [...(await buildNodeLocalManifest(stateDir, RING))].sort((a, b) =>
         `${a.where}/${a.item}` < `${b.where}/${b.item}` ? -1 : 1,
       ),
     );
+    const modulesFile = envelope.body.nodeLocal.find(
+      (row) => row.where === "state" && row.item === "modules.json",
+    );
+    expect(modulesFile?.sha256).toBe(sha256Hex('{"enabled":["core"]}'));
+  });
+
+  it("lists a set's journal by when each migration was applied, not by row order", async () => {
+    const self = await steppedDown();
+    const table = "__drizzle_migrations_credentials";
+    const applied = (
+      await suite.db.all<{ hash: string }>(
+        sql.raw(`select hash from "${table}" order by created_at`),
+      )
+    ).map((row) => row.hash);
+    suite.db.run(sql.raw(`insert into "${table}" (hash, created_at) values ('earliest', 0)`));
+    try {
+      const envelope = await captureFinalCopy(deps(self), OP);
+      const credentials = envelope.body.snapshot.schema.find((row) => row.set === "credentials");
+      expect(credentials?.journalSha256).toBe(journalDigest(["earliest", ...applied]));
+    } finally {
+      suite.db.run(sql.raw(`delete from "${table}" where hash = 'earliest'`));
+    }
   });
 });
 
@@ -399,6 +428,20 @@ describe("a capture is refused", () => {
     await beginHandover({ node: suite.node, nodeId: self }, bindingFor(self), "destination");
     await restrict(self);
     await refusedWith(self, "handover.not_stepped_down");
+  });
+
+  it("refused when the restriction's membership term is not the operation's", async () => {
+    const self = await box();
+    await restrict(self, { term: 4 });
+    await refusedWith(self, "handover.not_stepped_down");
+  });
+
+  it("refused after a capture once the restriction no longer names the operation", async () => {
+    const self = await steppedDown();
+    await captureFinalCopy(deps(self), OP);
+    await suite.node.delete(nodeHandoverRestriction);
+    const error = await captureError(() => captureFinalCopy(deps(self), OP));
+    expect(error).toMatchObject({ code: "handover.not_stepped_down" });
   });
 
   it("refused, with nothing copied, when the state folder is missing", async () => {
