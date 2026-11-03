@@ -1,5 +1,5 @@
 import { classifyDisk } from "./disk-state.mjs";
-import { usableVenueName } from "./name-tag.mjs";
+import { CONTROL_CHARACTERS, usableVenueName } from "./name-tag.mjs";
 import { exactRecord, safeInteger } from "./upgrades/contracts.mjs";
 
 /** Spec §5.1 guard 3, §5.2 and §5.3 item 4. The spec's calls, not separately the owner's. */
@@ -62,8 +62,6 @@ const RELEASE_OUTCOMES = [
 ];
 const MAX_TYPED_UNITS = 512;
 const PRINTABLE_ASCII = /^[\x20-\x7E]{1,32}$/;
-// eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
 
 /** @type {WeakSet<object>} */
 const GENUINE = new WeakSet();
@@ -76,7 +74,8 @@ const eventInvalid = (reason = "event-invalid") => refusal("installer.event_inva
 
 /** @param {unknown} value @param {number} maxCodePoints */
 function usableText(value, maxCodePoints) {
-  if (typeof value !== "string" || !value.isWellFormed() || CONTROL.test(value)) return false;
+  if (typeof value !== "string" || !value.isWellFormed() || CONTROL_CHARACTERS.test(value))
+    return false;
   const length = [...value].length;
   return length >= 1 && length <= maxCodePoints;
 }

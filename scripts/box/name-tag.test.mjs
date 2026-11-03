@@ -58,9 +58,9 @@ describe("name tag constants", () => {
 describe("usableVenueName", () => {
   it.each([
     ["Bar Santet", "Bar Santet"],
-    ["a decomposed name", "Bar Àngels", "Bar Àngels"],
+    ["a decomposed name", "Bar A\u0300ngels", "Bar \u00C0ngels"],
     ["256 emoji", EMOJI_256],
-    ["768 code points that compose to 256", "ệ".repeat(256), "ệ".repeat(256)],
+    ["768 code points that compose to 256", "e\u0323\u0302".repeat(256), "\u1EC7".repeat(256)],
   ])("%s → its NFC form", (_label, input, expected = input) => {
     expect(usableVenueName(input)).toBe(expected);
   });
@@ -72,14 +72,16 @@ describe("usableVenueName", () => {
 
 describe("encodeNameTag", () => {
   it("writes the one canonical byte form", () => {
-    expect(encodeNameTag({ name: "Bar Àngels", live: true })).toEqual(
-      utf8('{"type":"waitron-name-tag","keyslots":[],"version":1,"name":"Bar Àngels","live":true}'),
+    expect(encodeNameTag({ name: "Bar \u00C0ngels", live: true })).toEqual(
+      utf8(
+        '{"type":"waitron-name-tag","keyslots":[],"version":1,"name":"Bar \u00C0ngels","live":true}',
+      ),
     );
   });
 
   it("stores a decomposed name composed", () => {
-    expect(encodeNameTag({ name: "Bar Àngels", live: false })).toEqual(
-      canonical("Bar Àngels", false),
+    expect(encodeNameTag({ name: "Bar A\u0300ngels", live: false })).toEqual(
+      canonical("Bar \u00C0ngels", false),
     );
   });
 
@@ -123,8 +125,8 @@ describe("encodeNameTag", () => {
 describe("decodeNameTag round trip", () => {
   const names = [
     "Bar Santet",
-    "Bar Àngels",
-    "Café Àngels and the Old Crème Brûlée Kitchen on Main Street",
+    "Bar \u00C0ngels",
+    "Caf\u00E9 \u00C0ngels and the Old Cr\u00E8me Br\u00FBl\u00E9e Kitchen on Main Street",
     EMOJI_256,
     QUOTES_256,
     "\\".repeat(256),
@@ -143,8 +145,8 @@ describe("decodeNameTag round trip", () => {
   });
 
   it("a decomposed input comes back composed", () => {
-    expect(decodeNameTag(encodeNameTag({ name: "Bar Àngels", live: true }))).toEqual({
-      name: "Bar Àngels",
+    expect(decodeNameTag(encodeNameTag({ name: "Bar A\u0300ngels", live: true }))).toEqual({
+      name: "Bar \u00C0ngels",
       live: true,
     });
   });
@@ -177,11 +179,11 @@ describe("decodeNameTag answers null", () => {
     ["version written 1.0", utf8(base.replace('"version":1', '"version":1.0'))],
     ['live "true"', utf8(base.replace('"live":true', '"live":"true"'))],
     ["an empty name", canonical("", true)],
-    ["a decomposed name", canonical("Bar Àngels", true)],
+    ["a decomposed name", canonical("Bar A\u0300ngels", true)],
     ["257 ASCII letters", canonical("a".repeat(257), true)],
     ["a name holding U+0085", canonical("Bar\u0085", true)],
     ["a name written with a JSON escape", utf8(withName('"Bar \\u00c0ngels"'))],
-    ["a byte-order mark first", utf8("﻿" + base)],
+    ["a byte-order mark first", utf8("\uFEFF" + base)],
     ["a 0xFF byte inside the name", bytesWithFF],
     ["not json", utf8("not json")],
     ["an array", utf8("[]")],
@@ -191,7 +193,7 @@ describe("decodeNameTag answers null", () => {
   });
 
   it("the escaped name parses to the same value as a canonical one", () => {
-    expect(JSON.parse(withName('"Bar \\u00c0ngels"')).name).toBe("Bar Àngels");
+    expect(JSON.parse(withName('"Bar \\u00c0ngels"')).name).toBe("Bar \u00C0ngels");
   });
 
   it("an oversized input is refused before JSON.parse runs", () => {

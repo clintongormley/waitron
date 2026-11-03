@@ -15,8 +15,9 @@ export const NAME_TAG_MAX_BYTES = 1100;
 export const LUKS2_TOKENS_MAX = 32;
 
 const KEYS = ["type", "keyslots", "version", "name", "live"];
+/** U+0000-U+001F and U+007F-U+009F. */
 // eslint-disable-next-line no-control-regex
-const CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
+export const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F]/;
 
 /** @param {string} code @param {string} reason */
 function refusal(code, reason) {
@@ -42,7 +43,7 @@ function canonicalBytes(name, live) {
 export function usableVenueName(value) {
   if (typeof value !== "string") return null;
   const name = value.normalize("NFC");
-  if (!name.isWellFormed() || CONTROL.test(name)) return null;
+  if (!name.isWellFormed() || CONTROL_CHARACTERS.test(name)) return null;
   const length = [...name].length;
   return length >= 1 && length <= NAME_TAG_MAX_CODE_POINTS ? name : null;
 }
@@ -84,10 +85,6 @@ export function decodeNameTag(bytes) {
   }
   if (
     !exactRecord(value, KEYS) ||
-    value.type !== NAME_TAG_TYPE ||
-    !Array.isArray(value.keyslots) ||
-    value.keyslots.length !== 0 ||
-    value.version !== NAME_TAG_VERSION ||
     typeof value.live !== "boolean" ||
     usableVenueName(value.name) !== value.name
   )
