@@ -119,14 +119,14 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
   const answers: { answer: Answer; counted: boolean }[] = statuses.map((status, index) => {
     const counted = peers[index]!.counted;
     if (status === null) return { answer: "S", counted };
+    // Read from the signed status itself, whatever its chart: stopping is the safe side.
+    if (operationFences(status.openOperation, nodeId)) return { answer: "F", counted };
     const verdict = verdicts.get(index);
-    if (verdict !== undefined && !verdict.accepted && verdict.reason === "invalid")
+    // No chart, or one this box cannot trust, cannot vouch that no handover happened.
+    if (verdict === undefined || (!verdict.accepted && verdict.reason === "invalid"))
       return { answer: "S", counted };
-    const chartFences =
-      verdict?.accepted === true && isFencedStanding(standingOf(verdict.document, nodeId));
-    if (chartFences || operationFences(status.openOperation, nodeId))
-      return { answer: "F", counted };
-    return { answer: verdict?.accepted === true ? "N" : "=", counted };
+    if (!verdict.accepted) return { answer: "=", counted };
+    return { answer: isFencedStanding(standingOf(verdict.document, nodeId)) ? "F" : "N", counted };
   });
 
   if (answers.some((a) => a.answer === "F")) return "superseded";

@@ -310,6 +310,52 @@ describe("checkPeersAtStart — what counts as silent", () => {
     expect(d.asked).toEqual([]);
   });
 
+  it("a counted peer whose verified status holds no chart is S: the box waits", async () => {
+    const d = deps({ answers: { [SPARE]: status(null) } });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
+  it("an asked-only peer whose verified status holds no chart contributes nothing", async () => {
+    const both = chart(5, [
+      [OLD, "sell-only"],
+      [SELF, "serving-primary", OWN_ORIGIN],
+      [SPARE, "serving-secondary"],
+    ]);
+    const alone = deps({
+      held: M2_HELD,
+      joinedIds: [OLD],
+      activatedFrom: new Set([OLD]),
+      answers: { [OLD]: status(null) },
+    });
+    expect(await checkPeersAtStart(alone)).toBe("proceed");
+    const withCounted = deps({
+      held: both,
+      joinedIds: [OLD, SPARE],
+      activatedFrom: new Set([OLD]),
+      answers: { [OLD]: status(null), [SPARE]: null },
+    });
+    expect(await checkPeersAtStart(withCounted)).toBe("wait");
+  });
+
+  it("a verified status with an untrusted chart but an operation naming this box at copy_accepted is F", async () => {
+    const store = heldStore(HELD, new Set([4]));
+    const d = deps({
+      accept: store.accept,
+      answers: { [SPARE]: status(NEWER_SERVING, operation("controlled", "copy_accepted")) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("superseded");
+    expect(store.held()).toBe(HELD);
+  });
+
+  it("control: the same untrusted chart with the operation at prepared counts as S", async () => {
+    const store = heldStore(HELD, new Set([4]));
+    const d = deps({
+      accept: store.accept,
+      answers: { [SPARE]: status(NEWER_SERVING, operation("controlled", "prepared")) },
+    });
+    expect(await checkPeersAtStart(d)).toBe("wait");
+  });
+
   it("a peer that answers with a chart signed by an unknown key counts as no answer", async () => {
     const store = heldStore(HELD, new Set([4]));
     const d = deps({ answers: { [SPARE]: status(NEWER_SERVING) }, accept: store.accept });
@@ -359,7 +405,7 @@ describe("checkPeersAtStart — the review's cases", () => {
     expect(await checkPeersAtStart(d)).toBe("wait");
   });
 
-  it("a stale chart from a till does not clear a wait: only the chart's boxes are asked", async () => {
+  it("only the chart's own boxes are asked, and with the counted one silent no chart is offered for acceptance", async () => {
     const store = heldStore(HELD);
     const d = deps({ answers: { [SPARE]: null }, accept: store.accept });
     expect(await checkPeersAtStart(d)).toBe("wait");
