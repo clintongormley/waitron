@@ -177,6 +177,10 @@ export class TillPassScreen extends LitElement {
   @state() private lostLines: string[] = [];
   @state() private nothingLeft = false;
   @state() private columnsWindow: ColumnsWindow | null = null;
+  /** The other-stations choice sent and not yet answered; the window shows it, disabled. */
+  @state() private otherStationsSending?: boolean | null;
+  /** A refusal of that choice, shown in the window until the next choice. */
+  @state() private otherStationsError?: string;
   /** A read of the device's choice has answered; until one does, All stations shows. */
   #choiceRead = false;
   #choiceRequest = 0;
@@ -439,6 +443,35 @@ export class TillPassScreen extends LitElement {
     if (this.#isCurrent(boardId)) await this.#reload();
   }
 
+  /**
+   * The device's own choice of showing other stations' dishes on the board it shows. A refusal
+   * meaning the board itself has gone follows Fire's (D74, D92); any other keeps the previous choice.
+   */
+  async #chooseOtherStations(boardId: BoardId, value: boolean | null): Promise<void> {
+    if (boardId === "all" || this.otherStationsSending !== undefined) return;
+    this.otherStationsError = undefined;
+    this.otherStationsSending = value;
+    let reload: "board" | "choice" | null = "board";
+    try {
+      await this.api.setDeviceKitchenScreenDisplay(
+        boardId === "pass" ? "pass" : "pass_monitor",
+        value,
+      );
+    } catch (error) {
+      reload = null;
+      const code = (error as { code?: string } | null)?.code ?? "server.internal";
+      if (this.#switched(error)) this.columnsWindow = null;
+      else if (code === "device.unauthorized" && this.#followsChoice()) {
+        this.columnsWindow = null;
+        this.#tableChangedNext = {};
+        reload = "choice";
+      } else this.otherStationsError = code;
+    }
+    if (reload === "board" && this.#isCurrent(boardId)) await this.#reload();
+    this.otherStationsSending = undefined;
+    if (reload === "choice" && this.#isCurrent(boardId)) await this.#loadChoice();
+  }
+
   #leverRefused(card: PassCard | undefined, error: unknown): void {
     this.leverError = {
       code: (error as { code?: string } | null)?.code ?? "server.internal",
@@ -612,6 +645,7 @@ export class TillPassScreen extends LitElement {
         event.stopPropagation();
         const { opener } = (event as CustomEvent<{ opener: HTMLElement }>).detail;
         this.columnsWindow = { boardId, opener };
+        this.otherStationsError = undefined;
       }}
       >${this.#lead("lead")}${this.#unavailable("status")}
       <p class="stale" role="status" slot="status" ?data-stale=${this.stale}>
@@ -656,6 +690,23 @@ export class TillPassScreen extends LitElement {
       .names=${passColumnNames()}
       .boardName=${this.#title()}
       .opener=${open.opener}
+      .otherStations=${
+        boardId === "all" || !this.#shows()
+          ? null
+          : {
+              value:
+                this.otherStationsSending !== undefined
+                  ? this.otherStationsSending
+                  : (this.#display?.nonPassStationsOverride ?? null),
+              sending: this.otherStationsSending !== undefined,
+              errorCode: this.otherStationsError,
+            }
+      }
+      @other-stations-choose=${(event: Event) => {
+        event.stopPropagation();
+        const { value } = (event as CustomEvent<{ value: boolean | null }>).detail;
+        void this.#chooseOtherStations(boardId, value);
+      }}
       @column-move=${(event: Event) => {
         event.stopPropagation();
         this.#layouts.applyMove(this.#columnScope(boardId), boardId, event);

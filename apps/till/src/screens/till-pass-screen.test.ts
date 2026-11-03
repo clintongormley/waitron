@@ -1,6 +1,7 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { allergenName } from "../i18n/allergen-names.js";
+import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { kitchenScreenNoticeText } from "../kitchen-screen-notice.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -1055,6 +1056,195 @@ describe("A773 pass screen", () => {
       expect(boardOf(el)!.columns).toEqual(changed);
       expect(storedColumnKeys()).toEqual([]);
     });
+  });
+
+  describe("the device's other-stations choice", () => {
+    const columnsWindow = (el: TillPassScreen) =>
+      el.shadowRoot!.querySelector<TillKitchenColumnsDialog>("till-kitchen-columns-dialog");
+    const control = (el: TillPassScreen) =>
+      columnsWindow(el)?.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-segmented-control"]>(
+        "[data-other-stations]",
+      ) ?? null;
+    const radios = (el: TillPassScreen) => [
+      ...control(el)!.shadowRoot!.querySelectorAll<HTMLButtonElement>('[role="radio"]'),
+    ];
+    const checked = (el: TillPassScreen) =>
+      radios(el).map((radio) => radio.getAttribute("aria-checked"));
+    const words = (el: TillPassScreen) =>
+      control(el)!.shadowRoot!.querySelector("[data-error]")?.textContent!.trim();
+    const display = (nonPassStationsOverride: boolean | null) => ({
+      showNonPassStations: nonPassStationsOverride ?? true,
+      nonPassStationsOverride,
+    });
+    async function open(el: TillPassScreen) {
+      await userEvent.click(
+        boardOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-columns-open]")!,
+      );
+      await flush(el);
+      await columnsWindow(el)!.updateComplete;
+      await control(el)?.updateComplete;
+    }
+    async function choose(el: TillPassScreen, index: number) {
+      await userEvent.click(radios(el)[index]!);
+      await flush(el);
+      await columnsWindow(el)?.updateComplete;
+    }
+    const refused = (code: string) => Object.assign(new Error(code), { code, status: 409 });
+
+    it.each([
+      ["a kitchen display's pass", { deviceMode: true }, false, ["false", "false", "true"]],
+      ["a pass monitor", { monitor: true }, null, ["true", "false", "false"]],
+    ] as const)(
+      "on %s, the Columns window shows the board's own choice",
+      async (_name, props, override, expected) => {
+        const el = await mount({
+          ...props,
+          initialBoard: { ...deviceBoard(), display: display(override) },
+        });
+        await open(el);
+        expect(checked(el)).toEqual(expected);
+      },
+    );
+
+    it("a till's All stations shows no section", async () => {
+      const el = await mount({});
+      await open(el);
+      expect(columnsWindow(el)).not.toBeNull();
+      expect(control(el)).toBeNull();
+    });
+
+    it.each([
+      ["a kitchen display's pass", { deviceMode: true }, "pass", "getDevicePassBoard"],
+      ["a pass monitor", { monitor: true }, "pass_monitor", "getDevicePassMonitorBoard"],
+    ] as const)(
+      "on %s, a choice is sent once, the choices are off while it is out, and the board is read again",
+      async (_name, props, kind, read) => {
+        const sent = deferred<void>();
+        const api = fakeApi({
+          setDeviceKitchenScreenDisplay: vi.fn().mockReturnValue(sent.promise),
+          [read]: vi.fn().mockResolvedValue({ ...deviceBoard(), display: display(true) }),
+        });
+        const el = await mount({
+          ...props,
+          api,
+          initialBoard: { ...deviceBoard(), display: display(null) },
+        });
+        await open(el);
+        await choose(el, 1);
+        expect(api.setDeviceKitchenScreenDisplay).toHaveBeenCalledTimes(1);
+        expect(api.setDeviceKitchenScreenDisplay).toHaveBeenCalledWith(kind, true);
+        expect(control(el)!.disabled).toBe(true);
+        expect(api[read]).not.toHaveBeenCalled();
+        sent.resolve();
+        await flush(el);
+        await columnsWindow(el)!.updateComplete;
+        expect(api[read]).toHaveBeenCalledTimes(1);
+        expect(el.display).toEqual(display(true));
+        expect(control(el)!.disabled).toBe(false);
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+      },
+    );
+
+    it.each(["device.unauthorized", "kitchen_screen.not_allowed"])(
+      "on a kitchen display, %s closes the window and asks the app to re-read the device's screens, showing no words",
+      async (code) => {
+        const changed = vi.fn();
+        document.addEventListener("kitchen-screen-changed", changed);
+        try {
+          const api = fakeApi({
+            setDeviceKitchenScreenDisplay: vi.fn().mockRejectedValue(refused(code)),
+          });
+          const el = await mount({ deviceMode: true, api, initialBoard: deviceBoard() });
+          await open(el);
+          await choose(el, 2);
+          expect(columnsWindow(el)).toBeNull();
+          expect(changed).toHaveBeenCalledTimes(1);
+          expect(changed.mock.calls[0]![0].detail).toEqual({ from: "pass" });
+          expect(el.shadowRoot!.querySelector("[data-table-changed]")).toBeNull();
+          expect(boardOf(el)!.querySelector("[data-lever-error]")).toBeNull();
+        } finally {
+          document.removeEventListener("kitchen-screen-changed", changed);
+        }
+      },
+    );
+
+    it("at a till, device.unauthorized closes the window, re-reads the device's choice and says the screen was refreshed", async () => {
+      const changed = vi.fn();
+      document.addEventListener("kitchen-screen-changed", changed);
+      try {
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          setDeviceKitchenScreenDisplay: vi.fn().mockRejectedValue(refused("device.unauthorized")),
+        });
+        const el = await mount({ api });
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(1);
+        await open(el);
+        await choose(el, 2);
+        await flush(el);
+        expect(columnsWindow(el)).toBeNull();
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(2);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        const line = el.shadowRoot!.querySelector("[data-table-changed]");
+        expect(line?.textContent!.trim()).toBe(t("station.table_changed"));
+        expect(el.shadowRoot!.textContent).not.toContain(codeMessage("device.unauthorized"));
+        expect(changed).not.toHaveBeenCalled();
+      } finally {
+        document.removeEventListener("kitchen-screen-changed", changed);
+      }
+    });
+
+    it.each([
+      ["a kitchen display's pass", "storage.disk_full", { deviceMode: true }],
+      ["a till's pass", "storage.disk_full", {}],
+      ["a till's pass", "kitchen_screen.not_allowed", {}],
+    ] as const)(
+      "on %s, %s keeps the previous choice and shows its words in the window until the next choice",
+      async (_name, code, props) => {
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          getDevicePassBoard: vi
+            .fn()
+            .mockResolvedValue({ ...deviceBoard(), display: display(true) }),
+          setDeviceKitchenScreenDisplay: vi
+            .fn()
+            .mockRejectedValueOnce(refused(code))
+            .mockReturnValueOnce(new Promise(() => {})),
+        });
+        const el = await mount({
+          ...props,
+          api,
+          initialBoard: { ...deviceBoard(), display: display(true) },
+        });
+        const reads = api.getDevicePassBoard.mock.calls.length;
+        await open(el);
+        await choose(el, 2);
+        expect(columnsWindow(el)).not.toBeNull();
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+        expect(words(el)).toBe(codeMessage(code));
+        expect(control(el)!.disabled).toBe(false);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(reads);
+        await choose(el, 0);
+        expect(words(el)).toBeUndefined();
+      },
+    );
+
+    it("on a kitchen display, drops the section when a refresh says a narrowing took every station", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          getDevicePassBoard: vi.fn().mockResolvedValue(
+            deviceBoard(boardA, {
+              stations: [{ id: "s-1", name: "Grill", available: false }],
+            }),
+          ),
+        });
+        const el = await mount({ deviceMode: true, api, initialBoard: deviceBoard() });
+        await open(el);
+        expect(control(el)).not.toBeNull();
+        await vi.advanceTimersByTimeAsync(15_000);
+        await flush(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(1);
+        expect(control(el)).toBeNull();
+      }));
   });
 
   describe("header", () => {

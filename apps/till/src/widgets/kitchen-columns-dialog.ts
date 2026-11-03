@@ -1,11 +1,13 @@
-import { LitElement, type PropertyValues, css, html } from "lit";
+import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { baseStyles, registerIcons, type WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-segmented-control.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { ColumnKey, ColumnState } from "../state/kitchen-columns.js";
@@ -17,6 +19,18 @@ registerIcons({
 });
 
 type Direction = "up" | "down";
+
+/** A pass's own choice of showing other stations' dishes; null takes the profile's. */
+export interface OtherStationsChoice {
+  value: boolean | null;
+  sending: boolean;
+  errorCode?: string;
+}
+
+const CHOICE_VALUES = { profile: null, show: true, hide: false } as const;
+type ChoiceName = keyof typeof CHOICE_VALUES;
+const choiceName = (value: boolean | null): ChoiceName =>
+  value === null ? "profile" : value ? "show" : "hide";
 
 /**
  * A kitchen board's columns: their order and which are shown. A pure view: each tap asks through
@@ -66,6 +80,10 @@ export class TillKitchenColumnsDialog extends LitElement {
         margin-inline-start: auto;
       }
 
+      .other-stations {
+        margin-block-start: var(--wt-space-4);
+      }
+
       .kept {
         margin: var(--wt-space-3) 0 0;
         color: var(--wt-color-text-muted);
@@ -77,6 +95,8 @@ export class TillKitchenColumnsDialog extends LitElement {
   @property({ attribute: false }) names: ReadonlyMap<ColumnKey, string> = new Map();
   @property() boardName = "";
   @property({ attribute: false }) opener: HTMLElement | null = null;
+  /** Unset: the board takes no such choice, and the section is not drawn. */
+  @property({ attribute: false }) otherStations: OtherStationsChoice | null = null;
 
   /** The arrow last pressed: Lit reuses rows by position, so the focus is put back by key. */
   #moved?: { key: ColumnKey; direction: Direction };
@@ -102,6 +122,36 @@ export class TillKitchenColumnsDialog extends LitElement {
         composed: true,
       }),
     );
+  }
+
+  #choose(event: Event): void {
+    event.stopPropagation();
+    const { value } = (event as CustomEvent<{ value: ChoiceName }>).detail;
+    this.dispatchEvent(
+      new CustomEvent("other-stations-choose", {
+        detail: { value: CHOICE_VALUES[value] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #otherStations(choice: OtherStationsChoice) {
+    return html`<wt-segmented-control
+      class="other-stations"
+      data-other-stations
+      name="otherStations"
+      label=${t("pass.other_stations")}
+      .options=${[
+        { value: "profile", label: t("pass.use_profile") },
+        { value: "show", label: t("pass.other_stations_show") },
+        { value: "hide", label: t("pass.other_stations_hide") },
+      ]}
+      .value=${live(choiceName(choice.value))}
+      ?disabled=${choice.sending}
+      .error=${choice.errorCode === undefined ? "" : codeMessage(choice.errorCode)}
+      @wt-change=${(event: Event) => this.#choose(event)}
+    ></wt-segmented-control>`;
   }
 
   #close(event: Event): void {
@@ -165,6 +215,7 @@ export class TillKitchenColumnsDialog extends LitElement {
           </li>`;
         })}
       </ol>
+      ${this.otherStations === null ? nothing : this.#otherStations(this.otherStations)}
       <p class="kept" data-columns-kept>${t("station.columns_kept")}</p>
       <wt-form-actions slot="footer">
         <wt-button

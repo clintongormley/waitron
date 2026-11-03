@@ -1,5 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { STATION_COLUMNS, type ColumnKey, type ColumnState } from "../state/kitchen-columns.js";
 import { cleanupWidgets, mountWidget, pageAt, resetPage, textRects } from "./test-helpers.js";
@@ -263,4 +264,103 @@ describe("A773 held column", () => {
       }
     },
   );
+});
+
+describe("A773 the pass's other-stations choice", () => {
+  const control = (el: TillKitchenColumnsDialog) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-segmented-control"]>(
+      "wt-segmented-control[data-other-stations]",
+    );
+  const radios = (el: TillKitchenColumnsDialog) => [
+    ...control(el)!.shadowRoot!.querySelectorAll<HTMLButtonElement>('[role="radio"]'),
+  ];
+  const checked = (el: TillKitchenColumnsDialog) =>
+    radios(el).map((radio) => radio.getAttribute("aria-checked"));
+  const passLayout = () => layout({ order: ["toFire", "inProgress", "ready"] });
+
+  it("draws no section unless it is handed the device's choice", async () => {
+    const { el } = await mount();
+    expect(el.shadowRoot!.querySelector("[data-other-stations]")).toBeNull();
+  });
+
+  it.each([
+    [null, ["true", "false", "false"]],
+    [true, ["false", "true", "false"]],
+    [false, ["false", "false", "true"]],
+  ] as const)("names the three choices, with %s chosen", async (value, expected) => {
+    const { el } = await mount({ layout: passLayout(), otherStations: { value, sending: false } });
+    await control(el)!.updateComplete;
+    expect(
+      control(el)!.shadowRoot!.querySelector('[role="radiogroup"]')!.getAttribute("aria-label"),
+    ).toBe("Other stations' dishes");
+    expect(radios(el).map((radio) => radio.textContent!.trim())).toEqual([
+      "Use the profile's setting",
+      "Show",
+      "Hide",
+    ]);
+    expect(checked(el)).toEqual(expected);
+  });
+
+  it("a choice asks once for its value, and its change stops at the window", async () => {
+    const { el } = await mount({
+      layout: passLayout(),
+      otherStations: { value: null, sending: false },
+    });
+    await control(el)!.updateComplete;
+    const asks = heard<{ value: boolean | null }>(el, "other-stations-choose");
+    const changes = vi.fn();
+    document.addEventListener("wt-change", changes);
+    try {
+      await userEvent.click(radios(el)[2]!);
+      await userEvent.click(radios(el)[0]!);
+      await userEvent.click(radios(el)[1]!);
+    } finally {
+      document.removeEventListener("wt-change", changes);
+    }
+    expect(asks).toEqual([{ value: false }, { value: null }, { value: true }]);
+    expect(changes).not.toHaveBeenCalled();
+  });
+
+  it("disables the choices while one is out", async () => {
+    const { el } = await mount({
+      layout: passLayout(),
+      otherStations: { value: true, sending: true },
+    });
+    await control(el)!.updateComplete;
+    expect(control(el)!.disabled).toBe(true);
+    expect(radios(el).every((radio) => radio.disabled)).toBe(true);
+  });
+
+  it("shows a refusal's words in the window", async () => {
+    const { el } = await mount({
+      layout: passLayout(),
+      otherStations: { value: true, sending: false, errorCode: "storage.disk_full" },
+    });
+    await control(el)!.updateComplete;
+    expect(control(el)!.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(
+      codeMessage("storage.disk_full"),
+    );
+  });
+
+  it("reads the section in Spanish", async () => {
+    const before = currentLocale();
+    setLocale("es-ES");
+    try {
+      const { el } = await mount({
+        layout: passLayout(),
+        otherStations: { value: null, sending: false },
+      });
+      await control(el)!.updateComplete;
+      expect(
+        control(el)!.shadowRoot!.querySelector('[role="radiogroup"]')!.getAttribute("aria-label"),
+      ).toBe("Platos de otras estaciones");
+      expect(radios(el).map((radio) => radio.textContent!.trim())).toEqual([
+        "Usar la configuración del perfil",
+        "Mostrar",
+        "Ocultar",
+      ]);
+    } finally {
+      setLocale(before);
+    }
+  });
 });
