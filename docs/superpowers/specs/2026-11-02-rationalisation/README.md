@@ -2,7 +2,8 @@
 
 **Status:** proposal for the owner, 2 November 2026; refreshed 3 November 2026 against `main` at
 `68732329c1` (A1317). Nothing is built until the owner approves it. First read on `main` at
-`64eeabb036`. The refresh re-checked every cited line in a file that changed since then, re-measured
+`64eeabb036`. A773-2 PR B4b (#2440) landed just after the refresh's base; it adds two columns to
+the device kitchen-screen tables and no table. The refresh re-checked every cited line in a file that changed since then, re-measured
 every count, and rewrote U5 (the second box) around the handover work that has landed; each changed
 paragraph carries a dated "refreshed" note. The artifact "Waitron Database Tables" still shows the
 2 November mapping. The appendices in this folder hold the evidence: each cites the code
@@ -195,7 +196,7 @@ tables go into the core set.** Only modules a venue can do without, or swap, kee
 
 | Set after | Takes in | Why it stays separate |
 | --- | --- | --- |
-| `core` | core, catalogue, venue-service, media, adjustments (all `tier: "mandatory"`: `packages/composition/src/modules.ts:177, :193, :371`, media in `packages/media/src/module.ts:32`), credentials, identity | — |
+| `core` | core, catalogue, venue-service, media, adjustments (all `tier: "mandatory"`: `packages/composition/src/modules.ts:152, :177, :193, :371`, media in `packages/media/src/module.ts:32`), credentials, identity | — |
 | `node` | node (`node.db`) | a different file |
 | `workforce` | workforce, staffing | can be switched off |
 | `workforce-es` | — | Spain-only rules |
@@ -255,24 +256,31 @@ adoption's fetch code (`boxExchange`, `apps/server/src/boot-peer-check.ts:26, :3
   handover tables, as tables of their own. `node_handover_operations` has many rows per box;
   `node_handover_events` is a history product code reads back, and cannot go to `activity_log`,
   which lives in `venue.db` and is overwritten by a copy; `node_handover_restriction` is written
-  once and refuses a different value (`apps/server/src/handover.ts:128-147`), while `box` is
+  once and refuses a different value (`packages/node-db/src/handover.ts:5-20`), while `box` is
   rewritten on every role change. `WAITRON_TENANT_DOMAIN` is kept and renamed (U9): it sets the
   device cookie's domain so one credential reaches each of the venue's boxes after a promotion
-  (`apps/server/src/config.ts:106-112`). That A947's switch slice relies on it is read from A947's
-  text, not run.
+  (`apps/server/src/config.ts:106-112`). A947 does not name it; that its switch slice needs it is
+  inferred: A947 moves a till to the spare at a name beneath the venue's
+  (`equipo-….waitron.local`, A947 :580-582, :757-764), which a cookie set only for the venue's own
+  name would not reach. Not run.
 - **Removed:** `fiscal_reservations`, the standby's reserved fiscal identity. A947 reserves no
   fiscal identity when a box joins (its §4 item 3), and the table's only writer is the
-  allocated-standby path (`packages/fiscal-verifactu/src/standby-allocation.ts:184`). It is a
-  fiscal slice, so the owner lands it.
+  allocated-standby path (`packages/fiscal-verifactu/src/standby-allocation.ts:184`). Removing it
+  removes the paper-standby path with it (`allocation-preparation.ts:28`, the fallback in
+  `allocated-standby.ts:163-210`, `activateDormant`'s read at `allocation.ts:274-279`), its
+  name-history and backup-check readers, and the paper-standby case #2428 added to
+  `dormant-takeover.test.ts`; A947 joins through the dormant path, which reserves nothing
+  (`hour-dormant-standby.ts:247-277`). It is a fiscal slice, so the owner lands it.
 - **Left to A947's slice 3b:** `WAITRON_MIRROR_ALLOW_EXPOSED`, because 3b decides how a spare
   listens on the network.
 - **Cost:** three more tables than the 2 November count, and two fewer deleted. A1018's later
   slices add five more tables (`handover_activations`, `handover_gap_items`, `handover_gap_events`,
   `registros_devueltos`, `envios_devueltos`) and a migration set (U1); they are not counted here.
 
-The owner's earlier standby decision of 2026-09-03 (a standby gets its dormant identity at join)
-was already superseded by A679's decision A (owner, 2026-10-12: the standby stays dormant until
-take-over), which A947 keeps (A947 design :419-423, :572-574). Decision 2.
+The owner's earlier standby decisions — 2026-09-03 (a standby gets its dormant identity at join)
+and W41s-4's decision A (2026-10-12: "reserve at join, switch on at takeover") — were superseded
+by A679 (approved 2026-10-16: "Keep it dormant without reserving a future hour"), which A947 keeps
+(A947 design :418-424, :572-574). Decision 2.
 
 **U6. Delete 20 tables** that are dead, have no product writer, or serve something not built.
 (refreshed 2026-11-03 against main 68732329c1: was 23. `node_mirror_link` and `node_primary_key`
@@ -351,7 +359,7 @@ gates) says nothing that holds personal data or evidence is deleted on a timer u
 adviser, the labour specialist and the privacy specialist agree a period (G1–G3), and records that
 can never change need their own decision (G5)
 (`docs/superpowers/specs/2026-10-22-a980-data-protection-design.md` lines 100–102 for the gates,
-and 745–747: "Nothing proposed here deletes evidence or runs on a timer before the specialists
+and 746–747: "Nothing proposed here deletes evidence or runs on a timer before the specialists
 agree"; refreshed 2026-11-03: cite corrected). So this design
 prunes only what holds neither: expired sign-in challenges, and replaced photos' bytes once no
 photo names them. Everything else the appendices propose to prune (`service_commands`,
@@ -522,6 +530,7 @@ owner's knowledge, not the code's.
 | Allergy tracking at the table | 2 (plus columns) |
 | Translation suggestions from Waitron Cloud | 2 |
 | Who may sign in on a device profile | 2 |
+| Second box and handover (U5) | 3 (`node_handover_*`) plus two column groups on `box`; A1018 plans 5 more |
 | Bookings | 1 |
 | Custom themes | 1 |
 | A4 office printers | 1 |
@@ -557,9 +566,11 @@ behind these, with their evidence.
    adds a `handover` set in its Slice 5; the two have to agree (refreshed 2026-11-03). *Recommend yes.* Without it, about
    ten merges in four areas fall back to plain ids or stay separate tables.
 2. **Keep the second-box path that A947 and A1018 build on (U5).** *Recommend yes.* A1018 has
-   landed five pull requests on it (#2417, #2420, #2428, #2431, #2436); A947's slice 3b, approved,
-   finishes adoption; and the go-live goal is one box with failover to another local box (owner,
-   2026-10-21, A947). Only `fiscal_reservations` goes. Cost: the box group is 12 tables, not 9.
+   landed four pull requests on it (#2417, #2420, #2428, #2436), plus the bench's re-run (#2431);
+   A947's slice 3b, approved, finishes adoption; and the go-live goal is one box with failover to
+   another local box (owner, 2026-10-21, A947). Only `fiscal_reservations` goes, with the paper
+   standby path that writes it. Cost: the box group is 12 tables, not 9, and two column groups on
+   `box`; A1018's later slices add five more tables and a ninth migration set when they land.
    Waitron Cloud's hosted-venue design (2026-10-21) also plans Cloud standbys and its integration
    contract names `adopt.ts`; keeping adoption keeps what that work expects. (refreshed 2026-11-03
    against main 68732329c1: was "take out the unfinished second-box path".)
@@ -591,8 +602,10 @@ behind these, with their evidence.
     - the venue's operation description is deleted and becomes a required input when a sale is
       recorded — fiscal, so the owner lands it (`tables-venuebox.md` D3). Since A1315 part 5
       (#2441) setup no longer asks for it and the server stores the filing module's default
-      (`apps/server/src/setup-api.ts:502-507`), so deleting it removes no input anyone types
-      (refreshed 2026-11-03);
+      (`apps/server/src/setup-api.ts:502-507`), so deleting it removes no input the setup wizard
+      asks for; the provisioning command line and the configuration bundle still carry one
+      (`packages/provisioning/src/cli.ts:217-218`, `configuration-transfer.ts:41`) (refreshed
+      2026-11-03);
     - the display-language override moves to settings, or is deleted if staff never need a language
       other than the venue's (`environment.md` D5);
     - a chosen first-setup backup recovery is moved into the real folders, and the venue folder is

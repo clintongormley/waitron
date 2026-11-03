@@ -329,9 +329,9 @@ Note: the A773-2 columns `requested_at` and `pass_controlled` are on main
 (`packages/db/src/schema/ticket-items.ts:65-66`); this design keeps them. (Refreshed 2026-11-03
 against main `68732329c1`: A773-2 PRs B2, B3 and B4a, #2392, #2406, #2425, landed without changing
 this table's schema; the removal of `away_at` and `pass_item_marks` is still planned for A773 PR D,
-`docs/superpowers/plans/2026-11-01-a773-2b-requested-release.md:201`. The open PR B4b, #2440, not
-landed, adds `show_non_pass_stations` to the devices area's two kitchen-screen tables and changes
-nothing here.)
+`docs/superpowers/plans/2026-11-01-a773-2b-requested-release.md:201`. PR B4b landed after this
+refresh's base as #2440 (`af9a7d568c`); it adds `show_non_pass_stations` to the devices area's two
+kitchen-screen tables and changes nothing here.)
 
 ### 1.16 `ticket_item_moves` (kept — typed history)
 
@@ -368,11 +368,11 @@ line numbers only.)
 
 ### 1.20 `bookings` (kept, own set)
 
-Loses `location_id` (A1301's schema slices S20–S28; no plan yet names which slice);
-`bookings_location_date_idx` becomes an index on `booking_date`. (Refreshed 2026-11-03 against main
-`68732329c1`: the slice number "S20" was not in the A1301 plan, so it is narrowed to the range. The
-plan now records the same index change and why the day list keeps its location condition until
-then: S9a measured the read falling back to a scan without it,
+Loses `location_id` (A1301 S20, the design's slice table,
+`docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md:617`; no plan for S20–S28 exists
+yet); `bookings_location_date_idx` becomes an index on `booking_date`. (Refreshed 2026-11-03 against
+main `68732329c1`: the A1301 plan now records the same index change and why the day list keeps its
+location condition until then: S9a measured the read falling back to a scan without it,
 `docs/superpowers/plans/2026-11-01-a1301-remove-location.md:479-485`.)
 `table_label` stays (written when the table is removed, `packages/bookings/src/table-removal.ts`).
 FKs to `dining_tables` and `working_orders`, the status/date index, party-size and status CHECKs kept.
@@ -455,15 +455,15 @@ Proposed `activity_log` kinds, for facts that are overwritten in place today (se
 `pass_item_marks`: no product code reads or writes it. `git grep -lE "passItemMarks|pass_item_marks"
 origin/main -- apps packages scripts`, outside drizzle snapshots, lists its migration (`0118`), its
 schema file and that file's test, the `@waitron/db` export (`packages/db/src/index.ts`) and
-classification (`packages/db/src/classification.ts`), six `apps/server` test files (which insert
-marks themselves), the frozen `country-es` demo capture and `scripts/schema-constraints.test.ts`
+classification (`packages/db/src/classification.ts`), six `apps/server` test files (five insert
+marks themselves; `personal-data-actions.coverage.test.ts` lists the column), the frozen `country-es` demo capture and `scripts/schema-constraints.test.ts`
 — no non-test file in `apps/`. Its writer went in #1944 (`509e8d42a6`), and its removal is still
 planned for A773 PR D (`docs/superpowers/plans/2026-11-01-a773-2b-requested-release.md:201`).
 (Refreshed 2026-11-03 against main `68732329c1`: the earlier sentence said the grep finds "only its
 schema file, one test and `scripts/schema-constraints.test.ts`"; the same grep at `64eeabb036` lists
 the same fifteen files as on main, so that sentence was wrong when written. "Dead" still holds:
-A773-2 PRs B2–B4a added no reader or writer, and the open PR B4b, #2440, not landed, adds none
-outside its plan document. Dropping the table also drops the `pass_item_marks.done_by_person_id`
+A773-2 PRs B2–B4a added no reader or writer, and PR B4b, landed after this refresh's base as #2440
+(`af9a7d568c`), adds none outside its plan document. Dropping the table also drops the `pass_item_marks.done_by_person_id`
 entry in `apps/server/src/personal-data-actions.coverage.test.ts:57`, and needs a `REMOVED_TABLES`
 entry in `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`, which accepts it because the
 capture's manifest counts 0 rows for the table in every phase.)
@@ -597,10 +597,10 @@ Kept on purpose, with the reason:
 - **Staffing (toggleable):** points at `kitchen_stations` (`packages/staffing/src/schema/staffing.ts`).
 - **In-flight work:** A773-2 (firing and the pass) plans to remove `away_at` and `pass_item_marks` in
   its PR D; A1301 is removing `location_id` from every table here. (Refreshed 2026-11-03 against main
-  `68732329c1`: A773-2 PRs B2, B3 and B4a landed with no schema change to this area, and the open PR
-  B4b, #2440, not landed, touches only the devices area's kitchen-screen tables. A1301's code slices
-  S6 and S7 landed, so venue-service and the floor no longer filter by location; the columns go in
-  its schema slices S20–S28, still to be planned.)
+  `68732329c1`: A773-2 PRs B2, B3 and B4a landed with no schema change to this area, and PR B4b,
+  landed after this refresh's base as #2440 (`af9a7d568c`), touches only the devices area's
+  kitchen-screen tables. A1301's code slices S6 and S7 landed, so venue-service and the floor no
+  longer filter by location; the columns go in its schema slices S20–S28, still to be planned.)
 
 ## 8. Measure before building
 

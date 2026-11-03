@@ -49,7 +49,7 @@ Down from 16 in the `fiscal-verifactu` set. `invoice_series` (core) stays beside
   as safe as the current one.
 - What actually refuses a forked chain is not `cadenas` but the unique index on the position,
   `registros_tenant_node_secuencia_uq (node_id, secuencia)` (`chain.ts:24-32`; drizzle snapshot
-  `0013_snapshot.json`). That index stays, so a derived head loses no guarantee.
+  `packages/fiscal-verifactu/drizzle/meta/0015_snapshot.json:1858-1865`). That index stays, so a derived head loses no guarantee.
 - `cadenas.secuencia` is never reset; only the pointer is, and only when a new identity is
   registered (`registro-sif.ts:49-66`, `allocation.ts:448-454`). So:
   - next `secuencia` = `max(secuencia) + 1` over the node's records (the unique index serves it);
@@ -319,9 +319,11 @@ row per card payment, moving through its states. `ledger`, not append-only, with
   `created_at`, `updated_at` and `bill_payment_id`.
 - **`node_id` stays.** (refreshed 2026-11-03 against main 68732329c1: this replaces "Dropped: `node_id`".) Since A764, #2422, it is the
   payment's collection owner, the box that started it (`packages/payments/src/schema/payments.ts:57`).
-  `insertPayment` writes it (`store.ts:87`), and the card sweep's `listAttempting` reads only the
-  rows this box owns (`store.ts:515-521`), with the owners built by `sweepOwners`
-  (`apps/server/src/boot.ts:542`). Read, not run.
+  `insertPayment` writes it (`store.ts:87`), and the card sweep's `listAttempting` reads only
+  rows whose owner is in the set `sweepOwners` builds: this box, and on the primary, rows with no
+  owner (`packages/payments/src/store.ts:515-521`, `apps/server/src/boot.ts:542-543`).
+  `listAttempting` also takes a list of boxes taken over from, which `sweepOwners` leaves empty
+  (`boot.ts:538-539`: "Taking over from another box is not built yet"). Read, not run.
 
 Added columns, all null and set-once:
 
@@ -542,7 +544,7 @@ Saves to `settings.adjustments` are logged however the shared `settings` table l
 | `fiscal_certificate_installs` | rename to `fiscal_certificates` | Classified `local`, so it cannot join the `ledger` history log. |
 | `fiscal_certificate_reminders` | keep | Classified `local`, and updated in place (claimed, then reported). |
 | `fiscal_conflict_evidence` | → fiscal history | Many rows per record: one per attempt and cause. |
-| `fiscal_reservations` | delete (U5; decision 1) | Serves only a second box, and A947 does not use it: A947 §4 item 3 says no fiscal identity is reserved at joining, and its only writer is `establishDormantAllocation` (`packages/fiscal-verifactu/src/standby-allocation.ts:184`), reached only from `allocated-standby.ts:209`. Fiscal, so you land it. (refreshed 2026-11-03 against main 68732329c1: was merge or delete) |
+| `fiscal_reservations` | delete (U5; decision 1) | Serves only a second box, and A947 does not use it: A947 §4 item 3 says no fiscal identity is reserved at joining, and its only writer is `establishDormantAllocation` (`packages/fiscal-verifactu/src/standby-allocation.ts:184`), reached only from `allocated-standby.ts:209`. Fiscal, so you land it; what goes with it is in decision 1. (refreshed 2026-11-03 against main 68732329c1: was merge or delete) |
 | `registro_sif` | rename to `fiscal_identities` | Records point at past identities, and the never-reuse rule needs all of them. |
 | `registros_facturacion` | keep | The legal record. |
 | `adjustment_reasons` | keep | A list people edit. |
@@ -740,6 +742,13 @@ How `clock_confirmations`' protections land in `fiscal_history`:
      `establishDormantAllocation` (`packages/fiscal-verifactu/src/standby-allocation.ts:184`), reached
      only from `allocated-standby.ts:209`.
    - **Delete it (R11).** Removing it is a fiscal slice, so you land it.
+   - Removing it removes the paper-standby path with it
+     (`packages/fiscal-verifactu/src/allocation-preparation.ts:28`, the fallback in
+     `allocated-standby.ts:163-210`, `activateDormant`'s read at `allocation.ts:274-279`), its
+     name-history and backup-check readers (`hour-history-reader.ts:247-259`,
+     `backup-verification.ts:56`, `backup-verification-history.ts:473`), and the paper-standby case
+     #2428 added to `dormant-takeover.test.ts`. Nothing A947 or A1018 needs reads it: A947 joins
+     through the dormant path, which reserves nothing (`hour-dormant-standby.ts:247-277`).
    - (refreshed 2026-11-03 against main 68732329c1: the recommendation is unchanged, but it is no longer an open choice: U5 keeps the
      rest of the second-box path and removes only this table. The "if you keep it" alternative and
      the backlog's adoption sentence (now `docs/backlog.md:396-399`) are dropped as reasons. The

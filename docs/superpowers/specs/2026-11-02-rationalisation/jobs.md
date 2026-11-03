@@ -43,8 +43,9 @@ health, node status, peer status and handover reads (`handover-stepdown.ts:19-26
 the five closers marked `atStepdown` at once: certificate diagnosis, menu activation, box alert emails, the
 demo printer and the clock watch (`handover-stepdown.ts:171-191`; the marks are at
 `background-duties.ts:112, 151, 164, 190, 191`). Every other closer carries a written `reason` for waiting until
-the close (`background-duties.ts:80-83, 87-197`). It writes a `node_handover_restriction` row before it answers
-(`handover-stepdown.ts:89-98`). Then it waits up to 180 seconds for requests already admitted
+the close (`background-duties.ts:80-83, 87-197`). It writes a `node_handover_restriction` row before it answers,
+except for a supersession learnt from a chart that names no successor, which writes none
+(`apps/server/src/handover-stepdown.ts:89-98, 116-119`). Then it waits up to 180 seconds for requests already admitted
 (`HANDOVER_ADMITTED_WORK_LIMIT_MS`, `handover-stepdown.ts:17, 193-196`), runs the normal close within the
 8-second shutdown deadline, and restarts the process (`handover-stepdown.ts:197-218`). So backups, the bucket
 copy and the tunnel are not stopped at the signal: they keep running until that close. Two new start modes
@@ -186,13 +187,16 @@ One row per inventory entry. (Refreshed 2026-11-03 against main 68732329c1: the 
 table, at commit 2a19b2647c, has 82 rows; three A1018 rows are added below the shutdown deadline, so 85 now.
 Counted with `awk '/^## 3. Mapping/{m=1;next} /^## 4/{m=0} m && /^\| /'` over this file, less the header and
 rule rows. The new entries were found by counting `setInterval(`, `setTimeout(`, `unrefTimer(`, `runLoop({`,
-`while (!…signal.aborted)` and `setImmediate(` in non-test source under `apps/*/src` and `packages/*/src`:
-201 hits in 145 files at 64eeabb036, 206 in 149 on main. The new hits are in `boot-peer-check.ts`,
+`while (!…signal.aborted)` and `setImmediate(` in non-test source under `apps/*/src` and `packages/*/src`,
+leaving out test files, `**/testing/**` and `test-*` helpers: 201 hits in 145 files at 64eeabb036, 206 in
+149 on main (217 in 157 and 222 in 161 with those helpers counted). The new hits are in `boot-peer-check.ts`,
 `handover-gate.ts`, `handover-stepdown.ts` and `waiting-start.ts`; the till's pass screen moved from
 `till-expo-screen.ts` to `till-pass-screen.ts` (#2425) with the same two timers, which the "Kitchen and pass
-screen refresh" row already covers. That count does not read `scripts/` or `deploy/`. B3's new box scripts
-(`scripts/box/preboot.mjs`, `preboot-locked.mjs`, `installer-network.mjs`, `installer-policy.mjs`,
-`wifi-record.mjs`, `wifi-boot-copy.mjs`, `disk-key.mjs`) have no timer, and a `git grep` of their names
+screen refresh" row already covers. That count does not read `scripts/` or `deploy/`. The box scripts B3
+added or changed since 64eeabb036 (`git diff --name-status 64eeabb036 68732329c1 -- scripts/box/`: new
+`scripts/box/preboot.mjs`, `preboot-locked.mjs`, `installer-network.mjs`, `installer-policy.mjs`,
+`wifi-record.mjs`, `wifi-boot-copy.mjs`, `name-tag.mjs` and `disk-recovery-key.mjs`; changed `disk-key.mjs`
+and `disk-state.mjs`) have no timer, and a `git grep` of their names
 outside `scripts/box/`, tests and `docs/` finds nothing, so nothing runs them yet. `deploy/` changed only in
 its README, and no workflow schedule changed.)
 
@@ -289,13 +293,13 @@ its README, and no workflow schedule changed.)
 **Performance.** The box's single write lock is the bottleneck: every `withTransaction` takes it
 (`tenancy.ts:35`). Today several background duties take a lock turn even when they have nothing to do:
 
-- the working-time pass every 30 s (`attendance-loop.ts:25`);
+- the working-time pass every 30 s (`attendance-loop.ts:24`);
 - the clock watch reads under `withWriteLock` every 15 s (`boot.ts:2956`);
 - each open dashboard stream re-checks its session inside `withTransaction` on every wake, including the
   15-second keepalive (`live-api.ts:98-103, 136`);
 - each till menu-state read takes a turn (`till-app.ts:2918`).
 
-(Refreshed 2026-11-03 against main 68732329c1: the two line numbers above moved.)
+(Refreshed 2026-11-03 against main 68732329c1: three line numbers above moved.)
 
 The design reduces these lock turns:
 
@@ -405,6 +409,6 @@ and the scheduler settings) become the runner's per-job constants.
 
 - whether a scheduled backup can begin, or the bucket copy can ship, in the window between a stepdown's answer
   and its close (up to 180 s plus the 8-second close, `handover-stepdown.ts:193-218`). An in-process demotion
-  now exists: the A1018 stepdown, which stops neither at its signal and ends in a restart into the restricted
-  start (§1). (Refreshed 2026-11-03 against main 68732329c1: the old question, whether such a demotion
+  now exists: the A1018 stepdown, which stops neither at its signal and ends in a restart, into the restricted
+  start whenever it wrote a restriction row (§1). (Refreshed 2026-11-03 against main 68732329c1: the old question, whether such a demotion
   exists, is answered by #2420; this narrower one is read, not run.)

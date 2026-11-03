@@ -9,8 +9,9 @@ grep` and file reads. Every "the code does X" below is a citation, not a test re
 
 (refreshed 2026-11-03 against main 68732329c1: every cite into a file that changed since 64eeabb036
 was re-read on main and given its new line numbers; a cite into an unchanged file was left as it was,
-with `git diff --quiet 64eeabb036 origin/main -- <path>` as the receipt. The 27 tables are unchanged:
-their columns, indexes, foreign keys and CHECKs in each set's latest drizzle snapshot are identical at
+with `git diff --quiet 64eeabb036 origin/main -- <path>` as the receipt. The 27 tables are unchanged
+(at `68732329c1`; #2440, landed after, adds `show_non_pass_stations` to `device_kitchen_screens` and
+`device_profile_kitchen_screens`): their columns, indexes, foreign keys and CHECKs in each set's latest drizzle snapshot are identical at
 both revisions, and so are the foreign keys from other tables into `devices` and `print_jobs`. Still
 read-only: only `grep`, `git` and file reads were run.)
 
@@ -197,6 +198,13 @@ device (what that device chose within it).
 | screen | text enum (`station`, `pass`, `pass_monitor`) | |
 | every_station | integer flag | default 0 |
 | every_zone | integer flag | default 0 |
+| show_non_pass_stations | integer flag | null on a device's row, not null default 1 on a profile's |
+
+(added 2026-11-03: #2440, landed after this refresh's base, adds `show_non_pass_stations` to both
+source tables — nullable on `device_kitchen_screens`, `NOT NULL DEFAULT true` on
+`device_profile_kitchen_screens` (`packages/venue-service/drizzle/0073_brief_silver_samurai.sql`).
+The merged table keeps that difference with a CHECK on the owner columns; what a null on a device's
+row means was not traced.)
 
 Protections:
 - CHECK `(device_profile_id is null) <> (device_id is null)`: exactly one owner;
@@ -494,7 +502,7 @@ becomes a column there and is not logged.
 | device_kitchen_screen_removals | delete | null | worked out from what the device chose minus what its profile now allows (R6, D1) |
 | device_kitchen_screen_stations | merge into kitchen_screen_stations | kitchen_screen_stations | same shape as the profile list |
 | device_kitchen_screen_zones | merge into kitchen_screen_zones | kitchen_screen_zones | same shape as the profile list |
-| device_kitchen_screens | merge into kitchen_screens | kitchen_screens | same shape as the profile row; one owner column each |
+| device_kitchen_screens | merge into kitchen_screens | kitchen_screens | same shape as the profile row; one owner column each; since #2440 (`af9a7d568c`) both also carry `show_non_pass_stations`, which `kitchen_screens` takes too |
 | device_profile_kitchen_screen_stations | merge into kitchen_screen_stations | kitchen_screen_stations | as above |
 | device_profile_kitchen_screen_zones | merge into kitchen_screen_zones | kitchen_screen_zones | as above |
 | device_profile_kitchen_screens | merge into kitchen_screens | kitchen_screens | as above |

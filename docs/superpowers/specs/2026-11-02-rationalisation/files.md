@@ -47,8 +47,9 @@ since kept the third, so two fail it now:
    `adopt` hook; `boot.ts:1618-1619` supplies it with `adoptFromPrimary`). README §5 U5 keeps it: A947
    slice 3b finishes adoption, and A1018's start check already reads what adoption writes. These files
    stay (D1). (refreshed 2026-11-03 against main 68732329c1: this said the step "CANNOT SUCCEED TODAY", quoting
-   `finish-adoption.ts:31-44`; those words are gone. The grep this cited no longer lists
-   `setup-api.ts`, which now imports only adoption's types. The recommendation to delete the flow is
+   `finish-adoption.ts:31-44`; those words are gone. The grep this cited did not list
+   `setup-api.ts` at `64eeabb036` either (its last mention went in #657); that file imports only
+   adoption's types. The recommendation to delete the flow is
    withdrawn.)
 
 **One record per flow.** Today a flow is a constellation of single-purpose files at the top of the
@@ -263,8 +264,8 @@ table now has 86 rows for 87 numbers; it had 84 rows for 85.)
 | 82 | journal lines, timesyncd timestamp | keep | Audit of clock changes on the host. |
 | 83 | Docker apt source | keep | Install on a bare host. |
 | 84 | Docker images | keep; clear build cache after a branch install | `grep -n prune deploy/waitron.sh` finds none. |
-| 85 | `/boot/waitron-recovery/wifi.json` + `wifi.json.next` (B3 Wi-Fi boot copy, #2432) | keep (host-owned) | Read before the disk is unlocked, so it cannot live in the state volume. Written as `.next`, flushed, renamed, folder flushed (`scripts/box/wifi-boot-copy.mjs:36-38`, `:236-253`); removed by `:262-268`. It holds the Wi-Fi password (`scripts/box/wifi-record.mjs:11`). Nothing outside `scripts/box/` calls it yet (`git grep -l -E 'publishWifiBootCopy|createWifiBootCopyPublisher'` → its own file and its test). (refreshed 2026-11-03: new row) |
-| 86 | `/var/lib/waitron-host/disk-recovery/<disk id>.json` + `.next` (B3 disk recovery key, #2370) | keep (host-owned) | Already on `64eeabb036` and missed by the first inventory. Written once per disk and never removed (`scripts/box/disk-key.mjs:33,39`, `:246-273`, "nothing may remove a key" at `:259`). The design keeps it outside venue backups and rollback (`docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md:619-626`). Nothing outside `scripts/box/` calls it yet (`git grep -l createDiskRecoveryStore` → its own file and its test). (refreshed 2026-11-03: new row) |
+| 85 | `/boot/waitron-recovery/wifi.json` + `wifi.json.next` (B3 Wi-Fi boot copy, #2432) | keep (host-owned) | Read before the disk is unlocked, so it cannot live in the state volume. Written as `.next`, flushed, renamed, folder flushed (`scripts/box/wifi-boot-copy.mjs:36-38`, `:236-253`); removed by `:262-268`. It holds the Wi-Fi password (`scripts/box/wifi-record.mjs:11`). Nothing outside `scripts/box/` calls it yet (`git grep -l -E 'publishWifiBootCopy|createWifiBootCopyPublisher' -- ':!docs'` → its own file and its test). (refreshed 2026-11-03: new row) |
+| 86 | `/var/lib/waitron-host/disk-recovery/<disk id>.json` + `.next` (B3 disk recovery key, #2370) | keep (host-owned) | Already on `64eeabb036` and missed by the first inventory. Written once per disk and never removed (`scripts/box/disk-key.mjs:33,39`, `:246-273`, "nothing may remove a key" at `:259`). The design keeps it outside venue backups and rollback (`docs/superpowers/specs/2026-10-21-b3-usb-installer-design.md:619-626`). Nothing outside `scripts/box/` calls it yet (`git grep -l createDiskRecoveryStore -- ':!docs'` → its own file and its test). (refreshed 2026-11-03: new row) |
 
 ---
 

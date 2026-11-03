@@ -6447,8 +6447,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
-  [design](superpowers/specs/2026-11-02-rationalisation/README.md) is written and builder-checked,
-  and **waits for the owner's approval before any work starts**.
+  [design](superpowers/specs/2026-11-02-rationalisation/README.md) is written, builder-checked and
+  refreshed against main on 2026-11-03 (A1317), and **waits for the owner's approval before any
+  work starts**.
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
 
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,

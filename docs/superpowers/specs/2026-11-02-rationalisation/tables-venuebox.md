@@ -668,9 +668,11 @@ the 32. The three handover tables have no trigger either: that same grep prints 
    When a setup request has none, the server stores the filing module's default
    (`apps/server/src/setup-api.ts:502-507`; "Venta en establecimiento" for Veri*Factu, per #2441's
    commit message). So the venue's copy now normally holds the same text as the configured default.
-   It can differ only when it comes from the command-line `--operation-description` option
-   (`packages/provisioning/src/cli.ts:217-221`) or from a configuration bundle, whose `venue` field
-   still carries it (`packages/provisioning/src/configuration-transfer.ts:41`).)
+   It differs when a setup request names its own (the route still accepts one,
+   `apps/server/src/setup-api.ts:502-507`), when the command-line `--operation-description` option
+   supplies it (`packages/provisioning/src/cli.ts:217-221`), when a configuration bundle carries it
+   (`packages/provisioning/src/configuration-transfer.ts:41`), and in developer scripts that pass
+   their own (`apps/server/scripts/dev-setup.ts:222`).)
 6. **Receipt policy split from receipt design.** `print_trading_name`/`receipt_print_mode` live in
    `department_sale_policies`, the rest of the receipt in `department_receipts`, and one editor writes
    both. One home: `departments`.

@@ -1021,9 +1021,12 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 - **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
   [design](../superpowers/specs/2026-11-02-rationalisation/README.md) is written and builder-checked,
-  and **waits for the owner's approval before any work starts**. It proposes 242 tables → 148 in
-  eight migration sets instead of sixteen, one job runner, 111 product environment variables → 51,
-  and one state-folder layout. The owner chose that A760's squash runs first, merged into the eight
+  and **waits for the owner's approval before any work starts**. Refreshed on 2026-11-03 against
+  main `68732329c1` (A1317). It proposes 245 tables → 151 in eight migration sets instead of
+  sixteen, one job runner, 111 product environment variables → 53, and one state-folder layout. It
+  keeps the second-box path that A947 and the landed A1018 handover slices build on (adoption, the
+  mirror link, the pinned main-box key, the handover tables) and removes only the standby's
+  reserved identity (`fiscal_reservations`). The owner chose that A760's squash runs first, merged into the eight
   sets. If approved, it absorbs A1301's schema slices (S20–S28, S23's `venue_settings` included).
   It also renames every leftover "tenant" name: the `tenants` table becomes `taxpayer`, and
   names that mean the venue or box get that name (owner, 2026-11-02; design §5 U9).

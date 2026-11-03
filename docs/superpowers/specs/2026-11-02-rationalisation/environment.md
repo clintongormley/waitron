@@ -13,7 +13,8 @@ that changed since `64eeabb036` were re-read and moved to their new lines. Only 
 is new on main, the test-only `WAITRON_TEST_CRASH_AT`. The product's set of `WAITRON_*` names and
 every production reader and setter of them are unchanged: a per-name `git grep -l -w` at both
 commits over `apps packages scripts bench deploy .github docs`, test files left out, differs only
-in one new test helper, `apps/server/test/first-fiscal-hour-entry.ts`, and one plan. Files whose
+in one new test helper, `apps/server/test/first-fiscal-hour-entry.ts`, and one plan, besides this
+spec's own four files, which landed after `64eeabb036`. Files whose
 cites still hold, because `git diff --quiet 64eeabb036 origin/main -- <file>` reports them
 unchanged, were not re-read.)
 

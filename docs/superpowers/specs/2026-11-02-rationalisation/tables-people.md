@@ -280,7 +280,7 @@ The checker's work item: one row per business day. 360 a year.
 `deferred_shift_ids` (a JSON list of shift ids, R4) is dropped: it is written once
 (`packages/workforce/src/end-of-day.ts:412-419`) and read only for its length
 (`attendance-loop.ts:48`, `attendance-discovery.ts:537`). The same evaluation sets `next_due_at`
-to the earliest deferred shift's end (`end-of-day.ts:393`), or the day's end when none is deferred,
+to the earliest deferred shift's end (`end-of-day.ts:393, :417`), or the day's end when none is deferred,
 so "has deferred shifts" is `next_due_at > end_at`. Index `(next_due_at)`. (refreshed 2026-11-03
 against main 68732329c1: new line numbers.)
 
