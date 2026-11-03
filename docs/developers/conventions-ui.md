@@ -106,6 +106,51 @@ name — it reads, as text, the template and string literals of each non-test `.
 it refuses a bound `mode`, even one that resolves to `help-mode`; and it does not check that a badge sits in a positioned box, so a badge without one
 hangs over a far ancestor's corner unnoticed.
 
+### A help bubble orients
+
+What a help bubble says (a `wt-help-tooltip` body, a help-mode badge, a help string in an app's
+translations): the main points in a few short sentences, anything people would not find by
+trying, and a link to the guide section that documents everything else (where the badge can carry
+one; A1247 lists those that cannot). The person can try the screen to learn the rest. Nothing
+guards it.
+
+The owner (2026-11-03, on B4b's station-card and Columns help): "I see help text being written
+which is confusing … You try to write text which covers all the details and possible exceptions,
+but it ends up being overcomplicated and gets in the way of understanding. Keep it concise, clear,
+mention just the main points, gloss over the detail. The user can experiment with it to discover
+how it works, and we can link them to a full docs page which documents everything. The info text
+should just orientate the user." On the rewrite below: "that's much better", adding that tapping a
+card's heading and Whole ticket cards "may not be obvious and so may be worth a mention" — so a
+point people would not find by trying stays in, briefly.
+
+The approved example, for length and tone. The station card's help:
+
+- EN: "Each card is an order from a table or the counter. Tap a dish to move it on a step, or the
+  card's heading to move the whole card to the next column. On a Whole ticket card, the dishes move
+  together. A dashed card is held: it hasn't been sent to cook yet. Cards turn amber, then red, the
+  longer they wait." Then the guide link.
+- ES: «Cada tarjeta es un pedido de una mesa o del mostrador. Toca un plato para avanzarlo un paso,
+  o la cabecera de la tarjeta para pasar toda la tarjeta a la siguiente columna. En una tarjeta de
+  Toda la comanda, los platos avanzan juntos. Una tarjeta con borde discontinuo está en espera: aún
+  no se ha mandado a preparar. Las tarjetas pasan a ámbar y luego a rojo cuanto más esperan.» Then
+  the guide link.
+
+The Columns badge: EN "Tap a heading to fold its column. Use Columns to choose which columns show,
+and in what order." ES «Toca una cabecera para plegar su columna. Con Columnas eliges qué columnas
+se ven y en qué orden.» What these leave out belongs in the guide: the Held heading inside Waiting
+against the Held column, "Waiting for the pass", when the minutes start counting, the late-flag
+settings, that some columns start hidden, and that each device keeps its own layout.
+
+Write it from the code, never from memory (owner, 2026-11-03): find and read what the bubble
+describes — the handler, the state it reads, the rule it applies — and say in one line what the
+code does before writing the text. The watcher's first draft of the station card's heading tap,
+written from memory ("move on whatever is holding it back"), was something the owner could not
+follow; `#advanceHeading` in `apps/till/src/widgets/station-queue.ts` showed the plain answer: it
+moves on the card's sent dishes at their least advanced stage (`headingStage` and `dishesAt` in
+`apps/till/src/state/kitchen-cards.ts`), so a card with nothing held moves to the next column. A
+fact taken out of a bubble goes into the guide section it links, in English and Spanish, if it is
+not there already.
+
 ### A parent render must not restore a corrected request refusal
 
 A child that clears a request's field refusal locally can receive the same object again when
