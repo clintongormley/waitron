@@ -597,7 +597,7 @@ it("serves clock, selection and authenticated promotion through the management r
   }
 });
 
-it("a promotion whose preparation and promote bodies both claim the old box relinquished stores a version 1 approval exactly as without the claim", async () => {
+it("a promotion whose preparation and promote bodies both claim the old box relinquished stores a version 1 approval saying offline, with no oldMachineRelinquished key", async () => {
   const s = await service();
   await admit(s);
   const app = new Hono();

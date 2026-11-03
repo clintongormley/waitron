@@ -596,7 +596,7 @@ and `git diff origin/main -- packages/fiscal-verifactu/src/write-path.e2e.test.t
 | 3 Boot check | **FISCAL** | decides, before the first filing pass, whether a box may file (A947 5a's place) |
 | 4 Final copy | **FISCAL** | new read-only code in `packages/fiscal-verifactu` (chain summary, whole-chain check) |
 | 4b Payment collection owner | no | payments only; full review for concurrency |
-| 5a The relinquished fact | **FISCAL — LOUD** | adds a version 2 approval, written only by a promotion whose old box relinquished filing, to the append-only `fiscal_allocations` (`packages/fiscal-verifactu/src/classification.ts:10`, `schema/allocations.ts:26`); every other approval, including every other promotion's, stays version 1 byte for byte and stays readable; allocation validation and the activation context gain the fact (`packages/fiscal-verifactu/src/allocation-envelope.ts`, `allocation-operation.ts`); also changes the generic module operation contract (`ModuleRecoveryFacts`, `packages/module/src/operation-preparation.ts:15-26`) and the server's promotion path (`apps/server/src/node-operation-preparation.ts`), a cross-package contract |
+| 5a The relinquished fact | **FISCAL — LOUD** | adds a version 2 approval, written only by a promotion whose old box relinquished filing, to the append-only `fiscal_allocations` (`packages/fiscal-verifactu/src/classification.ts:10`, `schema/allocations.ts:26`); every other approval, including every other promotion's, stays version 1 byte for byte and stays readable; allocation validation and the activation context gain the fact (`packages/fiscal-verifactu/src/allocation-envelope.ts`, `allocation-operation.ts`); also changes the generic module operation contract (`ModuleRecoveryFacts`, `packages/module/src/operation-preparation.ts:15-28`) and the server's promotion path (`apps/server/src/node-operation-preparation.ts`), a cross-package contract |
 | 5 Controlled, server | **FISCAL** | activates a fresh fiscal identity on M2; M2 then files M1's copied records |
 | 6 Controlled, screens | no, unless Task 6.4 must change `packages/fiscal-verifactu/src/setup/` (then FISCAL) | screens and guides; lands after 5 |
 | 7 Emergency, server | **FISCAL** | as 5, under a declaration |
@@ -1489,7 +1489,7 @@ there:
 | `POST /api/node/peer-status` | mirror, fenced | a `query` envelope signed by a key the held chart vouches for and does not evict; answers only signed status | Slice 3 |
 | `POST /api/node/membership` | mirror, fenced | none needed from the caller: the body is a signed chart, accepted only through `acceptMembershipDocument` against the stored trust set; the answer is one boolean | Slice 3 |
 | `POST /api/node/handover/offer` | mirror | a `stepdown` envelope signed by the binding's source with a key the chart vouches for, the binding's chart term and digest equal to M2's | Slice 5 |
-| `POST /api/node/handover/:operationId/preparation` | mirror | the same sign-in as `prepare` (`apps/server/src/node-operation-preparation.ts:227-241`, `node.promote`); the operation must be at `filing_assumed` or `emergency_declared`; its context comes from the operation's own record, never the body | Slice 5 (Task 5.7b) |
+| `POST /api/node/handover/:operationId/preparation` | mirror | the same sign-in as `prepare` (`apps/server/src/node-operation-preparation.ts:242-256`, `node.promote`); the operation must be at `filing_assumed` or `emergency_declared`; its context comes from the operation's own record, never the body | Slice 5 (Task 5.7b) |
 | `POST /api/node/handover/:operationId/activate` | mirror | email, password and code when enrolled, against the placed copy; `node.promote`; the operation's recorded state | Slice 5 |
 | `POST /api/node/handover/emergency/declare` | mirror | email, password and code when enrolled; `node.promote` | Slice 7 |
 
@@ -1975,12 +1975,11 @@ all fifteen of its findings are folded in (Review round 7). No migration: the ap
 plain text with no check on its shape. It changes three packages: the generic module operation
 contract (`@waitron/module`), the server's operation host (`apps/server`) and the fiscal package;
 `@waitron/provisioning` and `@waitron/composition` gain only a fixture field in their tests. The
-PR discloses that a promotion's stored approval in `fiscal_allocations` can take a new shape
-(CLAUDE.md §3's disclosure for a stored-shape change).
+PR discloses that a promotion's stored approval in `fiscal_allocations` can take a new shape.
 
-**Why.** Promotion's approval always records `oldMachineOffline: true`
-(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:91`), and the preparation refuses
-anything else (`:113-114`). That approval is stored in the append-only `fiscal_allocations`
+**Why.** Before this slice, a promotion's approval always recorded `oldMachineOffline: true`
+(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:91` on `c336372fae`), and the
+preparation refused anything else (`:113-114`). That approval is stored in the append-only `fiscal_allocations`
 (`packages/fiscal-verifactu/src/classification.ts:10`; `schema/allocations.ts:26`). In a controlled
 handover M1 is running, restricted, when M2 activates; recording "offline" would write a false
 fact into a record nobody can correct. The approval instead records what happened: M1 signed away
@@ -2566,8 +2565,8 @@ file. If Task 4.5's probe made the minute history a transferred item, the retain
 drives itself with `clock-challenge` and `compare-clocks` steps
 (`packages/fiscal-verifactu/src/conflict-recovery-contract.ts:14-15`); the box refuses its own
 machine as the second clock (`hour-setup-clock.ts:106-107`). Those steps reach the module only
-through `nodePreparation.prepare` (`apps/server/src/node-operation-preparation.ts:227-241`), whose
-one route today is `POST /management-api/promote/preparation` (`apps/server/src/promote-api.ts:93`).
+through `nodePreparation.prepare` (`apps/server/src/node-operation-preparation.ts:242-256`), whose
+one route today is `POST /management-api/promote/preparation` (`apps/server/src/promote-api.ts:102-108`).
 That route is refused while a handover is open (Task 5.2b) and cannot carry the relinquished fact
 (Task 5a.1b). So the handover has a route of its own.
 
@@ -2578,14 +2577,16 @@ That route is refused while a handover is open (Task 5.2b) and cannot carry the 
 `{ moduleOperation, signIn: { email, password, totp? }, proposal }`, is mounted on a mirror and
 added to `read-only-exemptions.ts` (Task 3.2's row). It first calls `requireNodeOperationHttps`
 (TLS and a same-origin request, `apps/server/src/node-operation-https.ts`), as both promote routes
-do (`promote-api.ts:71,118`). It refuses
+do (`promote-api.ts:80,131`). It refuses
 `handover.step_out_of_order` unless the operation is at `filing_assumed` or `emergency_declared`,
 and `module.operation_invalid` unless the binding's action is `promote` and its target is this
 box. It builds the context with one function, `handoverPromotionContext(operation)`, from the
 operation's own record — controlled: `{ oldNodeNeutralised: true, noParallelRecovery: true, oldMachineRelinquished: true }`;
 emergency: the same with `oldMachineRelinquished: false` — and never from the body; the onBox
-check is the existing one (`promote-api.ts:91`). Tasks 5.8 and 7.4 use the same function for
-`withPromotion`. Test `apps/server/src/handover-preparation.test.ts`.
+check is the existing one (`promote-api.ts:100`). Tasks 5.8 and 7.4 use the same function for
+`withPromotion`. `contextKey` (`apps/server/src/node-operation-preparation.ts`) does not include
+`oldMachineRelinquished`, so every step of one operation takes it only from
+`handoverPromotionContext(operation)`. Test `apps/server/src/handover-preparation.test.ts`.
 
 **Sign-in by email, without revealing whether the account exists** (CLAUDE.md §3: unknown and
 wrong-secret accounts answer `password.invalid` "after the same hashing work"). The pages ask for
@@ -2627,19 +2628,19 @@ exactly as Task 5.7b does.
 comparison and minute selection were prepared through Task 5.7b's route, which `comparisonId`
 names. It promotes through the same
 path the promote route uses — `nodePreparation.withPromotion(operation, signIn, context, …)`
-(`apps/server/src/promote-api.ts:116-125`) with `context = handoverPromotionContext(operation)` (Task 5.7b), here `{ oldNodeNeutralised: true,
+(`apps/server/src/promote-api.ts:129-138`) with `context = handoverPromotionContext(operation)` (Task 5.7b), here `{ oldNodeNeutralised: true,
 noParallelRecovery: true, oldMachineRelinquished: true }`, justified by the recorded
 relinquishment — so the module receives `oldMachineOffline: false, oldMachineRelinquished: true`
 (Task 5a.1) and `createHourPromotionPreparation`
-(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:108-110`) stores a version 2 approval
+(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:118-120`) stores a version 2 approval
 (Task 5a.3); the next free minute (decision 7). The **same context** — built by one function
 from the operation's own record, Task 5.7b — is passed to the `prepare` step behind Task 5.7b's
 route and to `withPromotion`: the approval is part of the prepared input, and the promotion refuses
 `event_mismatch` when the input it rebuilds differs from the one prepared
-(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:197`). Promotion's one venue
+(`packages/fiscal-verifactu/src/hour-recovery-preparation.ts:223-226`). Promotion's one venue
 transaction holds the module activation, `trading.env` and the new chart
 (`apps/server/src/promote.ts:268-284`), run by `withPromotion`'s runner as
-`commit((tx) => consume(tx, ready))` (`apps/server/src/node-operation-preparation.ts:276`). The
+`commit((tx) => consume(tx, ready))` (`apps/server/src/node-operation-preparation.ts:291`). The
 activation wraps the `consume` it hands that runner so the `handover_activations` row is written
 **in that same transaction, right after `consume`** — mandatory, never a later transaction. Then
 the role (`promote.ts:297-301`) and `activated` are recorded in node.db (venue first, node after);
@@ -3912,7 +3913,7 @@ activation context gain the fact.
 | Finding | Checked by | What changed |
 | --- | --- | --- |
 | 1 (Critical) the builder cannot pass before the validator knows version 2 | read `allocation-envelope.ts:192-215` (`approvalShape`, version 1 only) and its two calls, `:296` and `:370` | Applied. New order: 5a.2 is allocation validation, 5a.3 the builder, 5a.4 backup verification and the guards |
-| 2 (Critical) Tasks 5a.1b and 5a.2 disagreed about what a promotion stores | read the old 5a.2 tests against 5a.1b's | Applied. Version 2 is built only when `oldMachineRelinquished` is true; every other promotion stores version 1 byte for byte. The old "emergency promotion stores version 2" test is replaced by the guard "a promotion without the fact stores version 1 exactly as today". Task 7.4's "the stored approval says offline, not relinquished" is met by version 1 (version 1 means not relinquished), so Task 7.4 is unchanged |
+| 2 (Critical) Tasks 5a.1b and 5a.2 disagreed about what a promotion stores | read the old 5a.2 tests against 5a.1b's | Applied. Version 2 is built only when `oldMachineRelinquished` is true; every other promotion stores version 1 byte for byte. The old "emergency promotion stores version 2" test is replaced by the guard "a promotion without the fact stores version 1 exactly as today". Task 7.4's approval test is reworded to the exact version 1 shape (narrow check below) |
 | 3 the validator as worded let a non-promotion path store version 2 | read `emergency-preparation.ts:228-240,250`, `paper-recovery-export.ts:86`, `allocation.ts:84-90`, `cloud-evidence.ts:373-376` | Applied. Version 2 is accepted only when `context.oldMachineRelinquished === true`, and refused `malformed_approval` elsewhere, as today; version 1 is refused `event_mismatch` in a relinquished context. Only the hour promotion's admission facts set the field. Guards: an emergency preparation and a paper standby promotion given version 2 are refused |
 | 4 the activation-time check and a retry after commit judge their own context | read `allocation-operation.ts:84-90` (the evidence), `:153-171` (its snapshot spreads it), `:240-254` (the context), `allocation-envelope.ts:306-312` (the evidence is built there; the review's `:302-308` is a few lines off) and `allocation.ts:386-397` | Applied in Task 5a.2: `HourAdmissionFacts` (`allocation-envelope.ts:234-237`; the review said `:233-236`) and the evidence gain the field, and the activation context copies it. Test "a committed controlled activation, retried, is accepted", with dropping the copy as its control |
 | 5 three calls build the approval, and `select` has no facts | read `hour-recovery-preparation.ts:111,135,166,197` and `hour-selection.ts:237-239`, `hosted-hour-recovery.ts:50-57` | Applied in Task 5a.3: `createPreparation` takes `promotion: boolean`; `select` reads the fact through `readContext` (falling back to `read`, as `within` does at `:146-148`); `prepare` passes the facts' value; `checked` admits relinquished only for a promotion; the admission facts carry it to Task 5a.2's validator |
