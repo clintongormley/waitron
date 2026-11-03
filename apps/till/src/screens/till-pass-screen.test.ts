@@ -4,7 +4,7 @@ import { allergenName } from "../i18n/allergen-names.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { kitchenScreenNoticeText } from "../kitchen-screen-notice.js";
-import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
 import { PASS_COLUMNS } from "../state/kitchen-columns.js";
 import type { TillPassBoard } from "../widgets/pass-board.js";
 import type { TillKitchenColumnsDialog } from "../widgets/kitchen-columns-dialog.js";
@@ -2205,4 +2205,96 @@ describe("A773 pass screen: a pass monitor", () => {
         }
       }),
   );
+});
+
+describe("D95 the pass on a 1024 px tablet", () => {
+  afterEach(resetPage);
+
+  const held = passCard({
+    key: "bill:order-6",
+    target: { kind: "bill", workingOrderId: "order-6" },
+    kind: "held",
+    requestedAt: null,
+    orders: [{ orderId: "order-6", orderNumber: 17, tableLabel: "T9", kitchenNote: null }],
+    items: [passItem({ id: "held-1", orderId: "order-6", phase: "held", firedAt: null })],
+  });
+  const toFire = passCard({
+    key: "bill:order-2",
+    target: { kind: "bill", workingOrderId: "order-2" },
+    orders: [{ orderId: "order-2", orderNumber: 13, tableLabel: "T5", kitchenNote: null }],
+    items: [passItem({ id: "req-1", orderId: "order-2", phase: "requested", firedAt: null })],
+    releaseTicketItemIds: ["req-1"],
+    releaseContext: "ctx-1",
+  });
+  const inProgress = passCard({ key: "bill:order-5" });
+  const ready = passCard({
+    key: "bill:order-7",
+    target: { kind: "bill", workingOrderId: "order-7" },
+    readyAt: minutesAgo(3),
+    allReady: true,
+    orders: [{ orderId: "order-7", orderNumber: 18, tableLabel: "T10", kitchenNote: null }],
+    items: [passItem({ id: "ready-1", orderId: "order-7", phase: "ready", state: "ready" })],
+  });
+  const withHeld = passBoard({
+    held: [held],
+    toFire: [toFire],
+    inProgress: [inProgress],
+    ready: [ready],
+  });
+  const withoutHeld = passBoard({ toFire: [toFire], inProgress: [inProgress], ready: [ready] });
+
+  const store = (hidden: string[]) =>
+    localStorage.setItem(
+      columnsKey("pass"),
+      JSON.stringify({ version: 1, order: [...PASS_COLUMNS.order], hidden, collapsed: [] }),
+    );
+  const drawn = (el: TillPassScreen) => {
+    const shadow = boardOf(el)!.shadowRoot!;
+    return {
+      kanban: shadow.querySelector(".kanban") !== null,
+      list: shadow.querySelector(".list") !== null,
+      sections: [...shadow.querySelectorAll<HTMLElement>("[data-column]")].map(
+        (section) => section.dataset.column,
+      ),
+    };
+  };
+
+  it("measures a 944 px board, and draws the default's columns with and without a held card", async () => {
+    await pageAt(1024, 768);
+    for (const board of [withHeld, withoutHeld]) {
+      const el = await mount({ deviceMode: true, initialBoard: deviceBoard(board) });
+      expect(Math.abs(boardOf(el)!.getBoundingClientRect().width - 944)).toBeLessThanOrEqual(1);
+      expect(drawn(el)).toEqual({
+        kanban: true,
+        list: false,
+        sections: ["toFire", "inProgress", "ready"],
+      });
+      cleanupWidgets();
+    }
+  });
+
+  it("with Held and To fire apart, draws the narrow list at 1024 px and columns at 1280 px", async () => {
+    store(["overview", "toFire"]);
+    await pageAt(1024, 768);
+    for (const board of [withHeld, withoutHeld]) {
+      const el = await mount({ deviceMode: true, initialBoard: deviceBoard(board) });
+      expect(drawn(el)).toMatchObject({ kanban: false, list: true });
+      expect(drawn(el).sections).toEqual(["held", "toFireOnly", "inProgress", "ready"]);
+      cleanupWidgets();
+    }
+    const el = await mount({ deviceMode: true, initialBoard: deviceBoard(withHeld) });
+    await pageAt(1280, 800);
+    await vi.waitFor(() => expect(drawn(el)).toMatchObject({ kanban: true, list: false }));
+  });
+
+  it("with Overview shown as well, still draws columns at 1024 px", async () => {
+    store(["held", "toFireOnly"]);
+    await pageAt(1024, 768);
+    const el = await mount({ deviceMode: true, initialBoard: deviceBoard(withHeld) });
+    expect(drawn(el)).toEqual({
+      kanban: true,
+      list: false,
+      sections: ["overview", "toFire", "inProgress", "ready"],
+    });
+  });
 });

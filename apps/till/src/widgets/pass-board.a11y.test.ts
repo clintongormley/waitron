@@ -5,6 +5,7 @@ import {
   cleanupWidgets,
   expectNoA11yViolations,
   mountWidget,
+  pageAt,
   resetPage,
 } from "./test-helpers.js";
 import { type ColumnState, PASS_COLUMNS } from "../state/kitchen-columns.js";
@@ -153,6 +154,20 @@ describe("A773 pass board widget: accessibility", () => {
         expect(el.shadowRoot!.querySelector("[data-overview]")).not.toBeNull();
         expect(el.shadowRoot!.querySelector("[data-dimmed]")).not.toBeNull();
         if (layout === "wide") expectSideBySide(el);
+        await expectNoA11yViolations(host);
+      });
+    }
+
+    for (const [width, height] of [
+      [1024, 768],
+      [390, 844],
+    ] as const) {
+      it(`has no axe violations at ${width} × ${height} in the ${theme} theme, the default layout drawing the held part`, async () => {
+        await pageAt(width, height);
+        const { el, host } = await mountBoard(theme, PASS_COLUMNS);
+        expect(
+          el.shadowRoot!.querySelector('[data-column="toFire"] [data-held-part]'),
+        ).not.toBeNull();
         await expectNoA11yViolations(host);
       });
     }

@@ -992,6 +992,60 @@ describe("A773 pass board widget", () => {
       }
     });
 
+    const fourCards = passBoard({
+      held: [heldCard],
+      toFire: [toFireCard],
+      inProgress: [billInProgress],
+      ready: [readyCard],
+    });
+
+    it("draws neither the held part nor a card in a collapsed To fire, and still counts both", async () => {
+      const el = await mountBoard({
+        board: fourCards,
+        columns: { ...PASS_COLUMNS, collapsed: ["toFire"] },
+      });
+      const toFire = root(el).querySelector<HTMLElement>('[data-column="toFire"]')!;
+      expect(toFire.querySelector("[data-held-part]")).toBeNull();
+      expect(toFire.querySelectorAll("[data-card]")).toHaveLength(0);
+      expect(toFire.querySelector("[data-column-count]")!.textContent!.trim()).toBe("2");
+    });
+
+    it("draws the To fire card, the held part and the held card in that order in the narrow list", async () => {
+      await page.viewport(390, 844);
+      expect(window.innerWidth).toBe(390);
+      const el = await mountBoard({ board: fourCards });
+      expect(root(el).querySelector(".list")).not.toBeNull();
+      const sections = [...root(el).querySelectorAll<HTMLElement>("[data-column]")];
+      expect(sections.map((section) => section.dataset.column)).toEqual([
+        "toFire",
+        "inProgress",
+        "ready",
+      ]);
+      const toFire = sections[0]!;
+      const fireCard = toFire.querySelector(`[data-card="${toFireCard.key}"]`)!;
+      const part = toFire.querySelector("[data-held-part]")!;
+      const held = toFire.querySelector(`[data-card="${heldCard.key}"]`)!;
+      expect(before(fireCard, part)).toBe(true);
+      expect(before(part, held)).toBe(true);
+    });
+
+    it("reads the held part and To fire's heading from the Spanish catalogue", async () => {
+      const previous = currentLocale();
+      setLocale("es-ES");
+      try {
+        const el = await mountBoard({ board: fourCards });
+        const toFire = root(el).querySelector<HTMLElement>('[data-column="toFire"]')!;
+        expect(toFire.querySelector("[data-held-part]")!.textContent).toContain(
+          t("pass.column.held", "es-ES"),
+        );
+        expect(toFire.querySelector(".column-heading")!.textContent).toContain(
+          t("pass.column.to_fire", "es-ES"),
+        );
+      } finally {
+        setLocale(previous);
+      }
+    });
+
     it("names Held + To fire, Held and To fire apart in the Columns window", () => {
       expect([...passColumnNames()]).toEqual([
         ["overview", t("station.overview")],
