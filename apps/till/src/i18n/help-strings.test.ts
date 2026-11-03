@@ -65,6 +65,10 @@ describe("the order screen's help", () => {
 });
 
 describe("the order lists' help", () => {
+  it("the Spanish Waiting orders help calls counter orders by the till's word for the counter", () => {
+    expect(helpEs["help.counter.waiting_orders"]).toContain(es["tab.counter"].toLowerCase());
+  });
+
   const states = ["items", "unsent", "held", "waiting", "ready"] as const;
   // \b is ASCII-only in JS, so a boundary here is "no letter on either side", accents included.
   const wholeWord = (word: string) =>
@@ -101,7 +105,7 @@ describe("the floor's help on service steps", () => {
 
   it("the list says where Done is, by the button's word, and only where it shows", () => {
     expect(helpEn["help.floor.tables_list"]).toContain(
-      `A card with a service step has ${en["floor.step_done"]}, if you may take orders: tap it when the guests want nothing.`,
+      `Tap ${en["floor.step_done"]} on a service step when the guests want nothing.`,
     );
   });
 

@@ -3065,7 +3065,9 @@ export class TillFloorScreen extends LitElement {
         @click=${() => this.#openReady(first)}
         >${t("floor.ready_bar_open")}</wt-button
       >
-      ${helpBadge("help.floor.ready_bar", t("floor.ready_title"))}
+      ${helpBadge("help.floor.ready_bar", t("floor.ready_title"), {
+        guide: "table-service.ready-bar",
+      })}
     </section>`;
   }
 

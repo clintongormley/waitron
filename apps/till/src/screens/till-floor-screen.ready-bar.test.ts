@@ -159,6 +159,12 @@ describe("till-floor-screen: the Ready bar", () => {
     expect(section.querySelector("wt-help-tooltip")).not.toBeNull();
   });
 
+  it("the bar's help links to the guide's Ready bar section", async () => {
+    const el = await mountFloor([table2(), table8()]);
+    const badge = bar(el)!.querySelector("wt-help-tooltip")!;
+    expect(badge.getAttribute("guide-href")).toBe("/help/en/table-service#ready-bar");
+  });
+
   it("the bar lists only the zones the Floor shows", async () => {
     const tables = [table2(), table8({ zoneId: "z2" })];
     const one = await mountFloor(tables);

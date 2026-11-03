@@ -5,6 +5,7 @@ export const GUIDE_LINKS = {
   "kitchen-service.kitchen-screen": { page: "kitchen-service", section: "kitchen-screen" },
   "kitchen-service.corrections": { page: "kitchen-service", section: "corrections" },
   "kitchen-service.pass-screen": { page: "kitchen-service", section: "pass-screen" },
+  "table-service.ready-bar": { page: "table-service", section: "ready-bar" },
 } as const;
 
 export type GuideLink = keyof typeof GUIDE_LINKS;
