@@ -5265,4 +5265,148 @@ describe("A773 held column", () => {
       }
     },
   );
+
+  const heldPart = (el: TillStationQueue) =>
+    column(el, "queued")!.querySelector<HTMLElement>("[data-held-part]");
+  const ALL_SIX = () => ({ order: [...STATION_COLUMNS.order], hidden: [], collapsed: [] });
+  const DEFAULT = () => ({
+    order: [...STATION_COLUMNS.order],
+    hidden: [...STATION_COLUMNS.hidden],
+    collapsed: [],
+  });
+  /** The 1024 px case's board: the station screen's padding inside the page's, 944 px wide. */
+  const atTablet = async (
+    groups: StationQueueGroup[],
+    columns: { order: ColumnKey[]; hidden: ColumnKey[]; collapsed: ColumnKey[] } = DEFAULT(),
+  ) => {
+    await pageAt(1024, 844);
+    const { el, host } = await mountBoard(groups, columns);
+    host.style.paddingInline = "var(--wt-space-4)";
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(el.getBoundingClientRect().width).toBe(944);
+    return el;
+  };
+  const tabbed = (el: TillStationQueue) => shadow(el).querySelector("[data-column-tabs]") !== null;
+
+  it("by default Waiting draws its cards with a released dish, then a Held part over the held cards, only while one is held", async () => {
+    const { el } = await mountBoard(scene());
+    const queued = column(el, "queued")!;
+    expect(heldPart(el)).not.toBeNull();
+    const part = heldPart(el)!;
+    expect(flat(part)).toBe(`${t("pass.column.held")} · 2`);
+    expect(part.querySelector("[data-held-count]")!.textContent).toBe("2");
+    const [three, one, two] = ["3", "1", "2"].map((order) =>
+      queued.querySelector<HTMLElement>(`[data-card][data-order="${order}"]`)!,
+    );
+    const follows = (a: Node, b: Node) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    expect(follows(three!, part)).toBe(true);
+    expect(follows(part, one!)).toBe(true);
+    expect(follows(one!, two!)).toBe(true);
+    expect(flat(queued.querySelector("[data-column-count]")!)).toBe("3");
+
+    el.groups = released();
+    await el.updateComplete;
+    expect(shadow(el).querySelector("[data-held-part]")).toBeNull();
+  });
+
+  it("at a 1024 px tablet the default columns stay columns, held card or not; Waiting and Held apart turn it to tabs, held card or not", async () => {
+    const el = await atTablet(scene());
+    expect(shadow(el).querySelector(".kanban")).not.toBeNull();
+    expect(tabbed(el)).toBe(false);
+    expect(drawn(el)).toHaveLength(4);
+    el.groups = released();
+    await el.updateComplete;
+    expect(shadow(el).querySelector(".kanban")).not.toBeNull();
+    el.groups = scene();
+    await el.updateComplete;
+    expect(shadow(el).querySelector(".kanban")).not.toBeNull();
+    cleanupWidgets();
+
+    const apart = {
+      order: ["overview", "waitingOnly", "held", "preparing", "ready"] as ColumnKey[],
+      hidden: [],
+      collapsed: [],
+    };
+    const split = await atTablet(released(), apart);
+    expect(tabbed(split)).toBe(true);
+    split.groups = scene();
+    await split.updateComplete;
+    expect(tabbed(split)).toBe(true);
+  });
+
+  it("narrow tabs: Waiting's panel holds its cards with a released dish, the Held part and the held cards", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard(scene());
+    expect(flat(tab(el, "waiting")!)).toBe(`${t("station.state.queued")} · 3`);
+    await userEvent.click(tab(el, "waiting")!);
+    await el.updateComplete;
+    const panel = shadow(el).querySelector<HTMLElement>("[data-tab-panel]")!;
+    expect(panel.dataset.tabPanel).toBe("waiting");
+    expect(
+      [...panel.querySelectorAll<HTMLElement>("[data-card], [data-held-part]")].map(
+        (node) => node.dataset.order ?? "held-part",
+      ),
+    ).toEqual(["3", "held-part", "1", "2"]);
+  });
+
+  it("a collapsed Waiting draws neither its cards nor the Held part, and still counts every card", async () => {
+    const { el } = await mountBoard(scene(), { ...DEFAULT(), collapsed: ["waiting"] });
+    const queued = column(el, "queued")!;
+    expect(queued.querySelector("[data-held-part]")).toBeNull();
+    expect(queued.querySelector("[data-card]")).toBeNull();
+    expect(flat(queued.querySelector("[data-column-count]")!)).toBe("3");
+  });
+
+  it("in Spanish, the Held part and Waiting's title read the catalogue", async () => {
+    const previousLocale = currentLocale();
+    setLocale("es");
+    try {
+      const { el } = await mountBoard(scene());
+      expect(heldPart(el)).not.toBeNull();
+      expect(flat(heldPart(el)!)).toBe(`${es["pass.column.held"]} · 2`);
+      expect(column(el, "queued")!.querySelector(".column-title")!.textContent).toBe(
+        es["station.state.queued"],
+      );
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
+  it("the focus follows a focused heading when the columns shown turn the board to tabs and back", async () => {
+    const el = await atTablet(released());
+    shadow(el).querySelector<HTMLElement>('[data-column-toggle="waiting"]')!.focus();
+    el.columns = ALL_SIX();
+    await el.updateComplete;
+    expect(tabbed(el)).toBe(true);
+    expect(shadow(el).activeElement).toBe(tab(el, "waiting"));
+
+    el.columns = DEFAULT();
+    await el.updateComplete;
+    expect(tabbed(el)).toBe(false);
+    expect(shadow(el).activeElement).toBe(
+      shadow(el).querySelector('[data-column-toggle="waiting"]'),
+    );
+
+    el.columns = ALL_SIX();
+    await el.updateComplete;
+    tab(el, "held")!.focus();
+    el.columns = DEFAULT();
+    await el.updateComplete;
+    expect(shadow(el).querySelector('[data-column-toggle="held"]')).toBeNull();
+    expect(shadow(el).activeElement).toBe(
+      shadow(el).querySelector('[data-column-toggle="overview"]'),
+    );
+  });
+
+  it("the late bar: a separate Held's tab never carries it, however long its card has waited", async () => {
+    await pageAt(390, 844);
+    const { el } = await mountBoard(
+      [ageBill(5, [ageDish("held-dish", 0, { firedAt: null })])],
+      APART,
+    );
+    expect(tab(el, "held")).not.toBeNull();
+    expect(tab(el, "held")!.hasAttribute("data-late")).toBe(false);
+  });
 });

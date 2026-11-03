@@ -85,16 +85,20 @@ interface DrawnColumn {
   /** The Columns window's name, which tells the combined Waiting from the separate one. */
   name: () => string;
   holds: (card: KitchenCard) => boolean;
+  /** Its held cards go last, under a Held heading drawn only while one is held. */
+  heldPart?: true;
 }
 
-/** Keyed in the Columns window's order. `waiting` keeps held cards (D94), which sort after the
- * timed ones; `waitingOnly` and `held` split it apart. */
+/** Its key order sets only the order of {@link stationColumnNames}; the board and the Columns window
+ * follow the layout's order. `waiting` keeps held cards (D94), which sort after the timed ones;
+ * `waitingOnly` and `held` split it apart. */
 const DRAWN: Partial<Record<ColumnKey, DrawnColumn>> = {
   waiting: {
     column: "queued",
     title: () => t("station.state.queued"),
     name: () => t("station.columns_waiting_held"),
     holds: (card) => card.column === "queued",
+    heldPart: true,
   },
   waitingOnly: {
     column: "waiting-only",
@@ -165,6 +169,14 @@ export class TillStationQueue extends LitElement {
 
       .width-probe {
         height: 0;
+      }
+
+      .held-part {
+        margin: var(--wt-space-3) 0 var(--wt-space-1);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-medium);
+        color: var(--wt-color-text-muted);
+        text-transform: uppercase;
       }
 
       .column-tabs {
@@ -1185,7 +1197,7 @@ export class TillStationQueue extends LitElement {
         ${
           chosenDrawn === undefined
             ? overviewList(rows)
-            : inColumn(chosenDrawn).map((card) => this.#card(card))
+            : this.#columnCards(chosenDrawn, inColumn(chosenDrawn))
         }
       </section>`;
   }
@@ -1222,10 +1234,25 @@ export class TillStationQueue extends LitElement {
             () => this.#toggleColumn(key),
             late,
           )}
-          ${collapsed ? nothing : inColumn.map((card) => this.#card(card))}
+          ${collapsed ? nothing : this.#columnCards(drawn, inColumn)}
         </section>`;
       })}
     </div>`;
+  }
+
+  #columnCards(drawn: DrawnColumn, inColumn: readonly KitchenCard[]): TemplateResult {
+    if (drawn.heldPart === undefined) return html`${inColumn.map((card) => this.#card(card))}`;
+    const held = inColumn.filter((card) => card.since === null);
+    return html`${inColumn.filter((card) => card.since !== null).map((card) => this.#card(card))}
+    ${
+      held.length === 0
+        ? nothing
+        : html`<h3 class="held-part" data-held-part>
+            ${t("pass.column.held")}<span aria-hidden="true"> ·</span>
+            <span data-held-count>${held.length}</span>
+          </h3>`
+    }
+    ${held.map((card) => this.#card(card))}`;
   }
 
   /** A card with no fired dish is held: dashed, untimed and saying so, whatever its group (D3). */
