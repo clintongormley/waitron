@@ -129,6 +129,7 @@ async function fixture() {
     history: [await withTransaction(suite.db, (tx) => readHourHistory(tx, "preproduction"))],
     oldMachineOffline: true,
     oldMachineAbsent: false,
+    oldMachineRelinquished: false,
     noParallelRecovery: true,
     priorActivation: "none",
   };

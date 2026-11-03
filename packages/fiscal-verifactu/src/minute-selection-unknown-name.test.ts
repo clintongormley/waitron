@@ -150,6 +150,7 @@ async function restore(c: Row): Promise<Outcome> {
     history: [...backupHistory, ...(c.surviving ?? [])],
     oldMachineOffline: true,
     oldMachineAbsent: false,
+    oldMachineRelinquished: false,
     noParallelRecovery: true,
     priorActivation: "none" as const,
   };
