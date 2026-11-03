@@ -2486,14 +2486,15 @@ boxes in one process, not physical qualification.
   table and one `attempting` card payment; M2 a mirror seeded from M1; the handover from Task 5.3
   through activation with a browser clock sample from the test. Assert: M2 `acceptingSales: true`
   with a new series; M1 answers `acceptingSales: false`, holds M2's chart (so the rejoin's fence
-  check will pass later), and makes **no** AEAT request after its stepdown; M2 files M1's
+  check will pass later), and starts no new filing after its stepdown; a batch already being sent
+  when the stepdown starts finishes, and its answer is in the final copy; M2 files M1's
   `pendiente` record with **M1's** identity and its own first sale with **its own**; the open
   table is on M2; M2's sweep, not M1's, resolves the card payment; a till router pointed at both
   moves to M2; **M1 is then switched off and M2 restarted: M2 starts selling, without waiting**
   (it does not count M1 as a peer, Task 3.4); and what M2's certificate card shows (the manifest's open row: if it shows no
   certificate, the test records that as `it.fails` with a comment naming the follow-up, and the
   PR reports it).
-- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-controlled.e2e.test.ts` — PASS (it pins Tasks 5.2–5.9). Control: comment out the restricted start's early return and the "no AEAT request from M1" assertion fails.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-controlled.e2e.test.ts` — PASS (it pins Tasks 5.2–5.9). Control: comment out the restricted start's early return and the assertion that M1 starts no new filing after its stepdown fails.
 - [ ] **Step 3: Commit** `git commit -s -m "server: a controlled handover between two simulated boxes, end to end"`.
 
 #### Task 5.11: Final checks for Slice 5

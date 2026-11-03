@@ -38,12 +38,10 @@ Left for the slices that add the callers:
   check alone fails no test.
 
 Left by Slice 2:
-- `stepDown`'s replay check reads only the in-memory gate, a restricted box never builds a
-  `stepDown`, and nothing checks the binding's `sourceNodeId` against this box: the first route
-  to reach `stepDown` (Slice 3's Task 3.3) must decide each, and whether
-  `handover.operation_conflict`'s wording fits a stepdown's refusal.
-- The restriction is committed to `node.db` before the drain is told to stop. Untested: whether a
-  drain claim can begin in the instant between the two and send one more batch.
+- `stepDown`'s replay check reads only this process's in-memory record of its first call, a
+  restricted box never builds a `stepDown`, and nothing checks the binding's `sourceNodeId`
+  against this box: the first route to reach `stepDown` (Slice 3's Task 3.3) must decide each,
+  and whether `handover.operation_conflict`'s wording fits a stepdown's refusal.
 - A restricted box's `/health` body is the same as a box whose trading is not admitted yet, so an
   operator reading it cannot tell the two apart.
 - The `handover.stepping_down` refusal names no next step.

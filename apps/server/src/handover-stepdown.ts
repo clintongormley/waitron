@@ -2,7 +2,11 @@ import type { Context } from "hono";
 import { withNodeTransaction, type NodeDatabase, type NodeTransaction } from "@waitron/db";
 import { bindingFingerprint, type HandoverBinding } from "@waitron/handover";
 import { codeOf } from "@waitron/server-kit";
-import { readHandoverOperation, recordHandoverRestrictionTx } from "@waitron/node-db";
+import {
+  readHandoverOperation,
+  readHandoverRestriction,
+  recordHandoverRestrictionTx,
+} from "@waitron/node-db";
 import { AppError } from "@waitron/shared";
 import type { BackgroundDuties } from "./background-duties.js";
 import type { HandoverGate } from "./handover-gate.js";
@@ -45,39 +49,88 @@ export interface StepDownResult {
   replayed: boolean;
 }
 
+/** Each server's stepdown write, kept so a replay answers only once it has committed. */
+const writes = new WeakMap<HandoverGate, Promise<void>>();
+
 export async function stepDown(
   deps: StepDownDeps,
   request: StepDownRequest,
 ): Promise<StepDownResult> {
-  const { binding, kind, self } = request;
-  // The restriction is written before the answer, so a lost answer leaves the box stepped down.
-  await withNodeTransaction(deps.node, async (tx) => {
-    if (kind === "handed-over") {
-      await assertBindingTx(tx, deps.nodeId, binding);
-      await advanceHandoverTx(tx, deps.nodeId, binding.operationId, "source_stepped_down", {});
-    }
-    await recordHandoverRestrictionTx(tx, {
-      nodeId: deps.nodeId,
-      operationId: binding.operationId,
-      kind,
-      successorNodeId: binding.destinationNodeId,
-      membershipTerm: binding.membership.term,
-    });
-  });
-  // Only a stepdown closes the gate, and the write above refuses any other binding.
-  if (deps.gate.isClosed()) return { restarting: true, replayed: true };
+  // A conflicting request is refused here, with nothing stopped and no restart.
+  await assertMatchesStored(deps.node, deps.nodeId, request);
+  const first = writes.get(deps.gate);
+  if (first !== undefined) {
+    await first;
+    await assertMatchesStored(deps.node, deps.nodeId, request);
+    return { restarting: true, replayed: true };
+  }
+  // The duties are stopped before the write, so no filing can begin while the write runs.
+  let signalFailure: { error: unknown } | null = null;
   try {
-    deps.gate.close({ allowed: STEPDOWN_ALLOWED, self });
+    deps.gate.close({ allowed: STEPDOWN_ALLOWED, self: request.self });
     signalDuties(deps.duties);
+  } catch (error) {
+    signalFailure = { error };
+  }
+  const write = writeRestriction(deps, request);
+  writes.set(deps.gate, write);
+  write.catch(() => {});
+  try {
+    // The restriction is written before the answer, so a lost answer leaves the box stepped down.
+    // A failed write leaves the box neither filing nor stepped down, so it restarts too.
+    await write;
   } finally {
     setTimeout(() => void afterAnswer(deps), 0);
   }
+  if (signalFailure !== null) throw signalFailure.error;
   return { restarting: true, replayed: false };
+}
+
+async function writeRestriction(deps: StepDownDeps, request: StepDownRequest): Promise<void> {
+  const { binding, kind } = request;
+  await withNodeTransaction(deps.node, async (tx) => {
+    if (kind === "handed-over") {
+      // Checked again inside the write: another request may have begun since the read above.
+      await assertBindingTx(tx, deps.nodeId, binding);
+      await advanceHandoverTx(tx, deps.nodeId, binding.operationId, "source_stepped_down", {});
+    }
+    await recordHandoverRestrictionTx(tx, restrictionRow(deps.nodeId, request));
+  });
+}
+
+function restrictionRow(nodeId: string, { binding, kind }: StepDownRequest) {
+  return {
+    nodeId,
+    operationId: binding.operationId,
+    kind,
+    successorNodeId: binding.destinationNodeId,
+    membershipTerm: binding.membership.term,
+  };
+}
+
+/** The refusals the write would give, read without writing. */
+async function assertMatchesStored(
+  node: NodeDatabase,
+  nodeId: string,
+  request: StepDownRequest,
+): Promise<void> {
+  if (request.kind === "handed-over") await assertBindingTx(node, nodeId, request.binding);
+  const stored = await readHandoverRestriction(node, nodeId);
+  if (stored === null) return;
+  const wanted = restrictionRow(nodeId, request);
+  if (
+    stored.operationId !== wanted.operationId ||
+    stored.kind !== wanted.kind ||
+    stored.successorNodeId !== wanted.successorNodeId ||
+    stored.membershipTerm !== wanted.membershipTerm
+  ) {
+    throw new AppError("handover.restriction_conflict", {});
+  }
 }
 
 /** The operation is selected by id alone, so the rest of the binding is checked against its own. */
 async function assertBindingTx(
-  tx: NodeTransaction,
+  tx: NodeTransaction | NodeDatabase,
   nodeId: string,
   binding: HandoverBinding,
 ): Promise<void> {

@@ -651,3 +651,177 @@ describe("a stepdown", () => {
     });
   });
 });
+
+/** `node` with `onWrite` run as each write transaction begins, before its body. */
+function hookedNode(node: NodeDatabase, onWrite: () => Promise<void> | void): NodeDatabase {
+  return new Proxy(node, {
+    get: (target, key) => {
+      if (key === "withWriteLock") {
+        return async <T>(fn: () => Promise<T>) => {
+          await onWrite();
+          return target.withWriteLock(fn);
+        };
+      }
+      const value: unknown = Reflect.get(target, key);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+describe("a stepdown stops the background work before it writes", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
+  const begin = () => beginHandover({ node: suite.node, nodeId: SOURCE }, BINDING, "source");
+
+  it("a drain that would claim as the write begins sees its stop and claims nothing", async () => {
+    await begin();
+    const duties = fakeDuties();
+    const claims: string[] = [];
+    const node = hookedNode(suite.node, () => {
+      // The drain checks its signal before each claim.
+      if (!duties.controllers.controller!.signal.aborted) claims.push("claimed");
+    });
+    const r = rig(node, { duties });
+    const response = await r.app.request("/stepdown", { method: "POST" });
+    expect(await response.json()).toEqual({ restarting: true, replayed: false });
+    expect(claims).toEqual([]);
+    await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+  });
+
+  it("a write that fails is the caller's answer, writes no restriction, and restarts the box", async () => {
+    await begin();
+    const before = await readHandoverOperation(suite.node, SOURCE, OP);
+    const failure = new Error("the write failed");
+    const r = rig(
+      hookedNode(suite.node, () => {
+        throw failure;
+      }),
+    );
+    let error: unknown;
+    r.app.post("/failing", async (c) => {
+      error = await captureError(() =>
+        stepDown(r.deps, { binding: BINDING, kind: "handed-over", self: c }),
+      );
+      return c.body(null);
+    });
+    await r.app.request("/failing", { method: "POST" });
+    expect(error).toBe(failure);
+    expect(r.controllers.controller!.signal.aborted).toBe(true);
+    await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+    expect(await readHandoverRestriction(suite.node, SOURCE)).toBeNull();
+    expect(await readHandoverOperation(suite.node, SOURCE, OP)).toEqual(before);
+  });
+
+  it("a replay while the write is in flight answers replayed only once the write commits", async () => {
+    await begin();
+    const writing = hold();
+    let held = false;
+    const r = rig(
+      hookedNode(suite.node, async () => {
+        if (held) return;
+        held = true;
+        await writing.wait;
+      }),
+    );
+    const close = vi.spyOn(r.deps.gate, "close");
+    let self: Context | undefined;
+    let replaySettled = false;
+    let first: Promise<unknown> | undefined;
+    let replay: Promise<unknown> | undefined;
+    r.app.post("/replay", async (c) => {
+      self = c;
+      first = stepDown(r.deps, { binding: BINDING, kind: "handed-over", self: c });
+      await vi.waitFor(() => expect(held).toBe(true));
+      replay = stepDown(r.deps, { binding: BINDING, kind: "handed-over", self: c }).finally(
+        () => (replaySettled = true),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(replaySettled).toBe(false);
+      expect(await readHandoverRestriction(suite.node, SOURCE)).toBeNull();
+      writing.release();
+      const answers = await Promise.all([first, replay]);
+      return c.json({ answers, restriction: await readHandoverRestriction(suite.node, SOURCE) });
+    });
+    const response = await r.app.request("/replay", { method: "POST" });
+    const body = (await response.json()) as { answers: unknown[]; restriction: unknown };
+    expect(self).toBeDefined();
+    expect(body.answers).toEqual([
+      { restarting: true, replayed: false },
+      { restarting: true, replayed: true },
+    ]);
+    expect(body.restriction).toMatchObject({ operationId: OP, successorNodeId: DESTINATION });
+    expect(close).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(r.restart).toHaveBeenCalledTimes(1);
+  });
+
+  it("a supersession naming another successor while the first one's write is in flight is refused once it commits", async () => {
+    const writing = hold();
+    let held = false;
+    const r = rig(
+      hookedNode(suite.node, async () => {
+        if (held) return;
+        held = true;
+        await writing.wait;
+      }),
+    );
+    const superseded = (destinationNodeId: string) => ({
+      binding: { ...BINDING, scenario: "emergency" as const, destinationNodeId },
+      kind: "superseded" as const,
+    });
+    let outcomes: unknown[] = [];
+    r.app.post("/superseded-in-flight", async (c) => {
+      const first = stepDown(r.deps, { ...superseded(DESTINATION), self: c });
+      await vi.waitFor(() => expect(held).toBe(true));
+      const second = captureError(() =>
+        stepDown(r.deps, { ...superseded("33333333-3333-4333-8333-333333333333"), self: c }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      writing.release();
+      outcomes = await Promise.all([first, second]);
+      return c.body(null);
+    });
+    await r.app.request("/superseded-in-flight", { method: "POST" });
+    expect(outcomes[0]).toEqual({ restarting: true, replayed: false });
+    expect((outcomes[1] as AppError | undefined)?.code).toBe("handover.restriction_conflict");
+    await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+    expect((await readHandoverRestriction(suite.node, SOURCE))?.successorNodeId).toBe(DESTINATION);
+  });
+
+  it("a replay while the write is in flight gets the write's refusal when the write fails", async () => {
+    await begin();
+    const writing = hold();
+    const failure = new Error("the write failed");
+    let writes = 0;
+    const r = rig(
+      hookedNode(suite.node, async () => {
+        writes += 1;
+        await writing.wait;
+        throw failure;
+      }),
+    );
+    const close = vi.spyOn(r.deps.gate, "close");
+    let errors: unknown[] = [];
+    r.app.post("/replay-fails", async (c) => {
+      const first = captureError(() =>
+        stepDown(r.deps, { binding: BINDING, kind: "handed-over", self: c }),
+      );
+      await vi.waitFor(() => expect(writes).toBe(1));
+      const replay = captureError(() =>
+        stepDown(r.deps, { binding: BINDING, kind: "handed-over", self: c }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      writing.release();
+      errors = await Promise.all([first, replay]);
+      return c.body(null);
+    });
+    await r.app.request("/replay-fails", { method: "POST" });
+    expect(errors).toEqual([failure, failure]);
+    expect(writes).toBe(1);
+    expect(close).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(r.restart).toHaveBeenCalledTimes(1);
+    expect(await readHandoverRestriction(suite.node, SOURCE)).toBeNull();
+  });
+});
