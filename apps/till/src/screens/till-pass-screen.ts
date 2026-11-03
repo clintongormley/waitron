@@ -177,8 +177,12 @@ export class TillPassScreen extends LitElement {
   @state() private lostLines: string[] = [];
   @state() private nothingLeft = false;
   @state() private columnsWindow: ColumnsWindow | null = null;
-  /** The other-stations choice sent and not yet answered; the window shows it, disabled. */
+  /** The choice sent on the board shown and not yet answered; the window shows it, disabled. */
   @state() private otherStationsSending?: boolean | null;
+  /**
+   * Moves on with each choice sent and each change of board. An older send's answer frees no newer
+   * choice, and its failure is not acted on.
+   */
   #otherStationsSend = 0;
   /** A refusal of that choice, shown in the window until the next choice or a change of board. */
   @state() private otherStationsError?: string;
@@ -273,6 +277,7 @@ export class TillPassScreen extends LitElement {
         this.#display = undefined;
         this.#acceptedChoice = undefined;
         this.otherStationsSending = undefined;
+        this.#otherStationsSend++;
         this.otherStationsError = undefined;
       }
       this.selected = next;
@@ -475,7 +480,9 @@ export class TillPassScreen extends LitElement {
     } catch (error) {
       reload = null;
       const code = (error as { code?: string } | null)?.code ?? "server.internal";
-      if (this.#switched(error)) this.columnsWindow = null;
+      if (send !== this.#otherStationsSend) {
+        // Answers a board no longer shown.
+      } else if (this.#switched(error)) this.columnsWindow = null;
       else if (code === "device.unauthorized" && this.#followsChoice()) {
         this.columnsWindow = null;
         this.#tableChangedNext = {};
@@ -483,7 +490,6 @@ export class TillPassScreen extends LitElement {
       } else this.otherStationsError = code;
     }
     if (reload === "board" && this.#isCurrent(boardId)) await this.#reload();
-    // A change of board cleared it; a choice made since then is not this answer's to clear.
     if (send === this.#otherStationsSend) this.otherStationsSending = undefined;
     if (reload === "choice" && this.#isCurrent(boardId)) await this.#loadChoice();
   }

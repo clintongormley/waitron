@@ -1514,6 +1514,82 @@ describe("A773 pass screen", () => {
         expect(api.setDeviceKitchenScreenDisplay).toHaveBeenCalledTimes(2);
       }));
 
+    it.each([
+      ["a refusal", refused("storage.disk_full")],
+      ["a network failure", new TypeError("Failed to fetch")],
+    ])(
+      "at a till whose choice moves to the monitor, %s of the pass's choice shows nothing in the monitor's window",
+      (_name, failure) =>
+        withFakeTimers(async () => {
+          const { api, sent } = movesToMonitorWhileSending(
+            Promise.resolve({ ...deviceBoard(boardB), display: display(null) }),
+          );
+          const el = await mount({ api });
+          await open(el);
+          await choose(el, 1);
+          await vi.advanceTimersByTimeAsync(15_000);
+          await settle(el);
+          await open(el);
+          sent.reject(failure);
+          await settle(el);
+          expect(columnsWindow(el)).not.toBeNull();
+          expect(words(el)).toBeUndefined();
+          expect(marked(el)).not.toBe("true");
+        }),
+    );
+
+    it.each([
+      ["a refusal", refused("storage.disk_full")],
+      ["a network failure", new TypeError("Failed to fetch")],
+    ])(
+      "at a till whose choice moves to the monitor, %s of the pass's choice leaves no words beside a monitor choice that saved",
+      (_name, failure) =>
+        withFakeTimers(async () => {
+          const { api, sent } = movesToMonitorWhileSending(
+            Promise.resolve({ ...deviceBoard(boardB), display: display(null) }),
+          );
+          const monitorSent = deferred<void>();
+          vi.mocked(api.setDeviceKitchenScreenDisplay)
+            .mockReturnValueOnce(sent.promise)
+            .mockReturnValueOnce(monitorSent.promise);
+          const el = await mount({ api });
+          await open(el);
+          await choose(el, 1);
+          await vi.advanceTimersByTimeAsync(15_000);
+          await settle(el);
+          await open(el);
+          await choose(el, 2);
+          sent.reject(failure);
+          await settle(el);
+          monitorSent.resolve();
+          await settle(el);
+          expect(api.setDeviceKitchenScreenDisplay).toHaveBeenLastCalledWith("pass_monitor", false);
+          expect(words(el)).toBeUndefined();
+          expect(control(el)!.disabled).toBe(false);
+        }),
+    );
+
+    it("at a till whose choice moves to the monitor, a late device.unauthorized for the pass's choice leaves the monitor's window open and says nothing was refreshed", () =>
+      withFakeTimers(async () => {
+        const { api, sent } = movesToMonitorWhileSending(
+          Promise.resolve({ ...deviceBoard(boardB), display: display(null) }),
+        );
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await open(el);
+        const reads = vi.mocked(api.getDeviceIdentity).mock.calls.length;
+        sent.reject(refused("device.unauthorized"));
+        await settle(el);
+        expect(columnsWindow(el)).not.toBeNull();
+        expect(api.getDeviceIdentity).toHaveBeenCalledTimes(reads);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(el.shadowRoot!.querySelector("[data-table-changed]")).toBeNull();
+      }));
+
     it("on a kitchen display, drops the section when a refresh says a narrowing took every station", () =>
       withFakeTimers(async () => {
         const api = fakeApi({
