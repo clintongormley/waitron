@@ -11,6 +11,7 @@ import {
   decodeNameTag,
   encodeNameTag,
   findNameTag,
+  planNameTagWrite,
   usableVenueName,
 } from "./name-tag.mjs";
 
@@ -406,5 +407,243 @@ describe("findNameTag input", () => {
     expect(() => findNameTag(/** @type {any} */ (input))).toThrow(
       expect.objectContaining({ code: "name_tag.input_invalid", reason: "input-invalid" }),
     );
+  });
+});
+
+const BAR = { name: "Bar Santet", live: true };
+
+/** @param {number} n */
+const others = (n) =>
+  Object.fromEntries(Array.from({ length: n }, (_, i) => [i, { type: "filler", keyslots: [] }]));
+
+/** @param {"import"|"replace"} op @param {number} tokenId @param {{name: string, live: boolean}} tag */
+const put = (op, tokenId, tag) => ({ op, tokenId, json: encodeNameTag(tag) });
+/** @param {number} tokenId */
+const remove = (tokenId) => ({ op: "remove", tokenId });
+
+describe("planNameTagWrite adds a tag", () => {
+  it("imports at 0 into a header with no tokens", () => {
+    expect(planNameTagWrite(header({}), BAR)).toEqual({
+      kind: "write",
+      reason: null,
+      steps: [put("import", 0, BAR)],
+    });
+  });
+
+  it("imports at the first number after systemd's tokens", () => {
+    expect(planNameTagWrite(header({ 0: TPM, 1: RECOVERY }), BAR).steps).toEqual([
+      put("import", 2, BAR),
+    ]);
+  });
+
+  it("imports at the lowest free number, not the one after the highest", () => {
+    expect(planNameTagWrite(header({ 0: TPM, 1: RECOVERY, 3: TPM }), BAR)).toEqual({
+      kind: "write",
+      reason: null,
+      steps: [put("import", 2, BAR)],
+    });
+  });
+
+  it("refuses when all 32 numbers are taken by other tokens", () => {
+    expect(planNameTagWrite(header(others(LUKS2_TOKENS_MAX)), BAR)).toEqual({
+      kind: "refused",
+      reason: "no-free-token",
+      steps: [],
+    });
+  });
+
+  it("replaces a tag at 31 when every other number is taken", () => {
+    const tokens = { ...others(31), 31: tagObject("Old", false) };
+    expect(planNameTagWrite(header(tokens), BAR)).toEqual({
+      kind: "write",
+      reason: null,
+      steps: [put("replace", 31, BAR)],
+    });
+  });
+});
+
+describe("planNameTagWrite changes a tag", () => {
+  it("leaves an equal tag unchanged", () => {
+    expect(planNameTagWrite(header({ 4: tagObject("Bar Santet", true) }), BAR)).toEqual({
+      kind: "unchanged",
+      reason: null,
+      steps: [],
+    });
+  });
+
+  it("replaces a tag whose live flag differs", () => {
+    const tag = { name: "Bar Santet", live: false };
+    expect(planNameTagWrite(header({ 4: tagObject("Bar Santet", true) }), tag)).toEqual({
+      kind: "write",
+      reason: null,
+      steps: [put("replace", 4, tag)],
+    });
+  });
+
+  it("replaces the lowest of two tags, then removes the other", () => {
+    const tokens = { 5: tagObject("Old", true), 2: tagObject("Old", true) };
+    expect(planNameTagWrite(header(tokens), BAR)).toEqual({
+      kind: "write",
+      reason: null,
+      steps: [put("replace", 2, BAR), remove(5)],
+    });
+  });
+
+  it("replaces two equal tags with one", () => {
+    const tokens = { 1: tagObject("Bar Santet", true), 3: tagObject("Bar Santet", true) };
+    expect(planNameTagWrite(header(tokens), BAR).steps).toEqual([
+      put("replace", 1, BAR),
+      remove(3),
+    ]);
+  });
+
+  it("replaces a lone malformed Waitron token", () => {
+    const token = { type: NAME_TAG_TYPE, keyslots: [], version: 2, name: "Bar Santet", live: true };
+    expect(planNameTagWrite(header({ 0: TPM, 6: token }), BAR)).toEqual({
+      kind: "write",
+      reason: null,
+      steps: [put("replace", 6, BAR)],
+    });
+  });
+
+  it("replaces a tag with the right values in another key order", () => {
+    const token = { live: true, name: "Bar Santet", keyslots: [], type: NAME_TAG_TYPE, version: 1 };
+    expect(planNameTagWrite(header({ 3: token }), BAR).steps).toEqual([put("replace", 3, BAR)]);
+  });
+
+  it("compares the composed name", () => {
+    const metadata = header({ 0: TPM, 1: tagObject("Bar \u00C0ngels", true) });
+    expect(planNameTagWrite(metadata, { name: "Bar A\u0300ngels", live: true })).toEqual({
+      kind: "unchanged",
+      reason: null,
+      steps: [],
+    });
+  });
+
+  it("writes the composed name", () => {
+    expect(planNameTagWrite(header({}), { name: "Bar A\u0300ngels", live: true }).steps).toEqual([
+      put("import", 0, { name: "Bar \u00C0ngels", live: true }),
+    ]);
+  });
+});
+
+describe("planNameTagWrite with no tag wanted", () => {
+  it("removes the box's tag", () => {
+    expect(planNameTagWrite(header({ 4: tagObject("Old", true), 0: TPM }), null)).toEqual({
+      kind: "remove",
+      reason: null,
+      steps: [remove(4)],
+    });
+  });
+
+  it("removes every Waitron token in ascending order", () => {
+    const tokens = { 9: tagObject("Old", true), 0: TPM, 2: { type: NAME_TAG_TYPE } };
+    expect(planNameTagWrite(header(tokens), null).steps).toEqual([remove(2), remove(9)]);
+  });
+
+  it("leaves a header without a tag unchanged", () => {
+    expect(planNameTagWrite(header({ 0: TPM }), null)).toEqual({
+      kind: "unchanged",
+      reason: null,
+      steps: [],
+    });
+  });
+
+  it.each([
+    ["257 four-byte characters", "\u{1F600}".repeat(257)],
+    ["a tab", "Bar\tSantet"],
+  ])("removes the tag when the name has %s", (_label, name) => {
+    const metadata = header({ 0: TPM, 4: tagObject("Old", true) });
+    expect(planNameTagWrite(metadata, { name, live: true })).toEqual({
+      kind: "remove",
+      reason: "name-unusable",
+      steps: [remove(4)],
+    });
+  });
+
+  it.each([
+    ["257 four-byte characters", "\u{1F600}".repeat(257)],
+    ["a tab", "Bar\tSantet"],
+  ])("leaves a header without a tag unchanged when the name has %s", (_label, name) => {
+    expect(planNameTagWrite(header({ 0: TPM }), { name, live: true })).toEqual({
+      kind: "unchanged",
+      reason: "name-unusable",
+      steps: [],
+    });
+  });
+});
+
+describe("planNameTagWrite refuses metadata it cannot read", () => {
+  it.each([
+    ["not json", utf8("not json")],
+    ["no tokens key", utf8(JSON.stringify({ ...BASE }))],
+    ["token 32", header({ 0: TPM, 32: TPM })],
+    ["token 007", header({ "007": TPM })],
+    ["token -1", header({ "-1": TPM })],
+    ["token a", header({ a: TPM })],
+    ["an empty token key", header({ "": TPM })],
+    ["token 1.0", header({ "1.0": TPM })],
+  ])("%s", (_label, metadata) => {
+    expect(planNameTagWrite(metadata, BAR)).toEqual({
+      kind: "refused",
+      reason: "metadata-unreadable",
+      steps: [],
+    });
+    expect(planNameTagWrite(metadata, null)).toEqual({
+      kind: "refused",
+      reason: "metadata-unreadable",
+      steps: [],
+    });
+  });
+
+  it("accepts token 31", () => {
+    expect(planNameTagWrite(header({ 31: TPM }), BAR).steps).toEqual([put("import", 0, BAR)]);
+  });
+});
+
+describe("planNameTagWrite input", () => {
+  it.each([
+    ["a name alone", { name: "Bar" }],
+    ["a string", "Bar"],
+    ["a live flag that is a string", { name: "Bar", live: "yes" }],
+    ["an extra key", { name: "Bar", live: true, extra: 1 }],
+    ["undefined", undefined],
+  ])("a tag that is %s throws name_tag.tag_invalid", (_label, tag) => {
+    expect(() => planNameTagWrite(header({}), /** @type {any} */ (tag))).toThrow(
+      expect.objectContaining({ code: "name_tag.tag_invalid", reason: "tag-invalid" }),
+    );
+  });
+
+  it("metadata that is a string throws name_tag.input_invalid", () => {
+    expect(() =>
+      planNameTagWrite(/** @type {any} */ (JSON.stringify({ tokens: {} })), BAR),
+    ).toThrow(expect.objectContaining({ code: "name_tag.input_invalid", reason: "input-invalid" }));
+  });
+});
+
+describe("planNameTagWrite answers", () => {
+  it("are frozen all the way to each step", () => {
+    const plan = planNameTagWrite(
+      header({ 2: tagObject("Old", true), 5: tagObject("Old", true) }),
+      BAR,
+    );
+    expect(Object.isFrozen(plan)).toBe(true);
+    expect(Object.isFrozen(plan.steps)).toBe(true);
+    expect(plan.steps).toHaveLength(2);
+    for (const step of plan.steps) expect(Object.isFrozen(step)).toBe(true);
+    const refused = planNameTagWrite(utf8("not json"), BAR);
+    expect(Object.isFrozen(refused)).toBe(true);
+    expect(Object.isFrozen(refused.steps)).toBe(true);
+  });
+
+  it("hold a fresh json array in each plan", () => {
+    const metadata = header({});
+    const first = planNameTagWrite(metadata, BAR).steps[0];
+    const second = planNameTagWrite(metadata, BAR).steps[0];
+    if (first.op === "remove" || second.op === "remove") throw new Error("expected an import");
+    expect(first.json).not.toBe(second.json);
+    expect(first.json).toEqual(second.json);
+    first.json.fill(0);
+    expect(planNameTagWrite(metadata, BAR).steps[0]).toEqual(put("import", 0, BAR));
   });
 });

@@ -137,3 +137,83 @@ export function findNameTag(metadata) {
   const tags = Object.values(tokens).filter(isWaitronToken);
   return tags.length === 1 ? new TextEncoder().encode(JSON.stringify(tags[0])) : null;
 }
+
+/**
+ * @typedef {{op: "import", tokenId: number, json: Uint8Array}
+ *   | {op: "replace", tokenId: number, json: Uint8Array}
+ *   | {op: "remove", tokenId: number}} NameTagStep  frozen; json is a fresh array.
+ *   import: `cryptsetup token import --token-id <tokenId>`; replace: the same with --token-replace;
+ *   remove: `cryptsetup token remove --token-id <tokenId>`. Never --key-slot.
+ * @typedef {object} NameTagWritePlan  frozen
+ * @property {"unchanged"|"write"|"remove"|"refused"} kind
+ * @property {null|"name-unusable"|"no-free-token"|"metadata-unreadable"} reason
+ * @property {readonly NameTagStep[]} steps  frozen; run in order; empty for unchanged and refused
+ */
+
+/**
+ * Pure. tag null means "this box has no tag" (spec §7.6). Only tokens of type NAME_TAG_TYPE, or a
+ * free token number, are ever named. Throws name_tag.input_invalid unless metadata is a Uint8Array;
+ * name_tag.tag_invalid (tag-invalid) unless tag is null or exactly {name: string, live: boolean}.
+ * @param {Uint8Array} metadata @param {VenueTag|null} tag @returns {NameTagWritePlan}
+ */
+export function planNameTagWrite(metadata, tag) {
+  if (
+    tag !== null &&
+    !(
+      exactRecord(tag, ["name", "live"]) &&
+      typeof tag.name === "string" &&
+      typeof tag.live === "boolean"
+    )
+  )
+    throw refusal("name_tag.tag_invalid", "tag-invalid");
+  const tokens = readTokens(metadata);
+  const numbers = tokens === null ? null : Object.keys(tokens).map(tokenNumber);
+  if (numbers === null || numbers.includes(null)) return plan("refused", "metadata-unreadable", []);
+
+  const ours = Object.entries(tokens)
+    .filter(([, token]) => isWaitronToken(token))
+    .map(([key]) => Number(key))
+    .sort((a, b) => a - b);
+  const name = tag === null ? null : usableVenueName(tag.name);
+  const reason = tag !== null && name === null ? "name-unusable" : null;
+
+  if (name === null) {
+    return ours.length === 0
+      ? plan("unchanged", reason, [])
+      : plan("remove", reason, ours.map(removeStep));
+  }
+  const json = encodeNameTag({ name, live: tag.live });
+  if (ours.length === 0) {
+    const free = Array.from({ length: LUKS2_TOKENS_MAX }, (_, i) => i).find(
+      (n) => !numbers.includes(n),
+    );
+    if (free === undefined) return plan("refused", "no-free-token", []);
+    return plan("write", null, [Object.freeze({ op: "import", tokenId: free, json })]);
+  }
+  if (ours.length === 1) {
+    const current = new TextEncoder().encode(JSON.stringify(tokens[String(ours[0])]));
+    if (sameBytes(current, json)) return plan("unchanged", null, []);
+  }
+  return plan("write", null, [
+    Object.freeze({ op: "replace", tokenId: ours[0], json }),
+    ...ours.slice(1).map(removeStep),
+  ]);
+}
+
+/** The token number a key names: "0" to "31" exactly, or null. @param {string} key */
+function tokenNumber(key) {
+  return /^(0|[1-9][0-9]?)$/.test(key) && Number(key) < LUKS2_TOKENS_MAX ? Number(key) : null;
+}
+
+/** @param {number} tokenId @returns {NameTagStep} */
+function removeStep(tokenId) {
+  return Object.freeze({ op: "remove", tokenId });
+}
+
+/**
+ * @param {NameTagWritePlan["kind"]} kind @param {NameTagWritePlan["reason"]} reason
+ * @param {NameTagStep[]} steps @returns {NameTagWritePlan}
+ */
+function plan(kind, reason, steps) {
+  return Object.freeze({ kind, reason, steps: Object.freeze(steps) });
+}
