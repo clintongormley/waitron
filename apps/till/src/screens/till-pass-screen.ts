@@ -177,14 +177,20 @@ export class TillPassScreen extends LitElement {
   @state() private lostLines: string[] = [];
   @state() private nothingLeft = false;
   @state() private columnsWindow: ColumnsWindow | null = null;
-  /** The choice sent on the board shown and not yet answered; the window shows it, disabled. */
+  /**
+   * The choice sent on the board shown, until the send is refused, a board read begun after its
+   * acceptance answers, or that follow-up read ends; the window shows it, disabled.
+   */
   @state() private otherStationsSending?: boolean | null;
   /**
    * Moves on with each choice sent and each change of board. An older send's answer frees no newer
    * choice, its success is not taken as the newest answer, and its failure is not acted on.
    */
   #otherStationsSend = 0;
-  /** The send the server accepted; the next board read to answer ends its sending. */
+  /**
+   * The send the server accepted; a board read begun after it ends its sending when it answers,
+   * unless a newer send is out.
+   */
   #acceptedSend = 0;
   /** A refusal of that choice, shown in the window until the next choice or a change of board. */
   @state() private otherStationsError?: string;

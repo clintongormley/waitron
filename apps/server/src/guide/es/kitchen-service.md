@@ -247,7 +247,7 @@ sus tarjetas lleve un plato que cubre y que se envió a esperar al pase. Mientra
 que esperan a este pase se ven enteros, y el pase atenúa los platos de sus estaciones que no esperan
 y los enviados antes de que su estación empezara a esperar: dicen, por ejemplo, **Preparando · Ya en
 Barra**. Un plato de una estación o zona de servicio que este pase no cubre solo aparece en una
-tarjeta que también lleva un plato que este pase cubre, y siempre se atenúa; mientras espera a su
+tarjeta que también lleva un plato que este pase cubre, y, cuando se muestra, se atenúa; mientras espera a su
 propio pase dice **Barra: esperando a su pase**. Los platos atenuados son solo información.
 
 En una pantalla de pase o un monitor de pase, **Columnas** ofrece también **Platos de otras

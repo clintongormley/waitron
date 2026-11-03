@@ -215,6 +215,7 @@ it("raises both alerts from one call, each naming only its own stations and dish
       .from(incidents)
       .then((rows) => rows.filter((row) => row.params.workingOrderId === tabId)),
   );
+  expect(alerts).toHaveLength(2);
   expect(Object.fromEntries(alerts.map((alert) => [alert.code, alert.params]))).toEqual({
     "route.released_at_closed_station": {
       station: "Upstairs bar",

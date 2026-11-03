@@ -21,7 +21,8 @@ export interface Stranded {
 
 /** Record one release that leaves work at closed stations, naming the device that released it:
  * `route.released_at_closed_station` for `released`, `route.waiting_at_closed_station` for work at
- * stations that wait for the pass. An open alert from the same device absorbs later releases. */
+ * stations that wait for the pass. An open alert of the same code from the same device absorbs later
+ * releases. */
 export async function raiseReleasedAtClosedStation(
   tx: Transaction,
   cfg: Pick<OriginConfig, "origin">,

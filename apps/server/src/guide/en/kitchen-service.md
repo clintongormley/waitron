@@ -218,7 +218,7 @@ holds a dish it covers that was sent to wait for the pass. While either is so, i
 for this pass show in full, and the pass dims the dishes of its stations that do not wait and dishes
 sent before their station began waiting: they say, for example, **Preparing · Already at Bar**. A
 dish from a station or service zone this pass does not cover shows only on a card that also holds a
-dish this pass covers, and is always dimmed; while it waits for its own pass it says **Bar: waiting
+dish this pass covers, and is dimmed when drawn; while it waits for its own pass it says **Bar: waiting
 for its pass**. Dimmed dishes are there for information only.
 
 On a pass screen or a pass monitor, **Columns** also offers **Other stations' dishes**: **Use the
