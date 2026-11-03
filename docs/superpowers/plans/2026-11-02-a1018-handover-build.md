@@ -2085,7 +2085,7 @@ Tests in a new `apps/server/src/node-operation-preparation.test.ts` (none exists
 
 #### Task 5a.1b: The existing promote routes cannot set the fact
 
-Both existing promote routes pass the whole request body as the context:
+Before this slice (on `c336372fae`), both promote routes passed the whole request body as the context:
 `nodePreparation.prepare(operation.binding, body, body, body.proposal, …)`
 (`apps/server/src/promote-api.ts:93`) and `withPromotion(operation, body, body, …)` (`:119-122`).
 After Task 5a.1 that would let any `node.promote` caller send `oldMachineRelinquished: true` and
@@ -2110,8 +2110,8 @@ Tests:
   `nodePreparation` a context of exactly `{ oldNodeNeutralised, noParallelRecovery }`, although the
   body also carries `oldMachineRelinquished: true` and the sign-in fields" (fails today: the
   whole body is handed on). In `hour-promotion.test.ts`: **"a promotion whose preparation and
-  promote bodies both carry `oldMachineRelinquished: true` stores a version 1 approval exactly as
-  today"** (fails today, after Task 5a.1: the fact reaches the preparation, which refuses
+  promote bodies both claim the old box relinquished stores a version 1 approval saying offline,
+  with no oldMachineRelinquished key"** (fails today, after Task 5a.1: the fact reaches the preparation, which refuses
   `old_machine_active`, `packages/fiscal-verifactu/src/hour-recovery-preparation.ts:114`). The
   existing cases of both files pass unedited (they are the guards that both routes still pass
   `oldNodeNeutralised` and `noParallelRecovery`).
@@ -2150,7 +2150,9 @@ recovery export (`paper-recovery-export.ts:86`), paper and dormant promotions (t
     never sets the field refuses version 2 exactly as today); a version 1 approval is refused
     `event_mismatch` when `context.oldMachineRelinquished === true`; a version 2 approval whose
     `oldMachineRelinquished` is not `true` is refused `event_mismatch`. The offline rule
-    (`:394-395`) is met by `oldMachineOffline` or by a version 2 `oldMachineRelinquished`.
+    (`:394-395`) is met by `oldMachineOffline` or by a version 2 `oldMachineRelinquished`. A version
+    2 approval that also says `oldMachineOffline` or `oldMachineAbsent` is refused
+    `malformed_approval`.
   - `HourAdmissionFacts` (`:234-237`) gains `oldMachineRelinquished?: boolean`;
     `withHourAdmission` puts it in the context it validates with (`:316-329`) and in the evidence
     it hands on (`:306-312`), adding the key only when it is `true`, so every existing caller's
@@ -2158,7 +2160,7 @@ recovery export (`paper-recovery-export.ts:86`), paper and dormant promotions (t
 - `packages/fiscal-verifactu/src/allocation-operation.ts`: `AllocationOperationEvidence` (`:84-90`)
   gains `oldMachineRelinquished?: boolean`, and the activation context (`:240-254`) copies it.
   `snapshotAllocationEvidence` (`:153-171`) already spreads the evidence, so the field survives it.
-- Unchanged, and so refusing version 2: the emergency, paper-export, paper and dormant promotion,
+- Refusing version 2: the emergency, paper-export, paper and dormant promotion,
   and Cloud contexts named above. Only the hour promotion's admission facts set the field
   (Task 5a.3).
 

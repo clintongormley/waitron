@@ -78,16 +78,14 @@ Left by Slice 9 (the S2 re-run, [research note](../research/2026-09-16-sqlite-fa
 
 Left open by Slice 5a (the relinquished fact: a promotion whose old box relinquished filing stores
 a version 2 approval):
-- A binding that carries `oldMachineRelinquished` is handled two ways. The emergency and
-  first-setup context builders drop the key after `...binding`, so a version 1 approval is
+- A binding that carries `oldMachineRelinquished` is handled two ways. The emergency context
+  builder (`emergency-preparation.ts`) drops the key after `...binding`, so a version 1 approval is
   accepted; the cloud restore check (`cloud-preparation.ts`) keeps it, so the request is refused
-  `event_mismatch`. (Paper export and cloud first setup drop it too, but refuse such a binding
-  before they build the context.) Neither writes a version 2 row. Pick one behaviour for all of
-  them.
+  `event_mismatch`. (Paper export, first setup and cloud first setup drop it too, but refuse such a
+  binding before they build the context.) Neither writes a version 2 row. Pick one behaviour for
+  both.
 - The context builders put their fixed fields before `...binding`, so a binding key such as `mode`
   would override one (`emergency-preparation.ts`); no test shows the binding's key checks stop that.
-- `initial-setup.ts`'s override of the fact has no test of its own (the mode check refuses that
-  case anyway).
 - In `hour-recovery-preparation.ts`, removing `promotion &&` from the offline rule or from `select`
   fails no test (the first is redundant).
 - `node-operation-preparation.test.ts` has no promotion case that passes

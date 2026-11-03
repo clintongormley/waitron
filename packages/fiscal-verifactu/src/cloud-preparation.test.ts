@@ -199,6 +199,7 @@ it("refuses a binding carrying the relinquished fact", async () => {
     params: { reason: "event_mismatch" },
   });
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
+  expect(await readdir(receiptDirectory)).toEqual([]);
 });
 
 it("refuses omission of the configured full purpose before spending a receipt", async () => {
