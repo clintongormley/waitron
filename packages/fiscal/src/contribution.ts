@@ -32,7 +32,8 @@ export interface FiscalDutyDeps {
     sentAt: Date;
     receivedAt: Date;
   }) => void;
-  /** Once aborted, a running drain sends no further batch to the tax authority. */
+  /** Once aborted, a running drain claims no further batch; a batch already claimed is still sent,
+   * answered and stored. */
   readonly signal?: AbortSignal;
 }
 

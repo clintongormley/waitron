@@ -430,7 +430,7 @@ describe("power lost part-way through a stepdown", () => {
     ["while it waits for admitted work", "admitted-work"],
     ["while it closes", "close"],
   ] as const)(
-    "%s, the box comes back restricted and asks nothing of AEAT",
+    "%s, the box comes back restricted and files nothing with AEAT",
     async (_, at) => {
       const restarted = await crashThenRestart(at);
       // The stepdown's writes were still in the log the restart replayed.

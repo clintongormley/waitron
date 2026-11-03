@@ -18,8 +18,8 @@ import {
 } from "./tender-refund-sends.js";
 import "./errors.js";
 
-/** Once `stopSignal` is aborted the recovery pass looks up no further refund; each one it did not
- * ask about stays pending for a later pass. */
+/** Once `stopSignal` is aborted the recovery pass looks up no further refund; each sent one it did
+ * not ask about stays pending for a later pass. */
 export type TenderRefundDeps = BillRefundDeps & { stopSignal?: AbortSignal };
 type RefundRow = typeof tenderRefunds.$inferSelect;
 
