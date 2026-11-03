@@ -1415,6 +1415,11 @@ The build departed from the task texts above in these ways; the task texts are l
   for a superseded box; and the page carries no closing line about sending records back or
   becoming the spare. Tasks 10.3 and 13.4b add those sentences to the page and to both guides.
 - A superseded stepdown records no handover operation; Task 10.3 begins one.
+- The page's English and Spanish words are in `apps/server/src/i18n/restricted-page.ts`
+  (`RESTRICTED_PAGE_WORDS`, `RESTRICTED_STEP_WORDS`), beside the guide pages' and the recovery
+  page's words that A968 moved there, rather than in `apps/server/src/restricted-page.ts`, the file
+  Task 2.7 creates. Tasks 10.3 and 13.4b put their sentences' words in that catalogue and the lines
+  that show them in `apps/server/src/restricted-page.ts`.
 
 ---
 

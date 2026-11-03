@@ -13,6 +13,7 @@ import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { escapeHtml } from "./recovery-surface.js";
+import { RESTRICTED_PAGE_WORDS, RESTRICTED_STEP_WORDS } from "./i18n/restricted-page.js";
 import { knownZone } from "./venue-time-zone.js";
 
 export interface RestrictedPageDeps {
@@ -34,89 +35,10 @@ interface RestrictedView {
   timeZone: string;
 }
 
-const PAGE_TEXT: Readonly<
-  Record<
-    SupportedLocale,
-    {
-      title: string;
-      /** The body's words before and after the successor's name. */
-      body: readonly [string, string];
-      progress: string;
-      /** The heading of the page answered when this one cannot be read. */
-      failed: string;
-    }
-  >
-> = {
-  "en-GB": {
-    title: "This box no longer runs the venue",
-    body: [
-      "It takes no sales and sends nothing to the tax agency. The box taking over the venue is ",
-      ".",
-    ],
-    progress: "Progress",
-    failed: "This page could not be shown.",
-  },
-  "es-ES": {
-    title: "El local ya no funciona con este equipo",
-    body: [
-      "No hace ventas ni envía nada a Hacienda. El equipo que pasa a llevar el local es ",
-      ".",
-    ],
-    progress: "Progreso",
-    failed: "No se ha podido mostrar esta página.",
-  },
-};
-
-/** Keyed by every state, so a new state with no wording fails the typecheck. */
-const STEP_TEXT: Readonly<
-  Record<HandoverOperationState, Readonly<Record<SupportedLocale, string>>>
-> = {
-  prepared: { "en-GB": "Handover begun", "es-ES": "Traspaso iniciado" },
-  source_stepped_down: { "en-GB": "Stopped taking sales", "es-ES": "Ha dejado de vender" },
-  filing_relinquished: {
-    "en-GB": "Stopped sending invoice records to the tax agency",
-    "es-ES": "Ha dejado de enviar registros de facturación a Hacienda",
-  },
-  source_superseded: {
-    "en-GB": "Another box took over the venue",
-    "es-ES": "Otro equipo ha pasado a llevar el local",
-  },
-  copy_accepted: {
-    "en-GB": "Copy of the venue accepted",
-    "es-ES": "Copia del local aceptada",
-  },
-  filing_assumed: {
-    "en-GB": "Took over sending invoice records to the tax agency",
-    "es-ES": "Ha pasado a enviar los registros de facturación a Hacienda",
-  },
-  emergency_declared: {
-    "en-GB": "Emergency handover declared",
-    "es-ES": "Traspaso de emergencia declarado",
-  },
-  activated: { "en-GB": "Started running the venue", "es-ES": "Ha empezado a llevar el local" },
-  return_pending: {
-    "en-GB": "Sending its invoice records",
-    "es-ES": "Enviando sus registros de facturación",
-  },
-  return_complete: {
-    "en-GB": "Invoice records sent",
-    "es-ES": "Registros de facturación enviados",
-  },
-  return_abandoned: {
-    "en-GB": "Sending its invoice records was stopped",
-    "es-ES": "Se ha detenido el envío de sus registros de facturación",
-  },
-  replaced: {
-    "en-GB": "Replaced by another handover",
-    "es-ES": "Sustituido por otro traspaso",
-  },
-  abandoned: { "en-GB": "Handover cancelled", "es-ES": "Traspaso cancelado" },
-};
-
 /** `Object.hasOwn`: the kind is read from a file, and `toString` must not find an inherited value. */
 function stepText(kind: string, locale: SupportedLocale): string {
-  if (!Object.hasOwn(STEP_TEXT, kind)) return kind;
-  return STEP_TEXT[kind as HandoverOperationState][locale];
+  if (!Object.hasOwn(RESTRICTED_STEP_WORDS, kind)) return kind;
+  return RESTRICTED_STEP_WORDS[kind as HandoverOperationState][locale];
 }
 
 /**
@@ -171,7 +93,7 @@ async function readView(deps: RestrictedPageDeps): Promise<RestrictedView> {
 }
 
 function renderPage(view: RestrictedView, locale: SupportedLocale): string {
-  const text = PAGE_TEXT[locale];
+  const text = RESTRICTED_PAGE_WORDS[locale];
   const when = new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeStyle: "short",
@@ -207,7 +129,7 @@ ${steps}
 }
 
 function renderFailure(locale: SupportedLocale): string {
-  const heading = PAGE_TEXT[locale].failed;
+  const heading = RESTRICTED_PAGE_WORDS[locale].failed;
   return `<!doctype html>
 <html lang="${locale}">
 <head>
