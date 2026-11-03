@@ -4,7 +4,7 @@
 // Each step is reached through a module the child swaps in at load, which writes a marker to file
 // descriptor 3 and kills its own process there, so a case that crashed earlier names the wrong marker.
 import { spawn, type ChildProcess } from "node:child_process";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -29,8 +29,10 @@ vi.mock("@hono/node-server", async () => {
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
-/** What the restarted box asked of AEAT, and how many fiscal passes it began. */
-const aeat = vi.hoisted(() => ({ drains: 0, submits: 0, timeReads: 0 }));
+/** The fiscal passes the restarted box began, and the AEAT submissions they made. */
+const aeat = vi.hoisted(() => ({ drains: 0, submits: 0 }));
+
+// AEAT's clock reading answers nothing, so the restart never asks AEAT's real host for the time.
 
 vi.mock("./clock-watch.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./clock-watch.js")>();
@@ -42,11 +44,7 @@ vi.mock("./clock-watch.js", async (importOriginal) => {
         ...deps,
         backend: new Proxy(deps.backend, {
           get: (target, key) => {
-            if (key === "readAuthorityTime")
-              return () => {
-                aeat.timeReads += 1;
-                return Promise.resolve(null);
-              };
+            if (key === "readAuthorityTime") return () => Promise.resolve(null);
             const value: unknown = Reflect.get(target, key);
             return typeof value === "function" ? value.bind(target) : value;
           },
@@ -108,7 +106,11 @@ const DESTINATION = "22222222-2222-4222-8222-222222222222";
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 /** How long a restarted box is watched for AEAT traffic; the control's first submission lands inside it. */
 const QUIET_MS = 2_000;
-const CHILD_LIMIT_MS = 40_000;
+/** The child starts in about two seconds. */
+const CHILD_LIMIT_MS = 15_000;
+const HEALTH_LIMIT_MS = 10_000;
+/** Over the sum of one case's waits: three child waits, two health waits and the quiet wait. */
+const CASE_LIMIT_MS = 3 * CHILD_LIMIT_MS + 2 * HEALTH_LIMIT_MS + QUIET_MS + 30_000;
 
 type CrashPoint =
   "before-node-transaction" | "after-node-transaction" | "quiesce" | "admitted-work" | "close";
@@ -180,7 +182,7 @@ const STEPDOWN = wrapper(
 const INTERNET = wrapper(
   here("../../../packages/fiscal-verifactu/src/hour-clock-internet.ts"),
   `export function authenticatedHourHead() {
-  return Promise.reject(new Error("the crashing child makes no request off this machine"));
+  return Promise.reject(new Error("the crashing child asks AEAT nothing for the time"));
 }`,
 );
 
@@ -230,7 +232,6 @@ afterEach(async () => {
     server = undefined;
     aeat.drains = 0;
     aeat.submits = 0;
-    aeat.timeReads = 0;
     if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     scratch = undefined;
   }
@@ -305,7 +306,11 @@ async function ending(child: Child) {
 interface Restarted {
   node: { status: number; body: Record<string, unknown> };
   operationState: string | undefined;
+  /** node.db's write-ahead log as the kill left it. */
+  nodeWalBytes: number;
   restriction: Awaited<ReturnType<typeof readHandoverRestriction>>;
+  enviosBefore: unknown[];
+  enviosAfter: unknown[];
 }
 
 async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
@@ -333,12 +338,20 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
     join(scratch, "modules.json"),
     JSON.stringify({ modules: { "fiscal-none": false } }),
   );
+  // Records waiting for AEAT: a box that starts as a filing primary sends them. The child is started
+  // without test submissions, so it files none of them.
+  await seedPendingEnvios(suite.db, {
+    count: 3,
+    identity: { locationId: venue.cfg.locationId, nodeId, nif: "61000002T" },
+    entorno: "preproduction",
+  });
+  const enviosBefore = suite.db.all(sql`select * from envios order by rowid`);
   // The suite holds its own folder for this process, so the child gets a copy of it.
   const venueDir = join(scratch, "venue");
   await mkdir(venueDir);
   suite.db.run(sql`vacuum into ${join(venueDir, VENUE_FILE)}`);
   suite.node.run(sql`vacuum into ${join(venueDir, NODE_FILE)}`);
-  const env: Record<string, string> = {
+  const childEnv: Record<string, string> = {
     ...KEY_ENV,
     WAITRON_HTTP_LANDING_PORT: "0",
     WAITRON_MANAGEMENT_ORIGIN: "https://dashboard.example",
@@ -350,13 +363,13 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
     WAITRON_CLOUD_ORIGIN: "https://cloud.example",
     WAITRON_MAX_TICK_MS: "600000",
     WAITRON_MIN_TICK_MS: "200",
-    WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
   };
+  const env = { ...childEnv, WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled" };
 
   const [port] = (await freePorts(1)) as [number];
   const child = startChild(
     at,
-    { ...env, WAITRON_HTTP_HOST: "127.0.0.1", WAITRON_HTTP_PORT: String(port) },
+    { ...childEnv, WAITRON_HTTP_HOST: "127.0.0.1", WAITRON_HTTP_PORT: String(port) },
     binding,
   );
   await waitForMark(child, "started");
@@ -365,7 +378,7 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
     async () => {
       expect((await fetch(`${base}/health`)).status).toBe(200);
     },
-    { timeout: 10_000 },
+    { timeout: HEALTH_LIMIT_MS },
   );
   const expected = ["started"];
   if (at === "admitted-work") {
@@ -381,25 +394,15 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
     `the child's output:\n${child.output()}`,
   ).toEqual({ signal: "SIGKILL", marks: [...expected, at] });
 
-  // Records waiting for AEAT, written while no server runs: a box that starts as a filing primary
-  // sends them.
-  const seeding = await openVenueDatabase(venueDir);
-  try {
-    await seedPendingEnvios(seeding.venue, {
-      count: 3,
-      identity: { locationId: venue.cfg.locationId, nodeId, nif: "61000002T" },
-      entorno: "preproduction",
-    });
-  } finally {
-    await seeding.close();
-  }
+  // Read before the restart, which replays the log; a graceful close would have removed the file.
+  const nodeWalBytes = (await stat(join(venueDir, `${NODE_FILE}-wal`))).size;
   server = await startServer(env, env);
   const restartedBase = `http://127.0.0.1:${httpPort()}`;
   await vi.waitFor(
     async () => {
       expect((await fetch(`${restartedBase}/health`)).status).toBe(200);
     },
-    { timeout: 10_000 },
+    { timeout: HEALTH_LIMIT_MS },
   );
   const answer = await fetch(`${restartedBase}/api/node`);
   const node = { status: answer.status, body: (await answer.json()) as Record<string, unknown> };
@@ -409,8 +412,11 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
     const operation = await readHandoverOperation(reading.node, nodeId, OP);
     return {
       node,
+      nodeWalBytes,
       operationState: operation?.state,
       restriction: await readHandoverRestriction(reading.node, nodeId),
+      enviosBefore,
+      enviosAfter: reading.venue.all(sql`select * from envios order by rowid`),
     };
   } finally {
     await reading.close();
@@ -418,9 +424,6 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
 }
 
 describe("power lost part-way through a stepdown", () => {
-  // Control, run locally and not committed: with the node transaction in `stepDown` moved after
-  // the gate's close, the "after the node transaction" case fails on its first line, the diff
-  // reading `- "acceptingSales": false` / `+ "acceptingSales": true`.
   it.each([
     ["after the node transaction", "after-node-transaction"],
     ["while the outside work is being told to stop", "quiesce"],
@@ -430,20 +433,28 @@ describe("power lost part-way through a stepdown", () => {
     "%s, the box comes back restricted and asks nothing of AEAT",
     async (_, at) => {
       const restarted = await crashThenRestart(at);
+      // The stepdown's writes were still in the log the restart replayed.
+      expect(restarted.nodeWalBytes).toBeGreaterThan(0);
       expect(restarted.node).toMatchObject({ status: 200, body: { acceptingSales: false } });
       expect(restarted.operationState).toBe("source_stepped_down");
       expect(restarted.restriction).toMatchObject({ kind: "handed-over", operationId: OP });
       await new Promise((resolve) => setTimeout(resolve, QUIET_MS));
-      expect(aeat).toEqual({ drains: 0, submits: 0, timeReads: 0 });
+      expect(aeat).toEqual({ drains: 0, submits: 0 });
+      // Neither the child nor the restart touched the waiting records.
+      expect(restarted.enviosAfter).toEqual(restarted.enviosBefore);
     },
-    90_000,
+    CASE_LIMIT_MS,
   );
 
-  it("control: power lost before the node transaction, the box comes back a primary that files", async () => {
-    const restarted = await crashThenRestart("before-node-transaction");
-    expect(restarted.node).toMatchObject({ status: 200, body: { acceptingSales: true } });
-    expect(restarted.operationState).not.toBe("source_stepped_down");
-    expect(restarted.restriction).toBeNull();
-    await vi.waitFor(() => expect(aeat.submits).toBeGreaterThan(0), { timeout: QUIET_MS });
-  }, 90_000);
+  it(
+    "control: power lost before the node transaction, the box comes back a primary that files",
+    async () => {
+      const restarted = await crashThenRestart("before-node-transaction");
+      expect(restarted.node).toMatchObject({ status: 200, body: { acceptingSales: true } });
+      expect(restarted.operationState).not.toBe("source_stepped_down");
+      expect(restarted.restriction).toBeNull();
+      await vi.waitFor(() => expect(aeat.submits).toBeGreaterThan(0), { timeout: QUIET_MS });
+    },
+    CASE_LIMIT_MS,
+  );
 });
