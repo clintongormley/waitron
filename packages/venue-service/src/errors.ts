@@ -11,6 +11,7 @@ export type MenuUse =
 declare module "@waitron/shared" {
   interface ErrorParams {
     "device.not_found": { deviceId: string };
+    "device.unauthorized": Record<string, never>;
     "device_zones.invalid": {
       field: "profileId" | "snapshot" | "selectedZoneIds" | "startingZoneId";
     };

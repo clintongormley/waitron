@@ -23,7 +23,7 @@ import { endSession, loginWithPin, persons } from "@waitron/identity";
 import type { DeviceKitchenScreen, ScreenSlot } from "@waitron/module";
 import type { PassBoard } from "./pass-card.js";
 import { routeProductTo } from "./testing/zone-offers.js";
-import { boardItems } from "./testing/pass-board-probe.js";
+import { boardCards, boardItems } from "./testing/pass-board-probe.js";
 import { setStationsWaitForPass } from "./testing/pass-waiting.js";
 import { mountDeviceApi } from "./device-api.js";
 import { mountTillApi } from "./till-api.js";
@@ -34,7 +34,14 @@ import { SESSION_COOKIE } from "./till-session.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { createStation } from "./kitchen.js";
-import { createOpenOrder, fireableLineColumns, fireLines, markServed } from "./working-order.js";
+import {
+  advanceTicketItem,
+  createOpenOrder,
+  fireableLineColumns,
+  fireLines,
+  markServed,
+} from "./working-order.js";
+import { releasePassItems } from "./pass-release.js";
 import {
   OPERATOR,
   commandFor,
@@ -187,6 +194,7 @@ describe("the pass screen's device routes", () => {
       board: { held: [], toFire: [], inProgress: [], ready: [], overview: [] },
       stations: screen!.stations,
       zones: null,
+      display: { showNonPassStations: true, nonPassStationsOverride: null },
     });
     expect(board.stations.map((s) => s.id)).toContain(f.grill);
   });
@@ -670,6 +678,160 @@ describe("A773 pass board: routes", () => {
       expect(await anonymous.json()).toMatchObject({ error: { code: "session.required" } });
       expect((await cards(f.app, await signIn(f, till), path)).board.toFire).toHaveLength(1);
     }
+  });
+});
+
+describe("A773 pass display policy", () => {
+  type ShownBoard = Board & {
+    display: { showNonPassStations: boolean; nonPassStationsOverride: boolean | null };
+  };
+
+  /** A burger at Grill and a paella at Cold on one card; Grill waits when `grillWaits`. */
+  async function burgerAndPaella(
+    f: Awaited<ReturnType<typeof fixture>>,
+    grillWaits: boolean,
+  ): Promise<{ burger: string; paella: string }> {
+    const cold = (await inTx(f.v, (tx) => createStation(tx, f.v.cfg, { name: "Cold" }))).id;
+    await inTx(f.v, async (tx) => {
+      await routeProductTo(tx, f.v.cfg, f.v.productId("Burger"), f.grill);
+      await routeProductTo(tx, f.v.cfg, f.v.productId("Paella"), cold);
+      if (grillWaits) await setStationsWaitForPass(tx, true, [f.grill]);
+    });
+    const seated = await seat(f.v, await f.v.table("Inside"));
+    await orderForParty(f.v, seated.partyId, ["Burger", "Paella"], seated.tabId);
+    const rows = await inTx(f.v, (tx) =>
+      tx
+        .select({ id: ticketItems.id, stationId: ticketItems.stationId })
+        .from(ticketItems)
+        .where(eq(ticketItems.workingOrderId, seated.tabId)),
+    );
+    return {
+      burger: rows.find((row) => row.stationId === f.grill)!.id,
+      paella: rows.find((row) => row.stationId === cold)!.id,
+    };
+  }
+
+  const shown = async (f: Awaited<ReturnType<typeof fixture>>, cookie: string, path: string) =>
+    (await read(f.app, cookie, path)) as ShownBoard;
+
+  const choose = (deviceId: string, kind: "pass" | "pass_monitor", value: boolean | null) =>
+    withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.setDeviceKitchenScreenDisplay(tx, deviceId, kind, value),
+    );
+
+  /** What the setting must never change on a card (B3 D46). */
+  const facts = (board: PassBoard) =>
+    boardCards(board).map((card) => ({
+      key: card.key,
+      column: (["held", "toFire", "inProgress", "ready"] as const).find((column) =>
+        board[column].includes(card),
+      ),
+      allReady: card.allReady,
+      releaseTicketItemIds: card.releaseTicketItemIds,
+      releaseContext: card.releaseContext,
+    }));
+
+  it("drops a pass's dimmed dishes and their overview facts when its device hides them, leaving every card's column and release as shown", async () => {
+    const f = await fixture();
+    const { burger, paella } = await burgerAndPaella(f, true);
+    /** The board shown, then hidden, by the device's own choice. */
+    const both = async () => {
+      await choose(f.a.id, "pass", true);
+      const before = await shown(f, f.a.cookie, "/api/device/pass-board");
+      await choose(f.a.id, "pass", false);
+      return { before, after: await shown(f, f.a.cookie, "/api/device/pass-board") };
+    };
+
+    const requestedPair = await both();
+    expect(
+      boardItems(requestedPair.before.board).map((item) => [item.id, item.informational]),
+    ).toEqual(
+      expect.arrayContaining([
+        [burger, false],
+        [paella, true],
+      ]),
+    );
+    expect(requestedPair.before.board.overview.map((fact) => fact.informational)).toContain(true);
+    expect(boardItems(requestedPair.after.board).map((item) => item.id)).toEqual([burger]);
+    expect(requestedPair.after.board.overview.map((fact) => fact.informational)).toEqual([false]);
+    expect(facts(requestedPair.after.board)).toEqual(facts(requestedPair.before.board));
+    expect(requestedPair.after.display).toEqual({
+      showNonPassStations: false,
+      nonPassStationsOverride: false,
+    });
+
+    await inTx(f.v, (tx) =>
+      tx
+        .update(deviceProfiles)
+        .set({ capabilities: ["act-as-kds", "prepare-orders", "run-the-pass"] })
+        .where(eq(deviceProfiles.id, f.kds)),
+    );
+    const [toFire] = requestedPair.before.board.toFire;
+    await inTx(f.v, async (tx) => {
+      await releasePassItems(
+        tx,
+        f.v.cfg,
+        { deviceId: f.a.id, personId: null },
+        {
+          submissionId: randomUUID(),
+          target: toFire!.target,
+          ticketItemIds: toFire!.releaseTicketItemIds,
+          expectedContext: toFire!.releaseContext,
+        },
+      );
+      await advanceTicketItem(tx, f.v.cfg, burger, "preparing");
+      await advanceTicketItem(tx, f.v.cfg, burger, "ready");
+    });
+    const readyPair = await both();
+    expect(readyPair.before.board.inProgress).toHaveLength(1);
+    expect(readyPair.before.board.inProgress[0]!.allReady).toBe(false);
+    expect(boardItems(readyPair.after.board).map((item) => item.id)).toEqual([burger]);
+    expect(facts(readyPair.after.board)).toEqual(facts(readyPair.before.board));
+  });
+
+  it("hides nothing in view while no station in view waits", async () => {
+    const f = await fixture();
+    const { burger, paella } = await burgerAndPaella(f, false);
+    await choose(f.a.id, "pass", false);
+    const read = await shown(f, f.a.cookie, "/api/device/pass-board");
+    expect(items(read).sort()).toEqual([burger, paella].sort());
+    expect(read.display).toEqual({ showNonPassStations: false, nonPassStationsOverride: false });
+  });
+
+  it("applies a pass monitor's own choice and still names nothing to release", async () => {
+    const f = await fixture();
+    const { burger } = await burgerAndPaella(f, true);
+    const monitor = await f.device("Pass monitor", f.kds, {
+      kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: null },
+    });
+    await choose(f.a.id, "pass", false);
+    const before = await shown(f, monitor.cookie, "/api/device/pass-monitor-board");
+    expect(boardItems(before.board)).toHaveLength(2);
+    expect(before.display).toEqual({ showNonPassStations: true, nonPassStationsOverride: null });
+
+    await choose(monitor.id, "pass_monitor", false);
+    const after = await shown(f, monitor.cookie, "/api/device/pass-monitor-board");
+    expect(boardItems(after.board).map((item) => item.id)).toEqual([burger]);
+    expect(facts(after.board)).toEqual(facts(before.board));
+    for (const card of boardCards(after.board)) {
+      expect(card.releaseTicketItemIds).toEqual([]);
+      expect(card.releaseContext).toBeNull();
+    }
+    expect(after.display).toEqual({ showNonPassStations: false, nonPassStationsOverride: false });
+  });
+
+  it("answers the device's own choice, and the profile's once the device clears it", async () => {
+    const f = await fixture();
+    await choose(f.a.id, "pass", true);
+    expect((await shown(f, f.a.cookie, "/api/device/pass-board")).display).toEqual({
+      showNonPassStations: true,
+      nonPassStationsOverride: true,
+    });
+    await choose(f.a.id, "pass", null);
+    expect((await shown(f, f.a.cookie, "/api/device/pass-board")).display).toEqual({
+      showNonPassStations: true,
+      nonPassStationsOverride: null,
+    });
   });
 });
 

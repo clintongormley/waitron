@@ -735,6 +735,23 @@ describe("A773 pass board: dimming", () => {
       expect(release(board)).toEqual(release(calm));
   });
 
+  it("5c. keeps a card Hide empties in its column, with its party and levers (D83)", () => {
+    const rows = [
+      released({ id: "grill-1", state: "preparing", passControlled: false, lineNo: 1 }),
+      released({ id: "grill-2", state: "ready", passControlled: false, lineNo: 2 }),
+    ];
+    const options = { aStationInViewWaits: true };
+    const shown = buildPassBoard(rows, HOT, { ...options, showNonPassStations: true });
+    const hidden = buildPassBoard(rows, HOT, { ...options, showNonPassStations: false });
+    expect(cards(shown)).toHaveLength(1);
+    const card = cards(shown)[0]!;
+    expect(card.items.every((item) => item.informational)).toBe(true);
+    expect(card.party).toEqual({ id: party, revision: 7 });
+    expect(hidden.inProgress).toEqual([{ ...card, items: [] }]);
+    expect(columnOf(hidden, card.key)).toBe(columnOf(shown, card.key));
+    expect(hidden.overview).toEqual([]);
+  });
+
   it("5b. lets no recalled pass work dim the board", () => {
     const rows = [
       row({ id: "grill-recalled", recalled: true, lineNo: 1 }),

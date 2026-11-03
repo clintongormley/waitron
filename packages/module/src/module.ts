@@ -1174,6 +1174,15 @@ export interface VenueServiceContribution {
     cfg: { locationId: LocationId },
     input: { deviceId: string; profileId: string; screens: readonly DeviceKitchenScreen[] },
   ): Promise<void>;
+  /** Sets the device's own choice of showing other stations' dishes on its screen of `kind`
+   *  (null: the profile's), changing nothing else. Refused `device.unauthorized` when the device
+   *  has no screen of that kind. */
+  setDeviceKitchenScreenDisplay(
+    tx: Transaction,
+    deviceId: string,
+    kind: "pass" | "pass_monitor",
+    value: boolean | null,
+  ): Promise<void>;
   readDeviceZoneSelection(
     tx: Transaction,
     cfg: { locationId: LocationId },

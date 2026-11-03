@@ -124,6 +124,7 @@ describe("VENUE_SERVICE", () => {
       "savePartyAllergy",
       "setAllergyLineTicks",
       "setBillName",
+      "setDeviceKitchenScreenDisplay",
       "setDeviceKitchenScreens",
       "setDeviceZoneSelection",
       "setProfileKitchenScreens",

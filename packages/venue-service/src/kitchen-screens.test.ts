@@ -32,6 +32,7 @@ import {
   readProfileKitchenScreens,
   readStationScreens,
   removeDeviceKitchenScreens,
+  setDeviceKitchenScreenDisplay,
   setDeviceKitchenScreens,
   setProfileKitchenScreens,
 } from "./kitchen-screens.js";
@@ -42,6 +43,7 @@ import {
   deviceProfileKitchenScreenStations,
   deviceProfileKitchenScreenZones,
   deviceKitchenScreenZones,
+  deviceKitchenScreenStations,
 } from "./schema/kitchen-screens.js";
 
 const suite = useVenueDb({
@@ -2510,6 +2512,56 @@ describe("A773 pass display policy", () => {
       showNonPassStations: false,
       nonPassStationsOverride: null,
     });
+  });
+
+  it("sets and clears a device's own choice through the seat, touching no scope or removal", async () => {
+    const venue = await seedVenueWithStations();
+    await set(venue, venue.kds, passes(venue));
+    const pass = await seedDevice(venue.kds, "Pass");
+    const monitor = await seedDevice(venue.kds, "Monitor");
+    const other = await seedDevice(venue.kds, "Other pass");
+    await choose(venue, pass, venue.kds, [
+      { kind: "pass", stationIds: [venue.grill, venue.cold], zoneIds: null },
+    ]);
+    await choose(venue, monitor, venue.kds, [{ kind: "pass_monitor", ...every }]);
+    await choose(venue, other, venue.kds, [
+      { kind: "pass", stationIds: [venue.grill], zoneIds: null },
+    ]);
+    await recordRemoval(pass, "pass", { stationId: venue.cold });
+    const scopes = async () => ({
+      screens: await db
+        .select({
+          deviceId: deviceKitchenScreens.deviceId,
+          screen: deviceKitchenScreens.screen,
+          everyStation: deviceKitchenScreens.everyStation,
+          everyZone: deviceKitchenScreens.everyZone,
+        })
+        .from(deviceKitchenScreens),
+      stations: await db.select().from(deviceKitchenScreenStations),
+      zones: await db.select().from(deviceKitchenScreenZones),
+      removals: await db.select().from(deviceKitchenScreenRemovals),
+    });
+    const before = await scopes();
+    const display = (deviceId: string, kind: "pass" | "pass_monitor", value: boolean | null) =>
+      scoped((tx) => setDeviceKitchenScreenDisplay(tx, deviceId, kind, value));
+
+    await display(pass, "pass", false);
+    await display(monitor, "pass_monitor", true);
+    await expect(deviceValues(pass)).resolves.toEqual({ pass: false });
+    await expect(deviceValues(monitor)).resolves.toEqual({ pass_monitor: true });
+    await expect(deviceValues(other)).resolves.toEqual({ pass: null });
+    await display(pass, "pass", null);
+    await display(monitor, "pass_monitor", false);
+    await expect(deviceValues(pass)).resolves.toEqual({ pass: null });
+    await expect(deviceValues(monitor)).resolves.toEqual({ pass_monitor: false });
+    await expect(scopes()).resolves.toEqual(before);
+
+    await expect(outcome(display(pass, "pass_monitor", true))).resolves.toEqual({
+      code: "device.unauthorized",
+      params: {},
+    });
+    await expect(deviceValues(pass)).resolves.toEqual({ pass: null });
+    await expect(deviceValues(monitor)).resolves.toEqual({ pass_monitor: false });
   });
 
   it("reads true and null for a station screen", async () => {

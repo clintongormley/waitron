@@ -89,6 +89,7 @@ import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
 import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
+import type { PassBoard } from "./pass-card.js";
 import { mountDeviceLevers, requireKitchenDisplay } from "./device-levers.js";
 import { STATUS as TILL_STATUS, stationMoveRequest } from "./till-api.js";
 import { moveDishesToStation } from "./station-move.js";
@@ -558,8 +559,10 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       return c.json(
         await withTransaction(deps.db, async (tx) => {
           const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass");
-          const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen));
-          return { board, stations: screen.stations, zones: screen.zones };
+          const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen), {
+            showNonPassStations: screen.showNonPassStations,
+          });
+          return passBoardAnswer(board, screen);
         }),
       );
     }),
@@ -573,8 +576,9 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
           const { screen } = await kitchenScreenOf(tx, c, deps.cfg, device, "pass_monitor");
           const board = await readScopedPassBoard(tx, deps.cfg, passScopeOf(screen), {
             release: false,
+            showNonPassStations: screen.showNonPassStations,
           });
-          return { board, stations: screen.stations, zones: screen.zones };
+          return passBoardAnswer(board, screen);
         }),
       );
     }),
@@ -1031,6 +1035,19 @@ async function stationScreenOf(
   device: DeviceBinding,
 ): Promise<ResolvedKitchenScreen> {
   return (await kitchenScreenOf(tx, c, cfg, device, "station")).screen;
+}
+
+/** A pass board's answer: the board, the screen's stations and zones, and its display choice. */
+function passBoardAnswer(board: PassBoard, screen: ResolvedKitchenScreen) {
+  return {
+    board,
+    stations: screen.stations,
+    zones: screen.zones,
+    display: {
+      showNonPassStations: screen.showNonPassStations,
+      nonPassStationsOverride: screen.nonPassStationsOverride,
+    },
+  };
 }
 
 /**
