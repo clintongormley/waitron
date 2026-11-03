@@ -1074,35 +1074,57 @@ describe("createWifiRecordReader refuses bad deps at construction", () => {
   });
 });
 
-describe("the Wi-Fi password never leaves in a refusal, an absence or output", () => {
-  const forms = [
-    PASSWORD,
-    Buffer.from(PASSWORD, "utf8").toString("hex"),
-    Buffer.from(PASSWORD, "utf8").toString("hex").toUpperCase(),
-    Buffer.from(PASSWORD, "utf8").toString("base64"),
+/** A password as written, in lowercase and uppercase hex, and in base64. @param {string} password */
+const passwordForms = (password) => {
+  const bytes = Buffer.from(password, "utf8");
+  return [
+    password,
+    bytes.toString("hex"),
+    bytes.toString("hex").toUpperCase(),
+    bytes.toString("base64"),
   ];
+};
+
+/** @param {readonly string[]} texts @param {readonly string[]} forms */
+const expectNoForm = (texts, forms) => {
+  for (const text of texts) for (const form of forms) expect(text).not.toContain(form);
+};
+
+/**
+ * Runs run and expects no console method, process.stdout.write or process.stderr.write call.
+ * @template T @param {() => T | Promise<T>} run @returns {Promise<T>}
+ */
+async function withoutOutput(run) {
+  const spies = [
+    ...["log", "info", "warn", "error", "debug", "trace"].map((name) => vi.spyOn(console, name)),
+    vi.spyOn(process.stdout, "write"),
+    vi.spyOn(process.stderr, "write"),
+  ];
+  const result = await run();
+  for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  return result;
+}
+
+describe("the Wi-Fi password never leaves in a refusal, an absence or output", () => {
   const texts = (result) => [
     JSON.stringify(result),
     inspect(result, { depth: null, showHidden: true }),
   ];
 
   it("every refusal and absence holds no form of the password, and console.*, process.stdout.write and process.stderr.write were not called", async () => {
-    const spies = [
-      ...["log", "info", "warn", "error", "debug", "trace"].map((name) => vi.spyOn(console, name)),
-      vi.spyOn(process.stdout, "write"),
-      vi.spyOn(process.stderr, "write"),
-    ];
-    const results = [];
-    for (const [, run] of nonLoadedCases) results.push(await run());
-    for (const [, change] of mountAnswers) {
-      const f = await fixture();
-      results.push(await f.read({ inspectBootMount: async () => change(f.answer) }));
-    }
-    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    const results = await withoutOutput(async () => {
+      const answers = [];
+      for (const [, run] of nonLoadedCases) answers.push(await run());
+      for (const [, change] of mountAnswers) {
+        const f = await fixture();
+        answers.push(await f.read({ inspectBootMount: async () => change(f.answer) }));
+      }
+      return answers;
+    });
     expect(results.length).toBe(nonLoadedCases.length + mountAnswers.length);
     for (const result of results) {
       expect(result.kind).not.toBe("loaded");
-      for (const text of texts(result)) for (const form of forms) expect(text).not.toContain(form);
+      expectNoForm(texts(result), passwordForms(PASSWORD));
     }
   });
 
@@ -1192,6 +1214,9 @@ describe("formatWifiRecord writes the form its reader loads", () => {
     expect(formatWifiRecord(fields())).toEqual(second);
   });
 });
+
+/** Every canary password starts with CANARY, so its forms cover the whole password or any leading part. */
+const CANARY_FORMS = passwordForms("CANARY");
 
 /** @type {Array<[string, string, unknown, unknown]>} name, reason, network, the same refusal with a password holding CANARY (null when none can) */
 const formatRefusals = /** @type {Array<[string, unknown, string, unknown]>} */ ([
@@ -1311,12 +1336,14 @@ describe("formatWifiRecord refuses with the reader's reason", () => {
   });
 
   it.each(formatRefusals.filter(([, , , canary]) => canary !== null))(
-    "%s: the refusal holds no password",
-    (_name, reason, _network, canary) => {
-      const error = thrown(() => formatWifiRecord(/** @type {any} */ (canary)));
+    "%s: the refusal holds no form of the password and nothing is written out",
+    async (_name, reason, _network, canary) => {
+      const error = await withoutOutput(() =>
+        thrown(() => formatWifiRecord(/** @type {any} */ (canary))),
+      );
       expect(error.code).toBe("wifi_record.network_invalid");
       expect(error.reason).toBe(reason);
-      for (const text of errorTexts(error)) expect(text).not.toContain("CANARY");
+      expectNoForm(errorTexts(error), CANARY_FORMS);
     },
   );
 });
@@ -1538,20 +1565,22 @@ describe("decideWifiBootCopy throws for settings of the wrong shape", () => {
 
 describe("decideWifiBootCopy never lets the password out except in a write", () => {
   it.each(removeCases.filter(([, , , canary]) => canary !== null))(
-    "%s: the decision holds no password",
-    (_name, reason, _settings, canary) => {
-      const decision = decideWifiBootCopy(/** @type {any} */ (canary));
+    "%s: the decision holds no form of the password and nothing is written out",
+    async (_name, reason, _settings, canary) => {
+      const decision = await withoutOutput(() => decideWifiBootCopy(/** @type {any} */ (canary)));
       expect(decision).toEqual({ kind: "remove", reason });
-      for (const text of decisionTexts(decision)) expect(text).not.toContain("CANARY");
+      expectNoForm(decisionTexts(decision), CANARY_FORMS);
     },
   );
 
   it.each(settingsThrows.filter(([, , canary]) => canary !== null))(
-    "%s: the error holds no password",
-    (_name, _settings, canary) => {
-      const error = thrown(() => decideWifiBootCopy(/** @type {any} */ (canary)));
+    "%s: the error holds no form of the password and nothing is written out",
+    async (_name, _settings, canary) => {
+      const error = await withoutOutput(() =>
+        thrown(() => decideWifiBootCopy(/** @type {any} */ (canary))),
+      );
       expectSettingsInvalid(error);
-      for (const text of errorTexts(error)) expect(text).not.toContain("CANARY");
+      expectNoForm(errorTexts(error), CANARY_FORMS);
     },
   );
 
