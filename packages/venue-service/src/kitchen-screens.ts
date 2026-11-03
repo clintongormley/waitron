@@ -560,17 +560,6 @@ export async function setDeviceKitchenScreens(
   const { deviceId, profileId, screens } = input;
   const stored = (await readChoices(tx, [deviceId])).get(deviceId)!;
   await checkChoice(tx, profileId, screens, stored);
-  const displays = new Map(
-    (
-      await tx
-        .select({
-          screen: deviceKitchenScreens.screen,
-          value: deviceKitchenScreens.showNonPassStations,
-        })
-        .from(deviceKitchenScreens)
-        .where(eq(deviceKitchenScreens.deviceId, deviceId))
-    ).map((row) => [row.screen, row.value]),
-  );
   await tx.delete(deviceKitchenScreens).where(eq(deviceKitchenScreens.deviceId, deviceId));
   await tx
     .delete(deviceKitchenScreenRemovals)
@@ -583,7 +572,7 @@ export async function setDeviceKitchenScreens(
       screen: screen.kind,
       everyStation: screen.stationIds === null,
       everyZone: screen.kind !== "station" && screen.zoneIds === null,
-      showNonPassStations: displays.get(screen.kind) ?? null,
+      showNonPassStations: stored.get(screen.kind)?.showNonPassStations ?? null,
     });
     if (stationIds.length > 0) {
       await tx
