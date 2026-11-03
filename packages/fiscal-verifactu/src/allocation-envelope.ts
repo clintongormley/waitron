@@ -301,6 +301,8 @@ export async function withHourAdmission<T>(
   if (!allocationShape(input.allocation)) return refuse("malformed_allocation");
   if (!approvalShape(input.approval)) return refuse("malformed_approval");
   const selectedFacts = structuredClone(facts);
+  if (selectedFacts.oldMachineRelinquished === true && binding.action !== "promote")
+    return refuse("event_mismatch");
   const token = Object.freeze({});
   hourAdmissions.set(token, {
     operation: { binding, authority, input },
@@ -400,6 +402,8 @@ function validateEnvelope(
   const relinquished = context.oldMachineRelinquished === true;
   if (permission.version === 2 && !relinquished) return refuse("malformed_approval");
   if (relinquished && (permission.version !== 2 || permission.oldMachineRelinquished !== true))
+    return refuse("event_mismatch");
+  if (relinquished && (context.mode !== "recovery" || context.authority.kind !== "hour"))
     return refuse("event_mismatch");
   if ((context.mode === "initial-setup") !== permission.oldMachineAbsent)
     return refuse("old_machine_absence_unconfirmed");

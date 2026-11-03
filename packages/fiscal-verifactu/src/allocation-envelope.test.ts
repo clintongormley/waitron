@@ -330,12 +330,30 @@ describe("an approval saying the old machine relinquished filing", () => {
   };
   const relinquishedContext = { ...context, oldMachineRelinquished: true };
 
-  it("passes a version 2 approval when the context says relinquished", () => {
+  it("refuses a relinquished context whose authority is not the hour's", () => {
     expect(validate(allocation, relinquished, relinquishedContext)).toEqual({
-      ok: true,
-      allocation,
-      approval: relinquished,
+      ok: false,
+      reason: "event_mismatch",
     });
+  });
+  it("refuses a relinquished context for an initial setup", () => {
+    const initial = {
+      ...candidate,
+      source: "initial-paper",
+      installationIdentity: "S000042",
+      series: [
+        { code: "A-S000042", purpose: "standard" },
+        { code: "R-S000042", purpose: "rectificative" },
+      ],
+    };
+    const input = { ...initial, reservationEvidence: signedEvidence(initial) };
+    expect(
+      validate(
+        input,
+        { ...relinquished, oldMachineAbsent: true },
+        { ...relinquishedContext, mode: "initial-setup" },
+      ),
+    ).toEqual({ ok: false, reason: "event_mismatch" });
   });
   it("refuses a version 1 approval when the context says relinquished", () => {
     expect(validate(allocation, approval, relinquishedContext)).toEqual({

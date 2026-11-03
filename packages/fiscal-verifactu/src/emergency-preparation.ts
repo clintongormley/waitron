@@ -231,6 +231,7 @@ export function createEmergencyAllocationPreparation(configuration: {
         environment: current.environment,
         mode: "recovery",
         ...held.binding,
+        oldMachineRelinquished: undefined,
         operatorId: operator.operatorId,
         incidentEvidence: current.incidentEvidence,
         requiredBases,
