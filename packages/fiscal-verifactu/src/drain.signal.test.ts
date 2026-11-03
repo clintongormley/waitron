@@ -131,6 +131,97 @@ describe("drain — told to stop", () => {
   });
 });
 
+describe("drain — told to stop while its next claim waits for the write lock", () => {
+  beforeEach(seedThreeBatches);
+
+  /**
+   * `suite.db`, except that the write which stores the first batch's answer queues a stand-in for
+   * the stepdown's write behind itself. That stand-in holds the lock until the drain has queued its
+   * next claim, then aborts `controller`, so the abort lands while the claim waits.
+   */
+  function stepdownQueuedAhead(controller: AbortController): {
+    db: DrainDeps["db"];
+    armAfterSubmit: () => void;
+  } {
+    const real = suite.db;
+    let phase: "idle" | "armed" | "stepdown-queued" | "done" = "idle";
+    let claimQueued!: () => void;
+    const db = new Proxy(real, {
+      get(target, prop) {
+        if (prop === "withWriteLock") {
+          return <T>(body: () => Promise<T>): Promise<T> => {
+            if (phase === "armed") {
+              phase = "stepdown-queued";
+              const storing = real.withWriteLock(body);
+              const queued = new Promise<void>((resolve) => (claimQueued = resolve));
+              void real.withWriteLock(async () => {
+                await queued;
+                controller.abort();
+              });
+              return storing;
+            }
+            if (phase === "stepdown-queued") {
+              phase = "done";
+              const waiting = real.withWriteLock(body);
+              claimQueued();
+              return waiting;
+            }
+            return real.withWriteLock(body);
+          };
+        }
+        const value: unknown = Reflect.get(target, prop, target);
+        return typeof value === "function" ? (value as () => unknown).bind(target) : value;
+      },
+    });
+    return {
+      db,
+      armAfterSubmit: () => {
+        if (phase === "idle") phase = "armed";
+      },
+    };
+  }
+
+  it("control: without the abort, the claim queued behind the stand-in sends the second batch", async () => {
+    const controller = new AbortController();
+    const { db, armAfterSubmit } = stepdownQueuedAhead(new AbortController());
+
+    const result = await drain({ ...deps(client(armAfterSubmit), controller.signal), db }, NOW);
+
+    expect(result.batchesSent).toBe(3);
+  });
+
+  it("claims nothing once the abort lands, sends no batch after it, and stores the wait AEAT set", async () => {
+    const controller = new AbortController();
+    const { db, armAfterSubmit } = stepdownQueuedAhead(controller);
+    const abortedAtSubmit: boolean[] = [];
+
+    const result = await drain(
+      {
+        ...deps(
+          client(() => {
+            abortedAtSubmit.push(controller.signal.aborted);
+            armAfterSubmit();
+          }),
+          controller.signal,
+        ),
+        db,
+      },
+      NOW,
+    );
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(abortedAtSubmit).toEqual([false]);
+    expect(result.batchesSent).toBe(1);
+    expect(await estados()).toEqual({ aceptado: 3, pendiente: 6 });
+    expect(await flujo()).toEqual([
+      {
+        proximo_envio_en: new Date(NOW.getTime() + AEAT_WAIT_SEG * 1000).toISOString(),
+        tiempo_espera_seg: AEAT_WAIT_SEG,
+      },
+    ]);
+  });
+});
+
 describe("drain — told to stop between a claim that found nothing sendable and its retry", () => {
   /**
    * Three rows the environment guard refuses fill the cap-3 claim window, and a healthy row on
@@ -156,7 +247,7 @@ describe("drain — told to stop between a claim that found nothing sendable and
   });
 
   it("claims and sends nothing more, and leaves envio_flujo unchanged", async () => {
-    // Reads false at the round's first check only: aborted from then on, as a signal raised while
+    // Reads false at the first claim's check only: aborted from then on, as a signal raised while
     // the first claim ran would be.
     let reads = 0;
     const signal = {
@@ -175,6 +266,8 @@ describe("drain — told to stop between a claim that found nothing sendable and
       NOW,
     );
 
+    // A changed count means re-checking which check this test now reaches.
+    expect(reads).toBe(2);
     expect(submits).toBe(0);
     expect(result.batchesSent).toBe(0);
     expect(await estados()).toEqual({ pendiente: 4 });
@@ -216,7 +309,7 @@ describe("drain — told to stop at a retry after a batch was sent", () => {
   });
 
   it("sends nothing more and stores the wait AEAT set", async () => {
-    // Aborted from the second read after a send: the next round's first check passes, and the
+    // Aborted from the second read after a send: the next round's first claim passes, and the
     // retry inside that round is the first to see it.
     let submits = 0;
     let readsSinceSubmit = 0;
@@ -238,6 +331,8 @@ describe("drain — told to stop at a retry after a batch was sent", () => {
       NOW,
     );
 
+    // A changed count means re-checking which check this test now reaches.
+    expect(readsSinceSubmit).toBe(2);
     expect(submits).toBe(1);
     expect(result.batchesSent).toBe(1);
     expect(await estados()).toEqual({ aceptado: 1, pendiente: 2 });

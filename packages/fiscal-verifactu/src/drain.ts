@@ -118,7 +118,7 @@ export interface DrainDeps {
    * A test seam, so a suite can exercise the over-the-cap split without seeding 1000+ rows.
    */
   maxRegistrosPorEnvio?: number;
-  /** Once aborted, the pass claims no further batch; a batch already sent is answered and stored. */
+  /** Once aborted, the pass claims no further batch. */
   signal?: AbortSignal;
 }
 
@@ -210,12 +210,6 @@ export async function drain(deps: DrainDeps, now: Date): Promise<DrainResult> {
   return result;
 }
 
-/** A call, not an inline read: the compiler would otherwise narrow `aborted` to false after the
- * round's first check, though the signal can be raised while a claim runs. */
-function stopRequested(signal: AbortSignal | undefined): boolean {
-  return signal?.aborted === true;
-}
-
 /**
  * Each chunk is claimed in its own short transaction (T1) that commits before the network call,
  * so the venue file's single writer slot is not held across an AEAT round trip. `client.submit`
@@ -233,6 +227,7 @@ function stopRequested(signal: AbortSignal | undefined): boolean {
  *     full envío nor past the wait, so it is deferred to a later pass gated on `t`.
  *   - An envío carries one taxpayer name (see `claimBatch`). Before the wait has passed, and after
  *     a chunk has gone, a chunk a name change would cut short is not sent; the pass ends there.
+ *   - Once `signal` is aborted no further chunk is claimed; a chunk already claimed is still sent.
  */
 async function drainDue(
   db: Database,
@@ -271,13 +266,7 @@ async function drainDue(
   // later chunk does not re-discover (and re-incident) them. Fresh each pass, so a chain is
   // re-examined next time rather than assumed still blocked.
   const blockedSifIds = new Set<string>();
-  rounds: while (dueCount > 0) {
-    // Before any send, return: storing `now + t` would move AEAT's wait later for a send that
-    // never happened. After one, break, so the wait AEAT set is stored.
-    if (stopRequested(signal)) {
-      if (result.batchesSent === 0) return;
-      break;
-    }
+  while (dueCount > 0) {
     // Retried until something is sendable or nothing was claimed: a window can hold only rows of
     // chains the environment guard just blocked, and the growing `blockedSifIds` lets the next
     // SELECT reach past them. Bounded: each empty round either blocks a new chain or moves its rows
@@ -286,12 +275,17 @@ async function drainDue(
       sendable: DueRow[];
       rawCount: number;
       deferred: boolean;
+      stopped?: true;
       incidentToken?: string | null;
     };
     for (;;) {
       try {
         let flushedFailure: TechnicalFailure | undefined;
         claimed = await countOnCommit(db, result, async (tx, counts) => {
+          // Read once this claim holds the write lock, so a stop raised while it waited claims nothing.
+          if (signal?.aborted === true) {
+            return { sendable: [], rawCount: 0, deferred: false, stopped: true };
+          }
           flushedFailure = technicalFailures.get(db)?.get(environment);
           if (flushedFailure !== undefined) {
             await openTechnicalIncident(tx, environment, flushedFailure.now, flushedFailure.ids);
@@ -341,11 +335,12 @@ async function drainDue(
         claimed = { sendable: [], rawCount: 0, deferred: true };
       }
       if (claimed.deferred || claimed.sendable.length > 0 || claimed.rawCount === 0) break;
-      // The same rule as the round's first check: a retry is a fresh claim.
-      if (stopRequested(signal)) {
-        if (result.batchesSent === 0) return;
-        break rounds;
-      }
+    }
+    if (claimed.stopped === true) {
+      // Before any send, return: storing `now + t` would move AEAT's wait later for a send that
+      // never happened. After one, break, so the wait AEAT set is stored.
+      if (result.batchesSent === 0) return;
+      break;
     }
     if (claimed.deferred) {
       if (result.batchesSent === 0) {
