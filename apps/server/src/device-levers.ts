@@ -1,6 +1,6 @@
 import "./errors.js";
 import type { Context, Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
 import { readRawJsonBody } from "@waitron/server-kit";
 import { withTransaction, workingOrders } from "@waitron/db";
@@ -44,7 +44,7 @@ async function orderZone(
       deliveryTableId: workingOrders.deliveryTableId,
     })
     .from(workingOrders)
-    .where(and(eq(workingOrders.id, orderId), eq(workingOrders.locationId, cfg.locationId)));
+    .where(eq(workingOrders.id, orderId));
   if (order === undefined) {
     throw new AppError("working_order.not_found", { workingOrderId: orderId });
   }

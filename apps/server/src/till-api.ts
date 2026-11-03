@@ -302,7 +302,7 @@ export interface TillApiDeps {
   providers?: readonly CardProviderContribution[];
   /** Gates the per-tab device override header (`x-waitron-dev-device`); unset leaves it inert. */
   devMode?: boolean;
-  /** The venue's default UI locale, distinct from the location's receipt language. */
+  /** The venue's default UI locale, distinct from its receipt language. */
   venueLocale: string;
   /** The setup journey that created this installation, shown persistently by the till. */
   onboardingIntent?: OnboardingIntent;

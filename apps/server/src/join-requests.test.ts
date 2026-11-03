@@ -47,7 +47,7 @@ import {
 import { authenticateAgent } from "@waitron/printing";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { nodeId as brandNodeId } from "@waitron/shared";
+import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { createStation } from "./kitchen.js";
@@ -1038,7 +1038,7 @@ describe("a returning disabled device", () => {
     expect(await pendingRows()).toBe(0);
   });
 
-  it("takes the printers of a new profile at the device's own location, not the request's", async () => {
+  it("takes the printers of a new profile", async () => {
     const venue = await setupVenue(suite.db);
     const [printer] = await suite.db
       .insert(printers)
@@ -1067,21 +1067,16 @@ describe("a returning disabled device", () => {
         label: "Tablet",
         returning: { deviceId, tokenHash },
       });
-      // A request's location is the node's configured one; the device keeps the row's own.
-      await tx
-        .update(joinRequests)
-        .set({ locationId: randomUUID() })
-        .where(eq(joinRequests.id, deviceId));
       await acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
         label: "Bar till",
         profileId: other,
       });
     });
     const [row] = await suite.db
-      .select({ receiptPrinterId: devices.receiptPrinterId, locationId: devices.locationId })
+      .select({ receiptPrinterId: devices.receiptPrinterId })
       .from(devices)
       .where(eq(devices.id, deviceId));
-    expect(row).toEqual({ receiptPrinterId: null, locationId: venue.cfg.locationId });
+    expect(row).toEqual({ receiptPrinterId: null });
     expect(
       await withTransaction(suite.db, (tx) => resolveDevicePrinterId(tx, deviceId, "receipt")),
     ).toBe(printer!.id);
@@ -1702,21 +1697,19 @@ describe("readAgentJoinStatus", () => {
 
 describe("selfEnrolNodeAgent", () => {
   it("mints one agent per node whose token authenticates", async () => {
-    const cfg = (await setupVenue(suite.db)).cfg;
+    await setupVenue(suite.db);
     const nodeId = randomUUID();
-    const { agentId, token } = await asApp((tx) =>
-      selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }),
-    );
+    const { agentId, token } = await asApp((tx) => selfEnrolNodeAgent(tx, { nodeId, name: "box" }));
     // The token is the accept-shape `${id}.${secret}` and authenticates as this agent.
     const auth = await authenticateAgent(suite.db, token);
     expect(auth.agentId).toBe(agentId);
   });
 
   it("is idempotent per node: a second call refreshes the token, keeps one row and the same id", async () => {
-    const cfg = (await setupVenue(suite.db)).cfg;
+    await setupVenue(suite.db);
     const nodeId = randomUUID();
-    const first = await asApp((tx) => selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }));
-    const second = await asApp((tx) => selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box again" }));
+    const first = await asApp((tx) => selfEnrolNodeAgent(tx, { nodeId, name: "box" }));
+    const second = await asApp((tx) => selfEnrolNodeAgent(tx, { nodeId, name: "box again" }));
     expect(second.agentId).toBe(first.agentId); // stable id → printer bindings survive
     expect(second.token).not.toBe(first.token); // fresh secret
 
@@ -1731,15 +1724,15 @@ describe("selfEnrolNodeAgent", () => {
   });
 
   it("refuses a revoked node's re-enrol with device.join_revoked and does NOT reactivate it", async () => {
-    const cfg = (await setupVenue(suite.db)).cfg;
+    await setupVenue(suite.db);
     const nodeId = randomUUID();
-    const { agentId } = await asApp((tx) => selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }));
+    const { agentId } = await asApp((tx) => selfEnrolNodeAgent(tx, { nodeId, name: "box" }));
     // Revoke it (active := false), the deliberate revoke self-enrol must not silently undo.
     await suite.db.execute(sql`update print_agents set active = false where id = ${agentId}`);
 
-    expect(
-      await codeOf(() => asApp((tx) => selfEnrolNodeAgent(tx, cfg, { nodeId, name: "box" }))),
-    ).toBe("device.join_revoked");
+    expect(await codeOf(() => asApp((tx) => selfEnrolNodeAgent(tx, { nodeId, name: "box" })))).toBe(
+      "device.join_revoked",
+    );
 
     // Through the table definition: a raw read skips drizzle's decoding and hands this boolean
     // column back as SQLite's 0/1, which no `toBe(false)` could ever match.
@@ -1831,5 +1824,42 @@ describe("a request stamped ahead of the clock, as after a backward step", () =>
     );
     await stampAhead(made.joinId, JOIN_TTL_MS - 5_000);
     expect(await readAgentJoinStatus(suite.db, cfg, made.joinId, made.token)).toBe("pending");
+  });
+});
+
+describe("the venue a join stamps", () => {
+  // A1301: deleted with cfg in S18
+  it("stamps the venue on a request, the device and agents it becomes, whatever location the scope names", async () => {
+    const venue = await setupVenue(suite.db);
+    const elsewhere = { ...venue.cfg, locationId: brandLocationId(randomUUID()) };
+    const profileId = await seedProfile("till");
+    const { device, agent, self } = await withTransaction(suite.db, async (tx) => {
+      const device = await createJoinRequest(tx, elsewhere, { kind: "device", label: "Bar till" });
+      const [request] = await tx
+        .select({ locationId: joinRequests.locationId })
+        .from(joinRequests)
+        .where(eq(joinRequests.id, device.joinId));
+      expect(request).toEqual({ locationId: venue.cfg.locationId });
+      await acceptDeviceJoinRequest(tx, elsewhere, device.joinId, { label: "Bar 1", profileId });
+      const agent = await createJoinRequest(tx, elsewhere, { kind: "print_agent", label: "pi" });
+      await acceptPrintAgentJoinRequest(tx, elsewhere, agent.joinId, {
+        choice: agent.verificationNumber,
+      });
+      const self = await selfEnrolNodeAgent(tx, { nodeId: randomUUID(), name: "box" });
+      return { device, agent, self };
+    });
+    const [deviceRow] = await suite.db
+      .select({ locationId: devices.locationId })
+      .from(devices)
+      .where(eq(devices.id, device.joinId));
+    expect(deviceRow).toEqual({ locationId: venue.cfg.locationId });
+    const agentRows = await suite.db
+      .select({ id: printAgents.id, locationId: printAgents.locationId })
+      .from(printAgents)
+      .orderBy(printAgents.name);
+    expect(agentRows).toEqual([
+      { id: self.agentId, locationId: venue.cfg.locationId },
+      { id: agent.joinId, locationId: venue.cfg.locationId },
+    ]);
   });
 });

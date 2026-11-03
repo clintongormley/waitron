@@ -84,14 +84,14 @@ async function readSetupFields(tx: Transaction, deps: TillSetupDeps, device: Dev
   /* v8 ignore start */
   if (taxpayer === null) {
     // Unreachable once provisioned: the taxpayer row exists.
-    throw new Error(`readTillSetup: no taxpayer row for ${deps.cfg.locationId}`);
+    throw new Error("readTillSetup: no taxpayer row");
   }
   /* v8 ignore stop */
   const simulator = deps.cardProvider?.provider === "simulator";
   return {
     locale: deps.venueLocale,
     clockingAvailable: deps.workforceEnabled === true,
-    // The location's receipt language, kept separate from the UI `locale`: the UI derivation
+    // The venue's receipt language, kept separate from the UI `locale`: the UI derivation
     // drops UI-unsupported codes, which must never reach the receipt.
     invoiceLocale: receiptLanguages[0],
     receiptLanguages,

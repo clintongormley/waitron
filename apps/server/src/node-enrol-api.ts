@@ -53,7 +53,7 @@ export function mountNodeEnrolApi(app: Hono, deps: NodeEnrolApiDeps, log: Logger
       const body = await readJsonBody<{ name?: unknown }>(c);
       const name = requireString(body.name, "name");
       const { token } = await withTransaction(deps.db, async (tx) => {
-        return selfEnrolNodeAgent(tx, deps.cfg, { nodeId: deps.nodeId, name });
+        return selfEnrolNodeAgent(tx, { nodeId: deps.nodeId, name });
       });
       return c.json({ token }, 201);
     }),

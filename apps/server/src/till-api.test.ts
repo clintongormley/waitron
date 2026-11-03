@@ -925,7 +925,6 @@ describe("requireSession (validates an OPEN session for Tasks 5 & 6's protected 
         deviceId: sessionDeviceId,
         formFactor: "till",
         label: rows[0]!.label,
-        locationId: cfg.locationId,
         deviceProfileId: rows[0]!.device_profile_id,
         capabilities: [...CAPABILITY_FLAGS],
       },

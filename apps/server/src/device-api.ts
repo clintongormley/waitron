@@ -617,7 +617,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
       const cfg = requestCfg(deps.cfg, device);
       const stations = await withTransaction(deps.db, async (tx) => {
         const screen = await stationScreenOf(tx, c, deps.cfg, device);
-        const { slots, queues } = await stationScreenSlots(tx, deps.cfg, screen);
+        const { slots, queues } = await stationScreenSlots(tx, screen);
         const live = [...queues.keys()];
         const now = new Date();
         // An Every screen can still hold ready dishes at a deleted station.
@@ -676,7 +676,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
           .select({ stationId: kitchenNotices.stationId })
           .from(kitchenNotices)
           .where(eq(kitchenNotices.id, id));
-        if (notice === undefined || !(await worksStation(tx, deps.cfg, screen, notice.stationId)))
+        if (notice === undefined || !(await worksStation(tx, screen, notice.stationId)))
           throw new AppError("kitchen_notice.not_found", { noticeId: id });
         await VENUE_SERVICE.acknowledgeKitchenNotice(tx, cfg, id, { stationId: notice.stationId });
       });
@@ -707,7 +707,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
           .select({ stationId: ticketItems.stationId })
           .from(ticketItems)
           .where(eq(ticketItems.id, id));
-        if (item !== undefined && !(await worksStation(tx, deps.cfg, screen, item.stationId))) {
+        if (item !== undefined && !(await worksStation(tx, screen, item.stationId))) {
           throw new AppError("device.forbidden_station", { stationId: item.stationId });
         }
         await advanceTicketItem(tx, cfg, id, to);
@@ -734,7 +734,7 @@ export function mountDeviceApi(root: Hono, deps: DeviceApiDeps, log: Logger): vo
           { deviceId: device.deviceId, personId, kind: "kitchen" },
           {
             assertFrom: async (stationId) => {
-              if (!(await worksStation(tx, deps.cfg, screen, stationId)))
+              if (!(await worksStation(tx, screen, stationId)))
                 throw new AppError("device.forbidden_station", { stationId });
             },
           },
@@ -1100,7 +1100,6 @@ async function kitchenScreenOf(
 
 async function stationScreenSlots(
   tx: Transaction,
-  cfg: Pick<TradingContext, "locationId">,
   screen: ResolvedKitchenScreen,
 ): Promise<{ slots: ScreenSlot[]; queues: Map<string, StationQueueGroup[]> }> {
   const worked = (slot: ScreenSlot) => slot.available || slot.switchedOff;
@@ -1112,7 +1111,7 @@ async function stationScreenSlots(
     return { slots: [...screen.stations], queues };
   }
   const listed = new Map(screen.stations.map((slot) => [slot.id, slot]));
-  const everyStation = await stationsHere(tx, cfg);
+  const everyStation = await stationsHere(tx);
   const off = everyStation.filter((station) => !station.active && !listed.has(station.id));
   const queues = await listStationQueues(tx, [
     ...screen.stations.filter(worked).map((slot) => slot.id),
@@ -1131,7 +1130,6 @@ async function stationScreenSlots(
  *  {@link stationScreenSlots} lists it with a queue. */
 async function worksStation(
   tx: Transaction,
-  cfg: Pick<TradingContext, "locationId">,
   screen: ResolvedKitchenScreen,
   stationId: string,
 ): Promise<boolean> {
@@ -1141,17 +1139,16 @@ async function worksStation(
   const [station] = await tx
     .select({ active: kitchenStations.active })
     .from(kitchenStations)
-    .where(and(eq(kitchenStations.id, stationId), eq(kitchenStations.locationId, cfg.locationId)));
+    .where(eq(kitchenStations.id, stationId));
   if (station === undefined || station.active) return false;
   return stationHasWork(tx, stationId);
 }
 
-/** The location's stations, historical rows included. */
-async function stationsHere(tx: Transaction, cfg: Pick<TradingContext, "locationId">) {
+/** The venue's stations, historical rows included. */
+async function stationsHere(tx: Transaction) {
   const stations = await tx
     .select({ id: kitchenStations.id, name: kitchenStations.name, active: kitchenStations.active })
     .from(kitchenStations)
-    .where(eq(kitchenStations.locationId, cfg.locationId))
     .orderBy(asc(kitchenStations.name), asc(kitchenStations.id));
   return stations.sort((a, b) => compareStationNames(a.name, b.name) || a.id.localeCompare(b.id));
 }
