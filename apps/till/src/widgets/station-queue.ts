@@ -730,7 +730,6 @@ export class TillStationQueue extends LitElement {
   #cardBadgeDrawn = false;
   /** The host's width and sizes, read before each drawing so the first is already tabs or columns. */
   #measured?: BoardMeasure;
-  #cards: KitchenCard[] = [];
   #resizing?: ResizeObserver;
   @state() private chosenTab?: ColumnKey;
   /** A collapsed column whose heading was just tapped: chosen if opening it turns the board to tabs. */
@@ -764,7 +763,6 @@ export class TillStationQueue extends LitElement {
   }
 
   override willUpdate(): void {
-    this.#cards = kitchenCards(this.groups);
     this.#measured = measureBoard(this);
     const tabs = this.groups.length > 0 && !this.#fits();
     if (this.#opening !== undefined && tabs && !this.#drewTabs) this.chosenTab = this.#opening;
@@ -927,7 +925,7 @@ export class TillStationQueue extends LitElement {
 
   override render() {
     this.#cardBadgeDrawn = false;
-    const cards = this.#cards;
+    const cards = kitchenCards(this.groups);
     return html`<div class="width-probe"></div>
       <div class="board-head" data-board-head>
         <slot name="lead"></slot>${this.#header(cards)}<span
