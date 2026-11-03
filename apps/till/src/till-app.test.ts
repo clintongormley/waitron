@@ -16331,6 +16331,20 @@ describe("till-app follows a server move", () => {
     expect(setServers).toHaveBeenCalledWith(servers);
   });
 
+  it("feeds the boot payload's chart to the router", async () => {
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    const offerChart = vi.spyOn(router, "offerChart");
+    const membership = { body: { term: 4 } };
+    const api = stubApi({ getTill: vi.fn().mockResolvedValue({ ...till, membership }) });
+    const { el } = await mountWidget<TillApp>("till-app", { api, router });
+    await flush(el);
+    expect(offerChart).toHaveBeenCalledWith(membership);
+  });
+
   it("shows the waiting-for-promotion banner in the shell while the router waits", async () => {
     // On the shell surface (an operator mid-shift) the lock-screen's own status line is not visible, so
     // `till-app` surfaces `server.waiting_promotion` in its own `role="status"` banner while the router

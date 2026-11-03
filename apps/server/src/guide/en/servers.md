@@ -12,3 +12,21 @@ recorded them, with the date and time of each in the venue's time zone.
 The page has no buttons, because nothing on it needs you: the box is meant to be in this state.
 
 The page is in Spanish when your browser prefers Spanish, and in English otherwise.
+
+## When a box is waiting for another box {#waiting}
+
+When a box starts and cannot reach the other box the venue runs on, it waits instead of selling,
+because the other box may have taken over. Its page, titled **This box is waiting for** and the
+other box's name, says so. While it waits it takes no sales and sends nothing to the tax agency.
+It asks again every 15 seconds; once the other box answers, this box starts normally or, if the
+other box has taken over, says so.
+
+## Carry on as the main box {#carry-on}
+
+If you know the other box is switched off, you can let this box carry on without it. Open the box
+at its `https://` address, sign in as an administrator under **Carry on as the main box**, and
+tick both statements. This box then runs the venue until it next restarts, when it asks the other
+box again.
+
+If the other box answers first, its answer wins. A box that has already handed over cannot carry
+on; its page says so instead of showing the form.

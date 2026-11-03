@@ -1,4 +1,4 @@
-import type { Hono } from "hono";
+import type { Hono, MiddlewareHandler } from "hono";
 import type { SignedMembershipDocument } from "@waitron/membership";
 import type { StartedServer } from "./boot.js";
 import type { DeploymentEnvironment } from "./config.js";
@@ -11,6 +11,8 @@ export interface RestrictedStartDeps {
   nodeId: string;
   environment: DeploymentEnvironment;
   readMembership: () => Promise<SignedMembershipDocument | null>;
+  /** The venue's cross-origin layer for `/api/*`, as the full start has. */
+  cors: MiddlewareHandler;
   /** Routes later handover steps add to the restricted box. */
   routes: ((app: Hono) => void)[];
   log: Logger;
@@ -23,6 +25,7 @@ export interface RestrictedStartDeps {
  * move to the successor, and nothing that sells, files or writes.
  */
 export function startRestricted(deps: RestrictedStartDeps): StartedServer {
+  deps.app.use("/api/*", deps.cors);
   mountNodeApi(
     deps.app,
     {

@@ -1533,6 +1533,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         ...setup,
         setupRevision: setupRevisionOf(setup),
         servers: routableServers(held),
+        membership: held,
       });
     }),
   );

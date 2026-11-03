@@ -1037,8 +1037,8 @@ export function mountManagementApi(
   );
 
   // A peer fetches this node's signed membership chart (`null` when none was adopted). The caller
-  // re-verifies the signature regardless; the credential keeps the chart off arbitrary readers. It
-  // rides in a header because a GET carries no body. Every malformed credential is `password.invalid`,
+  // re-verifies the signature regardless. The credential rides in a header because a GET carries no
+  // body. Every malformed credential is `password.invalid`,
   // so the response does not say which field failed. The session authorizes this read alone and is
   // ended in the same transaction; no cookie is set.
   app.get("/management-api/membership", (c) =>

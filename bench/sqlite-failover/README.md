@@ -113,10 +113,11 @@ against a config `writeConfig` did not write (which would otherwise reach litest
 credentials and come back as a store error). A later task that needs one of them should pin it or
 delete it.
 
-**`scenarios` exits 1 on a clean tree**, because S2 is a critical scenario whose verdict is FAIL — a
-recorded result, not a broken harness. See "What S2 measures, and what it does not" below. Anything
-reading this rig's exit code has to account for that: a 1 here means "a critical scenario failed", and
-on this tree that scenario is S2 and it is expected.
+**Since 2026-11-03 S2 no longer makes a clean run exit 1**: it reads PASS (see "What S2 measures,
+and what it does not" below). Before that every clean run exited 1, because S2's verdict was FAIL.
+A clean run can still exit 1: on 2026-11-03 S3 threw `database disk image is malformed` on some
+whole-table runs on one machine, cause not investigated (the backlog's _Replication, failover and
+the cloud_ area). A 1 means a critical scenario failed or threw; read the table for which.
 
 `TESTCONTAINERS_RYUK_DISABLED=true` is required locally (`CLAUDE.md` §4), and it turns off the reaper
 that would otherwise clean up after an interrupted run. Scenarios run one at a time and each that opens a store stops it
@@ -134,8 +135,8 @@ JSON document carrying the same rows verbatim, the ids of the critical failures 
 piped run's own exit status is the pipeline's last command, not the runner's).
 
 **`--json` needs `pnpm --silent`, or the document does not parse.** pnpm writes its script banner to
-stdout before the runner's output and, on a non-zero exit — which is every run on a clean tree, because
-S2 fails — an `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL` footer after it. Measured 2026-09-19: without
+stdout before the runner's output and, on a non-zero exit — which was every run on a clean tree until
+2026-11-03, because S2 failed — an `ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL` footer after it. Measured 2026-09-19: without
 `--silent`, piping stdout whole to a JSON parser gives `Expecting value: line 2 column 1`; with it, the
 same command parses to ten rows and `exitCode: 1`. Both forms still exit 1. Either way it exits
 **non-zero only when a scenario marked `critical` has the verdict `FAIL`**. `MEASURED` and `SKIPPED`
@@ -1075,6 +1076,17 @@ is not the measurement, and it may differ from run to run.
 > `docs/research/2026-09-16-sqlite-failover-prototype.md` → "S2 re-run with A1018's return batch".
 > S2's verdict now also reads FAIL when Part F leaves a record never filed or Part G's replay is not
 > clean. The rest of this section is about Parts A to E and is left as it was written.
+>
+> **2026-11-03, later — S2 reads PASS.** The owner reads S2's gate from Parts F and G. Part D and
+> Part E's second half model the unfenced tail ship that the fenced return batch retires, so they
+> are now controls of the retired design: each asserts that it files a record twice, and one that
+> does not makes the scenario throw, which the runner reports as a critical FAIL row titled `threw`.
+> The verdict counts second filings only in the parts that are not controls. Where the rest of this
+> section says S2's verdict is FAIL, or that Part D or Part E's second half is measured rather than
+> asserted, it describes the scenario before this change. The mutation list's first entry, forcing
+> `diffTail`'s high-water mark to 0, was run again after it, on 2026-11-03: the scenario now
+> throws, `| s2_no_double_submit | threw | FAIL | control: the retired refreshed-summary ship files record 1 twice |`,
+> exit 1.
 
 **S2's verdict is FAIL, and that is a result rather than a broken harness.** The rig found a way the
 loop as modelled here submits one sale to the tax agency twice. The scenario records it instead of

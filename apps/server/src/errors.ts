@@ -159,6 +159,13 @@ declare module "@waitron/shared" {
     /** The box is stepping down: it takes no new request beyond the few that report its state. */
     "handover.stepping_down": Record<string, never>;
     /**
+     * A box that holds a restriction, or is the source of an open handover, was asked to carry on
+     * as the main box: it cannot undo a handover it knows of.
+     */
+    "handover.known_handover": { successorNodeId: string };
+    /** A box's signed query came from a key this box's stored keys and held chart do not vouch for. */
+    "handover.peer_unknown": Record<string, never>;
+    /**
      * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
      * document that fences it, so it boots read-only rather than sell beside the promoted primary
      * (two nodes filing under one NIF — CLAUDE.md §5). Logged, never thrown: a fenced boot is a

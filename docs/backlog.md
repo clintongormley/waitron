@@ -5694,10 +5694,60 @@ Not in any track until the standalone primary is done.
   The [build plan](superpowers/plans/2026-11-02-a1018-handover-build.md) cuts the work into slices.
   The owner answered (a) to both its questions (returned invoices in modelo 303; the emergency
   minute wait) on 2026-11-02: Slice 12b is built on that answer, landed by the owner and marked
-  pending the venue's tax adviser, and Task 7.4b is not built. Slice 9's S2 re-run leaves one owner
-  question: whether S2's verdict is read off its new Parts F and G alone; Slices 10 and 11 wait on
-  it.
+  pending the venue's tax adviser, and Task 7.4b is not built. On 2026-11-03 the owner read
+  Slice 9's S2 re-run from its new Parts F and G, and S2 reads PASS; Slices 10 and 11 may be built.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
+
+- **A947 3b must make the held chart vouch for a joined box's key, or the main box can never check
+  its answer and waits at every start.** The start check verifies a peer's signed status with
+  `peerKeyOf` (`apps/server/src/handover-signing.ts`): this box's own key, the main-box key a spare
+  pins at adoption, and keys the held chart's endorsements vouch for. A main box holds none of
+  these for its spare, so once 3b makes a spare finish joining, the spare's answers count as
+  silent. No box has a joined peer before 3b. 3b must also give each box its own address in the
+  chart: by default both advertise `https://waitron.local` (`deploy/Dockerfile`, sent at
+  `apps/server/src/adopt.ts:109`), and the check never asks a peer at its own address. Left open by
+  A1018 Slice 3 (Ruling R13).
+
+- **The boot peer reconcile cannot reach a real box's certificate.** `fetchPeerMembershipDocument`
+  (`apps/server/src/membership-reconcile.ts:66`) calls the plain global `fetch`, which refuses a
+  leaf from a box's own authority, and it sets no time limit. `git blame` shows the line from
+  e82588f349 (2026-09-08, "Outbox → native logical replication", #280), so it predates A1018. The
+  start check's transport (`askPeerStatus`, `apps/server/src/boot-peer-check.ts`) pins the
+  authority a spare holds, or skips the check behind its signed answer. Found by A1018 Slice 3's
+  review.
+
+- **A captured signed peer query can be replayed later to read a box's status.** The peer-status
+  route checks the query's `atMs` but never uses it, so there is no freshness window; a strict one
+  would lock out a box with a wrong clock. Owner's choice. Left open by A1018 Slice 3 (Ruling R6).
+
+- **The waiting start's loose ends.** A refused stepdown leaves it waiting until its process
+  restarts, and a stepdown request still in flight after the wait ended restarts the box but closes
+  nothing. Left open by A1018 Slice 3.
+  [Detail](backlog/replication-cloud.md#the-waiting-starts-loose-ends)
+
+- **The membership route ignores a different chart at the term this box holds.** The start check
+  counts a trusted chart at the held term with another body that fences this box, and names
+  another box as serving primary, as a takeover
+  (`apps/server/src/boot-peer-check.ts`), but `POST /api/node/membership` answers `{ accepted: false }`
+  and steps nothing down (`apps/server/src/node-membership-api.ts`). Left open by A1018 Slice 3.
+
+- **The start check may still stop for a chart whose signer was evicted while it asked.** If a
+  chart that fences this box is refused at the save because a chart committed during the check
+  evicts its signer, the check still answers "superseded" and names that chart's serving primary
+  as its successor. Read, not run. Left open by A1018
+  Slice 3.
+
+- **The waiting page does not change when the wait ends.** A person already looking at it keeps
+  seeing "This box is waiting for…" until they reload (`apps/server/src/waiting-page.ts`). Left
+  open by A1018 Slice 3.
+
+- **The peer-status route's minor follow-ups.** A bad signature from a known box answers 403, the
+  operation id is not checked as a UUID, and a body of any size is read before the signature check.
+  Left open by A1018 Slice 3. [Detail](backlog/replication-cloud.md#the-peer-status-routes-minor-follow-ups)
+
+- **The carry-on page's unexpected-failure sentence does not call itself a fault in Waitron**
+  (`failed` in `apps/server/src/i18n/waiting-page.ts`). A refused disk write lands there too, so
+  the wording is a judgement call. Left open by A1018 Slice 3.
 
 - **A1185: a venue not yet connected sees no prices.** Left open by A1185.
   [Detail](backlog/replication-cloud.md#a1185-a-venue-not-yet-connected-sees-no-prices)
@@ -5855,6 +5905,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   store. A promoted node's generation and Cloud's recovery orchestration remain; settle the
   Waitron ↔ Waitron Cloud contract before assigning them.
   [Detail](backlog/replication-cloud.md#loose-ends-left-by-the-sqlite-failover-loop-prototype-gate)
+
+- **The bench's S3 sometimes throws `database disk image is malformed`.** Seen 2026-11-03 on one
+  Mac in 5 of 14 whole-table `bench/sqlite-failover` runs, including 1 of 7 with S2's file from
+  before A1018 Slice 3, so it also throws with main's bench code; S3 run alone passed 2 of 2. Cause not
+  investigated.
 
 - **Task 1a** — Deny's delete is the one join-request node filter no test fails without. Holders
   torn by a concurrent promotion, credential sealing and scheduler takeover remain unverified.

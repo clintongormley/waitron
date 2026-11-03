@@ -622,6 +622,26 @@ describe("a stepdown", () => {
     await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
   });
 
+  it("a supersession naming no successor writes no restriction and still restarts", async () => {
+    const r = rig(suite.node);
+    r.app.post("/no-successor", async (c) =>
+      c.json(
+        await stepDown(r.deps, {
+          kind: "superseded",
+          successorNodeId: null,
+          membershipTerm: 5,
+          self: c,
+        }),
+      ),
+    );
+    const response = await r.app.request("/no-successor", { method: "POST" });
+    expect(await response.json()).toEqual({ restarting: true, replayed: false });
+    expect(r.calls.length).toBeGreaterThan(0);
+    expect((await r.app.request("/stepdown", { method: "POST" })).status).toBe(503);
+    await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+    expect(await readHandoverRestriction(suite.node, SOURCE)).toBeNull();
+  });
+
   it("lets through only what a stepped-down box still answers", () => {
     const app = new Hono();
     const seen: Record<string, boolean> = {};

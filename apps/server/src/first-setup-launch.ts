@@ -25,14 +25,21 @@ export async function startServerOrFirstSetupResolution(
     startServer?: (
       env: NodeJS.ProcessEnv,
       base: NodeJS.ProcessEnv,
-    ) => Promise<{ close(): Promise<void> }>;
+    ) => Promise<{ close(): Promise<void>; fullyStarted?: Promise<void> }>;
     serveResolution?: (
       app: Hono,
       options: RecoveryServeOptions,
     ) => Promise<{ close(): Promise<void> }>;
     requestRestart?: () => void;
   } = {},
-): Promise<{ close(): Promise<void> }> {
+): Promise<{
+  close(): Promise<void>;
+  /**
+   * Rejects with the failure of a normal start, from this call or a relaunch after a repair, that
+   * answered while it waited for its peers and then failed; it never resolves.
+   */
+  failedLater: Promise<never>;
+}> {
   const stateDir = resolveConfigDir(env.WAITRON_STATE_DIR, DEFAULT_STATE_ROOT);
   const venueDir = resolveConfigDir(env.WAITRON_VENUE_DIR, join(stateDir, "venue"));
   const log = createLogger(
@@ -40,6 +47,15 @@ export async function startServerOrFirstSetupResolution(
     () => new Date(),
   );
   let active: { close(): Promise<void> };
+  let lateFailure: (error: unknown) => void = () => {};
+  const failedLater = new Promise<never>((_, reject) => (lateFailure = reject));
+  // Only keeps a caller that never reads it from an unhandled rejection.
+  failedLater.catch(() => {});
+  // A relaunch's start is watched too: the caller read the handle once, before any relaunch.
+  const watched = (server: { close(): Promise<void>; fullyStarted?: Promise<void> }) => {
+    server.fullyStarted?.catch(lateFailure);
+    return server;
+  };
   let closed = false;
   let transition: Promise<void> | undefined;
   let lastOptions: RecoveryServeOptions;
@@ -59,7 +75,7 @@ export async function startServerOrFirstSetupResolution(
       await active.close();
       if (closed) return;
       try {
-        active = await launch();
+        active = watched(await launch());
       } catch {
         active = await listen(new Hono(), { ...lastOptions, bootstrapOnly: true });
         throw new Error("Connection continuation failed");
@@ -72,7 +88,10 @@ export async function startServerOrFirstSetupResolution(
     }
   };
   const requestRestart = seams.requestRestart ?? (() => process.kill(process.pid, "SIGTERM"));
-  const launch = async (): Promise<{ close(): Promise<void> }> => {
+  const launch = async (): Promise<{
+    close(): Promise<void>;
+    fullyStarted?: Promise<void>;
+  }> => {
     const admission = await resolveFirstSetupEntry(
       { stateDir, venueDir },
       env,
@@ -144,8 +163,9 @@ export async function startServerOrFirstSetupResolution(
     }
     return listen(admission.app, options);
   };
-  active = await launch();
+  active = watched(await launch());
   return {
+    failedLater,
     close: async () => {
       closed = true;
       await transition?.catch(() => {});

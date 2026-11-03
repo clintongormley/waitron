@@ -69,6 +69,12 @@ import {
   setSingletonRole,
 } from "@waitron/node-db";
 import { finishPromotedRole } from "./promoted-role.js";
+import {
+  recordSupersededAtStart,
+  repairAtStart,
+  runStartPeerCheck,
+  type StartPeerCheckOutcome,
+} from "./start-peer-check.js";
 import { credentialProvisioned, loadKeyRing, tenantCredentials } from "@waitron/credentials";
 import { registerModulePermissions, withPassiveManagementRead } from "@waitron/identity";
 import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
@@ -202,6 +208,10 @@ import { restrictedPageRoute } from "./restricted-page.js";
 import { startRestricted } from "./restricted-start.js";
 import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
+import { mountPeerStatusApi } from "./peer-status-api.js";
+import { mountNodeMembershipApi } from "./node-membership-api.js";
+import { readPeerNames } from "./waiting-page.js";
+import { startWaiting, WAIT_RECHECK_MS } from "./waiting-start.js";
 import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-notices.js";
 import { clockStartUp, tillClockCheck } from "./clock-start-up.js";
 import {
@@ -371,6 +381,7 @@ import { BackupSupervisor } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { loadBoxEnv } from "./box-env.js";
 import { readOnlyGate } from "./read-only-gate.js";
+import { isReadOnlyExempt } from "./read-only-exemptions.js";
 import { isFenced } from "./membership-fence.js";
 import { endMirrorViewer, ensureMirrorViewer, mirrorSession } from "./mirror-session.js";
 import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
@@ -419,6 +430,11 @@ export interface StartedServer {
    * itself is not waited for) and the venue store is closed; rejects if any of that fails.
    */
   close(): Promise<void>;
+  /**
+   * Present when the start answered while it waited for its peers: settles when the rest of the
+   * start has finished, and rejects with the error that failed it.
+   */
+  fullyStarted?: Promise<void>;
 }
 
 /** The mode-specific half of `close()` (see `makeStartedServer`). */
@@ -953,13 +969,26 @@ export interface StartServerSeams {
     mount(app: Hono, stepDown: (request: StepDownRequest) => Promise<StepDownResult>): void;
     restart(): void;
   };
+  /**
+   * Stands in for the start check on a box that is not a mirror. A suite sets it, saying why at the
+   * site, when its chart lists a joined box that is not running. `superseded` takes the restricted
+   * start only with a `successorNodeId`; with `null` it takes Ruling R7's path, where only a held
+   * chart that fences this box stops it from selling.
+   */
+  peerCheck?: () => Promise<StartPeerCheckOutcome>;
+  /**
+   * How often a waiting start asks its peers again (defaults to `WAIT_RECHECK_MS`), and whether a
+   * carry-on request counts as reaching it over HTTPS (tests serve plain HTTP).
+   */
+  waitingStart?: { intervalMs?: number; secure?: (c: Context) => boolean };
 }
 
 /**
  * The one place the real implementations meet.
  *
  * Boot failures ESCAPE, deliberately: invalid config, an unloadable key ring, a failed migration or
- * a venue database it cannot open exit non-zero and let the supervisor decide. A host that boots
+ * a venue database it cannot open reject this call, or, for a box that answered while it waited for
+ * its peers, the returned server's `fullyStarted`, and the caller decides. A host that boots
  * half-configured and retries in the background is a host whose operator believes it is working.
  */
 export async function startServer(
@@ -968,9 +997,13 @@ export async function startServer(
   seams: StartServerSeams = {},
 ): Promise<StartedServer> {
   const undoOnFailure: Array<() => Promise<void>> = [];
-  try {
-    return await bootServer(env, base, seams, undoOnFailure);
-  } catch (error) {
+  let waiting: StartedServer | undefined;
+  let announced: () => void = () => {};
+  const waitBegan = new Promise<void>((resolve) => (announced = resolve));
+  const booted = bootServer(env, base, seams, undoOnFailure, (whileWaiting) => {
+    waiting = whileWaiting;
+    announced();
+  }).catch(async (error: unknown) => {
     // Newest first, so anything that runs on the venue store stops before the store closes. An undo
     // that fails is dropped: the boot's own error is the one the supervisor has to see.
     for (const undo of undoOnFailure.reverse()) {
@@ -981,7 +1014,27 @@ export async function startServer(
       }
     }
     throw error;
-  }
+  });
+  await Promise.race([booted, waitBegan]);
+  if (waiting === undefined) return await booted;
+  // A box that waits for its peers has started: it answers while the rest of its start waits.
+  const whileWaiting = waiting;
+  let current: StartedServer = whileWaiting;
+  const fullyStarted = booted.then((server) => {
+    current = server;
+  });
+  // The caller that starts the process reads the failure; this only keeps it from being unhandled.
+  const continued = fullyStarted.catch(() => {});
+  return {
+    health: whileWaiting.health,
+    fullyStarted,
+    close: async () => {
+      await whileWaiting.close();
+      // A shutdown after the wait ended waits for the rest of the start, up to the shutdown deadline.
+      await continued;
+      await current.close();
+    },
+  };
 }
 
 /**
@@ -993,6 +1046,7 @@ async function bootServer(
   base: NodeJS.ProcessEnv,
   seams: StartServerSeams,
   undoOnFailure: Array<() => Promise<void>>,
+  announceWaiting: (whileWaiting: StartedServer) => void,
 ): Promise<StartedServer> {
   const now = () => new Date();
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
@@ -1184,6 +1238,18 @@ async function bootServer(
   const handoverGate = createHandoverGate();
   // Ahead of every other middleware, so once a stepdown closes it nothing behind it runs.
   app.use("*", handoverGate.middleware);
+  // Used by the full, waiting and restricted starts, so all three answer the same origins.
+  const allowOrigin = createOriginAllowlist({
+    advertisedOrigin: config.advertisedOrigin,
+    readMembership: () => readNodeMembership(db),
+    devMode: config.devMode,
+    vitePorts: {
+      till: process.env.WAITRON_TILL_VITE_PORT,
+      dashboard: process.env.WAITRON_DASHBOARD_VITE_PORT,
+      setup: process.env.WAITRON_SETUP_VITE_PORT,
+    },
+    now: () => Date.now(),
+  });
   // Filled in only when the full start finishes; a fault in Waitron if called before then or on a
   // start that never fills it.
   let stepDownHere: (request: StepDownRequest) => Promise<StepDownResult> = () =>
@@ -1634,6 +1700,8 @@ async function bootServer(
   if (pendingAdoption !== null) {
     // Unauthenticated and deliberately minimal: no ambient viewer exists yet.
     app.get("/api/box/status", (c) => c.json({ adoption: "pending" }, 200));
+    mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: config.node.nodeId }, log);
+    mountNodeMembershipApi(app, { db, node: store.node, nodeId: config.node.nodeId }, log);
     const finishWorker = runFinishAdoption({
       ownerDb: db,
       stateDir: config.stateDir,
@@ -1684,15 +1752,24 @@ async function bootServer(
   // Before every worker, the first start, the stream host and the backup supervisor: a box that
   // has handed over or been superseded starts nothing that sells, files or writes beside its
   // successor.
-  if ((await readHandoverRestriction(store.node, config.node.nodeId)) !== null) {
+  const restrictedStart = () => {
     health.takesNoSales = true;
     return startRestricted({
       app,
-      nodeId: config.node.nodeId,
+      nodeId: node.nodeId,
       environment: config.environment,
       readMembership: () => readNodeMembership(db),
+      cors: corsForVenue(allowOrigin),
       routes: [
-        restrictedPageRoute({ venue: db, node: store.node, nodeId: config.node.nodeId, log }),
+        restrictedPageRoute({ venue: db, node: store.node, nodeId: node.nodeId, log }),
+        (restrictedApp) =>
+          mountPeerStatusApi(
+            restrictedApp,
+            { db, node: store.node, ring, nodeId: node.nodeId },
+            log,
+          ),
+        (restrictedApp) =>
+          mountNodeMembershipApi(restrictedApp, { db, node: store.node, nodeId: node.nodeId }, log),
       ],
       log,
       listen: (restrictedApp) => {
@@ -1720,10 +1797,110 @@ async function bootServer(
         );
       },
     });
-  }
+  };
+  if ((await readHandoverRestriction(store.node, config.node.nodeId)) !== null)
+    return restrictedStart();
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
   // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
   const initialAxes = await readNodeMode(store.node, config.node.nodeId);
+  // A mirror files nothing, so it has nothing to ask its peers before it starts.
+  if (initialAxes.mode !== "mirror") {
+    await repairAtStart({ node: store.node, nodeId: config.node.nodeId });
+    const checkPeers = () =>
+      seams.peerCheck === undefined
+        ? runStartPeerCheck({
+            db,
+            node: store.node,
+            ring,
+            nodeId: node.nodeId,
+            advertisedOrigin: config.advertisedOrigin,
+            log,
+          })
+        : seams.peerCheck();
+    let outcome = await checkPeers();
+    if (outcome.result === "wait") {
+      const fencedAtWait = isFenced(await readNodeMembership(db), node.nodeId);
+      const waitingStart = startWaiting({
+        health,
+        now,
+        venueDir: config.venueDir,
+        nodeId: node.nodeId,
+        environment: config.environment,
+        readMembership: () => readNodeMembership(db),
+        cors: corsForVenue(allowOrigin),
+        waitingOn: outcome.waitingOn ?? [],
+        namesOf: (ids) => readPeerNames(db, ids),
+        carryOn: {
+          db,
+          credentialKeyRing: totpKeyRing,
+          ...(seams.waitingStart?.secure === undefined
+            ? {}
+            : { secure: seams.waitingStart.secure }),
+        },
+        routes: [
+          (waitingApp) =>
+            mountPeerStatusApi(
+              waitingApp,
+              { db, node: store.node, ring, nodeId: node.nodeId },
+              log,
+            ),
+          (waitingApp, hooks) =>
+            mountNodeMembershipApi(
+              waitingApp,
+              {
+                db,
+                node: store.node,
+                nodeId: node.nodeId,
+                stepDown: hooks.stepDown,
+                // A box that waits sells once the wait ends, unless its held chart fences it.
+                selling: () => !fencedAtWait,
+              },
+              log,
+            ),
+        ],
+        node: store.node,
+        recheck: checkPeers,
+        intervalMs: seams.waitingStart?.intervalMs ?? WAIT_RECHECK_MS,
+        listen: (waitingApp) => {
+          const server = startTradingListener(config, waitingApp, now, log);
+          const mdns = startMdnsResponder({
+            hostname: BOX_HOSTNAME,
+            devMode: config.devMode,
+            httpHost: config.httpHost,
+            getAddresses: boxAddresses,
+            log,
+          });
+          const landing = startLandingListener(config, log);
+          return {
+            close: async () => {
+              await mdns.stop().catch(() => {});
+              await landing?.close().catch(() => {});
+              await closeListener(server);
+            },
+          };
+        },
+        closeStore: () => store.close(),
+        restart: seams.stepdown?.restart ?? restartProcess,
+        log,
+      });
+      announceWaiting(waitingStart.server);
+      const end = await waitingStart.ended;
+      if (end.kind === "stopped") return waitingStart.server;
+      outcome = end.kind === "checked" ? end.outcome : { result: "proceed", successorNodeId: null };
+    }
+    if (outcome.result === "superseded" && outcome.successorNodeId !== null) {
+      // The check saved any newer chart in venue.db first; the restriction goes to node.db after.
+      const held = await readNodeMembership(db);
+      await recordSupersededAtStart(
+        { node: store.node, nodeId: config.node.nodeId },
+        outcome.successorNodeId,
+        held?.body.term ?? 0,
+      );
+      return restrictedStart();
+    }
+    // `superseded` with no successor comes only from a newer chart that fences this box, which the
+    // check handed to `saveVerifiedMembership`; once saved, the chart read below fences it (Ruling R7).
+  }
   // A returned box that died before it was fenced would otherwise boot with a stale chart and SELL
   // while the promoted cloud is also primary — two nodes filing under one NIF (CLAUDE.md §5). So a
   // non-mirror node with a configured cloud peer best-effort fetches the peer's signed chart and
@@ -1835,17 +2012,8 @@ async function bootServer(
       "*",
       // A mirror gates by mode, per request, so a live promotion lifts it; a fenced node gates on the
       // boot-captured `fenced`, and leaves the fence only through a fresh boot.
-      readOnlyGate(
-        isReadOnly,
-        // Retirement and promote writes use their own authentication gates.
-        (c) =>
-          (fenced && c.req.method === "POST" && c.req.path === "/api/box/retire") ||
-          // Exempt on a fenced node too, so it answers the precise `promotion.node_fenced` rather
-          // than a generic gate 403.
-          (c.req.method === "POST" &&
-            ["/management-api/promote", "/management-api/promote/preparation"].includes(
-              c.req.path,
-            )),
+      readOnlyGate(isReadOnly, (c) =>
+        isReadOnlyExempt(c.req, { mirror: holders.mode.current === "mirror", fenced }),
       ),
     );
   }
@@ -2035,19 +2203,7 @@ async function bootServer(
   });
   const duty = reconcilerAsDuty(reconciler);
 
-  // Registered before the API mounts so it wraps them. Trading-only: the allow-list reads the held
-  // membership document, which a setup box has not provisioned.
-  const allowOrigin = createOriginAllowlist({
-    advertisedOrigin: config.advertisedOrigin,
-    readMembership: () => readNodeMembership(db),
-    devMode: config.devMode,
-    vitePorts: {
-      till: process.env.WAITRON_TILL_VITE_PORT,
-      dashboard: process.env.WAITRON_DASHBOARD_VITE_PORT,
-      setup: process.env.WAITRON_SETUP_VITE_PORT,
-    },
-    now: () => Date.now(),
-  });
+  // Registered before the API mounts so it wraps them.
   app.use("/api/*", corsForVenue(allowOrigin));
   // A rerouted till fetches menu photos cross-origin.
   app.use("/media/*", corsForVenue(allowOrigin));
@@ -2165,6 +2321,18 @@ async function bootServer(
       db,
       nodeId: tradingContext.nodeId,
       isPrimary: isSingletonPrimary && !fencedOrMirror,
+    },
+    log,
+  );
+  mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
+  mountNodeMembershipApi(
+    app,
+    {
+      db,
+      node: store.node,
+      nodeId: tradingContext.nodeId,
+      stepDown: (request) => stepDownHere(request),
+      selling: () => holders.mode.current !== "mirror" && !fenced,
     },
     log,
   );

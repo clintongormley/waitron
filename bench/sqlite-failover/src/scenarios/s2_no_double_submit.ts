@@ -13,24 +13,24 @@
 //     still holding it `pendiente`, or the receiver files a record its owner has already filed.
 //   Part C — a refused chain blocks the rest of its own chain for the rest of that pass, and the
 //     next pass drains it whole.
-//   Part D — the same retry recomputed against a REFRESHED view of the receiver, which is the shape
-//     that files a record twice.
+//   Part D — CONTROL of the retired design: the same retry recomputed against a REFRESHED view of
+//     the receiver, from an unfenced sender, which files a record twice.
 //   Part E — spec §4's third assertion: a ship for a chain that is sitting in the drain's blocked
-//     set, issued from inside a later `submit` callback in the same pass; and what a tail taken
-//     while the SENDER's own drain holds a row `enviando` leaves on the receiver.
+//     set, issued from inside a later `submit` callback in the same pass; and, as a CONTROL of the
+//     retired design, what a tail taken while the unfenced SENDER's own drain holds a row
+//     `enviando` leaves on the receiver.
 //   Part F — A1018's fiscal-only full-state return batch from a FENCED sender (A947 §7.1 as
 //     amended): every record of both chains is filed exactly once, and no sale travels.
 //   Part G — that batch replayed: built again from the same reported heads it is the same bytes,
 //     and applied again it changes nothing and files nothing.
 //
-// The verdict is a measurement, not a decision taken here: it is PASS when no part filed any record
-// twice, Part F left no record unfiled and Part G's replay was clean, and FAIL otherwise. Today it
-// is FAIL, for two separate reasons — see the README section "What S2 measures, and what it does
-// not" for what that means and what is open. Parts A, B, C and the FIRST HALF of Part E still
-// assert, so a failure in one of those is a thrown assertion and the runner reports it as a broken
-// harness rather than a result; Part D, Part E's second half and Parts F and G measure their
-// outcomes without asserting them (F and G assert only preconditions), and feed the verdict
-// instead; Part F's three controls assert.
+// The verdict is PASS when no part outside the controls filed any record twice, Part F left no
+// record unfiled and Part G's replay was clean, and FAIL otherwise. The owner reads S2's gate from
+// Parts F and G (2026-11-03): Part D and Part E's second half model the unfenced tail ship that
+// A1018's fenced return batch retires, so they are controls, expected to file twice. Parts A, B, C
+// and the first half of Part E assert, and so does every control, so any of those going wrong is a
+// thrown assertion, which the runner reports as a critical FAIL row titled "threw"; Parts F and G
+// measure their outcomes and feed the verdict (they assert only preconditions).
 //
 // Everything here is the rig's MODEL of the submission state machine (`src/model.ts`) — no result
 // here is a statement about `packages/fiscal-verifactu`.
@@ -340,14 +340,9 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     // every chain with no node filter, so it then files that record itself — a second filing of a
     // record its owner has already filed.
     //
-    // This part runs that sequence and MEASURES it. It asserts its preconditions and nothing about
-    // the outcome, because the outcome is the result: the scenario's verdict is read off the double
-    // filings below, so a ship protocol that later carries submission state for held rows turns
-    // THIS part's double off without anybody editing the scenario — measured, by forcing
-    // `diffTail`'s high-water mark to 0, which makes every ship carry the whole chain. S2 as a whole
-    // stays FAIL under that mutation, because Part E's second half files a record twice for a
-    // different reason. Whether to change the protocol, and how, is the owner's decision and is not
-    // proposed here.
+    // A control of the retired design: the sender is never fenced, which A1018's return batch
+    // (Part F) forbids. It asserts that the record is filed twice; if it is not, the row reads
+    //   | s2_no_double_submit | threw | FAIL | control: the retired refreshed-summary ship files record 1 twice |
     const ledgerD = newLedger();
     const submitD = makeSubmit(ledgerD);
     const senderD = open("refreshed-sender");
@@ -377,6 +372,11 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     const statesAfterFreshShipD = envioStates(receiverD, "refreshed-sender");
     drainPass(receiverD, submitD);
     const doubledD = doubleFilings(ledgerD);
+    assert.deepEqual(
+      doubledD,
+      ["refreshed-sender:1"],
+      "control: the retired refreshed-summary ship files record 1 twice",
+    );
 
     // ---- Part E: a ship that lands mid-pass ----------------------------------------------------
     //
@@ -467,8 +467,10 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     // and a drain claims only `pendiente` rows, so no DRAIN on the receiver touches that row again.
     // That is the whole of what is measured: a later ship carrying the row as `enviado, acked=1`
     // would satisfy the terminal-state-wins guard and clear it, and no part of S2 sends one, so
-    // whether the row survives in practice is not measured here. Measured, not asserted: nothing
-    // here says a stuck row is the right answer.
+    // whether the row survives in practice is not measured here. A control of the retired design:
+    // the sender keeps filing while it ships, which A1018's fence forbids. It asserts the second
+    // filing and the stuck row; if either differs, the row reads
+    //   | s2_no_double_submit | threw | FAIL | control: the retired mid-drain tail ship leaves record 1 stuck enviando and files record 2 twice |
     const ledgerF = newLedger();
     const submitF = makeSubmit(ledgerF);
     const senderF = open("cloud-f");
@@ -495,6 +497,11 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
     const receiverFAfterDrain = envioStates(receiverF, "cloud-f");
     const stuckF = receiverFAfterDrain.filter((row) => row.includes("enviando"));
     const doubledF = doubleFilings(ledgerF);
+    assert.deepEqual(
+      [stuckF, doubledF],
+      [["1 enviando acked=0"], ["cloud-f:2"]],
+      "control: the retired mid-drain tail ship leaves record 1 stuck enviando and files record 2 twice",
+    );
 
     // ---- Part F: A1018's fiscal-only full-state batch from a fenced sender -------------------
     // ---- Part G: that batch replayed, and built again from the same reported heads ----------
@@ -577,15 +584,11 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
       "control: exactly those two rows are filed a second time, by a node that does not own them",
     );
 
-    // Every filing this scenario measured, gathered in one place, and the verdict is read off it:
-    // FAIL when any of them names a record filed twice or, for Part F, never filed. Parts A, B and
-    // C assert their own ledger is clean and would have thrown already; what this adds is D, E and
-    // F, which MEASURE rather than assert; `replayClean` below adds Part G.
+    // The verdict: FAIL when any part outside the controls names a record filed twice or, for Part
+    // F, never filed; `replayClean` below adds Part G.
     const measuredFaults = [
       ...doubleFilings(ledger),
-      ...doubledD,
       ...doubleFilings(ledgerE),
-      ...doubledF,
       ...returned.filedTwice,
       ...returned.neverFiled,
     ];
@@ -600,15 +603,14 @@ export default async function noDoubleSubmit(): Promise<ScenarioResult> {
         `RETRIED-IN-FULL ship safe: filed=${ledger.filed.length} double=${doubleFilings(ledger).length} ` +
         `(A receiver files 5 once; B receiver files none of the owner's 4; ` +
         `C blocked chain drains 4 next pass after 1 refusal). ` +
-        `D REFRESHED-SUMMARY ship files twice: ${doubledD.length ? doubledD.join(",") : "none"} ` +
+        `D control (retired design) REFRESHED-SUMMARY ship files twice: ${doubledD.join(",")} ` +
         `(fresh tail carried records [${freshShippedD.join(",")}]; receiver left ` +
         `${statesAfterFreshShipD.join(", ")}). ` +
         `E ship issued mid-pass for a blocked chain: that chain files nothing more that pass, ` +
         `next pass files ${filingsFor(ledgerE, "cloud-e1").length} once, double=${doubleFilings(ledgerE).length}. ` +
-        `E tail taken mid-drain carried [${midDrainTailStates.join(", ")}]: receiver left ` +
-        `${receiverFAfterShip.join(", ")}, and its own drain claims no enviando row, so ` +
-        `${stuckF.length ? stuckF.join(", ") : "nothing"} is stuck against that drain and ` +
-        `${doubledF.length ? doubledF.join(",") : "nothing"} is filed twice. ` +
+        `E control (retired design) tail taken mid-drain carried [${midDrainTailStates.join(", ")}]: ` +
+        `receiver left ${receiverFAfterShip.join(", ")}, and its own drain claims no enviando row, ` +
+        `so ${stuckF.join(", ")} is stuck against that drain and ${doubledF.join(",")} is filed twice. ` +
         `F RETURN BATCH from a fenced sender: ${describeReturn(returned)} ` +
         `returned-from-enviando=[${returned.returnedFromEnviando.join(",")}] ` +
         `sales-carried=${returned.salesGained}. ` +

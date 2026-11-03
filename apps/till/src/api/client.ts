@@ -13,6 +13,7 @@ import type {
   FinishTableResolution,
 } from "./finish-table-types.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
+import type { HeldChart } from "./server-router.js";
 import type { CancelItemAnswer, CancellationRead, CancelItemRequest } from "./line-cancel-types.js";
 export type {
   CancellationContext,
@@ -195,6 +196,9 @@ export interface TillInfo {
   nodeId: string;
   /** The venue's routable servers, primary first; `[]` when no membership document is held. */
   servers: TillServer[];
+  /** The signed membership chart the server holds, or `null`; the router hands it to a server that
+   * holds an older one. */
+  membership?: HeldChart | null;
   /** The largest total a sale with no named customer may have, as a decimal string, or null when
    * the venue's fiscal regime sets none. The counter basket refuses an edit that would pass it. */
   simplifiedInvoiceLimit: string | null;
@@ -202,7 +206,7 @@ export interface TillInfo {
   fullInvoices: boolean;
   /** `/api/theme`'s hash for the theme in use. */
   themeHash: string;
-  /** A hash of every field here but `servers`; `/api/menu-state` names it too. */
+  /** A hash of every field here but `servers` and `membership`; `/api/menu-state` names it too. */
   setupRevision: string;
 }
 

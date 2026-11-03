@@ -37,12 +37,25 @@ export interface StepDownDeps {
   log: Logger;
 }
 
-export interface StepDownRequest {
-  binding: HandoverBinding;
-  kind: "handed-over" | "superseded";
-  /** The request asking for the stepdown, as the gate counted it. */
-  self: Context;
-}
+export type StepDownRequest =
+  | {
+      binding: HandoverBinding;
+      kind: "handed-over" | "superseded";
+      /** The request asking for the stepdown, as the gate counted it. */
+      self: Context;
+    }
+  | {
+      /**
+       * A supersession learnt from a chart alone, under no operation. A chart that names no
+       * serving main box gives no successor, so no restriction is written; the next start's read
+       * of that chart fences the box.
+       */
+      binding?: undefined;
+      kind: "superseded";
+      successorNodeId: string | null;
+      membershipTerm: number;
+      self: Context;
+    };
 
 export interface StepDownResult {
   restarting: true;
@@ -88,18 +101,31 @@ export async function stepDown(
 }
 
 async function writeRestriction(deps: StepDownDeps, request: StepDownRequest): Promise<void> {
-  const { binding, kind } = request;
   await withNodeTransaction(deps.node, async (tx) => {
-    if (kind === "handed-over") {
+    if (request.kind === "handed-over") {
+      const { binding } = request;
       // Checked again inside the write: another request may have begun since the read above.
       await assertBindingTx(tx, deps.nodeId, binding);
       await advanceHandoverTx(tx, deps.nodeId, binding.operationId, "source_stepped_down", {});
     }
-    await recordHandoverRestrictionTx(tx, restrictionRow(deps.nodeId, request));
+    const row = restrictionRow(deps.nodeId, request);
+    if (row !== null) await recordHandoverRestrictionTx(tx, row);
   });
 }
 
-function restrictionRow(nodeId: string, { binding, kind }: StepDownRequest) {
+function restrictionRow(nodeId: string, request: StepDownRequest) {
+  if (request.binding === undefined) {
+    const { successorNodeId } = request;
+    if (successorNodeId === null) return null;
+    return {
+      nodeId,
+      operationId: null,
+      kind: request.kind,
+      successorNodeId,
+      membershipTerm: request.membershipTerm,
+    };
+  }
+  const { binding, kind } = request;
   return {
     nodeId,
     operationId: binding.operationId,
@@ -119,6 +145,7 @@ async function assertMatchesStored(
   const stored = await readHandoverRestriction(node, nodeId);
   if (stored === null) return;
   const wanted = restrictionRow(nodeId, request);
+  if (wanted === null) return;
   if (
     stored.operationId !== wanted.operationId ||
     stored.kind !== wanted.kind ||

@@ -3,16 +3,24 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { withNodeTransaction } from "@waitron/db";
+import { readNodeMembership, withNodeTransaction } from "@waitron/db";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
-import { loadKeyRing } from "@waitron/credentials";
+import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
+import { signEnvelope, verifyEnvelope } from "@waitron/handover";
+import {
+  generateNodeKeyPair,
+  signDocumentBody,
+  type MembershipDocumentBody,
+} from "@waitron/membership";
 import { emptyDrainResult } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverRestriction, recordHandoverRestrictionTx } from "@waitron/node-db";
 import type { StartedServer, StartServerSeams } from "./boot.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
-import { establishNodeIdentity } from "./node-identity.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import type { PeerStatusBody } from "./peer-status-api.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -37,6 +45,7 @@ vi.mock("@waitron/module", async (importOriginal) => {
 const migrations = migrationOptionsFor(manifestSets(), null);
 
 const MIN_TICK_MS = 200;
+const MAIN_BOX = { nodeId: "00000000-0000-4000-8000-0000000000bb", ...generateNodeKeyPair() };
 const KEY_ENV = {
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
@@ -69,6 +78,7 @@ async function boot(
     nodeId,
     "https://box.example",
   );
+  await pinMainBoxKey(suite.node, nodeId, MAIN_BOX);
   if (options.restricted) {
     await withNodeTransaction(suite.node, (tx) =>
       recordHandoverRestrictionTx(tx, {
@@ -149,6 +159,47 @@ describe("a box holding a handover restriction starts restricted", () => {
     expect(await response.json()).toEqual({ ok: true, tradingAvailable: false });
   }, 60_000);
 
+  it("answers a peer's signed query with its restriction", async () => {
+    const { port, venue } = start();
+    const nonce = "q".repeat(20);
+    const response = await fetch(`http://127.0.0.1:${port}/api/node/peer-status`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(signEnvelope("query", { nonce, atMs: 1 }, MAIN_BOX)),
+    });
+    expect(response.status).toBe(200);
+    const boxKey = nodeSigningPublicKey(
+      await readNodeIdentityKey(suite.node, loadKeyRing(KEY_ENV), venue.cfg.nodeId),
+    );
+    const verified = verifyEnvelope<PeerStatusBody>(await response.json(), "status", (id) =>
+      id === venue.cfg.nodeId ? boxKey : undefined,
+    );
+    if (!verified.valid) throw new Error(`the answer did not verify: ${verified.reason}`);
+    expect(verified.body).toMatchObject({
+      nonce,
+      restriction: {
+        kind: "superseded",
+        successorNodeId: "00000000-0000-4000-8000-0000000000aa",
+        operationId: null,
+      },
+      openOperation: null,
+      requestedOperation: null,
+    });
+  }, 60_000);
+
+  it("is handed a chart through its own route, and answers only that it was not accepted", async () => {
+    const { port } = start();
+    const response = await fetch(`http://127.0.0.1:${port}/api/node/membership`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect({ status: response.status, body: await response.json() }).toEqual({
+      status: 200,
+      body: { accepted: false },
+    });
+  }, 60_000);
+
   it("refuses a till sign-in", async () => {
     const { port } = start();
     const response = await fetch(`http://127.0.0.1:${port}/api/session`, {
@@ -197,6 +248,22 @@ describe("a full start's stepdown, through its test seam", () => {
 
   afterEach(stop);
 
+  it("a full start answers a peer's signed query", async () => {
+    const { port, venue } = await boot(suite, { restricted: false });
+    const nonce = "f".repeat(20);
+    const response = await fetch(`http://127.0.0.1:${port}/api/node/peer-status`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(signEnvelope("query", { nonce, atMs: 1 }, MAIN_BOX)),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      purpose: "waitron.handover.status.v1",
+      signerNodeId: venue.cfg.nodeId,
+      body: { nonce, restriction: null, openOperation: null, requestedOperation: null },
+    });
+  }, 60_000);
+
   it("answers the caller, then closes and restarts, with the restriction on disk", async () => {
     const restart = vi.fn();
     let nodeId = "";
@@ -231,6 +298,47 @@ describe("a full start's stepdown, through its test seam", () => {
       kind: "superseded",
     });
     // The graceful close ran before the restart: the listener no longer answers.
+    await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
+  }, 60_000);
+
+  it("handed a newer chart that fences it, answers, then closes and restarts restricted", async () => {
+    const restart = vi.fn();
+    const successor = "00000000-0000-4000-8000-0000000000cc";
+    const { port, venue } = await boot(suite, {
+      restricted: false,
+      seams: { stepdown: { restart, mount: () => {} } },
+    });
+    const nodeId = venue.cfg.nodeId;
+    const body: MembershipDocumentBody = {
+      term: 1,
+      nodes: [
+        { nodeId, contactUrl: "https://box.example", standing: "sell-only" },
+        { nodeId: successor, contactUrl: "https://next.example", standing: "serving-primary" },
+      ],
+    };
+    const document = {
+      body,
+      signerNodeId: nodeId,
+      signature: signDocumentBody(
+        body,
+        await readNodeIdentityKey(suite.node, loadKeyRing(KEY_ENV), nodeId),
+      ),
+      endorsements: [],
+    };
+    const answer = await fetch(`http://127.0.0.1:${port}/api/node/membership`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ document }),
+    });
+    expect(await answer.json()).toEqual({ accepted: true });
+    await vi.waitFor(() => expect(restart).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    expect(await readNodeMembership(suite.db)).toEqual(document);
+    expect(await readHandoverRestriction(suite.node, nodeId)).toMatchObject({
+      kind: "superseded",
+      successorNodeId: successor,
+      operationId: null,
+      membershipTerm: 1,
+    });
     await expect(fetch(`http://127.0.0.1:${port}/health`)).rejects.toThrow();
   }, 60_000);
 

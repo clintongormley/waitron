@@ -1,6 +1,7 @@
 // `credential` is the primary's by-id login object (`AdoptCredential`), not the dashboard's
 // by-email body: the primary's mirror-bundle route authenticates it with `loginManagerById`.
 import { X509Certificate } from "node:crypto";
+import { request as httpRequest } from "node:http";
 import { request, type RequestOptions } from "node:https";
 import { AppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
@@ -112,7 +113,8 @@ async function withinLimit<T>(timeoutMs: number, work: (signal: AbortSignal) => 
   }
 }
 
-function httpsExchange(
+/** One request to a box; `trust` applies to an https address, and plain http ignores it. */
+export function boxExchange(
   url: URL,
   options: {
     method: "GET" | "POST";
@@ -123,7 +125,7 @@ function httpsExchange(
   maxBytes?: number,
 ): Promise<{ status: number; text: string }> {
   return new Promise((resolve, reject) => {
-    const req = request(
+    const req = (url.protocol === "http:" ? httpRequest : request)(
       url,
       {
         method: options.method,
@@ -179,10 +181,10 @@ export async function fetchPrimaryCertificate(
 
   let answer: { status: number; text: string };
   try {
-    // The only request that skips the certificate check: it carries no credential, body or cookie,
-    // and what it returns is public, and is trusted only once the person confirms it.
+    // It skips the certificate check: it carries no credential, body or cookie, and what it returns
+    // is public, and is trusted only once the person confirms it.
     answer = await withinLimit(timeoutMs, (signal) =>
-      httpsExchange(
+      boxExchange(
         url,
         { method: "GET", trust: { rejectUnauthorized: false }, signal },
         MAX_CERTIFICATE_BYTES,
@@ -258,7 +260,7 @@ export async function fetchMirrorBundle(
       if (https) {
         // `ca` is the confirmed AUTHORITY: trusting the box's own leaf instead would refuse it.
         // `rejectUnauthorized` is explicit so NODE_TLS_REJECT_UNAUTHORIZED=0 cannot switch it off.
-        return httpsExchange(new URL(url), {
+        return boxExchange(new URL(url), {
           method: "POST",
           trust: { ca: confirmedCaPem, rejectUnauthorized: true },
           signal,

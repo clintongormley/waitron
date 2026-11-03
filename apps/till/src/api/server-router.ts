@@ -9,6 +9,11 @@ export interface ServerStatus {
   state: ServerState;
   term: number | null;
 }
+/** A signed membership chart as the start read carries it. The till reads only its term; the box
+ * it is handed to verifies it. */
+export interface HeldChart {
+  readonly body: { readonly term: number };
+}
 export interface RouterOptions {
   origin: string;
   fetchImpl: typeof fetch;
@@ -47,6 +52,11 @@ export class ServerRouter extends EventTarget {
   #waiting = false;
   /** The initial `""` never equals a real signature, so the first change always dispatches. */
   #stateSignature = "";
+  #chart: HeldChart | null = null;
+  /** `url chart-term answered-term` triples already posted: a server is handed each held chart
+   * once per answer, so a box that refused it while answering no term is handed it again once it
+   * answers its own older term. */
+  readonly #chartSent = new Set<string>();
   #inFlight = 0;
   #round: Promise<void> | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
@@ -87,6 +97,13 @@ export class ServerRouter extends EventTarget {
     this.#servers = this.#merge(list);
     this.#save(list);
     this.#emitStateChanged();
+  }
+
+  /** Keeps the newer of this chart and the one held, to hand to a server that answers an older term
+   * or none. */
+  offerChart(chart: HeldChart | null | undefined): void {
+    if (typeof chart?.body?.term !== "number") return;
+    if (this.#chart === null || chart.body.term > this.#chart.body.term) this.#chart = chart;
   }
 
   start(): void {
@@ -170,12 +187,42 @@ export class ServerRouter extends EventTarget {
       };
       s.state = body.acceptingSales === true ? "primary" : "standby";
       s.term = typeof body.term === "number" ? body.term : null;
+      this.#handChart(s.url, s.term);
     } catch {
       s.state = "unreachable";
       s.term = null;
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /** Fire and forget, and never moves the till. A post answered with a 2xx or 4xx status is not sent
+   * again for the same answer; one answered with a 5xx status, or that failed in transit, is tried
+   * again on a later probe round. */
+  #handChart(url: string, term: number | null): void {
+    const chart = this.#chart;
+    if (chart === null || (term !== null && term >= chart.body.term)) return;
+    const key = `${url} ${chart.body.term} ${term ?? "none"}`;
+    if (this.#chartSent.has(key)) return;
+    this.#chartSent.add(key);
+    const fetchImpl = this.#fetch;
+    void Promise.resolve()
+      .then(() =>
+        fetchImpl(`${url}/api/node/membership`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ document: chart }),
+          cache: "no-store",
+        }),
+      )
+      .then(
+        (res) => {
+          if (res.status >= 500) this.#chartSent.delete(key);
+        },
+        () => {
+          this.#chartSent.delete(key);
+        },
+      );
   }
 
   #merge(list: ServerEntry[]): Tracked[] {

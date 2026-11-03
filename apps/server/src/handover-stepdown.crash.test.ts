@@ -106,8 +106,8 @@ const DESTINATION = "22222222-2222-4222-8222-222222222222";
 const OP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 /** How long a restarted box is watched for AEAT traffic; the control's first submission lands inside it. */
 const QUIET_MS = 2_000;
-/** The child starts in about two seconds. */
-const CHILD_LIMIT_MS = 15_000;
+/** The child starts in about two seconds locally; on a CI shard a first, cold child took over 15. */
+const CHILD_LIMIT_MS = 45_000;
 const HEALTH_LIMIT_MS = 10_000;
 /** Over the sum of one case's waits: three child waits, two health waits and the quiet wait. */
 const CASE_LIMIT_MS = 3 * CHILD_LIMIT_MS + 2 * HEALTH_LIMIT_MS + QUIET_MS + 30_000;
@@ -193,6 +193,14 @@ const INTERNET = wrapper(
 }`,
 );
 
+// The child stands for a box that prepared the handover while it was running, so its own start
+// neither abandons the operation the suite seeded at `prepared` (`repairAtStart`) nor waits on it
+// (the `peerCheck` seam below). The restart after the crash runs the real start check.
+const START_CHECK = wrapper(
+  here("./start-peer-check.ts"),
+  `export async function repairAtStart() {}`,
+);
+
 const CHILD = `import { registerHooks } from "node:module";
 import { writeSync } from "node:fs";
 const mark = (line) => writeSync(3, line + "\\n");
@@ -200,7 +208,7 @@ globalThis.__stepdownCrash = {
   at: process.env.WAITRON_TEST_CRASH_AT,
   die(line) { mark(line); process.kill(process.pid, "SIGKILL"); },
 };
-const swaps = { "/handover-gate.js": ${JSON.stringify(GATE)}, "/background-duties.js": ${JSON.stringify(DUTIES)}, "/handover-stepdown.js": ${JSON.stringify(STEPDOWN)}, "/hour-clock-internet.js": ${JSON.stringify(INTERNET)} };
+const swaps = { "/handover-gate.js": ${JSON.stringify(GATE)}, "/background-duties.js": ${JSON.stringify(DUTIES)}, "/handover-stepdown.js": ${JSON.stringify(STEPDOWN)}, "/hour-clock-internet.js": ${JSON.stringify(INTERNET)}, "/start-peer-check.js": ${JSON.stringify(START_CHECK)} };
 registerHooks({ resolve(specifier, context, next) {
   const swap = Object.entries(swaps).find(([end]) => specifier.endsWith(end));
   return swap === undefined ? next(specifier, context) : { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(swap[1]) };
@@ -208,6 +216,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { startServer } = await import(${JSON.stringify(here("./boot.ts"))});
 const { env, binding } = JSON.parse(process.argv[1]);
 await startServer(env, env, {
+  peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }),
   stepdown: {
     mount(app, stepDown) {
       app.post("/test/hold", () => { mark("held"); return new Promise(() => {}); });

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { isAppError } from "@waitron/shared";
 import {
   invoiceSeries,
@@ -411,6 +411,30 @@ describe("mirror-mode boot (node_mode.mode = 'mirror')", () => {
       });
     } finally {
       await server.close();
+    }
+  }, 60_000);
+
+  it("a mirror runs no check (control: the same identity booted as primary runs it once)", async () => {
+    for (const [venue, calls] of [
+      ["mirror", 0],
+      ["primary", 1],
+    ] as const) {
+      const peerCheck = vi.fn(() =>
+        Promise.resolve({ result: "proceed" as const, successorNodeId: null }),
+      );
+      const port = await freePort();
+      const env = {
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: venueDir[venue],
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      };
+      const server = await startServer(env, {}, { peerCheck });
+      try {
+        expect({ venue, calls: peerCheck.mock.calls.length }).toEqual({ venue, calls });
+      } finally {
+        await server.close();
+      }
     }
   }, 60_000);
 

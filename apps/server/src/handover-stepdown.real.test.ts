@@ -40,6 +40,14 @@ const outside = vi.hoisted(() => ({
   holdSweep: null as Promise<void> | null,
 }));
 
+// The suite stands for a box that prepared the handover while it was running, so its start does not
+// abandon the operation seeded at `prepared` (`repairAtStart`); the `peerCheck` seam below keeps it
+// from waiting on that operation.
+vi.mock("./start-peer-check.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./start-peer-check.js")>()),
+  repairAtStart: () => Promise.resolve(),
+}));
+
 // The pending-card loop sleeps at most 50 ms between passes, so a loop nobody stopped sweeps again
 // inside the window the test holds open after the stepdown.
 vi.mock("./pending-card-recovery.js", async (importOriginal) => {
@@ -300,6 +308,7 @@ describe("a card sale in flight when the box steps down", () => {
 
     let card: FakePaymentProvider | undefined;
     server = await startServer(env, env, {
+      peerCheck: () => Promise.resolve({ result: "proceed", successorNodeId: null }),
       // The venue's readers are Stripe's here, so the till's own credential check passes and the
       // card sweep reaches this stand-in through the held Stripe credential.
       cardPool: ({ db }) => {

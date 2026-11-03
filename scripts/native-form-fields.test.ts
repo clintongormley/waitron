@@ -65,6 +65,12 @@ const ALLOWED: ReadonlyArray<{ file: string; lines: number; reason: string }> = 
     reason:
       "an HTML string the server builds for the page a box serves when it cannot start; it loads no script or front-end bundle, so no field primitive can run on it",
   },
+  {
+    file: "apps/server/src/carry-on.ts",
+    lines: 4,
+    reason:
+      "an HTML string the server builds for the carry-on form on the page a box serves while it waits for its peers; it loads no front-end bundle (only a short inline script that enables its button), so no field primitive can run on it",
+  },
 ];
 
 /** The value of the `type` attribute among a tag's attributes, lowercased. A quote left open by the

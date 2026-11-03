@@ -257,6 +257,7 @@ export {
 } from "./node-membership.js";
 export {
   readMembershipTrustSet,
+  readMembershipTrustSetTx,
   readNodePublicKeyTx,
   setNodePublicKey,
   setNodePublicKeyTx,

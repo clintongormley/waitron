@@ -891,8 +891,8 @@ on the account (an empty required field, a malformed code) may still sit under i
 signed-in person re-checking their OWN password, PIN or code may be told which one was wrong. These
 answers are reachable only after a credential was proved and stay: `totp.required` (the
 dashboard's code step, after a right password), `google.second_factor_required` (after a valid
-Google sign-in) and `authorization.not_permitted` (403 from standby connect, promote and
-`GET /management-api/membership` when the password and code are right but the person lacks the
+Google sign-in) and `authorization.not_permitted` (403 from standby connect, promote, the waiting
+box's carry-on (`apps/server/src/carry-on.ts`) and `GET /management-api/membership` when the password and code are right but the person lacks the
 permission, and from the drawer, refund, unpaid-departure, cancel and late-send overrides (`authorize`,
 `packages/identity/src/authorize.ts`) and the manual-refund confirmer when the PIN is right but the
 person lacks the permission). The adjustment approver answers `adjustment.approval_required` for a
@@ -902,7 +902,9 @@ right PIN that the approval does not admit (`apps/server/src/adjustments-apply.t
 `promote-api.authenticator.test.ts`, `till-api.test.ts` (the till's sign-in) and
 `till-api.receipt.test.ts` (a drawer override) — weaker than the set looks:
 `GET /management-api/membership` (whose suite, `management-api.membership.test.ts`, tries a wrong
-password and a wrong code), the adjustment approver (`apps/server/src/adjustments-apply.ts`, tried
+password and a wrong code), the waiting box's carry-on (whose suite, `waiting-start.test.ts`, tries
+a wrong password and an unknown email, so it rests on identity's cases only for a suspended or
+pending person), the adjustment approver (`apps/server/src/adjustments-apply.ts`, tried
 in `adjustments-api.test.ts`), the refund override and the manual-refund confirmer
 (`apps/server/src/bill-refunds.ts`, both tried in `bill-payments-api.test.ts`), the
 unpaid-departure override (`apps/server/src/unpaid-departure.ts`) and the cancel override
@@ -1866,7 +1868,7 @@ showing. Pinned by "a bill opened from Find a bill shows no loading line, and Ba
 stops it" in the same file.
 
 **The start read.** `GET /api/till` answers `completeTillSetup` (`apps/server/src/till-setup.ts`) plus
-`servers`, and `setupRevision`, a hash of every field but `servers` (`setupRevisionOf`).
+`servers` and `membership`, and `setupRevision`, a hash of every field but those two (`setupRevisionOf`).
 `/api/menu-state` names the same revision. When a poll names one the till has not applied,
 `#noteSetupRevision` reads `/api/till` again and `#applyVenueSetup` applies the venue's values:
 receipt languages and invoice language, venue name and tax id, onboarding intent,
@@ -1902,6 +1904,9 @@ Fixed until the till starts again (a reload, or a server switch, which runs `#bo
 - `servers`: the till's router follows the primary on its own among the servers it was given at
   start (`ServerRouter.setServers`, `apps/till/src/api/server-router.ts`). `nodeId` is in the answer
   but the till does not read it.
+- `membership`: the server's signed chart. The router keeps the newest it was given
+  (`ServerRouter.offerChart`) and posts it to a server answering an older term or none; a newer
+  chart reaches an open till only when it starts again.
 - The profile's values: form factor, capabilities, idle logout, starting screen and whether clocking
   is offered. `#applyProfileSetup` applies them at start, on a profile switch
   (`#enterSwitchedProfile`) and when the device's zone selection changes

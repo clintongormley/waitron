@@ -4370,6 +4370,7 @@ export class TillApp extends LitElement {
       ]);
       if (overtaken()) return;
       this.router?.setServers(till.servers);
+      this.router?.offerChart(till.membership);
       this.#venueLocale = till.locale;
       this.#venueLocaleReady = true;
       // A login can begin while `getTill` is in flight; its saved language wins.
