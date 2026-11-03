@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { locations } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { FISCAL_SLOT } from "@waitron/fiscal-verifactu";
 import {
@@ -9,7 +8,6 @@ import {
 } from "@waitron/fiscal-verifactu/src/schema/index.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId as brandedLocationId } from "@waitron/shared";
 import type { CertificateReminderSender } from "./certificate-reminder-email.js";
 import {
   runCertificateReminderLoop,
@@ -25,7 +23,7 @@ const END = new Date("2026-10-24T22:59:00Z");
 const AMBER = new Date("2026-08-26T10:00:00Z");
 const smtp = { url: "smtp://127.0.0.1:1025", from: "venue@example.test" };
 
-let nodeId: string, locationId: string, primary: boolean, now: Date, controller: AbortController;
+let nodeId: string, primary: boolean, now: Date, controller: AbortController;
 let send: ReturnType<typeof vi.fn<CertificateReminderSender>>;
 
 const deps = () => ({
@@ -60,19 +58,14 @@ beforeEach(async () => {
   now = AMBER;
   controller = new AbortController();
   send = vi.fn<CertificateReminderSender>(async () => "sent");
-  await seedTenant(suite.db);
-  const [place] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "05:00",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-    })
-    .returning();
-  locationId = place!.id;
-  nodeId = await seedNode(suite.db, brandedLocationId(locationId));
+  await seedVenue(suite.db, {
+    name: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
+  nodeId = await seedNode(suite.db);
   await suite.db.insert(fiscalCertificateInstalls).values({
     nodeId,
     installedAt: new Date("2026-01-02T09:00:00Z"),

@@ -9,7 +9,7 @@ import type { AddressInfo } from "node:net";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   locations,
@@ -19,7 +19,6 @@ import {
   withTransaction,
   locationBusinessDaySettings,
   writeNodeMembership,
-  workingOrders,
   incidents,
 } from "@waitron/db";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
@@ -587,10 +586,7 @@ describe("startup zone admission", () => {
     const secret = "whsec_synthetic_boot_zone";
     const { deviceId } = await seedDevice(suite.db, { locationId: LOCATION });
     await withTransaction(suite.db, async (tx) => {
-      const [order] = await tx
-        .insert(workingOrders)
-        .values({ source: "device", deviceId, locationId: LOCATION, orderNumber: 1 })
-        .returning();
+      const order = await seedWorkingOrder(tx, { source: "device", deviceId, orderNumber: 1 });
       await insertInitiated(tx, {
         origin: deviceOrigin(deviceId),
         workingOrderId: order!.id,

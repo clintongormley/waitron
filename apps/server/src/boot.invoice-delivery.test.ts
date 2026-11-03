@@ -9,18 +9,24 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import {
   invoiceDeliveries,
   invoiceSeries,
-  locations,
   nodes,
   printJobs,
   stampDeployment,
   tenants,
   withTransaction,
   workingOrders,
+  venueLocationId,
 } from "@waitron/db";
 import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { departmentReceipts, departments } from "@waitron/venue-service";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  seedDevice,
+  seedNode,
+  seedTenant,
+  seedVenue,
+  seedWorkingOrder,
+} from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
@@ -30,7 +36,7 @@ import { recordSale } from "@waitron/core";
 import type { TrustedClock } from "@waitron/fiscal";
 import { enabledModules, fiscalSlot, parseModuleConfig } from "@waitron/module";
 import { enqueuePrintJob, esc, MAX_DELIVERY_ATTEMPTS } from "@waitron/printing";
-import { jobOrigin, locationId, seriesId } from "@waitron/shared";
+import { jobOrigin, seriesId } from "@waitron/shared";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { configureDemoPrinter, DEMO_PRINTER_KEY } from "./demo-printer.js";
@@ -85,15 +91,13 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
   await seedTenant(suite.db);
   await stampDeployment(suite.db, environment);
   await suite.db.update(tenants).set({ taxpayerDomicile: "Saved issuer address" });
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Bar",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Sale on premises",
-    })
-    .returning();
-  const node = await seedNode(suite.db, locationId(location!.id));
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Sale on premises",
+  });
+  const venueId = await venueLocationId(suite.db);
+  const node = await seedNode(suite.db);
   await suite.db.update(nodes).set({ filingModule: "none" }).where(eq(nodes.id, node));
   const [series] = await suite.db
     .insert(invoiceSeries)
@@ -192,7 +196,7 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
     env,
     node,
     deadPeerPort,
-    location: location!.id,
+    location: venueId,
     claim: { ...job!.invoiceClaim!, holder: identity.agentId },
   };
 }
@@ -707,10 +711,11 @@ describe("invoice-choice email context at trading boot", () => {
         loginWithPin(tx, { deviceId: device.deviceId, personId: person!.id, pin: "5555" }),
       );
       const cookie = await sessionCookieForTest(suite.db, session.token);
-      const [order] = await suite.db
-        .insert(workingOrders)
-        .values({ source: "dashboard", nodeId: ctx.node, locationId: ctx.location, orderNumber: 1 })
-        .returning();
+      const order = await seedWorkingOrder(suite.db, {
+        source: "dashboard",
+        nodeId: ctx.node,
+        orderNumber: 1,
+      });
       const [department] = await suite.db
         .insert(departments)
         .values({

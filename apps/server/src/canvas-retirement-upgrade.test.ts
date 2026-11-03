@@ -1,15 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import {
   CORE_CHANGE_SOURCES,
   FORM_FACTOR_REFUSAL,
   captureError,
-  locations,
   deviceProfiles,
   withTransaction,
   triggerRaised,
 } from "@waitron/db";
-import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 
@@ -42,12 +41,12 @@ describe("canvas retirement on a fresh venue", () => {
   });
 
   it("refuses changing a held profile's form factor but permits its rename", async () => {
-    await seedTenant(suite.db);
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Retained venue", invoiceLocales: ["en-GB"], operationDescription: "Food" })
-      .returning();
-    const { profileId } = await seedDevice(suite.db, { locationId: location!.id });
+    await seedVenue(suite.db, {
+      name: "Retained venue",
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Food",
+    });
+    const { profileId } = await seedDevice(suite.db);
     const refused = await captureError(() =>
       withTransaction(suite.db, async (tx) => {
         await tx
@@ -295,28 +294,13 @@ async function populatePredecessor(db: Database) {
     await tx.execute(
       sql`update device_profiles set canvas_id = ${canvasId} where id in (${profileId}, ${retiredId})`,
     );
-    await tx.insert(devices).values([
-      {
-        locationId: venue.cfg.locationId,
-        deviceProfileId: profileId,
-        label: "Active assigned device",
-        tokenHash: "fixture-active",
-      },
-      {
-        locationId: venue.cfg.locationId,
-        deviceProfileId: profileId,
-        label: "Disabled assigned device",
-        tokenHash: "fixture-disabled",
-        active: false,
-      },
-      {
-        locationId: venue.cfg.locationId,
-        deviceProfileId: retiredId,
-        label: "Retired holder",
-        tokenHash: "fixture-retired",
-        active: false,
-      },
-    ]);
+    await seedDevice(tx, { profileId, label: "Active assigned device" });
+    const disabled = await seedDevice(tx, { profileId, label: "Disabled assigned device" });
+    const retiredHolder = await seedDevice(tx, { profileId: retiredId, label: "Retired holder" });
+    await tx
+      .update(devices)
+      .set({ active: false })
+      .where(inArray(devices.id, [disabled.deviceId, retiredHolder.deviceId]));
     await tx
       .insert(deviceApprovedProfiles)
       .values({ deviceId: venue.deviceId, deviceProfileId: profileId });

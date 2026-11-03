@@ -4,15 +4,13 @@ import { describe, expect, it } from "vitest";
 import {
   deviceProfiles,
   devices,
-  locations,
   withTransaction,
-  workingOrders,
   type Database,
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
 import { createStripeCardProvider, type MakeStripe } from "@waitron/payments-stripe";
 import {
@@ -127,13 +125,12 @@ type ReaderOptions = {
  * and holds it, Till 2 takes Dining room's default R, Unplugged till (switched off) chooses R,
  * Till 3 takes Terrace's default Q and holds Q.
  */
-async function seedVenue(options: ReaderOptions = {}) {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Main bar", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
+async function seedVenueWithReaders(options: ReaderOptions = {}) {
+  await seedVenue(suite.db, {
+    name: "Main bar",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta",
+  });
   const [rRow] = await suite.db
     .insert(cardReaders)
     .values({
@@ -170,15 +167,12 @@ async function seedVenue(options: ReaderOptions = {}) {
     { deviceProfileId: terraceProfile.id, readerId: r, position: 1, isDefault: false },
   ]);
 
-  const device = async (name: string, profileId: string, active = true) => ({
-    id: (
-      await suite.db
-        .insert(devices)
-        .values({ locationId, deviceProfileId: profileId, label: name, tokenHash: "x", active })
-        .returning({ id: devices.id })
-    )[0]!.id,
-    name,
-  });
+  const device = async (name: string, profileId: string, active = true) => {
+    const { deviceId } = await seedDevice(suite.db, { label: name, profileId });
+    if (!active)
+      await suite.db.update(devices).set({ active: false }).where(eq(devices.id, deviceId));
+    return { id: deviceId, name };
+  };
   const firstTill = await device("Till 1", diningProfile.id);
   const secondTill = await device("Till 2", diningProfile.id);
   const retiredTill = await device("Unplugged till", terraceProfile.id, false);
@@ -198,10 +192,7 @@ async function seedVenue(options: ReaderOptions = {}) {
     deviceId: string | null,
   ) => {
     orderNumber += 1;
-    const [order] = await suite.db
-      .insert(workingOrders)
-      .values({ source: "dashboard", locationId, orderNumber })
-      .returning({ id: workingOrders.id });
+    const order = await seedWorkingOrder(suite.db, { source: "dashboard", orderNumber });
     await suite.db.insert(payments).values({
       workingOrderId: order!.id,
       source: deviceId === null ? "operator_script" : "device",
@@ -267,7 +258,7 @@ const kept = {
 
 describe("the card reader delete impact", () => {
   it("names every device choice, inherited default, profile list, profile default and holder", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithReaders();
     expect(await read(seats, v.r)).toEqual({
       target: { id: v.r, name: "Bar reader" },
       refusals: [],
@@ -283,7 +274,7 @@ describe("the card reader delete impact", () => {
   });
 
   it("names no switched-off device under the default it would inherit", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithReaders();
     const disabledTill = await v.device("Switched-off till", v.diningProfile.id, false);
     const impact = await read(seats, v.r);
     expect(impact.removes).toContainEqual({
@@ -295,14 +286,14 @@ describe("the card reader delete impact", () => {
   });
 
   it("writes nothing", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithReaders();
     const before = await snapshot();
     await read(seats, v.r);
     expect(await snapshot()).toEqual(before);
   });
 
   it("ends the provider pairing of a still-paired reader whose provider can unpair and is connected", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     await connectStripe(suite.db);
     const impact = await read([unpairing], v.r);
     expect(impact.refusals).toEqual([]);
@@ -312,14 +303,14 @@ describe("the card reader delete impact", () => {
   });
 
   it("says a still-paired reader stays registered at a provider that can unpair but is not connected, refusing nothing", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     const impact = await read([unpairing], v.r);
     expect(impact.refusals).toEqual([]);
     expect(impact.ends).toEqual([kept]);
   });
 
   it("shows a payment in progress beside the notice for a disconnected provider", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     await v.payment("attempting", v.secondTill.id);
     const impact = await read([unpairing], v.r);
     expect(impact.refusals).toEqual([
@@ -329,7 +320,7 @@ describe("the card reader delete impact", () => {
   });
 
   it("names no pairing for a provider that cannot unpair, connected or not", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     const impact = await read(seats, v.r);
     expect(impact.refusals).toEqual([]);
     expect(impact.ends).toEqual([]);
@@ -343,7 +334,7 @@ describe("deleting a card reader", () => {
   ])(
     "removes its links, keeps the $state row switched off and marked deleted, and returns the impact it read",
     async ({ active, disabledAt, expectedDisabledAt }) => {
-      const v = await seedVenue({ active, disabledAt });
+      const v = await seedVenueWithReaders({ active, disabledAt });
       const impact = await read(seats, v.r);
       const before = await snapshot();
 
@@ -363,7 +354,7 @@ describe("deleting a card reader", () => {
   );
 
   it("keeps the payment taken on it, joined to the retained row by name", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithReaders();
     await v.payment("captured", v.secondTill.id);
     const before = await snapshot();
 
@@ -385,7 +376,7 @@ describe("deleting a card reader", () => {
   it.each(["attempting", "initiated"] as const)(
     "is refused while a payment is %s on it, and writes nothing",
     async (state) => {
-      const v = await seedVenue();
+      const v = await seedVenueWithReaders();
       await v.payment(state, v.secondTill.id);
       expect((await read(seats, v.r)).refusals).toEqual([
         { code: "reader.payment_in_progress", params: { readerId: v.r }, targets: [v.secondTill] },
@@ -400,7 +391,7 @@ describe("deleting a card reader", () => {
   );
 
   it("is refused by a payment in progress that names no device", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithReaders();
     await v.payment("attempting", null);
     expect((await read(seats, v.r)).refusals).toEqual([
       { code: "reader.payment_in_progress", params: { readerId: v.r }, targets: [] },
@@ -411,7 +402,7 @@ describe("deleting a card reader", () => {
   it.each(["captured", "failed", "voided"] as const)(
     "is not refused by a %s payment on it",
     async (state) => {
-      const v = await seedVenue();
+      const v = await seedVenueWithReaders();
       await v.payment(state, v.secondTill.id);
       expect((await read(seats, v.r)).refusals).toEqual([]);
       await remove(seats, v.r);
@@ -421,7 +412,7 @@ describe("deleting a card reader", () => {
   );
 
   it("answers reader.unpair_failed for a still-paired reader its provider must unpair, and writes nothing", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     await connectStripe(suite.db);
     const before = await snapshot();
     await expect(remove([unpairing], v.r)).rejects.toMatchObject({
@@ -432,7 +423,7 @@ describe("deleting a card reader", () => {
   });
 
   it("answers reader.provider_disconnected first when that provider has no credential, and writes nothing", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     const before = await snapshot();
     await expect(remove([unpairing], v.r)).rejects.toMatchObject({
       code: "reader.provider_disconnected",
@@ -442,7 +433,7 @@ describe("deleting a card reader", () => {
   });
 
   it("deletes a still-paired reader of a disconnected provider in Waitron only once the notice is accepted, as the impact said", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     const impact = await read([unpairing], v.r);
     const before = await snapshot();
 
@@ -461,7 +452,7 @@ describe("deleting a card reader", () => {
   });
 
   it("still refuses a payment in progress first when the notice is accepted", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     await v.payment("attempting", v.secondTill.id);
     const before = await snapshot();
     await expect(remove([unpairing], v.r, NOW, accepted)).rejects.toMatchObject({
@@ -474,7 +465,7 @@ describe("deleting a card reader", () => {
   });
 
   it("never skips a needed unpair because the notice was accepted", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     await connectStripe(suite.db);
     const before = await snapshot();
     await expect(remove([unpairing], v.r, NOW, accepted)).rejects.toMatchObject({
@@ -485,14 +476,14 @@ describe("deleting a card reader", () => {
   });
 
   it("deletes a still-paired reader whose provider cannot unpair, leaving it marked paired", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     await remove(seats, v.r);
     const [row] = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, v.r));
     expect(row).toMatchObject({ deletedAt: NOW.toISOString(), unpairedAt: null, active: false });
   });
 
   it("never looks up the provider of an unpaired reader", async () => {
-    const v = await seedVenue({ provider: "gone" });
+    const v = await seedVenueWithReaders({ provider: "gone" });
     expect((await read(seats, v.r)).target).toEqual({ id: v.r, name: "Bar reader" });
     await remove(seats, v.r);
     const [row] = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, v.r));
@@ -500,7 +491,7 @@ describe("deleting a card reader", () => {
   });
 
   it("answers payment.provider_unknown for a still-paired reader no seat serves, and writes nothing", async () => {
-    const v = await seedVenue({ provider: "gone", unpairedAt: null });
+    const v = await seedVenueWithReaders({ provider: "gone", unpairedAt: null });
     const before = await snapshot();
     for (const call of [read, remove, prepare]) {
       await expect(call(seats, v.r)).rejects.toMatchObject({
@@ -512,7 +503,7 @@ describe("deleting a card reader", () => {
   });
 
   it("answers reader.not_found for an unknown, a deleted and the demo reader, and writes nothing", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithReaders();
     await suite.db.insert(cardReaders).values({
       id: DEMO_READER_ID,
       provider: "simulator",
@@ -533,7 +524,7 @@ describe("deleting a card reader", () => {
   });
 
   it("rolls back every removal when the final write is refused", async () => {
-    const v = await seedVenue();
+    const v = await seedVenueWithReaders();
     const before = await snapshot();
     await suite.db.execute(
       sql`create trigger test_delete_failure before update on card_readers
@@ -556,7 +547,7 @@ describe("preparing a card reader delete (step a)", () => {
   ])(
     "switches off a $state reader its provider will unpair, and changes nothing else",
     async ({ active, disabledAt, expectedDisabledAt }) => {
-      const v = await seedVenue({ unpairedAt: null, active, disabledAt });
+      const v = await seedVenueWithReaders({ unpairedAt: null, active, disabledAt });
       await connectStripe(suite.db);
       const impact = await read([unpairing], v.r);
       const before = await snapshot();
@@ -582,7 +573,7 @@ describe("preparing a card reader delete (step a)", () => {
     { state: "a provider that cannot unpair", list: seats, unpairedAt: null },
     { state: "an already unpaired reader", list: [unpairing], unpairedAt: UNPAIRED },
   ])("writes nothing for $state", async ({ list, unpairedAt }) => {
-    const v = await seedVenue({ unpairedAt });
+    const v = await seedVenueWithReaders({ unpairedAt });
     await connectStripe(suite.db);
     const before = await snapshot();
     expect(await prepare(list, v.r)).toMatchObject({ unpairAtProvider: false });
@@ -590,7 +581,7 @@ describe("preparing a card reader delete (step a)", () => {
   });
 
   it("throws the first refusal and writes nothing", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     await v.payment("attempting", v.secondTill.id);
     const before = await snapshot();
     await expect(prepare([unpairing], v.r)).rejects.toMatchObject({
@@ -601,7 +592,7 @@ describe("preparing a card reader delete (step a)", () => {
   });
 
   it("plans no provider call and writes nothing for a disconnected provider once the notice is accepted", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     const impact = await read([unpairing], v.r);
     const before = await snapshot();
     expect(await prepare([unpairing], v.r, NOW, accepted)).toEqual({
@@ -614,7 +605,7 @@ describe("preparing a card reader delete (step a)", () => {
   });
 
   it("refuses reader.provider_disconnected without the acceptance, and writes nothing", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     const before = await snapshot();
     await expect(prepare([unpairing], v.r)).rejects.toMatchObject({
       code: "reader.provider_disconnected",
@@ -624,7 +615,7 @@ describe("preparing a card reader delete (step a)", () => {
   });
 
   it("plans the unpair for a connected provider whether or not the notice was accepted", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     await connectStripe(suite.db);
     expect(await prepare([unpairing], v.r, NOW, accepted)).toMatchObject({
       unpairAtProvider: true,
@@ -654,7 +645,7 @@ const selectsMadeBy = (body: (tx: Transaction) => Promise<unknown>) =>
 
 describe("starting a card reader delete (step a, and the delete when no provider is called)", () => {
   it("deletes a reader no provider must unpair, returning the impact it read", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     const impact = await read([unpairing], v.r);
     const before = await snapshot();
 
@@ -677,7 +668,7 @@ describe("starting a card reader delete (step a, and the delete when no provider
   });
 
   it("only switches off a reader its provider will unpair, leaving the delete to the caller", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     await connectStripe(suite.db);
     const impact = await read([unpairing], v.r);
     const before = await snapshot();
@@ -695,7 +686,7 @@ describe("starting a card reader delete (step a, and the delete when no provider
   });
 
   it("refuses as the delete does, and writes nothing", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     const before = await snapshot();
     await expect(
       withTransaction(suite.db, (tx) => startCardReaderDelete(tx, [unpairing], v.r, NOW)),
@@ -704,7 +695,7 @@ describe("starting a card reader delete (step a, and the delete when no provider
   });
 
   it("reads no more than the impact read does when it deletes in the one call", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     const reading = await selectsMadeBy((tx) => readCardReaderDeleteImpact(tx, [unpairing], v.r));
     const deleting = await selectsMadeBy((tx) =>
       startCardReaderDelete(tx, [unpairing], v.r, NOW, accepted),
@@ -718,7 +709,7 @@ describe("starting a card reader delete (step a, and the delete when no provider
 
 describe("marking a card reader unpaired", () => {
   it("switches off and stamps an undeleted reader as Unpair does", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     const at = "2026-10-10T11:00:00.000Z";
     const before = await snapshot();
     await withTransaction(suite.db, (tx) => markCardReaderUnpaired(tx, v.r, at));
@@ -733,7 +724,7 @@ describe("marking a card reader unpaired", () => {
   });
 
   it("changes nothing on a deleted reader", async () => {
-    const v = await seedVenue({ unpairedAt: null });
+    const v = await seedVenueWithReaders({ unpairedAt: null });
     await remove(seats, v.r);
     const before = await snapshot();
     await withTransaction(suite.db, (tx) =>

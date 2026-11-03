@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loadKeyRing } from "@waitron/credentials";
-import { locations } from "@waitron/db";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { venueLocationId } from "@waitron/db";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -15,16 +15,17 @@ const ring = loadKeyRing({
 
 describe("readBoxEmailContext", () => {
   it("reads the venue's name, the managers and the settings", async () => {
-    await seedTenant(suite.db);
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Corner Bistro", invoiceLocales: ["en-GB"], operationDescription: "Sale" })
-      .returning({ id: locations.id });
+    await seedVenue(suite.db, {
+      name: "Corner Bistro",
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Sale",
+    });
+    const venueId = await venueLocationId(suite.db);
     const [admin] = await suite.db
       .insert(persons)
       .values({ displayName: "Admin", role: "admin", email: "admin@example.test" })
       .returning({ id: persons.id });
-    const deps = { ring, locationId: location!.id, venueLanguage: "en" as const };
+    const deps = { ring, locationId: venueId, venueLanguage: "en" as const };
 
     await expect(readBoxEmailContext(suite.db, { ...deps, practiceMode: false })).resolves.toEqual({
       venue: "Corner Bistro",

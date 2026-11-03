@@ -3,13 +3,13 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   CORE_MIGRATIONS,
   kitchenStations,
-  locations,
   withTransaction,
   type Database,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import { VENUE_SERVICE_MIGRATIONS } from "@waitron/venue-service";
 import { AppError, type ChangesAfterSending } from "@waitron/shared";
@@ -26,16 +26,13 @@ beforeAll(() => {
 });
 
 async function stations(values: readonly ChangesAfterSending[]): Promise<string[]> {
-  await seedTenant(db);
-  const [loc] = await db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Venue" })
-    .returning({ id: locations.id });
+  await seedVenue(db, { name: "Bar", invoiceLocales: ["es-ES"], operationDescription: "Venue" });
+  const venueId = await venueLocationId(db);
   const ids: string[] = [];
   for (const [i, changesAfterSending] of values.entries()) {
     const [row] = await db
       .insert(kitchenStations)
-      .values({ locationId: loc!.id, name: `Station ${i}`, changesAfterSending })
+      .values({ locationId: venueId, name: `Station ${i}`, changesAfterSending })
       .returning({ id: kitchenStations.id });
     ids.push(row!.id);
   }

@@ -74,7 +74,7 @@ const BUCKET = {
   secretAccessKey: "secret-example-at-the-real-start",
 };
 
-async function seedVenue(): Promise<void> {
+async function seedVenueWithBackupSettings(): Promise<void> {
   await seedTenants(suite.db);
   await suite.db.delete(nodes).where(eq(nodes.id, TENANT_B.nodeId));
   await suite.db.update(nodes).set({ filingModule: "verifactu" }).where(eq(nodes.id, node.nodeId));
@@ -118,7 +118,7 @@ async function seedVenue(): Promise<void> {
 }
 
 it("makes a pack over the real TLS listener, drawn with the production font, that the readers accept, and the status follows a key rotation", async () => {
-  await seedVenue();
+  await seedVenueWithBackupSettings();
   const { token } = await openManagementSession(suite.db, "admin");
   const cookie = `waitron_management_session=${token}`;
 
@@ -233,7 +233,7 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
 }, 60_000);
 
 it("with the box ticked, the real fiscal module draws a new server key that the pack carries, changing no series counter and no evidence file, and logging neither key nor the session", async () => {
-  await seedVenue();
+  await seedVenueWithBackupSettings();
   await suite.db.update(invoiceSeries).set({ nextNumber: 123 });
   const oldKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
   const { token } = await openManagementSession(suite.db, "admin");

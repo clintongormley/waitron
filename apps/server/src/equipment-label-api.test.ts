@@ -3,10 +3,10 @@ import jsQR from "jsqr";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { locations, printers, printJobs, withTransaction } from "@waitron/db";
+import { printers, printJobs, withTransaction, venueLocationId } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { persons, hashPin, startManagementSession } from "@waitron/identity";
 import { readRasterText } from "@waitron/printing";
 import { cardReaders, DEMO_READER_ID } from "@waitron/payments";
@@ -27,18 +27,19 @@ let target: string;
 let reader: string;
 let source: string;
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["en-GB"], operationDescription: "Sale" })
-    .returning();
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Sale",
+  });
+  const venueId = await venueLocationId(suite.db);
   const makePrinter = async (name: string) =>
     (
       await suite.db
         .insert(printers)
         .values({
           name,
-          locationId: location!.id,
+          locationId: venueId,
           transport: "network_tcp",
           host: "10.0.0.9",
           paperWidth: "58mm",
@@ -72,7 +73,7 @@ beforeEach(async () => {
       db: suite.db,
       cfg: {
         nodeId: nodeId(randomUUID()),
-        locationId: locationId(location!.id),
+        locationId: locationId(venueId),
         locale: "en-GB",
         invoiceLocales: ["en-GB"],
         tipsEnabled: false,
