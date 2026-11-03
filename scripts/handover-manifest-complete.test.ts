@@ -7,9 +7,10 @@ import { RECOVERY_FILES } from "../apps/server/src/state-secrets.js";
 
 /**
  * A box's own state that the handover manifest does not name is state nobody decided about: M2
- * would silently keep, drop or inherit it. Reads the classifications and state-file lists from
- * their sources, so a new `local` table, state file or module state source fails here until the
- * manifest says what M2 does with it.
+ * would silently keep, drop or inherit it. Reads its lists from their sources, so a new `node.db`
+ * or `local` table, a new name in `RECOVERY_FILES` or `OPTIONAL_BACKUP_STATE`, or a new module
+ * backup source fails here until the manifest has a row for it. A state-folder file outside those
+ * lists is not seen.
  */
 
 type Where = (typeof NODE_LOCAL_MANIFEST)[number]["where"];
@@ -57,17 +58,19 @@ describe("the handover manifest names every piece of a box's own state", () => {
     for (const module of ALL_MODULES) {
       for (const source of module.backup?.nonDbState ?? []) {
         sources += 1;
-        const fill = { module: module.name, source: source.source };
+        if (source.kind !== "preparation-history") {
+          unnamed.push(
+            `${module.name}:${source.source} → kind "${source.kind}" has no manifest mapping; decide where its files live and teach this guard`,
+          );
+          continue;
+        }
         // A preparation-history source reads the module journal and the retained kept file
-        // (`apps/server/src/backup-sources.ts`); a content-addressed source reads its directory.
-        const files =
-          source.kind === "preparation-history"
-            ? [
-                "module-preparation-state.json",
-                `module-evidence/${module.name}/${source.source}.json`,
-              ]
-            : [`${source.source}/`];
-        for (const file of files)
+        // (`apps/server/src/backup-sources.ts`).
+        const fill = { module: module.name, source: source.source };
+        for (const file of [
+          "module-preparation-state.json",
+          `module-evidence/${module.name}/${source.source}.json`,
+        ])
           if (!named(file, "state", fill))
             unnamed.push(`${module.name}:${source.source} → ${file}`);
       }

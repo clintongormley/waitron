@@ -1,12 +1,13 @@
 /**
- * What a box keeps for itself — in `node.db`, in its state folder, and in the `local` tables inside
- * `venue.db` — and what the receiving box (M2) does with each after a handover. One row per exact
- * table or file name; the root guard `scripts/handover-manifest-complete.test.ts` fails when a
- * classified `local` table or a backed-up state file has no row.
+ * A box's own state — its `node.db` tables, the `local` tables inside `venue.db`, and the state
+ * files a backup carries — and what the receiving box (M2) does with each after a handover. One row
+ * per exact table or file name. The root guard `scripts/handover-manifest-complete.test.ts` fails
+ * when a `node.db` or `local` table, a recovery file, an optional backup file or a file behind a
+ * module's backup source has no row; other state-folder files are not checked.
  */
 export interface NodeLocalManifestRow {
   readonly item: string;
-  readonly where: "node.db" | "venue.db" | "state";
+  readonly where: "node.db" | "venue.db" | "state" | "venue-folder";
   readonly class: "transferred" | "source-only" | "destination-owned" | "rebuildable";
   readonly treatment: string;
 }
@@ -138,9 +139,9 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
   {
     item: "module-preparation-state.json",
     where: "state",
-    class: "source-only",
+    class: "transferred",
     treatment:
-      "summarised: it holds module operation history, including the minute selections; M2 keeps its own file",
+      "M1's retained minute selections are not in the copy, and placed as module-evidence the restore way they do not reach promotion, so the spare reuses an abandoned selection's name when its checked clock reads that minute; Task 5.7 merges M1's retained selections into M2's own file before activation (owner question open)",
   },
   {
     item: "module-evidence/<module>/<source>.json",
@@ -151,8 +152,9 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
   },
   {
     item: ".venue.db-litestream/",
-    where: "state",
+    where: "venue-folder",
     class: "rebuildable",
-    treatment: "never copied; the new primary opens a new generation",
+    treatment:
+      "beside venue.db in the venue folder; never copied; the new primary opens a new generation",
   },
 ];

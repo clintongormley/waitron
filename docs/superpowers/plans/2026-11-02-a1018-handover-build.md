@@ -540,8 +540,8 @@ modules' non-database state (`apps/server/src/backup-sources.ts:50-62`).
 | `tls/ca.*`, `tls/server.*`, `tls/venue-ca.*` | state | destination-owned | M2 keeps its own; the venue authority reached it at joining |
 | `backup.env` | state | transferred, compared | the indicator carries its digest; a difference waits `handover.backup_settings_differ` |
 | `modules.json` | state | transferred, compared | as `backup.env`; M2 refuses a module set that differs |
-| `module-preparation-state.json` | state | source-only, summarised | it holds module operation history, including the minute selections (`packages/provisioning/src/module-preparation-state.ts:73-83`; backed up as `secrets/module-evidence/fiscal-verifactu/hour-history.json` through `FISCAL_HOUR_BACKUP_STATE`, `packages/fiscal-verifactu/src/hour-backup-state.ts:49`). M2 keeps its own file. Task 4.5 finds, by a test, whether M2's minute selection sees every name M1 used from the copy alone; if it does not, M1's projected history travels as the retained `module-evidence` file the restore path already places (`apps/server/src/first-setup-backup-recovery.ts:551-582`) |
-| Litestream's `.venue.db-litestream/` | state | rebuildable | never copied; the new primary opens a new generation |
+| `module-preparation-state.json` | state | transferred | it holds module operation history, including the minute selections. Slice 4's probe (`apps/server/src/handover-minute-history.test.ts`, cases 2 and 2c) measured that the copy does not carry M1's retained minute selections, and that placing the file as `module-evidence/` the restore way does not reach promotion; a name is reused only when the spare's checked clock reads an abandoned selection's minute (e.g. an abandoned conflict-switch or an earlier setup attempt in the promotion's own minute). Task 5.7 merges M1's retained selections into M2's own preparation file before activation (case 2b shows that stops the reuse). Owner question open |
+| Litestream's `.venue.db-litestream/` | venue folder | rebuildable | beside `venue.db` in the venue folder (default `<state>/venue`, `WAITRON_VENUE_DIR` overrides); never copied; the new primary opens a new generation |
 
 ### Crash windows: what a restart or a lost answer does at each step
 
@@ -2610,6 +2610,8 @@ acceptance for another indicator refuses `handover.indicator_mismatch`.
 - [ ] **Step 5: Commit** `git commit -s -m "server: the old box gives up filing to the spare that accepted its copy, and only once"`.
 
 #### Task 5.7: M2 places the accepted copy
+
+Slice 4 probe (2026-11-03): placing the file as module-evidence does not reach promotion; merge M1's retained selections into M2's own module-preparation-state.json before activation (handover-minute-history.test.ts case 2b) — owner question open.
 
 **Files:** Create `apps/server/src/handover-place-copy.ts`; modify `boot.ts` (before the store
 opens, as `runStagedRestore` does, `apps/server/src/restore-request.ts:344-642`, place
