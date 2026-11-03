@@ -1983,6 +1983,14 @@ describe("/management-api/stations (KDS-1 config)", () => {
     expect(await stationRow(notWaiting)).toMatchObject({ waitsForPass: false });
     const id = await createStation(unique("Waiting"), { waitsForPass: true });
     expect(await stationRow(id)).toMatchObject({ waitsForPass: true });
+    const renamed = unique("Renamed");
+    const rename = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ name: renamed }) },
+      managerCookie,
+    );
+    expect(rename.status).toBe(204);
+    expect(await stationRow(id)).toMatchObject({ name: renamed, waitsForPass: true });
     const off = await req(
       `/stations/${id}`,
       { method: "PATCH", body: JSON.stringify({ waitsForPass: false }) },

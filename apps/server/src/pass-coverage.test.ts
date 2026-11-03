@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { deviceProfiles, devices, floorZones, ticketItems, withTransaction } from "@waitron/db";
+import {
+  deviceProfiles,
+  devices,
+  floorZones,
+  kitchenStations,
+  ticketItems,
+  withTransaction,
+} from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -25,6 +32,7 @@ import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
 import type { PassCard } from "./pass-card.js";
 import { releasePassItems, type PassActor } from "./pass-release.js";
 import { readPassCoverage, type PassCoverageGap } from "./pass-coverage.js";
+import { deleteStation } from "./station-delete.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -108,9 +116,14 @@ async function gaps(
     }))
     .sort(
       (a, b) =>
-        zoneIndex(a.zoneId) - zoneIndex(b.zoneId) || a.stationName.localeCompare(b.stationName),
+        zoneIndex(a.zoneId) - zoneIndex(b.zoneId) ||
+        byCodeUnit(a.stationName, b.stationName) ||
+        byCodeUnit(a.stationId, b.stationId),
     );
 }
+
+/** The database's binary collation, which `localeCompare` is not. */
+const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 describe("A773 station policy: pass coverage", () => {
   it("case 1: no station waits, so nothing is a gap, even with no pass device", async () => {
@@ -289,6 +302,53 @@ describe("A773 station policy: pass coverage", () => {
     expect(await release(venue, pass.by, tableCard)).toEqual({
       releasedTicketItemIds: [placed.tableBurger],
     });
+  });
+
+  it("a deleted station is no gap, though deletion leaves it waiting", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill", "fryer");
+    await withTransaction(db, (tx) => deleteStation(tx, venue.cfg, venue.stations.grill));
+    const [grill] = await db
+      .select({ active: kitchenStations.active, waitsForPass: kitchenStations.waitsForPass })
+      .from(kitchenStations)
+      .where(eq(kitchenStations.id, venue.stations.grill));
+    expect(grill).toEqual({ active: false, waitsForPass: true });
+    expect(await coverage(venue)).toEqual(
+      await gaps(venue, [
+        ["fryer", venue.party.zoneId],
+        ["fryer", venue.counter.zoneId],
+      ]),
+    );
+  });
+
+  it("orders gaps by zone display order, then station name", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await waiting(venue, "grill", "fryer");
+    const T = venue.party.zoneId;
+    const C = venue.counter.zoneId;
+    await withTransaction(db, async (tx) => {
+      await tx.update(floorZones).set({ displayOrder: 2 }).where(eq(floorZones.id, C));
+      await tx.update(floorZones).set({ displayOrder: 1 }).where(eq(floorZones.id, T));
+    });
+    const names = await db
+      .select({ id: floorZones.id, name: floorZones.name })
+      .from(floorZones)
+      .where(eq(floorZones.active, true));
+    const nameOf = (id: string) => names.find((zone) => zone.id === id)!.name;
+    // Name order alone would put the counter zone first.
+    expect(nameOf(C) < nameOf(T)).toBe(true);
+    const gap = (station: "grill" | "fryer", zoneId: string) => ({
+      stationId: venue.stations[station],
+      stationName: STATION_NAMES[station],
+      zoneId,
+      zoneName: nameOf(zoneId),
+    });
+    expect(await coverage(venue)).toEqual([
+      gap("fryer", T),
+      gap("grill", T),
+      gap("fryer", C),
+      gap("grill", C),
+    ]);
   });
 
   it("case 12: with no active zone, a waiting station needs an every-zone pass", async () => {

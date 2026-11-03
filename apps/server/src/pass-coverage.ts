@@ -17,9 +17,9 @@ export interface PassCoverageGap {
 }
 
 /** Each active waiting station in each active zone (or in no zone, when the venue has no active
- *  zone) that no pass device's Fire could release, by zone order, then station name and id. A pass
- *  device passes the Fire's own profile check (`passReleaseRefusal`), is active, and has an
- *  available pass screen; it covers a zone its screen sees and its profile's zone list allows. */
+ *  zone) that no pass device covers, by zone order, then station name and id. A pass device is
+ *  active, passes the Fire's profile check (`passReleaseRefusal`) and has an available pass screen;
+ *  it covers a station and zone its screen sees, where its profile's zone list allows that zone. */
 export async function readPassCoverage(
   tx: Transaction,
   cfg: TradingContext,
