@@ -179,6 +179,7 @@ export class TillPassScreen extends LitElement {
   @state() private columnsWindow: ColumnsWindow | null = null;
   /** The other-stations choice sent and not yet answered; the window shows it, disabled. */
   @state() private otherStationsSending?: boolean | null;
+  #otherStationsSend = 0;
   /** A refusal of that choice, shown in the window until the next choice or a change of board. */
   @state() private otherStationsError?: string;
   /** A read of the device's choice has answered; until one does, All stations shows. */
@@ -271,6 +272,7 @@ export class TillPassScreen extends LitElement {
         this.columnsWindow = null;
         this.#display = undefined;
         this.#acceptedChoice = undefined;
+        this.otherStationsSending = undefined;
         this.otherStationsError = undefined;
       }
       this.selected = next;
@@ -458,6 +460,7 @@ export class TillPassScreen extends LitElement {
     if (boardId === "all" || this.otherStationsSending !== undefined) return;
     this.otherStationsError = undefined;
     this.otherStationsSending = value;
+    const send = ++this.#otherStationsSend;
     let reload: "board" | "choice" | null = "board";
     try {
       await this.api.setDeviceKitchenScreenDisplay(
@@ -480,7 +483,8 @@ export class TillPassScreen extends LitElement {
       } else this.otherStationsError = code;
     }
     if (reload === "board" && this.#isCurrent(boardId)) await this.#reload();
-    this.otherStationsSending = undefined;
+    // A change of board cleared it; a choice made since then is not this answer's to clear.
+    if (send === this.#otherStationsSend) this.otherStationsSending = undefined;
     if (reload === "choice" && this.#isCurrent(boardId)) await this.#loadChoice();
   }
 

@@ -1470,6 +1470,50 @@ describe("A773 pass screen", () => {
         expect(checked(el)).toEqual(["true", "false", "false"]);
       }));
 
+    it("at a till whose choice moves to the monitor while a pass choice is still out, the monitor's window offers the monitor's own choice", () =>
+      withFakeTimers(async () => {
+        const { api } = movesToMonitorWhileSending(
+          Promise.resolve({ ...deviceBoard(boardB), display: display(null) }),
+        );
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        expect(control(el)!.disabled).toBe(true);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(cardKeys(el)).toEqual(["bill:b"]);
+        await open(el);
+        expect(checked(el)).toEqual(["true", "false", "false"]);
+        expect(control(el)!.disabled).toBe(false);
+      }));
+
+    it("at a till whose choice moves to the monitor, a late answer to the pass's choice does not free a monitor choice still out", () =>
+      withFakeTimers(async () => {
+        const { api, sent } = movesToMonitorWhileSending(
+          Promise.resolve({ ...deviceBoard(boardB), display: display(null) }),
+        );
+        const monitorSent = deferred<void>();
+        vi.mocked(api.setDeviceKitchenScreenDisplay)
+          .mockReturnValueOnce(sent.promise)
+          .mockReturnValueOnce(monitorSent.promise);
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 1);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await open(el);
+        await choose(el, 2);
+        expect(api.setDeviceKitchenScreenDisplay).toHaveBeenLastCalledWith("pass_monitor", false);
+        sent.resolve();
+        await settle(el);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+        expect(control(el)!.disabled).toBe(true);
+        monitorSent.resolve();
+        await settle(el);
+        expect(control(el)!.disabled).toBe(false);
+        expect(api.setDeviceKitchenScreenDisplay).toHaveBeenCalledTimes(2);
+      }));
+
     it("on a kitchen display, drops the section when a refresh says a narrowing took every station", () =>
       withFakeTimers(async () => {
         const api = fakeApi({

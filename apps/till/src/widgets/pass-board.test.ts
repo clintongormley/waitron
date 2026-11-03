@@ -968,6 +968,30 @@ describe("A773 pass board widget", () => {
       ).toBe("1");
     });
 
+    it("heads the separate Held column Held, never To fire, in English and in Spanish", async () => {
+      const previous = currentLocale();
+      const columns: ColumnState = {
+        order: ["held", "toFireOnly", "inProgress", "ready", "toFire", "overview"],
+        hidden: ["toFire", "overview"],
+        collapsed: [],
+      };
+      const board = passBoard({ held: [heldCard], toFire: [toFireCard] });
+      const heading = (el: TillPassBoard, key: string) =>
+        root(el).querySelector(`[data-column="${key}"] .column-heading`)!.textContent;
+      try {
+        for (const locale of ["en", "es-ES"] as const) {
+          setLocale(locale);
+          const el = await mountBoard({ board, columns });
+          expect(heading(el, "held")).toContain(t("pass.column.held", locale));
+          expect(heading(el, "held")).not.toContain(t("pass.column.to_fire", locale));
+          expect(heading(el, "toFireOnly")).toContain(t("pass.column.to_fire", locale));
+          cleanupWidgets();
+        }
+      } finally {
+        setLocale(previous);
+      }
+    });
+
     it("names Held + To fire, Held and To fire apart in the Columns window", () => {
       expect([...passColumnNames()]).toEqual([
         ["overview", t("station.overview")],
