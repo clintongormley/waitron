@@ -162,7 +162,7 @@ export function formatWifiRecord(network) {
   ) {
     throw networkInvalid("network-invalid");
   }
-  const { bytes, result } = canonicalRecord(network);
+  const { bytes, result } = canonicalRecord({ ssidHex, keyMgmt, psk, hidden });
   if (result.kind !== "loaded") throw networkInvalid(result.reason);
   return bytes;
 }

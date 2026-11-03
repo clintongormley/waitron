@@ -1166,6 +1166,23 @@ describe("formatWifiRecord writes the form its reader loads", () => {
     expect(parseWifiRecord(bytes)).toEqual({ kind: "loaded", network });
   });
 
+  it("reads each field once, so the bytes hold the values it checked", () => {
+    const reads = { ssidHex: 0, keyMgmt: 0, psk: 0, hidden: 0 };
+    const values = fields();
+    const network = {};
+    for (const key of Object.keys(reads)) {
+      Object.defineProperty(network, key, {
+        enumerable: true,
+        get() {
+          reads[key] += 1;
+          return reads[key] === 1 ? values[key] : 42;
+        },
+      });
+    }
+    expect(formatWifiRecord(/** @type {any} */ (network))).toEqual(recordBytes());
+    expect(reads).toEqual({ ssidHex: 1, keyMgmt: 1, psk: 1, hidden: 1 });
+  });
+
   it("two calls return different arrays with equal bytes", () => {
     const first = formatWifiRecord(fields());
     const second = formatWifiRecord(fields());
