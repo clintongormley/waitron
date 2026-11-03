@@ -14,11 +14,13 @@ export const NETWORK_TIMINGS_MS = Object.freeze({
  * @property {number} atMs
  * @property {number|null} deadlineMs  probing: when the hotspot opens; hotspot: the next probe; joining/joined: when the join counts as failed
  * @property {'join-failed'|'no-internet'|null} failure  why the last join failed (the page says the password was wrong, or the network has no internet); null until one fails, and again after continue
+ * @property {number} joinId  the last join issued; 0 before the first
  * @typedef {'wait'|'probe'|'open-hotspot'|'join'|'continue'} NetworkAction
  *   open-hotspot: open the installer's own network (spec §5.3 item 2's fixed name; open, 10.42.0.1, forwarding nothing; the adapter's duty)
- *   join: close the hotspot, then join ssidHex with the password the adapter took from the form
+ *   join: close the hotspot, then join ssidHex with the password the adapter took from the form; its join-result must carry
+ *     the decision's joinId, and a result carrying another is ignored
  *   continue: internet found; close the hotspot if open; the installer goes on
- * @typedef {{ action: NetworkAction, ssidHex: string|null, deadlineMs: number|null, state: NetworkState }} NetworkDecision  frozen
+ * @typedef {{ action: NetworkAction, ssidHex: string|null, joinId: number|null, deadlineMs: number|null, state: NetworkState }} NetworkDecision  frozen
  */
 
 // The same rule as the Wi-Fi record's: lowercase hex of 1-32 bytes.
@@ -56,6 +58,7 @@ export function createNetworkState(options) {
     atMs: options.atMs,
     deadlineMs: options.atMs + NETWORK_TIMINGS_MS.hotspotAfter,
     failure: null,
+    joinId: 0,
   });
 }
 
@@ -68,7 +71,8 @@ function checkEvent(event) {
   else if (kind === "link") ok = keys("internet") && typeof event.internet === "boolean";
   else if (kind === "join-requested")
     ok = keys("ssidHex") && typeof event.ssidHex === "string" && SSID_HEX.test(event.ssidHex);
-  else if (kind === "join-result") ok = keys("ok") && typeof event.ok === "boolean";
+  else if (kind === "join-result")
+    ok = keys("joinId", "ok") && safeInteger(event.joinId) && typeof event.ok === "boolean";
   else ok = false;
   if (!ok || !safeInteger(event.atMs)) throw eventInvalid();
 }
@@ -79,7 +83,8 @@ function checkEvent(event) {
  */
 function decide(state, action, changes = {}, ssidHex = null) {
   const next = makeState({ ...state, ...changes });
-  return Object.freeze({ action, ssidHex, deadlineMs: next.deadlineMs, state: next });
+  const joinId = action === "join" ? next.joinId : null;
+  return Object.freeze({ action, ssidHex, joinId, deadlineMs: next.deadlineMs, state: next });
 }
 
 /** @param {NetworkState} state @param {'join-failed'|'no-internet'|null} failure */
@@ -113,10 +118,14 @@ export function nextNetworkStep(state, event) {
     return decide(
       timed,
       "join",
-      { phase: "joining", deadlineMs: e.atMs + NETWORK_TIMINGS_MS.joinWithin },
+      {
+        phase: "joining",
+        deadlineMs: e.atMs + NETWORK_TIMINGS_MS.joinWithin,
+        joinId: timed.joinId + 1,
+      },
       e.ssidHex,
     );
-  if (phase === "joining" && e.kind === "join-result")
+  if (phase === "joining" && e.kind === "join-result" && e.joinId === timed.joinId)
     return e.ok ? decide(timed, "probe", { phase: "joined" }) : openHotspot(timed, "join-failed");
   if (phase === "joining" && due) return openHotspot(timed, "join-failed");
   if (phase === "joined" && due) return openHotspot(timed, "no-internet");

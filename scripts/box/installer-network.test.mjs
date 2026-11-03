@@ -12,7 +12,7 @@ const OTHER_HEX = "4f74726f";
 const link = (atMs, internet) => ({ kind: "link", atMs, internet });
 const tick = (atMs) => ({ kind: "tick", atMs });
 const joinRequested = (atMs, ssidHex = VENUE_HEX) => ({ kind: "join-requested", atMs, ssidHex });
-const joinResult = (atMs, ok) => ({ kind: "join-result", atMs, ok });
+const joinResult = (atMs, ok, joinId = 1) => ({ kind: "join-result", atMs, joinId, ok });
 
 /** @param {object[]} events @param {number} [atMs] */
 function play(events, atMs = 0) {
@@ -54,7 +54,13 @@ describe("timings", () => {
 describe("creating the state", () => {
   it("starts probing, with the hotspot due one minute later and no failure", () => {
     const state = createNetworkState({ atMs: 5_000 });
-    expect(state).toEqual({ phase: "probing", atMs: 5_000, deadlineMs: 65_000, failure: null });
+    expect(state).toEqual({
+      phase: "probing",
+      atMs: 5_000,
+      deadlineMs: 65_000,
+      failure: null,
+      joinId: 0,
+    });
     expect(Object.isFrozen(state)).toBe(true);
     expect(networkStatus(state)).toEqual({ stage: "probing", failure: null });
   });
@@ -84,8 +90,9 @@ describe("a cable with internet", () => {
     expect(decisions[0]).toEqual({
       action: "continue",
       ssidHex: null,
+      joinId: null,
       deadlineMs: null,
-      state: { phase: "online", atMs: 0, deadlineMs: null, failure: null },
+      state: { phase: "online", atMs: 0, deadlineMs: null, failure: null, joinId: 0 },
     });
     expect(networkStatus(final(decisions).state)).toEqual({ stage: "online", failure: null });
   });
@@ -111,8 +118,9 @@ describe("a cable with no internet", () => {
     expect(decisions[3]).toEqual({
       action: "open-hotspot",
       ssidHex: null,
+      joinId: null,
       deadlineMs: 120_000,
-      state: { phase: "hotspot", atMs: 60_000, deadlineMs: 120_000, failure: null },
+      state: { phase: "hotspot", atMs: 60_000, deadlineMs: 120_000, failure: null, joinId: 0 },
     });
   });
 
@@ -150,6 +158,7 @@ describe("a cable with no internet", () => {
       atMs: 150_000,
       deadlineMs: null,
       failure: null,
+      joinId: 0,
     });
   });
 
@@ -165,8 +174,9 @@ describe("joining a Wi-Fi network from the hotspot's page", () => {
     expect(final(decisions)).toEqual({
       action: "join",
       ssidHex: VENUE_HEX,
+      joinId: 1,
       deadlineMs: 130_000,
-      state: { phase: "joining", atMs: 70_000, deadlineMs: 130_000, failure: null },
+      state: { phase: "joining", atMs: 70_000, deadlineMs: 130_000, failure: null, joinId: 1 },
     });
   });
 
@@ -175,8 +185,15 @@ describe("joining a Wi-Fi network from the hotspot's page", () => {
     expect(final(decisions)).toEqual({
       action: "open-hotspot",
       ssidHex: null,
+      joinId: null,
       deadlineMs: 140_000,
-      state: { phase: "hotspot", atMs: 80_000, deadlineMs: 140_000, failure: "join-failed" },
+      state: {
+        phase: "hotspot",
+        atMs: 80_000,
+        deadlineMs: 140_000,
+        failure: "join-failed",
+        joinId: 1,
+      },
     });
     expect(networkStatus(final(decisions).state)).toEqual({
       stage: "hotspot",
@@ -190,7 +207,7 @@ describe("joining a Wi-Fi network from the hotspot's page", () => {
       joinRequested(70_000),
       joinResult(80_000, false),
       joinRequested(90_000, OTHER_HEX),
-      joinResult(95_000, true),
+      joinResult(95_000, true, 2),
       link(100_000, true),
     ]);
     expect(actions(decisions)).toEqual([
@@ -209,6 +226,7 @@ describe("joining a Wi-Fi network from the hotspot's page", () => {
       atMs: 95_000,
       deadlineMs: 150_000,
       failure: "join-failed",
+      joinId: 2,
     });
     expect(networkStatus(final(decisions).state)).toEqual({ stage: "online", failure: null });
   });
@@ -234,8 +252,15 @@ describe("joining a Wi-Fi network from the hotspot's page", () => {
     expect(final(decisions)).toEqual({
       action: "open-hotspot",
       ssidHex: null,
+      joinId: null,
       deadlineMs: 190_000,
-      state: { phase: "hotspot", atMs: 130_000, deadlineMs: 190_000, failure: "no-internet" },
+      state: {
+        phase: "hotspot",
+        atMs: 130_000,
+        deadlineMs: 190_000,
+        failure: "no-internet",
+        joinId: 1,
+      },
     });
   });
 
@@ -247,6 +272,7 @@ describe("joining a Wi-Fi network from the hotspot's page", () => {
       atMs: 130_000,
       deadlineMs: 190_000,
       failure: "join-failed",
+      joinId: 1,
     });
   });
 
@@ -274,6 +300,7 @@ describe("joining a Wi-Fi network from the hotspot's page", () => {
       atMs: 65_000,
       deadlineMs: 60_000,
       failure: null,
+      joinId: 0,
     });
   });
 
@@ -310,6 +337,77 @@ describe("joining a Wi-Fi network from the hotspot's page", () => {
       state: { phase: "hotspot", failure: null },
     });
     expect(final(fromJoined)).toMatchObject({ action: "wait", state: { phase: "joined" } });
+  });
+});
+
+describe("a join's result answers only that join", () => {
+  /** Join 1 asked at 70000 times out at 130000; join 2 is asked at 131000. */
+  const SECOND_JOIN = [
+    ...HOTSPOT_OPEN,
+    joinRequested(70_000, "41"),
+    tick(130_000),
+    joinRequested(131_000, "42"),
+  ];
+
+  it("each join carries a new joinId, kept in the state; other decisions carry null", () => {
+    const decisions = play(SECOND_JOIN);
+    expect(decisions.map((d) => [d.action, d.ssidHex, d.joinId, d.state.joinId])).toEqual([
+      ["wait", null, null, 0],
+      ["open-hotspot", null, null, 0],
+      ["join", "41", 1, 1],
+      ["open-hotspot", null, null, 1],
+      ["join", "42", 2, 2],
+    ]);
+  });
+
+  for (const ok of [false, true])
+    it(`the timed-out join's late ${ok ? "success" : "failure"} → wait, still joining the second`, () => {
+      const decisions = play([...SECOND_JOIN, joinResult(132_000, ok, 1)]);
+      expect(final(decisions)).toEqual({
+        action: "wait",
+        ssidHex: null,
+        joinId: null,
+        deadlineMs: 191_000,
+        state: {
+          phase: "joining",
+          atMs: 132_000,
+          deadlineMs: 191_000,
+          failure: "join-failed",
+          joinId: 2,
+        },
+      });
+    });
+
+  it("the second join's own failure → open-hotspot, failure join-failed", () => {
+    const decisions = play([
+      ...SECOND_JOIN,
+      joinResult(132_000, true, 1),
+      joinResult(133_000, false, 2),
+    ]);
+    expect(final(decisions)).toMatchObject({
+      action: "open-hotspot",
+      state: { phase: "hotspot", failure: "join-failed", joinId: 2 },
+    });
+  });
+
+  it("the second join's own success → probe, joined", () => {
+    const decisions = play([
+      ...SECOND_JOIN,
+      joinResult(132_000, false, 1),
+      joinResult(133_000, true, 2),
+    ]);
+    expect(final(decisions)).toMatchObject({
+      action: "probe",
+      state: { phase: "joined", deadlineMs: 191_000, joinId: 2 },
+    });
+  });
+
+  it("a result naming a join not yet asked for → wait, still joining", () => {
+    const decisions = play([...HOTSPOT_OPEN, joinRequested(70_000), joinResult(75_000, true, 2)]);
+    expect(final(decisions)).toMatchObject({
+      action: "wait",
+      state: { phase: "joining", joinId: 1 },
+    });
   });
 });
 
@@ -369,6 +467,12 @@ describe("refusals for a caller's mistakes", () => {
     ["a link without internet", { kind: "link", atMs: 1_000 }],
     ["a link whose internet is not a boolean", link(1_000, "yes")],
     ["a join-result whose ok is not a boolean", joinResult(1_000, 1)],
+    ["a join-result without a joinId", { kind: "join-result", atMs: 1_000, ok: true }],
+    ["a join-result with a negative joinId", joinResult(1_000, true, -1)],
+    ["a join-result with a fractional joinId", joinResult(1_000, true, 1.5)],
+    ["a join-result with a string joinId", joinResult(1_000, true, "1")],
+    ["a join-result with a null joinId", joinResult(1_000, true, null)],
+    ["a join-requested with a joinId", { ...joinRequested(1_000), joinId: 1 }],
     ["a join-result with an ssidHex", { ...joinResult(1_000, true), ssidHex: VENUE_HEX }],
     ["a negative atMs", tick(-1)],
     ["a fractional atMs", tick(1_000.5)],

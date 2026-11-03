@@ -496,11 +496,12 @@ export const NETWORK_TIMINGS_MS; // frozen { hotspotAfter: 60_000, retryEvery: 6
  * @property {number} atMs
  * @property {number|null} deadlineMs  probing: when the hotspot opens; hotspot: the next probe; joining/joined: when the join counts as failed
  * @property {'join-failed'|'no-internet'|null} failure  why the last join failed (the page says the password was wrong, or the network has no internet); null until one fails, and again after continue
+ * @property {number} joinId  the last join issued; 0 before the first
  * @typedef {'wait'|'probe'|'open-hotspot'|'join'|'continue'} NetworkAction
  *   open-hotspot: open the installer's own network (spec §5.3 item 2's fixed name; open, 10.42.0.1, forwarding nothing; the adapter's duty)
  *   join: close the hotspot, then join ssidHex with the password the adapter took from the form
  *   continue: internet found; close the hotspot if open; the installer goes on
- * @typedef {{ action: NetworkAction, ssidHex: string|null, deadlineMs: number|null, state: NetworkState }} NetworkDecision  frozen
+ * @typedef {{ action: NetworkAction, ssidHex: string|null, joinId: number|null, deadlineMs: number|null, state: NetworkState }} NetworkDecision  frozen
  */
 /** Throws installer_network.options_invalid unless options is exactly {atMs}. */
 export function createNetworkState(options);
@@ -510,18 +511,18 @@ export function nextNetworkStep(state, event);
 export function networkStatus(state);
 ```
 
-**Events** (exact records; `atMs` as in Task 1): `link {atMs, internet: boolean}` (the adapter's report that some link — cable, USB tethering or a joined Wi-Fi — has, or has not, a usable route to the internet); `tick {atMs}`; `join-requested {atMs, ssidHex}` (`ssidHex` as PR 2's rule: lowercase hex of 1–32 bytes; any other key, `password` included, throws); `join-result {atMs, ok: boolean}`.
+**Events** (exact records; `atMs` as in Task 1): `link {atMs, internet: boolean}` (the adapter's report that some link — cable, USB tethering or a joined Wi-Fi — has, or has not, a usable route to the internet); `tick {atMs}`; `join-requested {atMs, ssidHex}` (`ssidHex` as PR 2's rule: lowercase hex of 1–32 bytes; any other key, `password` included, throws); `join-result {atMs, joinId, ok: boolean}` (`joinId` a safe non-negative integer, the `joinId` of the `join` decision it answers).
 
 **Rules.**
 
 1. `createNetworkState({atMs})` → phase `probing`, `deadlineMs = atMs + NETWORK_TIMINGS_MS.hotspotAfter`.
 2. `link` with `internet: true` in `probing`, `hotspot`, `joining` or `joined` → `continue`, phase `online`.
 3. *`probing`:* `tick` at or after the deadline → `open-hotspot`, phase `hotspot`, `deadlineMs = atMs + NETWORK_TIMINGS_MS.retryEvery`.
-4. *`hotspot`:* `tick` at or after the deadline → `probe`, `deadlineMs = atMs + NETWORK_TIMINGS_MS.retryEvery` (every minute). `join-requested` → `join` with its `ssidHex`, phase `joining`, `deadlineMs = atMs + NETWORK_TIMINGS_MS.joinWithin`.
-5. *`joining`:* `join-result` `ok: false` → `open-hotspot`, phase `hotspot`, `failure: 'join-failed'`, `deadlineMs = atMs + NETWORK_TIMINGS_MS.retryEvery`. `ok: true` → `probe`, phase `joined`, deadline unchanged.
+4. *`hotspot`:* `tick` at or after the deadline → `probe`, `deadlineMs = atMs + NETWORK_TIMINGS_MS.retryEvery` (every minute). `join-requested` → `join` with its `ssidHex` and a new `joinId` (one more than the state's), phase `joining`, `deadlineMs = atMs + NETWORK_TIMINGS_MS.joinWithin`.
+5. *`joining`:* a `join-result` whose `joinId` is the state's: `ok: false` → `open-hotspot`, phase `hotspot`, `failure: 'join-failed'`, `deadlineMs = atMs + NETWORK_TIMINGS_MS.retryEvery`. `ok: true` → `probe`, phase `joined`, deadline unchanged.
 6. *`joining`* or *`joined`:* `tick` at or after the deadline → `open-hotspot`, phase `hotspot`, `failure` `join-failed` from `joining`, `no-internet` from `joined` (D16).
 7. `continue` sets `failure` to `null`: once the installer is online, an earlier failed join is no longer the page's news.
-8. `join-requested` outside `hotspot`, `join-result` outside `joining`, `link` with `internet: false`, and early `tick`s → `wait`. *`online`* answers `wait` to everything: when the installer needs the network again (Task 3's retries), its driver starts a new state.
+8. `join-requested` outside `hotspot`, `join-result` outside `joining` or with another `joinId` (a join that timed out can still answer late), `link` with `internet: false`, and early `tick`s → `wait`. *`online`* answers `wait` to everything: when the installer needs the network again (Task 3's retries), its driver starts a new state.
 
 - [ ] **Step 1: Write the failing tests.**
   - **Cable (Review Focus 5):** `link internet true at 0 → continue`; ticks after that → `wait`, and no `open-hotspot` in the run.
