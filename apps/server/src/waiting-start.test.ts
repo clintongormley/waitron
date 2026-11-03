@@ -604,7 +604,7 @@ describe("the waiting start", () => {
       const carried = await posted;
       expect(carried.status).toBe(409);
       expect(await carried.text()).toContain(
-        "Your decision to carry on was recorded, but this box then had to step down as the main box, so it did not carry on.",
+        "Your decision to carry on was recorded, but this box then learnt that another box has taken over, or it is shutting down, so it did not carry on.",
       );
       expect((await stepped).status).toBe(200);
       expect(await h.waiting.ended).toEqual({ kind: "stopped" });

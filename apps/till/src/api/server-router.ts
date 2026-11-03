@@ -197,7 +197,7 @@ export class ServerRouter extends EventTarget {
   }
 
   /** Fire and forget, and never moves the till. A post the server answered, whatever the status, is
-   * not sent again for the same answer; one that never reached it is tried on a later round. */
+   * not sent again for the same answer; one that failed in transit is tried on a later round. */
   #handChart(url: string, term: number | null): void {
     const chart = this.#chart;
     if (chart === null || (term !== null && term >= chart.body.term)) return;

@@ -1030,6 +1030,7 @@ export async function startServer(
     fullyStarted,
     close: async () => {
       await whileWaiting.close();
+      // A shutdown after the wait ended waits for the rest of the start, up to the shutdown deadline.
       await continued;
       await current.close();
     },
@@ -1237,8 +1238,7 @@ async function bootServer(
   const handoverGate = createHandoverGate();
   // Ahead of every other middleware, so once a stepdown closes it nothing behind it runs.
   app.use("*", handoverGate.middleware);
-  // Trading-only: the allow-list reads the held membership document, which a setup box has not
-  // provisioned. The waiting and restricted starts answer the same origins as the full start.
+  // Used by the full, waiting and restricted starts, so all three answer the same origins.
   const allowOrigin = createOriginAllowlist({
     advertisedOrigin: config.advertisedOrigin,
     readMembership: () => readNodeMembership(db),

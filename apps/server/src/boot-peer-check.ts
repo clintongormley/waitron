@@ -119,7 +119,8 @@ export async function checkPeersAtStart(deps: CheckPeersDeps): Promise<StartChec
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const ownOrigin = originOf(deps.ownOrigin);
 
-  // This box's own promotion chart: the person attested the box it demoted is switched off.
+  // `sell-only` enters a chart only through a promotion (packages/membership/src/standings.ts:15),
+  // and every promotion first requires the old box to be neutralised (promote.ts assertFenced).
   const ownPromotion =
     held !== null && held.signerNodeId === nodeId && standingOf(held, nodeId) === "serving-primary";
   const peers: { server: RoutableServer; counted: boolean }[] = [];

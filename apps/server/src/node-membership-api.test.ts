@@ -366,7 +366,7 @@ describe("POST /api/node/membership with the real stepdown", () => {
     });
   });
 
-  it("two different fencing charts together step down once and answer both", async () => {
+  it("two different fencing charts sent together both answer and the box restarts once", async () => {
     const { self, peer, signer, send, restart } = await sellingBox();
     const fencing = (term: number) =>
       JSON.stringify({

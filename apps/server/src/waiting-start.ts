@@ -202,7 +202,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     carrying = true;
     clearTimeout(timer);
     // Not awaited: an await here would itself give a re-ask answered by the seam time to finish.
-    void deps.onCarryOn?.("turn");
+    void Promise.resolve(deps.onCarryOn?.("turn")).catch(() => {});
     await asking;
     const done = (): void => {
       carrying = false;
