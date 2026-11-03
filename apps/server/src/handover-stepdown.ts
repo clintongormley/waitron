@@ -64,7 +64,8 @@ export async function stepDown(
     await assertMatchesStored(deps.node, deps.nodeId, request);
     return { restarting: true, replayed: true };
   }
-  // The duties are stopped before the write, so no filing can begin while the write runs.
+  // Told to stop before the write: from here no drain claims another batch, though one already
+  // claimed is still sent.
   let signalFailure: { error: unknown } | null = null;
   try {
     deps.gate.close({ allowed: STEPDOWN_ALLOWED, self: request.self });

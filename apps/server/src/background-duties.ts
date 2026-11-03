@@ -175,7 +175,7 @@ export function backgroundDuties(h: BackgroundDutyHandles): BackgroundDuties {
     {
       name: "loop",
       close: () => h.loop,
-      reason: LOOP_WAIT,
+      reason: SIGNALLED_LOOP_WAIT,
     },
     {
       name: "tunnelWorker",
