@@ -1391,6 +1391,26 @@ is meant to be in; CLAUDE.md §3).
   unedited-diff check (Fiscal boundary), and from the root `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts scripts/personal-log-params.test.ts`.
   Then `/finish-branch` (full). The PR says FISCAL in its first line.
 
+#### Slice 2 as built (2026-11-03)
+
+The build departed from the task texts above in these ways; the task texts are left as written.
+
+- `createHandoverGate` takes no argument. An open event stream is never counted as admitted work,
+  because its handler returns its response at once (measured while building the gate).
+- A restricted box's `/health` answers 200 with `{ ok: true, tradingAvailable: false }`, so the
+  install and update health checks still pass on a box that has stepped down.
+- `stepDown` returns `{ restarting: true, replayed: boolean }`; a replayed call schedules no second
+  restart.
+- No production route reaches `stepDown` in Slice 2. `boot.ts` exposes it only through a test seam;
+  Slice 5 adds the authenticated route.
+- The stepdown's close is bounded by the same shutdown deadline a SIGTERM has, so a close that never
+  settles still restarts the box.
+- The pending-card pass skips its later steps once it has been signalled.
+- The restricted page's title is "This box no longer runs the venue" for both kinds of restriction
+  (handed over and superseded), and the page carries no closing line about sending records back or
+  becoming the spare. Later slices add those sentences when they build what they describe.
+- A superseded stepdown records no handover operation; Task 10.3 begins one.
+
 ---
 
 ### Slice 3 — A returning box asks before it sells or files
