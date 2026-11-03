@@ -1,6 +1,6 @@
 import "./errors.js";
 import { and, eq, inArray } from "drizzle-orm";
-import { profileAllows } from "@waitron/layouts";
+import { profileAllows, type FormFactor } from "@waitron/layouts";
 import { AppError, isUuid } from "@waitron/shared";
 import { deviceProfiles, devices, nowIso, ticketItems } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -34,6 +34,19 @@ export interface PassReleaseResult {
 
 const stale = () => new AppError("ticket.pass_context_changed", {});
 
+/** The profile half of the Fire's authority: the first action the profile lacks, or null. */
+export function passReleaseRefusal(device: {
+  formFactor: FormFactor;
+  capabilities: readonly string[];
+}): "prepare-orders" | "run-the-pass" | null {
+  for (const [allowed, action] of [
+    [profileAllows(device, "prepare-orders"), "prepare-orders"],
+    [device.capabilities.includes("run-the-pass"), "run-the-pass"],
+  ] as const)
+    if (!allowed) return action;
+  return null;
+}
+
 /** D48: authority, then `passReleaseAsk(body)`, then zones, replay and staleness. */
 export async function releasePassItems(
   tx: Transaction,
@@ -51,11 +64,8 @@ export async function releasePassItems(
   const device = toDeviceBinding(by.deviceId, row);
   if (device.formFactor !== "kds" && by.personId === null)
     throw new AppError("session.required", {});
-  for (const [allowed, action] of [
-    [profileAllows(device, "prepare-orders"), "prepare-orders"],
-    [device.capabilities.includes("run-the-pass"), "run-the-pass"],
-  ] as const)
-    if (!allowed) throw new AppError("device.forbidden_action", { action });
+  const refused = passReleaseRefusal(device);
+  if (refused !== null) throw new AppError("device.forbidden_action", { action: refused });
   const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, cfg, by.deviceId)).find(
     (candidate) => candidate.kind === "pass",
   );
