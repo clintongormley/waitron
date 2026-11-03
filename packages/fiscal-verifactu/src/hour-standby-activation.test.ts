@@ -473,6 +473,23 @@ it("a promotion admitted with oldMachineRelinquished activates and stores its ve
   expect(stored!.approval).toEqual(f.input.approval);
 });
 
+it("refuses a relinquished promotion whose version 2 approval also says the old machine is offline", async () => {
+  const f = relinquishedFixture();
+  f.input.approval = { ...f.input.approval, oldMachineOffline: true };
+  const before = await snapshot();
+  await expect(activate(f, "none", bases, { relinquished: true })).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "malformed_approval" },
+  });
+  expect(
+    await suite.db
+      .select()
+      .from(fiscalAllocations)
+      .where(eq(fiscalAllocations.eventKey, "promotion")),
+  ).toEqual([]);
+  expect(await snapshot()).toEqual(before);
+});
+
 it("a committed controlled activation, retried, is accepted", async () => {
   const first = await activate(relinquishedFixture(), "none", bases, { relinquished: true });
   const before = await snapshot();

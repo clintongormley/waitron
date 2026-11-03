@@ -405,6 +405,8 @@ function validateEnvelope(
     return refuse("event_mismatch");
   if (relinquished && (context.mode !== "recovery" || context.authority.kind !== "hour"))
     return refuse("event_mismatch");
+  if (permission.version === 2 && (permission.oldMachineOffline || permission.oldMachineAbsent))
+    return refuse("malformed_approval");
   if ((context.mode === "initial-setup") !== permission.oldMachineAbsent)
     return refuse("old_machine_absence_unconfirmed");
   if (

@@ -355,6 +355,18 @@ describe("an approval saying the old machine relinquished filing", () => {
       ),
     ).toEqual({ ok: false, reason: "event_mismatch" });
   });
+  it.each([
+    ["offline", { oldMachineOffline: true }],
+    ["absent", { oldMachineAbsent: true }],
+  ])("refuses a version 2 approval that also says the old machine is %s", (_, contradiction) => {
+    expect(
+      validate(
+        allocation,
+        { ...relinquished, ...contradiction },
+        { ...relinquishedContext, authority: { kind: "hour", token: {} } },
+      ),
+    ).toEqual({ ok: false, reason: "malformed_approval" });
+  });
   it("refuses a version 1 approval when the context says relinquished", () => {
     expect(validate(allocation, approval, relinquishedContext)).toEqual({
       ok: false,
