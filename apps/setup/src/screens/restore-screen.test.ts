@@ -126,9 +126,8 @@ describe("SetupRestoreScreen", () => {
       type: "password",
     });
     expect(key!.shadowRoot!.querySelector("input")!.autocomplete).toBe("off");
-    expect(key!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label")).toBe(
-      "Help with recovery key",
-    );
+    expect(key!.getAttribute("hint")).toBe("The key saved with this backup");
+    expect(key!.querySelector("wt-help-tooltip")).toBeNull();
     const reveal = key!.querySelector<HTMLElement>("wt-button[slot=end]")!;
     expect(reveal.getAttribute("aria-label")).toBe("Show recovery key");
     expect(reveal.querySelector("svg")).not.toBeNull();
@@ -534,6 +533,14 @@ describe("SetupRestoreScreen", () => {
 
 describe("SetupRestoreScreen in Spanish", () => {
   afterEach(() => setLocale("en-GB"));
+
+  it("explains the recovery key with a Spanish hint", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupRestoreScreen>("setup-restore-screen", {});
+    expect(q(el, 'wt-input[name="recovery-key"]')!.getAttribute("hint")).toBe(
+      "La clave guardada con esta copia",
+    );
+  });
 
   it("asks for the backup, the key and the confirmation in Spanish", async () => {
     setLocale("es-ES");

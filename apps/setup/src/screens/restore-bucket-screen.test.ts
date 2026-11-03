@@ -161,9 +161,10 @@ describe("SetupRestoreBucketScreen", () => {
       font: "fantasy",
       size: "11px",
     });
-    expect(kit!.querySelector("wt-help-tooltip[slot=help]")!.getAttribute("aria-label")).toBe(
-      "Help with the recovery kit",
+    expect(kit!.getAttribute("hint")).toBe(
+      "Or paste the kit here: one long line starting with WAITRON-RECOVERY-KIT-1",
     );
+    expect(kit!.querySelector("wt-help-tooltip")).toBeNull();
   });
 
   it("picks the environment from the shared dropdown, with its help beside the box", async () => {
@@ -732,6 +733,14 @@ describe("SetupRestoreBucketScreen", () => {
 
 describe("SetupRestoreBucketScreen in Spanish", () => {
   afterEach(() => setLocale("en-GB"));
+
+  it("explains the kit with a Spanish hint", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
+    expect(q(el, "[data-test=kit]")!.getAttribute("hint")).toBe(
+      "O pega aquí el kit: una sola línea larga que empieza por WAITRON-RECOVERY-KIT-1",
+    );
+  });
 
   it("asks for the kit and the confirmations in Spanish", async () => {
     setLocale("es-ES");

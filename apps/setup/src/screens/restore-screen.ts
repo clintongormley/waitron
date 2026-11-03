@@ -292,6 +292,7 @@ export class SetupRestoreScreen extends LitElement {
         class="field"
         label=${t("restore.recovery_key")}
         name="recovery-key"
+        hint=${t("restore.recovery_key_hint")}
         type=${this.recoveryKeyVisible ? "text" : "password"}
         autocomplete="off"
         required
@@ -304,9 +305,6 @@ export class SetupRestoreScreen extends LitElement {
           this.#edited("recoveryKey");
         }}
       >
-        <wt-help-tooltip slot="help" aria-label=${t("restore.recovery_key_help_label")}
-          >${t("restore.recovery_key_help")}</wt-help-tooltip
-        >
         <wt-button
           slot="end"
           variant="ghost"

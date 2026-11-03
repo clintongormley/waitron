@@ -10,7 +10,6 @@ import {
 } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
-import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { actionsStyles, fieldStyles } from "../form-styles.js";
 import { dispatchAdoptRequested, dispatchSetupGoto } from "../events.js";
@@ -52,34 +51,29 @@ function originOf(typed: string): string {
 interface FieldText {
   label: StringKey;
   error: StringKey;
-  helpLabel: StringKey;
-  help: StringKey;
+  hint: StringKey;
 }
 
 const FIELD_TEXT: Record<ConnectField, FieldText> = {
   primaryUrl: {
     label: "connect.primary_url.label",
     error: "connect.primary_url.error",
-    helpLabel: "connect.primary_url.help_label",
-    help: "connect.primary_url.help",
+    hint: "connect.primary_url.hint",
   },
   personId: {
     label: "connect.person_id.label",
     error: "connect.person_id.error",
-    helpLabel: "connect.person_id.help_label",
-    help: "connect.person_id.help",
+    hint: "connect.person_id.hint",
   },
   password: {
     label: "connect.password.label",
     error: "connect.password.error",
-    helpLabel: "connect.password.help_label",
-    help: "connect.password.help",
+    hint: "connect.password.hint",
   },
   totp: {
     label: "connect.totp.label",
     error: "connect.totp.error",
-    helpLabel: "connect.totp.help_label",
-    help: "connect.totp.help",
+    hint: "connect.totp.hint",
   },
 };
 
@@ -356,16 +350,14 @@ export class SetupConnectScreen extends LitElement {
       name=${key}
       autocomplete=${key === "password" ? "current-password" : key === "personId" ? "username" : key === "totp" ? "one-time-code" : "off"}
       ?required=${key !== "totp" && !readonly}
+      hint=${t(text.hint)}
       error=${invalid ? t(text.error) : ""}
       data-test=${key}
       type=${type}
       ?invalid=${invalid}
       .value=${this.values[key]}
       @wt-change=${(e: CustomEvent<{ value: string }>) => this.#onField(key, e)}
-      ><wt-help-tooltip slot="help" aria-label=${t(text.helpLabel)}
-        >${t(text.help)}</wt-help-tooltip
-      ></wt-input
-    >`;
+    ></wt-input>`;
   }
 
   #actions(blocked: boolean): TemplateResult {

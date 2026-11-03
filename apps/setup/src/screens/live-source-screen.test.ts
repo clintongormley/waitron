@@ -46,6 +46,23 @@ const FIX_FIELDS = "Correct the highlighted fields to continue.";
 const EXPORT = new File(["encrypted"], "prepared.waitron-config");
 
 describe("SetupLiveSourceScreen", () => {
+  it("explains the passphrase with a hint in the empty field and no ?", async () => {
+    const { el } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+    const passphrase = q(el, "wt-input[name=export-passphrase]")!;
+    expect(passphrase.getAttribute("hint")).toBe("The passphrase that encrypted the export");
+    expect(passphrase.querySelector("wt-help-tooltip")).toBeNull();
+    cleanupWidgets();
+    setLocale("es-ES");
+    try {
+      const { el: es } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
+      expect(q(es, "wt-input[name=export-passphrase]")!.getAttribute("hint")).toBe(
+        "La que se usó al exportar",
+      );
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
   it("offers a separate empty production path", async () => {
     const { el, host } = await mountWidget<SetupLiveSourceScreen>("setup-live-source-screen", {});
     const patch = vi.fn();

@@ -83,6 +83,23 @@ class FailingFileReader {
 afterEach(cleanupWidgets);
 
 describe("setup-cert-screen", () => {
+  it("explains the passphrase with a hint in the empty field and no ?", async () => {
+    const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+    const passphrase = q(el, "[data-test=passphrase]")!;
+    expect(passphrase.getAttribute("hint")).toBe("The password chosen when exporting the file");
+    expect(passphrase.querySelector("wt-help-tooltip")).toBeNull();
+    cleanupWidgets();
+    setLocale("es-ES");
+    try {
+      const { el: es } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
+      expect(q(es, "[data-test=passphrase]")!.getAttribute("hint")).toBe(
+        "La contraseña que elegiste al exportar el archivo",
+      );
+    } finally {
+      setLocale("en-GB");
+    }
+  });
+
   it("gives the certificate passphrase a stable non-login name", async () => {
     const { el } = await mountWidget<SetupCertScreen>("setup-cert-screen", {});
     const input = q(el, "[data-test=passphrase]")!.shadowRoot!.querySelector("input")!;

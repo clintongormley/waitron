@@ -110,6 +110,43 @@ afterEach(() => {
 });
 
 describe("setup-connect-screen", () => {
+  it.each([
+    [
+      "en-GB",
+      {
+        primaryUrl: "Full HTTPS address of the primary server",
+        personId: "An admin's person ID on the primary server",
+        password: "That admin's dashboard password",
+        totp: "Current code, if this admin uses an authenticator",
+      },
+    ],
+    [
+      "es-ES",
+      {
+        primaryUrl: "Dirección HTTPS completa del servidor principal",
+        personId: "ID de un administrador del servidor principal",
+        password: "La contraseña del panel de ese administrador",
+        totp: "El código que muestra ahora el autenticador",
+      },
+    ],
+  ] as const)(
+    "explains each field with a hint in the empty field and no ? (%s)",
+    async (locale, hints) => {
+      setLocale(locale);
+      const { el } = await mount();
+      const hintOf = (field: string) => q(el, `[data-test=${field}]`)!.getAttribute("hint");
+      expect(hintOf("primaryUrl")).toBe(hints.primaryUrl);
+      await toLogin(el);
+      expect({
+        primaryUrl: hintOf("primaryUrl"),
+        personId: hintOf("personId"),
+        password: hintOf("password"),
+        totp: hintOf("totp"),
+      }).toEqual(hints);
+      expect(el.shadowRoot!.querySelector("wt-help-tooltip")).toBeNull();
+    },
+  );
+
   it("assembles the adopt body as a STRUCTURED credential object and emits adopt-requested", async () => {
     const { el, host } = await mount();
     const events = collect(host);
