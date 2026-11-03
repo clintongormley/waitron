@@ -6,7 +6,7 @@ import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
-import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import { ownsEveryPayment, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { decimal, deviceOrigin, workingOrderId } from "@waitron/shared";
 import { StripeTerminalProvider } from "./provider.js";
 import { stripeClient } from "./stripe-client.js";
@@ -67,7 +67,10 @@ describe("unknown Stripe payments through the installed HTTP client", () => {
           (await getPaymentByRef(suite.db, { provider: "stripe", paymentRef: result.paymentRef }))
             ?.externalRef,
         ).toBe("pi_http");
-        const pass = await provider.resolvePending(new Date("2026-10-17T00:00:00Z"));
+        const pass = await provider.resolvePending(
+          new Date("2026-10-17T00:00:00Z"),
+          await ownsEveryPayment(suite.db),
+        );
         expect(pass).toEqual({
           nextDueAt: null,
           forwarded: status === "succeeded" ? 1 : 0,

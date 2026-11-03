@@ -34,6 +34,7 @@ import type { StripeClient } from "./client.js";
 import {
   billPaymentOfRow,
   freshNif,
+  ownsEveryPayment,
   readerOfRow,
   seedBillPayment,
   seedHeldReader,
@@ -507,7 +508,12 @@ describe("StripeTerminalProvider.resolvePending", () => {
       client: new FakeStripe(),
       db: suite.db,
     });
-    expect(await provider.resolvePending(new Date("2026-07-24T10:00:00Z"))).toEqual({
+    expect(
+      await provider.resolvePending(
+        new Date("2026-07-24T10:00:00Z"),
+        await ownsEveryPayment(suite.db),
+      ),
+    ).toEqual({
       nextDueAt: null,
       forwarded: 0,
       declined: 0,
@@ -518,7 +524,8 @@ describe("StripeTerminalProvider.resolvePending", () => {
 
 /** The one `attempting` stripe row of a working order, as `collect` wrote it. */
 async function attemptingRowOf(workingOrderId: string): Promise<{ paymentRef: string }> {
-  const rows = await suite.db.transaction((tx) => listAttempting(tx, "stripe"));
+  const owners = await ownsEveryPayment(suite.db);
+  const rows = await suite.db.transaction((tx) => listAttempting(tx, "stripe", owners));
   const mine = rows.filter((r) => r.workingOrderId === workingOrderId);
   expect(mine).toHaveLength(1);
   return mine[0]!;
@@ -567,7 +574,7 @@ describe("StripeTerminalProvider.collect when a full disk refuses the capture's 
     expect(left?.state).toBe("attempting");
     expect((await fake.retrievePaymentIntent(left!.externalRef!)).status).toBe("succeeded");
 
-    await provider.resolvePending(new Date());
+    await provider.resolvePending(new Date(), await ownsEveryPayment(suite.db));
 
     expect((await rowFor(paymentRef))?.state).toBe("captured");
   });

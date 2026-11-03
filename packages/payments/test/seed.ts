@@ -6,6 +6,7 @@ import {
   billPayments,
   invoiceSeries,
   locations,
+  nodes,
   sales,
   tenants,
   tenders,
@@ -22,6 +23,7 @@ import {
 import { cardReaderHolders } from "../src/schema/card-reader-holders.js";
 import { cardReaders } from "../src/schema/card-readers.js";
 import { paymentPolicy } from "../src/schema/payment-policy.js";
+import type { CollectionOwners } from "../src/provider.js";
 import type { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 
 export interface Seeded {
@@ -65,6 +67,15 @@ export async function seedWorkingOrder(db: Database, nif = "B00000000"): Promise
   const { deviceId } = await seedDevice(db);
   const order = await seedOrder(db, { source: "device", deviceId });
   return { locationId, deviceId, nodeId, workingOrderId: order.id };
+}
+
+/** Owners that cover every payment in the database, for a sweep test about something other than
+ * which box owns a payment. */
+export async function ownsEveryPayment(db: Database): Promise<CollectionOwners> {
+  const [first, ...rest] = (await db.select({ id: nodes.id }).from(nodes)).map((row) =>
+    brandNodeId(row.id),
+  );
+  return { nodeId: first ?? brandNodeId(randomUUID()), takenOverFrom: rest, unowned: true };
 }
 
 const SEEDED_AT = new Date("2026-07-01T12:00:00Z").toISOString();

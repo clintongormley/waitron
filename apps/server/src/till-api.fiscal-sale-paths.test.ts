@@ -1,4 +1,5 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { randomUUID } from "node:crypto";
@@ -1140,7 +1141,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     // The sweep tick: fetch the provider (no reader) and resolve pending — exactly what
     // `connectedCardProviderSweep` does. This caches the provider; it must NOT poison it.
     const swept = await pool.get("stripe");
-    await swept.resolvePending(new Date());
+    await swept.resolvePending(new Date(), await ownsEveryPayment(suite.db));
 
     const workingOrderId = randomUUID();
     const payRes = await app.request("/api/pay", {

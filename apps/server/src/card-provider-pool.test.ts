@@ -4,7 +4,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing } from "@waitron/credentials";
 import { decimal, deviceOrigin, isAppError, workingOrderId } from "@waitron/shared";
 import { PAYMENTS_MIGRATIONS, getPaymentByRef } from "@waitron/payments";
-import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
+import { ownsEveryPayment, seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { StripeTerminalProvider } from "@waitron/payments-stripe";
 import { FakeStripe } from "@waitron/payments-stripe/src/testing/fake-stripe.js";
 import type { CardProviderContribution, IncidentSink, PaymentProvider } from "@waitron/payments";
@@ -138,7 +138,7 @@ describe("createCardProviderPool", () => {
       pool.evict("stripe");
       replacement = await pool.get("stripe");
       expect(replacement).not.toBe(first);
-      expect(await replacement.resolvePending(now)).toEqual({
+      expect(await replacement.resolvePending(now, await ownsEveryPayment(suite.db))).toEqual({
         nextDueAt: new Date(now.getTime() + 60_000),
         forwarded: 0,
         declined: 0,
@@ -153,7 +153,9 @@ describe("createCardProviderPool", () => {
     expect(result.state).toBe("attempting");
     const intent = await created.mock.results[0]!.value;
     client.setIntent(intent.id, { status: "succeeded", amount: 1210, amountReceived: 1210 });
-    expect((await replacement!.resolvePending(now)).forwarded).toBe(1);
+    expect(
+      (await replacement!.resolvePending(now, await ownsEveryPayment(suite.db))).forwarded,
+    ).toBe(1);
     expect(
       (await getPaymentByRef(suite.db, { provider: "stripe", paymentRef: result.paymentRef }))
         ?.state,

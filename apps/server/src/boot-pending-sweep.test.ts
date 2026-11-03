@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ForwardResult, PaymentProvider } from "@waitron/payments";
+import type { CollectionOwners, ForwardResult, PaymentProvider } from "@waitron/payments";
+import { nodeId } from "@waitron/shared";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, putCredential } from "@waitron/credentials";
@@ -17,6 +18,11 @@ import type { PassReport } from "./pass.js";
 // that runs, logs or throws.
 
 const REPORT: PassReport = { duties: [], nextDueAt: null };
+const OWNERS: CollectionOwners = {
+  nodeId: nodeId("11111111-1111-4111-8111-111111111111"),
+  takenOverFrom: [],
+  unowned: true,
+};
 
 describe("automatic recovery in the pending-card pass", () => {
   it("recovers after the sweep and before releasing stale marks", async () => {
@@ -97,7 +103,12 @@ describe("withPendingSweep", () => {
   it("is a no-op (returns the inner report, logs nothing) when the enumerator yields no providers", async () => {
     const inner = vi.fn(async () => REPORT);
     const log = vi.fn();
-    const wrapped = withPendingSweep(inner, async () => [], log);
+    const wrapped = withPendingSweep(
+      inner,
+      async () => [],
+      () => OWNERS,
+      log,
+    );
     expect(await wrapped(new Date())).toBe(REPORT);
     expect(log).not.toHaveBeenCalled();
   });
@@ -113,6 +124,7 @@ describe("withPendingSweep", () => {
     const report = await withPendingSweep(
       inner,
       async () => [fakeProvider("sumup", resolvePending)],
+      () => OWNERS,
       log,
     )(now);
 
@@ -136,6 +148,7 @@ describe("withPendingSweep", () => {
     await withPendingSweep(
       async () => REPORT,
       async () => [fakeProvider("simulator", sim), fakeProvider("stripe", stripe)],
+      () => OWNERS,
       log,
     )(new Date());
     expect(sim).toHaveBeenCalledTimes(1);
@@ -153,6 +166,7 @@ describe("withPendingSweep", () => {
     const report = await withPendingSweep(
       async () => REPORT,
       async () => [fakeProvider("providerA", aThrows), fakeProvider("providerB", bSweeps)],
+      () => OWNERS,
       log,
     )(new Date());
 
@@ -183,6 +197,7 @@ describe("withPendingSweep", () => {
     await withPendingSweep(
       async () => REPORT,
       async () => [fakeProvider("stripe", async () => result)],
+      () => OWNERS,
       log,
     )(new Date());
     expect(log).toHaveBeenCalledWith("info", "resolve_pending.complete", {
@@ -204,6 +219,7 @@ describe("withPendingSweep", () => {
     const report = await withPendingSweep(
       inner,
       async () => [fakeProvider("sumup", resolvePending)],
+      () => OWNERS,
       log,
     )(new Date());
 
@@ -222,6 +238,7 @@ describe("withPendingSweep", () => {
       async () => {
         throw new Error("enumerate boom");
       },
+      () => OWNERS,
       log,
     )(new Date());
     expect(report).toBe(REPORT);
@@ -239,6 +256,7 @@ describe("withPendingSweep", () => {
       (() => {
         throw new Error("sync boom");
       }) as unknown as () => Promise<readonly PaymentProvider[]>,
+      () => OWNERS,
       log,
     )(new Date());
     expect(report).toBe(REPORT);

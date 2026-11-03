@@ -1395,7 +1395,9 @@ describe("listAttempting / stampAttemptingRef", () => {
       });
       await stampAttemptingRef(tx, { provider: "sumup", paymentRef: "ref-a" }, "ctx_a");
     });
-    const rows = await suite.db.transaction((tx) => listAttempting(tx, "sumup"));
+    const rows = await suite.db.transaction((tx) =>
+      listAttempting(tx, "sumup", { nodeId: t.nodeId, takenOverFrom: [], unowned: false }),
+    );
     expect(rows.map((r) => [r.paymentRef, r.externalRef, r.amount])).toEqual([
       ["ref-a", "ctx_a", "10.00"],
     ]);
@@ -1761,7 +1763,9 @@ describe("rows written within one millisecond", () => {
     const seeded = await seedTenant();
     const refs = await writePayments(seeded, "attempting", () => null);
 
-    const listed = await suite.db.transaction((tx) => listAttempting(tx, "fake"));
+    const listed = await suite.db.transaction((tx) =>
+      listAttempting(tx, "fake", { nodeId: seeded.nodeId, takenOverFrom: [], unowned: true }),
+    );
 
     expect(listed.map((row) => row.paymentRef)).toEqual(refs);
   });

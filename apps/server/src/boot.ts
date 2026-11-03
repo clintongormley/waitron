@@ -78,6 +78,7 @@ import {
   cardReaders,
   type CardProviderContribution,
   type CardProviderRuntimeDeps,
+  type CollectionOwners,
   type PaymentProvider,
   type ReaderStatus,
 } from "@waitron/payments";
@@ -507,16 +508,20 @@ export async function buildCardProvider(
  * though it never drains or reconciles. Log-only, NOT a health-tracked `Duty`: every `ALL_DUTIES`
  * member is seeded on every node, so a duty that never runs on a no-card node would read stale and
  * fail `/health`. A stuck sweep surfaces only as `resolve_pending.failed`. The providers are
- * enumerated each pass, so one connected while the host runs is swept without a restart.
+ * enumerated each pass, so one connected while the host runs is swept without a restart. `owners`
+ * is read once per pass and limits every provider to the `attempting` rows this box owns, so a
+ * promotion or demotion in this process is seen at the next pass.
  *
  * Exported for a direct test (`boot-pending-sweep.test.ts`). */
 export function withPendingSweep(
   inner: (now: Date) => Promise<PassReport>,
   sweepProviders: () => Promise<readonly PaymentProvider[]>,
+  owners: () => CollectionOwners,
   log: Logger,
 ): (now: Date) => Promise<PassReport> {
   return async (now) => {
     const report = await inner(now);
+    const owned = owners();
     // An enumeration failure is a sweep failure and never propagates: the fiscal `report` must be
     // returned whatever the card backstop does.
     let providers: readonly PaymentProvider[];
@@ -528,7 +533,7 @@ export function withPendingSweep(
     }
     for (const provider of providers) {
       try {
-        const r = await provider.resolvePending(now);
+        const r = await provider.resolvePending(now, owned);
         log("info", "resolve_pending.complete", {
           provider: provider.provider,
           captured: r.forwarded,
@@ -3246,6 +3251,11 @@ async function bootServer(
               pool: cardPool,
               contributions: CARD_PROVIDERS,
               simulator: cardProvider,
+            }),
+            () => ({
+              nodeId: tradingContext.nodeId,
+              takenOverFrom: [],
+              unowned: holders.singletonRole.current === "primary",
             }),
             log,
           ),

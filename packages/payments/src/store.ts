@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import {
   AppError,
   addDecimal,
@@ -16,7 +16,7 @@ import { payments } from "./schema/payments.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import { paymentHoldOutcomes, paymentHolds } from "./schema/payment-holds.js";
 import { readerHeldBy, readerPaymentInProgress } from "./device-readers.js";
-import type { CardDetails, PaymentState } from "./provider.js";
+import type { CardDetails, CollectionOwners, PaymentState } from "./provider.js";
 
 /** `amount` is the exact decimal for the column's count of cents, never a float. */
 export interface PaymentRow {
@@ -506,11 +506,19 @@ export interface AttemptingPayment {
 
 /** Not a claim, like `listAcceptedOffline`: `captureAttempting`/`failAttempting` each match only a
  * row still `attempting`, so two concurrent passes cannot resolve a row twice; the loser throws
- * `payment.not_found`. */
+ * `payment.not_found`. Lists only the rows `owners` covers. */
 export async function listAttempting(
   tx: Transaction,
   provider: string,
+  owners: CollectionOwners,
 ): Promise<AttemptingPayment[]> {
+  const owned = or(
+    eq(payments.nodeId, owners.nodeId),
+    owners.takenOverFrom.length > 0
+      ? inArray(payments.nodeId, [...owners.takenOverFrom])
+      : undefined,
+    owners.unowned ? isNull(payments.nodeId) : undefined,
+  );
   const rows = await tx
     .select({
       paymentRef: payments.paymentRef,
@@ -520,7 +528,7 @@ export async function listAttempting(
       createdAt: payments.createdAt,
     })
     .from(payments)
-    .where(and(eq(payments.provider, provider), eq(payments.state, "attempting")))
+    .where(and(eq(payments.provider, provider), eq(payments.state, "attempting"), owned))
     .orderBy(payments.createdAt, sql`${payments}.rowid`);
   return rows.map(withDecimalAmount);
 }

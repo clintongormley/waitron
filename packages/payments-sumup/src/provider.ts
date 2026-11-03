@@ -6,6 +6,7 @@ import type { Database, Transaction } from "@waitron/db";
 import type {
   CardDetails,
   CollectParams,
+  CollectionOwners,
   ForwardResult,
   IncidentSink,
   PaymentProvider,
@@ -312,8 +313,8 @@ export class SumUpCloudProvider implements PaymentProvider {
    * `incidentsRaised` undercounts. Accepted: one open alert is enough to send a human to the
    * payments screen; the count is a log field, not a per-row guarantee.
    */
-  async resolvePending(now: Date): Promise<ForwardResult> {
-    const rows = await this.inTransaction((tx) => listAttempting(tx, SUMUP_PROVIDER));
+  async resolvePending(now: Date, owners: CollectionOwners): Promise<ForwardResult> {
+    const rows = await this.inTransaction((tx) => listAttempting(tx, SUMUP_PROVIDER, owners));
     if (rows.length === 0) {
       return { nextDueAt: null, forwarded: 0, declined: 0, incidentsRaised: 0 };
     }

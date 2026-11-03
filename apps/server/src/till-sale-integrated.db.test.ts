@@ -1,4 +1,5 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine, placeOrder } from "./testing/order-writer-fixture.js";
 import { departments, departmentReceipts } from "@waitron/venue-service";
@@ -2810,7 +2811,7 @@ describe("an order being paid by card cannot be changed from another device (pla
       const { t, client, provider, checkout } = await timedOut();
 
       client.decline(checkout);
-      await provider.resolvePending(new Date());
+      await provider.resolvePending(new Date(), await ownsEveryPayment(suite.db));
       await releaseLoopPass();
 
       expect(await markOf(t.tabId)).toBeNull();
@@ -2821,7 +2822,7 @@ describe("an order being paid by card cannot be changed from another device (pla
       const { t, client, provider, deps, checkout } = await timedOut();
 
       client.settle(checkout);
-      await provider.resolvePending(new Date());
+      await provider.resolvePending(new Date(), await ownsEveryPayment(suite.db));
       await releaseLoopPass();
 
       expect(await markOf(t.tabId)).not.toBeNull();

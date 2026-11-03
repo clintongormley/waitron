@@ -115,6 +115,18 @@ export interface ForwardResult {
   incidentsRaised: number;
 }
 
+/** Which `attempting` payments a box's sweep may resolve, so that with two boxes one never cancels
+ * or captures a payment the other is still driving. */
+export interface CollectionOwners {
+  /** This box. */
+  readonly nodeId: NodeId;
+  /** The boxes this box has taken over collection from. */
+  readonly takenOverFrom: readonly NodeId[];
+  /** Whether payments that name no box are this box's: true only while it is the venue's singleton
+   * primary. */
+  readonly unowned: boolean;
+}
+
 /**
  * What `resolveAbandonedAttempt` did to one `attempting` row. `captured`: the row is now captured,
  * with its settlement time and processor reference. `failed`: the row is now failed and nothing was
@@ -248,9 +260,9 @@ export interface PaymentProvider {
   /** Resolve this provider's `attempting` rows whose outcome `collect` did not learn. One pass: each
    * row is polled at the processor and resolved `captured` or `failed`; a row the processor still
    * reports pending is left for the next pass (`nextDueAt`). `forwarded` counts rows captured,
-   * `declined` rows failed. An adapter whose `collect` never leaves a row `attempting` answers
-   * all-zeros. */
-  resolvePending(now: Date): Promise<ForwardResult>;
+   * `declined` rows failed. Only rows `owners` covers are read. An adapter whose `collect` never
+   * leaves a row `attempting` answers all-zeros. */
+  resolvePending(now: Date, owners: CollectionOwners): Promise<ForwardResult>;
 
   /** Settle one `attempting` row that nothing in this process is still driving — the caller
    * guarantees that — by asking the processor what became of it. A `captured` or `failed` outcome

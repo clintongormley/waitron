@@ -1,4 +1,5 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
+import { ownsEveryPayment } from "@waitron/payments/test/seed.js";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -640,7 +641,7 @@ describe.each(REAL_PROVIDERS)(
         { level: "error", event: "sale.charged_not_recorded", fields: { workingOrderId: id } },
       ]);
 
-      await real.provider.resolvePending(new Date());
+      await real.provider.resolvePending(new Date(), await ownsEveryPayment(venue.db));
       const again = await till.payAgain(id);
 
       expect(again.status).toBe(200);
@@ -671,7 +672,7 @@ describe.each(REAL_PROVIDERS)(
       ]);
       expect((await paymentRows(venue, billId)).map((row) => row.state)).toEqual(["pending"]);
 
-      await real.provider.resolvePending(new Date());
+      await real.provider.resolvePending(new Date(), await ownsEveryPayment(venue.db));
       await settlePendingBillPayments({
         admission: testTradingAdmission(),
         db: venue.db,
