@@ -7,7 +7,7 @@ import { withTransaction, venueLocationId } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   persons,
@@ -61,7 +61,6 @@ interface Venue {
 }
 
 async function setupVenue(): Promise<Venue> {
-  await seedTenant(db);
   await seedVenue(db, {
     name: "Barra",
     invoiceLocales: [LOCALE],

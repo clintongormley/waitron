@@ -6,7 +6,7 @@ import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { bookings } from "@waitron/bookings";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
 import { createTable } from "./testing/live-table.js";
@@ -29,7 +29,6 @@ beforeAll(() => {
 const LOCALE = "es-ES";
 
 async function setupVenue(): Promise<TradingContext> {
-  await seedTenant(db);
   await seedVenue(db, {
     name: "Counter",
     invoiceLocales: [LOCALE],

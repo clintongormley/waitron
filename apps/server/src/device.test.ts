@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { deviceProfiles, withTransaction, venueLocationId } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { FormFactor } from "@waitron/layouts";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
@@ -35,7 +35,6 @@ interface SeededVenue {
  * tables between tests, so the counts each case reads are its own. */
 async function setupVenue(): Promise<SeededVenue> {
   const admin = suite.db;
-  await seedTenant(admin);
   await seedVenue(admin, {
     name: "Bar",
     invoiceLocales: [LOCALE],
