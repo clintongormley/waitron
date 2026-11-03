@@ -178,8 +178,10 @@ describe("a box holding a handover restriction starts restricted", () => {
     });
     expect(response.status).toBe(200);
     const html = await response.text();
-    expect(html).toContain("<h1>This box has handed over</h1>");
-    expect(html).toContain("The venue now runs on 00000000-0000-4000-8000-0000000000aa.");
+    expect(html).toContain("<h1>This box no longer runs the venue</h1>");
+    expect(html).toContain(
+      "The venue now runs on <strong>00000000-0000-4000-8000-0000000000aa</strong>.",
+    );
   }, 60_000);
 
   it("starts no fiscal pass", async () => {

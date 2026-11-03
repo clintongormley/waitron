@@ -1,19 +1,17 @@
 # Servidores
 
-## Cuando un equipo ha hecho el traspaso {#handed-over}
+## Cuando un equipo ya no lleva el local {#handed-over}
 
-Un local funciona con un solo equipo a la vez. Cuando pasas el local de un equipo a otro, el equipo
-que deja se retira: se reinicia y, desde ese momento, no hace ventas ni envía nada a Hacienda. Así
-las ventas y los registros de facturación del local nunca quedan repartidos entre dos equipos.
+Si abres la dirección de un equipo en un navegador y ves una página titulada **Este equipo ya no
+lleva el local**, ese equipo se ha retirado. No hace ventas ni envía nada a Hacienda. La página
+indica, en negrita, con qué equipo funciona ahora el local.
 
-Si abres la dirección del equipo antiguo en un navegador, muestra una página titulada **Este equipo
-ha hecho el traspaso**. La página indica con qué equipo funciona ahora el local y enumera cada paso
-del traspaso que el equipo antiguo ha registrado, con la fecha y la hora en que lo registró, en la
-zona horaria del local.
+Debajo, la página enumera cada paso del traspaso que este equipo ha registrado, en el orden en que
+los registró, con la fecha y la hora de cada uno en la zona horaria del local. Un equipo que supo
+que lo habían sustituido sin tomar parte en un traspaso no enumera ningún paso.
 
-La página no tiene botones, porque no hay nada que tengas que hacer: el equipo antiguo debe estar
-en este estado. Envía por sí solo sus registros de facturación al equipo nuevo y después pasa a ser
-el equipo de reserva.
+La página no tiene botones, porque no hay nada que tengas que hacer: el equipo debe estar en este
+estado.
 
 La página aparece en español cuando tu navegador prefiere el español, y en inglés en los demás
 casos.

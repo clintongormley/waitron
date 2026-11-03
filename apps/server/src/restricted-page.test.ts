@@ -8,6 +8,7 @@ import type { HandoverBinding } from "@waitron/handover";
 import {
   appendHandoverEventTx,
   NODE_MIGRATIONS,
+  nodeHandoverEvents,
   recordHandoverRestrictionTx,
 } from "@waitron/node-db";
 import { advanceHandover, beginHandover } from "./handover-store.js";
@@ -52,9 +53,16 @@ async function handOver(successor: string): Promise<void> {
   );
 }
 
+const logged: { level: string; event: string }[] = [];
+
 async function page(language: string): Promise<{ status: number; html: string }> {
   const app = new Hono();
-  restrictedPageRoute({ venue: suite.db, node: suite.node, nodeId: NODE })(app);
+  restrictedPageRoute({
+    venue: suite.db,
+    node: suite.node,
+    nodeId: NODE,
+    log: (level, event) => logged.push({ level, event }),
+  })(app);
   const response = await app.request("/", { headers: { "Accept-Language": language } });
   return { status: response.status, html: await response.text() };
 }
@@ -78,22 +86,21 @@ describe("the restricted box's own page", () => {
     expect(english.status).toBe(200);
     expect(english.html).toContain('<html lang="en-GB">');
     inOrder(english.html, [
-      "<h1>This box has handed over</h1>",
-      "It takes no sales and sends nothing to the tax agency. The venue now runs on Bar counter box.",
+      "<h1>This box no longer runs the venue</h1>",
+      "It takes no sales and sends nothing to the tax agency. The venue now runs on <strong>Bar counter box</strong>.",
       "Handover begun",
       "Stopped taking sales",
-      "It sends its invoice records to Bar counter box by itself, then becomes the spare.",
     ]);
+    expect(english.html).not.toContain("spare");
 
     const spanish = await page("es-ES,es;q=0.9");
     expect(spanish.status).toBe(200);
     expect(spanish.html).toContain('<html lang="es-ES">');
     inOrder(spanish.html, [
-      "<h1>Este equipo ha hecho el traspaso</h1>",
-      "No hace ventas ni envía nada a Hacienda. El local funciona ahora con Bar counter box.",
+      "<h1>Este equipo ya no lleva el local</h1>",
+      "No hace ventas ni envía nada a Hacienda. El local funciona ahora con <strong>Bar counter box</strong>.",
       "Traspaso iniciado",
       "Ha dejado de vender",
-      "Envía por sí solo sus registros de facturación a Bar counter box y después pasa a ser el equipo de reserva.",
     ]);
   });
 
@@ -102,7 +109,7 @@ describe("the restricted box's own page", () => {
     const { html } = await page("en-GB");
     expect(html).not.toContain("<script>");
     expect(html).toContain(
-      "The venue now runs on &lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;Co&#39;.",
+      "The venue now runs on <strong>&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#39;Co&#39;</strong>.",
     );
   });
 
@@ -119,7 +126,40 @@ describe("the restricted box's own page", () => {
     const successor = await seedSuccessor(null);
     await handOver(successor);
     const { html } = await page("en-GB");
-    expect(html).toContain(`The venue now runs on ${successor}.`);
+    expect(html).toContain(`The venue now runs on <strong>${successor}</strong>.`);
+  });
+
+  it("names the successor by its id when its recorded name is empty", async () => {
+    const successor = await seedSuccessor("");
+    await handOver(successor);
+    const { html } = await page("en-GB");
+    expect(html).toContain(`The venue now runs on <strong>${successor}</strong>.`);
+  });
+
+  it("lists the steps in the order they were recorded, whatever their recorded times", async () => {
+    await handOver(await seedSuccessor("Bar counter box"));
+    await suite.node.insert(nodeHandoverEvents).values({
+      nodeId: NODE,
+      operationId: OP,
+      kind: "filing_relinquished",
+      detail: {},
+      envelope: null,
+      recordedAt: new Date("2020-01-01T00:00:00Z"),
+    });
+    const { html } = await page("en-GB");
+    inOrder(html, [
+      "Handover begun",
+      "Stopped taking sales",
+      "Stopped sending invoice records to the tax agency",
+    ]);
+  });
+
+  it("answers a failure to read through the error boundary, which logs it", async () => {
+    logged.length = 0;
+    const { status, html } = await page("en-GB");
+    expect(status).toBe(500);
+    expect(html).not.toContain("<h1>");
+    expect(logged).toEqual([{ level: "error", event: "restricted_page.failed" }]);
   });
 
   it("lists no step for a supersession learnt from a newer list of machines alone", async () => {
@@ -134,7 +174,7 @@ describe("the restricted box's own page", () => {
       }),
     );
     const { html } = await page("en-GB");
-    expect(html).toContain("The venue now runs on Bar counter box.");
+    expect(html).toContain("The venue now runs on <strong>Bar counter box</strong>.");
     expect(html).not.toContain("<li>");
   });
 

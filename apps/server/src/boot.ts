@@ -1692,7 +1692,9 @@ async function bootServer(
       nodeId: config.node.nodeId,
       environment: config.environment,
       readMembership: () => readNodeMembership(db),
-      routes: [restrictedPageRoute({ venue: db, node: store.node, nodeId: config.node.nodeId })],
+      routes: [
+        restrictedPageRoute({ venue: db, node: store.node, nodeId: config.node.nodeId, log }),
+      ],
       log,
       listen: (restrictedApp) => {
         const server = startTradingListener(config, restrictedApp, now, log);

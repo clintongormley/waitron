@@ -1,6 +1,6 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
-import { nodes, type Database, type NodeDatabase } from "@waitron/db";
+import { locations, nodes, type Database, type NodeDatabase } from "@waitron/db";
 import { initialState } from "@waitron/handover";
 import {
   nodeHandoverEvents,
@@ -8,15 +8,18 @@ import {
   readHandoverRestriction,
   type HandoverOperationState,
 } from "@waitron/node-db";
+import { createErrorBoundary } from "@waitron/server-kit";
 import { FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
 import { resolveLoginLocale } from "./login-locale.js";
+import type { Logger } from "./logger.js";
 import { escapeHtml } from "./recovery-surface.js";
-import { readVenueTimeZone } from "./venue-time-zone.js";
+import { knownZone } from "./venue-time-zone.js";
 
 export interface RestrictedPageDeps {
   venue: Database;
   node: NodeDatabase;
   nodeId: string;
+  log: Logger;
 }
 
 interface Step {
@@ -36,27 +39,21 @@ const PAGE_TEXT: Readonly<
     SupportedLocale,
     {
       title: string;
-      body: (successor: string) => string;
+      /** The body's words before and after the successor's name. */
+      body: readonly [string, string];
       progress: string;
-      after: (successor: string) => string;
     }
   >
 > = {
   "en-GB": {
-    title: "This box has handed over",
-    body: (successor) =>
-      `It takes no sales and sends nothing to the tax agency. The venue now runs on ${successor}.`,
+    title: "This box no longer runs the venue",
+    body: ["It takes no sales and sends nothing to the tax agency. The venue now runs on ", "."],
     progress: "Progress",
-    after: (successor) =>
-      `It sends its invoice records to ${successor} by itself, then becomes the spare.`,
   },
   "es-ES": {
-    title: "Este equipo ha hecho el traspaso",
-    body: (successor) =>
-      `No hace ventas ni envía nada a Hacienda. El local funciona ahora con ${successor}.`,
+    title: "Este equipo ya no lleva el local",
+    body: ["No hace ventas ni envía nada a Hacienda. El local funciona ahora con ", "."],
     progress: "Progreso",
-    after: (successor) =>
-      `Envía por sí solo sus registros de facturación a ${successor} y después pasa a ser el equipo de reserva.`,
   },
 };
 
@@ -112,6 +109,15 @@ function stepText(kind: string, locale: SupportedLocale): string {
   return STEP_TEXT[kind as HandoverOperationState][locale];
 }
 
+/**
+ * Outside a transaction: `withTransaction` takes the write lock and drains `change_log`, and this
+ * box writes nothing to venue.db (`boot.restricted-quiet.test.ts`).
+ */
+async function readTimeZone(venue: Database): Promise<string> {
+  const [row] = await venue.select({ timeZone: locations.timeZone }).from(locations).limit(1);
+  return row === undefined ? "UTC" : knownZone(row.timeZone);
+}
+
 async function readView(deps: RestrictedPageDeps): Promise<RestrictedView> {
   const restriction = await readHandoverRestriction(deps.node, deps.nodeId);
   // A fault in Waitron: this page is mounted only on a start that found the restriction.
@@ -140,13 +146,13 @@ async function readView(deps: RestrictedPageDeps): Promise<RestrictedView> {
           eq(nodeHandoverEvents.operationId, operation.operationId),
         ),
       )
-      .orderBy(asc(nodeHandoverEvents.recordedAt), asc(sql`rowid`));
+      .orderBy(asc(sql`rowid`));
     steps.push(...events);
   }
   return {
-    successor: row?.name ?? restriction.successorNodeId,
+    successor: row === undefined || row.name === "" ? restriction.successorNodeId : row.name,
     steps,
-    timeZone: await readVenueTimeZone(deps.venue),
+    timeZone: await readTimeZone(deps.venue),
   };
 }
 
@@ -179,8 +185,8 @@ ${view.steps
 </head>
 <body>
 <h1>${escapeHtml(text.title)}</h1>
-<p>${escapeHtml(text.body(view.successor))}</p>
-${steps}<p>${escapeHtml(text.after(view.successor))}</p>
+<p>${escapeHtml(text.body[0])}<strong>${escapeHtml(view.successor)}</strong>${escapeHtml(text.body[1])}</p>
+${steps}
 </body>
 </html>
 `;
@@ -188,12 +194,15 @@ ${steps}<p>${escapeHtml(text.after(view.successor))}</p>
 
 /** The page a person opening a stepped-down box sees. It offers nothing to do: none is needed. */
 export function restrictedPageRoute(deps: RestrictedPageDeps): (app: Hono) => void {
+  const run = createErrorBoundary({}, "restricted_page.failed");
   return (app) => {
-    app.get("/", async (c) => {
-      const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
-      c.header("Cache-Control", "no-store");
-      c.header("Vary", "Accept-Language");
-      return c.html(renderPage(await readView(deps), locale));
-    });
+    app.get("/", (c) =>
+      run(c, deps.log, async () => {
+        const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
+        c.header("Cache-Control", "no-store");
+        c.header("Vary", "Accept-Language");
+        return c.html(renderPage(await readView(deps), locale));
+      }),
+    );
   };
 }

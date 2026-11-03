@@ -90,6 +90,8 @@ interface Observed {
   authority: number;
   sweep: number;
   spawn: number;
+  /** The status of a GET of `/` made during the quiet period. */
+  pageStatus: number;
 }
 
 function venueFile(suite: VenueDb): string {
@@ -174,6 +176,11 @@ function observeStart(options: { restricted: boolean }): () => Observed {
         }),
       );
     }
+    // A pending change row, as a write outside `withTransaction` leaves one: a GET that opened a
+    // write transaction would drain it and change the file.
+    suite.db.run(
+      sql`insert into change_log (id, payload) values (${randomUUID()}, ${JSON.stringify({ resource: "venue" })})`,
+    );
     scratch = await mkdtemp(join(tmpdir(), "waitron-boot-restricted-quiet-"));
     const migrationsRoot = join(scratch, "migrations");
     for (const [index, set] of manifestSets().entries()) {
@@ -214,8 +221,10 @@ function observeStart(options: { restricted: boolean }): () => Observed {
     await vi.waitFor(async () => {
       expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
     });
+    // A person opening the box's address is part of the quiet period: the page must not write.
+    const pageStatus = (await fetch(`http://127.0.0.1:${httpPort()}/`)).status;
     await new Promise((resolve) => setTimeout(resolve, QUIET_MS));
-    observed = { hashBefore, hashAfter: await venueHash(suite), ...calls };
+    observed = { hashBefore, hashAfter: await venueHash(suite), ...calls, pageStatus };
   }, 60_000);
 
   afterAll(async () => {
@@ -235,7 +244,8 @@ function observeStart(options: { restricted: boolean }): () => Observed {
 describe("a restricted start touches nothing outside and nothing in venue.db", () => {
   const observed = observeStart({ restricted: true });
 
-  it("writes nothing to venue.db", () => {
+  it("writes nothing to venue.db, with its own page opened", () => {
+    expect(observed().pageStatus).toBe(200);
     expect(observed().hashAfter).toBe(observed().hashBefore);
   });
 
