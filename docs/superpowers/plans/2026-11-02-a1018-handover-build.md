@@ -456,7 +456,7 @@ interface FinalStateIndicator {
 }
 ```
 
-The Veri*Factu module's summary is, per chain it holds (`registro_sif` row): `sifId`, `nodeId`,
+The Veri*Factu module's summary is, per (`node_id`, `sif_id`) pair that has a record: `sifId`, `nodeId`,
 `idSistemaInformatico`, `numeroInstalacion`, record count, head record id and head huella (by
 `secuencia`), `envios` counts per state, the SHA-256 of its `acks` rows in key order, and the ids
 of rows in `enviando`. The payments module's summary lists every external request whose outcome
