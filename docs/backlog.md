@@ -5795,7 +5795,7 @@ Not in any track until the standalone primary is done.
   authority a spare holds, or skips the check behind its signed answer. Found by A1018 Slice 3's
   review.
 
-- **A captured signed peer query can be replayed later to read a box's status.** The peer-status
+- **A captured signed peer query can be replayed later to read a box's status, or a stepped-down box's indicator and final copy.** The peer-status
   route checks the query's `atMs` but never uses it, so there is no freshness window; a strict one
   would lock out a box with a wrong clock. Owner's choice. Left open by A1018 Slice 3 (Ruling R6).
 
@@ -5830,17 +5830,20 @@ Not in any track until the standalone primary is done.
 
 - **A handover's manifest has no row for the box's other state-folder files.** `recovery.json`,
   `setup-operation.json`, `restore-request.json`, `reset-request.json`, `cloud-replacement.json`,
-  `backup-room-note.json` and `spare-space` are not in `packages/handover/src/manifest.ts`; whether
-  a handover needs rows for them is not decided. Left open by A1018 Slice 4 (Ruling R5).
+  `backup-room-note.json`, `spare-space` and `<state>/handover/<operationId>/` are not in
+  `packages/handover/src/manifest.ts`; whether a handover needs rows for them is not decided. Left
+  open by A1018 Slice 4 (Slice 4's Ruling R5).
+
+- **Does a minute name the old box selected but never activated count as used?** Built: yes. The
+  manifest marks `module-preparation-state.json` transferred, and Task 5.7 merges the old box's
+  retained selections into the new box's own preparation file. The alternative: such a name does
+  not count, and the row goes back to source-only. Owner's choice. Left open by A1018 Slice 4
+  (Slice 4's Ruling R3).
 
 - **The signed peer query names no route.** In review, one envelope a box signed was accepted by
   `/api/node/peer-status` and twice by the final-copy route; Slice 5's status reads must not sign
   the same shape (bind a purpose field to the route, or a nonce accepted once). Left open by A1018
-  Slice 4 (Ruling R10).
-
-- **The peer query routes read a body of any size.** `/api/node/peer-status` and the two handover
-  source routes (`apps/server/src/handover-source-api.ts`) read the whole body through
-  `verifiedPeerQuery` before checking its signature, with no body limit. Left open by A1018 Slice 4.
+  Slice 4 (Slice 4's Ruling R10).
 
 - **The handover summaries' and checks' minor follow-ups.** Untested choices and hand-kept lists in
   the module seat, the Veri*Factu summary and copy check, the payments summary and the manifest

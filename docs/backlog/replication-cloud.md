@@ -23,7 +23,8 @@ qualification on real boxes remains the owner's, after A947 3b/3c
 
 **Built so far:** Slice 0 (docs, main `b0e22a9feb`), Slice 1 (#2417: `@waitron/handover`, the
 handover tables in `node.db`, the server's handover store and signer), Slice 2 (the stepdown and
-the restricted start; no production route reaches `stepDown` yet), Slice 4b (A764: every payment
+the restricted start), Slice 3 (#2436: a box asks the other box before it sells, and waits if it
+cannot reach it), Slice 4 (the final copy and its indicator), Slice 4b (A764: every payment
 records the box that started it, and each box's card sweep resolves only the payments it owns; what
 it leaves open is under _Payments and card readers_ in [the backlog](../backlog.md)) and Slice 9
 (S2's Parts F and G and three controls in `bench/sqlite-failover`; S2's row reads PASS since the
@@ -500,8 +501,9 @@ Left open by A1018 Slice 3, each read in review rather than run:
 Left open by A1018 Slice 3 (`apps/server/src/peer-status-api.ts`):
 - A bad signature from a box the chart knows answers 403 `handover.peer_unknown`, not 401.
 - `operationId` is checked as a 1–64 character string, not as a UUID.
-- The route reads a body of any size, reads the chart and unseals this box's key before the
-  signature is checked; a small body limit, or checking the envelope's shape first, would bound it.
+- The route, and the two handover source routes (`apps/server/src/handover-source-api.ts`)
+  through the same `verifiedPeerQuery`, read a body of any size, read the chart and unseal this
+  box's key before the signature is checked; a small body limit, or checking the envelope's shape first, would bound it.
 - `boot.adoption-allocation.test.ts` imports from `@waitron/db` twice, and its pending-adoption
   case repeats its sibling's setup; `boot.restricted.test.ts`'s full-start case checks only the
   answer's shape, not its signature.
