@@ -2085,10 +2085,11 @@ const REASONS = [
 ];
 
 /** From the network to a finished write with the stick still in, then out. @param {number} from */
-const toBooted = (from, outcome = "verified") => [
+const toBooted = (from) => [
   online(from),
   clockSet(true, FLOOR, from + 1_000),
-  released(outcome, from + 2_000),
+  released("verified", from + 2_000),
+  tick(from + 61_999),
   tick(from + 62_000),
   writeFinished(true, from + 300_000),
   usbRemoved(from + 301_000),
@@ -2111,11 +2112,27 @@ const verified = (seen = sweepSeen([windowsDisk()], null, {}, 0)) => [
  * `guard3` marks runs on a Waitron disk with no matching submit.
  */
 const RUNS = [
-  { name: "blank, unattended", events: unattended([blankDisk()]), unattended: true },
-  { name: "Windows, unattended", events: unattended([windowsDisk()]), unattended: true },
-  { name: "BitLocker, unattended", events: unattended([bitlockerDisk()]), unattended: true },
+  {
+    name: "blank, unattended",
+    events: unattended([blankDisk()]),
+    unattended: true,
+    ends: "boot-installed",
+  },
+  {
+    name: "Windows, unattended",
+    events: unattended([windowsDisk()]),
+    unattended: true,
+    ends: "boot-installed",
+  },
+  {
+    name: "BitLocker, unattended",
+    events: unattended([bitlockerDisk()]),
+    unattended: true,
+    ends: "boot-installed",
+  },
   {
     name: "an unknown disk, a wrong word, then the erase word",
+    ends: "boot-installed",
     events: [
       sweepSeen([foreignLuksDisk()]),
       ramReady(2_000),
@@ -2126,6 +2143,7 @@ const RUNS = [
   },
   {
     name: "a Waitron reinstall by the name, typed decomposed",
+    ends: "boot-installed",
     events: [
       sweepSeen([completeWaitronDisk()], COMPOSED),
       key(2_000),
@@ -2137,6 +2155,7 @@ const RUNS = [
   },
   {
     name: "a Waitron reinstall by the erase word, the tag unreadable",
+    ends: "boot-installed",
     events: [
       sweepSeen([completeWaitronDisk()], UNREADABLE),
       key(2_000),
@@ -2148,6 +2167,7 @@ const RUNS = [
   },
   {
     name: "a Waitron disk left alone for 15 seconds",
+    ends: "boot-installed",
     events: [
       sweepSeen([completeWaitronDisk()], SANTET),
       ramReady(2_000),
@@ -2158,6 +2178,7 @@ const RUNS = [
   },
   {
     name: "a Waitron disk, a scanner's line, and two minutes later the installed box",
+    ends: "boot-installed",
     events: [
       sweepSeen([completeWaitronDisk()], SANTET),
       ramReady(2_000),
@@ -2171,6 +2192,7 @@ const RUNS = [
   },
   {
     name: "a Waitron box with the TPM off, left alone",
+    ends: "boot-installed",
     events: [
       sweepSeen([completeWaitronDisk()], SANTET, { tpm: "disabled" }),
       ramReady(2_000),
@@ -2180,6 +2202,7 @@ const RUNS = [
   },
   {
     name: "a Waitron box with the TPM off, the name typed → refuse no-tpm",
+    ends: "refuse:no-tpm",
     events: [
       sweepSeen([completeWaitronDisk()], SANTET, { tpm: "disabled" }),
       key(2_000),
@@ -2192,23 +2215,28 @@ const RUNS = [
   },
   {
     name: "refuse observation-invalid",
+    ends: "refuse:observation-invalid",
     events: [sweepSeen([blankDisk({ diskId: "../sda" })]), ramReady(2_000), tick(70_000)],
   },
-  { name: "refuse disk-none", events: [sweepSeen([]), tick(70_000)] },
+  { name: "refuse disk-none", events: [sweepSeen([]), tick(70_000)], ends: "refuse:disk-none" },
   {
     name: "refuse disk-multiple",
+    ends: "refuse:disk-multiple",
     events: [sweepSeen([blankDisk(), windowsDisk({ diskId: SECOND_ID })]), tick(70_000)],
   },
   {
     name: "refuse secure-boot-off",
+    ends: "refuse:secure-boot-off",
     events: [sweepSeen([windowsDisk()], null, { secureBoot: "setup-mode" }), tick(70_000)],
   },
   {
     name: "refuse usb-removed-early",
+    ends: "refuse:usb-removed-early",
     events: [sweepSeen([windowsDisk()]), usbRemoved(2_000), ramReady(3_000), online(4_000)],
   },
   {
     name: "refuse sequence-invalid (a verified release while finding the network)",
+    ends: "refuse:sequence-invalid",
     events: [
       sweepSeen([windowsDisk()]),
       ramReady(2_000),
@@ -2218,10 +2246,15 @@ const RUNS = [
   },
   {
     name: "refuse write-failed",
+    ends: "refuse:write-failed",
     events: [...verified(), tick(61_000), writeFinished(false, 90_000), usbRemoved(91_000)],
     unattended: true,
   },
-  ...["signature", "checksum", "too-large", "unavailable", "truncated"].map((outcome) => ({
+  ...[
+    ["signature", "release-signature"],
+    ["checksum", "release-checksum"],
+    ["too-large", "release-too-large"],
+  ].map(([outcome, reason]) => ({
     name: `a run interrupted by release-checked ${outcome}`,
     events: [
       sweepSeen([windowsDisk()]),
@@ -2233,9 +2266,30 @@ const RUNS = [
       ...toBooted(66_000),
     ],
     unattended: true,
+    ends: `refuse:${reason}`,
+  })),
+  ...["unavailable", "truncated"].map((outcome) => ({
+    name: `a run interrupted by release-checked ${outcome}, then a retry that verifies`,
+    events: [
+      sweepSeen([windowsDisk()]),
+      ramReady(2_000),
+      online(3_000),
+      clockSet(true, FLOOR, 4_000),
+      released(outcome, 5_000),
+      tick(65_000),
+      online(66_000),
+      released("verified", 68_000),
+      tick(127_999),
+      tick(128_000),
+      writeFinished(true, 300_000),
+      usbRemoved(301_000),
+    ],
+    unattended: true,
+    ends: "boot-installed",
   })),
   {
     name: "a run interrupted by release-checked installer-too-old",
+    ends: "refuse:installer-too-old",
     events: [
       sweepSeen([windowsDisk()]),
       ramReady(2_000),
@@ -2248,6 +2302,7 @@ const RUNS = [
   },
   {
     name: "a clock failure, then success",
+    ends: "boot-installed",
     events: [
       sweepSeen([windowsDisk()]),
       ramReady(2_000),
@@ -2260,11 +2315,13 @@ const RUNS = [
   },
   {
     name: "an erase stopped, then powered off",
+    ends: "power-off",
     events: [...verified(), key(30_000), choice("power-off", 40_000), tick(200_000)],
     unattended: true,
   },
   {
     name: "an erase stopped, then install-now before the 60 seconds end",
+    ends: "write-owned-target",
     events: [
       ...verified(),
       key(30_000),
@@ -2275,12 +2332,26 @@ const RUNS = [
   },
   {
     name: "a second verification during the 60 seconds (M2)",
+    ends: "refuse:sequence-invalid",
     events: [...verified(), released("verified", 2_000), tick(61_000), tick(62_000)],
     unattended: true,
   },
   {
     name: "a key at 61500 with no tick at 61000 (I1), then install-now",
+    ends: "write-owned-target",
     events: [...verified(), key(61_500), tick(61_501), choice("install-now", 70_000)],
+    unattended: true,
+  },
+  {
+    name: "install-now during the 60 seconds with no key, then the deadline",
+    ends: "write-owned-target",
+    events: [...verified(), choice("install-now", 30_000), tick(61_000)],
+    unattended: true,
+  },
+  {
+    name: "a typed line during the 60 seconds stops the erase",
+    ends: "confirm-erase",
+    events: [...verified(), submit("CANARY-7f3a", 30_000), tick(61_000)],
     unattended: true,
   },
 ];
@@ -2324,89 +2395,104 @@ describe("whole runs", () => {
     ).toEqual(new Set(REASONS));
   });
 
-  describe.each(RUNS)("$name", (run) => {
-    const { decisions, tag } = sweep(run);
+  for (const run of RUNS)
+    describe(run.name, () => {
+      const { decisions, tag } = sweep(run);
 
-    it("answers only with the nine actions", () => {
-      for (const decision of decisions) expect(ACTIONS).toContain(decision.action);
-    });
+      it(`ends with ${run.ends}`, () => {
+        const last = decisions.findLast((d) => d.action !== "wait");
+        expect(last.action === "refuse" ? `refuse:${last.state.refusal.reason}` : last.action).toBe(
+          run.ends,
+        );
+      });
 
-    it("names only the frozen target, and never the stick, the external disk or a second disk", () => {
-      for (const decision of decisions) {
-        if (decision.diskId !== null) expect(decision.diskId).toBe(INTERNAL_ID);
-        const text = JSON.stringify([
-          decision.diskId,
-          decision.message,
-          installerStatus(decision.state),
-        ]);
-        for (const id of [STICK_ID, EXTERNAL_ID, SECOND_ID]) expect(text).not.toContain(id);
-      }
-    });
+      it("answers only with the nine actions", () => {
+        for (const decision of decisions) expect(ACTIONS).toContain(decision.action);
+      });
 
-    it("writes at most once, and only after a verified release", () => {
-      const at = decisions.flatMap((d, i) => (d.action === "write-owned-target" ? [i] : []));
-      expect(at.length).toBeLessThanOrEqual(1);
-      for (const i of at)
-        expect(
-          run.events
-            .slice(0, i + 1)
-            .some((e) => e.kind === "release-checked" && e.outcome === "verified"),
-        ).toBe(true);
-    });
-
-    it("ends at most once, and answers only wait after it", () => {
-      const end = decisions.findIndex((d) => FINAL_ACTIONS.includes(d.action));
-      if (end === -1) return;
-      expect(decisions.slice(end + 1).map((d) => d.action)).toEqual(
-        decisions.slice(end + 1).map(() => "wait"),
-      );
-    });
-
-    it("keeps no typed text", () => {
-      run.events.forEach((event, i) => {
-        if (event.kind !== "submit" || event.text === ERASE) return;
-        const texts = laterTexts(decisions, i);
-        if (event.text.normalize("NFC") === tag) {
-          if (event.text !== tag) for (const text of texts) expect(text).not.toContain("A\u0300");
-          return;
+      it("names only the frozen target, and never the stick, the external disk or a second disk", () => {
+        for (const decision of decisions) {
+          if (decision.diskId !== null) expect(decision.diskId).toBe(INTERNAL_ID);
+          const text = JSON.stringify([
+            decision.diskId,
+            decision.message,
+            installerStatus(decision.state),
+          ]);
+          for (const id of [STICK_ID, EXTERNAL_ID, SECOND_ID]) expect(text).not.toContain(id);
         }
-        expect(CANARIES).toContain(event.text);
-        for (const text of texts) expect(text).not.toContain(event.text);
       });
-      const states = [createInstallerState(OPTIONS), ...decisions.map((d) => d.state)];
-      for (const state of states) expect(pathsHolding(state, ERASE)).toEqual(["eraseWord"]);
-      for (const decision of decisions)
-        expect(pathsHolding(decision, ERASE)).toEqual(["state.eraseWord"]);
-    });
 
-    it("freezes every state, decision and status", () => {
-      for (const decision of decisions) {
-        expect(deepFrozen(decision)).toBe(true);
-        expect(deepFrozen(installerStatus(decision.state))).toBe(true);
-      }
-    });
-  });
+      it("writes at most once, and only after a verified release", () => {
+        const at = decisions.flatMap((d, i) => (d.action === "write-owned-target" ? [i] : []));
+        expect(at.length).toBeLessThanOrEqual(1);
+        for (const i of at)
+          expect(
+            run.events
+              .slice(0, i + 1)
+              .some((e) => e.kind === "release-checked" && e.outcome === "verified"),
+          ).toBe(true);
+      });
 
-  describe.each(RUNS.filter((run) => run.guard3))("$name, nothing typed", (run) => {
-    it("is a Waitron disk, and nothing is written or fetched", () => {
-      const { decisions } = sweep(run);
-      expect(decisions[0].state.target.kind).toBe("waitron");
-      noWriteNorNetwork(decisions);
-    });
-  });
+      it("ends at most once, and answers only wait after it", () => {
+        const end = decisions.findIndex((d) => FINAL_ACTIONS.includes(d.action));
+        if (end === -1) return;
+        expect(decisions.slice(end + 1).map((d) => d.action)).toEqual(
+          decisions.slice(end + 1).map(() => "wait"),
+        );
+      });
 
-  describe.each(RUNS.filter((run) => run.unattended))("$name, unattended", (run) => {
-    it("holds the 60 seconds unless a person chose install-now", () => {
-      const { decisions } = sweep(run);
-      decisions.forEach((decision, i) => {
-        if (decision.action !== "write-owned-target") return;
-        const event = run.events[i];
-        if (event.kind === "choice" && event.choice === "install-now") return;
-        const latest = run.events
-          .slice(0, i + 1)
-          .findLast((e) => e.kind === "release-checked" && e.outcome === "verified");
-        expect(event.atMs).toBeGreaterThanOrEqual(latest.atMs + INSTALLER_TIMINGS_MS.eraseWait);
+      it("keeps no typed text", () => {
+        run.events.forEach((event, i) => {
+          if (event.kind !== "submit" || event.text === ERASE) return;
+          const texts = laterTexts(decisions, i);
+          if (event.text.normalize("NFC") === tag) {
+            if (event.text !== tag) for (const text of texts) expect(text).not.toContain("A\u0300");
+            return;
+          }
+          expect(CANARIES).toContain(event.text);
+          for (const text of texts) expect(text).not.toContain(event.text);
+        });
+        const states = [createInstallerState(OPTIONS), ...decisions.map((d) => d.state)];
+        for (const state of states) expect(pathsHolding(state, ERASE)).toEqual(["eraseWord"]);
+        for (const decision of decisions)
+          expect(pathsHolding(decision, ERASE)).toEqual(["state.eraseWord"]);
+      });
+
+      it("freezes every state, decision and status", () => {
+        for (const decision of decisions) {
+          expect(deepFrozen(decision)).toBe(true);
+          expect(deepFrozen(installerStatus(decision.state))).toBe(true);
+        }
       });
     });
-  });
+
+  for (const run of RUNS.filter((r) => r.guard3))
+    describe(`${run.name}, nothing typed`, () => {
+      it("is a Waitron disk, and nothing is written or fetched", () => {
+        const { decisions } = sweep(run);
+        expect(decisions[0].state.target.kind).toBe("waitron");
+        noWriteNorNetwork(decisions);
+      });
+    });
+
+  for (const run of RUNS.filter((r) => r.unattended))
+    describe(`${run.name}, unattended`, () => {
+      it("holds the 60 seconds unless a person chose install-now", () => {
+        const { decisions } = sweep(run);
+        decisions.forEach((decision, i) => {
+          if (decision.action !== "write-owned-target") return;
+          const event = run.events[i];
+          const before = run.events.slice(0, i + 1);
+          const latest = before.findLastIndex(
+            (e) => e.kind === "release-checked" && e.outcome === "verified",
+          );
+          expect(latest).toBeGreaterThanOrEqual(0);
+          const stopped = before.slice(latest).some((e) => e.kind === "key" || e.kind === "submit");
+          if (event.kind === "choice" && event.choice === "install-now" && stopped) return;
+          expect(event.atMs).toBeGreaterThanOrEqual(
+            run.events[latest].atMs + INSTALLER_TIMINGS_MS.eraseWait,
+          );
+        });
+      });
+    });
 });
