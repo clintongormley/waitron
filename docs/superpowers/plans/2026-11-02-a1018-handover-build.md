@@ -1350,12 +1350,14 @@ the box restarts after. Tests: one case in each adapter's suite and in
 
 **Files:** Test `apps/server/src/handover-stepdown.crash.test.ts` (Review Focus 2).
 
-- [ ] **Step 1: Write the tests.** For each crash point — after the node transaction, during the
-  quiesce, during the admitted-work wait, during close — stop the process's store without the
-  graceful close, then `startServer` on the same folder: "comes back restricted,
+- [ ] **Step 1: Write the tests.** For each crash point after the node transaction — after it
+  commits and before the answer, during the admitted-work wait, during close — stop the process's
+  store without the graceful close, then `startServer` on the same folder: "comes back restricted,
   `acceptingSales: false`, no AEAT request" (stand-in counts zero); "the operation reads
-  `source_stepped_down`". Control: a crash before the node transaction comes back as a normal
-  primary (the failing case prints `acceptingSales: true` for the first four).
+  `source_stepped_down`". For each crash point before it — before the stepdown begins, as the gate
+  closes, during the quiesce (the duties are told to stop before the write) — the box comes back
+  as a normal primary that files: `acceptingSales: true`, no restriction, an AEAT submission
+  arrives.
 - [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/handover-stepdown.crash.test.ts` — PASS (it pins Tasks 2.1–2.4); if a case passes for the wrong reason, the control shows it.
 - [ ] **Step 3: Commit** `git commit -s -m "server: a stepdown interrupted at any point comes back restricted"`.
 

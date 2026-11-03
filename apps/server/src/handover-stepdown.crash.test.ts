@@ -113,7 +113,12 @@ const HEALTH_LIMIT_MS = 10_000;
 const CASE_LIMIT_MS = 3 * CHILD_LIMIT_MS + 2 * HEALTH_LIMIT_MS + QUIET_MS + 30_000;
 
 type CrashPoint =
-  "before-node-transaction" | "after-node-transaction" | "quiesce" | "admitted-work" | "close";
+  | "before-node-transaction"
+  | "gate-close"
+  | "quiesce"
+  | "after-node-transaction"
+  | "admitted-work"
+  | "close";
 
 const here = (file: string) => new URL(file, import.meta.url).href;
 
@@ -131,7 +136,7 @@ const GATE = wrapper(
   return {
     ...gate,
     close(deps) {
-      if (t.at === "after-node-transaction") t.die("after-node-transaction");
+      if (t.at === "gate-close") t.die("gate-close");
       gate.close(deps);
     },
     settled(limitMs) {
@@ -173,9 +178,11 @@ export async function stopBackgroundDuties(duties) {
 
 const STEPDOWN = wrapper(
   here("./handover-stepdown.ts"),
-  `export function stepDown(deps, request) {
+  `export async function stepDown(deps, request) {
   if (t.at === "before-node-transaction") t.die("before-node-transaction");
-  return actual.stepDown(deps, request);
+  const result = await actual.stepDown(deps, request);
+  if (t.at === "after-node-transaction") t.die("after-node-transaction");
+  return result;
 }`,
 );
 
@@ -425,8 +432,7 @@ async function crashThenRestart(at: CrashPoint): Promise<Restarted> {
 
 describe("power lost part-way through a stepdown", () => {
   it.each([
-    ["after the node transaction", "after-node-transaction"],
-    ["while the outside work is being told to stop", "quiesce"],
+    ["after the node transaction, before the answer", "after-node-transaction"],
     ["while it waits for admitted work", "admitted-work"],
     ["while it closes", "close"],
   ] as const)(
@@ -446,10 +452,16 @@ describe("power lost part-way through a stepdown", () => {
     CASE_LIMIT_MS,
   );
 
-  it(
-    "control: power lost before the node transaction, the box comes back a primary that files",
-    async () => {
-      const restarted = await crashThenRestart("before-node-transaction");
+  // The duties are told to stop before the node transaction, so a power cut while they are told
+  // leaves nothing written.
+  it.each([
+    ["before the node transaction", "before-node-transaction"],
+    ["as the gate closes, before any duty is told", "gate-close"],
+    ["while the outside work is being told to stop, before the write", "quiesce"],
+  ] as const)(
+    "%s, the box comes back a primary that files",
+    async (_, at) => {
+      const restarted = await crashThenRestart(at);
       expect(restarted.node).toMatchObject({ status: 200, body: { acceptingSales: true } });
       expect(restarted.operationState).not.toBe("source_stepped_down");
       expect(restarted.restriction).toBeNull();
