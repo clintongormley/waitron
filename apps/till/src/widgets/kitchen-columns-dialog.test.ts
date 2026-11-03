@@ -331,15 +331,22 @@ describe("A773 the pass's other-stations choice", () => {
     expect(radios(el).every((radio) => radio.disabled)).toBe(true);
   });
 
-  it("shows a refusal's words in the window", async () => {
+  it("shows a refusal's words as the window's one message, leaving the choice unmarked", async () => {
     const { el } = await mount({
       layout: passLayout(),
       otherStations: { value: true, sending: false, errorCode: "storage.disk_full" },
     });
     await control(el)!.updateComplete;
-    expect(control(el)!.shadowRoot!.querySelector("[data-error]")!.textContent!.trim()).toBe(
-      codeMessage("storage.disk_full"),
-    );
+    const dialog = el.shadowRoot!.querySelector("wt-dialog")!;
+    await el.shadowRoot!.querySelector("wt-form-actions")!.updateComplete;
+    await dialog.updateComplete;
+    const message = dialog.shadowRoot!.querySelector(".footer [data-error]");
+    expect(message?.textContent!.trim()).toBe(codeMessage("storage.disk_full"));
+    expect(message?.getAttribute("role")).toBe("alert");
+    expect(control(el)!.shadowRoot!.querySelector("[data-error]")).toBeNull();
+    expect(
+      control(el)!.shadowRoot!.querySelector('[role="radiogroup"]')!.getAttribute("aria-invalid"),
+    ).toBeNull();
   });
 
   it("reads the section in Spanish", async () => {

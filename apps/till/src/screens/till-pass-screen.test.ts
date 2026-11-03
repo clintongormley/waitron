@@ -1071,7 +1071,21 @@ describe("A773 pass screen", () => {
     const checked = (el: TillPassScreen) =>
       radios(el).map((radio) => radio.getAttribute("aria-checked"));
     const words = (el: TillPassScreen) =>
-      control(el)!.shadowRoot!.querySelector("[data-error]")?.textContent!.trim();
+      columnsWindow(el)!
+        .shadowRoot!.querySelector("wt-dialog")!
+        .shadowRoot!.querySelector(".footer [data-error]")
+        ?.textContent!.trim();
+    const marked = (el: TillPassScreen) =>
+      control(el)!.shadowRoot!.querySelector('[role="radiogroup"]')!.getAttribute("aria-invalid");
+    async function settle(el: TillPassScreen) {
+      await flush(el);
+      const shown = columnsWindow(el);
+      if (shown === null) return;
+      await shown.updateComplete;
+      await control(el)?.updateComplete;
+      await shown.shadowRoot!.querySelector("wt-form-actions")!.updateComplete;
+      await shown.shadowRoot!.querySelector("wt-dialog")!.updateComplete;
+    }
     const display = (nonPassStationsOverride: boolean | null) => ({
       showNonPassStations: nonPassStationsOverride ?? true,
       nonPassStationsOverride,
@@ -1080,14 +1094,17 @@ describe("A773 pass screen", () => {
       await userEvent.click(
         boardOf(el)!.shadowRoot!.querySelector<HTMLElement>("[data-columns-open]")!,
       );
-      await flush(el);
-      await columnsWindow(el)!.updateComplete;
-      await control(el)?.updateComplete;
+      await settle(el);
     }
     async function choose(el: TillPassScreen, index: number) {
       await userEvent.click(radios(el)[index]!);
-      await flush(el);
-      await columnsWindow(el)?.updateComplete;
+      await settle(el);
+    }
+    async function closeWindow(el: TillPassScreen) {
+      await userEvent.click(
+        columnsWindow(el)!.shadowRoot!.querySelector<HTMLElement>("[data-columns-done]")!,
+      );
+      await vi.waitFor(() => expect(columnsWindow(el)).toBeNull());
     }
     const refused = (code: string) => Object.assign(new Error(code), { code, status: 409 });
 
@@ -1221,12 +1238,162 @@ describe("A773 pass screen", () => {
         expect(columnsWindow(el)).not.toBeNull();
         expect(checked(el)).toEqual(["false", "true", "false"]);
         expect(words(el)).toBe(codeMessage(code));
+        expect(marked(el)).toBeNull();
         expect(control(el)!.disabled).toBe(false);
         expect(api.getDevicePassBoard).toHaveBeenCalledTimes(reads);
         await choose(el, 0);
         expect(words(el)).toBeUndefined();
       },
     );
+
+    it("a refusal's words stay when the window is closed and opened again", async () => {
+      const api = fakeApi({
+        setDeviceKitchenScreenDisplay: vi.fn().mockRejectedValue(refused("storage.disk_full")),
+      });
+      const el = await mount({ deviceMode: true, api, initialBoard: deviceBoard() });
+      await open(el);
+      await choose(el, 2);
+      expect(words(el)).toBe(codeMessage("storage.disk_full"));
+      await closeWindow(el);
+      await open(el);
+      expect(words(el)).toBe(codeMessage("storage.disk_full"));
+    });
+
+    it("while a choice is out the window shows it, off, until the board has been read again", async () => {
+      const sent = deferred<void>();
+      const read = deferred<DevicePassBoard>();
+      const api = fakeApi({
+        setDeviceKitchenScreenDisplay: vi.fn().mockReturnValue(sent.promise),
+        getDevicePassBoard: vi.fn().mockReturnValue(read.promise),
+      });
+      const el = await mount({
+        deviceMode: true,
+        api,
+        initialBoard: { ...deviceBoard(), display: display(null) },
+      });
+      await open(el);
+      await choose(el, 1);
+      expect(checked(el)).toEqual(["false", "true", "false"]);
+      expect(control(el)!.disabled).toBe(true);
+      sent.resolve();
+      await settle(el);
+      expect(api.getDevicePassBoard).toHaveBeenCalledTimes(1);
+      expect(checked(el)).toEqual(["false", "true", "false"]);
+      expect(control(el)!.disabled).toBe(true);
+      read.resolve({ ...deviceBoard(), display: display(true) });
+      await settle(el);
+      expect(checked(el)).toEqual(["false", "true", "false"]);
+      expect(control(el)!.disabled).toBe(false);
+    });
+
+    it("a till's own pass window shows the board's stored choice when it opens", async () => {
+      const api = fakeApi({
+        getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+        getDevicePassBoard: vi
+          .fn()
+          .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+      });
+      const el = await mount({ api });
+      await open(el);
+      expect(checked(el)).toEqual(["false", "false", "true"]);
+    });
+
+    it("at a till, the window shows no choice until a read of the board gives it", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          getDeviceIdentity: vi.fn().mockResolvedValue(identity([chosen("pass")])),
+          getDevicePassBoard: vi
+            .fn()
+            .mockRejectedValueOnce(new Error("offline"))
+            .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+        });
+        const el = await mount({ api });
+        await open(el);
+        expect(columnsWindow(el)).not.toBeNull();
+        expect(control(el)).toBeNull();
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+      }));
+
+    it("after an accepted choice, a failed read keeps the value sent, and the old one can be chosen again", async () => {
+      const api = fakeApi({
+        setDeviceKitchenScreenDisplay: vi.fn().mockResolvedValue(undefined),
+        getDevicePassBoard: vi.fn().mockRejectedValue(new Error("offline")),
+      });
+      const el = await mount({
+        deviceMode: true,
+        api,
+        initialBoard: { ...deviceBoard(), display: display(null) },
+      });
+      await open(el);
+      await choose(el, 2);
+      expect(api.getDevicePassBoard).toHaveBeenCalledTimes(1);
+      expect(checked(el)).toEqual(["false", "false", "true"]);
+      expect(control(el)!.disabled).toBe(false);
+      await choose(el, 0);
+      expect(api.setDeviceKitchenScreenDisplay).toHaveBeenLastCalledWith("pass", null);
+      expect(api.setDeviceKitchenScreenDisplay).toHaveBeenCalledTimes(2);
+    });
+
+    it("a read begun before a choice was accepted does not put the old choice back", () =>
+      withFakeTimers(async () => {
+        const older = deferred<DevicePassBoard>();
+        const api = fakeApi({
+          setDeviceKitchenScreenDisplay: vi.fn().mockResolvedValue(undefined),
+          getDevicePassBoard: vi
+            .fn()
+            .mockReturnValueOnce(older.promise)
+            .mockRejectedValue(new Error("offline")),
+        });
+        const el = await mount({
+          deviceMode: true,
+          api,
+          initialBoard: { ...deviceBoard(), display: display(null) },
+        });
+        await open(el);
+        await vi.advanceTimersByTimeAsync(15_000);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(1);
+        await choose(el, 2);
+        expect(api.getDevicePassBoard).toHaveBeenCalledTimes(2);
+        older.resolve({ ...deviceBoard(), display: display(null) });
+        await settle(el);
+        expect(checked(el)).toEqual(["false", "false", "true"]);
+      }));
+
+    it("at a till whose choice moves from the pass to the monitor, the window forgets the pass's choice and refusal", () =>
+      withFakeTimers(async () => {
+        const api = fakeApi({
+          getDeviceIdentity: vi
+            .fn()
+            .mockResolvedValueOnce(identity([chosen("pass")]))
+            .mockResolvedValue(identity([chosen("pass_monitor")])),
+          getDevicePassBoard: vi
+            .fn()
+            .mockResolvedValue({ ...deviceBoard(), display: display(false) }),
+          getDevicePassMonitorBoard: vi
+            .fn()
+            .mockRejectedValueOnce(new Error("offline"))
+            .mockResolvedValue({ ...deviceBoard(), display: display(true) }),
+          setDeviceKitchenScreenDisplay: vi.fn().mockRejectedValue(refused("storage.disk_full")),
+        });
+        const el = await mount({ api });
+        await open(el);
+        await choose(el, 0);
+        expect(words(el)).toBe(codeMessage("storage.disk_full"));
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        expect(api.getDevicePassMonitorBoard).toHaveBeenCalledTimes(1);
+        await open(el);
+        expect(control(el)).toBeNull();
+        await closeWindow(el);
+        await vi.advanceTimersByTimeAsync(15_000);
+        await settle(el);
+        await open(el);
+        expect(checked(el)).toEqual(["false", "true", "false"]);
+        expect(words(el)).toBeUndefined();
+      }));
 
     it("on a kitchen display, drops the section when a refresh says a narrowing took every station", () =>
       withFakeTimers(async () => {

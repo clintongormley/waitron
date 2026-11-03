@@ -149,7 +149,6 @@ export class TillKitchenColumnsDialog extends LitElement {
       ]}
       .value=${live(choiceName(choice.value))}
       ?disabled=${choice.sending}
-      .error=${choice.errorCode === undefined ? "" : codeMessage(choice.errorCode)}
       @wt-change=${(event: Event) => this.#choose(event)}
     ></wt-segmented-control>`;
   }
@@ -173,6 +172,7 @@ export class TillKitchenColumnsDialog extends LitElement {
 
   override render() {
     const keys = this.layout.order.filter((key) => this.names.has(key));
+    const refusal = this.otherStations?.errorCode;
     return html`<wt-dialog
       ${trackDialog()}
       .open=${true}
@@ -217,7 +217,7 @@ export class TillKitchenColumnsDialog extends LitElement {
       </ol>
       ${this.otherStations === null ? nothing : this.#otherStations(this.otherStations)}
       <p class="kept" data-columns-kept>${t("station.columns_kept")}</p>
-      <wt-form-actions slot="footer">
+      <wt-form-actions slot="footer" .error=${refusal === undefined ? "" : codeMessage(refusal)}>
         <wt-button
           data-columns-done
           variant="primary"

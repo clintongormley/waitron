@@ -179,7 +179,7 @@ export class TillPassScreen extends LitElement {
   @state() private columnsWindow: ColumnsWindow | null = null;
   /** The other-stations choice sent and not yet answered; the window shows it, disabled. */
   @state() private otherStationsSending?: boolean | null;
-  /** A refusal of that choice, shown in the window until the next choice. */
+  /** A refusal of that choice, shown in the window until the next choice or a change of board. */
   @state() private otherStationsError?: string;
   /** A read of the device's choice has answered; until one does, All stations shows. */
   #choiceRead = false;
@@ -202,7 +202,10 @@ export class TillPassScreen extends LitElement {
   @state() private tableChanged: { table?: string } | null = null;
   #tableChangedNext: { table?: string } | null = null;
   readonly #layouts = new KitchenColumnLayouts(PASS_COLUMNS);
+  /** Unset until a read of the board shown answers; the window offers no choice until then. */
   #display?: DevicePassBoard["display"];
+  /** A choice the server accepted, shown until a read begun after it answers. */
+  #acceptedChoice?: boolean | null;
 
   /** The last board read's choice of showing other stations' dishes. */
   get display(): DevicePassBoard["display"] | undefined {
@@ -266,6 +269,9 @@ export class TillPassScreen extends LitElement {
         this.lostLines = [];
         this.nothingLeft = false;
         this.columnsWindow = null;
+        this.#display = undefined;
+        this.#acceptedChoice = undefined;
+        this.otherStationsError = undefined;
       }
       this.selected = next;
     }
@@ -338,6 +344,7 @@ export class TillPassScreen extends LitElement {
   #adoptBoard(read: DevicePassBoard): void {
     this.board = read.board;
     this.#display = read.display;
+    this.#acceptedChoice = undefined;
     this.lostLines = lostLines(read);
     this.nothingLeft = nothingLeft(read);
     for (const key of this.#asks.keys()) if (!this.sending.has(key)) this.#dropAskIfChanged(key);
@@ -457,6 +464,9 @@ export class TillPassScreen extends LitElement {
         boardId === "pass" ? "pass" : "pass_monitor",
         value,
       );
+      this.#acceptedChoice = value;
+      // Counts as an answer newer than any board read already out, so none of those can undo it.
+      this.#appliedRequest = ++this.#request;
     } catch (error) {
       reload = null;
       const code = (error as { code?: string } | null)?.code ?? "server.internal";
@@ -645,7 +655,6 @@ export class TillPassScreen extends LitElement {
         event.stopPropagation();
         const { opener } = (event as CustomEvent<{ opener: HTMLElement }>).detail;
         this.columnsWindow = { boardId, opener };
-        this.otherStationsError = undefined;
       }}
       >${this.#lead("lead")}${this.#unavailable("status")}
       <p class="stale" role="status" slot="status" ?data-stale=${this.stale}>
@@ -691,13 +700,15 @@ export class TillPassScreen extends LitElement {
       .boardName=${this.#title()}
       .opener=${open.opener}
       .otherStations=${
-        boardId === "all" || !this.#shows()
+        boardId === "all" || !this.#shows() || this.#display === undefined
           ? null
           : {
               value:
                 this.otherStationsSending !== undefined
                   ? this.otherStationsSending
-                  : (this.#display?.nonPassStationsOverride ?? null),
+                  : this.#acceptedChoice !== undefined
+                    ? this.#acceptedChoice
+                    : this.#display.nonPassStationsOverride,
               sending: this.otherStationsSending !== undefined,
               errorCode: this.otherStationsError,
             }
