@@ -322,7 +322,8 @@ describe("the waiting start", () => {
       });
     });
     afterEach(async () => {
-      await h.waiting.server.close();
+      const server = h?.waiting.server;
+      if (server !== undefined) await server.close();
       for (const socket of sockets.splice(0)) socket.destroy();
     });
 
