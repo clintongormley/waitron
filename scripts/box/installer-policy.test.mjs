@@ -1,3 +1,4 @@
+import { inspect } from "node:util";
 import { describe, expect, it } from "vitest";
 import { MICROSOFT_RESERVED_TYPE, WAITRON_LAYOUTS } from "./disk-state.mjs";
 import {
@@ -2044,6 +2045,368 @@ describe("the public status (D15)", () => {
       message: "installer.state_invalid",
       code: "installer.state_invalid",
       reason: "state-invalid",
+    });
+  });
+});
+
+const EXTERNAL_ID = "usb-WD_Elements_2620_575843324433-0:0";
+const externalDisk = () => blankDisk({ diskId: EXTERNAL_ID, attachment: "external" });
+const sweepSeen = (disks, venueTag = null, overrides = {}, atMs = AT) =>
+  observed(survey([...disks, externalDisk()], overrides), venueTag, atMs);
+const COMPOSED = Object.freeze({ name: "Bar \u00C0ngels", live: true });
+const UNREADABLE = Object.freeze({ name: "", live: false });
+const ERASE = OPTIONS.eraseWord;
+const CANARIES = ["CANARY-7f3a", "Bar Santet extra", "CANARY-scan-8412345678905"];
+const ACTIONS = [
+  "wait",
+  "find-network",
+  "set-clock",
+  "download",
+  "confirm-erase",
+  "write-owned-target",
+  "boot-installed",
+  "power-off",
+  "refuse",
+];
+const FINAL_ACTIONS = ["boot-installed", "power-off", "refuse"];
+const REASONS = [
+  "observation-invalid",
+  "disk-none",
+  "disk-multiple",
+  "no-tpm",
+  "secure-boot-off",
+  "usb-removed-early",
+  "sequence-invalid",
+  "release-signature",
+  "release-checksum",
+  "release-too-large",
+  "installer-too-old",
+  "write-failed",
+];
+
+/** From the network to a finished write with the stick still in, then out. @param {number} from */
+const toBooted = (from, outcome = "verified") => [
+  online(from),
+  clockSet(true, FLOOR, from + 1_000),
+  released(outcome, from + 2_000),
+  tick(from + 62_000),
+  writeFinished(true, from + 300_000),
+  usbRemoved(from + 301_000),
+];
+const unattended = (disks, overrides) => [
+  sweepSeen(disks, null, overrides),
+  ramReady(2_000),
+  ...toBooted(3_000),
+];
+const verified = (seen = sweepSeen([windowsDisk()], null, {}, 0)) => [
+  seen,
+  ramReady(0),
+  online(0),
+  clockSet(true, FLOOR, 0),
+  released("verified", 1_000),
+];
+
+/**
+ * Each run is a complete list of events. `unattended` marks runs no one confirmed by typing;
+ * `guard3` marks runs on a Waitron disk with no matching submit.
+ */
+const RUNS = [
+  { name: "blank, unattended", events: unattended([blankDisk()]), unattended: true },
+  { name: "Windows, unattended", events: unattended([windowsDisk()]), unattended: true },
+  { name: "BitLocker, unattended", events: unattended([bitlockerDisk()]), unattended: true },
+  {
+    name: "an unknown disk, a wrong word, then the erase word",
+    events: [
+      sweepSeen([foreignLuksDisk()]),
+      ramReady(2_000),
+      submit("CANARY-7f3a", 3_000),
+      submit(ERASE, 4_000),
+      ...toBooted(5_000),
+    ],
+  },
+  {
+    name: "a Waitron reinstall by the name, typed decomposed",
+    events: [
+      sweepSeen([completeWaitronDisk()], COMPOSED),
+      key(2_000),
+      ramReady(3_000),
+      submit("Bar Santet extra", 4_000),
+      submit("Bar A\u0300ngels", 5_000),
+      ...toBooted(6_000),
+    ],
+  },
+  {
+    name: "a Waitron reinstall by the erase word, the tag unreadable",
+    events: [
+      sweepSeen([completeWaitronDisk()], UNREADABLE),
+      key(2_000),
+      ramReady(3_000),
+      submit("CANARY-7f3a", 4_000),
+      submit(ERASE, 5_000),
+      ...toBooted(6_000),
+    ],
+  },
+  {
+    name: "a Waitron disk left alone for 15 seconds",
+    events: [
+      sweepSeen([completeWaitronDisk()], SANTET),
+      ramReady(2_000),
+      tick(16_000),
+      tick(99_000),
+    ],
+    guard3: true,
+  },
+  {
+    name: "a Waitron disk, a scanner's line, and two minutes later the installed box",
+    events: [
+      sweepSeen([completeWaitronDisk()], SANTET),
+      ramReady(2_000),
+      key(5_000),
+      submit("CANARY-scan-8412345678905", 6_000),
+      tick(125_999),
+      tick(126_000),
+      online(127_000),
+    ],
+    guard3: true,
+  },
+  {
+    name: "a Waitron box with the TPM off, left alone",
+    events: [
+      sweepSeen([completeWaitronDisk()], SANTET, { tpm: "disabled" }),
+      ramReady(2_000),
+      tick(16_000),
+    ],
+    guard3: true,
+  },
+  {
+    name: "a Waitron box with the TPM off, the name typed → refuse no-tpm",
+    events: [
+      sweepSeen([completeWaitronDisk()], SANTET, { tpm: "disabled" }),
+      key(2_000),
+      ramReady(3_000),
+      submit("Bar Santet", 4_000),
+      online(5_000),
+      released("verified", 6_000),
+      tick(70_000),
+    ],
+  },
+  {
+    name: "refuse observation-invalid",
+    events: [sweepSeen([blankDisk({ diskId: "../sda" })]), ramReady(2_000), tick(70_000)],
+  },
+  { name: "refuse disk-none", events: [sweepSeen([]), tick(70_000)] },
+  {
+    name: "refuse disk-multiple",
+    events: [sweepSeen([blankDisk(), windowsDisk({ diskId: SECOND_ID })]), tick(70_000)],
+  },
+  {
+    name: "refuse secure-boot-off",
+    events: [sweepSeen([windowsDisk()], null, { secureBoot: "setup-mode" }), tick(70_000)],
+  },
+  {
+    name: "refuse usb-removed-early",
+    events: [sweepSeen([windowsDisk()]), usbRemoved(2_000), ramReady(3_000), online(4_000)],
+  },
+  {
+    name: "refuse sequence-invalid (a verified release while finding the network)",
+    events: [
+      sweepSeen([windowsDisk()]),
+      ramReady(2_000),
+      released("verified", 3_000),
+      tick(70_000),
+    ],
+  },
+  {
+    name: "refuse write-failed",
+    events: [...verified(), tick(61_000), writeFinished(false, 90_000), usbRemoved(91_000)],
+    unattended: true,
+  },
+  ...["signature", "checksum", "too-large", "unavailable", "truncated"].map((outcome) => ({
+    name: `a run interrupted by release-checked ${outcome}`,
+    events: [
+      sweepSeen([windowsDisk()]),
+      ramReady(2_000),
+      online(3_000),
+      clockSet(true, FLOOR, 4_000),
+      released(outcome, 5_000),
+      tick(65_000),
+      ...toBooted(66_000),
+    ],
+    unattended: true,
+  })),
+  {
+    name: "a run interrupted by release-checked installer-too-old",
+    events: [
+      sweepSeen([windowsDisk()]),
+      ramReady(2_000),
+      online(3_000),
+      clockSet(true, FLOOR, 4_000),
+      released("installer-too-old", 5_000, "1.4.0"),
+      tick(70_000),
+    ],
+    unattended: true,
+  },
+  {
+    name: "a clock failure, then success",
+    events: [
+      sweepSeen([windowsDisk()]),
+      ramReady(2_000),
+      online(3_000),
+      clockSet(false, null, 4_000),
+      tick(64_000),
+      ...toBooted(65_000),
+    ],
+    unattended: true,
+  },
+  {
+    name: "an erase stopped, then powered off",
+    events: [...verified(), key(30_000), choice("power-off", 40_000), tick(200_000)],
+    unattended: true,
+  },
+  {
+    name: "an erase stopped, then install-now before the 60 seconds end",
+    events: [
+      ...verified(),
+      key(30_000),
+      choice("install-now", 31_000),
+      writeFinished(true, 90_000),
+    ],
+    unattended: true,
+  },
+  {
+    name: "a second verification during the 60 seconds (M2)",
+    events: [...verified(), released("verified", 2_000), tick(61_000), tick(62_000)],
+    unattended: true,
+  },
+  {
+    name: "a key at 61500 with no tick at 61000 (I1), then install-now",
+    events: [...verified(), key(61_500), tick(61_501), choice("install-now", 70_000)],
+    unattended: true,
+  },
+];
+
+/** @param {unknown} value @returns {boolean} */
+const deepFrozen = (value) =>
+  value === null ||
+  typeof value !== "object" ||
+  (Object.isFrozen(value) && Object.values(value).every(deepFrozen));
+
+/** @param {unknown} value @param {string} word @param {string} [path] @returns {string[]} */
+const pathsHolding = (value, word, path = "") => {
+  if (value === word) return [path];
+  if (value === null || typeof value !== "object") return [];
+  return Object.entries(value).flatMap(([k, v]) =>
+    pathsHolding(v, word, path === "" ? k : `${path}.${k}`),
+  );
+};
+
+/** @param {{events: any[]}} run */
+const sweep = (run) => {
+  const decisions = play(run.events);
+  const tag = run.events[0].venueTag?.name.normalize("NFC") ?? null;
+  return { decisions, tag };
+};
+const laterTexts = (decisions, from) =>
+  decisions
+    .slice(from)
+    .flatMap((d) => [
+      JSON.stringify(d),
+      JSON.stringify(installerStatus(d.state)),
+      inspect(d.state, { depth: 10, showHidden: true }),
+    ]);
+
+describe("whole runs", () => {
+  it("the table reaches every action and every refusal reason", () => {
+    const all = RUNS.flatMap((run) => sweep(run).decisions);
+    expect(new Set(all.map((d) => d.action))).toEqual(new Set(ACTIONS));
+    expect(
+      new Set(all.flatMap((d) => (d.action === "refuse" ? [d.state.refusal.reason] : []))),
+    ).toEqual(new Set(REASONS));
+  });
+
+  describe.each(RUNS)("$name", (run) => {
+    const { decisions, tag } = sweep(run);
+
+    it("answers only with the nine actions", () => {
+      for (const decision of decisions) expect(ACTIONS).toContain(decision.action);
+    });
+
+    it("names only the frozen target, and never the stick, the external disk or a second disk", () => {
+      for (const decision of decisions) {
+        if (decision.diskId !== null) expect(decision.diskId).toBe(INTERNAL_ID);
+        const text = JSON.stringify([
+          decision.diskId,
+          decision.message,
+          installerStatus(decision.state),
+        ]);
+        for (const id of [STICK_ID, EXTERNAL_ID, SECOND_ID]) expect(text).not.toContain(id);
+      }
+    });
+
+    it("writes at most once, and only after a verified release", () => {
+      const at = decisions.flatMap((d, i) => (d.action === "write-owned-target" ? [i] : []));
+      expect(at.length).toBeLessThanOrEqual(1);
+      for (const i of at)
+        expect(
+          run.events
+            .slice(0, i + 1)
+            .some((e) => e.kind === "release-checked" && e.outcome === "verified"),
+        ).toBe(true);
+    });
+
+    it("ends at most once, and answers only wait after it", () => {
+      const end = decisions.findIndex((d) => FINAL_ACTIONS.includes(d.action));
+      if (end === -1) return;
+      expect(decisions.slice(end + 1).map((d) => d.action)).toEqual(
+        decisions.slice(end + 1).map(() => "wait"),
+      );
+    });
+
+    it("keeps no typed text", () => {
+      run.events.forEach((event, i) => {
+        if (event.kind !== "submit" || event.text === ERASE) return;
+        const texts = laterTexts(decisions, i);
+        if (event.text.normalize("NFC") === tag) {
+          if (event.text !== tag) for (const text of texts) expect(text).not.toContain("A\u0300");
+          return;
+        }
+        expect(CANARIES).toContain(event.text);
+        for (const text of texts) expect(text).not.toContain(event.text);
+      });
+      const states = [createInstallerState(OPTIONS), ...decisions.map((d) => d.state)];
+      for (const state of states) expect(pathsHolding(state, ERASE)).toEqual(["eraseWord"]);
+      for (const decision of decisions)
+        expect(pathsHolding(decision, ERASE)).toEqual(["state.eraseWord"]);
+    });
+
+    it("freezes every state, decision and status", () => {
+      for (const decision of decisions) {
+        expect(deepFrozen(decision)).toBe(true);
+        expect(deepFrozen(installerStatus(decision.state))).toBe(true);
+      }
+    });
+  });
+
+  describe.each(RUNS.filter((run) => run.guard3))("$name, nothing typed", (run) => {
+    it("is a Waitron disk, and nothing is written or fetched", () => {
+      const { decisions } = sweep(run);
+      expect(decisions[0].state.target.kind).toBe("waitron");
+      noWriteNorNetwork(decisions);
+    });
+  });
+
+  describe.each(RUNS.filter((run) => run.unattended))("$name, unattended", (run) => {
+    it("holds the 60 seconds unless a person chose install-now", () => {
+      const { decisions } = sweep(run);
+      decisions.forEach((decision, i) => {
+        if (decision.action !== "write-owned-target") return;
+        const event = run.events[i];
+        if (event.kind === "choice" && event.choice === "install-now") return;
+        const latest = run.events
+          .slice(0, i + 1)
+          .findLast((e) => e.kind === "release-checked" && e.outcome === "verified");
+        expect(event.atMs).toBeGreaterThanOrEqual(latest.atMs + INSTALLER_TIMINGS_MS.eraseWait);
+      });
     });
   });
 });
