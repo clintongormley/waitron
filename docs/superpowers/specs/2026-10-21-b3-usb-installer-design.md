@@ -1,3 +1,5 @@
+> 2026-11-03: PR 3's plan (the installer's decisions and its network fallback decisions; the signed release list deferred) and its re-map against main: [2026-11-03-b3-3-installer-policy.md](../plans/2026-11-03-b3-3-installer-policy.md).
+
 > 2026-11-03: PR 2's plan (the preboot unlock gate, locked-mode redirect and Wi-Fi record reader) and its re-map against main: [2026-11-03-b3-2-preboot-logic.md](../plans/2026-11-03-b3-2-preboot-logic.md).
 
 > 2026-11-01: the owner authorised the build; PR 1's plan and its re-map against main: [2026-11-01-b3-1-encrypted-disk.md](../plans/2026-11-01-b3-1-encrypted-disk.md).
