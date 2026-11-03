@@ -502,6 +502,33 @@ it.each(["name", "city", "addressLine1", "addressLine2"] as const)(
   },
 );
 
+it("fills the filing module's operation description into a claim that leaves it out, and refuses an empty one", async () => {
+  const f = await fixture();
+  expect(f.claimed.status).toBe(200);
+  expect((await f.post("/setup-api/first-setup/abandon", {}, f.headers())).status).toBe(200);
+  const before = await f.host.store.read();
+  const refused = await f.post("/setup-api/first-setup/claim", {
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    venue: { ...structuredClone(request), operationDescription: "" },
+  });
+  expect(refused.status).toBe(400);
+  expect((await refused.json()).error).toEqual({
+    code: "setup.request_invalid",
+    params: { field: "operationDescription" },
+  });
+  expect(await f.host.store.read()).toEqual(before);
+  const { operationDescription: _, ...venue } = structuredClone(request);
+  void _;
+  const accepted = await f.post("/setup-api/first-setup/claim", {
+    clientClaimNonce: randomBytes(32).toString("base64url"),
+    venue,
+  });
+  expect(accepted.status).toBe(200);
+  expect((await f.host.store.read())?.frozen.request.operationDescription).toBe(
+    "Venta en establecimiento",
+  );
+});
+
 it("rejects a missing reconfirmation and an invalid answer before any outside-use state", async () => {
   const f = await fixture();
   expect(f.claimed.status).toBe(200);

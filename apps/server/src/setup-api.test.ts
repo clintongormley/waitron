@@ -1482,6 +1482,51 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
   });
 });
 
+describe("POST /setup-api/provision — the operation description", () => {
+  it("takes the filing module's default when the field is absent", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const body = demoBody();
+    delete asRec(body.venue).operationDescription;
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(200);
+    expect(provisionRequests[0]!.venue.operationDescription).toBe("Venta en establecimiento");
+    await tick();
+  });
+
+  it("keeps an explicitly sent value as sent", async () => {
+    const app = new Hono();
+    const { deps, provisionRequests } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const res = await postProvision(app, demoBody());
+
+    expect(res.status).toBe(200);
+    expect(provisionRequests[0]!.venue.operationDescription).toBe("Retail counter sales");
+    await tick();
+  });
+
+  it("still refuses an explicitly sent empty value", async () => {
+    const app = new Hono();
+    const { deps, provision } = makeDeps();
+    mountSetup(app, deps, noopLog);
+
+    const body = demoBody();
+    asRec(body.venue).operationDescription = "";
+    const res = await postProvision(app, body);
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toEqual({
+      code: "setup.request_invalid",
+      params: { field: "operationDescription" },
+    });
+    expect(provision).not.toHaveBeenCalled();
+  });
+});
+
 // The route-ORDERING guard: the wizard's catch-all is registered LAST, so the routes registered
 // before it still win their own paths.
 describe("mountSetup — serving a built setup wizard when setupAppDir is configured", () => {

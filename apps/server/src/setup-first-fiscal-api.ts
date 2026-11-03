@@ -414,17 +414,21 @@ export function mountSetupFirstFiscalApi(
         (body.newTaxpayer === true && body.configurationImport !== true)
       )
         invalid();
-      const raw = exact(body.venue, [
-        "country",
-        "taxId",
-        "legalName",
-        "taxpayerDomicile",
-        ...VENUE_FIELDS,
-        "seriesCode",
-        "fullSeriesCode",
-        "rectificativeSeriesCode",
-        "admin",
-      ]);
+      const raw = exact(
+        body.venue,
+        [
+          "country",
+          "taxId",
+          "legalName",
+          "taxpayerDomicile",
+          ...VENUE_FIELDS.filter((field) => field !== "operationDescription"),
+          "seriesCode",
+          "fullSeriesCode",
+          "rectificativeSeriesCode",
+          "admin",
+        ],
+        ["operationDescription"],
+      );
       const admin = exact(
         raw.admin,
         ["displayName", "email", "password", "pin"],

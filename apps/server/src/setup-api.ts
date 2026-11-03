@@ -499,7 +499,13 @@ function parseVenue(venueRaw: unknown, acceptLanguage: string | undefined): Venu
     name: asString(v.name, "name"),
     fiscalTerritory: jurisdiction.id,
     invoiceLocales,
-    operationDescription: asString(v.operationDescription, "operationDescription"),
+    operationDescription: asString(
+      v.operationDescription === undefined
+        ? venueFiscalSelection(ALL_MODULES, jurisdiction.id).contribution?.venueFields?.defaults
+            ?.operationDescription
+        : v.operationDescription,
+      "operationDescription",
+    ),
     addressLine1: asString(v.addressLine1, "addressLine1"),
     addressLine2: asNullableString(v.addressLine2, "addressLine2"),
     postalCode: postalCode?.valid === true ? postalCode.normalized : postalCodeInput,
