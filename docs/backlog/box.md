@@ -827,7 +827,7 @@ large release assets and the A940/A947/A798 coordination.
   replacing. A sweep checks that the key appears in no returned value, error, log line or other file.
 
 **Built so far (2026-11-03).** [PR 2](../superpowers/plans/2026-11-03-b3-2-preboot-logic.md)
-(#PR2) adds three more host libraries under `scripts/box/`, none called yet:
+(#2423) adds three more host libraries under `scripts/box/`, none called yet:
 
 - `preboot.mjs`: the preboot unlock gate. `freezeUnlockTarget` decides, once, from PR 1's
   whole-machine observation, which disk may be opened: the one Waitron disk whose encryption UUID
