@@ -5294,7 +5294,10 @@ describe("A773 held column", () => {
     const queued = column(el, "queued")!;
     expect(heldPart(el)).not.toBeNull();
     const part = heldPart(el)!;
+    expect(part.tagName).toBe("H3");
     expect(flat(part)).toBe(`${t("pass.column.held")} · 2`);
+    const separator = [...part.querySelectorAll("span")].find((span) => span.textContent === " ·");
+    expect(separator?.getAttribute("aria-hidden")).toBe("true");
     expect(part.querySelector("[data-held-count]")!.textContent).toBe("2");
     const [three, one, two] = ["3", "1", "2"].map((order) =>
       queued.querySelector<HTMLElement>(`[data-card][data-order="${order}"]`)!,

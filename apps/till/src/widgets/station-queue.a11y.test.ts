@@ -590,6 +590,43 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     await expectNoA11yViolations(host);
   });
 
+  it("the board's narrow tabs: Waiting's panel with its Held part has no violations", async () => {
+    await page.viewport(390, 844);
+    const held = { ...groups[0]!, orderId: "wo-held", orderNumber: 7, label: "Mesa 7" };
+    const { el, host } = await mountWidget<TillStationQueue>(
+      "till-station-queue",
+      {
+        groups: [
+          ...groups,
+          {
+            ...held,
+            items: held.items.map((item) => ({
+              ...item,
+              id: `${item.id}-held`,
+              firedAt: null,
+              ...kitchenStamps({ state: item.state, firedAt: null }),
+            })),
+          },
+        ],
+        stationId: "st-1",
+        columns: {
+          order: ["overview", "waiting", "preparing", "ready"],
+          hidden: [],
+          collapsed: [],
+        },
+        now: Date.parse("2026-08-17T10:20:00.000Z"),
+        reducedMotion: true,
+      },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>('[data-column-tab="waiting"]')!.click();
+    await el.updateComplete;
+    const panel = el.shadowRoot!.querySelector<HTMLElement>("[data-tab-panel]")!;
+    expect(panel.dataset.tabPanel).toBe("waiting");
+    expect(panel.querySelector("[data-held-part]")).not.toBeNull();
+    await expectNoA11yViolations(host);
+  });
+
   it("the board's narrow tabs: the narrow tabs have no violations", async () => {
     await page.viewport(390, 844);
     const props = {
