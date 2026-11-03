@@ -389,6 +389,7 @@ describe("freezeLockedTarget", () => {
 });
 
 const RECOVERY_HOST = READY.target.recoveryHost;
+const KELVIN_RECOVERY_HOST = RECOVERY_HOST.replace("k", "\u212A");
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "get"];
 const READS = new Set(["GET", "HEAD"]);
 const OTHER_HOSTS = [
@@ -399,6 +400,15 @@ const OTHER_HOSTS = [
   null,
   "unlock-zz99.waitron.local",
   "other.waitron.local",
+  KELVIN_RECOVERY_HOST,
+  "waitron.local.",
+  `${RECOVERY_HOST}.`,
+  "user@waitron.local",
+  `user@${RECOVERY_HOST}`,
+  " waitron.local",
+  "waitron.local ",
+  ` ${RECOVERY_HOST}`,
+  `${RECOVERY_HOST} `,
 ];
 const HTTP_MATCHING = [
   "waitron.local",
@@ -422,7 +432,7 @@ const HTTPS_RECOVERY_OTHER = [
   "waitron.local:80",
   `${RECOVERY_HOST}:80`,
 ];
-const ALL_HOSTS = [...HTTP_MATCHING, ...HTTP_OTHER, "waitron.local:443", `${RECOVERY_HOST}:443`];
+const ALL_HOSTS = [...HTTP_MATCHING, ...HTTP_OTHER];
 
 const REDIRECT = {
   kind: "redirect",
@@ -504,6 +514,8 @@ describe("selectLockedIdentity", () => {
     `${RECOVERY_HOST}.`,
     "other.waitron.local",
     "unlock-zz99.waitron.local",
+    KELVIN_RECOVERY_HOST,
+    false,
   ];
 
   it.each(OTHER_NAMES)("%j → null", (name) => {

@@ -172,10 +172,17 @@ function requestInvalid(reason) {
 
 /** @param {unknown} result @returns {LockedTargetResult} */
 function genuineResult(result) {
-  if (result === null || typeof result !== "object" || !GENUINE.has(result)) {
-    throw requestInvalid("target-invalid");
-  }
+  if (!GENUINE.has(/** @type {object} */ (result))) throw requestInvalid("target-invalid");
   return /** @type {LockedTargetResult} */ (result);
+}
+
+/**
+ * toLowerCase would fold the Kelvin sign (U+212A) into "k", so a name outside printable ASCII matches nothing.
+ * @param {string} name @returns {string|null}
+ */
+function asciiLower(name) {
+  if (/[^ -~]/.test(name)) return null;
+  return name.replace(/[A-Z]/g, (letter) => String.fromCharCode(letter.charCodeAt(0) + 32));
 }
 
 /**
@@ -186,7 +193,8 @@ function genuineResult(result) {
 export function selectLockedIdentity(result, serverName) {
   const checked = genuineResult(result);
   if (checked.kind !== "ready" || typeof serverName !== "string") return null;
-  const name = serverName.toLowerCase();
+  const name = asciiLower(serverName);
+  if (name === null) return null;
   if (name === checked.target.recoveryHost) return "recovery";
   if (name === BOX_NAME && checked.target.redirect === "ready") return "redirect";
   return null;
@@ -208,8 +216,8 @@ function checkedRequest(request) {
 
 /** @param {LockedRequest} request */
 function hostName(request) {
-  if (request.host === null) return null;
-  const host = request.host.toLowerCase();
+  const host = request.host === null ? null : asciiLower(request.host);
+  if (host === null) return null;
   const port = DEFAULT_PORT[request.scheme];
   return host.endsWith(port) ? host.slice(0, -port.length) : host;
 }
