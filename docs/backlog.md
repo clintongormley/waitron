@@ -2491,6 +2491,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   fails if a pass screen's zone that is listed but switched off is still read (`passScopeOf`,
   `apps/server/src/pass-board.ts`). Add a case.
 
+- **Index the dishes not yet fired, so the pass's reads stop scanning every ticket item ever kept
+  (left open by A773-2 PR C's review).** The coverage warning's read of dishes waiting for the pass
+  (`readPassCoverage`, `apps/server/src/pass-coverage.ts`) begins `SCAN ticket_items` in
+  `explain query plan`, measured on a freshly migrated database: no index on `ticket_items` leads on
+  `fired_at` or `requested_at`, so each refresh reads the venue's whole ticket history. The review
+  measured the same plan for the pass board's own card read (`scopedItems`,
+  `apps/server/src/pass-board.ts`), which predates PR C (its `ticket_items` read blames to
+  073d37ae9b, 2026-10-09). A partial index on unfired items could serve both and the Fire's card
+  read. This needs a migration.
+
 - **Pin the pass board's live-dish filter (left open by A773-2 B4a's reviews).** No case fails if
   the board's card reader stops leaving out a dish made at the till, or a bill collected or
   abandoned on a two-bill group card, and none has a ticket that survives with nothing left to make.

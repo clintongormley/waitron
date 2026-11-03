@@ -397,6 +397,7 @@ retirement.
 | "station input … add `waitsForPass`" | the route accepts it; Add station's form does not offer it | A756 built default (finding 2) |
 | "column/read-only state" | no read-only case | the Prep stations screen has no read-only mode: it declares no `readPermission` (`packages/venue-service/src/dashboard/index.ts:79-84`), and everyone who may open it (`venue_service.manage`, manager and up, `packages/venue-service/src/permissions.ts:6`) may change a station |
 | profile zones via `readZoneScope` per profile | one batched `readProfilesZones` | no read per profile (D100) |
+| case 10's C in a department of its own | `setupSplitExtrasVenue`'s T and C share one department, so case 10 keeps C out by the till pass's zone list alone | the fixture has one department for both zones (Revision 2); the department half is held by the venue-service `readProfilesZones` case |
 
 ## Consumer audit
 
@@ -651,8 +652,8 @@ signature); `apps/server/src/pass-coverage.ts`, `pass-coverage.test.ts`.
   2. server, case 10: a till pass built as `signedInTillPass` (`pass-release.test.ts:577-589`) with
      an every-station every-zone pass screen, its profile limited to T's own department with
      `allowedZoneIds: [T]` and starting zone T (`setProfileServiceAccess`, read T's department from
-     `zone_service_policies`; C must be in another department, so check that in the test) → only
-     Grill×C.
+     `zone_service_policies`; the fixture puts C in the same department, so the test checks that
+     and case 10 keeps C out by the zone list alone; see Revision 2) → only Grill×C.
   3. server, case 13, agreement with Fire: for case 10's device, a requested Grill dish on C (a
      counter order, `fireNewOrder`) is refused by `releasePassItems` with `service_zone.not_allowed`
      and one at the party's table on T (`placeGroups(…, { release: "fire" })`, as
@@ -970,3 +971,10 @@ rejected.
 - **M6.** "Owner questions" became "Owner answers": the owner approved both tables as written
   (`questions.md:1829-1830`, 2026-11-03 ~23:35); no landing waits on words.
 - **M7.** D99 says why refusing a JSON `true` is deliberately stricter than the sibling flags.
+
+## Revision 2 (2026-11-04, Task 3a2 and 3b reviews)
+
+- Task 3a2's case 10 premise was false for this fixture: `setupSplitExtrasVenue` puts the tables
+  zone T and the counter zone C in one department, so case 10 relies on the till pass's zone list
+  alone (`allowedZoneIds: [T]`), and its helper checks the shared department. Whether a profile's
+  department bounds its zones is held by the venue-service `readProfilesZones` case instead.
