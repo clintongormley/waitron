@@ -244,8 +244,25 @@ export function createWifiBootCopyPublisher(deps) {
     if (!holds(await reader.read(), bytes)) throw refusal("publication-unverified");
   }
 
-  async function removeCopy() {
-    throw new Error("not implemented");
+  /**
+   * Only the two fixed names are removed; the folder stays, as other recovery files share it.
+   * @param {import("./wifi-record.mjs").WifiReadResult} found  the reader's answer before any write
+   * @param {boolean} folderExists @param {boolean} nextExists
+   */
+  async function removeCopy(found, folderExists, nextExists) {
+    if (!folderExists) return;
+    // The active copy goes first, so preboot stops trying an obsolete network as early as possible.
+    if (found.kind !== "absent") await io.unlink(recordPath);
+    if (nextExists) await io.unlink(nextPath);
+    // Flushed even when nothing was removed: an earlier removal may have failed to flush.
+    await io.syncDirectory(folder);
+    let gone;
+    try {
+      gone = (await reader.read()).kind === "absent" && (await lstatIfPresent(nextPath)) === null;
+    } catch {
+      gone = false;
+    }
+    if (!gone) throw refusal("publication-unverified");
   }
 
   /**
@@ -260,7 +277,10 @@ export function createWifiBootCopyPublisher(deps) {
     try {
       const folderExists = await checkFolder();
       const nextExists = folderExists && (await checkNext());
-      if (decision.kind === "remove") return await removeCopy();
+      if (decision.kind === "remove") {
+        await removeCopy(found, folderExists, nextExists);
+        return { state: "absent", failure: null };
+      }
       await writeCopy(decision.bytes, found, folderExists, nextExists);
       return { state: "current", failure: null };
     } catch (error) {

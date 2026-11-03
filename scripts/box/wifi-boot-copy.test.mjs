@@ -12,7 +12,12 @@ import {
   publishWifiBootCopy,
   wifiBootCopyStatus,
 } from "./wifi-boot-copy.mjs";
-import { createWifiRecordReader, decideWifiBootCopy, formatWifiRecord } from "./wifi-record.mjs";
+import {
+  WIFI_NO_COPY_REASONS,
+  createWifiRecordReader,
+  decideWifiBootCopy,
+  formatWifiRecord,
+} from "./wifi-record.mjs";
 
 // The fixed entry points' default io is not injectable, so their file calls are seen through the
 // module's own `node:fs/promises`; with no hook set, writeFile is the real one.
@@ -994,5 +999,131 @@ describe("publish writes a copy through wifi.json.next and reads it back", () =>
     expect(
       counting.log.filter(([name, at]) => name === "open" && at === f.recordPath),
     ).toHaveLength(2);
+  });
+});
+
+describe("publish removes wifi.json and wifi.json.next on every no-copy answer", () => {
+  const readerCalls = (f) => [
+    ["lstat", f.bootRoot],
+    ["lstat", f.folder],
+    ["open", f.recordPath],
+  ];
+  const checks = (f) => [...readerCalls(f), ["lstat", f.folder], ["lstat", f.nextPath]];
+  const verification = (f) => [...readerCalls(f), ["lstat", f.nextPath]];
+  const absent = (reason) => ({ state: "absent", reason, failure: null });
+  const expectGone = async (path) =>
+    expect(fs.lstat(path)).rejects.toMatchObject({ code: "ENOENT" });
+  const names = (log) => log.map(([name]) => name);
+
+  it("cable-only over A: unlinked, the folder flushed, then checked absent", async () => {
+    const f = await fixture({ record: "A" });
+    const crt = join(f.folder, "recovery.crt");
+    const crtBefore = await fs.readFile(crt);
+    expectStatus(await f.make().publish(removeCable), absent("cable-only"));
+    expect(f.counting.log).toEqual([
+      ...checks(f),
+      ["unlink", f.recordPath],
+      ["syncDirectory", f.folder],
+      ...verification(f),
+    ]);
+    await expectGone(f.recordPath);
+    await expectGone(f.nextPath);
+    expect((await fs.lstat(f.folder)).isDirectory()).toBe(true);
+    expect((await fs.lstat(f.folder)).mode & 0o7777).toBe(0o700);
+    expect(await fs.readFile(crt)).toEqual(crtBefore);
+    expect((await fs.lstat(crt)).mode & 0o7777).toBe(0o600);
+    expect((await f.reader().read()).kind).toBe("absent");
+  });
+
+  it.each(WIFI_NO_COPY_REASONS.map((reason) => [reason]))(
+    "a remove for %s removes the copy",
+    async (reason) => {
+      const f = await fixture({ record: "A" });
+      expectStatus(await f.make().publish({ kind: "remove", reason }), absent(reason));
+      await expectGone(f.recordPath);
+    },
+  );
+
+  it("A with a leftover wifi.json.next: wifi.json first, then the leftover, then the flush", async () => {
+    const f = await fixture({ record: "A", next: "B" });
+    expectStatus(await f.make().publish(removeCable), absent("cable-only"));
+    expect(f.counting.log).toEqual([
+      ...checks(f),
+      ["unlink", f.recordPath],
+      ["unlink", f.nextPath],
+      ["syncDirectory", f.folder],
+      ...verification(f),
+    ]);
+    await expectGone(f.recordPath);
+    await expectGone(f.nextPath);
+  });
+
+  it("only a leftover wifi.json.next: it is removed, then the folder flushed", async () => {
+    const f = await fixture({ next: "A" });
+    expectStatus(await f.make().publish(removeCable), absent("cable-only"));
+    expect(f.counting.log).toEqual([
+      ...checks(f),
+      ["unlink", f.nextPath],
+      ["syncDirectory", f.folder],
+      ...verification(f),
+    ]);
+    await expectGone(f.nextPath);
+  });
+
+  it("a damaged copy is removed", async () => {
+    const f = await fixture({ record: "{}\n" });
+    expectStatus(await f.make().publish(removeCable), absent("cable-only"));
+    await expectGone(f.recordPath);
+  });
+
+  it("nothing there, the folder present: no write, the folder flushed once", async () => {
+    const f = await fixture();
+    expectStatus(await f.make().publish(removeCable), absent("cable-only"));
+    for (const name of WRITE_OPS) expect(names(f.counting.log)).not.toContain(name);
+    expect(f.counting.log.filter(([name]) => name === "syncDirectory")).toEqual([
+      ["syncDirectory", f.folder],
+    ]);
+  });
+
+  it("no folder: no write and no flush, and the folder is never made", async () => {
+    const f = await fixture({ folder: false });
+    expectStatus(await f.make().publish(removeCable), absent("cable-only"));
+    for (const name of [...WRITE_OPS, ...FLUSH_OPS]) {
+      expect(names(f.counting.log)).not.toContain(name);
+    }
+    await expectGone(f.folder);
+  });
+
+  it.each([
+    ["wifi.json", { record: "A" }, (f) => f.recordPath],
+    ["wifi.json.next", { next: "A" }, (f) => f.nextPath],
+  ])(
+    "an unlink of %s that reports success but leaves it → publication-unverified",
+    async (_name, fixtureArgs, target) => {
+      const f = await fixture(fixtureArgs);
+      const counting = countingIo({
+        unlink: async (path) => (path === target(f) ? undefined : fs.unlink(path)),
+      });
+      const status = await f.make({ io: counting.io }).publish(removeCable);
+      expectStatus(status, {
+        state: "failed",
+        reason: "cable-only",
+        failure: "publication-unverified",
+      });
+      expect(counting.log).toContainEqual(["unlink", target(f)]);
+    },
+  );
+
+  it("remove, then write, on one publisher: absent, then current with B", async () => {
+    const f = await fixture({ record: "A" });
+    const publisher = f.make();
+    expectStatus(await publisher.publish(removeCable), absent("cable-only"));
+    await expectGone(f.recordPath);
+    expectStatus(await publisher.publish(writeB), {
+      state: "current",
+      reason: null,
+      failure: null,
+    });
+    expect(new Uint8Array(await fs.readFile(f.recordPath))).toEqual(writeB.bytes);
   });
 });
