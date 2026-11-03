@@ -107,7 +107,13 @@ import { openPartyTab, serveLine } from "./testing/serve-line.js";
 import { openGroupedCounterOrder } from "./testing/grouped-counter-order.js";
 import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testing/party-venue.js";
 import { readScopedPassBoard } from "./pass-board.js";
-import { boardCards, boardItems, boardOrderIds, EVERY } from "./testing/pass-board-probe.js";
+import {
+  boardCards,
+  boardItems,
+  boardOrderIds,
+  cardOf,
+  EVERY,
+} from "./testing/pass-board-probe.js";
 import "./errors.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { heldRow } from "./testing/held-row.js";
@@ -149,6 +155,11 @@ interface SeededVenue {
   kgUnitId: string;
 }
 
+/** Every dish on the whole pass board, card by card. */
+async function passItems(tx: Transaction, cfg: TradingContext) {
+  return boardItems(await readScopedPassBoard(tx, cfg, EVERY));
+}
+
 /**
  * Stand up the one taxpayer row + a location + till + node and a catalogue with two products, all
  * keyed to `LOCALE` so the `working_order_lines_check_locales` trigger (descriptions must hold
@@ -156,11 +167,6 @@ interface SeededVenue {
  * `allocateOrderNumber` counts per node, so the order number is that test's own — always 1 on the
  * first park — and the suite is order-independent (CLAUDE.md §4).
  */
-/** Every dish on the whole pass board, card by card. */
-async function passItems(tx: Transaction, cfg: TradingContext) {
-  return boardItems(await readScopedPassBoard(tx, cfg, EVERY));
-}
-
 async function setupVenue(orderFlow: OrderFlow = "prepay"): Promise<SeededVenue> {
   const eachUnitId = randomUUID();
   const kgUnitId = randomUUID();
@@ -6205,7 +6211,7 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
       await setProductCourse(tx, cfg, starter, ent.id);
       await setProductCourse(tx, cfg, main, pri.id);
 
-      const { id: orderId } = await placeOrderWith(tx, cfg, [line(starter), line(main)]);
+      const { id: orderId } = await placeOrderWith(tx, cfg, [line(main), line(starter)]);
 
       const board = await readScopedPassBoard(tx, cfg, EVERY);
       const [d0, d1] = boardItems(board);
@@ -6261,7 +6267,7 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
     });
   });
 
-  it("surfaces the dining-table label for a tab and omits it for a walk-up", async () => {
+  it("surfaces the dining-table label for a tab and omits it for a walk-up, and ages the tab's card from its first sent dish", async () => {
     const { cfg, catalogueId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       await createStation(tx, cfg, { name: "Cocina", isDefault: true });
@@ -6281,11 +6287,15 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
       // A WALK-UP counter order, no table → tableLabel omitted.
       const { id: walkup } = await placeOrderWith(tx, cfg, [line(cafe)]);
 
-      const orders = boardCards(await readScopedPassBoard(tx, cfg, EVERY)).flatMap((c) => c.orders);
+      const board = await readScopedPassBoard(tx, cfg, EVERY);
+      const orders = boardCards(board).flatMap((c) => c.orders);
       const tab = orders.find((o) => o.orderId === tabId)!;
       expect(tab.tableLabel).toBe("Mesa 5");
       const walk = orders.find((o) => o.orderId === walkup)!;
       expect(walk.tableLabel).toBeUndefined();
+      const tabCard = cardOf(board, (c) => c.orders.some((o) => o.orderId === tabId));
+      expect(tabCard.requestedAt).not.toBeNull();
+      expect(tabCard.requestedAt).toBe(tabCard.items[0]!.firedAt);
     });
   });
 
@@ -6374,6 +6384,12 @@ describe("the pass board (KDS-3 cross-station expo/pass read)", () => {
       });
       expect(oliveOut.band).toBe("overdue"); // 5 >= 4 (overdue), < 6 (forgotten)
       expect(typeof oliveOut.queuedAt).toBe("string");
+      const board = await readScopedPassBoard(tx, cfg, EVERY);
+      expect(
+        cardOf(board, (c) => c.items.some((i) => i.id === soupItem.id))
+          .items.map((i) => i.id)
+          .sort(),
+      ).toEqual([soupItem.id, oliveItem.id].sort());
     });
   });
 

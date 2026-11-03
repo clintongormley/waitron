@@ -119,7 +119,7 @@ async function seatAnotherParty(tx: Transaction, venue: Venue, label: string): P
 const onOrder = (orderId: string) => sql`${workingOrders.id} = ${orderId}`;
 
 describe("A773 pass board: reads", () => {
-  it("reads today's pass board for a Fire now group unchanged", async () => {
+  it("reads a Fire now group's card on the pass board", async () => {
     vi.useFakeTimers({ toFake: ["Date"], now: new Date(AT) });
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
@@ -150,10 +150,14 @@ describe("A773 pass board: reads", () => {
       };
       const [card, ...others] = cards(await readScopedPassBoard(tx, venue.cfg, EVERY));
       expect(others).toEqual([]);
-      expect(card).toMatchObject({
+      expect(card).toEqual({
+        key: `group:${placed.groupId}`,
         target: { kind: "group", partyId: venue.party.partyId, groupId: placed.groupId },
+        kind: "new_order",
+        requestedAt: AT,
+        readyAt: null,
+        allReady: false,
         party: { id: venue.party.partyId, revision: 0 },
-        group: { displayNumber: 1, position: 1 },
         orders: [
           {
             orderId: venue.party.tabId,
@@ -162,22 +166,49 @@ describe("A773 pass board: reads", () => {
             tableLabel: "Split extras",
           },
         ],
-      });
-      expect(card!.items).toHaveLength(2);
-      const items = new Map(card!.items.map((dish) => [dish.id, dish]));
-      expect(items.get(placed.burgerItem)).toMatchObject({
-        ...item,
-        id: placed.burgerItem,
-        name: "BURG",
-        stationName: "Grill",
-        firedAt: null,
-      });
-      expect(items.get(placed.waterItem)).toMatchObject({
-        ...item,
-        id: placed.waterItem,
-        name: "H2O",
-        stationName: "Bar",
-        firedAt: AT,
+        group: { displayNumber: 1, position: 1 },
+        items: [
+          {
+            ...item,
+            id: placed.burgerItem,
+            name: "BURG",
+            stationName: "Grill",
+            firedAt: null,
+            lineId: placed.burgerLine,
+            orderId: venue.party.tabId,
+            stationId: venue.stations.grill,
+            phase: "requested",
+            requestedAt: AT,
+            readyAt: null,
+            visible: true,
+            informational: false,
+            passControlled: true,
+            course: null,
+            stationClosed: false,
+            extra: false,
+          },
+          {
+            ...item,
+            id: placed.waterItem,
+            name: "H2O",
+            stationName: "Bar",
+            firedAt: AT,
+            lineId: placed.waterLine,
+            orderId: venue.party.tabId,
+            stationId: venue.stations.bar,
+            phase: "waiting",
+            requestedAt: AT,
+            readyAt: null,
+            visible: true,
+            informational: true,
+            passControlled: false,
+            course: null,
+            stationClosed: false,
+            extra: false,
+          },
+        ],
+        releaseTicketItemIds: [placed.burgerItem],
+        releaseContext: expect.stringMatching(/^[0-9a-f]{64}$/),
       });
     });
   });

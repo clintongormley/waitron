@@ -2593,7 +2593,7 @@ describe("the pass board — venue-wide", () => {
   it("is VENUE-WIDE: each node's pass board shows the venue's orders, regardless of node", async () => {
     const { cfg: nodeA, cafe, zoneId } = await modeVenue("ticket_then_pay");
     // A second node under the SAME tenant + location. Reads are venue-wide, so
-    // BOTH nodes fire a genuine order and BOTH expo boards show both — a measurement where each side
+    // BOTH nodes fire a genuine order and BOTH pass boards show both — a measurement where each side
     // holds two orders, not "one empty, one not" (CLAUDE.md §1).
     const nodeB = await addNode(nodeA);
 
@@ -2634,7 +2634,7 @@ describe("the pass board — venue-wide", () => {
     const expoA = await orderIdsOn(nodeA);
     const expoB = await orderIdsOn(nodeB);
 
-    // Same tenant + location on both sides, each expo board holding BOTH orders (oldest-first: A
+    // Same tenant + location on both sides, each pass board holding BOTH orders (oldest-first: A
     // fired before B) — the reads do not separate by node.
     expect(expoA).toEqual([idA, idB]);
     expect(expoB).toEqual([idA, idB]);

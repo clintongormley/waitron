@@ -4039,7 +4039,7 @@ describe("the kitchen and the pass read a party's groups", () => {
     }
   });
 
-  it("puts a party's groups on the pass as cards by group position, held groups unfired", async () => {
+  it("puts a party's groups on the pass as cards at their group positions, held groups unfired", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const revision = await revisionOf(s.partyId);
@@ -4154,8 +4154,8 @@ describe("the kitchen and the pass read a party's groups", () => {
     const v = await setupVenue();
     const tabId = await billOfNoParty(v, (tx, id) =>
       addTabRound(tx, v.cfg, id, [
-        { menuItemId: v.offer("beer"), quantity: "1" },
         { menuItemId: v.offer("steak"), quantity: "1" },
+        { menuItemId: v.offer("beer"), quantity: "1" },
       ]),
     );
 
