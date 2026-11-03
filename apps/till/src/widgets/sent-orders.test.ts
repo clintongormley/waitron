@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
 import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders, TabLine } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./sent-orders.js";
 import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
@@ -1044,4 +1045,50 @@ it("A803 portion grouping: a long press on a grouped row names every member", as
     { lineId: "burger-1", workingOrderId: "b1", kind: "fired", lineIds: ["burger-1", "burger-2"] },
   ]);
   expect(serves).toEqual([]);
+});
+
+describe("A773 at the pass", () => {
+  it("says a released dish the kitchen asked for and the pass has not fired is at the pass", async () => {
+    setLocale("es");
+    const el = await mount(
+      current(
+        [
+          row("burger", {
+            firedAt: null,
+            kitchen: {
+              state: "queued",
+              firedAt: null,
+              stationId: "grill",
+              movable: false,
+              phase: "requested",
+              requestedAt: at(45),
+            },
+          }),
+          row("unknown", { firedAt: null }),
+          row("queued", {
+            firedAt: at(50),
+            kitchen: {
+              state: "queued",
+              firedAt: at(50),
+              stationId: "grill",
+              movable: false,
+              phase: "waiting",
+              requestedAt: at(50),
+            },
+          }),
+        ],
+        [group("g", [row("held", { released: false, firedAt: null })])],
+      ),
+    );
+    await click(el, "[data-sent-toggle]");
+    await click(el, "[data-held-toggle]");
+    const status = (selector: string) =>
+      find(el, `${selector} .status`).textContent!.replace(/\s+/g, " ").trim();
+    expect(status("[data-fired-line=burger]")).toBe(es["table.at_the_pass"]);
+    expect(status("[data-fired-line=unknown]")).toBe(es["table.group_fired"]);
+    expect(status("[data-fired-line=queued]")).toBe(
+      es["table.group_fired_ago"].replace("{n}", "10"),
+    );
+    expect(status("[data-held-line=held]")).toBe(es["table.group_held"]);
+  });
 });
