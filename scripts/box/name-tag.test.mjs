@@ -188,6 +188,11 @@ describe("decodeNameTag answers null", () => {
     ["257 ASCII letters", canonical("a".repeat(257), true)],
     ["a name holding U+0085", canonical("Bar\u0085", true)],
     ["a name written with a JSON escape", utf8(withName('"Bar \\u00c0ngels"'))],
+    ["a null name", utf8(withName("null"))],
+    ["a number name", utf8(withName("7"))],
+    ["a true name", utf8(withName("true"))],
+    ["an array name", utf8(withName("[]"))],
+    ["an object name", utf8(withName("{}"))],
     ["a byte-order mark first", utf8("\uFEFF" + base)],
     ["a 0xFF byte inside the name", bytesWithFF],
     ["not json", utf8("not json")],
@@ -730,6 +735,7 @@ const readBack = (tokens) => {
 const OLD = { name: "Old Name", live: false };
 const OTHER = { name: "Other Name", live: true };
 const MALFORMED = { type: NAME_TAG_TYPE, keyslots: [], version: 1, name: "Bar", live: "yes" };
+const NULL_NAME = { type: NAME_TAG_TYPE, keyslots: [], version: 1, name: null, live: true };
 const old = () => tagObject(OLD.name, OLD.live);
 
 /** screen: the one good tag the installer should show for the start header, or null. */
@@ -745,6 +751,7 @@ const STARTS = [
     screen: null,
   },
   { label: "a malformed Waitron token", tokens: { 3: MALFORMED }, screen: null },
+  { label: "a Waitron token whose name is null", tokens: { 3: NULL_NAME }, screen: null },
   { label: "31 other tokens", tokens: others(31), screen: null },
   { label: "31 other tokens and a tag at 31", tokens: { ...others(31), 31: old() }, screen: OLD },
   { label: "32 other tokens", tokens: others(32), screen: null },

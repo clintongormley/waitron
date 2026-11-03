@@ -91,6 +91,7 @@ export function decodeNameTag(bytes) {
   }
   if (
     !exactRecord(value, KEYS) ||
+    typeof value.name !== "string" ||
     typeof value.live !== "boolean" ||
     usableVenueName(value.name) !== value.name
   )
