@@ -3,11 +3,11 @@ import { createZone } from "./testing/service-zone.js";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { locations, withTransaction } from "@waitron/db";
+import { withTransaction, venueLocationId } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   hashPin,
   persons,
@@ -61,19 +61,13 @@ interface Venue {
 }
 
 async function setupVenue(): Promise<Venue> {
-  await seedTenant(db);
-  // Through the table definitions: `locations.id` is a NOT NULL `$defaultFn`
-  // generator a raw insert never reaches.
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Barra",
-      invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  await seedVenue(db, {
+    name: "Barra",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Venta en establecimiento",
+  });
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
   const tillCfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),
@@ -83,7 +77,8 @@ async function setupVenue(): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   };
   const manager = await withTransaction(db, async (tx) => {
-    // Through the table definition for the same reason as the venue rows above.
+    // Through the table definition: `persons.id` is a `$defaultFn` generator a raw insert never
+    // reaches.
     const [p] = await tx
       .insert(persons)
       .values({ displayName: "The Manager", pinHash: hashPin("1234"), role: "manager" })

@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, withTransaction, type Transaction } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import {
+  CORE_MIGRATIONS,
+  locations,
+  withTransaction,
+  type Transaction,
+  venueLocationId,
+} from "@waitron/db";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
-import { jobOrigin, locationId as brandedLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
@@ -131,19 +137,15 @@ beforeEach(async () => {
   now = new Date("2026-01-08T06:00:00Z");
   controller = new AbortController();
   send = vi.fn<AttendanceEmailSender>(async () => "sent");
-  await seedTenant(suite.db);
-  const [place] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "05:00",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-    })
-    .returning();
-  locationId = place!.id;
-  nodeId = await seedNode(suite.db, brandedLocationId(locationId));
+  await seedVenue(suite.db, {
+    name: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "05:00",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
+  locationId = await venueLocationId(suite.db);
+  nodeId = await seedNode(suite.db);
   const [person] = await suite.db
     .insert(persons)
     .values({

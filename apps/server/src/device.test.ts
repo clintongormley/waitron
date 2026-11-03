@@ -4,10 +4,10 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { deviceProfiles, locations, withTransaction } from "@waitron/db";
+import { deviceProfiles, withTransaction, venueLocationId } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { FormFactor } from "@waitron/layouts";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
@@ -35,18 +35,13 @@ interface SeededVenue {
  * tables between tests, so the counts each case reads are its own. */
 async function setupVenue(): Promise<SeededVenue> {
   const admin = suite.db;
-  await seedTenant(admin);
-  // Through the table definition: `locations.id` is a `$defaultFn` generator raw SQL never reaches.
-  const [loc] = await admin
-    .insert(locations)
-    .values({
-      name: "Bar",
-      invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const locationId = loc!.id;
-  const nodeId = await seedNode(admin, brandLocationId(locationId));
+  await seedVenue(admin, {
+    name: "Bar",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Venta en establecimiento",
+  });
+  const locationId = await venueLocationId(admin);
+  const nodeId = await seedNode(admin);
   const cfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),

@@ -1,12 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, incidents, invoiceSeries, locations, printers } from "@waitron/db";
+import { CORE_MIGRATIONS, incidents, invoiceSeries, printers, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import type { TrustedReading } from "@waitron/fiscal";
 import { hashPin, IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import type { OwnedStaffNoticeSource } from "./staff-notices.js";
 import { cardReaders, DEMO_READER_ID, PAYMENTS_MIGRATIONS } from "@waitron/payments";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import {
   collectBoxHealth,
@@ -63,16 +62,18 @@ function stubReaders(over: Partial<BoxHealthReaders> = {}): BoxHealthReaders {
 }
 
 async function seedLocation(): Promise<string> {
-  const [row] = await suite.db
-    .insert(locations)
-    .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
-    .returning({ id: locations.id });
-  return row!.id;
+  await seedVenue(suite.db, {
+    name: "Counter",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Retail",
+  });
+  const venueId = await venueLocationId(suite.db);
+  return venueId;
 }
 
 async function seedSales(issued: { id: string; at: string; corrects?: string }[]): Promise<void> {
-  const location = await seedLocation();
-  const node = await seedNode(suite.db, brandLocationId(location));
+  await seedLocation();
+  const node = await seedNode(suite.db);
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId: node, code: "FA", purpose: "standard" })

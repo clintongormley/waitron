@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { workingOrders, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -53,15 +54,11 @@ async function fixture(counter = false) {
 type Fixture = Awaited<ReturnType<typeof fixture>>;
 async function sibling(p: Fixture) {
   return inTx(venue, async (tx) => {
-    const [order] = await tx
-      .insert(workingOrders)
-      .values({
-        source: "dashboard",
-        orderNumber: 2,
-        partyId: p.partyId,
-        locationId: venue.cfg.locationId,
-      })
-      .returning();
+    const order = await seedWorkingOrder(tx, {
+      source: "dashboard",
+      orderNumber: 2,
+      partyId: p.partyId,
+    });
     await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, order!.id, venue.zoneId);
     return order!;
   });

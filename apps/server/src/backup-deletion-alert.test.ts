@@ -3,9 +3,9 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { incidents, locations, withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { markIncidentHandled } from "@waitron/core";
-import { locationId as brandLocationId, type NodeId } from "@waitron/shared";
+import type { NodeId } from "@waitron/shared";
 import type { DeletableArchive } from "./backup-room.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 
@@ -18,19 +18,15 @@ beforeAll(() => {
   db = suite.db;
 });
 
-async function seedVenue(): Promise<NodeId> {
-  await seedTenant(db);
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Sala",
-      invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
-      timeZone: "Europe/Madrid",
-      dayCutover: "06:00:00",
-    })
-    .returning({ id: locations.id });
-  return seedNode(db, brandLocationId(location!.id));
+async function seedVenueWithNode(): Promise<NodeId> {
+  await seedVenue(db, {
+    name: "Sala",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Venta en establecimiento",
+    timeZone: "Europe/Madrid",
+    dayCutover: "06:00:00",
+  });
+  return seedNode(db);
 }
 
 function archive(key: string, takenAt = "2026-10-01T12:00:00.000Z"): DeletableArchive {
@@ -63,7 +59,7 @@ const ONE_ON_THE_FIRST = {
 
 describe("recordArchivesDeleted", () => {
   it("records a backup warning with the count and the venue's calendar days the oldest and newest deleted backups were taken", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     const hooks = createBackupRoomHooks({ db, nodeId, fiscal: null });
     const at = new Date("2026-10-27T23:30:00.000Z");
     // Newest first, so the days come from the times rather than the order. 00:30 on 1 October in
@@ -87,7 +83,7 @@ describe("recordArchivesDeleted", () => {
   });
 
   it("records one day when every deleted backup was taken on it", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     const hooks = createBackupRoomHooks({ db, nodeId, fiscal: null });
     await hooks.recordArchivesDeleted(
       [archive("a", "2026-10-01T03:00:00.000Z"), archive("b", "2026-10-01T20:00:00.000Z")],
@@ -99,7 +95,7 @@ describe("recordArchivesDeleted", () => {
   });
 
   it("keeps one open alert with the first count while it is open, and raises a new one once handled", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     const hooks = createBackupRoomHooks({ db, nodeId, fiscal: null });
     await hooks.recordArchivesDeleted([archive("a")], new Date("2026-10-27T10:00:00.000Z"));
     await hooks.recordArchivesDeleted(
@@ -131,7 +127,7 @@ describe("recordArchivesDeleted", () => {
 
 describe("readInstallationStart", () => {
   it("answers the fiscal seat's installation start for this node", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     const start = new Date("2026-10-01T09:00:00.000Z");
     const asked: unknown[] = [];
     const hooks = createBackupRoomHooks({
@@ -151,7 +147,7 @@ describe("readInstallationStart", () => {
   });
 
   it("answers null when the seat has no such member, or there is no seat", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     expect(await createBackupRoomHooks({ db, nodeId, fiscal: {} }).readInstallationStart()).toBe(
       null,
     );
@@ -178,7 +174,7 @@ describe("readInstallationStart", () => {
   });
 
   it("reads with a change waiting in the change list and leaves it waiting", async () => {
-    const nodeId = await seedVenue();
+    const nodeId = await seedVenueWithNode();
     await withTransaction(db, () => undefined);
     // A drained list would be empty afterwards: draining is a write, which a nearly full disk
     // refuses.

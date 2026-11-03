@@ -14,6 +14,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { hashPin, persons } from "@waitron/identity";
 import type { DeviceKitchenScreen } from "@waitron/module";
@@ -567,17 +568,13 @@ describe("a kitchen display's retained Ready actions", () => {
 
   it("requires every-zone scope for an order with no zone", async () => {
     const f = await fixture();
-    const [order] = await suite.db
-      .insert(workingOrders)
-      .values({
-        source: "dashboard",
-        deviceId: null,
-        locationId: f.v.cfg.locationId,
-        nodeId: f.v.cfg.nodeId,
-        orderNumber: 999001,
-        status: "open",
-      })
-      .returning({ id: workingOrders.id });
+    const order = await seedWorkingOrder(suite.db, {
+      source: "dashboard",
+      deviceId: null,
+      nodeId: f.v.cfg.nodeId,
+      orderNumber: 999001,
+      status: "open",
+    });
     const display = await f.device("Table pass", f.runner, {
       kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [f.v.tables.zoneId] },
     });

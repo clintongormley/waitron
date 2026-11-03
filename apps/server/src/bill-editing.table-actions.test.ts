@@ -9,6 +9,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
 import {
@@ -62,10 +63,7 @@ async function party() {
 }
 async function otherBill(partyId: string) {
   return inTx(venue, async (tx) => {
-    const [bill] = await tx
-      .insert(workingOrders)
-      .values({ source: "dashboard", orderNumber: 2, partyId, locationId: venue.cfg.locationId })
-      .returning();
+    const bill = await seedWorkingOrder(tx, { source: "dashboard", orderNumber: 2, partyId });
     return bill!.id;
   });
 }
@@ -488,18 +486,14 @@ describe("table composition compares every affected bill before moving anything"
   it.each(actions)("%s compares closed destination bills as well", async (action) => {
     const from = await party(),
       into = await party();
-    const [closed] = await inTx(venue, async (tx) =>
-      tx
-        .insert(workingOrders)
-        .values({
-          source: "dashboard",
-          orderNumber: 3,
-          partyId: into.partyId,
-          locationId: venue.cfg.locationId,
-          status: "abandoned",
-        })
-        .returning(),
-    );
+    const [closed] = await inTx(venue, async (tx) => [
+      await seedWorkingOrder(tx, {
+        source: "dashboard",
+        orderNumber: 3,
+        partyId: into.partyId,
+        status: "abandoned",
+      }),
+    ]);
     const expected = (await edits(from.partyId, into.partyId)).filter(
       (e) => e.billId !== closed!.id,
     );

@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { invoiceSeries, locations, printers } from "@waitron/db";
+import { invoiceSeries, printers, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { collectBoxHealth, type BoxHealthReaders } from "./box-health.js";
 import { createStaffNoticeLog } from "./staff-notices.js";
 
@@ -54,12 +53,14 @@ function stubReaders(paymentsEnabled: boolean): BoxHealthReaders {
   };
 }
 
-async function seedVenue(): Promise<string> {
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Counter", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
-    .returning({ id: locations.id });
-  const node = await seedNode(suite.db, brandLocationId(location!.id));
+async function seedVenueWithPrinter(): Promise<string> {
+  await seedVenue(suite.db, {
+    name: "Counter",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Retail",
+  });
+  const venueId = await venueLocationId(suite.db);
+  const node = await seedNode(suite.db);
   const [series] = await suite.db
     .insert(invoiceSeries)
     .values({ nodeId: node, code: "FA", purpose: "standard" })
@@ -69,14 +70,14 @@ async function seedVenue(): Promise<string> {
   );
   const [printer] = await suite.db
     .insert(printers)
-    .values({ locationId: location!.id, name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
+    .values({ locationId: venueId, name: "Bar", transport: "network_tcp", host: "10.0.0.1" })
     .returning({ id: printers.id });
   return printer!.id;
 }
 
 describe("collectBoxHealth on a box without the payments module", () => {
   it("a box with card payments off answers, with no readers", async () => {
-    const printer = await seedVenue();
+    const printer = await seedVenueWithPrinter();
     const health = await collectBoxHealth(suite.db, stubReaders(false));
     expect(health.readers).toBeNull();
     expect(health.printers).toEqual([{ id: printer, name: "Bar" }]);
@@ -84,7 +85,7 @@ describe("collectBoxHealth on a box without the payments module", () => {
   });
 
   it("reading the readers there fails, as the table is not there", async () => {
-    await seedVenue();
+    await seedVenueWithPrinter();
     await expect(collectBoxHealth(suite.db, stubReaders(true))).rejects.toThrow(
       /no such table: card_readers/,
     );

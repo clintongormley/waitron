@@ -101,7 +101,7 @@ import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { Turns } from "./backup-turns.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
 import { freePort } from "./testing/free-ports.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   TILL_LOCATION_ID,
   TILL_ENV,
@@ -2735,11 +2735,10 @@ describe("startServer, against a migrated venue directory", () => {
   it("clears a card-payment mark a previous run left with no payment behind it, on its first pass", async () => {
     const port = await freePort();
     const orderId = randomUUID();
-    await sharedDb.insert(workingOrders).values({
+    await seedWorkingOrder(sharedDb, {
       id: orderId,
       source: "dashboard",
       deviceId: null,
-      locationId: brandLocationId(TILL_LOCATION_ID),
       orderNumber: 990_001,
       paymentAttemptAt: new Date(Date.now() - 1_000).toISOString(),
     });
@@ -2775,11 +2774,10 @@ describe("startServer, against a migrated venue directory", () => {
   it("fails a card bill payment a previous run left with no provider row, on its first pass", async () => {
     const port = await freePort();
     const orderId = randomUUID();
-    await sharedDb.insert(workingOrders).values({
+    await seedWorkingOrder(sharedDb, {
       id: orderId,
       source: "dashboard",
       deviceId: null,
-      locationId: brandLocationId(TILL_LOCATION_ID),
       orderNumber: 990_002,
     });
     const { deviceId } = await seedDevice(sharedDb, {

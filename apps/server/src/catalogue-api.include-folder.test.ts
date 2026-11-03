@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { CORE_MIGRATIONS, locations, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, venueLocationId } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, hashPin, persons, startManagementSession } from "@waitron/identity";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import type { DocumentMember, MenuPreview, MenuStructureNode } from "@waitron/catalogue";
@@ -28,16 +28,13 @@ const suite = useVenueDb({
   setup: async (db) => {
     await seedTenant(db);
     await seedLegacySellingUnits(db);
-    const [loc] = await db
-      .insert(locations)
-      .values({
-        name: "Main",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta",
-        timeZone: "Europe/Madrid",
-      })
-      .returning({ id: locations.id });
-    locationId = loc!.id;
+    await seedVenue(db, {
+      name: "Main",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta",
+      timeZone: "Europe/Madrid",
+    });
+    locationId = await venueLocationId(db);
     await db.insert(mediaImages).values({ filename: PHOTO, names: { es: "Copas" } });
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
       const [manager] = await tx

@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   billEditStates,
   CORE_MIGRATIONS,
-  locations,
   orderDraftLines,
   orderDraftRecalledLines,
   orderDrafts,
@@ -14,6 +13,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import * as editing from "./bill-editing.js";
@@ -24,30 +24,18 @@ const inTx = <T>(body: (tx: Transaction) => Promise<T>) => withTransaction(suite
 
 async function fixture() {
   return inTx(async (tx) => {
-    const [location] = await tx
-      .insert(locations)
-      .values({
-        name: "Room",
-        invoiceLocales: ["en"],
-        operationDescription: "Restaurant",
-      })
-      .returning();
+    await seedVenue(tx, {
+      name: "Room",
+      invoiceLocales: ["en"],
+      operationDescription: "Restaurant",
+    });
     const [ana, luis] = await tx
       .insert(persons)
       .values([{ displayName: "Ana" }, { displayName: "Luis" }])
       .returning();
     const [party] = await tx.insert(parties).values({ openedBy: ana!.id }).returning();
-    const [bill, other] = await tx
-      .insert(workingOrders)
-      .values(
-        [1, 2].map((orderNumber) => ({
-          source: "dashboard" as const,
-          locationId: location!.id,
-          partyId: party!.id,
-          orderNumber,
-        })),
-      )
-      .returning();
+    const bill = await seedWorkingOrder(tx, { orderNumber: 1, partyId: party!.id });
+    const other = await seedWorkingOrder(tx, { orderNumber: 2, partyId: party!.id });
     return { bill: bill!, other: other!, party: party!, ana: ana!, luis: luis! };
   });
 }

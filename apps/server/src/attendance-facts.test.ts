@@ -5,20 +5,19 @@ import {
   appendOrderAmendment,
   billPayments,
   devices,
-  locations,
   newId,
   orderDraftEvents,
   orderDrafts,
   orderGroupEvents,
   parties,
   withTransaction,
-  workingOrders,
   type Transaction,
+  venueLocationId,
 } from "@waitron/db";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, persons, sessions, hashSessionToken } from "@waitron/identity";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
   WorkforceBackend,
@@ -83,20 +82,16 @@ const event = (at: string) => ({
   origin: jobOrigin("dashboard"),
 });
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [place] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "04:00",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-    })
-    .returning({ id: locations.id });
-  locationId = place!.id;
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
-  deviceId = (await seedDevice(suite.db, { locationId: brandLocationId(locationId) })).deviceId;
+  await seedVenue(suite.db, {
+    name: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "04:00",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
+  locationId = await venueLocationId(suite.db);
+  nodeId = await seedNode(suite.db);
+  deviceId = (await seedDevice(suite.db)).deviceId;
   const people = await suite.db
     .insert(persons)
     .values(
@@ -111,9 +106,13 @@ beforeEach(async () => {
   partyId = newId();
   orderId = newId();
   await suite.db.insert(parties).values({ id: partyId, openedBy: diego });
-  await suite.db
-    .insert(workingOrders)
-    .values({ id: orderId, source: "dashboard", locationId, nodeId, orderNumber: 1, partyId });
+  await seedWorkingOrder(suite.db, {
+    id: orderId,
+    source: "dashboard",
+    nodeId,
+    orderNumber: 1,
+    partyId,
+  });
 });
 
 describe("attendance source facts", () => {

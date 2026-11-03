@@ -34,6 +34,7 @@ import {
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { persons } from "@waitron/identity";
@@ -1753,15 +1754,11 @@ describe("where each submission's groups go (spec §3)", () => {
     const s = await seated(v);
     const alex = await save(v, s.partyId, ALEX, [item(v, "croquetas"), item(v, "steak")]);
     const miaBillId = await inTx(async (tx) => {
-      const [bill] = await tx
-        .insert(workingOrders)
-        .values({
-          source: "dashboard",
-          locationId: v.cfg.locationId,
-          orderNumber: 2,
-          partyId: s.partyId,
-        })
-        .returning();
+      const bill = await seedWorkingOrder(tx, {
+        source: "dashboard",
+        orderNumber: 2,
+        partyId: s.partyId,
+      });
       await VENUE_SERVICE.recordOrderContext(tx, v.cfg, bill!.id, v.zoneId);
       return bill!.id;
     });

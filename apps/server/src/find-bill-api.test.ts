@@ -12,6 +12,7 @@ import {
   workingOrderLines,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { persons, sessions, setProfileAdmission } from "@waitron/identity";
 import { setProfileServiceAccess, zoneServicePolicies } from "@waitron/venue-service";
@@ -294,16 +295,12 @@ describe("Find a bill list routes", () => {
 
   it("allows a legitimate bill with no recorded zone even when the permitted-zone set is empty", async () => {
     const id = await inTx(venue, async (tx) => {
-      const [row] = await tx
-        .insert(workingOrders)
-        .values({
-          source: "operator_script",
-          locationId: venue.cfg.locationId,
-          nodeId: venue.cfg.nodeId,
-          orderNumber: 5000,
-          label: "No zone",
-        })
-        .returning({ id: workingOrders.id });
+      const row = await seedWorkingOrder(tx, {
+        source: "operator_script",
+        nodeId: venue.cfg.nodeId,
+        orderNumber: 5000,
+        label: "No zone",
+      });
       return row!.id;
     });
     await restrict([]);

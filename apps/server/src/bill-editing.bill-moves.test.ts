@@ -7,9 +7,9 @@ import {
   orderDraftRecalledLines,
   parties,
   workingOrderLines,
-  workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
 import {
@@ -63,10 +63,7 @@ async function party() {
 }
 async function otherBill(partyId: string) {
   return inTx(venue, async (tx) => {
-    const [bill] = await tx
-      .insert(workingOrders)
-      .values({ source: "dashboard", orderNumber: 2, partyId, locationId: venue.cfg.locationId })
-      .returning();
+    const bill = await seedWorkingOrder(tx, { source: "dashboard", orderNumber: 2, partyId });
     await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, bill!.id, venue.zoneId);
     return bill!.id;
   });

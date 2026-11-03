@@ -1,12 +1,12 @@
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
-import { DEFAULT_TIME_ZONE, locations, withTransaction } from "@waitron/db";
+import { DEFAULT_TIME_ZONE, withTransaction, venueLocationId } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { bookings } from "@waitron/bookings";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
 import { createTable } from "./testing/live-table.js";
@@ -29,20 +29,14 @@ beforeAll(() => {
 const LOCALE = "es-ES";
 
 async function setupVenue(): Promise<TradingContext> {
-  await seedTenant(db);
-  // Through the table definition: `locations.id` is a NOT NULL `$defaultFn` generator a raw insert
-  // never reaches.
-  const [location] = await db
-    .insert(locations)
-    .values({
-      name: "Counter",
-      invoiceLocales: [LOCALE],
-      operationDescription: "In-store sales",
-      timeZone: DEFAULT_TIME_ZONE,
-    })
-    .returning({ id: locations.id });
-  const locationId = location!.id;
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  await seedVenue(db, {
+    name: "Counter",
+    invoiceLocales: [LOCALE],
+    operationDescription: "In-store sales",
+    timeZone: DEFAULT_TIME_ZONE,
+  });
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
   return {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),
@@ -61,7 +55,6 @@ function asApp<T>(cfg: TradingContext, fn: (tx: Transaction) => Promise<T>): Pro
 }
 
 async function insertBooking(cfg: TradingContext, tableId: string, time: string): Promise<void> {
-  // Through the table definition for the same reason as the venue row above.
   await asApp(cfg, (tx) =>
     tx.insert(bookings).values({
       locationId: cfg.locationId,

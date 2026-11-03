@@ -3,21 +3,18 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   kitchenStations,
-  locations,
   products,
   ticketItems,
+  venueLocationId,
   withTransaction,
   workingOrderLines,
-  workingOrders,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { locationId as brandLocationId } from "@waitron/shared";
 import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/catalogue";
 import { dishKitchenItems, dishKitchenItemsQuery, onDishesOrTheirExtras } from "./dish-kitchen.js";
-import { dashboardOrderAt } from "./testing/session-device.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -29,15 +26,9 @@ beforeAll(() => {
 });
 
 async function seed() {
-  await seedTenant(db);
-  const locationId = randomUUID();
-  await db.insert(locations).values({
-    id: locationId,
-    name: "Venue",
-    invoiceLocales: ["en"],
-    operationDescription: "Service",
-  });
-  const nodeId = await seedNode(db, brandLocationId(locationId));
+  await seedVenue(db, { name: "Venue", invoiceLocales: ["en"], operationDescription: "Service" });
+  const locationId = await venueLocationId(db);
+  const nodeId = await seedNode(db);
   const stations = await db
     .insert(kitchenStations)
     .values([
@@ -47,9 +38,13 @@ async function seed() {
     .returning({ id: kitchenStations.id, name: kitchenStations.name });
   const station = (name: string) => stations.find((s) => s.name === name)!.id;
   const orderId = randomUUID();
-  await db
-    .insert(workingOrders)
-    .values({ id: orderId, ...dashboardOrderAt(locationId), nodeId, orderNumber: 1 });
+  await seedWorkingOrder(db, {
+    id: orderId,
+    source: "dashboard",
+    deviceId: null,
+    nodeId,
+    orderNumber: 1,
+  });
   const ids = {
     burger: randomUUID(),
     chips: randomUUID(),

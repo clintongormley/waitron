@@ -131,7 +131,7 @@ beforeAll(async () => {
     });
   }
   seededTemplate = await mkdtemp(join(tmpdir(), "waitron-failed-start-template-"));
-  await seedVenue(seededTemplate);
+  await seedVenueWithNode(seededTemplate);
   leafTemplate = await mkdtemp(join(tmpdir(), "waitron-failed-start-leaf-"));
   await ensureBoxSecrets({
     stateDir: leafTemplate,
@@ -220,7 +220,7 @@ async function tempDir(prefix: string): Promise<string> {
 }
 
 /** Migrates `directory` and writes the venue's identity on this node, leaving no handle open on it. */
-async function seedVenue(directory: string): Promise<void> {
+async function seedVenueWithNode(directory: string): Promise<void> {
   await applyMigrations(directory, migrationOptionsFor(manifestSets(), null));
   const store = await openVenueDatabase(directory);
   try {

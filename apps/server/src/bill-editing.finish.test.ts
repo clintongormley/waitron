@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { parties, workingOrders } from "@waitron/db";
+import { parties } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loginWithPin } from "@waitron/identity";
 import { readBillEditState } from "./bill-editing.js";
@@ -52,15 +53,9 @@ async function own(p: Fixture, personId = venue.adminId) {
 /** A second bill on `p`'s party, numbered in `shownBy`, the party whose list shows it. */
 async function sibling(p: Fixture, shownBy = p.partyId) {
   const [bill] = await inTx(venue, async (tx) => {
-    const rows = await tx
-      .insert(workingOrders)
-      .values({
-        source: "dashboard",
-        orderNumber: 2,
-        partyId: p.partyId,
-        locationId: venue.cfg.locationId,
-      })
-      .returning();
+    const rows = [
+      await seedWorkingOrder(tx, { source: "dashboard", orderNumber: 2, partyId: p.partyId }),
+    ];
     await numberBill(tx, rows[0]!.id, shownBy);
     return rows;
   });

@@ -11,11 +11,11 @@ import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError, isAppError } from "@waitron/shared";
 import { hashSecret } from "@waitron/identity";
-import { deviceProfiles, devices, locations, withTransaction } from "@waitron/db";
+import { deviceProfiles, devices, withTransaction, venueLocationId } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { TradingContext } from "./trading-context.js";
 import { createStation } from "./kitchen.js";
@@ -83,17 +83,13 @@ function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T>
  */
 async function setupStation(): Promise<{ cfg: TradingContext; stationId: string }> {
   const admin = suite.db;
-  await seedTenant(admin);
-  const [loc] = await admin
-    .insert(locations)
-    .values({
-      name: "Bar",
-      invoiceLocales: [LOCALE],
-      operationDescription: "Venta en establecimiento",
-    })
-    .returning({ id: locations.id });
-  const locationId = loc!.id;
-  const nodeId = await seedNode(admin, brandLocationId(locationId));
+  await seedVenue(admin, {
+    name: "Bar",
+    invoiceLocales: [LOCALE],
+    operationDescription: "Venta en establecimiento",
+  });
+  const locationId = await venueLocationId(admin);
+  const nodeId = await seedNode(admin);
   const cfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),
@@ -827,31 +823,17 @@ describe("tryReadDevice dev override resolves a seeded device (venue database)",
   // path carries no token and reads the device by id alone.
   async function seedKdsDeviceUnderNewTenant(): Promise<{ deviceId: string }> {
     const admin = suite.db;
-    await seedTenant(admin);
-    const [loc] = await admin
-      .insert(locations)
-      .values({
-        name: "Bar",
-        invoiceLocales: [LOCALE],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
-    const locationId = loc!.id;
+    await seedVenue(admin, {
+      name: "Bar",
+      invoiceLocales: [LOCALE],
+      operationDescription: "Venta en establecimiento",
+    });
     const [prof] = await admin
       .insert(deviceProfiles)
       .values({ name: "Screen", formFactor: "kds" })
       .returning({ id: deviceProfiles.id });
-    const [dev] = await admin
-      .insert(devices)
-      .values({
-        locationId,
-        deviceProfileId: prof!.id,
-        label: "Kitchen screen",
-        tokenHash: "scrypt$00$00",
-        active: true,
-      })
-      .returning({ id: devices.id });
-    return { deviceId: dev!.id };
+    const { deviceId } = await seedDevice(admin, { profileId: prof!.id, label: "Kitchen screen" });
+    return { deviceId };
   }
 
   it("DOES resolve a device scoped to its OWN tenant", async () => {

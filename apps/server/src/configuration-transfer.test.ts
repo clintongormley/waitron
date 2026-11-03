@@ -56,7 +56,7 @@ import { samplePreparedImage } from "@waitron/media/testing/sample-image.js";
 import { describe, expect, it } from "vitest";
 import type { WaitronModule } from "@waitron/module";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import {
   catalogues,
   categories,
@@ -84,7 +84,6 @@ import {
   sales,
   tenantReceipts,
   withTransaction,
-  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -773,11 +772,10 @@ describe("configuration transfer database path", () => {
       await tx.execute(sql`
         insert into payment_policy (offline_mode, offline_amount_cap, created_at, updated_at)
         values ('cash_only', 5000, ${policyStamp}, ${policyStamp})`);
-      await tx.insert(workingOrders).values({
+      await seedWorkingOrder(tx, {
         id: "aaaaaaaa-bbbb-bbbb-bbbb-aaaaaaaaaaaa",
         source: "dashboard",
         deviceId: null,
-        locationId: source.locationId,
         nodeId: source.nodeId,
         orderNumber: 1,
         label: "Practice tab",
@@ -8007,15 +8005,9 @@ it("exports profile zone settings but leaves enrolled device zone selections beh
       .insert(deviceProfiles)
       .values({ name: "Selected till", formFactor: "till" })
       .returning();
-    const [device] = await tx
-      .insert(devices)
-      .values({
-        locationId: source.locationId,
-        deviceProfileId: profile!.id,
-        label: "Selected till",
-        tokenHash: "hash",
-      })
-      .returning();
+    const device = {
+      id: (await seedDevice(tx, { profileId: profile!.id, label: "Selected till" })).deviceId,
+    };
     const cfg = { locationId: locationId(source.locationId) };
     const current = await VENUE_SERVICE.readDeviceZoneSelection(tx, cfg, device!.id);
     expect(current.startingZoneId).not.toBeNull();

@@ -6,13 +6,13 @@ import {
   diningTables,
   floorZones,
   floorTodayTables,
-  locations,
   withTransaction,
   installChangeFeed,
   subscribeToChanges,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { bookings } from "@waitron/bookings";
 import { hashPin, persons, startManagementSession } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -44,11 +44,13 @@ for (const enabled of [true, false]) {
           .returning();
         return startManagementSession(tx, { personId: person!.id });
       });
-      const [loc] = await suite.db
-        .insert(locations)
-        .values({ name: "Stream hierarchy", invoiceLocales: ["es"], operationDescription: "test" })
-        .returning();
-      const cfg = { locationId: locationId(loc!.id) };
+      await seedVenue(suite.db, {
+        name: "Stream hierarchy",
+        invoiceLocales: ["es"],
+        operationDescription: "test",
+      });
+      const venueId = await venueLocationId(suite.db);
+      const cfg = { locationId: locationId(venueId) };
       const [zone] = await suite.db
         .insert(floorZones)
         .values({ locationId: cfg.locationId, name: "Stream hierarchy" })
@@ -157,12 +159,13 @@ for (const enabled of [true, false]) {
         ? "collects the enabled booking seat without releasing its records"
         : "without bookings migrations neither impact nor deletion queries bookings",
       async () => {
-        await seedTenant(suite.db);
-        const [loc] = await suite.db
-          .insert(locations)
-          .values({ name: "Hierarchy", invoiceLocales: ["es"], operationDescription: "test" })
-          .returning();
-        const cfg = { locationId: locationId(loc!.id) };
+        await seedVenue(suite.db, {
+          name: "Hierarchy",
+          invoiceLocales: ["es"],
+          operationDescription: "test",
+        });
+        const venueId = await venueLocationId(suite.db);
+        const cfg = { locationId: locationId(venueId) };
         const [zone] = await suite.db
           .insert(floorZones)
           .values({ locationId: cfg.locationId, name: "Hierarchy" })

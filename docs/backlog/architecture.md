@@ -1036,7 +1036,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its
-  slices. Still open: F3, S18, S19 and the schema slices S20–S28; every other slice has landed.
+  slices. Still open: S18, S19 and the schema slices S20–S28; every other slice has landed.
   `@waitron/db`'s `readVenue`, `readVenueClock`, `readVenueClockAndPlace` and the interim
   `venueLocationId` are on main for the remaining consumer slices (S1, #2379).
   `@waitron/db/testing/seed.js` has `seedVenue` and `seedWorkingOrder`, and
@@ -1078,7 +1078,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     copy (S12; the plan's "Carried to the schema plan").
   - **Fixture lines the helpers could not take:** F5 (#2403), F2 (#2410) and F4 (#2412) list the
     lines they left (fixed ids the helpers cannot keep, second-location cases and standby copies)
-    with their owning slice in their commit messages and PR bodies. Reporting's
+    with their owning slice in their commit messages and PR bodies; F3 (#2427) lists its lines
+    with the reason each was left. Reporting's
     `seedVenueWithSeries` and `seedOpenOrder` and workforce's `seedLocation` still write a raw
     second location when a cross-location case calls them again; the code slices that delete
     those cases remove that branch. fiscal-verifactu's own helpers and the tests outside F2's list
@@ -1088,6 +1089,15 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
     `rebuild-first-start`, `node-config.location`, `promote-endpoint-e2e`), devices planted under
     a join request's id, cases needing no taxpayer row (`reset-request`), and second-location
     cases whose code slice deletes them.
+    Left as they were by F3: venue and node rows under fixed ids that a boot env, `trading.env`,
+    adoption, promotion, mirror or break-glass key names (the `boot.*` suites the F3c
+    commit lists,
+    `adoption-allocation-refusal`, `allocated-standby-host`, `backup-data-placement`,
+    `backup-verification`, `first-fiscal-mode`, `first-setup-backup-recovery`,
+    `first-setup-backup-source`), a raw insert on `backup-verification-compatibility`'s
+    fixture-migrated copy, devices sharing one token hash (`device-session`), a case needing no
+    taxpayer row (`department-receipt-languages`), and second-location cases whose code slice
+    deletes them (`alerts-api`, `boot.test`, `device-api.pass`).
 
   [Design](../superpowers/specs/2026-11-01-a1301-remove-location-design.md),
   [plan](../superpowers/plans/2026-11-01-a1301-remove-location.md),

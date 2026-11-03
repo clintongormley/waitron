@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
 import { credentialRevision, loadKeyRing, putCredential } from "@waitron/credentials";
-import { locations, setNodePublicKey, withTransaction, type Transaction } from "@waitron/db";
-import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { setNodePublicKey, withTransaction, type Transaction } from "@waitron/db";
+import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
@@ -51,12 +51,12 @@ let nodeId: NodeId;
 let context: PartsContext;
 
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Sala", invoiceLocales: ["es"], operationDescription: "Restaurant" })
-    .returning({ id: locations.id });
-  nodeId = await seedNode(suite.db, locationId(location!.id));
+  await seedVenue(suite.db, {
+    name: "Sala",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
+  nodeId = await seedNode(suite.db);
   await setNodePublicKey(suite.db, nodeId, "SIGNER_PUBLIC_KEY");
   context = {
     locale: "en",

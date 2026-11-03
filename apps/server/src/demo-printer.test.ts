@@ -6,16 +6,16 @@ import {
   deviceProfiles,
   devices,
   kitchenStations,
-  locations,
   pagePrinters,
   printAgents,
   printJobs,
   printers,
   stationPrinters,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   emptyPrinterLists,
   readProfilePrinterLists,
@@ -34,16 +34,14 @@ import { deletePrinter } from "./printer-delete.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
 async function venue(): Promise<{ locationId: string; deviceId: string; profileId: string }> {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({ name: "Bar", invoiceLocales: ["en-GB"], operationDescription: "Restaurant sale" })
-    .returning({ id: locations.id });
-  const { deviceId, profileId } = await seedDevice(suite.db, {
-    locationId: location!.id,
-    label: "Counter",
+  await seedVenue(suite.db, {
+    name: "Bar",
+    invoiceLocales: ["en-GB"],
+    operationDescription: "Restaurant sale",
   });
-  return { locationId: location!.id, deviceId, profileId };
+  const venueId = await venueLocationId(suite.db);
+  const { deviceId, profileId } = await seedDevice(suite.db, { label: "Counter" });
+  return { locationId: venueId, deviceId, profileId };
 }
 
 async function realPrinter(locationId: string, name: string): Promise<string> {
@@ -236,12 +234,12 @@ describe("the Demo printer", () => {
   });
 
   it("refuses to route to a deleted printer itself, before anything that would also refuse it", async () => {
-    await seedTenant(suite.db);
-    const [location] = await suite.db
-      .insert(locations)
-      .values({ name: "Empty", invoiceLocales: ["en-GB"], operationDescription: "Restaurant sale" })
-      .returning({ id: locations.id });
-    const locationId = location!.id;
+    await seedVenue(suite.db, {
+      name: "Empty",
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Restaurant sale",
+    });
+    const locationId = await venueLocationId(suite.db);
     const gone = await realPrinter(locationId, "Gone");
     await withTransaction(suite.db, (tx) => deletePrinter(tx, gone));
 
@@ -292,7 +290,7 @@ describe("the Demo printer", () => {
       .update(devices)
       .set({ receiptPrinterId: bar, paymentSlipPrinterId: bar })
       .where(eq(devices.id, deviceId));
-    const { deviceId: revokedId } = await seedDevice(suite.db, { locationId, profileId });
+    const { deviceId: revokedId } = await seedDevice(suite.db, { profileId });
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, revokedId));
 
     await configureDemoPrinter(suite.db, true);
@@ -314,10 +312,8 @@ describe("the Demo printer", () => {
   });
 
   it("leaves a retired profile off, so it gains no printer list", async () => {
-    const { locationId, profileId } = await venue();
-    const { deviceId: revokedId, profileId: retiredId } = await seedDevice(suite.db, {
-      locationId,
-    });
+    const { profileId } = await venue();
+    const { deviceId: revokedId, profileId: retiredId } = await seedDevice(suite.db);
     await suite.db.update(devices).set({ active: false }).where(eq(devices.id, revokedId));
     await suite.db
       .update(deviceProfiles)
@@ -461,7 +457,7 @@ describe("the Demo printer", () => {
 
   it("joins every live profile's invoice list, as its default only where there was none", async () => {
     const { locationId, profileId } = await venue();
-    const { profileId: otherId } = await seedDevice(suite.db, { locationId });
+    const { profileId: otherId } = await seedDevice(suite.db);
     const office = await pagePrinter(locationId, "Office");
     await withTransaction(suite.db, (tx) =>
       setProfilePrinterLists(tx, otherId, {

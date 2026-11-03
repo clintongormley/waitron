@@ -3,12 +3,18 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { locations, newId, openVenueDatabase, withTransaction, type Database } from "@waitron/db";
+import {
+  newId,
+  openVenueDatabase,
+  withTransaction,
+  type Database,
+  venueLocationId,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { persons, sessions, hashSessionToken } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { jobOrigin, locationId as brandLocationId } from "@waitron/shared";
+import { jobOrigin } from "@waitron/shared";
 import {
   WorkforceBackend,
   attendanceDayWork,
@@ -38,21 +44,16 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  const [location] = await suite.db
-    .insert(locations)
-    .values({
-      name: "Madrid",
-      timeZone: "Europe/Madrid",
-      dayCutover: "04:00",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurant",
-    })
-    .returning();
-  locationId = location!.id;
-  nodeId = await seedNode(suite.db, brandLocationId(locationId));
-  const deviceId = (await seedDevice(suite.db, { locationId: brandLocationId(locationId) }))
-    .deviceId;
+  await seedVenue(suite.db, {
+    name: "Madrid",
+    timeZone: "Europe/Madrid",
+    dayCutover: "04:00",
+    invoiceLocales: ["es"],
+    operationDescription: "Restaurant",
+  });
+  locationId = await venueLocationId(suite.db);
+  nodeId = await seedNode(suite.db);
+  const deviceId = (await seedDevice(suite.db)).deviceId;
   const people = await suite.db
     .insert(persons)
     .values([

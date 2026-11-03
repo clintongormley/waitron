@@ -7,15 +7,15 @@ import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import {
-  locations,
   parties,
   ticketItems,
   workingOrderLines,
   workingOrders,
   withTransaction,
+  venueLocationId,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
+import { seedKitchenStation, seedNode, seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { hashPin, loginWithPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -65,13 +65,15 @@ async function setup() {
   const db = suite.db;
   await seedTenant(db);
   await seedLegacySellingUnits(db);
-  const [loc] = await db
-    .insert(locations)
-    .values({ name: "Sala", invoiceLocales: ["es-ES"], operationDescription: "Restaurant" })
-    .returning();
-  const locationId = brandLocationId(loc!.id);
+  await seedVenue(db, {
+    name: "Sala",
+    invoiceLocales: ["es-ES"],
+    operationDescription: "Restaurant",
+  });
+  const venueId = await venueLocationId(db);
+  const locationId = brandLocationId(venueId);
   const stationId = await seedKitchenStation(db, { locationId });
-  const nodeId = await seedNode(db, locationId);
+  const nodeId = await seedNode(db);
   const cfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
     locationId,

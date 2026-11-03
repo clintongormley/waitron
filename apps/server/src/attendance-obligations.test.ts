@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { CORE_MIGRATIONS, locations, withTransaction, type Transaction } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedVenue } from "@waitron/db/testing/seed.js";
 import { IDENTITY_MIGRATIONS, persons } from "@waitron/identity";
 import {
   WORKFORCE_MIGRATIONS,
@@ -42,8 +42,7 @@ async function drain() {
   throw new Error("source discovery did not finish");
 }
 beforeEach(async () => {
-  await seedTenant(suite.db);
-  await suite.db.insert(locations).values({
+  await seedVenue(suite.db, {
     name: "Deli",
     timeZone: "UTC",
     dayCutover: "04:00",

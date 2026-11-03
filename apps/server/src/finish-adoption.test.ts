@@ -3,9 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { sql } from "drizzle-orm";
-import { locations, type Database } from "@waitron/db";
+import { type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTenant } from "@waitron/db/testing/seed.js";
+import { seedTenant, seedVenue } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   PENDING_ADOPTION_FILE,
@@ -214,15 +214,11 @@ describe("runFinishAdoption — default steps on a migrated venue", () => {
   });
 
   it("establishes the standby's node and the mirror viewer, then clears the record", async () => {
-    await seedTenant(suite.db);
-    await suite.db
-      .insert(locations)
-      .values({
-        name: "Barra",
-        invoiceLocales: ["es-ES"],
-        operationDescription: "Venta en establecimiento",
-      })
-      .returning({ id: locations.id });
+    await seedVenue(suite.db, {
+      name: "Barra",
+      invoiceLocales: ["es-ES"],
+      operationDescription: "Venta en establecimiento",
+    });
     const dir = await tempDir();
     await writePendingAdoption(dir, {
       ...PENDING,
