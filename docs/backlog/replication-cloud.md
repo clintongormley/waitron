@@ -40,7 +40,8 @@ Left for the slices that add the callers:
 Left by Slice 2:
 - `stepDown`'s replay check reads only the in-memory gate, a restricted box never builds a
   `stepDown`, and nothing checks the binding's `sourceNodeId` against this box: the first route
-  to reach `stepDown` (Slice 3's Task 3.3) must decide each.
+  to reach `stepDown` (Slice 3's Task 3.3) must decide each, and whether
+  `handover.operation_conflict`'s wording fits a stepdown's refusal.
 - The restriction is committed to `node.db` before the drain is told to stop. Untested: whether a
   drain claim can begin in the instant between the two and send one more batch.
 - A restricted box's `/health` body is the same as a box whose trading is not admitted yet, so an
@@ -49,13 +50,17 @@ Left by Slice 2:
 - A streamed download leaves the gate's count when its response returns, before its body ends.
 - The close-deadline log does not name the step still running.
 - A drain stopped early reads as a successful pass to `/health`'s last-success time.
-- Boot hands the pending-card pass its stop signal checked only by the compiler; a different
-  signal would compile.
-- `withPendingSweep` checks the stop only before it starts, not between card providers.
+- Boot passes `pendingCardController.signal` to both `pendingCardPass` and its loop; the compiler
+  requires a signal there, but nothing checks it is the loop's own.
+- `withPendingSweep` never reads the stop signal itself: it hands it to each provider's
+  `resolvePending` and still calls the remaining providers after it is raised.
 - The four new server-starting test files (`boot.restricted*.test.ts`,
   `handover-stepdown.real.test.ts`, `handover-stepdown.crash.test.ts`) each rebuild the boot
-  setup, the clock-watch mock and the fake AEAT drain by hand instead of sharing them through
-  `apps/server/src/testing/` (`copyMigrationsRoot` already exists there).
+  setup by hand; three carry their own clock-watch mock (`boot.restricted-quiet`,
+  `handover-stepdown.real`, `handover-stepdown.crash`) and three their own drain stand-in
+  (`boot.restricted`'s files nothing; the two `handover-stepdown` files fake AEAT's transport),
+  instead of sharing them through `apps/server/src/testing/` (`copyMigrationsRoot` already exists
+  there).
 
 **Amended Cloud agreement published, 2026-10-23 (D133):**
 [Cloud #323](https://github.com/waitron-io/waitron-cloud/pull/323), signed

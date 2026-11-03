@@ -1410,7 +1410,9 @@ The build departed from the task texts above in these ways; the task texts are l
   settles still restarts the box.
 - The pending-card pass skips its later steps once it has been signalled.
 - The restricted page's title is "This box no longer runs the venue" for both kinds of restriction
-  (handed over and superseded), and the page carries no closing line about sending records back or
+  (handed over and superseded); its body says "The box taking over the venue is {successor}." rather
+  than Task 2.7's "The venue now runs on {successor}.", which is false at `source_stepped_down` and
+  for a superseded box; and the page carries no closing line about sending records back or
   becoming the spare. Tasks 10.3 and 13.4b add those sentences to the page and to both guides.
 - A superseded stepdown records no handover operation; Task 10.3 begins one.
 

@@ -233,7 +233,10 @@ export function restrictedPageRoute(deps: RestrictedPageDeps): (app: Hono) => vo
       try {
         return c.html(renderPage(await readView(deps), locale));
       } catch (error) {
-        deps.log("error", "restricted_page.failed", { errorCode: codeOf(error) });
+        deps.log("error", "restricted_page.failed", {
+          errorCode: codeOf(error),
+          requestId: c.get("requestId"),
+        });
         return c.html(renderFailure(locale), 500);
       }
     });

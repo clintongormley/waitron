@@ -555,9 +555,7 @@ the hand-run rehearsal: see [aws-backup-rehearsal.md](../../docs/developers/aws-
 one of several routes the process serves (the till API under `/api/*`, the management-dashboard API
 under `/management-api/*`, and the Stripe webhook at `POST /webhooks/stripe` share the same
 Hono app); this endpoint answers `200` when every duty is within its staleness budget, `503`
-otherwise. A box that takes no sales answers `200` with only `{ "ok": true, "tradingAvailable": false }`:
-trading is not admitted yet, or the box has stepped down and started restricted
-(`src/restricted-start.ts`):
+otherwise:
 
 ```json
 {
@@ -596,6 +594,10 @@ trading is not admitted yet, or the box has stepped down and started restricted
   }
 }
 ```
+
+A box that takes no sales answers `200` with only `{ "ok": true, "tradingAvailable": false }`:
+trading is not admitted yet, or the box has stepped down and started restricted
+(`src/restricted-start.ts`).
 
 `venueHolder` is read from `venue.holder.json`, the file a monitored venue holder
 keeps beside `venue.lock`. It gives the holder's kind, when it took the folder, its last heartbeat,

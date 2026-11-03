@@ -135,9 +135,10 @@ describe("drain — told to stop while its next claim waits for the write lock",
   beforeEach(seedThreeBatches);
 
   /**
-   * `suite.db`, except that the write which stores the first batch's answer queues a stand-in for
-   * the stepdown's write behind itself. That stand-in holds the lock until the drain has queued its
-   * next claim, then aborts `controller`, so the abort lands while the claim waits.
+   * `suite.db`, except that the write which stores the first batch's answer queues another venue.db
+   * writer behind itself, as a sale admitted before the stepdown would be. That writer holds the
+   * lock until the drain has queued its next claim, then aborts `controller`, as the stepdown's
+   * signal can, so the abort lands while the claim waits.
    */
   function stepdownQueuedAhead(controller: AbortController): {
     db: DrainDeps["db"];
