@@ -81,6 +81,19 @@ describe("A773 column layouts", () => {
     expect(storage.values.size).toBe(0);
   });
 
+  it("reads a board's layout again for each new scope, never the last scope's", () => {
+    const storage = fakeStorage();
+    const other: ColumnScope = { ...scope, deviceId: "dev-2" };
+    saveColumnState(storage, scope, { ...STATION_COLUMNS, collapsed: ["held"] });
+    saveColumnState(storage, other, { ...STATION_COLUMNS, hidden: ["waiting"] });
+    const layouts = new KitchenColumnLayouts(STATION_COLUMNS, () => storage);
+    layouts.applyShow(null, "st-1", showEvent("ready", false));
+
+    expect(layouts.get(scope, "st-1")).toEqual({ ...STATION_COLUMNS, collapsed: ["held"] });
+    expect(layouts.get(other, "st-1")).toEqual({ ...STATION_COLUMNS, hidden: ["waiting"] });
+    expect(storage.getItem).toHaveBeenCalledTimes(2);
+  });
+
   it("keeps a layout in memory when the browser refuses storage", () => {
     const layouts = new KitchenColumnLayouts(STATION_COLUMNS, () => {
       throw new DOMException("refused", "SecurityError");

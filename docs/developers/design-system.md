@@ -5858,8 +5858,8 @@ The columns are drawn in the device's stored order. The screen reads each board'
 the first time that board is drawn, with `readColumnState` (`apps/till/src/state/kitchen-columns.ts`)
 under `waitron.kitchenColumns.v1.` followed by the JSON array of the server's origin, the device's
 id, `"station"` and the station's id (`""` for the merged board), and never again on a refresh;
-without a device id or an origin it keeps the layout in memory only (`#columnsFor`,
-`till-station-screen.ts`). Each heading is an `h2` holding a `<button aria-expanded>` with the
+without a device id or an origin it keeps the layout in memory only (`KitchenColumnLayouts`,
+`apps/till/src/state/kitchen-column-layouts.ts`). Each heading is an `h2` holding a `<button aria-expanded>` with the
 column's name, its count (of cards, held cards included, 0 shown; Overview's is its rows to make) and a decorative chevron, on
 `--wt-color-surface` with a 1 px `--wt-color-border` and `--wt-radius-md`; a tap sends
 `toggle-column`, and the screen applies `toggleColumnCollapsed` and saves (`#onToggleColumn`). A
@@ -5874,7 +5874,7 @@ Columns sends `open-columns` with its own button as `opener`, and the screen dra
 (`stationColumnNames`, `station-queue.ts`) in the layout's order, with ↑ and ↓ icon buttons named
 "Move up Ready" and "Move down Ready" (disabled at the ends) and a Show switch. The window is a pure
 view: each tap sends `column-move` or `column-show`, and the screen applies `moveColumn` or
-`setColumnVisible` and saves at once (`#keepColumns`, `till-station-screen.ts`), so it holds no
+`setColumnVisible` and saves at once (`KitchenColumnLayouts`, `kitchen-column-layouts.ts`), so it holds no
 staged input, takes no draft scope and has no `*.unsaved.test.ts`; Done and Escape only close it.
 The screen closes it when its board is no longer drawn or the device changes.
 

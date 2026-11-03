@@ -2329,12 +2329,24 @@ describe("A773 pass display policy", () => {
     ]);
     await storeDeviceValue(till, "station", true);
     await storeDeviceValue(till, "pass", false);
+    const other = await seedDevice(venue.till, "Other till");
+    await choose(venue, other, venue.till, [
+      { kind: "station", ...every },
+      { kind: "pass", ...every },
+    ]);
+    await storeDeviceValue(other, "station", false);
+    await storeDeviceValue(other, "pass", true);
 
     await choose(venue, till, venue.till, [
       { kind: "station", stationIds: [venue.grill], zoneIds: null },
       { kind: "pass", stationIds: [venue.cold], zoneIds: null },
     ]);
     await expect(deviceValues(till)).resolves.toEqual({ station: true, pass: false });
+    await choose(venue, other, venue.till, [
+      { kind: "station", stationIds: [venue.cold], zoneIds: null },
+      { kind: "pass", stationIds: [venue.grill], zoneIds: null },
+    ]);
+    await expect(deviceValues(other)).resolves.toEqual({ station: false, pass: true });
 
     await choose(venue, till, venue.till, [{ kind: "station", ...every }]);
     await choose(venue, till, venue.till, [
@@ -2389,7 +2401,7 @@ describe("A773 pass display policy", () => {
     expect(await removalsOf(pass)).toHaveLength(1);
   });
 
-  it("stores the profile's value as a column the export reads, and reads a row written without it as true", async () => {
+  it("stores the profile's value in its column, and reads a row inserted without it as true", async () => {
     const venue = await seedVenueWithStations();
     await set(venue, venue.kds, { pass: { ...every, showNonPassStations: false } });
     const exported = await db.all<Record<string, unknown>>(
