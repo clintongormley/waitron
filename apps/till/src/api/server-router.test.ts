@@ -535,7 +535,71 @@ describe("ServerRouter — handing on the held chart", () => {
     expect(posts).toEqual([{ url: `${BOX}/api/node/membership`, body: { document: chart(5) } }]);
   });
 
-  it("posts a newer chart again to a server it already sent an older one, and a failed post neither retries nor stops the round", async () => {
+  it("none, then lower, posts twice", async () => {
+    const table: Record<string, Record<string, unknown>> = {
+      [BOX]: { acceptingSales: false },
+    };
+    const { fetchImpl, posts } = chartFetch(table);
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    r.offerChart(chart(5));
+    await r.probeNow();
+    table[BOX] = { acceptingSales: true, term: 4, nodeId: "b" };
+    await r.probeNow();
+    await r.probeNow();
+    expect(posts.map((p) => p.url)).toEqual([
+      `${BOX}/api/node/membership`,
+      `${BOX}/api/node/membership`,
+    ]);
+  });
+
+  it("a rejected post is tried again on the next round", async () => {
+    let posts = 0;
+    let reject = true;
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        posts += 1;
+        if (reject) throw new TypeError("Failed to fetch");
+        return new Response(JSON.stringify({ accepted: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ acceptingSales: true, term: 2, nodeId: "b" }), {
+        status: 200,
+      });
+    }) as unknown as typeof fetch;
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    r.offerChart(chart(3));
+    await r.probeNow();
+    reject = false;
+    await r.probeNow();
+    await r.probeNow();
+    expect(posts).toBe(2);
+  });
+
+  it("a post answered with a refusal is not sent again for the same answer", async () => {
+    let posts = 0;
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        posts += 1;
+        return new Response("{}", { status: 409 });
+      }
+      return new Response(JSON.stringify({ acceptingSales: false }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    r.offerChart(chart(3));
+    await r.probeNow();
+    await r.probeNow();
+    expect(posts).toBe(1);
+  });
+
+  it("ignores a chart without a numeric term", async () => {
+    const { fetchImpl, posts } = chartFetch({ [BOX]: { acceptingSales: false } });
+    const r = new ServerRouter({ origin: BOX, fetchImpl, storage: memoryStorage() });
+    expect(() => r.offerChart({} as never)).not.toThrow();
+    expect(() => r.offerChart({ body: { term: "5" } } as never)).not.toThrow();
+    await r.probeNow();
+    expect(posts).toEqual([]);
+  });
+
+  it("posts a newer chart again to a server it already sent an older one, and a refused post neither retries nor stops the round", async () => {
     const posts: number[] = [];
     const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === "POST") {
@@ -543,7 +607,7 @@ describe("ServerRouter — handing on the held chart", () => {
           (JSON.parse(String(init.body)) as { document: { body: { term: number } } }).document.body
             .term,
         );
-        throw new TypeError("Failed to fetch");
+        return new Response("{}", { status: 500 });
       }
       return new Response(JSON.stringify({ acceptingSales: true, term: 2, nodeId: "b" }), {
         status: 200,

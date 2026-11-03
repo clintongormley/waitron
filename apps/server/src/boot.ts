@@ -1237,6 +1237,19 @@ async function bootServer(
   const handoverGate = createHandoverGate();
   // Ahead of every other middleware, so once a stepdown closes it nothing behind it runs.
   app.use("*", handoverGate.middleware);
+  // Trading-only: the allow-list reads the held membership document, which a setup box has not
+  // provisioned. The waiting and restricted starts answer the same origins as the full start.
+  const allowOrigin = createOriginAllowlist({
+    advertisedOrigin: config.advertisedOrigin,
+    readMembership: () => readNodeMembership(db),
+    devMode: config.devMode,
+    vitePorts: {
+      till: process.env.WAITRON_TILL_VITE_PORT,
+      dashboard: process.env.WAITRON_DASHBOARD_VITE_PORT,
+      setup: process.env.WAITRON_SETUP_VITE_PORT,
+    },
+    now: () => Date.now(),
+  });
   // Filled in only when the full start finishes; a fault in Waitron if called before then or on a
   // start that never fills it.
   let stepDownHere: (request: StepDownRequest) => Promise<StepDownResult> = () =>
@@ -1746,6 +1759,7 @@ async function bootServer(
       nodeId: node.nodeId,
       environment: config.environment,
       readMembership: () => readNodeMembership(db),
+      cors: corsForVenue(allowOrigin),
       routes: [
         restrictedPageRoute({ venue: db, node: store.node, nodeId: node.nodeId, log }),
         (restrictedApp) =>
@@ -1813,6 +1827,7 @@ async function bootServer(
         nodeId: node.nodeId,
         environment: config.environment,
         readMembership: () => readNodeMembership(db),
+        cors: corsForVenue(allowOrigin),
         waitingOn: outcome.waitingOn ?? [],
         namesOf: (ids) => readPeerNames(db, ids),
         carryOn: {
@@ -2187,19 +2202,7 @@ async function bootServer(
   });
   const duty = reconcilerAsDuty(reconciler);
 
-  // Registered before the API mounts so it wraps them. Trading-only: the allow-list reads the held
-  // membership document, which a setup box has not provisioned.
-  const allowOrigin = createOriginAllowlist({
-    advertisedOrigin: config.advertisedOrigin,
-    readMembership: () => readNodeMembership(db),
-    devMode: config.devMode,
-    vitePorts: {
-      till: process.env.WAITRON_TILL_VITE_PORT,
-      dashboard: process.env.WAITRON_DASHBOARD_VITE_PORT,
-      setup: process.env.WAITRON_SETUP_VITE_PORT,
-    },
-    now: () => Date.now(),
-  });
+  // Registered before the API mounts so it wraps them.
   app.use("/api/*", corsForVenue(allowOrigin));
   // A rerouted till fetches menu photos cross-origin.
   app.use("/media/*", corsForVenue(allowOrigin));

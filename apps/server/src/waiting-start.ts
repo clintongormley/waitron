@@ -1,4 +1,4 @@
-import type { Hono } from "hono";
+import type { Hono, MiddlewareHandler } from "hono";
 import type { Context } from "hono";
 import type { Database, NodeDatabase } from "@waitron/db";
 import type { TotpKeyRing } from "@waitron/identity";
@@ -32,6 +32,8 @@ export interface WaitingStartDeps {
   nodeId: string;
   environment: DeploymentEnvironment;
   readMembership: () => Promise<SignedMembershipDocument | null>;
+  /** The venue's cross-origin layer for `/api/*`, as the full start has. */
+  cors: MiddlewareHandler;
   /** The boxes this one waits for, as the check that began the wait named them. */
   waitingOn: readonly string[];
   /** The page's name for each box, or `null` where it has none. */
@@ -87,6 +89,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   });
   const gate = createHandoverGate();
   app.use("*", gate.middleware);
+  app.use("/api/*", deps.cors);
   mountNodeApi(
     app,
     {

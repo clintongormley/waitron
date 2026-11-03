@@ -23,6 +23,7 @@ import {
 import { TOTP_KEY_RING, enrolAuthenticator } from "./testing/authenticator.js";
 import { fixturePasswordHash } from "./testing/known-secret-hashes.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
+import { corsForVenue } from "./cors.js";
 import { createHealthState } from "./health.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
 import { startWaiting, type WaitingStartDeps } from "./waiting-start.js";
@@ -70,6 +71,7 @@ function harness(
     nodeId: NODE_ID,
     environment: "preproduction",
     readMembership: () => Promise.resolve(CHART),
+    cors: corsForVenue((origin) => Promise.resolve(origin === "https://m2.test")),
     waitingOn: [SPARE_ID],
     namesOf: (ids) => Promise.resolve(ids.map((id) => NAMES[id] ?? null)),
     routes: [],
@@ -117,6 +119,36 @@ describe("the waiting start", () => {
     const asked = recheck.mock.calls.length;
     await new Promise((done) => setTimeout(done, 50));
     expect(recheck).toHaveBeenCalledTimes(asked);
+  });
+
+  it("answers a till on another of the venue's origins, and no stranger", async () => {
+    const h = harness(() => Promise.resolve(WAIT), {
+      routes: [(a) => a.post("/api/node/membership", (c) => c.json({ accepted: false }))],
+    });
+    const probe = await h.app().request("/api/node", { headers: { origin: "https://m2.test" } });
+    expect(probe.headers.get("access-control-allow-origin")).toBe("https://m2.test");
+    const preflight = await h.app().request("/api/node/membership", {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://m2.test",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type",
+      },
+    });
+    expect(preflight.status).toBe(204);
+    expect(preflight.headers.get("access-control-allow-origin")).toBe("https://m2.test");
+    const post = await h.app().request("/api/node/membership", {
+      method: "POST",
+      headers: { origin: "https://m2.test", "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(post.status).toBe(200);
+    expect(post.headers.get("access-control-allow-origin")).toBe("https://m2.test");
+    const stranger = await h
+      .app()
+      .request("/api/node", { headers: { origin: "https://evil.test" } });
+    expect(stranger.headers.get("access-control-allow-origin")).toBeNull();
+    await h.waiting.server.close();
   });
 
   it("a close during a re-ask closes the store only once the re-ask has settled", async () => {

@@ -53,7 +53,9 @@ export class ServerRouter extends EventTarget {
   /** The initial `""` never equals a real signature, so the first change always dispatches. */
   #stateSignature = "";
   #chart: HeldChart | null = null;
-  /** `url term` pairs already posted, so a server is handed each held chart once. */
+  /** `url chart-term answered-term` triples already posted: a server is handed each held chart
+   * once per answer, so a box that refused it while answering no term is handed it again once it
+   * answers its own older term. */
   readonly #chartSent = new Set<string>();
   #inFlight = 0;
   #round: Promise<void> | undefined;
@@ -100,7 +102,7 @@ export class ServerRouter extends EventTarget {
   /** Keeps the newer of this chart and the one held, to hand to a server that answers an older term
    * or none. */
   offerChart(chart: HeldChart | null | undefined): void {
-    if (chart === null || chart === undefined) return;
+    if (typeof chart?.body?.term !== "number") return;
     if (this.#chart === null || chart.body.term > this.#chart.body.term) this.#chart = chart;
   }
 
@@ -194,12 +196,12 @@ export class ServerRouter extends EventTarget {
     }
   }
 
-  /** Fire and forget: a failed post is not retried for the same server and term, and never moves
-   * the till. */
+  /** Fire and forget, and never moves the till. A post the server answered, whatever the status, is
+   * not sent again for the same answer; one that never reached it is tried on a later round. */
   #handChart(url: string, term: number | null): void {
     const chart = this.#chart;
     if (chart === null || (term !== null && term >= chart.body.term)) return;
-    const key = `${url} ${chart.body.term}`;
+    const key = `${url} ${chart.body.term} ${term ?? "none"}`;
     if (this.#chartSent.has(key)) return;
     this.#chartSent.add(key);
     const fetchImpl = this.#fetch;
@@ -212,7 +214,9 @@ export class ServerRouter extends EventTarget {
           cache: "no-store",
         }),
       )
-      .catch(() => undefined);
+      .catch(() => {
+        this.#chartSent.delete(key);
+      });
   }
 
   #merge(list: ServerEntry[]): Tracked[] {
