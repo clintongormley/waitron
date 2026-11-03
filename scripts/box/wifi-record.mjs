@@ -123,6 +123,41 @@ export function parseWifiRecord(bytes) {
   });
 }
 
+const NETWORK_CODE = "wifi_record.network_invalid";
+const NETWORK_KEYS = ["ssidHex", "keyMgmt", "psk", "hidden"];
+
+/** @param {string} reason */
+function networkInvalid(reason) {
+  return Object.assign(new Error(NETWORK_CODE), { code: NETWORK_CODE, reason });
+}
+
+/**
+ * Pure. network is exactly {ssidHex, keyMgmt, psk, hidden}. Returns the canonical version-1 bytes
+ * once parseWifiRecord answers loaded for them. Throws code "wifi_record.network_invalid" with
+ * reason "network-invalid" (wrong shape) or the reason parseWifiRecord gives those bytes; the
+ * error holds no field value.
+ * @param {{ssidHex:string, keyMgmt:string, psk:string, hidden:boolean}} network
+ * @returns {Uint8Array} a fresh array
+ */
+export function formatWifiRecord(network) {
+  const { ssidHex, keyMgmt, psk, hidden } = /** @type {any} */ (network ?? {});
+  if (
+    !exactRecord(network, NETWORK_KEYS) ||
+    typeof ssidHex !== "string" ||
+    typeof keyMgmt !== "string" ||
+    typeof psk !== "string" ||
+    typeof hidden !== "boolean"
+  ) {
+    throw networkInvalid("network-invalid");
+  }
+  const bytes = new TextEncoder().encode(
+    JSON.stringify({ version: 1, ssidHex, keyMgmt, psk, hidden }) + "\n",
+  );
+  const result = parseWifiRecord(bytes);
+  if (result.kind !== "loaded") throw networkInvalid(result.reason);
+  return bytes;
+}
+
 /**
  * @typedef {{ bootRoot: string, rootId: string }} BootMountIdentity  rootId is "<dev>:<ino>" of bootRoot
  * @typedef {object} WifiReaderDeps

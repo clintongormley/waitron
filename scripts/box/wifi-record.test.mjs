@@ -11,6 +11,7 @@ import {
   BOOT_ROOT,
   WIFI_RECORD_MAX_BYTES,
   createWifiRecordReader,
+  formatWifiRecord,
   parseWifiRecord,
   readActiveWifiRecord,
 } from "./wifi-record.mjs";
@@ -1108,4 +1109,196 @@ describe("the Wi-Fi password never leaves in a refusal, an absence or output", (
     const result = await (await fixture()).read();
     expect(texts(result).every((text) => text.includes(PASSWORD))).toBe(true);
   });
+});
+
+/** The four network fields of wifiFields. @param {Record<string, unknown>} [overrides] */
+const fields = (overrides) => {
+  const { ssidHex, keyMgmt, psk, hidden } = wifiFields(overrides);
+  return { ssidHex, keyMgmt, psk, hidden };
+};
+
+/** @param {Record<string, unknown>} network */
+const withoutHidden = (network) => {
+  const copy = { ...network };
+  delete copy.hidden;
+  return copy;
+};
+
+/** @param {() => unknown} run */
+function thrown(run) {
+  try {
+    run();
+  } catch (error) {
+    return /** @type {any} */ (error);
+  }
+  throw new Error("expected a throw");
+}
+
+/** @param {any} error */
+const errorTexts = (error) => [
+  String(error),
+  JSON.stringify({ ...error }),
+  inspect(error, { depth: 10, showHidden: true }),
+];
+
+describe("formatWifiRecord writes the form its reader loads", () => {
+  it.each([
+    ["a WPA2 record", {}],
+    ["a WPA3 record with a non-ASCII password", { keyMgmt: "sae", psk: "Crème brûlée Àngels" }],
+    ["a 32-byte network name", { ssidHex: SSID_32 }],
+    ["an 8-character password", { psk: "12345678" }],
+    ["a 63-character password", { psk: "~ ".repeat(31) + "!" }],
+    ["a 64-hex-digit password in lower case", { psk: HEX_64 }],
+    ["a 64-hex-digit password in upper case", { psk: HEX_64.toUpperCase() }],
+    ["a hidden network", { hidden: true }],
+  ])("%s, byte for byte", (_name, overrides) => {
+    const network = fields(overrides);
+    const bytes = formatWifiRecord(network);
+    expect(bytes).toEqual(recordBytes(overrides));
+    expect(parseWifiRecord(bytes)).toEqual({ kind: "loaded", network });
+  });
+
+  it("the largest valid record, a 32-byte name and a 256-byte WPA3 password of '\"', is under WIFI_RECORD_MAX_BYTES and loads", () => {
+    const network = { ssidHex: SSID_32, keyMgmt: "sae", psk: '"'.repeat(256), hidden: false };
+    const bytes = formatWifiRecord(network);
+    expect(bytes.length).toBeLessThan(WIFI_RECORD_MAX_BYTES);
+    expect(parseWifiRecord(bytes)).toEqual({ kind: "loaded", network });
+  });
+
+  it("two calls return different arrays with equal bytes", () => {
+    const first = formatWifiRecord(fields());
+    const second = formatWifiRecord(fields());
+    expect(first).not.toBe(second);
+    expect(first).toEqual(second);
+    first[0] = 0;
+    expect(formatWifiRecord(fields())).toEqual(second);
+  });
+});
+
+/** @type {Array<[string, string, unknown, unknown]>} name, reason, network, the same refusal with a password holding CANARY (null when none can) */
+const formatRefusals = /** @type {Array<[string, unknown, string, unknown]>} */ ([
+  [
+    "a 7-character WPA2 password",
+    fields({ psk: "1234567" }),
+    "record-corrupt",
+    fields({ psk: "CANARY-" }),
+  ],
+  [
+    "a 65-character WPA2 password",
+    fields({ psk: "a".repeat(65) }),
+    "record-corrupt",
+    fields({ psk: "CANARY-" + "a".repeat(58) }),
+  ],
+  ["an empty WPA3 password", fields({ keyMgmt: "sae", psk: "" }), "record-corrupt", null],
+  [
+    "a 257-byte WPA3 password",
+    fields({ keyMgmt: "sae", psk: "a".repeat(257) }),
+    "record-corrupt",
+    fields({ keyMgmt: "sae", psk: "CANARY-" + "a".repeat(250) }),
+  ],
+  [
+    "a WPA3 password holding U+0000",
+    fields({ keyMgmt: "sae", psk: "abc\u0000def" }),
+    "record-corrupt",
+    fields({ keyMgmt: "sae", psk: "CANARY-\u0000def" }),
+  ],
+  [
+    'ssidHex "ABCD"',
+    fields({ ssidHex: "ABCD" }),
+    "record-corrupt",
+    fields({ ssidHex: "ABCD", psk: "CANARY-pass" }),
+  ],
+  [
+    'ssidHex ""',
+    fields({ ssidHex: "" }),
+    "record-corrupt",
+    fields({ ssidHex: "", psk: "CANARY-pass" }),
+  ],
+  [
+    "a WPA2 password holding a tab",
+    fields({ psk: "pass\tword" }),
+    "record-unsupported",
+    fields({ psk: "CANARY-\tpass1" }),
+  ],
+  [
+    "a WPA2 password holding \u00F1",
+    fields({ psk: "pass\u00F1word" }),
+    "record-unsupported",
+    fields({ psk: "CANARY-\u00F1pass" }),
+  ],
+  [
+    'keyMgmt "owe"',
+    fields({ keyMgmt: "owe" }),
+    "record-unsupported",
+    fields({ keyMgmt: "owe", psk: "CANARY-pass" }),
+  ],
+  [
+    'keyMgmt "none"',
+    fields({ keyMgmt: "none" }),
+    "record-unsupported",
+    fields({ keyMgmt: "none", psk: "CANARY-pass" }),
+  ],
+  [
+    'keyMgmt "WPA-PSK"',
+    fields({ keyMgmt: "WPA-PSK" }),
+    "record-unsupported",
+    fields({ keyMgmt: "WPA-PSK", psk: "CANARY-pass" }),
+  ],
+  [
+    'a WPA2 password of "a".repeat(1000)',
+    fields({ psk: "a".repeat(1000) }),
+    "record-oversized",
+    fields({ psk: "CANARY-" + "a".repeat(993) }),
+  ],
+  [
+    'a WPA3 password of "a".repeat(1000) + "\\t"',
+    fields({ keyMgmt: "sae", psk: "a".repeat(1000) + "\t" }),
+    "record-oversized",
+    fields({ keyMgmt: "sae", psk: "CANARY-" + "a".repeat(993) + "\t" }),
+  ],
+  ["null", null, "network-invalid", null],
+  [
+    "a missing key",
+    withoutHidden(fields()),
+    "network-invalid",
+    withoutHidden(fields({ psk: "CANARY-pass" })),
+  ],
+  [
+    "an extra version key",
+    { version: 1, ...fields() },
+    "network-invalid",
+    { version: 1, ...fields({ psk: "CANARY-pass" }) },
+  ],
+  ["psk 7", fields({ psk: 7 }), "network-invalid", null],
+  ["psk 10n", fields({ psk: 10n }), "network-invalid", null],
+  [
+    'hidden "false"',
+    fields({ hidden: "false" }),
+    "network-invalid",
+    fields({ hidden: "false", psk: "CANARY-pass" }),
+  ],
+  [
+    "keyMgmt null",
+    fields({ keyMgmt: null }),
+    "network-invalid",
+    fields({ keyMgmt: null, psk: "CANARY-pass" }),
+  ],
+]).map(([name, network, reason, canary]) => [name, reason, network, canary]);
+
+describe("formatWifiRecord refuses with the reader's reason", () => {
+  it.each(formatRefusals)("%s refuses with %s", (_name, reason, network) => {
+    const error = thrown(() => formatWifiRecord(/** @type {any} */ (network)));
+    expect(error.code).toBe("wifi_record.network_invalid");
+    expect(error.reason).toBe(reason);
+  });
+
+  it.each(formatRefusals.filter(([, , , canary]) => canary !== null))(
+    "%s: the refusal holds no password",
+    (_name, reason, _network, canary) => {
+      const error = thrown(() => formatWifiRecord(/** @type {any} */ (canary)));
+      expect(error.code).toBe("wifi_record.network_invalid");
+      expect(error.reason).toBe(reason);
+      for (const text of errorTexts(error)) expect(text).not.toContain("CANARY");
+    },
+  );
 });
