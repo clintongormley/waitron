@@ -131,6 +131,12 @@ list and `--shard …/20` change together; `docs/developers/ci-and-gates.md` nam
 server-shard section) and make that change as a further commit, with the
 measurement in the pull request; otherwise leave the count at 20.
 
+2026-11-03: done differently. No run was taken on the refreshed table at twenty shards; the
+packing model over run 41551662181's three attempts put twenty at 286–298 s, twenty-two at
+265–277 s, twenty-three at 257–269 s and twenty-four at 248–260 s, so the count went to
+twenty-four, the first with ten seconds' room under 270. PR run 41556523522 then took 143–244 s
+per ordinary server job.
+
 ### Task 6 — Split `first-fiscal-hour.e2e.test.ts`
 
 The longest single file bounds its shard whatever the packing: 194 s in the table, 211 s on one

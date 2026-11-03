@@ -5951,11 +5951,12 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **`apps/server/src/invoice-pdf.test.ts` took 162 s on one CI run**
   [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run).
 
-- **A1297. Bring the remaining server jobs to about 4.5 minutes.**
-  Refresh the server's duration table from CI, change the shard count only if a job is still over
-  270 seconds, and record two main runs. Preserve every behavioural assertion.
-  [Measurements and remaining work](backlog/ci.md#a1252-remaining-server-job-time-after-the-held-setup-split).
-  [Method](developers/ci-and-gates.md#refresh-after-the-held-setup-suites-grew).
+- **A1297. Confirm the server's twenty-four shards on two main runs.**
+  PR #2418 refreshed the duration table and moved `test-server` to twenty-four shards; its run
+  41556523522 took 143–244 s per ordinary server job. Record two consecutive full main runs with
+  every `test-server (N)` job at or under 270 seconds, or name the suite that cannot get there.
+  [Earlier measurements](backlog/ci.md#a1252-remaining-server-job-time-after-the-held-setup-split).
+  [Method](developers/ci-and-gates.md#the-servers-shards-twenty-four-after-a1297).
 
 - **The server's duration table needs a staleness warning.** Flag missing files and
   shards over four minutes from CI measurements; refreshing the table remains manual.
