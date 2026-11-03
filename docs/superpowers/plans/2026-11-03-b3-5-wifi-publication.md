@@ -14,7 +14,7 @@ The boot copy is `/boot/waitron-recovery/wifi.json`: the venue's normal Wi-Fi na
 
 Its file operations come in through an injected set of functions (a *seam*), so the tests can make each step fail, and the happy path and the leftovers of a stopped publication also run on real files in a `mkdtemp` folder.
 
-Nothing here runs on a box, reads NetworkManager, joins a network or writes `/boot`. The production entry points answer `failed` / `mount-unverified` with no file call until the Linux pull request adds the boot-mount check, as PR 2's reader does. Nothing here is a qualified boot or Wi-Fi path.
+Nothing here runs on a box, reads NetworkManager, joins a network or writes `/boot`. `publishWifiBootCopy` answers a valid decision with `failed` / `mount-unverified` and no file call until the Linux pull request adds the boot-mount check, as PR 2's reader does. Nothing here is a qualified boot or Wi-Fi path.
 
 Task 3.1 also asks for a durable pending record on `@host-state`. It is left out (D11), but not because it could not be tested here: PR 1 built and tested an `@host-state` store on this machine. It is left out because what it must record depends on the live NetworkManager half of a network change, which is not built.
 
@@ -43,7 +43,7 @@ A third, narrower claim check of that fold found one important and six minor poi
 
 **Tech Stack:** Node 26 (`.nvmrc` holds `26`; `node --version` printed `v26.13.0` on 2026-11-03), Vitest 4.1.12 root project. No new dependency and no workspace package.
 
-**Spec:** [B3 design](../specs/2026-10-21-b3-usb-installer-design.md) §7.5, "Approved normal Wi-Fi copy" (lines 695–703 on main) and "Proposed minimal-copy update contract" (lines 705–738); the storage table (lines 385–395); §19 item 3 (lines 1612–1617, "including the minimal Wi-Fi boot-copy update/removal (§7.5)"). Line numbers are main's at `93667fe547`; this branch adds a two-line pointer at the top, so add 2 for the spec as merged.
+**Spec:** [B3 design](../specs/2026-10-21-b3-usb-installer-design.md) §7.5, "Approved normal Wi-Fi copy" (lines 695–703 on main) and "Proposed minimal-copy update contract" (lines 705–738); the storage table (lines 385–395); §19 item 3 (lines 1612–1617, "including the minimal Wi-Fi boot-copy update/removal (§7.5)"). Line numbers are main's at `93667fe547`; this branch adds a two-line pointer at the top, so add 2 for the spec as merged. Line numbers in `wifi-record.mjs` past line 182 and in `disk-key.mjs` past line 67 are main's too; this branch adds 15 and 2 lines there, and 2 at the top of the six-slice plan.
 
 **Parent plan:** [six-slice plan](2026-10-26-b3-usb-installer.md) Slice 3 Task 3.1: the "Proposed boot-copy contract" (lines 191–199), the second red step on network-copy cases (line 202) and the implementation step after it (line 203), the publication parts only.
 
@@ -274,7 +274,7 @@ export const WIFI_NO_COPY_REASONS; // ["cable-only", "open", "open-or-wep", "dyn
  *   |'publication-unverified'} WifiCopyFailure
  * @typedef {object} WifiCopyStatus  frozen; exactly these keys; says nothing about live connectivity
  * @property {WifiCopyState} state
- * @property {import("./wifi-record.mjs").WifiNoCopyReason|null} reason  the latest decision's reason when it is a remove
+ * @property {import("./wifi-record.mjs").WifiNoCopyReason|null} reason  when the decision is a remove, its reason: from publish, its own decision's; from status(), the most recently called one's
  * @property {WifiCopyFailure|null} failure  set exactly when state is failed
  * @typedef {import("./disk-key.mjs").DiskRecoveryIo} WifiCopyIo
  * @typedef {object} WifiCopyDeps
@@ -476,6 +476,8 @@ A test-only task: it checks properties across whole flows that no single case sh
 - [ ] **Step 5: Commit:** `git add scripts/box/wifi-boot-copy.test.mjs && git commit -s -m "test(box): stop the Wi-Fi boot copy after every step and check the next start repairs it"`. The body says a stop is a process stop, not a power cut, which stays a rig check, and lists D11's reason (b).
 
 ### Task 8: backlog and dated pointers
+
+> 2026-11-03: what landed in `docs/backlog.md`, `docs/backlog/box.md` and the two dated pointers differs from the drafts below, and was narrowed and added to after review; those files, not the drafts, are the record.
 
 **Files:**
 - Modify: `docs/backlog.md`, the B3 entry (line 5157 on main).

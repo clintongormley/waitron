@@ -1104,6 +1104,16 @@ and removes real files, through file operations a test can replace.
   mismatch during the read-back or the removal check, its own reads included, is
   `publication-unverified` (D8); every "no copy" answer removes the active copy, not only
   cable-only (D7); a failed step makes no clean-up (D8).
+- The publisher works on paths, and `node:fs` on Node 26.13 offers no folder-relative calls
+  (`openat`, `renameat`, `unlinkat`). So another process able to write in the boot root (root, on
+  a box) that swaps `waitron-recovery` for a link or another folder between the publisher's checks
+  and its writes redirects the write or removal there; a redirected removal can then answer
+  `absent` with the old copy still under the boot root, and an unchanged copy answers `current`
+  without reading the copy again. The finish-branch run-it review reproduced all four on real files
+  with the swap injected into a file operation (2026-11-03): the new password written outside the
+  boot root, an outside file removed, `current` over a different copy, and `absent` with the old
+  password left under the boot root. Slice 3 must keep every other writer out of the boot root
+  while it publishes, or the Linux adapter must use folder-relative calls.
 
 **Left open by PR 1's review (#2370):**
 
