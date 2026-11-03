@@ -72,6 +72,7 @@ import {
   paymentsBackupVerification,
   PAYMENTS_CONFIGURATION_TRANSFER,
   PAYMENTS_CHANGE_SOURCES,
+  PAYMENTS_HANDOVER,
 } from "@waitron/payments";
 import { SCHEDULER_CLASSIFICATION, SCHEDULER_BACKUP_VERIFICATION } from "@waitron/scheduler";
 import {
@@ -274,6 +275,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     changes: PAYMENTS_CHANGE_SOURCES,
     configurationTransfer: PAYMENTS_CONFIGURATION_TRANSFER,
     alerts: PAYMENTS_ALERTS,
+    handover: PAYMENTS_HANDOVER,
   },
   {
     name: "scheduler",
