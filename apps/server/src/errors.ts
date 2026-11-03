@@ -167,8 +167,9 @@ declare module "@waitron/shared" {
     "handover.peer_unknown": Record<string, never>;
     /**
      * A final copy was asked of a box that has not stepped down for this operation: its
-     * restriction is missing, names another operation or successor, or it is not the operation's
-     * source. Answered 409.
+     * restriction is missing, is not a handed-over one, or names another operation, successor or
+     * membership term; or this box holds no source record of the operation, or that record's
+     * binding names another operation, another source or another destination. Answered 409.
      */
     "handover.not_stepped_down": { operationId: string };
     /** A box asked for the final copy of a handover operation this box holds no record of. */

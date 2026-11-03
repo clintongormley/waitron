@@ -5828,6 +5828,25 @@ Not in any track until the standalone primary is done.
   (`failed` in `apps/server/src/i18n/waiting-page.ts`). A refused disk write lands there too, so
   the wording is a judgement call. Left open by A1018 Slice 3.
 
+- **A handover's manifest has no row for the box's other state-folder files.** `recovery.json`,
+  `setup-operation.json`, `restore-request.json`, `reset-request.json`, `cloud-replacement.json`,
+  `backup-room-note.json` and `spare-space` are not in `packages/handover/src/manifest.ts`; whether
+  a handover needs rows for them is not decided. Left open by A1018 Slice 4 (Ruling R5).
+
+- **The signed peer query names no route.** In review, one envelope a box signed was accepted by
+  `/api/node/peer-status` and twice by the final-copy route; Slice 5's status reads must not sign
+  the same shape (bind a purpose field to the route, or a nonce accepted once). Left open by A1018
+  Slice 4 (Ruling R10).
+
+- **The peer query routes read a body of any size.** `/api/node/peer-status` and the two handover
+  source routes (`apps/server/src/handover-source-api.ts`) read the whole body through
+  `verifiedPeerQuery` before checking its signature, with no body limit. Left open by A1018 Slice 4.
+
+- **The handover summaries' and checks' minor follow-ups.** Untested choices and hand-kept lists in
+  the module seat, the Veri*Factu summary and copy check, the payments summary and the manifest
+  guard. Left open by A1018 Slice 4.
+  [Detail](backlog/replication-cloud.md#the-handover-summaries-and-checks-minor-follow-ups)
+
 - **A1185: a venue not yet connected sees no prices.** Left open by A1185.
   [Detail](backlog/replication-cloud.md#a1185-a-venue-not-yet-connected-sees-no-prices)
 

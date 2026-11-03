@@ -311,7 +311,14 @@ the owner.
    own handover page for the clock reading and the activation; in an emergency the person is on
    M2's page throughout.
 7. **The minute name:** the next free minute in both scenarios (Q2, answered (a)). A controlled
-   handover's final copy holds every name M1 ever used; for the emergency, see Q2.
+   handover's final copy holds the names M1 activated, as `registro_sif` rows in `venue.db`, but
+   not a name M1 selected and never activated: that one lives only in M1's
+   `module-preparation-state.json`, which the copy does not carry. Slice 4's probe
+   (`apps/server/src/handover-minute-history.test.ts`) measured that a spare waits rather than
+   reuse a name in the copy (case 1); that a spare without M1's file reuses a selected but never
+   activated name (case 2); that placing M1's history as `module-evidence/` the restore way does
+   not stop the reuse (case 2c); and that M1's revisions merged into the spare's own preparation
+   file do (case 2b). Task 5.7 is to make that merge. For the emergency, see Q2.
 8. **The returned records reach M2 as a full-state batch for every chain M1 holds**: every
    filing-state row and every AEAT answer M1 holds (A947 §7.1's rule, "not only the rows the
    receiver lacks"), M1's `envio_flujo` row (the AEAT wait time and the technical-incident token,
@@ -463,8 +470,9 @@ of rows in `enviando`. The payments module's summary lists every external reques
 is still open, with the provider and the reference that anchors its retry: payments in
 `attempting`, `initiated` (a hosted payment minted but not yet paid) and `accepted_offline`
 (accepted by the reader offline, not yet forwarded) (`packages/payments/src/schema/payments.ts:20-40`,
-reference at `:62`), and card refunds still `pending` at a provider (`tender_refunds`, a core
-table, `packages/db/src/schema/tender-refunds.ts:23,88-98`). The snapshot is
+reference at `:62`), card refunds still `pending` at a provider (`tender_refunds`, a core
+table, `packages/db/src/schema/tender-refunds.ts:23,88-98`), and pending bill refunds
+(`bill_payment_refunds`, a core table, `packages/db/src/schema/bill-payments.ts`). The snapshot is
 `StoreHandle.archiveTo`'s `VACUUM INTO` copy (`packages/store/src/archive.ts:24-34`); a copy taken
 with every writer stopped is the "consistent snapshot" of design §3, committed journal changes
 included. It carries Litestream's `_litestream_seq` and `_litestream_lock` tables as they stood
@@ -540,7 +548,7 @@ modules' non-database state (`apps/server/src/backup-sources.ts:50-62`).
 | `tls/ca.*`, `tls/server.*`, `tls/venue-ca.*` | state | destination-owned | M2 keeps its own; the venue authority reached it at joining |
 | `backup.env` | state | transferred, compared | the indicator carries its digest; a difference waits `handover.backup_settings_differ` |
 | `modules.json` | state | transferred, compared | as `backup.env`; M2 refuses a module set that differs |
-| `module-preparation-state.json` | state | transferred | it holds module operation history, including the minute selections. Slice 4's probe (`apps/server/src/handover-minute-history.test.ts`, cases 2 and 2c) measured that the copy does not carry M1's retained minute selections, and that placing the file as `module-evidence/` the restore way does not reach promotion; a name is reused only when the spare's checked clock reads an abandoned selection's minute (e.g. an abandoned conflict-switch or an earlier setup attempt in the promotion's own minute). Task 5.7 merges M1's retained selections into M2's own preparation file before activation (case 2b shows that stops the reuse). Owner question open |
+| `module-preparation-state.json` | state | transferred | it holds module operation history, including the minute selections. Slice 4's probe (`apps/server/src/handover-minute-history.test.ts`, cases 2 and 2c) measured that the copy does not carry M1's retained minute selections, and that placing the file as `module-evidence/` the restore way does not reach promotion; a name is reused only when the spare's checked clock reads an abandoned selection's minute: the selection was made in the promotion's own minute (an abandoned conflict-switch, for example), or the box and the machine confirming its clock are wrong by the same amount (which an earlier setup attempt's minute needs). Task 5.7 merges M1's retained selections into M2's own preparation file before activation (case 2b shows that stops the reuse). Owner question open |
 | Litestream's `.venue.db-litestream/` | venue folder | rebuildable | beside `venue.db` in the venue folder (default `<state>/venue`, `WAITRON_VENUE_DIR` overrides); never copied; the new primary opens a new generation |
 
 ### Crash windows: what a restart or a lost answer does at each step
@@ -1897,7 +1905,7 @@ as data). Test `packages/handover/src/manifest.test.ts`, and a root guard
 `scripts/handover-manifest-complete.test.ts` (it reads every module's classification, so it
 belongs in the root project, CLAUDE.md §4).
 
-**Interfaces — Produces:** `NODE_LOCAL_MANIFEST: readonly { item: string; where: "node.db" | "venue.db" | "state"; class: "transferred" | "source-only" | "destination-owned" | "rebuildable"; treatment: string }[]`.
+**Interfaces — Produces:** `NODE_LOCAL_MANIFEST: readonly { item: string; where: "node.db" | "venue.db" | "state" | "venue-folder"; class: "transferred" | "source-only" | "destination-owned" | "rebuildable"; treatment: string }[]`.
 
 - [ ] **Step 1: Write the failing tests.** Root guard: "every table classified `local` in any
   migration set the composition lists, and every `node.db` table in `NODE_CLASSIFICATION`, appears
@@ -2541,6 +2549,17 @@ a stepdown whose write failed — so the abandon M2 waits for always
 comes while M1 runs. A stepped-down M1 never reports `abandoned` (Task 1.3), so it is never left
 behind.
 
+Slice 4 notes (2026-11-03):
+- Ruling R10: the signed peer query (`PeerQueryBody` in `apps/server/src/peer-status-api.ts`:
+  `nonce`, `atMs`, optional `operationId`) names no route and its `atMs` is never checked, so one
+  envelope signed by M2 was accepted by `peer-status` and twice by `final-copy` (Task 4.8 review).
+  These status reads must not sign that same shape: bind a purpose field to the route, or use a
+  nonce that M1 accepts only once.
+- `handover.summary_failed` and `handover.final_copy_changed` (`apps/dashboard/src/i18n/codes.ts`)
+  name no step the person can take, because no screen shows them yet (Tasks 4.9a and 4.9b). The
+  screen that first shows them adds that step (CLAUDE.md §3, refusals name a self-service next
+  step).
+
 - [ ] **Step 1: Write the failing tests.** "fetches once M1's restricted start answers"; "a
   partial download is discarded and fetched again"; "stops when the operation leaves `prepared`";
   "M1's status reporting the operation `abandoned` closes M2's operation as `abandoned`";
@@ -2575,6 +2594,22 @@ acceptance envelope, and only then is the acceptance posted to M1. The posting i
 while the operation is at `copy_accepted`, every 5 seconds, so a lost answer or a restart of
 either box re-posts the same stored acceptance and gets M1's same stored relinquishment (Task
 5.6); on receiving it M2 records `filing_assumed` (Task 5.7).
+
+Slice 4 notes (2026-11-03):
+- `buildNodeLocalManifest` (`apps/server/src/handover-manifest.ts`) digests `backup.env`'s bytes,
+  not its values (Task 4.6 review). `writeRecoveryKey` keeps the file's existing key order, so two
+  boxes with the same values in another order or spacing differ; on a box whose backup settings
+  come from the environment the file may be absent on both, and `null` equals `null` whatever the
+  two environments hold. This task decides whether it compares bytes or parsed values.
+- `modules.json` missing and `{"modules":{}}` both read as no overrides, so the same module set
+  (`apps/server/src/module-config.ts`, `packages/module/src/config.ts`), but they digest
+  differently, so the digest check can wait on two equal module sets that `handover.modules_differ`
+  passed.
+- The manifest reads a state folder that holds neither file the same as one that does not exist:
+  both digests `null`. `captureFinalCopy` (`apps/server/src/handover-capture.ts`) refuses a missing
+  state folder before copying, and a path it cannot read fails; it does not detect an existing
+  folder that is the wrong one. When M2 builds its own manifest to compare, the same holds unless
+  this task adds a check.
 
 - [ ] **Step 1: Write the failing tests.** One per check, built from a real capture (Task 4.7) and
   then altered: "one row written after capture" (`handover.copy_mismatch`); "a copy whose bytes

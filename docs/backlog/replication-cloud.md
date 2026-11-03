@@ -506,6 +506,24 @@ Left open by A1018 Slice 3 (`apps/server/src/peer-status-api.ts`):
   case repeats its sibling's setup; `boot.restricted.test.ts`'s full-start case checks only the
   answer's shape, not its signature.
 
+## The handover summaries' and checks' minor follow-ups
+
+Left open by A1018 Slice 4, each checked by reading the code, not run:
+- `checkHandoverCopy` (`packages/module/src/handover.ts`) lets a throwing `checkCopy` through as
+  it was thrown, without the module's name or a `handover.*` code; no test shows that modules are
+  asked one at a time.
+- In `packages/fiscal-verifactu/src/handover-summary.ts`, `ENVIO_STATES` and the acks column list
+  are hand copies that no test ties to the schema; a misspelt column becomes the text
+  `"undefined"`; a head lookup that finds no row gives an empty head instead of an error.
+- `checkFiscalChains` (`packages/fiscal-verifactu/src/handover-chain-check.ts`) repeats the table
+  query `walkFiscalChains` makes and converts its count to a bigint needlessly; no test drops a
+  single fiscal table; a copy without the `nodes` table throws a raw error.
+- `summariseOpenPayments` (`packages/payments/src/handover-summary.ts`) lists pending manual card
+  refunds, though nothing on the new box would chase one (the refund recovery selects only
+  connected refunds).
+- `scripts/handover-manifest-complete.test.ts` has no reverse check: a manifest row naming a table
+  or file that no longer exists still passes.
+
 ## A1185: a venue not yet connected sees no prices
 
 The Cloud services screen shows the plan
