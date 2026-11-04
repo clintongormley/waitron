@@ -21,6 +21,7 @@ import { withMovedSlips, type SlipsLater } from "./moved-slips.js";
 import { moveBillDraftsToParty, moveDraftsToParty } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import {
+  copyHeldGroups,
   groupArrivingDishes,
   moveGroupsToParty,
   printHoldTickets,
@@ -278,8 +279,9 @@ export interface SplitGuestCounts {
 /**
  * `tableId` leaves the party and its today's merge ({@link leaveMergesRestoring}), and a new,
  * unnamed party starts on it, taking `billId`, or a new empty bill when none is chosen. The chosen
- * bill must be an open or presented bill of the party, holding no dish held for the kitchen. A
- * staying party whose family is left with no bill that is not abandoned is given a new empty one.
+ * bill must be an open or presented bill of the party. Its dishes held for the kitchen stay held,
+ * in the new party's own copy of each of their groups ({@link copyHeldGroups}). A staying party
+ * whose family is left with no bill that is not abandoned is given a new empty one.
  */
 export async function splitTable(
   tx: Transaction,
@@ -312,9 +314,10 @@ export async function splitTable(
     options.expectedEdits,
   );
   let firers: ReadonlyMap<string, Firer> = new Map();
+  let heldLineIds: string[] = [];
   if (billId !== null) {
     await refuseUnsplittableBill(tx, partyId, billId);
-    ({ firers } = await leaveParty(tx, billId, "refuse"));
+    ({ firers, heldLineIds } = await leaveParty(tx, billId, "keep"));
   }
 
   return withMovedSlips(tx, cfg, { parties: [partyId] }, async () => {
@@ -338,6 +341,13 @@ export async function splitTable(
       await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
       await VENUE_SERVICE.allocateBillNumber(tx, billId, newParty);
       await moveBillDraftsToParty(tx, billId, newParty, options.expectedEdits[0]!);
+      const activity =
+        attendance === undefined
+          ? undefined
+          : {
+              recorder: attendance.recorder,
+              at: attendance.clock.now().instant.toISOString(),
+            };
       const { held } = await groupArrivingDishes(
         tx,
         cfg,
@@ -345,13 +355,9 @@ export async function splitTable(
         billId,
         options.operatorId,
         firers,
-        attendance === undefined
-          ? undefined
-          : {
-              recorder: attendance.recorder,
-              at: attendance.clock.now().instant.toISOString(),
-            },
+        activity,
       );
+      await copyHeldGroups(tx, partyId, newParty, heldLineIds, options.operatorId, activity);
       await printHoldTickets(tx, cfg, held);
       await ensureFamilyBill(tx, cfg, partyId);
     }

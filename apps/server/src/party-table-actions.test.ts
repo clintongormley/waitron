@@ -8,6 +8,7 @@ import {
   captureError,
   diningTables,
   floorZones,
+  orderGroupEvents,
   orderGroups,
   partyTables,
   ticketItems,
@@ -1429,21 +1430,45 @@ describe("split a table", () => {
       expect(abandoned).toMatchObject({ code: "tab.not_open", params: { tabId: b3 } });
       expect(absent).toMatchObject({ code: "tab.not_open", params: { tabId: missing } });
     });
+  });
 
-    it("refuses a bill holding a dish held for the kitchen (Review Focus 4)", async () => {
-      const { ana, m4, m5, b2 } = await anaAtTwo("Retenida");
-      await sendGroups(ana.partyId, [{ names: ["Flan"], release: "hold" }], b2);
-      const splitting = await cmd(ana.partyId);
-
-      const error = await refused([ana.partyId], [ana.tabId, b2], [m4, m5], () =>
-        act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting)),
+  it("A803 waiting copy: Split a table takes a bill holding a dish held for the kitchen, and the new party holds its own copy of the group", async () => {
+    const { ana, m5, b2 } = await anaAtTwo("Retenida");
+    await sendGroups(ana.partyId, [{ names: ["Flan"], release: "hold" }], b2);
+    const flanBefore = (await lineRows(b2)).find((line) => line.lineNo === 2)!;
+    const source = flanBefore.groupId!;
+    const flanTicket = () =>
+      act((tx) =>
+        tx.select().from(ticketItems).where(eq(ticketItems.workingOrderLineId, flanBefore.id)),
       );
+    const ticketBefore = await flanTicket();
+    expect(ticketBefore).toMatchObject([{ firedAt: null }]);
+    const splitting = await cmd(ana.partyId);
 
-      expect(error).toMatchObject({
-        code: "group.held_leaves_party",
-        params: { tabId: b2, lineNo: 2 },
-      });
+    const result = await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
+
+    expect(result.billId).toBe(b2);
+    expect(result.partyId).not.toBe(ana.partyId);
+    expect((await billRow(v, b2)).partyId).toBe(result.partyId);
+    const flan = (await lineRows(b2)).find((line) => line.id === flanBefore.id)!;
+    expect(flan.groupId).not.toBeNull();
+    expect(flan.groupId).not.toBe(source);
+    const groupOf = async (id: string) =>
+      (await act((tx) => tx.select().from(orderGroups).where(eq(orderGroups.id, id))))[0];
+    expect(await groupOf(flan.groupId!)).toMatchObject({
+      partyId: result.partyId,
+      state: "held",
+      firedAt: null,
     });
+    expect(await groupOf(source)).toMatchObject({ partyId: ana.partyId, state: "removed" });
+    const removed = await act((tx) =>
+      tx
+        .select({ partyId: orderGroupEvents.partyId, actorId: orderGroupEvents.actorId })
+        .from(orderGroupEvents)
+        .where(and(eq(orderGroupEvents.groupId, source), eq(orderGroupEvents.kind, "removed"))),
+    );
+    expect(removed).toEqual([{ partyId: ana.partyId, actorId: OPERATOR }]);
+    expect(await flanTicket()).toEqual(ticketBefore);
   });
 });
 

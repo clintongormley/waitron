@@ -5003,7 +5003,7 @@ async function carveLines(
 
 /**
  * Refuse `group.held_leaves_party` for the lowest-numbered of these lines whose group is held: a
- * group belongs to its party (D1).
+ * bill going to the counter leaves its party, and a counter order has no groups to hold a dish in.
  */
 export async function refuseHeldLeavingParty(
   tx: Transaction,

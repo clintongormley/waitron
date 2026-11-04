@@ -31,6 +31,7 @@ import { attachPrinterToStation } from "./station-printers.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
 import { moveBill, type MoveTarget } from "./testing/move-bill-fixture.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
+import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import {
   readChangesAfterSending,
   setChangesAfterSending,
@@ -923,5 +924,40 @@ describe("A803 waiting copy: Move this bill", () => {
     });
 
     expect(await rowsOf([a.partyId], [a.billId])).toEqual(before);
+  });
+});
+
+describe("A803 waiting copy: Split a table", () => {
+  it("A803 waiting copy: Split a table takes a bill holding a held dish", async () => {
+    const a = await seatWith([
+      { names: ["Burger"], release: "fire" },
+      { names: ["Flan"], release: "hold" },
+    ]);
+    const source = (await lineOf(a.billId, "Flan")).groupId!;
+    const tableId = await v.table(`Copy ${++tableNumber}`);
+    const joining = { operatorId: OPERATOR, expectedPartyRevision: await revisionOf(v, a.partyId) };
+    await inTx(v, (tx) => joinTables(tx, v.cfg, a.partyId, tableId, joining));
+    const splitting = {
+      expectedPartyRevision: await revisionOf(v, a.partyId),
+      operatorId: OPERATOR,
+    };
+
+    const result = await inTx(v, (tx) =>
+      splitTable(tx, v.cfg, a.partyId, tableId, a.billId, splitting),
+    );
+
+    expect(result.billId).toBe(a.billId);
+    expect(result.partyId).not.toBe(a.partyId);
+    const burger = await lineOf(a.billId, "Burger");
+    const flan = await lineOf(a.billId, "Flan");
+    const groups = await groupsOf(result.partyId);
+    expect(groups.map((group) => [group.id, group.state])).toEqual([
+      [burger.groupId, "fired"],
+      [flan.groupId, "held"],
+    ]);
+    expect(flan.groupId).not.toBe(source);
+    expect(groups[1]).toMatchObject({ partyId: result.partyId, state: "held", firedAt: null });
+    expect(await kitchenItemOf(flan.id)).toMatchObject({ firedAt: null, requestedAt: null });
+    expect((await groupRow(source)).state).toBe("removed");
   });
 });

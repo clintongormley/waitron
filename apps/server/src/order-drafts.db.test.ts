@@ -4733,7 +4733,7 @@ describe("source-backed draft foundations", () => {
     expect((await inTx((tx) => readPartyAllergy(tx, target.partyId))).ticks).toEqual(ticksBefore);
   });
 
-  it.each(["free table", "occupied table"] as const)(
+  it.each(["free table", "occupied table", "split table"] as const)(
     "a recalled companion travels as a draft row while active held work leaves for a %s with its own copy of the group",
     async (destination) => {
       const v = await setupVenue();
@@ -4750,6 +4750,14 @@ describe("source-backed draft foundations", () => {
           async (tx) =>
             (await createTable(tx, v.cfg, { label: "Destination", zoneId: v.zoneId })).id,
         ));
+      if (destination === "split table")
+        await inTx(async (tx) =>
+          joinTables(tx, v.cfg, moving.from.partyId, tableId, {
+            operatorId: SAM,
+            expectedPartyRevision: await partyRevision(moving.from.partyId),
+            otherPartyId: null,
+          }),
+        );
       const freshBefore = await storedLines(moving.draft.id);
       const [recalledBefore] = await db
         .select()
@@ -4757,21 +4765,26 @@ describe("source-backed draft foundations", () => {
         .where(eq(orderDraftRecalledLines.id, moving.id));
 
       const result = await inTx(async (tx) =>
-        moveBill(
-          tx,
-          v.cfg,
-          moving.billId,
-          { tableId },
-          {
-            operatorId: SAM,
-            partyId: moving.from.partyId,
-            expectedPartyRevision: await partyRevision(moving.from.partyId),
-            otherPartyId: target?.partyId ?? null,
-            ...(target === null
-              ? {}
-              : { expectedOtherPartyRevision: await partyRevision(target.partyId) }),
-          },
-        ),
+        destination === "split table"
+          ? splitTable(tx, v.cfg, moving.from.partyId, tableId, moving.billId, {
+              expectedPartyRevision: await partyRevision(moving.from.partyId),
+              operatorId: SAM,
+            })
+          : moveBill(
+              tx,
+              v.cfg,
+              moving.billId,
+              { tableId },
+              {
+                operatorId: SAM,
+                partyId: moving.from.partyId,
+                expectedPartyRevision: await partyRevision(moving.from.partyId),
+                otherPartyId: target?.partyId ?? null,
+                ...(target === null
+                  ? {}
+                  : { expectedOtherPartyRevision: await partyRevision(target.partyId) }),
+              },
+            ),
       );
 
       const partyId = result.partyId!;
@@ -4830,60 +4843,6 @@ describe("source-backed draft foundations", () => {
         { id: moving.draft.lines[1]!.id, afterGroupId: copy!.id },
         { id: moving.id, sourceLineId: moving.parentId, afterGroupId: copy!.id },
       ]);
-    },
-  );
-
-  it.each<"free table" | "occupied table" | "split table">(["split table"])(
-    "a recalled companion does not let active held work leave for a %s, and refusal changes nothing",
-    async (destination) => {
-      const v = await setupVenue();
-      const moving = await movingFamily(v, "held");
-      const active = await family(v, moving.billId, 3);
-      await db
-        .update(workingOrderLines)
-        .set({ groupId: moving.groupId })
-        .where(eq(workingOrderLines.id, active.parentId));
-      const target = destination === "occupied table" ? await seated(v, "Occupied") : null;
-      const tableId =
-        target?.tableId ??
-        (await inTx(
-          async (tx) =>
-            (await createTable(tx, v.cfg, { label: "Destination", zoneId: v.zoneId })).id,
-        ));
-      if (destination === "split table")
-        await inTx(async (tx) =>
-          joinTables(tx, v.cfg, moving.from.partyId, tableId, {
-            operatorId: SAM,
-            expectedPartyRevision: await partyRevision(moving.from.partyId),
-            otherPartyId: null,
-          }),
-        );
-      await refusedWritingNothing(
-        () =>
-          inTx(async (tx) =>
-            destination === "split table"
-              ? splitTable(tx, v.cfg, moving.from.partyId, tableId, moving.billId, {
-                  expectedPartyRevision: await partyRevision(moving.from.partyId),
-                  operatorId: SAM,
-                })
-              : moveBill(
-                  tx,
-                  v.cfg,
-                  moving.billId,
-                  { tableId },
-                  {
-                    operatorId: SAM,
-                    partyId: moving.from.partyId,
-                    expectedPartyRevision: await partyRevision(moving.from.partyId),
-                    otherPartyId: target?.partyId ?? null,
-                    ...(target === null
-                      ? {}
-                      : { expectedOtherPartyRevision: await partyRevision(target.partyId) }),
-                  },
-                ),
-          ),
-        { code: "group.held_leaves_party", params: { tabId: moving.billId, lineNo: 3 } },
-      );
     },
   );
 
