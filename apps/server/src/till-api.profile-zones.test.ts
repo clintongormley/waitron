@@ -1481,7 +1481,7 @@ describe("A773 pass board", () => {
       createStation(tx, v.cfg, { name: `Grill ${randomUUID().slice(0, 4)}` }),
     );
     const deliTablesBurger = await inTx(v, async (tx) => {
-      await routeProductTo(tx, v.cfg, v.productId("Burger"), grill.id);
+      await routeProductTo(tx, v.productId("Burger"), grill.id);
       await setStationsWaitForPass(tx, true, [grill.id]);
       return (
         await offerProducts(tx, v.cfg, { zone: { zoneId: f.deliTables }, orderStart: "table" })

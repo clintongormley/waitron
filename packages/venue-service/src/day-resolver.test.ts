@@ -102,7 +102,7 @@ async function venue(options: { oneSeason?: boolean } = {}) {
       return (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] })).id;
     };
     const ids = Object.fromEntries(
-      (await ensureDefaultSeasons(tx, cfg)).map((season) => [
+      (await ensureDefaultSeasons(tx)).map((season) => [
         englishSeasonName(season.name, "es"),
         season.id,
       ]),
@@ -130,7 +130,7 @@ const closedWeek = (days: Record<number, Range[]>) =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: days[weekday] ?? [] }));
 
 const menuSeason = (v: Venue, seasonId: string, days: Record<number, Slot[]>) =>
-  scoped((tx) => replaceMenuWeek(tx, v.cfg, v.departmentId, menuWeek(days), AT, 0, { seasonId }));
+  scoped((tx) => replaceMenuWeek(tx, v.departmentId, menuWeek(days), AT, 0, { seasonId }));
 const zoneSeason = (v: Venue, zoneId: string, seasonId: string, days: Record<number, Range[]>) =>
   scoped((tx) => replaceZoneClosedWeek(tx, v.cfg, zoneId, closedWeek(days), 0, AT, { seasonId }));
 
@@ -147,9 +147,9 @@ async function autumnAndWinter(): Promise<Venue> {
 }
 
 const departmentDays = (v: Venue, days: readonly string[], clock = CLOCK) =>
-  scoped((tx) => resolveDepartmentDays(tx, v.cfg, v.departmentId, days, clock));
-const zoneDays = (v: Venue, zoneIds: readonly string[] | undefined, days: readonly string[]) =>
-  scoped((tx) => resolveZoneClosedDays(tx, v.cfg, zoneIds, days, CLOCK));
+  scoped((tx) => resolveDepartmentDays(tx, v.departmentId, days, clock));
+const zoneDays = (zoneIds: readonly string[] | undefined, days: readonly string[]) =>
+  scoped((tx) => resolveZoneClosedDays(tx, zoneIds, days, CLOCK));
 
 describe("resolveDepartmentDays", () => {
   it("gives each business day the week of the season holding it, so yesterday keeps its own", async () => {
@@ -214,7 +214,7 @@ describe("resolveDepartmentDays", () => {
       async (tx) => (await createDepartment(tx, cfg, { name: "Bar", orderStart: "table" })).id,
     );
     const days = await scoped((tx) =>
-      resolveDepartmentDays(tx, cfg, departmentId, ["2030-11-30"], CLOCK),
+      resolveDepartmentDays(tx, departmentId, ["2030-11-30"], CLOCK),
     );
     expect(days.get("2030-11-30")).toEqual({
       businessDay: "2030-11-30",
@@ -269,7 +269,7 @@ describe("resolveDepartmentDays", () => {
     const days = ["2030-12-07", "2030-12-08"];
     const alone = await departmentDays(v, days, clock);
     const together = await scoped((tx) =>
-      resolveDepartmentsDays(tx, v.cfg, [randomUUID(), v.departmentId], days, clock),
+      resolveDepartmentsDays(tx, [randomUUID(), v.departmentId], days, clock),
     );
     expect(together.get(v.departmentId)).toEqual(alone);
   });
@@ -316,12 +316,12 @@ describe("the till's service on a season boundary", () => {
       [SATURDAY]: [{ startsAt: "00:00", endsAt: "05:00" }],
     });
     const at = new Date("2030-11-30T23:15:00Z");
-    expect([...(await scoped((tx) => closedZoneIdsAt(tx, v.cfg, at)))]).toEqual([v.sala]);
+    expect([...(await scoped((tx) => closedZoneIdsAt(tx, at)))]).toEqual([v.sala]);
     await db
       .update(locations)
       .set({ timeZone: "not/a-zone" })
       .where(eq(locations.id, v.cfg.locationId));
-    expect([...(await scoped((tx) => closedZoneIdsAt(tx, v.cfg, at)))]).toEqual([]);
+    expect([...(await scoped((tx) => closedZoneIdsAt(tx, at)))]).toEqual([]);
   });
 
   it("an unreadable clock answers every zone named with nothing to close", async () => {
@@ -334,7 +334,7 @@ describe("the till's service on a season boundary", () => {
       .set({ timeZone: "not/a-zone" })
       .where(eq(locations.id, v.cfg.locationId));
     const states = await scoped((tx) =>
-      readZoneClosingStates(tx, v.cfg, [v.sala, v.terraza], new Date("2030-11-30T23:15:00Z")),
+      readZoneClosingStates(tx, [v.sala, v.terraza], new Date("2030-11-30T23:15:00Z")),
     );
     expect(states).toEqual(
       new Map([
@@ -360,12 +360,12 @@ describe("the till's service on a season boundary", () => {
 describe("a day plan shared between resolvers", () => {
   it("refuses a plan that does not cover a requested day", async () => {
     const v = await autumnAndWinter();
-    const plan = await scoped((tx) => readDayPlan(tx, v.cfg, ["2030-11-30"]));
+    const plan = await scoped((tx) => readDayPlan(tx, ["2030-11-30"]));
     await expect(
-      scoped((tx) => resolveDepartmentDays(tx, v.cfg, v.departmentId, ["2030-12-01"], CLOCK, plan)),
+      scoped((tx) => resolveDepartmentDays(tx, v.departmentId, ["2030-12-01"], CLOCK, plan)),
     ).rejects.toThrow("the day plan does not cover 2030-12-01");
     await expect(
-      scoped((tx) => resolveZoneClosedDays(tx, v.cfg, [v.sala], ["2030-12-01"], CLOCK, plan)),
+      scoped((tx) => resolveZoneClosedDays(tx, [v.sala], ["2030-12-01"], CLOCK, plan)),
     ).rejects.toThrow("the day plan does not cover 2030-12-01");
   });
 
@@ -391,7 +391,6 @@ describe("a day plan shared between resolvers", () => {
       ).id;
       await replaceMenuWeek(
         tx,
-        v.cfg,
         id,
         menuWeek({ [TUESDAY]: [{ periodId: period, startsAt: "21:00", endsAt: "03:00" }] }),
         AT,
@@ -407,17 +406,15 @@ describe("a day plan shared between resolvers", () => {
       [TUESDAY]: [{ startsAt: "22:00", endsAt: "01:00" }],
     });
     // 00:15 on 1 January in Madrid still falls in business day 31 December.
-    const prepared = await scoped((tx) =>
-      readServiceDayPlan(tx, v.cfg, new Date("2030-12-31T23:15:00Z")),
-    );
+    const prepared = await scoped((tx) => readServiceDayPlan(tx, new Date("2030-12-31T23:15:00Z")));
     expect([...prepared.plan!.seasonIdOn]).toEqual([
       ["2030-12-30", v.seasons.Autumn],
       ["2030-12-31", v.seasons.Autumn],
     ]);
     const days = ["2030-12-31", "2031-01-01"];
-    const plan = await scoped((tx) => readDayPlan(tx, v.cfg, days));
+    const plan = await scoped((tx) => readDayPlan(tx, days));
     const first = await scoped((tx) =>
-      resolveDepartmentDays(tx, v.cfg, v.departmentId, days, CLOCK, plan),
+      resolveDepartmentDays(tx, v.departmentId, days, CLOCK, plan),
     );
     expect(first.get("2030-12-31")?.ranges).toEqual([
       { periodId: v.dinner, startsAt: "20:00", endsAt: "02:00" },
@@ -425,15 +422,13 @@ describe("a day plan shared between resolvers", () => {
     expect(first.get("2031-01-01")?.ranges).toEqual([
       { periodId: v.breakfast, startsAt: "09:00", endsAt: "12:00" },
     ]);
-    const other = await scoped((tx) =>
-      resolveDepartmentDays(tx, v.cfg, second.id, days, CLOCK, plan),
-    );
+    const other = await scoped((tx) => resolveDepartmentDays(tx, second.id, days, CLOCK, plan));
     expect(other.get("2030-12-31")?.ranges).toEqual([
       { periodId: second.period, startsAt: "21:00", endsAt: "03:00" },
     ]);
     expect(other.get("2031-01-01")?.ranges).toEqual([]);
     const closed = await scoped((tx) =>
-      resolveZoneClosedDays(tx, v.cfg, [v.sala, v.terraza], days, CLOCK, plan),
+      resolveZoneClosedDays(tx, [v.sala, v.terraza], days, CLOCK, plan),
     );
     expect(closed.get(v.sala)?.get("2030-12-31")).toEqual([{ startsAt: "23:00", endsAt: "02:00" }]);
     expect(closed.get(v.terraza)?.get("2030-12-31")).toEqual([
@@ -461,7 +456,7 @@ describe("resolveZoneClosedDays", () => {
 
   it("gives each zone each business day's closures from the season holding it", async () => {
     const v = await zones();
-    const days = await zoneDays(v, [v.sala, v.terraza], ["2030-11-30", "2030-12-01"]);
+    const days = await zoneDays([v.sala, v.terraza], ["2030-11-30", "2030-12-01"]);
     expect(days.get(v.sala)).toEqual(
       new Map([
         ["2030-11-30", [{ startsAt: "15:00", endsAt: "19:00" }]],
@@ -484,19 +479,19 @@ describe("resolveZoneClosedDays", () => {
 
   it("reads every zone when none are named", async () => {
     const v = await zones();
-    const days = await zoneDays(v, undefined, ["2030-11-30"]);
+    const days = await zoneDays(undefined, ["2030-11-30"]);
     expect(days.get(v.sala)?.get("2030-11-30")).toEqual([{ startsAt: "15:00", endsAt: "19:00" }]);
     expect(days.get(v.terraza)?.get("2030-11-30")).toEqual([]);
   });
 
   it("answers an empty map for no days", async () => {
-    const v = await zones();
-    expect((await zoneDays(v, undefined, [])).size).toBe(0);
+    await zones();
+    expect((await zoneDays(undefined, [])).size).toBe(0);
   });
 
   it("answers an empty map for an empty zone list", async () => {
-    const v = await zones();
-    expect((await zoneDays(v, [], ["2030-11-30"])).size).toBe(0);
+    await zones();
+    expect((await zoneDays([], ["2030-11-30"])).size).toBe(0);
   });
 });
 
@@ -610,7 +605,6 @@ describe("special-day paint over the season", () => {
       ).id;
       await replaceMenuWeek(
         tx,
-        v.cfg,
         id,
         menuWeek({ [FRIDAY]: [{ periodId: period, startsAt: "19:00", endsAt: "23:00" }] }),
         AT,
@@ -621,11 +615,11 @@ describe("special-day paint over the season", () => {
     });
     expect((await departmentDays(v, ["2030-12-13"])).get("2030-12-13")?.ranges).toEqual([]);
     const laterDays = await scoped((tx) =>
-      resolveDepartmentDays(tx, v.cfg, later, ["2030-12-13", "2030-12-20"], CLOCK),
+      resolveDepartmentDays(tx, later, ["2030-12-13", "2030-12-20"], CLOCK),
     );
     expect(laterDays.get("2030-12-13")?.ranges).toEqual([]);
     expect(laterDays.get("2030-12-20")?.ranges).toHaveLength(1);
-    const zones = await zoneDays(v, [v.sala, v.terraza], ["2030-12-13"]);
+    const zones = await zoneDays([v.sala, v.terraza], ["2030-12-13"]);
     expect(zones.get(v.sala)?.get("2030-12-13")).toEqual([]);
     expect(zones.get(v.terraza)?.get("2030-12-13")).toEqual([]);
   });
@@ -672,8 +666,8 @@ describe("special-day paint over the season", () => {
       zonePaint: { [v.terraza]: [{ kind: "open", startsAt: "22:00", endsAt: "23:30" }] },
     });
     const at = new Date("2030-12-13T21:30:00Z"); // 22:30 in Madrid
-    expect([...(await scoped((tx) => closedZoneIdsAt(tx, v.cfg, at)))]).toEqual([]);
-    const zones = await zoneDays(v, [v.terraza], ["2030-12-13"]);
+    expect([...(await scoped((tx) => closedZoneIdsAt(tx, at)))]).toEqual([]);
+    const zones = await zoneDays([v.terraza], ["2030-12-13"]);
     expect(zones.get(v.terraza)?.get("2030-12-13")).toEqual([
       { startsAt: "23:30", endsAt: "06:00" },
     ]);
@@ -725,7 +719,7 @@ describe("special-day paint over the season", () => {
     expect((await departmentDays(v, ["2030-12-13"])).get("2030-12-13")?.ranges).toEqual([
       { periodId: v.dinner, startsAt: "20:00", endsAt: "22:00" },
     ]);
-    expect((await zoneDays(v, [v.sala], ["2030-12-13"])).get(v.sala)?.get("2030-12-13")).toEqual([
+    expect((await zoneDays([v.sala], ["2030-12-13"])).get(v.sala)?.get("2030-12-13")).toEqual([
       { startsAt: "22:00", endsAt: "23:00" },
     ]);
   });
@@ -763,19 +757,11 @@ describe("special-day paint over the season", () => {
       });
     const zones = (zoneIds: string[]) =>
       statements(async (tx) => {
-        expect([...(await closedZoneIdsAt(tx, v.cfg, at, zoneIds))].sort()).toEqual(
-          [...zoneIds].sort(),
-        );
+        expect([...(await closedZoneIdsAt(tx, at, zoneIds))].sort()).toEqual([...zoneIds].sort());
       });
     const days = (businessDays: string[]) =>
       statements(async (tx) => {
-        const resolved = await resolveDepartmentDays(
-          tx,
-          v.cfg,
-          v.departmentId,
-          businessDays,
-          CLOCK,
-        );
+        const resolved = await resolveDepartmentDays(tx, v.departmentId, businessDays, CLOCK);
         expect(businessDays.map((day) => resolved.get(day)?.ranges)).toEqual(
           businessDays.map(() => dinner),
         );
@@ -795,12 +781,10 @@ describe("special-day paint over the season", () => {
 
   it("refuses a shared plan that does not cover a requested day's special days", async () => {
     const v = await venue();
-    const plan = await scoped((tx) => readDayPlan(tx, v.cfg, ["2030-12-13"]));
+    const plan = await scoped((tx) => readDayPlan(tx, ["2030-12-13"]));
     const partial = { ...plan, special: new Map() };
     await expect(
-      scoped((tx) =>
-        resolveDepartmentDays(tx, v.cfg, v.departmentId, ["2030-12-13"], CLOCK, partial),
-      ),
+      scoped((tx) => resolveDepartmentDays(tx, v.departmentId, ["2030-12-13"], CLOCK, partial)),
     ).rejects.toThrow("the day plan does not cover 2030-12-13");
   });
 });
@@ -843,9 +827,7 @@ describe("readSpecialDayPlan", () => {
         closedAllDay: true,
       })
       .returning({ id: specialDayDates.id });
-    const { result: found, texts } = await paintStatements((tx) =>
-      readSpecialDayPlan(tx, v.cfg, id),
-    );
+    const { result: found, texts } = await paintStatements((tx) => readSpecialDayPlan(tx, id));
     expect(texts.filter((text) => text.includes('"special_day_dates"'))).toHaveLength(1);
     expect(texts.filter((text) => text.includes('"special_day_date_id" in'))).toHaveLength(1);
     expect(found!.name).toBe("Special 2030-12-13");
@@ -870,14 +852,7 @@ describe("readSpecialDayPlan", () => {
       ]),
     );
     const days = await scoped((tx) =>
-      resolveDepartmentDays(
-        tx,
-        v.cfg,
-        v.departmentId,
-        ["2030-11-29", "2030-12-13"],
-        CLOCK,
-        found!.plan,
-      ),
+      resolveDepartmentDays(tx, v.departmentId, ["2030-11-29", "2030-12-13"], CLOCK, found!.plan),
     );
     expect(days.get("2030-11-29")?.ranges).toEqual([]);
     expect(days.get("2030-12-13")?.ranges).toEqual([
@@ -891,7 +866,7 @@ describe("readSpecialDayPlan", () => {
       .insert(specialDays)
       .values({ locationId: v.cfg.locationId, name: "Undated" })
       .returning({ id: specialDays.id });
-    const { result, texts } = await paintStatements((tx) => readSpecialDayPlan(tx, v.cfg, day!.id));
+    const { result, texts } = await paintStatements((tx) => readSpecialDayPlan(tx, day!.id));
     expect(result).toEqual({
       name: "Undated",
       dates: [],
@@ -904,13 +879,13 @@ describe("readSpecialDayPlan", () => {
     const v = await venue();
     await db.delete(seasons).where(eq(seasons.locationId, v.cfg.locationId));
     const id = await specialDay(v, "2030-12-13");
-    const found = await scoped((tx) => readSpecialDayPlan(tx, v.cfg, id));
+    const found = await scoped((tx) => readSpecialDayPlan(tx, id));
     expect(found!.plan.seasonIdOn).toEqual(new Map([["2030-12-13", null]]));
   });
 
   it("answers null for a special day it does not hold", async () => {
-    const v = await venue();
-    expect(await scoped((tx) => readSpecialDayPlan(tx, v.cfg, randomUUID()))).toBeNull();
+    await venue();
+    expect(await scoped((tx) => readSpecialDayPlan(tx, randomUUID()))).toBeNull();
   });
 });
 
@@ -941,11 +916,11 @@ describe("a past day's range that misfits its own start", () => {
   const resolve = (v: Venue, cut?: { anchor: string }) =>
     scoped(async (tx) => ({
       hours: (
-        await resolveDepartmentsDays(tx, v.cfg, [v.departmentId], DAYS, HOURS_BACK, undefined, cut)
+        await resolveDepartmentsDays(tx, [v.departmentId], DAYS, HOURS_BACK, undefined, cut)
       ).get(v.departmentId)!,
-      closed: (
-        await resolveZoneClosedDays(tx, v.cfg, [v.sala], DAYS, HOURS_BACK, undefined, cut)
-      ).get(v.sala)!,
+      closed: (await resolveZoneClosedDays(tx, [v.sala], DAYS, HOURS_BACK, undefined, cut)).get(
+        v.sala,
+      )!,
     }));
 
   it("is drawn as stored when no cut is asked for, a special day's paint dropping it and its closure", async () => {
@@ -991,12 +966,10 @@ describe("a past day's range that misfits its own start", () => {
     const days = ["2026-10-27"];
     const cut = { anchor: "05:00" };
     const [hours, closed] = await scoped(async (tx) => [
-      (
-        await resolveDepartmentsDays(tx, v.cfg, [v.departmentId], days, HOURS_BACK, undefined, cut)
-      ).get(v.departmentId)!,
-      (await resolveZoneClosedDays(tx, v.cfg, [v.sala], days, HOURS_BACK, undefined, cut)).get(
-        v.sala,
+      (await resolveDepartmentsDays(tx, [v.departmentId], days, HOURS_BACK, undefined, cut)).get(
+        v.departmentId,
       )!,
+      (await resolveZoneClosedDays(tx, [v.sala], days, HOURS_BACK, undefined, cut)).get(v.sala)!,
     ]);
     expect(hours.get("2026-10-27")!.ranges).toEqual([
       { periodId: v.breakfast, startsAt: "12:00", endsAt: "15:00" },
@@ -1011,19 +984,13 @@ describe("a past day's range that misfits its own start", () => {
       [2]: [{ periodId: v.dinner, startsAt: "22:00", endsAt: "04:30" }],
     });
     const days = await scoped((tx) =>
-      resolveDepartmentDays(tx, v.cfg, v.departmentId, ["2026-10-27"], HOURS_BACK),
+      resolveDepartmentDays(tx, v.departmentId, ["2026-10-27"], HOURS_BACK),
     );
     const cut = await scoped(async (tx) =>
       (
-        await resolveDepartmentsDays(
-          tx,
-          v.cfg,
-          [v.departmentId],
-          ["2026-10-27"],
-          HOURS_BACK,
-          undefined,
-          { anchor: "05:00" },
-        )
+        await resolveDepartmentsDays(tx, [v.departmentId], ["2026-10-27"], HOURS_BACK, undefined, {
+          anchor: "05:00",
+        })
       ).get(v.departmentId)!,
     );
     expect(days.get("2026-10-27")!.ranges).toEqual([
@@ -1043,15 +1010,9 @@ describe("a past day's range that misfits its own start", () => {
     });
     const days = await scoped(async (tx) =>
       (
-        await resolveDepartmentsDays(
-          tx,
-          v.cfg,
-          [v.departmentId],
-          ["2026-10-20"],
-          HOURS_BACK,
-          undefined,
-          { anchor: "07:00" },
-        )
+        await resolveDepartmentsDays(tx, [v.departmentId], ["2026-10-20"], HOURS_BACK, undefined, {
+          anchor: "07:00",
+        })
       ).get(v.departmentId)!,
     );
     expect(days.get("2026-10-20")!.ranges).toEqual([]);

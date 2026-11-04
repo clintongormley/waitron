@@ -6,7 +6,6 @@ import {
   assertBusinessDayScheduleWrite,
   assertWaitingChangeFits,
 } from "./business-day-schedule.js";
-import type { VenueScope } from "./operations.js";
 import {
   byStart,
   DEFAULT_SEASONS,
@@ -35,22 +34,17 @@ const SEASON_COLUMNS = {
   colour: seasons.colour,
 };
 
-export async function readSeasons(
-  tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: VenueScope,
-): Promise<Season[]> {
+export async function readSeasons(tx: Transaction): Promise<Season[]> {
   return tx.select(SEASON_COLUMNS).from(seasons).orderBy(asc(seasons.startsOn));
 }
 
 export async function ensureDefaultSeasons(
   tx: Transaction,
-  cfg: VenueScope,
   staffLanguage?: StarterStaffLanguage,
 ): Promise<Season[]> {
-  const existing = await readSeasons(tx, cfg);
+  const existing = await readSeasons(tx);
   if (existing.length > 0) return existing;
-  const language = staffLanguage ?? (await readStarterStaffLanguage(tx, cfg));
+  const language = staffLanguage ?? (await readStarterStaffLanguage(tx));
   const venueRowId = await venueLocationId(tx);
   const inserted = await tx
     .insert(seasons)
@@ -88,12 +82,11 @@ export function temporaryStart(index: number): string {
  *  before the change. */
 export async function saveSeasons(
   tx: Transaction,
-  cfg: VenueScope,
   change: SeasonChange,
   at: Date,
   expectedClockRevision: number,
 ): Promise<Season[]> {
-  const all = await ensureDefaultSeasons(tx, cfg);
+  const all = await ensureDefaultSeasons(tx);
   const stored = new Map(all.map((season) => [season.id, season]));
   const sentStrings = change.save.flatMap((entry) =>
     typeof entry.id === "string" ? [entry.id] : [],
@@ -146,7 +139,7 @@ export async function saveSeasons(
     deleted.size > 0 ||
     added.length > 0 ||
     changed.some((entry) => entry.startsOn !== stored.get(entry.id!)!.startsOn);
-  await assertBusinessDayScheduleWrite(tx, cfg, timed ? "time" : "metadata", expectedClockRevision);
+  await assertBusinessDayScheduleWrite(tx, timed ? "time" : "metadata", expectedClockRevision);
 
   const clock = await readVenueClock(tx);
   const { dayCutover } = clock;
@@ -154,8 +147,8 @@ export async function saveSeasons(
     seasonIds: [...new Set(added.map((entry) => entry.split))],
     weekdays: [0, 1, 2, 3, 4, 5, 6],
   };
-  const departmentWeeks = await readDepartmentSeasonWeeks(tx, cfg, undefined, dayCutover, only);
-  const zoneWeeks = await readZoneSeasonWeeks(tx, cfg, undefined, dayCutover, only);
+  const departmentWeeks = await readDepartmentSeasonWeeks(tx, undefined, dayCutover, only);
+  const zoneWeeks = await readZoneSeasonWeeks(tx, undefined, dayCutover, only);
 
   if (deleted.size > 0) await tx.delete(seasons).where(inArray(seasons.id, [...deleted]));
   // Two passes, so a swap of two names or two starts never meets a unique index mid-way. No
@@ -191,18 +184,17 @@ export async function saveSeasons(
       if (week !== undefined) await writeZoneSeasonWeeks(tx, zoneId, [row!.id], week);
     }
   }
-  if (timed) await assertWaitingChangeFits(tx, cfg, at, clock);
-  return readSeasons(tx, cfg);
+  if (timed) await assertWaitingChangeFits(tx, at, clock);
+  return readSeasons(tx);
 }
 
 /** The departments whose painted ranges deleting the season would lose; a department holding
  *  only empty days there loses nothing. */
 export async function seasonDeleteImpact(
   tx: Transaction,
-  cfg: VenueScope,
   id: string,
 ): Promise<{ departments: { id: string; name: string }[] }> {
-  await targetSeasons(tx, cfg, id);
+  await targetSeasons(tx, id);
   const painted = await tx
     .selectDistinct({ id: departments.id, name: departments.name })
     .from(departmentDayRanges)

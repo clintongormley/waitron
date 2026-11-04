@@ -271,7 +271,7 @@ describe("saved kitchen note corrections", () => {
     const stations = await inTx(v, async (tx) => {
       const station = async (name: string, dish: string, withPrinter: boolean) => {
         const { id } = await createStation(tx, v.cfg, { name });
-        await routeProductTo(tx, v.cfg, v.productId(dish), id);
+        await routeProductTo(tx, v.productId(dish), id);
         if (!withPrinter) return { id, printerId: null };
         const p = await createPrinter(tx, { name, transport: "cloud_poll", pollId: randomUUID() });
         await attachPrinterToStation(tx, {
@@ -530,7 +530,7 @@ it("A807 prints one slip per printer for stations that share one", async () => {
     const own = await newPrinter("Q", "58mm");
     const station = async (name: string, dish: string, printerId: string) => {
       const { id } = await createStation(tx, v.cfg, { name });
-      await routeProductTo(tx, v.cfg, v.productId(dish), id);
+      await routeProductTo(tx, v.productId(dish), id);
       await attachPrinterToStation(tx, { stationId: id, printerId });
       return id;
     };

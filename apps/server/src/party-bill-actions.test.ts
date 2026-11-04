@@ -82,7 +82,6 @@ useVenueDb({
     await inTx(v, (tx) =>
       setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: productIds.get("Agua")! }, zoneId: null },
         { kind: "no_preparation" },
       ),

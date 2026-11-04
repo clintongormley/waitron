@@ -79,7 +79,7 @@ export async function moveGuests(
   const table = await readTargetTable(tx, toTableId, partyId, options);
   const zoneBefore = await partyZone(tx, cfg, partyId);
   if (table.zoneId !== zoneBefore)
-    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, table.zoneId, new Date());
+    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, table.zoneId, new Date());
   const held = await memberTables(tx, partyId);
   if (table.holding !== null && table.holding !== partyId) {
     const combined = await combineAt(tx, cfg, partyId, table.holding, "leave", options);

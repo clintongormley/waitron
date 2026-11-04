@@ -244,7 +244,6 @@ describe("retained clock candidate validation", () => {
       });
       await replaceMenuWeek(
         tx,
-        cfg,
         department.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,

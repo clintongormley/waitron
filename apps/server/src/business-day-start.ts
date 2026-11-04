@@ -13,7 +13,6 @@ import {
   businessDayBoundaryAt,
   businessDayBounds,
   cutoverForBusinessDay,
-  locationId,
   type BusinessDayClock,
 } from "@waitron/shared";
 import { clockTransitionAt, planBusinessDayStart } from "./business-day-changeover.js";
@@ -156,13 +155,7 @@ export async function previewBusinessDayStart(
   let conflictCount = 0;
   try {
     // Measured from the start in force, not from a waiting change this Save replaces.
-    await VENUE_SERVICE.assertBusinessDayClockChange(
-      tx,
-      { locationId: locationId(await venueLocationId(tx)) },
-      plan.before,
-      plan.candidate,
-      effectiveDay,
-    );
+    await VENUE_SERVICE.assertBusinessDayClockChange(tx, plan.before, plan.candidate, effectiveDay);
   } catch (error) {
     if (!(error instanceof AppError) || error.code !== "venue.business_day_hours_conflict")
       throw error;
@@ -218,13 +211,7 @@ export async function writeBusinessDayStart(
     await protectHistory(tx, model.clock, plan.candidate, removed);
   await protectHistory(tx, model.clock, plan.candidate, effectiveDay);
   const venueId = await venueLocationId(tx);
-  await VENUE_SERVICE.assertBusinessDayClockChange(
-    tx,
-    { locationId: locationId(venueId) },
-    plan.before,
-    plan.candidate,
-    effectiveDay,
-  );
+  await VENUE_SERVICE.assertBusinessDayClockChange(tx, plan.before, plan.candidate, effectiveDay);
   for (const removed of plan.removed)
     await tx.delete(locationDayCutoverChanges).where(pendingScope(venueId, removed));
   if (plan.candidate !== plan.before)

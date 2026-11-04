@@ -98,17 +98,17 @@ it("refreshes Calendar and routing from special days, clock and daily station st
   });
   let id = "";
   const created = await announced(async (tx) => {
-    id = (await saveSpecialDay(tx, cfg, null, party(["2030-10-15"]), at, 0)).id;
+    id = (await saveSpecialDay(tx, null, party(["2030-10-15"]), at, 0)).id;
   });
   const dayTables = ["special_days", "special_day_dates"];
   expect(reaches(created, calendar)).toEqual(dayTables);
   expect(reaches(created, routing)).toEqual(dayTables);
   const added = await announced((tx) =>
-    saveSpecialDay(tx, cfg, id, party(["2030-10-15", "2030-10-22"]), at, 0),
+    saveSpecialDay(tx, id, party(["2030-10-15", "2030-10-22"]), at, 0),
   );
   expect(reaches(added, calendar)).toEqual(["special_day_dates"]);
   expect(reaches(added, routing)).toEqual(["special_day_dates"]);
-  const removed = await announced((tx) => deleteSpecialDay(tx, cfg, id, at, 0));
+  const removed = await announced((tx) => deleteSpecialDay(tx, id, at, 0));
   expect(reaches(removed, calendar)).toEqual(dayTables);
   expect(reaches(removed, routing)).toEqual(dayTables);
 
@@ -178,7 +178,6 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
   const named = await announced((tx) =>
     saveSpecialDay(
       tx,
-      cfg,
       null,
       { name: "Arán", repeatsYearly: false, dates: [{ date: "2026-06-17", closedAllDay: false }] },
       new Date("2026-01-01T12:00:00Z"),
@@ -187,7 +186,7 @@ it("refreshes Calendar, holiday coverage and the operations readiness after ever
   );
   expect(both(named)).toEqual([["special_days", "special_day_dates"], []]);
   expect(reaches(named, operations)).toEqual(["special_days", "special_day_dates"]);
-  const area = await announced((tx) => saveHolidayArea(tx, cfg, { areaKey: "aran" }));
+  const area = await announced((tx) => saveHolidayArea(tx, { areaKey: "aran" }));
   expect(both(area)).toEqual([["holiday_geographies"], ["holiday_geographies"]]);
   expect(reaches(area, operations)).toEqual(["holiday_geographies"]);
   const moved = await announced((tx) =>
@@ -220,7 +219,6 @@ it("daily station status refreshes routing and special days refresh Opening hour
       .returning();
     const date = await saveSpecialDay(
       tx,
-      cfg,
       null,
       { name: "Party", repeatsYearly: false, dates: [{ date: "2030-10-15", closedAllDay: false }] },
       at,
@@ -234,7 +232,6 @@ it("daily station status refreshes routing and special days refresh Opening hour
   const named = await announced((tx) =>
     saveSpecialDay(
       tx,
-      cfg,
       dateId,
       {
         name: "Party renamed",

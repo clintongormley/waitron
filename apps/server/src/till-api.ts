@@ -2838,9 +2838,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             zone.serviceMode,
           ]),
         );
-        const day = await VENUE_SERVICE.readServiceDay(tx, deps.cfg, at);
-        const states = await VENUE_SERVICE.readZoneClosingStates(tx, deps.cfg, ids, at, day);
-        const layouts = await zoneLayouts(tx, deps.cfg, ids, at, day);
+        const day = await VENUE_SERVICE.readServiceDay(tx, at);
+        const states = await VENUE_SERVICE.readZoneClosingStates(tx, ids, at, day);
+        const layouts = await zoneLayouts(tx, ids, at, day);
         return visible.map((zone) => {
           const state = states.get(zone.id)!;
           const layout = layouts.get(zone.id)!;

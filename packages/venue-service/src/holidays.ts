@@ -27,7 +27,6 @@ import { rangeDates } from "./hours-rules.js";
 import type { HolidayFact, LocalDate } from "./hours-types.js";
 import type { HolidayDates } from "./special-days.js";
 import type { HolidayReader } from "./hours.js";
-import type { VenueScope } from "./operations.js";
 import { holidayGeographies } from "./schema/holidays.js";
 import "./errors.js";
 
@@ -134,7 +133,6 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
 
   async function readHolidays(
     tx: Transaction,
-    _cfg: VenueScope,
     from: LocalDate,
     to: LocalDate,
     place?: VenuePlace,
@@ -200,7 +198,6 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
    *  its first date in that year. A year with no list is absent. */
   async function readHolidayDates(
     tx: Transaction,
-    _cfg: VenueScope,
     fromYear: number,
     toYear: number,
     place?: VenuePlace,
@@ -234,14 +231,10 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
     return byYear;
   }
 
-  const readHolidayFacts: HolidayReader = async (tx, cfg, from, to, place) =>
-    (await readHolidays(tx, cfg, from, to, place)).facts;
+  const readHolidayFacts: HolidayReader = async (tx, _cfg, from, to, place) =>
+    (await readHolidays(tx, from, to, place)).facts;
 
-  async function readHolidayAreaModel(
-    tx: Transaction,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-    _cfg: VenueScope,
-  ): Promise<HolidayAreaModel> {
+  async function readHolidayAreaModel(tx: Transaction): Promise<HolidayAreaModel> {
     const address = await readAddress(tx);
     const current = (await geographiesOf(tx)).find((row) => matches(row, address));
     return areaModelAt(address, current);
@@ -278,7 +271,6 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
    *  reading the address and its geography once. */
   async function readHolidayYear(
     tx: Transaction,
-    _cfg: VenueScope,
     year: number,
   ): Promise<{ read: HolidayRead; area: HolidayAreaModel; dates: HolidayDates }> {
     const address = await readAddress(tx);
@@ -293,7 +285,6 @@ export function createHolidayStore(findPack: PackLookup = getCountryPack) {
   /** `null` when a choice was cleared at an address that has no geography row, so nothing was written. */
   async function saveHolidayArea(
     tx: Transaction,
-    _cfg: VenueScope,
     input: { areaKey: string | null },
   ): Promise<HolidayGeography | null> {
     const areaKey = parseAreaKey(input);

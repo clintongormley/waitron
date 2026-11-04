@@ -55,7 +55,6 @@ async function venue() {
       );
     await replaceMenuWeek(
       tx,
-      v.cfg,
       policy!.departmentId,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,

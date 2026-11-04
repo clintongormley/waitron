@@ -130,7 +130,7 @@ describe("listDepartmentReminderMinutes", () => {
     await setMinutes(b.departmentId, null);
     await setMinutes(c.departmentId, 5);
     await db.execute(sql`update departments set active = 0 where id = ${c.departmentId}`);
-    expect(await scoped((tx) => listDepartmentReminderMinutes(tx, cfg))).toEqual({
+    expect(await scoped((tx) => listDepartmentReminderMinutes(tx))).toEqual({
       [a.departmentId]: 25,
       [b.departmentId]: null,
     });

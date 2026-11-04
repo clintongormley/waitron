@@ -57,7 +57,7 @@ describe("each station's own minutes across consumers", () => {
           .update(kitchenStations)
           .set({ warmAfterMinutes: 3, overdueAfterMinutes: 5, forgottenAfterMinutes: 7 })
           .where(eq(kitchenStations.id, bar.id));
-        await routeProductTo(tx, v.cfg, v.productId("Caña"), bar.id);
+        await routeProductTo(tx, v.productId("Caña"), bar.id);
         return { kitchenId: kitchen!.id, barId: bar.id };
       });
       const first = await v.table("Kitchen table");

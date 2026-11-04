@@ -202,13 +202,11 @@ async function topLevelProducts(tx: Transaction): Promise<string[]> {
 /** Test-only: route one top-level product to a station in every zone; a later call replaces it. */
 export async function routeProductTo(
   tx: Transaction,
-  cfg: Cfg,
   productId: string,
   stationId: string,
 ): Promise<void> {
   await setRoutingCell(
     tx,
-    cfg,
     { row: { kind: "product", productId }, zoneId: null },
     { kind: "station", stationId },
   );
@@ -217,13 +215,11 @@ export async function routeProductTo(
 /** Test-only: route a category to a station in every zone. */
 export async function routeCategoryTo(
   tx: Transaction,
-  cfg: Cfg,
   categoryId: string,
   stationId: string,
 ): Promise<void> {
   await setRoutingCell(
     tx,
-    cfg,
     { row: { kind: "category", categoryId }, zoneId: null },
     { kind: "station", stationId },
   );

@@ -58,7 +58,6 @@ useVenueDb({
       const station = await createStation(tx, venue.cfg, { name: "Extra preparation" });
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: venue.olivesId }, zoneId: null },
         { kind: "station", stationId: station.id },
       );
@@ -1114,7 +1113,7 @@ describe("Cancel item service command", () => {
           .from(products)
           .where(eq(products.name, name));
         const cell = { row: { kind: "product" as const, productId: product!.id }, zoneId: null };
-        await setRoutingCell(tx, venue.cfg, cell, { kind: "station", stationId });
+        await setRoutingCell(tx, cell, { kind: "station", stationId });
         cells.push(cell);
       }
       await setStationPrinting(tx, { printHeldWork: true }, [venue.stationId, screenId]);

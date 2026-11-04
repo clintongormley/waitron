@@ -197,8 +197,8 @@ export async function createDepartment(
   await tx
     .insert(departmentSalePolicies)
     .values({ departmentId: row!.id, orderStart: input.orderStart ?? "counter" });
-  const staffLanguage = await readStarterStaffLanguage(tx, cfg);
-  await addStarterServiceSteps(tx, cfg, row!.id, staffLanguage);
+  const staffLanguage = await readStarterStaffLanguage(tx);
+  await addStarterServiceSteps(tx, row!.id, staffLanguage);
   const menuId = (await readVenue(tx)).defaultCatalogueId;
   if (menuId !== null) await placeOpenPeriod(tx, cfg, row!.id, menuId, staffLanguage);
   return row!;
@@ -288,7 +288,7 @@ export async function listVenueReadiness(
     .from(kitchenStations)
     .where(and(eq(kitchenStations.isDefault, true), eq(kitchenStations.active, true)))
     .limit(1);
-  const specialDayIssues = await specialDayReadiness(tx, cfg, at);
+  const specialDayIssues = await specialDayReadiness(tx, at);
   const issues: VenueReadinessIssue[] = [
     ...(defaultStation === undefined ? [{ code: "venue.default_station_missing" as const }] : []),
     ...specialDayIssues.missing.map((missing) => ({
@@ -1499,13 +1499,12 @@ async function keepOpenStatesIn(
 
 export async function readZoneClosingStates(
   tx: Transaction,
-  cfg: VenueScope,
   zoneIds: readonly string[],
   at: Date,
   prepared?: PreparedServiceDay,
 ): Promise<Map<string, { closed: boolean; keepOpen: ZoneKeepOpenState | null }>> {
   if (zoneIds.length === 0) return new Map();
-  const days = await zoneClosureDays(tx, cfg, zoneIds, at, serviceDayOf(prepared));
+  const days = await zoneClosureDays(tx, zoneIds, at, serviceDayOf(prepared));
   const closed = closedZoneIdsIn(days);
   const keepOpen = await keepOpenStatesIn(tx, days);
   return new Map(
@@ -1518,11 +1517,10 @@ export async function readZoneClosingStates(
 
 export async function readZoneKeepOpenState(
   tx: Transaction,
-  cfg: VenueScope,
   zoneId: string,
   at: Date,
 ): Promise<ZoneKeepOpenState | null> {
-  return (await readZoneClosingStates(tx, cfg, [zoneId], at)).get(zoneId)!.keepOpen;
+  return (await readZoneClosingStates(tx, [zoneId], at)).get(zoneId)!.keepOpen;
 }
 
 /** The department's service and the zone's own closure state at `at`, sharing one clock and
@@ -1534,9 +1532,9 @@ async function zoneServiceState(
   departmentId: string,
   at: Date,
 ) {
-  const prepared = await readServiceDayPlan(tx, cfg, at);
+  const prepared = await readServiceDayPlan(tx, at);
   const service = await resolveDepartmentService(tx, cfg, departmentId, at, prepared);
-  const zoneDay = await zoneClosureDays(tx, cfg, [zoneId], at, prepared);
+  const zoneDay = await zoneClosureDays(tx, [zoneId], at, prepared);
   return {
     service,
     zoneOpen: !closedZoneIdsIn(zoneDay).has(zoneId),

@@ -339,7 +339,7 @@ describe("A669 lifecycle", () => {
         ? await inTx(v, async (tx) => {
             const station = await createStation(tx, v.cfg, { name: "Release cook" });
             await setStationPrinting(tx, { printHeldWork: true }, [station.id]);
-            await routeProductTo(tx, v.cfg, v.productId("Burger"), station.id);
+            await routeProductTo(tx, v.productId("Burger"), station.id);
             await tx
               .update(kitchenStations)
               .set({ active: false })
@@ -402,7 +402,7 @@ describe("A669 lifecycle", () => {
       );
       await writeProductModifiers(tx, v.productId("Burger"), [{ kind: "extras", id: list.id }]);
       const station = await createStation(tx, v.cfg, { name: "Side cook" });
-      await routeProductTo(tx, v.cfg, side.id, station.id);
+      await routeProductTo(tx, side.id, station.id);
       await republishMenus(tx);
       return { list, side, station };
     });

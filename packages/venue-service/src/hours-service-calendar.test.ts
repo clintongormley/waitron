@@ -57,7 +57,7 @@ async function fixture() {
         weekday: day,
         slots: day === weekday ? [{ periodId: period.id, startsAt: "22:00", endsAt: "03:00" }] : [],
       }));
-    await replaceMenuWeek(tx, cfg, department!.id, week(1), at, 0);
+    await replaceMenuWeek(tx, department!.id, week(1), at, 0);
     const inactivePeriod = await saveMenuPeriod(tx, cfg, inactive!.id, {
       name: "Terrace",
       menuId: menu!.id,
@@ -65,7 +65,6 @@ async function fixture() {
     });
     await replaceMenuWeek(
       tx,
-      cfg,
       inactive!.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -95,7 +94,6 @@ const special = (
   withTransaction(suite.db, (tx) =>
     saveSpecialDay(
       tx,
-      f.cfg,
       null,
       {
         name: `Special ${date}`,
@@ -132,7 +130,7 @@ describe("calendar follows department service periods", () => {
   it("reads each date's own season: Winter's Monday Lunch opens 2 December, Autumn's empty Monday closes 25 November", async () => {
     const f = await fixture();
     await withTransaction(suite.db, async (tx) => {
-      const seasons = await readSeasons(tx, f.cfg);
+      const seasons = await readSeasons(tx);
       const seasonId = (name: string) => seasons.find((season) => season.name === name)!.id;
       const lunch = await saveMenuPeriod(tx, f.cfg, f.department, {
         name: "Lunch",
@@ -143,14 +141,13 @@ describe("calendar follows department service periods", () => {
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: weekday === 1 ? slots : [] }));
       await replaceMenuWeek(
         tx,
-        f.cfg,
         f.department,
         monday([{ periodId: lunch.id, startsAt: "12:00", endsAt: "15:00" }]),
         at,
         0,
         { seasonId: seasonId("Winter") },
       );
-      await replaceMenuWeek(tx, f.cfg, f.department, monday([]), at, 0, {
+      await replaceMenuWeek(tx, f.department, monday([]), at, 0, {
         seasonId: seasonId("Autumn"),
       });
     });

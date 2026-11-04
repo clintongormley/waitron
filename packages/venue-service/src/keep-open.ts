@@ -42,13 +42,13 @@ export async function readKeepOpen(
 
 async function zoneContext(tx: Transaction, cfg: VenueScope, zoneId: string, at: Date) {
   const { departmentId } = await resolveZoneContext(tx, cfg, zoneId);
-  const prepared = await readServiceDayPlan(tx, cfg, at);
-  const c = await zoneClosureDay(tx, cfg, zoneId, at, prepared);
+  const prepared = await readServiceDayPlan(tx, at);
+  const c = await zoneClosureDay(tx, zoneId, at, prepared);
   const closure =
     c.moment === null
       ? undefined
       : c.ranges.find((range) => rangeSpanInDay(range, c.dayContext).end > c.moment!.minute);
-  const day = await departmentDay(tx, cfg, departmentId, c.moment, c.clock, prepared.plan);
+  const day = await departmentDay(tx, departmentId, c.moment, c.clock, prepared.plan);
   const openRanges = day.ranges;
   const extended =
     c.moment === null || closure === undefined

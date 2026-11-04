@@ -61,26 +61,17 @@ function lastDayIn(year: string, seasons: readonly Season[], startsOn: string): 
 
 export async function readOpeningHoursYear(
   tx: Transaction,
-  cfg: VenueScope,
   year: number,
   at: Date,
 ): Promise<OpeningHoursYear> {
   const yearText = String(year).padStart(4, "0");
   const dates = rangeDates(`${yearText}-01-01`, `${yearText}-12-31`);
   const clock = await readVenueClock(tx);
-  const status = await readBusinessDayScheduleStatus(tx, cfg, clock, at);
-  const { read: holidays, area, dates: holidayDates } = await readHolidayYear(tx, cfg, year);
-  const seasons = await readSeasons(tx, cfg);
-  const { days, seasonIdOn } = await calendarDays(
-    tx,
-    cfg,
-    dates,
-    holidays.facts,
-    clock,
-    seasons,
-    at,
-  );
-  const missing = await missingHolidaysIn(tx, cfg, [year], holidayDates);
+  const status = await readBusinessDayScheduleStatus(tx, clock, at);
+  const { read: holidays, area, dates: holidayDates } = await readHolidayYear(tx, year);
+  const seasons = await readSeasons(tx);
+  const { days, seasonIdOn } = await calendarDays(tx, dates, holidays.facts, clock, seasons, at);
+  const missing = await missingHolidaysIn(tx, [year], holidayDates);
   return {
     ...status,
     year,
@@ -175,7 +166,6 @@ const wallClock = (stored: BusinessDayClock): BusinessDayClock =>
 /** `month` is a `YYYY-MM` the caller has checked. */
 export async function readCalendarMonthPlan(
   tx: Transaction,
-  cfg: VenueScope,
   month: string,
   at: Date,
 ): Promise<CalendarMonthPlan> {
@@ -186,8 +176,8 @@ export async function readCalendarMonthPlan(
   const dates = rangeDates(from, to);
   const { clock: stored, place } = await readVenueClockAndPlace(tx);
   const clock = wallClock(stored);
-  const seasons = await readSeasons(tx, cfg);
-  const plan = await readDayPlan(tx, cfg, dates, seasons, place);
+  const seasons = await readSeasons(tx);
+  const plan = await readDayPlan(tx, dates, seasons, place);
   const touched = new Map<string, Season & { lastDay: string }>();
   for (const date of dates) {
     const season = seasons.find(({ id }) => id === plan.seasonIdOn.get(date));
@@ -223,16 +213,15 @@ export async function readOpeningHoursMonth(
   month: string,
   at: Date,
 ): Promise<OpeningHoursMonth> {
-  const frame = await readCalendarMonthPlan(tx, cfg, month, at);
+  const frame = await readCalendarMonthPlan(tx, month, at);
   const { plan, wallClock: clock } = frame;
   const dates = frame.days.map(({ date }) => date);
-  const status = await readBusinessDayScheduleStatus(tx, cfg, frame.clock, at);
-  const departments = await readActiveDepartments(tx, cfg);
-  const zones = await readServiceZones(tx, cfg);
+  const status = await readBusinessDayScheduleStatus(tx, frame.clock, at);
+  const departments = await readActiveDepartments(tx);
+  const zones = await readServiceZones(tx);
   const cut = { anchor: calendarCutAnchor(frame.clock, at) };
   const hours = await resolveDepartmentsDays(
     tx,
-    cfg,
     departments.map(({ id }) => id),
     dates,
     clock,
@@ -241,7 +230,6 @@ export async function readOpeningHoursMonth(
   );
   const closures = await resolveZoneClosedDays(
     tx,
-    cfg,
     zones.map(({ id }) => id),
     dates,
     clock,
@@ -287,21 +275,19 @@ export interface SeasonDays {
 /** `dates` are dates the caller has checked; the answer keeps their order, each date once. */
 export async function readSeasonDays(
   tx: Transaction,
-  cfg: VenueScope,
   dates: readonly LocalDate[],
 ): Promise<SeasonDays> {
   const days = [...new Set(dates)];
   const clock = wallClock(await readVenueClock(tx));
-  const seasons = await readSeasons(tx, cfg);
+  const seasons = await readSeasons(tx);
   const plan: DayPlan = {
     seasonIdOn: new Map(days.map((day) => [day, seasonOn(seasons, day)?.id ?? null])),
     special: new Map(days.map((day) => [day, null])),
   };
-  const departments = await readActiveDepartments(tx, cfg);
-  const zones = await readServiceZones(tx, cfg);
+  const departments = await readActiveDepartments(tx);
+  const zones = await readServiceZones(tx);
   const hours = await resolveDepartmentsDays(
     tx,
-    cfg,
     departments.map(({ id }) => id),
     days,
     clock,
@@ -309,7 +295,6 @@ export async function readSeasonDays(
   );
   const closures = await resolveZoneClosedDays(
     tx,
-    cfg,
     zones.map(({ id }) => id),
     days,
     clock,

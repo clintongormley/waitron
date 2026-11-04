@@ -293,7 +293,6 @@ describe("A773 requested lifecycle: alerts and slips", () => {
     await withTransaction(db, async (tx) => {
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "category", categoryId: venue.folders.bottled }, zoneId: null },
         { kind: "station", stationId: venue.stations.bar },
       );

@@ -81,7 +81,6 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
       ).id;
       await replaceMenuWeek(
         tx,
-        cfg,
         department,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -94,31 +93,26 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
       );
     }
     const seasons = Object.fromEntries(
-      (await readSeasons(tx, cfg)).map((season) => [
-        englishSeasonName(season.name, "es"),
-        season.id,
-      ]),
+      (await readSeasons(tx)).map((season) => [englishSeasonName(season.name, "es"), season.id]),
     );
     return { cfg, seasons };
   });
 }
-type Venue = Awaited<ReturnType<typeof venue>>;
 
-const read = (v: Venue, year: number) => run((tx) => readOpeningHoursYear(tx, v.cfg, year, AT));
-const special = (v: Venue, input: unknown) =>
-  run((tx) => saveSpecialDay(tx, v.cfg, null, input, AT, 0));
+const read = (year: number) => run((tx) => readOpeningHoursYear(tx, year, AT));
+const special = (input: unknown) => run((tx) => saveSpecialDay(tx, null, input, AT, 0));
 const dayOf = (year: Awaited<ReturnType<typeof read>>, date: string) =>
   year.days.find((day) => day.date === date);
 
 describe("the Opening hours year read", () => {
   it("gives 2030's days by value: a Winter day, a closed Monday and a special day's Closed tick", async () => {
     const v = await venue();
-    const closure = await special(v, {
+    const closure = await special({
       name: "Closure",
       repeatsYearly: false,
       dates: [{ date: "2030-07-10", closedAllDay: true }],
     });
-    const year = await read(v, 2030);
+    const year = await read(2030);
     expect(year.year).toBe(2030);
     expect(year.timeZone).toBe("Europe/Madrid");
     expect(year.today).toBe("2026-10-09");
@@ -184,7 +178,7 @@ describe("the Opening hours year read", () => {
 
   it("gives a public holiday from the pack's 2026 list in a 2026 read, with its coverage", async () => {
     const v = await venue();
-    const year = await read(v, 2026);
+    const year = await read(2026);
     expect(year.publicHolidaysAvailable).toBe(true);
     expect(
       year.holidayCoverage.map(({ year, nationalRegional }) => ({ year, nationalRegional })),
@@ -209,15 +203,15 @@ describe("the Opening hours year read", () => {
   });
 
   it("says 2027's public holidays are not available yet, and names the repeating date with no holiday of its name", async () => {
-    const v = await venue();
-    const easterWeek = await special(v, {
+    await venue();
+    const easterWeek = await special({
       name: "Easter week",
       repeatsYearly: true,
       dates: [{ date: "2026-04-03", closedAllDay: true }],
     });
-    const now = await read(v, 2026);
+    const now = await read(2026);
     expect(now.missingHolidays).toEqual([]);
-    const next = await read(v, 2027);
+    const next = await read(2027);
     expect(next.publicHolidaysAvailable).toBe(false);
     expect(next.holidayCoverage.map(({ nationalRegional }) => nationalRegional)).toEqual([
       "missing_year",
@@ -226,15 +220,15 @@ describe("the Opening hours year read", () => {
       { specialDayId: easterWeek.id, name: "Easter week", holidayName: "Viernes Santo" },
     ]);
     const known = new Map([[2027, new Map([["Viernes Santo", "2027-03-26"]])]]);
-    expect(await run((tx) => missingHolidaysIn(tx, v.cfg, [2027], known))).toEqual([]);
+    expect(await run((tx) => missingHolidaysIn(tx, [2027], known))).toEqual([]);
   });
 
   it("closes a date only when every active department is closed all day", async () => {
-    const v = await venue([
+    await venue([
       [1, 2],
       [1, 3],
     ]);
-    const year = await read(v, 2030);
+    const year = await read(2030);
     expect(
       ["2030-01-14", "2030-01-15", "2030-01-16", "2030-01-17"].map((date) => ({
         date,
@@ -251,7 +245,7 @@ describe("the Opening hours year read", () => {
   it("puts no date in a season for a venue that has none yet", async () => {
     const v = await venue([]);
     expect(v.seasons).toEqual({});
-    const year = await read(v, 2030);
+    const year = await read(2030);
     expect(year.seasons).toEqual([]);
     expect(year.days).toHaveLength(365);
     expect(year.days.filter((day) => day.seasonId !== null)).toEqual([]);
@@ -260,7 +254,7 @@ describe("the Opening hours year read", () => {
   it("ends each season on its true last day in the shown year, 29 February in a leap year", async () => {
     const v = await venue();
     const lastDays = async (year: number) =>
-      (await read(v, year)).seasons.map(({ name, lastDay }) => ({ name, lastDay }));
+      (await read(year)).seasons.map(({ name, lastDay }) => ({ name, lastDay }));
     expect(await lastDays(2028)).toEqual([
       { name: starterSeasonName("Spring", "es"), lastDay: "05-31" },
       { name: starterSeasonName("Summer", "es"), lastDay: "08-31" },
@@ -271,24 +265,26 @@ describe("the Opening hours year read", () => {
       name: starterSeasonName("Winter", "es"),
       lastDay: "02-28",
     });
-    expect(dayOf(await read(v, 2028), "2028-02-29")!.seasonId).toBe(v.seasons.Winter);
+    expect(dayOf(await read(2028), "2028-02-29")!.seasonId).toBe(v.seasons.Winter);
   });
 
   it("sends the same statements for one department as for several, not one per day", async () => {
-    const statementsFor = async (v: Venue) =>
+    const statementsFor = async () =>
       run(async (tx) => {
         const session = (tx as unknown as { session: { prepareQuery: (...a: never[]) => unknown } })
           .session;
         const prepared = vi.spyOn(session, "prepareQuery");
         try {
-          await readOpeningHoursYear(tx, v.cfg, 2030, AT);
+          await readOpeningHoursYear(tx, 2030, AT);
           return prepared.mock.calls.length;
         } finally {
           prepared.mockRestore();
         }
       });
-    const one = await statementsFor(await venue([[1]]));
-    expect(await statementsFor(await venue([[1], [1], [1]]))).toBe(one);
+    await venue([[1]]);
+    const one = await statementsFor();
+    await venue([[1], [1], [1]]);
+    expect(await statementsFor()).toBe(one);
     expect(one).toBeLessThan(40);
   });
 });
@@ -318,23 +314,20 @@ async function monthVenue() {
     };
     const diningDepartment = await department("Dining");
     const barDepartment = await department("Counter department");
-    await ensureDefaultSeasons(tx, cfg);
+    await ensureDefaultSeasons(tx);
     const seasons = Object.fromEntries(
-      (await readSeasons(tx, cfg)).map((season) => [
-        englishSeasonName(season.name, "es"),
-        season.id,
-      ]),
+      (await readSeasons(tx)).map((season) => [englishSeasonName(season.name, "es"), season.id]),
     );
     const lunch = await period(diningDepartment, "Lunch");
     const dinner = await period(diningDepartment, "Dinner");
     const barLunch = await period(barDepartment, "Lunch");
-    await replaceMenuWeek(tx, cfg, diningDepartment, everyDay(lunch, "12:00", "16:00"), AT, 0, {
+    await replaceMenuWeek(tx, diningDepartment, everyDay(lunch, "12:00", "16:00"), AT, 0, {
       seasonId: seasons.Autumn,
     });
-    await replaceMenuWeek(tx, cfg, diningDepartment, everyDay(dinner, "20:00", "23:30"), AT, 0, {
+    await replaceMenuWeek(tx, diningDepartment, everyDay(dinner, "20:00", "23:30"), AT, 0, {
       seasonId: seasons.Winter,
     });
-    await replaceMenuWeek(tx, cfg, barDepartment, everyDay(barLunch, "13:00", "15:00"), AT, 0);
+    await replaceMenuWeek(tx, barDepartment, everyDay(barLunch, "13:00", "15:00"), AT, 0);
     const terrace = await zone("Terrace", 1, diningDepartment);
     const bar = await zone("Bar", 2, diningDepartment);
     const counter = await zone("Counter", 3, barDepartment);
@@ -371,7 +364,7 @@ const readMonth = (v: { cfg: VenueScope }, month: string) =>
 describe("the Opening hours month read", () => {
   it("gives December 2030 by value: Autumn's last Saturday, Winter's first Sunday and a painted special day", async () => {
     const v = await monthVenue();
-    const christmasEve = await special(v, {
+    const christmasEve = await special({
       name: "Christmas Eve",
       repeatsYearly: false,
       dates: [{ date: "2030-12-24", closedAllDay: false }],
@@ -536,7 +529,7 @@ describe("the Opening hours month read", () => {
 
   it("gives the next year's public holidays on December's trailing dates, and the Closed tick", async () => {
     const v = await monthVenue();
-    await special(v, {
+    await special({
       name: "Closure",
       repeatsYearly: false,
       dates: [{ date: "2025-12-29", closedAllDay: true }],
@@ -566,7 +559,7 @@ describe("the Opening hours month read", () => {
 
   it("plans the month as the month read does, with each special date's id, reading no hours, zones or holidays", async () => {
     const v = await monthVenue();
-    const closure = await special(v, {
+    const closure = await special({
       name: "Closure",
       repeatsYearly: false,
       dates: [{ date: "2025-12-29", closedAllDay: true }],
@@ -578,7 +571,7 @@ describe("the Opening hours month read", () => {
       const prepared = vi.spyOn(session, "prepareQuery");
       try {
         return {
-          frame: await readCalendarMonthPlan(tx, v.cfg, "2025-12", AT),
+          frame: await readCalendarMonthPlan(tx, "2025-12", AT),
           tables: prepared.mock.calls.map(
             (call) => /\bfrom "(\w+)"/.exec((call[0] as { sql: string }).sql)?.[1],
           ),
@@ -661,7 +654,7 @@ describe("the Opening hours month read", () => {
       departments: [{ ranges: [{ startsAt: "12:00", endsAt: "16:00" }] }],
     });
     expect(month.days.find((day) => day.date === "2030-12-09")!.departments[0]!.ranges).toEqual([]);
-    expect((await read(v, 2030)).today).toBeNull();
+    expect((await read(2030)).today).toBeNull();
   });
 
   it("gives a venue with no seasons yet every date with no season and no chips", async () => {
@@ -684,8 +677,8 @@ describe("the Opening hours month read", () => {
   });
 
   it("plans the month from the tables it declares, holidays and special-day paint included", async () => {
-    const v = await venue();
-    const easterWeek = await special(v, {
+    await venue();
+    const easterWeek = await special({
       name: "Easter week",
       repeatsYearly: true,
       dates: [{ date: "2025-04-18", closedAllDay: false }],
@@ -699,7 +692,7 @@ describe("the Opening hours month read", () => {
         .session;
       const prepared = vi.spyOn(session, "prepareQuery");
       try {
-        const frame = await readCalendarMonthPlan(tx, v.cfg, "2026-04", AT);
+        const frame = await readCalendarMonthPlan(tx, "2026-04", AT);
         expect(frame.plan.special.get("2026-04-03")?.specialDayId).toBe(easterWeek.id);
         return prepared.mock.calls.flatMap((call) =>
           [...(call[0] as { sql: string }).sql.matchAll(/\b(?:from|join) "(\w+)"/g)].map(
@@ -715,7 +708,7 @@ describe("the Opening hours month read", () => {
 
   it("reads the location once when a repeating special day follows a public holiday, and places it by that holiday", async () => {
     const v = await venue();
-    const easterWeek = await special(v, {
+    const easterWeek = await special({
       name: "Easter week",
       repeatsYearly: true,
       dates: [{ date: "2025-04-18", closedAllDay: true }],
@@ -771,7 +764,7 @@ describe("the Opening hours month read", () => {
 describe("the season days read", () => {
   it("gives each asked date its season's hours and closures by value, under a special day's paint and Closed tick", async () => {
     const v = await monthVenue();
-    await special(v, {
+    await special({
       name: "Christmas Eve",
       repeatsYearly: false,
       dates: [
@@ -794,7 +787,7 @@ describe("the season days read", () => {
       ],
     });
     const read = await run((tx) =>
-      readSeasonDays(tx, v.cfg, ["2030-12-24", "2030-11-30", "2030-12-01", "2030-12-24"]),
+      readSeasonDays(tx, ["2030-12-24", "2030-11-30", "2030-12-01", "2030-12-24"]),
     );
     const barDepartment = {
       departmentId: v.barDepartment,
@@ -862,7 +855,7 @@ describe("the season days read", () => {
       effectiveBusinessDay: "2030-12-10",
       dayCutover: "07:00:00",
     });
-    const read = await run((tx) => readSeasonDays(tx, v.cfg, ["2030-12-09", "2030-12-10"]));
+    const read = await run((tx) => readSeasonDays(tx, ["2030-12-09", "2030-12-10"]));
     expect(read.days.map(({ date, dayCutover }) => ({ date, dayCutover }))).toEqual([
       { date: "2030-12-09", dayCutover: "06:00" },
       { date: "2030-12-10", dayCutover: "07:00" },
@@ -900,7 +893,6 @@ describe("a past day's range around a start change", () => {
       const dinner = await period("Dinner");
       await replaceMenuWeek(
         tx,
-        cfg,
         diningDepartment,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -971,7 +963,6 @@ describe("a past day's range around a start change", () => {
     await run((tx) =>
       saveSpecialDay(
         tx,
-        v.cfg,
         null,
         {
           name: "Fair",
@@ -996,11 +987,10 @@ describe("a past day's range around a start change", () => {
   });
 
   it("counts the cut range as open in the year, under a special day with no paint", async () => {
-    const v = await lateSaturday();
+    await lateSaturday();
     await run((tx) =>
       saveSpecialDay(
         tx,
-        v.cfg,
         null,
         {
           name: "Fair",
@@ -1015,7 +1005,7 @@ describe("a past day's range around a start change", () => {
         1,
       ),
     );
-    const year = await run((tx) => readOpeningHoursYear(tx, v.cfg, 2026, AFTER_RETURN));
+    const year = await run((tx) => readOpeningHoursYear(tx, 2026, AFTER_RETURN));
     for (const date of ["2026-10-24", "2026-10-27"])
       expect(year.days.find((day) => day.date === date)).toMatchObject({
         tone: "special_day",

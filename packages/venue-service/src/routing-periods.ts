@@ -1,7 +1,6 @@
 import { asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import { loadSectionGraph, reachableProducts } from "@waitron/catalogue";
-import type { VenueScope } from "./operations.js";
 import type { RoutingPeriod } from "./routing-types.js";
 import { menuPeriods, menuPeriodStaffMenus } from "./schema/menus.js";
 import { readDepartmentSeasonWeeks } from "./season-weeks.js";
@@ -14,11 +13,7 @@ type PeriodRow = Omit<RoutingPeriod, "productIds" | "departmentInactive"> & {
 };
 
 /** The venue's periods, or only those of `ids`. */
-export async function readPeriods(
-  tx: Transaction,
-  _cfg: VenueScope,
-  ids?: readonly string[],
-): Promise<PeriodRow[]> {
+export async function readPeriods(tx: Transaction, ids?: readonly string[]): Promise<PeriodRow[]> {
   if (ids?.length === 0) return [];
   return tx
     .select({
@@ -80,12 +75,11 @@ export async function periodProductIds(
 /** The venue's periods with their products, in `inPeriodOrder`. */
 export async function readRoutingPeriods(
   tx: Transaction,
-  cfg: VenueScope,
   dayCutover: string,
 ): Promise<RoutingPeriod[]> {
-  const periods = await readPeriods(tx, cfg);
+  const periods = await readPeriods(tx);
   const productIds = await periodProductIds(tx, periods);
-  return (await inPeriodOrder(tx, cfg, periods, dayCutover)).map(
+  return (await inPeriodOrder(tx, periods, dayCutover)).map(
     ({ id, departmentId, departmentName, departmentActive, name, colour }) => ({
       id,
       departmentId,
@@ -105,7 +99,6 @@ export async function readRoutingPeriods(
  */
 export async function inPeriodOrder<T extends { id: string; departmentId: string; name: string }>(
   tx: Transaction,
-  cfg: VenueScope,
   periods: readonly T[],
   dayCutover: string,
 ): Promise<T[]> {
@@ -114,7 +107,7 @@ export async function inPeriodOrder<T extends { id: string; departmentId: string
     .from(departments)
     .orderBy(desc(departments.isDefault), asc(departments.name), asc(departments.id));
   const departmentOrder = new Map(departmentRows.map((row, index) => [row.id, index]));
-  const weeks = await readDepartmentSeasonWeeks(tx, cfg, undefined, dayCutover);
+  const weeks = await readDepartmentSeasonWeeks(tx, undefined, dayCutover);
   const firstStart = new Map<string, number>();
   for (const seasonWeeks of weeks.values())
     for (const week of seasonWeeks.values())

@@ -117,11 +117,10 @@ export const STARTER_STEPS = [
 
 export async function addStarterServiceSteps(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   staffLanguage?: StarterStaffLanguage,
 ): Promise<void> {
-  const language = staffLanguage ?? (await readStarterStaffLanguage(tx, cfg));
+  const language = staffLanguage ?? (await readStarterStaffLanguage(tx));
   for (const [position, step] of STARTER_STEPS.entries())
     await tx.insert(serviceSteps).values({
       departmentId,

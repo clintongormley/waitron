@@ -522,7 +522,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const year = parseCalendarYear(c.req.query("year"));
         if (year === null) throw new AppError("management.request_invalid", { field: "year" });
         const at = new Date();
-        return c.json(await viewed(sessionId, (tx) => readOpeningHoursYear(tx, ctx.cfg, year, at)));
+        return c.json(await viewed(sessionId, (tx) => readOpeningHoursYear(tx, year, at)));
       }),
     );
 
@@ -543,7 +543,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const dates = parseSeasonDates(c.req.query("dates"));
         if (dates === null) throw new AppError("management.request_invalid", { field: "dates" });
-        return c.json(await viewed(sessionId, (tx) => readSeasonDays(tx, ctx.cfg, dates)));
+        return c.json(await viewed(sessionId, (tx) => readSeasonDays(tx, dates)));
       }),
     );
 
@@ -556,7 +556,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             onlyKeys(body, ["save", "delete", "expectedClockRevision"]);
             const change = requireSeasonChange(body);
             const revision = requireClockRevision(body);
-            return saveSeasons(tx, ctx.cfg, change, new Date(), revision);
+            return saveSeasons(tx, change, new Date(), revision);
           }),
         );
       }),
@@ -566,7 +566,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = requireUuidParam(c.req.param("seasonId"), "SeasonId");
-        return c.json(await viewed(sessionId, (tx) => seasonDeleteImpact(tx, ctx.cfg, id)));
+        return c.json(await viewed(sessionId, (tx) => seasonDeleteImpact(tx, id)));
       }),
     );
 
@@ -575,7 +575,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const from = c.req.query("from") ?? "";
         const to = c.req.query("to") ?? "";
-        return c.json(await viewed(sessionId, (tx) => readHolidays(tx, ctx.cfg, from, to)));
+        return c.json(await viewed(sessionId, (tx) => readHolidays(tx, from, to)));
       }),
     );
 
@@ -585,7 +585,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const body = await readJsonBody<{ areaKey: string | null }>(c);
         const geography = await gated(sessionId, (tx) => {
           onlyKeys(body, ["areaKey"]);
-          return saveHolidayArea(tx, ctx.cfg, body);
+          return saveHolidayArea(tx, body);
         });
         return geography === null ? c.body(null, 204) : c.json(geography);
       }),
@@ -603,7 +603,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       const { dates, zonePaint } = input as SpecialDayInput;
       return assertDatedClosuresInHours(
         tx,
-        ctx.cfg,
         zonePaint ?? [],
         new Set(dates.filter((entry) => entry.closedAllDay).map((entry) => entry.date)),
         read,
@@ -613,7 +612,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
     app.get("/management-api/venue-service/special-days", (c) =>
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
-        return c.json(await viewed(sessionId, (tx) => listSpecialDays(tx, ctx.cfg)));
+        return c.json(await viewed(sessionId, (tx) => listSpecialDays(tx)));
       }),
     );
 
@@ -621,7 +620,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const id = requireUuidParam(c.req.param("id"), "SpecialDayId");
-        return c.json(await viewed(sessionId, (tx) => readSpecialDay(tx, ctx.cfg, id)));
+        return c.json(await viewed(sessionId, (tx) => readSpecialDay(tx, id)));
       }),
     );
 
@@ -634,7 +633,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           const { expectedClockRevision, ...input } = body;
           return saveSpecialDay(
             tx,
-            ctx.cfg,
             null,
             input,
             new Date(),
@@ -657,7 +655,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             const { expectedClockRevision, ...input } = body;
             return saveSpecialDay(
               tx,
-              ctx.cfg,
               id,
               input,
               new Date(),
@@ -675,7 +672,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const id = requireUuidParam(c.req.param("id"), "SpecialDayId");
         const body = await readJsonBody<{ expectedClockRevision: number }>(c);
         await gated(sessionId, (tx) =>
-          deleteSpecialDay(tx, ctx.cfg, id, new Date(), body.expectedClockRevision as number),
+          deleteSpecialDay(tx, id, new Date(), body.expectedClockRevision as number),
         );
         return c.body(null, 204);
       }),
@@ -710,7 +707,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         await gated(sessionId, (tx) =>
           target === null
             ? clearRoutingCell(tx, ctx.cfg, address)
-            : setRoutingCell(tx, ctx.cfg, address, target, periods),
+            : setRoutingCell(tx, address, target, periods),
         );
         return c.body(null, 204);
       }),
@@ -746,7 +743,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               ? await listDepartmentReceiptReadiness(tx, ctx.cfg)
               : []),
           ],
-          releaseReminderMinutesByDepartment: await listDepartmentReminderMinutes(tx, ctx.cfg),
+          releaseReminderMinutesByDepartment: await listDepartmentReminderMinutes(tx),
           needsClearingDepartmentIds: await listNeedsClearingDepartmentIds(tx, ctx.cfg),
           lateSendManagerDepartmentIds: await listLateSendManagerDepartmentIds(tx, ctx.cfg),
           serviceSteps: await listServiceSteps(tx, ctx.cfg),
@@ -1109,7 +1106,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
       run(c, log, async () => {
         const sessionId = requireManagementSession(c);
         const at = new Date();
-        return c.json(await viewed(sessionId, (tx) => readOpeningHoursModel(tx, ctx.cfg, at)));
+        return c.json(await viewed(sessionId, (tx) => readOpeningHoursModel(tx, at)));
       }),
     );
 
@@ -1140,9 +1137,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         const sessionId = requireManagementSession(c);
         const asked = c.req.query("periodId");
         const periodId = asked === undefined ? undefined : requireUuidParam(asked, "MenuPeriodId");
-        const painted = await viewed(sessionId, (tx) =>
-          readPaintedIn(tx, ctx.cfg, new Date(), periodId),
-        );
+        const painted = await viewed(sessionId, (tx) => readPaintedIn(tx, new Date(), periodId));
         return c.json([...painted].map(([periodId, where]) => ({ periodId, ...where })));
       }),
     );
@@ -1212,7 +1207,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         await gated(sessionId, (tx) =>
           replaceMenuWeek(
             tx,
-            ctx.cfg,
             departmentId,
             body.days as readonly MenuWeekDay[],
             new Date(),
@@ -1241,7 +1235,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
           const at = new Date();
           await saveSeasonWeeks(
             tx,
-            ctx.cfg,
             seasonId,
             {
               departments: departments?.map(({ id, days }) => ({
@@ -1255,7 +1248,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             (read) =>
               assertSeasonClosuresInHours(
                 tx,
-                ctx.cfg,
                 seasonId,
                 (zoneWeeks ?? []).map((zone, i) => ({ ...zone, field: `zones.${i}.` })),
                 at,
@@ -1288,7 +1280,6 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
               afterWrite: (read) =>
                 assertSeasonClosuresInHours(
                   tx,
-                  ctx.cfg,
                   seasonId,
                   [{ zoneId, field: "", days: body.days as readonly ClosedWeekDay[] }],
                   at,

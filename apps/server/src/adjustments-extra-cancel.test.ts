@@ -110,7 +110,6 @@ useVenueDb({
       // Made at the bar with nothing to prepare: it never reaches a kitchen station.
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: toastie.id }, zoneId: null },
         { kind: "no_preparation" },
       );
@@ -606,7 +605,6 @@ describe("cancelling an extra of a held dish (B11g)", () => {
         await writeProductModifiers(tx, product.id, [{ kind: "extras", id: extras.listId }]);
         await setRoutingCell(
           tx,
-          venue.cfg,
           { row: { kind: "product", productId: product.id }, zoneId: null },
           { kind: "station", stationId },
         );

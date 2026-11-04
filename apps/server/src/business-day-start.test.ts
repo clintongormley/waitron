@@ -80,7 +80,6 @@ async function authorRange(
     ).rows[0]!.id;
     await replaceMenuWeek(
       tx,
-      venue.cfg,
       department.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -119,7 +118,6 @@ describe("business-day start scheduling", () => {
       await inTx((tx) =>
         replaceMenuWeek(
           tx,
-          venue.cfg,
           department.id,
           [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
             weekday,
@@ -1051,7 +1049,6 @@ describe("a Save takes the next changeover", () => {
         ).rows[0]!.id;
         await replaceMenuWeek(
           tx,
-          venue.cfg,
           departmentId,
           [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
           at,

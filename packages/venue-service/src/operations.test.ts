@@ -566,12 +566,9 @@ describe("venue service routing", () => {
         staffMenuIds: [],
         colour: "blue",
       });
-      const summer = (await ensureDefaultSeasons(tx, { locationId })).find(
-        (season) => season.name === "Summer",
-      )!;
+      const summer = (await ensureDefaultSeasons(tx)).find((season) => season.name === "Summer")!;
       await replaceMenuWeek(
         tx,
-        { locationId },
         restaurant.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -745,13 +742,11 @@ describe("venue service routing", () => {
       });
       await setRoutingCell(
         tx,
-        { locationId },
         { row: { kind: "category", categoryId: category.id }, zoneId: upstairsZone },
         { kind: "station", stationId: upstairsBar },
       );
       await setRoutingCell(
         tx,
-        { locationId },
         { row: { kind: "category", categoryId: category.id }, zoneId: downstairsZone },
         { kind: "station", stationId: downstairsBar },
       );
@@ -1229,13 +1224,11 @@ describe("routing outcomes and menu readiness", () => {
       const cocktail = await productWithCategory(tx, menu.id, "Cocktail");
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "category", categoryId: cocktail.categoryId }, zoneId: null },
         station(kitchen),
       );
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "product", productId: cocktail.id }, zoneId },
         station(bar),
       );
@@ -1271,13 +1264,11 @@ describe("routing outcomes and menu readiness", () => {
       });
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "category", categoryId: parent.id }, zoneId: null },
         station(kitchen),
       );
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "category", categoryId: child.id }, zoneId: null },
         station(closedGrill),
       );
@@ -3164,7 +3155,6 @@ describe("each served menu's structure and Device Home Page", () => {
       });
       await replaceMenuWeek(
         tx,
-        cfg,
         restaurant.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -3235,7 +3225,6 @@ describe("each served menu's structure and Device Home Page", () => {
       });
       await replaceMenuWeek(
         tx,
-        cfg,
         restaurant.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,

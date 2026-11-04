@@ -85,7 +85,7 @@ async function routed() {
   const barZone = await zone("Bar");
   const counterZone = await zone("Deli counter");
   const made = await scoped(async (tx) => {
-    await ensureDefaultSeasons(tx, cfg);
+    await ensureDefaultSeasons(tx);
     const restaurant = (
       await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
     ).id;
@@ -112,7 +112,6 @@ async function routed() {
     const christmas = (
       await saveSpecialDay(
         tx,
-        cfg,
         null,
         {
           name: "Christmas",
@@ -178,7 +177,7 @@ async function routed() {
             ),
           }),
     });
-  const model = () => scoped((tx) => readOpeningHoursModel(tx, cfg, new Date()));
+  const model = () => scoped((tx) => readOpeningHoursModel(tx, new Date()));
   season = (await model()).currentSeasonId!;
   return { ...made, cfg, barZone, counterZone, app, send, model, season };
 }
@@ -534,9 +533,7 @@ describe("the opening-hours period API", () => {
     expect(response.status).toBe(200);
     const model = (await response.json()) as OpeningHoursModel;
     expect(model).toEqual(
-      JSON.parse(
-        JSON.stringify(await scoped((tx) => readOpeningHoursModel(tx, r.cfg, new Date()))),
-      ),
+      JSON.parse(JSON.stringify(await scoped((tx) => readOpeningHoursModel(tx, new Date())))),
     );
     expect(model.departments.find((department) => department.id === r.restaurant)!.periods).toEqual(
       [
@@ -566,7 +563,7 @@ describe("the opening-hours period API", () => {
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
     const period = async () =>
-      (await scoped((tx) => readOpeningHoursModel(tx, r.cfg, new Date()))).departments
+      (await scoped((tx) => readOpeningHoursModel(tx, new Date()))).departments
         .find((department) => department.id === r.restaurant)!
         .periods.find((value) => value.id === id)!;
     expect(await period()).toEqual({
@@ -625,7 +622,7 @@ describe("the opening-hours period API", () => {
     });
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
-    const model = await scoped((tx) => readOpeningHoursModel(tx, r.cfg, new Date()));
+    const model = await scoped((tx) => readOpeningHoursModel(tx, new Date()));
     expect(
       model.departments
         .find((department) => department.id === r.restaurant)!
@@ -644,7 +641,7 @@ describe("the opening-hours period API", () => {
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
     const colour = async () =>
-      (await scoped((tx) => readOpeningHoursModel(tx, r.cfg, new Date()))).departments
+      (await scoped((tx) => readOpeningHoursModel(tx, new Date()))).departments
         .find((department) => department.id === r.restaurant)!
         .periods.find((value) => value.id === id)!.colour;
     expect(await colour()).toBe("indigo");

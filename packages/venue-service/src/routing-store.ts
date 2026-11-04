@@ -183,7 +183,6 @@ async function storedLines(
  */
 async function validatePeriodLines(
   tx: Transaction,
-  cfg: VenueScope,
   cell: { address: CellAddress; departmentId: string | null },
   lines: readonly PeriodLine[],
 ): Promise<StoredLine[]> {
@@ -196,7 +195,7 @@ async function validatePeriodLines(
     seen.add(periodId);
     return { periodId, target: line.target };
   });
-  const periods = new Map((await readPeriods(tx, cfg, [...seen])).map((row) => [row.id, row]));
+  const periods = new Map((await readPeriods(tx, [...seen])).map((row) => [row.id, row]));
   const valid: StoredLine[] = [];
   for (const line of canonical) {
     const period = periods.get(line.periodId);
@@ -314,14 +313,12 @@ function cellAt({ row, zoneId }: CellAddress) {
 /** `periods` replaces the cell's period lines; omitted, the stored lines stay. */
 export async function setRoutingCell(
   tx: Transaction,
-  cfg: VenueScope,
   address: CellAddress,
   target: RouteTarget,
   periods?: readonly PeriodLine[],
 ): Promise<void> {
   const valid = await validateRoutingCell(tx, address, target);
-  const lines =
-    periods === undefined ? undefined : await validatePeriodLines(tx, cfg, valid, periods);
+  const lines = periods === undefined ? undefined : await validatePeriodLines(tx, valid, periods);
   const stored = storedTarget(valid.target!);
   const [updated] = await tx
     .update(routingCells)
@@ -475,9 +472,7 @@ export async function previewRoutingChange(
   const valid = await validateRoutingCell(tx, change.address, change.target);
   const { address, target } = valid;
   const lines =
-    change.periods === undefined
-      ? undefined
-      : await validatePeriodLines(tx, cfg, valid, change.periods);
+    change.periods === undefined ? undefined : await validatePeriodLines(tx, valid, change.periods);
   const key = cellKey(address);
   const cells = rules.cells.filter((cell) => cellKey(cell) !== key);
   if (target !== null) cells.push({ ...address, target });
@@ -533,7 +528,7 @@ export async function previewRoutingChange(
     ...move,
     periodIds: null,
   }));
-  const timedPeriods = await periodsDeciding(tx, cfg, [rules, after], {
+  const timedPeriods = await periodsDeciding(tx, [rules, after], {
     productsToCheck,
     offers,
     zoneList,
@@ -578,7 +573,6 @@ export async function previewRoutingChange(
  */
 async function periodsDeciding(
   tx: Transaction,
-  cfg: VenueScope,
   states: readonly RoutingRules[],
   {
     productsToCheck,
@@ -609,7 +603,7 @@ async function periodsDeciding(
       compared.set(facts.productId, facts);
     }
   }
-  const periods = await readPeriods(tx, cfg);
+  const periods = await readPeriods(tx);
   const departmentOf = new Map(periods.map((period) => [period.id, period.departmentId]));
   const zoneDepartment = await zoneDepartments(tx);
   const named = new Set<string>();
@@ -635,7 +629,6 @@ async function periodsDeciding(
     moment === null ? clock.dayCutover : serviceDayContext(clock, moment.businessDay).dayCutover;
   const ordered = await inPeriodOrder(
     tx,
-    cfg,
     periods.filter((period) => named.has(period.id)),
     dayCutover,
   );
@@ -1040,7 +1033,7 @@ export async function describeMakers(
 
 export async function routingModel(
   tx: Transaction,
-  cfg: VenueScope,
+  _cfg: VenueScope,
   at: Date,
 ): Promise<RoutingModel> {
   const { clock, moment } = await clockAt(tx, at);
@@ -1058,7 +1051,7 @@ export async function routingModel(
     .where(and(eq(products.active, true), isNull(products.parentId)))
     .orderBy(asc(products.name), asc(products.id));
   const shown = new Set(gridProducts.map((product) => product.id));
-  const periods = await readRoutingPeriods(tx, cfg, cutover);
+  const periods = await readRoutingPeriods(tx, cutover);
   const periodOrder = new Map(periods.map((period, index) => [period.id, index]));
   const periodProducts = new Map(periods.map((period) => [period.id, period.productIds]));
   const active = (rules.cellPeriods?.size ?? 0) > 0 ? await activeProducts(tx) : [];

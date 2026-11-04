@@ -103,7 +103,6 @@ async function dish(station = grill) {
   await inTx(v, (tx) =>
     setRoutingCell(
       tx,
-      v.cfg,
       { row: { kind: "product", productId: v.productId("Burger") }, zoneId: null },
       { kind: "station", stationId: station },
     ),
@@ -454,7 +453,6 @@ it.each(["leave", "send", "move", "split"] as const)(
     await inTx(v, (tx) =>
       setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId("Burger") }, zoneId: null },
         { kind: "station", stationId: grill },
       ),

@@ -451,7 +451,7 @@ describe("readTableSteps", () => {
   it("a new venue's starter steps reach the floor", async () => {
     const v = await setupPartyVenue(suite.db);
     const department = await tablesDepartment(v);
-    await inTx(v, (tx) => addStarterServiceSteps(tx, v.cfg, department));
+    await inTx(v, (tx) => addStarterServiceSteps(tx, department));
     const [first] = await inTx(v, (tx) =>
       tx
         .select({ id: serviceSteps.id, name: serviceSteps.name })

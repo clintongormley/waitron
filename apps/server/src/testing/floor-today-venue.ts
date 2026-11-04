@@ -184,7 +184,6 @@ export async function setsDepartment(
     const dinnerPeriod = await period("Dinner");
     await replaceMenuWeek(
       tx,
-      v.cfg,
       department.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -296,7 +295,7 @@ export async function standardAndDinner(
         .where(eq(menuPeriods.id, d.lunchPeriod));
       const { revision } = await readLayout(tx, v.cfg, { setId, zoneId: d.zoneId });
       const day = await todayBusinessDay(tx, now);
-      return updateLayout(tx, v.cfg, REMOVALS, d.zoneId, day, now, {
+      return updateLayout(tx, REMOVALS, d.zoneId, day, now, {
         setId,
         layoutRevision: revision,
       });

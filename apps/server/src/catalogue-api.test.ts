@@ -1773,7 +1773,6 @@ describe("mountCatalogueApi — products", () => {
         .returning();
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "category", categoryId: drinks }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );
@@ -1788,7 +1787,6 @@ describe("mountCatalogueApi — products", () => {
       await configureZone(tx, cfg, { zoneId: terrace!.id, departmentId: department.id });
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "category", categoryId: cocktails }, zoneId: terrace!.id },
         { kind: "station", stationId: cocktailBar!.id },
       );
@@ -1812,7 +1810,6 @@ describe("mountCatalogueApi — products", () => {
         );
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "category", categoryId: drinks }, zoneId: null },
         { kind: "station", stationId: cocktailBar!.id },
       );

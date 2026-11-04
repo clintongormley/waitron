@@ -446,7 +446,6 @@ describe("A669 candidate sets", () => {
     await inTx(v, async (tx) => {
       await setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: n.egg.id }, zoneId: v.tables.zoneId },
         { kind: "no_preparation" },
       );

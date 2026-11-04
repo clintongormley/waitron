@@ -182,7 +182,6 @@ async function setupVenue(options: {
         const middayPeriodId = await period("Middays", "Midday menu");
         await replaceMenuWeek(
           tx,
-          cfg,
           restaurant,
           [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
             weekday,
@@ -400,7 +399,6 @@ async function mealVenue(weekdays: readonly number[] = [1], simulatorCard = fals
     await updateMenuPeriod(tx, v.cfg, dinner.id, { name: "Dinner" });
     await replaceMenuWeek(
       tx,
-      v.cfg,
       v.restaurant,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -973,7 +971,6 @@ describe("service periods gate only added dishes and added stored quantities", (
     await withTransaction(suite.db, (tx) =>
       replaceMenuWeek(
         tx,
-        v.cfg,
         v.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
         MONDAY_10_00,
@@ -1217,7 +1214,6 @@ describe("service periods gate only added dishes and added stored quantities", (
     await withTransaction(suite.db, (tx) =>
       replaceMenuWeek(
         tx,
-        v.cfg,
         v.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
         MONDAY_10_00,
@@ -1265,7 +1261,6 @@ describe("service periods gate only added dishes and added stored quantities", (
     await withTransaction(suite.db, (tx) =>
       replaceMenuWeek(
         tx,
-        v.cfg,
         v.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
         MONDAY_10_00,
@@ -1873,7 +1868,6 @@ describe("menu-state follows department service periods", () => {
       });
       await replaceMenuWeek(
         tx,
-        v.cfg,
         v.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -2011,7 +2005,6 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       ).id;
       await replaceMenuWeek(
         tx,
-        v.cfg,
         v.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -2056,7 +2049,6 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       const downstairs = await stationWithPrinter("Downstairs bar");
       await setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "category", categoryId: cocktails }, zoneId: null },
         { kind: "station", stationId: upstairs.stationId },
       );
@@ -2231,7 +2223,6 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       const garnish = (await createCategory(tx, { name: "Garnish" })).id;
       await setRoutingCell(
         tx,
-        c.v.cfg,
         { row: { kind: "category", categoryId: garnish }, zoneId: null },
         { kind: "station", stationId: c.downstairs.stationId },
       );

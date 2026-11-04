@@ -100,8 +100,7 @@ async function painted() {
   });
 }
 
-const read = (cfg: { locationId: string }) =>
-  inTx((tx) => readStaffingMonth(tx, cfg, "2026-08", AT));
+const read = () => inTx((tx) => readStaffingMonth(tx, "2026-08", AT));
 
 /** What `fn` returned, and every table each statement it sent names after `from` or `join`. */
 async function tablesRead<T>(fn: (tx: Transaction) => Promise<T>) {
@@ -126,7 +125,7 @@ async function tablesRead<T>(fn: (tx: Transaction) => Promise<T>) {
 describe("readStaffingMonth", () => {
   it("counts each painted area's slots on each business day of the month's whole weeks", async () => {
     const v = await painted();
-    const month = await read(v.cfg);
+    const month = await read();
     expect(month.month).toBe("2026-08");
     expect(month.today).toBe("2026-08-10");
     expect(month.areas).toEqual([
@@ -202,7 +201,7 @@ describe("readStaffingMonth", () => {
         .values({ locationId: v.cfg.locationId, name: "Pastry" })
         .returning({ id: kitchenStations.id }),
     );
-    const month = await read(v.cfg);
+    const month = await read();
     const area: AreaRef = { kind: "station", id: pastry!.id };
     expect(month.areas).toEqual([
       { area: v.dept, name: "Dining room" },
@@ -217,15 +216,15 @@ describe("readStaffingMonth", () => {
     await inTx((tx) =>
       tx.update(departments).set({ active: false }).where(eq(departments.id, v.departmentId)),
     );
-    const month = await read(v.cfg);
+    const month = await read();
     const friday = month.days.find((d) => d.date === "2026-08-14")!;
     expect(friday.areas).toEqual([{ area: v.grill, needed: 4, unfilled: null }]);
     expect(month.areas).toEqual([{ area: v.grill, name: "Grill" }]);
   });
 
   it("reads each table once, joins included, and not floor_zones, the holiday tables or the clock status", async () => {
-    const v = await painted();
-    const { tables } = await tablesRead((tx) => readStaffingMonth(tx, v.cfg, "2026-08", AT));
+    await painted();
+    const { tables } = await tablesRead((tx) => readStaffingMonth(tx, "2026-08", AT));
     expect(tables).toContain("staffing_days");
     expect(tables).toContain("location_day_cutover_changes");
     expect(tables.filter((table, i) => tables.indexOf(table) !== i)).toEqual([]);
@@ -258,7 +257,7 @@ describe("readStaffingMonth", () => {
       return row!.id;
     });
     const { result: month, tables } = await tablesRead((tx) =>
-      readStaffingMonth(tx, v.cfg, "2026-04", AT),
+      readStaffingMonth(tx, "2026-04", AT),
     );
     // Viernes Santo falls on 2026-04-03, not on the saved date's 04-18.
     expect(month.days.find((d) => d.date === "2026-04-03")!.specialDay).toEqual({
@@ -300,7 +299,7 @@ describe("rota counts in the staffing month", () => {
         .values({ shiftId, departmentId: v.departmentId, staffRoleId: role!.id });
     });
     const { result: month, tables } = await tablesRead((tx) =>
-      readStaffingMonth(tx, v.cfg, "2026-08", AT),
+      readStaffingMonth(tx, "2026-08", AT),
     );
     expect(month.days.find((d) => d.date === "2026-08-14")!.areas).toEqual([
       { area: v.dept, needed: 5, unfilled: 4 },

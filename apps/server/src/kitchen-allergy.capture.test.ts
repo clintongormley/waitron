@@ -225,7 +225,7 @@ async function extraFixture(separate: boolean) {
     const station = separate
       ? (await createStation(tx, v.cfg, { name: "Sides station" })).id
       : stationId;
-    await routeProductTo(tx, v.cfg, extra.id, station);
+    await routeProductTo(tx, extra.id, station);
     await republishMenus(tx);
     return { extraId: extra.id, listId: list.id, stationId: station };
   });
@@ -797,7 +797,6 @@ describe("A669 capture", () => {
         if (noPreparation)
           await setRoutingCell(
             tx,
-            v.cfg,
             {
               row: { kind: "product", productId: v.productId("Burger") },
               zoneId: null,

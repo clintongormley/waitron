@@ -85,7 +85,6 @@ async function lineIdOf(tx: Transaction, orderId: string, name: string): Promise
 async function burgerAndWater(tx: Transaction, venue: Venue) {
   await setRoutingCell(
     tx,
-    venue.cfg,
     { row: { kind: "category", categoryId: venue.folders.bottled }, zoneId: null },
     { kind: "station", stationId: venue.stations.bar },
   );
@@ -645,10 +644,9 @@ describe("A773 pass board: scoped", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       const cold = (await createStation(tx, venue.cfg, { name: "Cold" })).id;
-      await routeProductTo(tx, venue.cfg, venue.products.cheese, cold);
+      await routeProductTo(tx, venue.products.cheese, cold);
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "category", categoryId: venue.folders.bottled }, zoneId: null },
         { kind: "station", stationId: venue.stations.bar },
       );

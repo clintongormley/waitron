@@ -39,7 +39,6 @@ useVenueDb({
       extraStationId = station.id;
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: venue.olivesId }, zoneId: null },
         { kind: "station", stationId: station.id },
       );

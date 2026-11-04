@@ -346,7 +346,6 @@ describe("seedDemoRestaurant", () => {
       });
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "category", categoryId: folder.id }, zoneId: null },
         { kind: "no_preparation" },
       );

@@ -17,7 +17,6 @@ import "./errors.js";
  *  calendar draws them, cut at a past day's own ends. */
 export async function calendarDays(
   tx: Transaction,
-  cfg: VenueScope,
   dates: readonly LocalDate[],
   holidays: readonly HolidayFact[],
   stored?: BusinessDayClock,
@@ -28,7 +27,7 @@ export async function calendarDays(
   // A business day's cutover never reads the zone (`cutoverAt`, @waitron/shared
   // business-day-clock.ts), so a venue whose zone cannot be read still has its days drawn.
   const clock = isReadableZone(stored.timeZone) ? stored : { ...stored, timeZone: "UTC" };
-  const plan = await readDayPlan(tx, cfg, dates, seasons);
+  const plan = await readDayPlan(tx, dates, seasons);
   const active = await tx
     .select({ id: departments.id })
     .from(departments)
@@ -36,7 +35,6 @@ export async function calendarDays(
   const open = new Set<LocalDate>();
   const resolved = await resolveDepartmentsDays(
     tx,
-    cfg,
     active.map(({ id }) => id),
     dates,
     clock,
@@ -98,5 +96,5 @@ export async function readCalendarDays(
   holidays?: HolidayReader,
 ): Promise<CalendarDay[]> {
   const dates = rangeDates(from, to);
-  return (await calendarDays(tx, cfg, dates, await readHolidays(tx, cfg, dates, holidays))).days;
+  return (await calendarDays(tx, dates, await readHolidays(tx, cfg, dates, holidays))).days;
 }

@@ -85,7 +85,7 @@ export async function seedFloor(
   await tx
     .insert(departmentSalePolicies)
     .values({ departmentId: deliDepartmentId, orderStart: "counter" });
-  await addStarterServiceSteps(tx, cfg, deliDepartmentId);
+  await addStarterServiceSteps(tx, deliDepartmentId);
 
   const zoneIds = new Map<string, string>();
   for (const zone of floor.zones) {
@@ -161,7 +161,6 @@ export async function seedFloor(
     for (const category of barCategories) {
       await setRoutingCell(
         tx,
-        { locationId: brandLocationId(locationId) },
         { row: { kind: "category", categoryId: category.id }, zoneId: upstairsBarZone.id },
         { kind: "station", stationId: downstairsStationId },
       );
@@ -204,25 +203,23 @@ export async function seedFloor(
     });
     await replaceMenuWeek(
       tx,
-      cfg,
       restaurantId,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
         slots: [{ periodId: restaurant.id, startsAt: "09:00", endsAt: "00:00" }],
       })),
       new Date(),
-      await readBusinessDayScheduleRevision(tx, cfg),
+      await readBusinessDayScheduleRevision(tx),
     );
     await replaceMenuWeek(
       tx,
-      cfg,
       deliDepartmentId,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
         slots: weekday === 0 ? [] : [{ periodId: deli.id, startsAt: "09:00", endsAt: "18:00" }],
       })),
       new Date(),
-      await readBusinessDayScheduleRevision(tx, cfg),
+      await readBusinessDayScheduleRevision(tx),
     );
   }
 

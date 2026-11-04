@@ -217,7 +217,6 @@ async function setupVenue(): Promise<Venue> {
     // Bottled water is handed over at the bar: no kitchen ticket, only a sent stamp.
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "product", productId: productId.water }, zoneId: null },
       { kind: "no_preparation" },
     );
@@ -5170,7 +5169,6 @@ describe("advance HOLD tickets (Task 6)", () => {
       const barPrinter = await inTx(async (tx) => {
         await setRoutingCell(
           tx,
-          v.cfg,
           { row: { kind: "product", productId: v.productId.fish }, zoneId: null },
           { kind: "station", stationId: barId },
         );
@@ -5328,7 +5326,6 @@ describe("advance HOLD tickets (Task 6)", () => {
           ] as const)
             await setRoutingCell(
               tx,
-              v.cfg,
               { row: { kind: "product", productId: v.productId[dish] }, zoneId: null },
               { kind: "station", stationId },
             );
@@ -5866,7 +5863,6 @@ describe("Fire now on one held dish", () => {
       await setStationPrinting(tx, { printHeldWork: printHeld });
       await setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId.sauce }, zoneId: null },
         { kind: "station", stationId: extraStation },
       );

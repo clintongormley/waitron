@@ -352,7 +352,6 @@ function saladStation() {
       .where(eq(products.name, "Salad"));
     await setRoutingCell(
       tx,
-      venue.cfg,
       { row: { kind: "product", productId: salad!.id }, zoneId: null },
       { kind: "station", stationId: station.id },
     );

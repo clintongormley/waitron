@@ -262,7 +262,7 @@ export async function readSeasonStaffing(
   seasonId: string,
 ): Promise<SeasonStaffing> {
   const scope = venueScope(cfg);
-  const all = await readSeasons(tx, scope);
+  const all = await readSeasons(tx);
   if (!all.some((season) => season.id === seasonId))
     throw new AppError("season.not_found", { seasonId });
   const areas = await listStaffingAreas(tx);
@@ -327,7 +327,7 @@ export async function readSpecialDayStaffing(
   specialDayId: string,
 ): Promise<SpecialDayStaffing> {
   const scope = venueScope(cfg);
-  const found = await readSpecialDayPlan(tx, scope, specialDayId);
+  const found = await readSpecialDayPlan(tx, specialDayId);
   if (found === null) throw new AppError("special_day.not_found", { specialDayId });
   const { name: specialDayName, plan } = found;
   const dates = found.dates.map(({ dateId, storedDate }) => ({ dateId, date: storedDate }));
@@ -405,13 +405,12 @@ export interface ResolveStaffingGiven {
  *  the area wins, else the season's weekday row, else no entry. */
 export async function resolveStaffing(
   tx: Transaction,
-  cfg: ScopeCfg,
   businessDays: readonly string[],
   given: ResolveStaffingGiven = {},
 ): Promise<Map<string, Map<string, StaffingBlock[]>>> {
   const resolved = new Map<string, Map<string, StaffingBlock[]>>();
   if (businessDays.length === 0) return resolved;
-  const plan = given.plan ?? (await readDayPlan(tx, venueScope(cfg), businessDays));
+  const plan = given.plan ?? (await readDayPlan(tx, businessDays));
   for (const day of businessDays)
     if (!plan.seasonIdOn.has(day) || !plan.special.has(day))
       throw new Error(`the day plan does not cover ${day}`);

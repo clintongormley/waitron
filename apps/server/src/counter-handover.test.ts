@@ -82,7 +82,6 @@ useVenueDb({
       ).rows;
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: item!.product_id }, zoneId: null },
         { kind: "no_preparation" },
       );

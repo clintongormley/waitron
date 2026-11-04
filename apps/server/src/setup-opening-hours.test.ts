@@ -44,62 +44,62 @@ async function seed(withMenu = true, receiptLocale = "en-GB") {
 
 describe("setup's saved first opening hours", () => {
   it("reports the default department's actual seeded weekday hours", async () => {
-    const { cfg, department } = await seed();
-    expect(await readSetupOpeningHours(suite.db, cfg)).toEqual({ departmentId: department.id });
+    const { department } = await seed();
+    expect(await readSetupOpeningHours(suite.db)).toEqual({ departmentId: department.id });
   });
 
   it("reports a Spanish venue's seeded weekday hours under its staff language's period name", async () => {
-    const { cfg, department } = await seed(true, "es-ES");
+    const { department } = await seed(true, "es-ES");
     expect(
       await suite.db
         .select({ name: menuPeriods.name })
         .from(menuPeriods)
         .where(eq(menuPeriods.departmentId, department.id)),
     ).toEqual([{ name: STARTER_PERIOD_NAMES.Open.es }]);
-    expect(await readSetupOpeningHours(suite.db, cfg)).toEqual({ departmentId: department.id });
+    expect(await readSetupOpeningHours(suite.db)).toEqual({ departmentId: department.id });
   });
 
   // Decided behaviour (A918 slice 3, decision 5): no column marks the starter period, so the
   // check matches its name in any staff language, even in a venue that did not start with it.
   it("reads an English venue's period renamed to the Spanish starter name as the starter period", async () => {
-    const { cfg, department } = await seed();
+    const { department } = await seed();
     await suite.db.update(menuPeriods).set({ name: STARTER_PERIOD_NAMES.Open.es });
-    expect(await readSetupOpeningHours(suite.db, cfg)).toEqual({ departmentId: department.id });
+    expect(await readSetupOpeningHours(suite.db)).toEqual({ departmentId: department.id });
   });
 
   it("has no weekday summary when provisioning has no catalogue", async () => {
-    const { cfg } = await seed(false);
-    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+    await seed(false);
+    expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });
 
   it("has no summary without a default department", async () => {
-    const { cfg, department } = await seed();
+    const { department } = await seed();
     await suite.db
       .update(departments)
       .set({ isDefault: false })
       .where(eq(departments.id, department.id));
-    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+    expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });
 
   it("has no summary for an inactive department", async () => {
-    const { cfg, department } = await seed();
+    const { department } = await seed();
     await suite.db
       .update(departments)
       .set({ active: false })
       .where(eq(departments.id, department.id));
-    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+    expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });
 
   it("has no first-Open summary for an authored period", async () => {
-    const { cfg } = await seed();
+    await seed();
     await suite.db.update(menuPeriods).set({ name: "Lunch" });
-    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+    expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });
 
   it("has no first-Open summary for an authored period in a Spanish venue", async () => {
-    const { cfg } = await seed(true, "es-ES");
+    await seed(true, "es-ES");
     await suite.db.update(menuPeriods).set({ name: "Lunch" });
-    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+    expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });
 
   it("has no first-Open summary when another period has been added", async () => {
@@ -115,11 +115,11 @@ describe("setup's saved first opening hours", () => {
         staffMenuIds: [],
       }),
     );
-    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+    expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });
 
   it("has no weekday-only summary when Saturday also opens", async () => {
-    const { cfg, department } = await seed();
+    const { department } = await seed();
     const [period] = await suite.db
       .select()
       .from(menuPeriods)
@@ -127,7 +127,6 @@ describe("setup's saved first opening hours", () => {
     await withTransaction(suite.db, (tx) =>
       replaceMenuWeek(
         tx,
-        cfg,
         department.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -138,22 +137,21 @@ describe("setup's saved first opening hours", () => {
         0,
       ),
     );
-    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+    expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });
 
   it("has no summary when one season other than the current one differs", async () => {
-    const { cfg, department } = await seed();
+    const { department } = await seed();
     const [period] = await suite.db
       .select()
       .from(menuPeriods)
       .where(eq(menuPeriods.departmentId, department.id));
-    const model = await readOpeningHoursModel(suite.db, cfg, new Date());
+    const model = await readOpeningHoursModel(suite.db, new Date());
     // Not the current season, so a check reading only the current week would still match.
     const other = model.seasons.find((season) => season.id !== model.currentSeasonId)!;
     await withTransaction(suite.db, (tx) =>
       replaceMenuWeek(
         tx,
-        cfg,
         department.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -173,17 +171,17 @@ describe("setup's saved first opening hours", () => {
         { seasonId: other.id },
       ),
     );
-    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+    expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });
 
   it("has no summary for a venue with no seasons", async () => {
     const { cfg } = await seed();
     await suite.db.delete(seasons).where(eq(seasons.locationId, cfg.locationId));
-    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+    expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });
 
   it("has no full-week summary when a weekday has no range", async () => {
-    const { cfg, department } = await seed();
+    const { department } = await seed();
     const tuesdays = await suite.db
       .select({ id: departmentDays.id })
       .from(departmentDays)
@@ -195,19 +193,19 @@ describe("setup's saved first opening hours", () => {
         tuesdays.map((day) => day.id),
       ),
     );
-    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+    expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });
 
   it("does not describe an authored shorter week as the first weekday schedule", async () => {
-    const { cfg } = await seed();
+    await seed();
     await suite.db.update(departmentDayRanges).set({ endsAt: "16:00:00" });
-    expect(await readSetupOpeningHours(suite.db, cfg)).toBeUndefined();
+    expect(await readSetupOpeningHours(suite.db)).toBeUndefined();
   });
 });
 
 describe("setup without venue-service installed", () => {
   const core = useVenueDb({ migrations: [CORE_MIGRATIONS] });
   it("does not query absent period tables", async () => {
-    expect(await readSetupOpeningHours(core.db, { locationId: "uninstalled" })).toBeUndefined();
+    expect(await readSetupOpeningHours(core.db)).toBeUndefined();
   });
 });

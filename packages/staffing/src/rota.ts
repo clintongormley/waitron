@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, lte, inArray, or } from "drizzle-orm";
 import { readVenueClock, type Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
-import { AppError, cutoverForBusinessDay, locationId } from "@waitron/shared";
+import { AppError, cutoverForBusinessDay } from "@waitron/shared";
 import {
   addDays,
   isLocalDate,
@@ -28,31 +28,28 @@ import { shiftAssignments, staffRoles } from "./schema/staffing.js";
 import type { RotaWeek, RotaShiftInput, RotaShiftPatch } from "./staffing-types.js";
 import "./errors.js";
 
-type Cfg = { locationId: string };
 const backend = new WorkforceBackend();
 const invalid = (field: string) => new AppError("staffing.invalid", { field });
 export function isRotaWeek(value: unknown): value is string {
   return typeof value === "string" && isLocalDate(value) && mondayOf(value) === value;
 }
-export async function readRotaWeek(tx: Transaction, cfg: Cfg, week: string): Promise<RotaWeek> {
+export async function readRotaWeek(tx: Transaction, week: string): Promise<RotaWeek> {
   if (!isRotaWeek(week)) throw invalid("week");
   const days = Array.from({ length: 7 }, (_, i) => addDays(week, i));
   const clock = await readVenueClock(tx);
   const cutover = (day: string) => cutoverForBusinessDay(clock, day);
-  const scope = { locationId: locationId(cfg.locationId) };
-  const venueSeasons = await readSeasons(tx, scope);
-  const plan = await readDayPlan(tx, scope, days, venueSeasons);
+  const venueSeasons = await readSeasons(tx);
+  const plan = await readDayPlan(tx, days, venueSeasons);
   const areas = await listStaffingAreas(tx);
   const opening = await resolveDepartmentsDays(
     tx,
-    scope,
     areas.flatMap(({ area }) => (area.kind === "department" ? [area.id] : [])),
     days,
     clock,
     plan,
   );
   const weekSeasonIds = new Set(days.map((day) => plan.seasonIdOn.get(day)));
-  const paint = await resolveStaffing(tx, cfg, days, { plan, areas, cutover: clock.dayCutover });
+  const paint = await resolveStaffing(tx, days, { plan, areas, cutover: clock.dayCutover });
   const roles = await listStaffRoles(tx);
   const data = await readRotaRows(tx, week, week);
   const version = data.selected.get(week);
@@ -226,11 +223,7 @@ function assignment(area: AreaRef, staffRoleId: string) {
     staffRoleId,
   };
 }
-export async function addRotaShift(
-  tx: Transaction,
-  _cfg: Cfg,
-  input: RotaShiftInput,
-): Promise<string> {
+export async function addRotaShift(tx: Transaction, input: RotaShiftInput): Promise<string> {
   if (!isRotaWeek(input.week)) throw invalid("week");
   if (
     !isLocalDate(input.businessDay) ||
@@ -278,7 +271,6 @@ async function unattachedWeek(
 }
 export async function updateRotaShift(
   tx: Transaction,
-  _cfg: Cfg,
   shiftId: string,
   patch: RotaShiftPatch,
 ): Promise<void> {
@@ -333,7 +325,7 @@ export async function updateRotaShift(
     });
   }
 }
-export async function removeRotaShift(tx: Transaction, _cfg: Cfg, shiftId: string): Promise<void> {
+export async function removeRotaShift(tx: Transaction, shiftId: string): Promise<void> {
   const row = await writableShift(tx, shiftId);
   if (row.rosterVersionId === null) await unattachedWeek(tx, row);
   await backend.removeShift(tx, { shiftId });

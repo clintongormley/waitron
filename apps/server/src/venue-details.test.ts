@@ -977,7 +977,6 @@ describe("venue details preserve committed history", () => {
       for (const period of periods.rows)
         await replaceMenuWeek(
           tx,
-          venue.cfg,
           period.department_id,
           [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
             weekday,
@@ -1721,7 +1720,6 @@ it("refuses a changed cutover beside a placed period and rolls back other detail
     });
     await replaceMenuWeek(
       tx,
-      venue.cfg,
       department.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,

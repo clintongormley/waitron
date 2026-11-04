@@ -193,10 +193,9 @@ describe("station times", () => {
 
 const SAVED_AT = new Date("2026-10-01T10:00:00Z");
 
-async function saveDate(tx: Transaction, cfg: VenueScope, date: string, closedAllDay = false) {
+async function saveDate(tx: Transaction, date: string, closedAllDay = false) {
   return saveSpecialDay(
     tx,
-    cfg,
     null,
     { name: `Special ${date}`, repeatsYearly: false, dates: [{ date, closedAllDay }] },
     SAVED_AT,
@@ -219,10 +218,10 @@ describe("station status on special dates and calendar boundaries", () => {
       const f = await fixture(tx);
       const tuesdayHalfPastMidnight = "2026-10-05T22:30:00Z";
       expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
-      await saveDate(tx, f.cfg, "2026-10-06");
+      await saveDate(tx, "2026-10-06");
       expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
       expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T00:00:00Z")).toEqual(openState);
-      await saveDate(tx, f.cfg, "2026-10-05");
+      await saveDate(tx, "2026-10-05");
       expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
     });
   });
@@ -230,14 +229,14 @@ describe("station status on special dates and calendar boundaries", () => {
   it("keeps active stations open across month and year boundaries", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await saveDate(tx, f.cfg, "2026-12-31");
-      await saveDate(tx, f.cfg, "2027-01-01");
-      await saveDate(tx, f.cfg, "2026-10-31");
+      await saveDate(tx, "2026-12-31");
+      await saveDate(tx, "2027-01-01");
+      await saveDate(tx, "2026-10-31");
       await tx
         .update(kitchenStations)
         .set({ active: true })
         .where(eq(kitchenStations.id, f.retired));
-      await saveDate(tx, f.cfg, "2026-10-11");
+      await saveDate(tx, "2026-10-11");
 
       expect(await statusAt(tx, f.cfg, f.upstairs, "2027-01-01T01:30:00Z")).toEqual(openState);
       expect(await statusAt(tx, f.cfg, f.upstairs, "2027-01-01T02:00:00Z")).toEqual(openState);
@@ -255,7 +254,7 @@ describe("station status on special dates and calendar boundaries", () => {
   it("keeps stations open throughout ordinary and special dates", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await saveDate(tx, f.cfg, "2026-10-08");
+      await saveDate(tx, "2026-10-08");
       // Tuesday 6 October from 00:00 to 23:59 in Madrid, then Wednesday.
       expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-05T22:00:00Z")).toEqual(openState);
       expect(await statusAt(tx, f.cfg, f.upstairs, "2026-10-06T21:59:00Z")).toEqual(openState);
@@ -280,7 +279,7 @@ describe("station status on special dates and calendar boundaries", () => {
   it("keeps a by-hand close until cutover and ignores an explicit open row", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await saveDate(tx, f.cfg, "2026-10-06");
+      await saveDate(tx, "2026-10-06");
       const afternoon = new Date("2026-10-06T13:00:00Z");
       expect(await statusAt(tx, f.cfg, f.upstairs, afternoon)).toEqual(openState);
       await setStationToday(tx, f.cfg, f.upstairs, "closed", afternoon);
@@ -311,7 +310,7 @@ describe("station status on special dates and calendar boundaries", () => {
   it("keeps the default station open through a closed day, and an inactive default unavailable", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await saveDate(tx, f.cfg, "2026-10-06", true);
+      await saveDate(tx, "2026-10-06", true);
       await tx
         .update(kitchenStations)
         .set({ isDefault: false })
@@ -336,7 +335,7 @@ describe("station status on special dates and calendar boundaries", () => {
   it("makes an open station the default on a special date", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await saveDate(tx, f.cfg, "2026-10-06");
+      await saveDate(tx, "2026-10-06");
       expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-06T10:00:00Z")).toEqual(openState);
       expect(await statusAt(tx, f.cfg, f.downstairs, "2026-10-13T10:00:00Z")).toEqual(openState);
       await tx
@@ -357,7 +356,7 @@ describe("station status on special dates and calendar boundaries", () => {
   it("keeps active stations open while the venue clock cannot be read", async () => {
     await db.transaction(async (tx) => {
       const f = await fixture(tx);
-      await saveDate(tx, f.cfg, "2026-10-06", true);
+      await saveDate(tx, "2026-10-06", true);
       await tx
         .update(locations)
         .set({ timeZone: "Mars/Base" })
@@ -378,7 +377,7 @@ describe("station status on special dates and calendar boundaries", () => {
         const tuesdayHalfPastMidnight = "2026-10-05T22:30:00Z";
         expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
         expect(await statusAt(tx, f.cfg, f.downstairs, tuesdayHalfPastMidnight)).toEqual(openState);
-        await saveDate(tx, f.cfg, "2026-10-05");
+        await saveDate(tx, "2026-10-05");
         expect(await statusAt(tx, f.cfg, f.upstairs, tuesdayHalfPastMidnight)).toEqual(openState);
       });
     },
@@ -492,7 +491,7 @@ describe("station times on a public holiday", () => {
   it("a special day on a public holiday does not close a prep station", async () => {
     await db.transaction(async (tx) => {
       const f = await sevilleVenue(tx);
-      await saveDate(tx, f.cfg, HOLIDAY);
+      await saveDate(tx, HOLIDAY);
       expect(await statusAt(tx, f.cfg, f.upstairs, `${HOLIDAY}T18:00:00Z`)).toEqual(openState);
       expect(await statusAt(tx, f.cfg, f.upstairs, `${ORDINARY}T18:00:00Z`)).toEqual(openState);
     });

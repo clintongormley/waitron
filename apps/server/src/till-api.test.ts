@@ -249,7 +249,6 @@ const suite = useVenueDb({
         });
         await setRoutingCell(
           tx,
-          venueScope,
           { row: { kind: "product", productId: p.id }, zoneId: null },
           { kind: "station", stationId: defaultStationId },
         );

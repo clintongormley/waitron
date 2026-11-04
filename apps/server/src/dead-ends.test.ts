@@ -28,7 +28,6 @@ describe("findDeadEnds", () => {
     await inTx(v, async (tx) => {
       await setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId("Caña") }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );
@@ -38,7 +37,6 @@ describe("findDeadEnds", () => {
         .where(eq(kitchenStations.isDefault, true));
       await setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId("Burger") }, zoneId: null },
         { kind: "station", stationId: kitchen!.id },
       );

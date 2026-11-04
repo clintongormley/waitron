@@ -81,7 +81,7 @@ async function venue() {
     .values({ locationId, name: "Kitchen", isDefault: true })
     .returning({ id: kitchenStations.id });
   return scoped(async (tx) => {
-    const seasons = await ensureDefaultSeasons(tx, cfg);
+    const seasons = await ensureDefaultSeasons(tx);
     const season = (name: StarterSeason) =>
       seasons.find((entry) => entry.name === starterSeasonName(name, "es"))!.id;
     const restaurant = (
@@ -102,22 +102,15 @@ async function venue() {
     for (const name of ["Summer", "Autumn"] as const)
       await replaceMenuWeek(
         tx,
-        cfg,
         restaurant,
         week([slot(lunch, "12:00", "16:00"), slot(dinner, "20:00", "23:00")]),
         WRITE_AT,
         0,
         { seasonId: season(name) },
       );
-    await replaceMenuWeek(
-      tx,
-      cfg,
-      restaurant,
-      week([slot(dinner, "20:00", "23:00")]),
-      WRITE_AT,
-      0,
-      { seasonId: season("Winter") },
-    );
+    await replaceMenuWeek(tx, restaurant, week([slot(dinner, "20:00", "23:00")]), WRITE_AT, 0, {
+      seasonId: season("Winter"),
+    });
     return {
       cfg,
       locationId,
@@ -147,7 +140,6 @@ const specialDay = (
       (
         await saveSpecialDay(
           tx,
-          v.cfg,
           null,
           {
             name,
@@ -170,7 +162,7 @@ describe("where a period is painted", () => {
     const christmas = await specialDay(v, "Christmas", ["2025-12-25"], lunch, true);
     const anniversary = await specialDay(v, "Anniversary", ["2026-10-20"], lunch);
 
-    const painted = await scoped((tx) => readPaintedIn(tx, v.cfg, AT));
+    const painted = await scoped((tx) => readPaintedIn(tx, AT));
 
     expect(painted.get(v.lunch)).toEqual({
       seasons: [
@@ -189,7 +181,7 @@ describe("where a period is painted", () => {
     const v = await venue();
     await specialDay(v, "Past dinner", ["2026-09-01"], [slot(v.dinner, "20:00", "23:00")]);
 
-    const painted = await scoped((tx) => readPaintedIn(tx, v.cfg, AT));
+    const painted = await scoped((tx) => readPaintedIn(tx, AT));
 
     expect(painted.get(v.dinner)).toEqual({
       seasons: [
@@ -205,7 +197,7 @@ describe("where a period is painted", () => {
     const v = await venue();
     const today = await specialDay(v, "Festival", [TODAY], [slot(v.afternoon, "16:00", "19:00")]);
 
-    const painted = await scoped((tx) => readPaintedIn(tx, v.cfg, AT));
+    const painted = await scoped((tx) => readPaintedIn(tx, AT));
     const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.afternoon, AT));
 
     expect(painted.get(v.afternoon)!.specialDays).toEqual([{ id: today, name: "Festival" }]);
@@ -221,7 +213,7 @@ describe("where a period is painted", () => {
       [slot(v.afternoon, "16:00", "19:00")],
     );
 
-    const painted = await scoped((tx) => readPaintedIn(tx, v.cfg, AT));
+    const painted = await scoped((tx) => readPaintedIn(tx, AT));
     const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.afternoon, AT));
 
     expect(painted.get(v.afternoon)!.specialDays).toEqual([{ id: fair, name: "Fair" }]);
@@ -235,7 +227,6 @@ describe("where a period is painted", () => {
         (
           await saveSpecialDay(
             tx,
-            v.cfg,
             null,
             {
               name: "Two dates",
@@ -263,7 +254,7 @@ describe("where a period is painted", () => {
         ).id,
     );
 
-    const painted = await scoped((tx) => readPaintedIn(tx, v.cfg, AT));
+    const painted = await scoped((tx) => readPaintedIn(tx, AT));
     const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.afternoon, AT));
 
     expect(painted.get(v.afternoon)!.specialDays).toEqual([{ id: twoDates, name: "Two dates" }]);
@@ -274,7 +265,7 @@ describe("where a period is painted", () => {
   it("gives a period painted nowhere empty lists", async () => {
     const v = await venue();
 
-    const painted = await scoped((tx) => readPaintedIn(tx, v.cfg, AT));
+    const painted = await scoped((tx) => readPaintedIn(tx, AT));
 
     expect(painted.get(v.afternoon)).toEqual({ seasons: [], specialDays: [] });
     expect(painted.get(v.deliLunch)).toEqual({ seasons: [], specialDays: [] });
@@ -290,7 +281,7 @@ describe("where a period is painted", () => {
     );
     await db.update(locations).set({ timeZone: "Not/AZone" }).where(eq(locations.id, v.locationId));
 
-    const painted = await scoped((tx) => readPaintedIn(tx, v.cfg, AT));
+    const painted = await scoped((tx) => readPaintedIn(tx, AT));
     const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.afternoon, AT));
 
     expect(painted.get(v.afternoon)!.specialDays).toEqual([
@@ -325,8 +316,8 @@ describe("what deleting a period touches", () => {
     });
 
     const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.lunch, AT));
-    const routing = await scoped((tx) => readRoutingUses(tx, v.cfg));
-    const lunchRouting = await scoped((tx) => readRoutingUses(tx, v.cfg, v.lunch));
+    const routing = await scoped((tx) => readRoutingUses(tx));
+    const lunchRouting = await scoped((tx) => readRoutingUses(tx, v.lunch));
 
     expect([...routing.keys()].sort()).toEqual([v.lunch, v.dinner].sort());
     expect(lunchRouting).toEqual(new Map([[v.lunch, routing.get(v.lunch)]]));
@@ -499,7 +490,6 @@ describe("deleting a period", () => {
       await scoped((tx) =>
         replaceMenuWeek(
           tx,
-          v.cfg,
           v.restaurant,
           [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
             weekday,
@@ -564,7 +554,7 @@ describe("deleting a period", () => {
       const before = (await stored(v)).routing;
       const impact = await scoped((tx) => periodDeleteImpact(tx, v.cfg, v.lunch, AT));
       const afternoonUses = async () =>
-        (await scoped((tx) => readRoutingUses(tx, v.cfg, v.afternoon))).get(v.afternoon);
+        (await scoped((tx) => readRoutingUses(tx, v.afternoon))).get(v.afternoon);
       const afternoonBefore = await afternoonUses();
 
       await remove(v, v.lunch, v.afternoon);
@@ -611,7 +601,7 @@ describe("deleting a period", () => {
       await remove(v, v.lunch, null);
 
       const resolved = await scoped(async (tx) =>
-        resolveDepartmentDays(tx, v.cfg, v.restaurant, [date], await readVenueClock(tx)),
+        resolveDepartmentDays(tx, v.restaurant, [date], await readVenueClock(tx)),
       );
       expect(resolved.get(date)).toEqual({
         businessDay: date,
@@ -646,13 +636,7 @@ describe("deleting a period", () => {
         .where(eq(departmentDays.departmentId, v.restaurant));
       expect(dayRows).toEqual([]);
       const resolved = await scoped(async (tx) =>
-        resolveDepartmentDays(
-          tx,
-          v.cfg,
-          v.restaurant,
-          [date, plainWednesday],
-          await readVenueClock(tx),
-        ),
+        resolveDepartmentDays(tx, v.restaurant, [date, plainWednesday], await readVenueClock(tx)),
       );
       expect(resolved.get(date)!.ranges).toEqual([slot(v.dinner, "20:00", "23:00")]);
       expect(resolved.get(date)!.ranges).toEqual(resolved.get(plainWednesday)!.ranges);

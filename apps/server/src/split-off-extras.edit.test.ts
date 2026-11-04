@@ -240,7 +240,6 @@ describe("editing split-off extras", () => {
     await withTransaction(db, async (tx) => {
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "category", categoryId: venue.folders.sides }, zoneId: null },
         { kind: "no_preparation" },
       );
@@ -252,7 +251,6 @@ describe("editing split-off extras", () => {
       expect(await slips(tx, venue.printers.fryer)).toHaveLength(0);
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "category", categoryId: venue.folders.sides }, zoneId: null },
         {
           kind: "station",

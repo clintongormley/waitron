@@ -120,25 +120,21 @@ export async function setupSplitExtrasVenue() {
     };
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "category", categoryId: burgers.id }, zoneId: null },
       { kind: "station", stationId: stations.grill },
     );
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "category", categoryId: sides.id }, zoneId: null },
       { kind: "station", stationId: stations.fryer },
     );
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "category", categoryId: sauces.id }, zoneId: null },
       { kind: "no_preparation" },
     );
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "category", categoryId: bottled.id }, zoneId: null },
       { kind: "no_preparation" },
     );

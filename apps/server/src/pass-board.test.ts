@@ -65,8 +65,8 @@ async function terraceVenue() {
   const { grill, bar, terrace } = await inTx(v, async (tx) => {
     const grill = (await createStation(tx, v.cfg, { name: "Grill" })).id;
     const bar = (await createStation(tx, v.cfg, { name: "Bar" })).id;
-    await routeProductTo(tx, v.cfg, v.productId("Burger"), grill);
-    await routeProductTo(tx, v.cfg, v.productId("Caña"), bar);
+    await routeProductTo(tx, v.productId("Burger"), grill);
+    await routeProductTo(tx, v.productId("Caña"), bar);
     const terrace = (await createZone(tx, v.cfg, { name: "Terrace" })).id;
     await offerProducts(tx, v.cfg, { zone: { zoneId: terrace }, orderStart: "table" });
     return { grill, bar, terrace };
@@ -101,8 +101,8 @@ async function twoSectionVenue() {
   const grill = await inTx(v, async (tx) => {
     const grill = (await createStation(tx, v.cfg, { name: "Grill" })).id;
     const bar = (await createStation(tx, v.cfg, { name: "Bar" })).id;
-    await routeProductTo(tx, v.cfg, v.productId("Burger"), grill);
-    await routeProductTo(tx, v.cfg, v.productId("Caña"), bar);
+    await routeProductTo(tx, v.productId("Burger"), grill);
+    await routeProductTo(tx, v.productId("Caña"), bar);
     const starters = await createCourse(tx, v.cfg, { name: "Starters", displayOrder: 0 });
     await setProductCourse(tx, v.cfg, v.productId("Caña"), starters.id);
     const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 1 });
@@ -240,7 +240,7 @@ describe("the pass board", () => {
     await inTx(v, async (tx) => {
       const grill = (await createStation(tx, v.cfg, { name: "Grill" })).id;
       for (const name of ["Burger", "Caña", "Flan"])
-        await routeProductTo(tx, v.cfg, v.productId(name), grill);
+        await routeProductTo(tx, v.productId(name), grill);
       const starters = await createCourse(tx, v.cfg, { name: "Starters", displayOrder: 0 });
       await setProductCourse(tx, v.cfg, v.productId("Caña"), starters.id);
       const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 1 });

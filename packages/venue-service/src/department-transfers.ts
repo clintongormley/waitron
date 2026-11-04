@@ -426,7 +426,7 @@ export async function acceptDepartmentTransfer(
     if (table.joined)
       throw new AppError("table.in_joined_table", { tableId: input.tableId, field: "tableId" });
   }
-  await assertZoneTakesNewOrders(tx, cfg, input.zoneId, new Date());
+  await assertZoneTakesNewOrders(tx, input.zoneId, new Date());
   const accepted = await resolveRequest(tx, request.id, receiver, {
     status: "accepted",
     destinationZoneId: input.zoneId,

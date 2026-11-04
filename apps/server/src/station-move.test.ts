@@ -101,7 +101,7 @@ useVenueDb({
         stationId: grill,
         printerId: grillPrinter,
       });
-      await routeProductTo(tx, venue.cfg, venue.productId("Burger"), bar);
+      await routeProductTo(tx, venue.productId("Burger"), bar);
     });
   },
 });
@@ -121,7 +121,7 @@ const splitJobs = (printerId: string) =>
 /** Routes a product in every zone and returns the cell's address, for clearing it afterwards. */
 async function routeProduct(tx: Transaction, productId: string, target: RouteTarget) {
   const address = { row: { kind: "product" as const, productId }, zoneId: null };
-  await setRoutingCell(tx, venue.cfg, address, target);
+  await setRoutingCell(tx, address, target);
   return address;
 }
 
@@ -767,7 +767,7 @@ describe("release", () => {
       try {
         await inTx(venue, async (tx) => {
           await setStationToday(tx, venue.cfg, grill, null, at);
-          await routeProductTo(tx, venue.cfg, venue.productId("Burger"), grill);
+          await routeProductTo(tx, venue.productId("Burger"), grill);
         });
         const group = await heldBurger();
         if (byHand)
@@ -795,7 +795,7 @@ describe("release", () => {
         vi.useRealTimers();
         await inTx(venue, async (tx) => {
           await setStationToday(tx, venue.cfg, grill, null, at);
-          await routeProductTo(tx, venue.cfg, venue.productId("Burger"), bar);
+          await routeProductTo(tx, venue.productId("Burger"), bar);
         });
       }
     },
@@ -3034,7 +3034,7 @@ describe("moveDishesToStation", () => {
   it("prints one destination ticket per old station in a two-dish move", async () => {
     const fryer = await inTx(venue, async (tx) => {
       const station = await createStation(tx, venue.cfg, { name: `Fryer ${randomUUID()}` });
-      await routeProductTo(tx, venue.cfg, venue.productId("Vino"), station.id);
+      await routeProductTo(tx, venue.productId("Vino"), station.id);
       const printer = await createPrinter(tx, {
         name: "Fryer printer",
         transport: "cloud_poll",

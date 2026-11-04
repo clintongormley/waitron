@@ -139,7 +139,7 @@ async function setupVenue(): Promise<Venue> {
       });
       productId[dish] = product.id;
     }
-    await routeProductTo(tx, cfg, productId.beer, barStationId);
+    await routeProductTo(tx, productId.beer, barStationId);
     await assignCatalogueToVenue(tx, catalogue.id);
     const offers = await offerProducts(tx, cfg, { zone: "tables" });
     const printer = async (name: string) =>

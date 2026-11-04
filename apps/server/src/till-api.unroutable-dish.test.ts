@@ -186,7 +186,6 @@ async function routeTo(productId: string, stationId: string, zoneId?: string): P
   await inTx(v, (tx) =>
     setRoutingCell(
       tx,
-      v.cfg,
       { row: { kind: "product", productId }, zoneId: zoneId ?? null },
       { kind: "station", stationId },
     ),
@@ -324,7 +323,6 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     await inTx(v, (tx) =>
       setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "category", categoryId: category.id }, zoneId: null },
         { kind: "station", stationId: open },
       ),

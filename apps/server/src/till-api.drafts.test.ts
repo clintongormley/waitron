@@ -779,7 +779,6 @@ describe("POST /api/dead-ends/draft", () => {
     await inTx(venue, async (tx) => {
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: beer!.id }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );
@@ -854,7 +853,6 @@ describe("a draft's chosen station at submission", () => {
     await inTx(venue, async (tx) => {
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: beer!.id }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );

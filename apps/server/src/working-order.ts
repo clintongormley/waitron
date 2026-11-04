@@ -690,7 +690,7 @@ export async function priceOrderLines(
   if (periodCheck === "added" && requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true)) {
     const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId!);
     const at = new Date();
-    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, context.zoneId, at);
+    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at);
     service = await VENUE_SERVICE.resolveDepartmentService(tx, cfg, context.departmentId, at);
     const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu.periodName]));
     const items: { productId: string; variantId: string | null }[] = [];
@@ -1686,7 +1686,7 @@ export async function createOpenOrder(
     effectiveZoneId = (await VENUE_SERVICE.resolveNewOrderZone(tx, cfg, { profileId })).zoneId;
   }
   if (placement.existingService !== true) {
-    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, effectiveZoneId, new Date());
+    await VENUE_SERVICE.assertZoneTakesNewOrders(tx, effectiveZoneId, new Date());
   }
   const pricedLines = await priceOrderLines(
     tx,

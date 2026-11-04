@@ -94,7 +94,7 @@ async function routed() {
     .values({ locationId, name: "Kitchen", isDefault: true })
     .returning({ id: kitchenStations.id });
   const made = await scoped(async (tx) => {
-    const seasons = await ensureDefaultSeasons(tx, cfg);
+    const seasons = await ensureDefaultSeasons(tx);
     const season = (name: StarterSeason) =>
       seasons.find((entry) => entry.name === starterSeasonName(name, "es"))!.id;
     const restaurant = (
@@ -115,7 +115,6 @@ async function routed() {
     for (const name of ["Summer", "Autumn"] as const)
       await replaceMenuWeek(
         tx,
-        cfg,
         restaurant,
         week([slot(lunch, "12:00", "16:00"), slot(dinner, "20:00", "23:00")]),
         new Date(),
@@ -126,7 +125,6 @@ async function routed() {
       (
         await saveSpecialDay(
           tx,
-          cfg,
           null,
           {
             name,

@@ -85,7 +85,6 @@ useVenueDb({
       const beer = await productOf(tx, "Caña");
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: beer }, zoneId: null },
         { kind: "no_preparation" },
       );
@@ -187,7 +186,7 @@ useVenueDb({
       );
       await writeProductModifiers(tx, cake, [{ kind: "extras", id: list.id }]);
       const grill = await createStation(tx, venue.cfg, { name: "Grill" });
-      await routeProductTo(tx, venue.cfg, sauce.id, grill.id);
+      await routeProductTo(tx, sauce.id, grill.id);
       sauces = { listId: list.id, productId: sauce.id };
       await republishMenus(tx);
     });

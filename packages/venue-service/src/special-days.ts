@@ -17,7 +17,7 @@ import { isReadableClock, venueLocalMoment } from "./hours-clock.js";
 import { isLocalDate } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
 import { nextOccurrence, occurrenceIn, repeatKey, standingInYear } from "./repeat-rules.js";
-import { storedTime, wireTime, type VenueScope } from "./operations.js";
+import { storedTime, wireTime } from "./operations.js";
 import {
   departmentDayRanges,
   departmentDays,
@@ -56,7 +56,6 @@ const followsHoliday = (rule: SpecialDayDateRule) =>
  *  a repeating date that follows a holiday's name. */
 async function holidayDatesFor(
   tx: Transaction,
-  cfg: VenueScope,
   rules: readonly SpecialDayDateRule[],
   [fromYear, toYear]: readonly [number, number],
   place?: VenuePlace,
@@ -64,7 +63,7 @@ async function holidayDatesFor(
   const named = rules.filter(followsHoliday);
   if (named.length === 0) return NO_HOLIDAY_DATES;
   const first = Math.min(...named.map((rule) => yearOf(rule.date))) + 1;
-  return readHolidayDates(tx, cfg, Math.max(fromYear, first), toYear, place);
+  return readHolidayDates(tx, Math.max(fromYear, first), toYear, place);
 }
 
 const yearsInOrder = new WeakMap<HolidayDates, readonly number[]>();
@@ -191,7 +190,6 @@ export interface SpecialDayOccurrence {
  *  department and zone: one read of the dates, and one of the paint only when any date matched. */
 export async function specialDaysOn(
   tx: Transaction,
-  cfg: VenueScope,
   days: readonly LocalDate[],
   place?: VenuePlace,
 ): Promise<Map<LocalDate, SpecialDayOccurrence | null>> {
@@ -226,7 +224,6 @@ export async function specialDaysOn(
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
   const holidays = await holidayDatesFor(
     tx,
-    cfg,
     dates,
     [yearOf(ordered[0]!), yearOf(ordered[ordered.length - 1]!)],
     place,
@@ -324,7 +321,6 @@ async function occurrencesOf(
  *  Null when the venue has no such special day. */
 export async function specialDayOccurrences(
   tx: Transaction,
-  _cfg: VenueScope,
   specialDayId: string,
 ): Promise<{ name: string; occurrences: SpecialDayOccurrence[] } | null> {
   const rows = await tx
@@ -374,7 +370,6 @@ export interface SpecialDayClash {
  *  different special day applies. The holiday lists are read once for both. */
 export async function specialDayReadiness(
   tx: Transaction,
-  cfg: VenueScope,
   at: Date,
 ): Promise<{ missing: MissingHoliday[]; clashes: SpecialDayClash[] }> {
   const clock = await readVenueClock(tx);
@@ -392,8 +387,8 @@ export async function specialDayReadiness(
     .from(specialDayDates)
     .innerJoin(specialDays, eq(specialDays.id, specialDayDates.specialDayId))
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
-  const holidays = await holidayDatesFor(tx, cfg, rows, years);
-  const missing = await missingHolidaysIn(tx, cfg, years, holidays);
+  const holidays = await holidayDatesFor(tx, rows, years);
+  const missing = await missingHolidaysIn(tx, years, holidays);
   const clashes = new Map<string, SpecialDayClash>();
   for (const year of years) {
     const standing = specialDatesStandingIn(rows, year, holidays);
@@ -427,7 +422,6 @@ export async function specialDayReadiness(
  *  instead. */
 export async function missingHolidaysIn(
   tx: Transaction,
-  cfg: VenueScope,
   years: readonly number[],
   known?: HolidayDates,
 ): Promise<(MissingHoliday & { name: string })[]> {
@@ -444,7 +438,7 @@ export async function missingHolidaysIn(
     .orderBy(asc(specialDayDates.date), asc(specialDayDates.id));
   if (rows.length === 0 || years.length === 0) return [];
   const rules = rows.map((row) => ({ ...row, repeats: true }));
-  const holidays = known ?? (await holidayDatesFor(tx, cfg, rules, [years[0]!, years.at(-1)!]));
+  const holidays = known ?? (await holidayDatesFor(tx, rules, [years[0]!, years.at(-1)!]));
   const missing = new Map<string, MissingHoliday & { name: string }>();
   for (const year of years)
     for (const rule of rules)
@@ -814,11 +808,7 @@ const storedDate = (row: {
 });
 
 /** Every special day of the venue with its dates, by name then id; no paint. */
-export async function listSpecialDays(
-  tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: VenueScope,
-): Promise<SpecialDaySummary[]> {
+export async function listSpecialDays(tx: Transaction): Promise<SpecialDaySummary[]> {
   const days = await tx
     .select({
       id: specialDays.id,
@@ -848,11 +838,7 @@ export async function listSpecialDays(
   return days.map((day) => ({ ...day, dates: byDay.get(day.id)! }));
 }
 
-export async function readSpecialDay(
-  tx: Transaction,
-  _cfg: VenueScope,
-  id: string,
-): Promise<SpecialDayDetail> {
+export async function readSpecialDay(tx: Transaction, id: string): Promise<SpecialDayDetail> {
   const day = await requireSpecialDay(tx, id);
   const dates = await tx
     .select({
@@ -939,15 +925,14 @@ export async function readSpecialDay(
  *  departments this save read. */
 export async function saveSpecialDay(
   tx: Transaction,
-  cfg: VenueScope,
   id: string | null,
   input: unknown,
   at: Date,
   expectedClockRevision: number,
   afterWrite?: (read: ServingRead) => Promise<void>,
 ): Promise<SpecialDayDetail> {
-  await assertBusinessDayScheduleWrite(tx, cfg, "time", expectedClockRevision);
-  const stored = id === null ? null : await readSpecialDay(tx, cfg, id);
+  await assertBusinessDayScheduleWrite(tx, "time", expectedClockRevision);
+  const stored = id === null ? null : await readSpecialDay(tx, id);
   const clock = await readVenueClock(tx);
   const inForce = inForceClock(clock, at);
   const parsed = parseInput(input, { settled: settledClock(clock, at), inForce });
@@ -987,7 +972,7 @@ export async function saveSpecialDay(
   const keptNames = new Map(
     (stored?.dates ?? []).map((entry) => [entry.date, entry.holidayName ?? null]),
   );
-  const holidays = await readHolidayDates(tx, cfg, ...holidayHorizon(parsed.dates));
+  const holidays = await readHolidayDates(tx, ...holidayHorizon(parsed.dates));
   const rules = parsed.dates.map(({ date }): SpecialDayDateRule => ({
     date,
     repeats: parsed.repeatsYearly,
@@ -1095,21 +1080,20 @@ export async function saveSpecialDay(
     );
   }
   await afterWrite?.({ clock, departmentOf: zoneDepartments });
-  await assertWaitingChangeFits(tx, cfg, at, clock);
-  return readSpecialDay(tx, cfg, specialDayId);
+  await assertWaitingChangeFits(tx, at, clock);
+  return readSpecialDay(tx, specialDayId);
 }
 
 /** Deletes a special day; its dates, and their paint, go with it and follow their seasons again. */
 export async function deleteSpecialDay(
   tx: Transaction,
-  cfg: VenueScope,
   id: string,
   at: Date,
   expectedClockRevision: number,
 ): Promise<void> {
-  await assertBusinessDayScheduleWrite(tx, cfg, "time", expectedClockRevision);
+  await assertBusinessDayScheduleWrite(tx, "time", expectedClockRevision);
   await requireSpecialDay(tx, id);
   await tx.delete(specialDays).where(eq(specialDays.id, id));
   const clock = await readVenueClock(tx);
-  await assertWaitingChangeFits(tx, cfg, at, clock);
+  await assertWaitingChangeFits(tx, at, clock);
 }

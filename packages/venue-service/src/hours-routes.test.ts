@@ -130,7 +130,6 @@ async function fixture(): Promise<Fixture> {
     });
     await replaceMenuWeek(
       tx,
-      cfg,
       restaurant!.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -230,7 +229,6 @@ const venueDates = (fx: Fixture) =>
     .orderBy(asc(specialDayDates.date));
 
 const createDay = (
-  fx: Fixture,
   date: string,
   options: {
     name?: string;
@@ -246,7 +244,6 @@ const createDay = (
   withTransaction(db, (tx) =>
     saveSpecialDay(
       tx,
-      fx.cfg,
       null,
       {
         name: options.name ?? "Staff party",
@@ -272,7 +269,7 @@ describe("reading Hours", () => {
         vi.useRealTimers();
       });
       const fx = await fixture();
-      const party = await createDay(fx, "2030-10-15");
+      const party = await createDay("2030-10-15");
       const response = await send(
         fx,
         "GET",
@@ -370,7 +367,6 @@ describe("reading Hours", () => {
     const deliPeriod = await withTransaction(db, async (tx) => {
       await replaceMenuWeek(
         tx,
-        fx.cfg,
         fx.departmentIds.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
         new Date(),
@@ -384,7 +380,6 @@ describe("reading Hours", () => {
       });
       await replaceMenuWeek(
         tx,
-        fx.cfg,
         fx.departmentIds.deli,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -395,7 +390,7 @@ describe("reading Hours", () => {
       );
       return period;
     });
-    await createDay(fx, "2030-10-14", {
+    await createDay("2030-10-14", {
       paint: [
         {
           departmentId: fx.departmentIds.deli,
@@ -422,7 +417,6 @@ describe("reading Hours", () => {
     await withTransaction(db, (tx) =>
       replaceMenuWeek(
         tx,
-        fx.cfg,
         fx.departmentIds.deli,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -445,7 +439,7 @@ describe("reading Hours", () => {
   it("reads the model in the same number of statements whatever the range and its special dates", async () => {
     const fx = await fixture();
     for (const date of ["2030-11-03", "2030-11-10", "2030-11-17", "2030-11-24"])
-      await createDay(fx, date, { name: date, closedAllDay: true });
+      await createDay(date, { name: date, closedAllDay: true });
     const statements = (from: string, to: string) =>
       withTransaction(db, async (tx) => {
         const reads = vi.spyOn(tx, "select");
@@ -467,7 +461,7 @@ describe("reading Hours", () => {
     const at = new Date("2030-10-06T10:00:00Z");
     const days: Record<string, string> = {};
     for (const date of ["2030-10-12", "2030-10-15", "2030-10-16"])
-      days[date] = (await createDay(fx, date, { name: date, at })).id;
+      days[date] = (await createDay(date, { name: date, at })).id;
     const read = () =>
       withTransaction(db, (tx) => readSpecialDaysModel(tx, fx.cfg, "2030-10-13", "2030-10-15", at));
 
@@ -528,7 +522,7 @@ describe("Hours when the venue's clock changes", () => {
 
   it("moves the civil date with a new time zone, keeping special days without closing stations", async () => {
     const fx = await fixture();
-    await createDay(fx, "2026-10-15", { at: new Date("2026-10-01T10:00:00Z") });
+    await createDay("2026-10-15", { at: new Date("2026-10-01T10:00:00Z") });
     const madrid = await model(fx, AT);
     expect(madrid.civilDate).toBe("2026-10-15");
     expect(await barStatus(fx, AT)).toEqual({ open: true, why: "open" });
@@ -580,7 +574,7 @@ describe("station-only Hours request boundary", () => {
 describe("named-days Calendar route", () => {
   it("returns the venue-scoped model for a venue viewer", async () => {
     const fx = await fixture();
-    const day = await createDay(fx, "2030-10-15", { repeatsYearly: true, closedAllDay: true });
+    const day = await createDay("2030-10-15", { repeatsYearly: true, closedAllDay: true });
     const response = await send(
       fx,
       "GET",
@@ -632,7 +626,7 @@ describe("named-days Calendar route", () => {
 describe("retired special-date routes", () => {
   it("answers the unmatched-route 404 to every special-date writer for a manager and leaves a special day as it was", async () => {
     const fx = await fixture();
-    const day = await createDay(fx, "2030-10-15", { name: "Staff party" });
+    const day = await createDay("2030-10-15", { name: "Staff party" });
     const row = () => db.select().from(specialDays).where(eq(specialDays.id, day.id));
     const before = await row();
     expect(before).toHaveLength(1);
@@ -663,7 +657,7 @@ describe("retired station-hours range route", () => {
     "/hours?from=2030-02-30&to=2030-03-02",
   ])("answers 404 for %s without changing saved data for any session", async (path) => {
     const fx = await fixture();
-    await createDay(fx, "2030-10-15", { closedAllDay: true });
+    await createDay("2030-10-15", { closedAllDay: true });
     const beforeDates = await venueDates(fx);
     for (const cookie of [fx.manager, fx.supervisor, fx.staff, fx.expired, undefined]) {
       expect((await send(fx, "GET", path, cookie)).status).toBe(404);

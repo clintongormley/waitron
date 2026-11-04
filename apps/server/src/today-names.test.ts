@@ -85,7 +85,7 @@ useVenueDb({
         stationId: grill.id,
         printerId: kitchenPrinter,
       });
-      await routeProductTo(tx, v.cfg, v.productId("Burger"), grill.id);
+      await routeProductTo(tx, v.productId("Burger"), grill.id);
     });
   },
 });

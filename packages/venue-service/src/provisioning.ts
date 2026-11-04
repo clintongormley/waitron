@@ -23,7 +23,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
     summary:
       "Create the default department with its starter service steps, counter zone and four seasons, and give each profile that takes orders that department",
     async run(tx, node) {
-      const staffLanguage = await readStarterStaffLanguage(tx, node);
+      const staffLanguage = await readStarterStaffLanguage(tx);
       const venue = await readVenue(tx);
       let venueId: string | undefined;
       const venueRowId = async () => (venueId ??= await venueLocationId(tx));
@@ -59,7 +59,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
             })
             .returning({ id: departments.id });
           departmentId = inserted!.id;
-          await addStarterServiceSteps(tx, node, departmentId, staffLanguage);
+          await addStarterServiceSteps(tx, departmentId, staffLanguage);
         }
         await tx
           .update(departments)
@@ -139,7 +139,7 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
         .insert(zoneSalePolicies)
         .values({ zoneId })
         .onConflictDoNothing({ target: zoneSalePolicies.zoneId });
-      await ensureDefaultSeasons(tx, node, staffLanguage);
+      await ensureDefaultSeasons(tx, staffLanguage);
       const menuId = venue.defaultCatalogueId;
       if (menuId !== null) {
         const counterDepartmentId = policy[0]!.departmentId;

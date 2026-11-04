@@ -5,7 +5,6 @@ import { layerPaint, layerZonePaint } from "./day-paint.js";
 import { cutToOwnDay } from "./calendar-cut.js";
 import { addDays, weekdayOf } from "./hours-rules.js";
 import type { LocalDate } from "./hours-types.js";
-import type { VenueScope } from "./operations.js";
 import { zoneServicePolicies } from "./schema/service.js";
 import { serviceDayWallContext, type ServiceDayContext } from "./service-day-context.js";
 import { seasonOn, type Season } from "./season-rules.js";
@@ -77,15 +76,14 @@ export interface DayPlan {
 
 export async function readDayPlan(
   tx: Transaction,
-  cfg: VenueScope,
   businessDays: readonly LocalDate[],
   venueSeasons?: readonly Season[],
   place?: VenuePlace,
 ): Promise<DayPlan> {
-  const seasons = venueSeasons ?? (await readSeasons(tx, cfg));
+  const seasons = venueSeasons ?? (await readSeasons(tx));
   return {
     seasonIdOn: new Map(businessDays.map((day) => [day, seasonOn(seasons, day)?.id ?? null])),
-    special: await specialDaysOn(tx, cfg, businessDays, place),
+    special: await specialDaysOn(tx, businessDays, place),
   };
 }
 
@@ -94,12 +92,11 @@ export async function readDayPlan(
  *  no such special day. */
 export async function readSpecialDayPlan(
   tx: Transaction,
-  cfg: VenueScope,
   specialDayId: string,
 ): Promise<{ name: string; dates: SpecialDayOccurrence[]; plan: DayPlan } | null> {
-  const found = await specialDayOccurrences(tx, cfg, specialDayId);
+  const found = await specialDayOccurrences(tx, specialDayId);
   if (found === null) return null;
-  const seasons = await readSeasons(tx, cfg);
+  const seasons = await readSeasons(tx);
   const dates = found.occurrences;
   return {
     name: found.name,
@@ -123,21 +120,13 @@ export interface ServiceDay {
 
 /** The clock, and the plan for the business day `at` falls in and the one before, read once for
  *  a department and its zones; no plan when the clock cannot place `at`. */
-export async function readServiceDayPlan(
-  tx: Transaction,
-  cfg: VenueScope,
-  at: Date,
-): Promise<ServiceDay> {
-  return serviceDayAt(tx, cfg, at, -1);
+export async function readServiceDayPlan(tx: Transaction, at: Date): Promise<ServiceDay> {
+  return serviceDayAt(tx, at, -1);
 }
 
 /** The clock and the plan of the business day `at` falls in, for the reads that take it. */
-export async function readServiceDay(
-  tx: Transaction,
-  cfg: VenueScope,
-  at: Date,
-): Promise<PreparedServiceDay> {
-  const day = await serviceDayAt(tx, cfg, at, 0);
+export async function readServiceDay(tx: Transaction, at: Date): Promise<PreparedServiceDay> {
+  const day = await serviceDayAt(tx, at, 0);
   return { ...day, businessDay: day.moment?.businessDay ?? null } as ServiceDay &
     PreparedServiceDay;
 }
@@ -157,12 +146,7 @@ export function momentAt(
     : serviceMomentAt(at, clock);
 }
 
-async function serviceDayAt(
-  tx: Transaction,
-  cfg: VenueScope,
-  at: Date,
-  firstDay: 0 | -1,
-): Promise<ServiceDay> {
+async function serviceDayAt(tx: Transaction, at: Date, firstDay: 0 | -1): Promise<ServiceDay> {
   const clock = await readVenueClock(tx);
   const moment = serviceMomentAt(at, clock);
   if (moment === null) return { clock, at, moment };
@@ -171,17 +155,16 @@ async function serviceDayAt(
     clock,
     at,
     moment,
-    plan: await readDayPlan(tx, cfg, [...days, moment.businessDay]),
+    plan: await readDayPlan(tx, [...days, moment.businessDay]),
   };
 }
 
 async function planFor(
   tx: Transaction,
-  cfg: VenueScope,
   businessDays: readonly LocalDate[],
   given: DayPlan | undefined,
 ): Promise<DayPlan> {
-  if (given === undefined) return readDayPlan(tx, cfg, businessDays);
+  if (given === undefined) return readDayPlan(tx, businessDays);
   for (const day of businessDays)
     if (!given.seasonIdOn.has(day) || !given.special.has(day))
       throw new Error(`the day plan does not cover ${day}`);
@@ -205,14 +188,13 @@ function seasonDays(plan: DayPlan, businessDays: readonly LocalDate[]): SeasonDa
  *  season's day. Any other day has its season's week. */
 export async function resolveDepartmentDays(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   businessDays: readonly LocalDate[],
   clock: BusinessDayClock,
   given?: DayPlan,
 ): Promise<Map<LocalDate, ResolvedDepartmentDay>> {
   return (
-    (await resolveDepartmentsDays(tx, cfg, [departmentId], businessDays, clock, given)).get(
+    (await resolveDepartmentsDays(tx, [departmentId], businessDays, clock, given)).get(
       departmentId,
     ) ?? new Map()
   );
@@ -222,7 +204,6 @@ export async function resolveDepartmentDays(
  *  statement; keyed by department id. */
 export async function resolveDepartmentsDays(
   tx: Transaction,
-  cfg: VenueScope,
   departmentIds: readonly string[],
   businessDays: readonly LocalDate[],
   clock: BusinessDayClock,
@@ -231,10 +212,9 @@ export async function resolveDepartmentsDays(
 ): Promise<Map<string, Map<LocalDate, ResolvedDepartmentDay>>> {
   const resolved = new Map<string, Map<LocalDate, ResolvedDepartmentDay>>();
   if (businessDays.length === 0 || departmentIds.length === 0) return resolved;
-  const plan = await planFor(tx, cfg, businessDays, given);
+  const plan = await planFor(tx, businessDays, given);
   const allWeeks = await readDepartmentSeasonWeeks(
     tx,
-    cfg,
     departmentIds,
     clock.dayCutover,
     seasonDays(plan, businessDays),
@@ -270,7 +250,6 @@ export async function resolveDepartmentsDays(
  *  zone paint laid over the season's closures. Any other day has its season's week. */
 export async function resolveZoneClosedDays(
   tx: Transaction,
-  cfg: VenueScope,
   zoneIds: readonly string[] | undefined,
   businessDays: readonly LocalDate[],
   clock: BusinessDayClock,
@@ -284,10 +263,9 @@ export async function resolveZoneClosedDays(
     (await tx.select({ zoneId: zoneServicePolicies.zoneId }).from(zoneServicePolicies)).map(
       (row) => row.zoneId,
     );
-  const plan = await planFor(tx, cfg, businessDays, given);
+  const plan = await planFor(tx, businessDays, given);
   const weeks = await readZoneSeasonWeeks(
     tx,
-    cfg,
     zoneIds,
     clock.dayCutover,
     seasonDays(plan, businessDays),

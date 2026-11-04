@@ -149,7 +149,7 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
   [
     "menu week",
     "department.not_found",
-    (tx, f) => service.replaceMenuWeek(tx, f.cfg, f.gone, week, at, 0),
+    (tx, f) => service.replaceMenuWeek(tx, f.gone, week, at, 0),
   ],
   [
     "menu date",
@@ -157,7 +157,6 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
     (tx, f) =>
       saveSpecialDay(
         tx,
-        f.cfg,
         null,
         {
           name: "Navidad",
@@ -226,7 +225,6 @@ const actions: [string, string, (tx: Transaction, f: Fixture) => Promise<unknown
     (tx, f) =>
       saveSpecialDay(
         tx,
-        f.cfg,
         null,
         {
           name: "Navidad",
@@ -254,7 +252,7 @@ describe("deleted service targets", () => {
     expect(
       await run((tx) => service.listServiceZones(tx, f.cfg, { withActiveFlag: true })),
     ).toEqual([expect.objectContaining({ id: f.liveZone })]);
-    const model = await run((tx) => service.readOpeningHoursModel(tx, f.cfg, at));
+    const model = await run((tx) => service.readOpeningHoursModel(tx, at));
     expect(model.departments.map((row) => row.id)).toEqual([f.live]);
     expect(model.departments.flatMap((row) => row.periods)).toEqual([]);
   });
@@ -266,7 +264,7 @@ describe("deleted service targets", () => {
   });
   it("hides deleted departments from opening-hours configuration", async () => {
     const f = await fixture();
-    const model = await run((tx) => service.readOpeningHoursModel(tx, f.cfg, at));
+    const model = await run((tx) => service.readOpeningHoursModel(tx, at));
     expect(model.departments.map((row) => row.id)).toEqual([f.live]);
     expect(model.departments.flatMap((row) => row.periods)).toEqual([]);
   });

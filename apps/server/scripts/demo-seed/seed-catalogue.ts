@@ -1,7 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { kitchenStations, type Transaction } from "@waitron/db";
 import { setRoutingCell, STARTER_OPEN_PERIOD_NAMES } from "@waitron/venue-service";
-import { locationId as brandLocationId } from "@waitron/shared";
 import {
   addCatalogueToVenue,
   addMember,
@@ -147,7 +146,6 @@ export async function seedCatalogues(
       });
       await setRoutingCell(
         tx,
-        { locationId: brandLocationId(locationId) },
         { row: { kind: "category", categoryId: category.id }, zoneId: null },
         cat.station === null
           ? { kind: "no_preparation" }

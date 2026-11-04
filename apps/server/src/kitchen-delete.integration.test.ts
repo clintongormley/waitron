@@ -91,13 +91,11 @@ it("keeps retained draft, group, course and ready station history through manage
       .where(eq(products.id, v.productId("Flan")));
     await setRoutingCell(
       tx,
-      v.cfg,
       { row: { kind: "category", categoryId: flan!.categoryId! }, zoneId: null },
       { kind: "station", stationId: defaultStation.id },
     );
     await setRoutingCell(
       tx,
-      v.cfg,
       { row: { kind: "product", productId: v.productId("Flan") }, zoneId: null },
       { kind: "station", stationId: station.id },
       [{ periodId: period.id, target: { kind: "station", stationId: defaultStation.id } }],
@@ -376,7 +374,6 @@ it("refuses a queued station delete after another writer sends preparing food", 
     const row = await createStation(tx, v.cfg, { name: "Queued pastry" });
     await setRoutingCell(
       tx,
-      v.cfg,
       { row: { kind: "product", productId: v.productId("Flan") }, zoneId: null },
       { kind: "station", stationId: row.id },
     );

@@ -697,13 +697,11 @@ describe("routing cells in a staged import", () => {
           .returning();
         await setRoutingCell(
           tx,
-          cfg,
           { row: { kind: "category", categoryId: category.id }, zoneId: null },
           { kind: "no_preparation" },
         );
         await setRoutingCell(
           tx,
-          cfg,
           { row: { kind: "product", productId: product.id }, zoneId: zone.id },
           { kind: "station", stationId: station!.id },
         );

@@ -76,7 +76,6 @@ export async function offerMenuThroughZone(
   const middle = `${String((Number(start.slice(0, 2)) + 12) % 24).padStart(2, "0")}:${start.slice(3, 5)}`;
   await replaceMenuWeek(
     tx,
-    cfg,
     policy.departmentId,
     [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
       weekday,
@@ -86,6 +85,6 @@ export async function offerMenuThroughZone(
       ],
     })),
     new Date(),
-    await readBusinessDayScheduleRevision(tx, cfg),
+    await readBusinessDayScheduleRevision(tx),
   );
 }

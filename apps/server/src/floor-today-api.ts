@@ -296,7 +296,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
         const from = await roomRevision(tx, zoneId);
         await refuseStaleZone(tx, zoneId, sent, from);
         if (!active) return from;
-        return updateLayout(tx, deps.cfg, removals, zoneId, day, now, layout);
+        return updateLayout(tx, removals, zoneId, day, now, layout);
       });
       return c.json({ zoneId, revision });
     }),

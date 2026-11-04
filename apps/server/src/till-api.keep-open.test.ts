@@ -87,7 +87,6 @@ beforeEach(async () => {
     }
     await replaceMenuWeek(
       tx,
-      v.cfg,
       department,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -231,7 +230,6 @@ describe("the till keeps a zone open today", () => {
       });
       await replaceMenuWeek(
         tx,
-        v.cfg,
         department,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -301,7 +299,6 @@ describe("the till keeps a zone open today", () => {
     await run((tx) =>
       replaceMenuWeek(
         tx,
-        v.cfg,
         department,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,

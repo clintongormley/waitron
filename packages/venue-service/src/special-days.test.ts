@@ -82,9 +82,9 @@ async function venue() {
 }
 type Venue = Awaited<ReturnType<typeof venue>>;
 
-const save = (v: Venue, id: string | null, input: unknown, at = AT, revision = 0) =>
-  scoped((tx) => saveSpecialDay(tx, v.cfg, id, input, at, revision));
-const read = (v: Venue, id: string) => scoped((tx) => readSpecialDay(tx, v.cfg, id));
+const save = (id: string | null, input: unknown, at = AT, revision = 0) =>
+  scoped((tx) => saveSpecialDay(tx, id, input, at, revision));
+const read = (id: string) => scoped((tx) => readSpecialDay(tx, id));
 const refusal = async (promise: Promise<unknown>) => {
   try {
     await promise;
@@ -103,7 +103,7 @@ const dates = (days: readonly string[]) => days.map((date) => ({ date, closedAll
 
 async function christmasDinners(v: Venue) {
   const days = december(14, 23);
-  return save(v, null, {
+  return save(null, {
     name: "Christmas company dinners",
     repeatsYearly: false,
     dates: dates(days),
@@ -148,7 +148,7 @@ describe("saveSpecialDay", () => {
     expect(rowsBefore).toHaveLength(10);
     const edited = [{ periodId: v.lunch, startsAt: "13:00", endsAt: "16:30" }];
 
-    const after = await save(v, before.id, {
+    const after = await save(before.id, {
       name: "Christmas company dinners",
       repeatsYearly: false,
       dates: dates(december(14, 24)),
@@ -169,14 +169,14 @@ describe("saveSpecialDay", () => {
     const rowsAfter = await dateRows(before.id);
     expect(rowsAfter).toHaveLength(11);
     for (const row of rowsBefore) expect(rowsAfter).toContainEqual(row);
-    expect(await read(v, before.id)).toEqual(after);
+    expect(await read(before.id)).toEqual(after);
   });
 
   it("deletes a removed date with its paint, and changes a kept date's Closed tick", async () => {
     const v = await venue();
     const before = await christmasDinners(v);
     const removed = (await dateRows(before.id)).find((row) => row.date === "2030-12-14")!;
-    const after = await save(v, before.id, {
+    const after = await save(before.id, {
       name: "Christmas company dinners",
       repeatsYearly: false,
       dates: [...dates(december(15, 23)).slice(1), { date: "2030-12-15", closedAllDay: true }],
@@ -196,7 +196,7 @@ describe("saveSpecialDay", () => {
   it("clears one department's paint on a date given empty ranges", async () => {
     const v = await venue();
     const before = await christmasDinners(v);
-    const after = await save(v, before.id, {
+    const after = await save(before.id, {
       name: "Christmas company dinners",
       repeatsYearly: false,
       dates: dates(december(14, 23)),
@@ -211,7 +211,7 @@ describe("saveSpecialDay", () => {
     const other = await christmasDinners(v);
     expect(
       await refusal(
-        save(v, null, {
+        save(null, {
           name: "Christmas Eve",
           repeatsYearly: false,
           dates: dates(["2030-12-18"]),
@@ -224,21 +224,21 @@ describe("saveSpecialDay", () => {
   });
 
   it("a repeating date collides with a one-off date only from its first year", async () => {
-    const v = await venue();
-    const oneOff = await save(v, null, {
+    await venue();
+    const oneOff = await save(null, {
       name: "Dinner 2031",
       repeatsYearly: false,
       dates: dates(["2031-12-24"]),
     });
     expect(
       await refusal(
-        save(v, null, { name: "Christmas Eve", repeatsYearly: true, dates: dates(["2030-12-24"]) }),
+        save(null, { name: "Christmas Eve", repeatsYearly: true, dates: dates(["2030-12-24"]) }),
       ),
     ).toEqual({
       code: "special_day.date_taken",
       params: { date: "2031-12-24", specialDayId: oneOff.id, name: "Dinner 2031" },
     });
-    const later = await save(v, null, {
+    const later = await save(null, {
       name: "Christmas Eve",
       repeatsYearly: true,
       dates: dates(["2032-12-24"]),
@@ -247,20 +247,20 @@ describe("saveSpecialDay", () => {
   });
 
   it("turning a special day repeating rechecks its kept dates", async () => {
-    const v = await venue();
-    const oneOff = await save(v, null, {
+    await venue();
+    const oneOff = await save(null, {
       name: "Dinner 2031",
       repeatsYearly: false,
       dates: dates(["2031-12-24"]),
     });
-    const nochebuena = await save(v, null, {
+    const nochebuena = await save(null, {
       name: "Christmas Eve",
       repeatsYearly: false,
       dates: dates(["2030-12-24"]),
     });
     expect(
       await refusal(
-        save(v, nochebuena.id, {
+        save(nochebuena.id, {
           name: "Christmas Eve",
           repeatsYearly: true,
           dates: dates(["2030-12-24"]),
@@ -273,13 +273,13 @@ describe("saveSpecialDay", () => {
   });
 
   it("names need not be unique", async () => {
-    const v = await venue();
-    const first = await save(v, null, {
+    await venue();
+    const first = await save(null, {
       name: "Viernes Santo",
       repeatsYearly: false,
       dates: dates(["2026-04-03"]),
     });
-    const second = await save(v, null, {
+    const second = await save(null, {
       name: "Viernes Santo",
       repeatsYearly: false,
       dates: dates(["2027-03-26"]),
@@ -289,10 +289,10 @@ describe("saveSpecialDay", () => {
   });
 
   it("refuses one date twice in the input, and two dates a repeating day lands on together", async () => {
-    const v = await venue();
+    await venue();
     expect(
       await refusal(
-        save(v, null, {
+        save(null, {
           name: "Twice",
           repeatsYearly: false,
           dates: dates(["2030-12-24", "2030-12-24"]),
@@ -304,7 +304,7 @@ describe("saveSpecialDay", () => {
     });
     expect(
       await refusal(
-        save(v, null, {
+        save(null, {
           name: "Twice",
           repeatsYearly: true,
           dates: dates(["2030-12-24", "2031-12-24"]),
@@ -330,7 +330,7 @@ describe("saveSpecialDay", () => {
     const v = await venue();
     expect(
       await refusal(
-        save(v, null, {
+        save(null, {
           name: "Shape",
           repeatsYearly: false,
           dates: dates(["2030-12-24"]),
@@ -348,15 +348,15 @@ describe("saveSpecialDay", () => {
       ranges: [{ periodId: null, startsAt: "12:00", endsAt: "14:00" }],
     };
     const input = { name: "Dup", repeatsYearly: false, dates: dates(["2030-12-24"]) };
-    expect(await refusal(save(v, null, { ...input, paint: [entry, entry] }))).toEqual({
+    expect(await refusal(save(null, { ...input, paint: [entry, entry] }))).toEqual({
       code: "special_day.invalid",
       params: { field: "paint.1", reason: "overlap" },
     });
     expect(
-      await refusal(save(v, null, { ...input, paint: [{ ...entry, date: "2030-12-25" }] })),
+      await refusal(save(null, { ...input, paint: [{ ...entry, date: "2030-12-25" }] })),
     ).toEqual({ code: "special_day.invalid", params: { field: "paint.0.date" } });
     const zone = { zoneId: v.sala, date: "2030-12-24", ranges: [] };
-    expect(await refusal(save(v, null, { ...input, zonePaint: [zone, zone] }))).toEqual({
+    expect(await refusal(save(null, { ...input, zonePaint: [zone, zone] }))).toEqual({
       code: "special_day.invalid",
       params: { field: "zonePaint.1", reason: "overlap" },
     });
@@ -366,7 +366,7 @@ describe("saveSpecialDay", () => {
     const v = await venue();
     expect(
       await refusal(
-        save(v, null, {
+        save(null, {
           name: "Wrong period",
           repeatsYearly: false,
           dates: dates(["2030-12-24"]),
@@ -396,7 +396,6 @@ describe("saveSpecialDay", () => {
     expect(
       await refusal(
         save(
-          v,
           null,
           input("2030-12-24", [
             { periodId: v.lunch, startsAt: "14:00", endsAt: "16:00" },
@@ -411,7 +410,6 @@ describe("saveSpecialDay", () => {
     expect(
       await refusal(
         save(
-          v,
           null,
           input("2026-03-28", [
             { periodId: v.dinner, startsAt: "05:00", endsAt: "05:30" },
@@ -430,7 +428,7 @@ describe("saveSpecialDay", () => {
     const v = await venue();
     expect(
       await refusal(
-        save(v, null, {
+        save(null, {
           name: "Kind",
           repeatsYearly: false,
           dates: dates(["2030-12-24"]),
@@ -480,10 +478,10 @@ describe("saveSpecialDay", () => {
       },
     ],
   ])("refuses a malformed %s", async (field, change) => {
-    const v = await venue();
+    await venue();
     expect(
       await refusal(
-        save(v, null, {
+        save(null, {
           name: "Malformed",
           repeatsYearly: false,
           dates: dates(["2030-12-24"]),
@@ -494,23 +492,23 @@ describe("saveSpecialDay", () => {
   });
 
   it("refuses an input that is not an object", async () => {
-    const v = await venue();
-    expect(await refusal(save(v, null, ["Christmas Eve"]))).toEqual({
+    await venue();
+    expect(await refusal(save(null, ["Christmas Eve"]))).toEqual({
       code: "special_day.invalid",
       params: { field: "input" },
     });
   });
 
   it("refuses a one-off date a repeating special day reaches in a later year", async () => {
-    const v = await venue();
-    const every = await save(v, null, {
+    await venue();
+    const every = await save(null, {
       name: "Christmas Eve",
       repeatsYearly: true,
       dates: dates(["2030-12-24"]),
     });
     expect(
       await refusal(
-        save(v, null, { name: "Dinner", repeatsYearly: false, dates: dates(["2033-12-24"]) }),
+        save(null, { name: "Dinner", repeatsYearly: false, dates: dates(["2033-12-24"]) }),
       ),
     ).toEqual({
       code: "special_day.date_taken",
@@ -520,11 +518,14 @@ describe("saveSpecialDay", () => {
 
   it("saves and reads a special day with no dates, and clears a zone's paint given empty ranges", async () => {
     const v = await venue();
-    expect(
-      await save(v, null, { name: "No dates", repeatsYearly: false, dates: [] }),
-    ).toMatchObject({ name: "No dates", dates: [], paint: [], zonePaint: [] });
+    expect(await save(null, { name: "No dates", repeatsYearly: false, dates: [] })).toMatchObject({
+      name: "No dates",
+      dates: [],
+      paint: [],
+      zonePaint: [],
+    });
     const before = await christmasDinners(v);
-    const after = await save(v, before.id, {
+    const after = await save(before.id, {
       name: "Christmas company dinners",
       repeatsYearly: false,
       dates: dates(december(14, 23)),
@@ -536,7 +537,7 @@ describe("saveSpecialDay", () => {
 
   it("stores touching paint of one period, or of Closed, as one range, and of two periods as two", async () => {
     const v = await venue();
-    const saved = await save(v, null, {
+    const saved = await save(null, {
       name: "Touching",
       repeatsYearly: false,
       dates: dates(["2030-12-24", "2030-12-25"]),
@@ -579,7 +580,7 @@ describe("saveSpecialDay", () => {
 
   it("stores touching zone paint of one kind as one range, and of two kinds as two", async () => {
     const v = await venue();
-    const saved = await save(v, null, {
+    const saved = await save(null, {
       name: "Touching zone",
       repeatsYearly: false,
       dates: dates(["2030-12-24"]),
@@ -614,7 +615,6 @@ describe("saveSpecialDay", () => {
       .set({ timeZone: "Mars/Base" })
       .where(eq(locations.id, v.cfg.locationId));
     const saved = await save(
-      v,
       null,
       {
         name: "Clock change",
@@ -645,9 +645,10 @@ describe("saveSpecialDay", () => {
       weekday,
       slots: weekday === 2 ? [{ periodId: null, startsAt: "12:00", endsAt: "14:00" }] : [],
     }));
-    expect(
-      await refusal(scoped((tx) => replaceMenuWeek(tx, v.cfg, v.restaurant, week, AT, 0))),
-    ).toEqual({ code: "menu_timetable.invalid", params: { field: "days.2.slots.0.periodId" } });
+    expect(await refusal(scoped((tx) => replaceMenuWeek(tx, v.restaurant, week, AT, 0)))).toEqual({
+      code: "menu_timetable.invalid",
+      params: { field: "days.2.slots.0.periodId" },
+    });
   });
 
   it.each([
@@ -673,57 +674,36 @@ describe("saveSpecialDay", () => {
         "zoneId" in params ? [{ zoneId: missing, date: "2030-12-11", ranges: zoneRanges }] : [],
     };
     const key = Object.keys(params)[0]!;
-    expect(await refusal(save(v, before.id, input))).toEqual({
+    expect(await refusal(save(before.id, input))).toEqual({
       code,
       params: { [key]: missing },
     });
-    expect(await read(v, before.id)).toEqual(before);
+    expect(await read(before.id)).toEqual(before);
   });
 
   it("refuses a stale clock revision, writing nothing", async () => {
     const v = await venue();
     const before = await christmasDinners(v);
     const input = { name: "Renamed", repeatsYearly: false, dates: dates(["2030-12-01"]) };
-    expect(await refusal(save(v, before.id, input, AT, 1))).toEqual({
+    expect(await refusal(save(before.id, input, AT, 1))).toEqual({
       code: "hours.clock_changed",
       params: {},
     });
-    expect(await refusal(save(v, null, input, AT, 1))).toEqual({
+    expect(await refusal(save(null, input, AT, 1))).toEqual({
       code: "hours.clock_changed",
       params: {},
     });
-    expect(await read(v, before.id)).toEqual(before);
+    expect(await read(before.id)).toEqual(before);
     expect(
       await db.select().from(specialDays).where(eq(specialDays.locationId, v.cfg.locationId)),
     ).toHaveLength(1);
   });
 
-  // A1301: deleted with cfg in S18
-  it("stores a special day on the venue's row whatever location the scope names", async () => {
-    await venue();
-    const scope: VenueScope = { locationId: brandLocationId(randomUUID()) };
-    const saved = await scoped((tx) =>
-      saveSpecialDay(
-        tx,
-        scope,
-        null,
-        { name: "Scope-blind", repeatsYearly: false, dates: [] },
-        AT,
-        0,
-      ),
-    );
-    const [row] = await db
-      .select({ locationId: specialDays.locationId })
-      .from(specialDays)
-      .where(eq(specialDays.id, saved.id));
-    expect(row!.locationId).toBe(await scoped((tx) => venueLocationId(tx)));
-  });
-
   it("refuses an id it does not hold", async () => {
-    const v = await venue();
+    await venue();
     const missing = randomUUID();
     const input = { name: "Nope", repeatsYearly: false, dates: dates(["2030-12-01"]) };
-    expect(await refusal(save(v, missing, input))).toEqual({
+    expect(await refusal(save(missing, input))).toEqual({
       code: "special_day.not_found",
       params: { specialDayId: missing },
     });
@@ -746,7 +726,7 @@ describe("saveSpecialDay", () => {
     it("refuses paint at 02:15 on business day 2026-03-28, which the clocks skip on 29 March", async () => {
       const v = await venue();
       expect(
-        await refusal(save(v, null, skipping("2026-03-28", false, v), new Date("2026-01-10"))),
+        await refusal(save(null, skipping("2026-03-28", false, v), new Date("2026-01-10"))),
       ).toEqual({
         code: "special_day.invalid",
         params: { field: "paint.0.ranges.0.startsAt", reason: "clock_skips", date: "2026-03-28" },
@@ -755,7 +735,7 @@ describe("saveSpecialDay", () => {
 
     it("saves the same paint on business day 2026-03-29 (02:15 on 30 March exists)", async () => {
       const v = await venue();
-      const saved = await save(v, null, skipping("2026-03-29", false, v), new Date("2026-01-10"));
+      const saved = await save(null, skipping("2026-03-29", false, v), new Date("2026-01-10"));
       expect(saved.paint).toHaveLength(1);
     });
 
@@ -763,7 +743,7 @@ describe("saveSpecialDay", () => {
       const v = await venue();
       // Stored 2025-03-28 is fine (2025's change was on 30 March); its 2026 occurrence is not.
       expect(
-        await refusal(save(v, null, skipping("2025-03-28", true, v), new Date("2026-01-10"))),
+        await refusal(save(null, skipping("2025-03-28", true, v), new Date("2026-01-10"))),
       ).toEqual({
         code: "special_day.invalid",
         params: { field: "paint.0.ranges.0.startsAt", reason: "clock_skips", date: "2026-03-28" },
@@ -772,15 +752,15 @@ describe("saveSpecialDay", () => {
         await db.select().from(specialDays).where(eq(specialDays.locationId, v.cfg.locationId)),
       ).toEqual([]);
       // After it, the next occurrence is 2027-03-28, whose night (28 → 29 March) skips nothing.
-      const saved = await save(v, null, skipping("2025-03-28", true, v), new Date("2026-04-01"));
+      const saved = await save(null, skipping("2025-03-28", true, v), new Date("2026-04-01"));
       expect(saved.paint).toHaveLength(1);
     });
 
     it("turning a day repeating rechecks the department paint the request leaves out", async () => {
       const v = await venue();
-      const saved = await save(v, null, skipping("2025-03-28", false, v), new Date("2025-01-10"));
+      const saved = await save(null, skipping("2025-03-28", false, v), new Date("2025-01-10"));
       const repeating = { name: saved.name, repeatsYearly: true, dates: saved.dates };
-      expect(await refusal(save(v, saved.id, repeating, new Date("2026-01-10")))).toEqual({
+      expect(await refusal(save(saved.id, repeating, new Date("2026-01-10")))).toEqual({
         code: "special_day.invalid",
         params: {
           field: "paint",
@@ -789,10 +769,9 @@ describe("saveSpecialDay", () => {
           date: "2026-03-28",
         },
       });
-      expect(await read(v, saved.id)).toEqual(saved);
+      expect(await read(saved.id)).toEqual(saved);
       const replaced = [{ periodId: v.dinner, startsAt: "04:00", endsAt: "05:00" }];
       const accepted = await save(
-        v,
         saved.id,
         {
           ...repeating,
@@ -808,7 +787,6 @@ describe("saveSpecialDay", () => {
     it("turning a day repeating rechecks the zone paint the request leaves out", async () => {
       const v = await venue();
       const saved = await save(
-        v,
         null,
         {
           name: "Clock change",
@@ -827,7 +805,6 @@ describe("saveSpecialDay", () => {
       expect(
         await refusal(
           save(
-            v,
             saved.id,
             { name: saved.name, repeatsYearly: true, dates: saved.dates },
             new Date("2026-01-10"),
@@ -837,14 +814,13 @@ describe("saveSpecialDay", () => {
         code: "special_day.invalid",
         params: { field: "zonePaint", zoneId: v.sala, reason: "clock_skips", date: "2026-03-28" },
       });
-      expect(await read(v, saved.id)).toEqual(saved);
+      expect(await read(saved.id)).toEqual(saved);
     });
 
     it("renaming a yearly day a year later keeps paint the request leaves out unchecked", async () => {
       const v = await venue();
-      const saved = await save(v, null, skipping("2025-03-28", true, v), new Date("2025-01-10"));
+      const saved = await save(null, skipping("2025-03-28", true, v), new Date("2025-01-10"));
       const renamed = await save(
-        v,
         saved.id,
         { name: "Renamed", repeatsYearly: true, dates: saved.dates },
         new Date("2026-01-10"),
@@ -870,7 +846,6 @@ describe("saveSpecialDay", () => {
     it("turning a day repeating rechecks the department paint's order under every changeover", async () => {
       const v = await withChange();
       const saved = await save(
-        v,
         null,
         {
           name: "Christmas Eve",
@@ -888,19 +863,18 @@ describe("saveSpecialDay", () => {
       );
       expect(
         await refusal(
-          save(v, saved.id, { name: saved.name, repeatsYearly: true, dates: saved.dates }, AFTER),
+          save(saved.id, { name: saved.name, repeatsYearly: true, dates: saved.dates }, AFTER),
         ),
       ).toEqual({
         code: "special_day.invalid",
         params: { field: "paint", departmentId: v.restaurant, date: "2030-12-24", reason: "order" },
       });
-      expect(await read(v, saved.id)).toEqual(saved);
+      expect(await read(saved.id)).toEqual(saved);
     });
 
     it("turning a day repeating rechecks the zone paint's order under every changeover", async () => {
       const v = await withChange();
       const saved = await save(
-        v,
         null,
         {
           name: "Christmas Eve",
@@ -918,13 +892,13 @@ describe("saveSpecialDay", () => {
       );
       expect(
         await refusal(
-          save(v, saved.id, { name: saved.name, repeatsYearly: true, dates: saved.dates }, AFTER),
+          save(saved.id, { name: saved.name, repeatsYearly: true, dates: saved.dates }, AFTER),
         ),
       ).toEqual({
         code: "special_day.invalid",
         params: { field: "zonePaint", zoneId: v.sala, date: "2030-12-24", reason: "order" },
       });
-      expect(await read(v, saved.id)).toEqual(saved);
+      expect(await read(saved.id)).toEqual(saved);
     });
   });
 });
@@ -934,8 +908,8 @@ describe("deleteSpecialDay", () => {
     const v = await venue();
     const before = await christmasDinners(v);
     const ids = (await dateRows(before.id)).map((row) => row.id);
-    await scoped((tx) => deleteSpecialDay(tx, v.cfg, before.id, AT, 0));
-    expect(await refusal(read(v, before.id))).toEqual({
+    await scoped((tx) => deleteSpecialDay(tx, before.id, AT, 0));
+    expect(await refusal(read(before.id))).toEqual({
       code: "special_day.not_found",
       params: { specialDayId: before.id },
     });
@@ -951,15 +925,15 @@ describe("deleteSpecialDay", () => {
   it("refuses a stale revision and an unknown id, deleting nothing", async () => {
     const v = await venue();
     const before = await christmasDinners(v);
-    expect(await refusal(scoped((tx) => deleteSpecialDay(tx, v.cfg, before.id, AT, 1)))).toEqual({
+    expect(await refusal(scoped((tx) => deleteSpecialDay(tx, before.id, AT, 1)))).toEqual({
       code: "hours.clock_changed",
       params: {},
     });
     const missing = randomUUID();
-    expect(await refusal(scoped((tx) => deleteSpecialDay(tx, v.cfg, missing, AT, 0)))).toEqual({
+    expect(await refusal(scoped((tx) => deleteSpecialDay(tx, missing, AT, 0)))).toEqual({
       code: "special_day.not_found",
       params: { specialDayId: missing },
     });
-    expect(await read(v, before.id)).toEqual(before);
+    expect(await read(before.id)).toEqual(before);
   });
 });

@@ -187,7 +187,6 @@ export async function createBareDepartment(
     .where(eq(menuPeriods.departmentId, departmentId));
   await replaceMenuWeek(
     tx,
-    cfg,
     departmentId,
     [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, slots: [] })),
     at,

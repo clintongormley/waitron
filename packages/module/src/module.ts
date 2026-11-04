@@ -740,15 +740,10 @@ export interface PrintedDepartmentReceipt {
 
 /** Venue-service decisions consumed by generic ordering code inside its existing transaction. */
 export interface VenueServiceContribution {
-  readServiceDay(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    at: Date,
-  ): Promise<PreparedServiceDay>;
+  readServiceDay(tx: Transaction, at: Date): Promise<PreparedServiceDay>;
   /** One entry per zone named; each department's day is read once. */
   dueFloorLayouts(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     zones: readonly {
       zoneId: string;
       recordedOccurrence: string | null;
@@ -764,14 +759,12 @@ export interface VenueServiceContribution {
   ): Promise<readonly FloorPlanSetSummary[]>;
   assertBusinessDayClockChange(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     before: BusinessDayClock,
     candidate: BusinessDayClock,
     effectiveBusinessDay: string,
   ): Promise<void>;
   assertBusinessDayScheduleWrite(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     changeKind: "time" | "metadata",
     expectedClockRevision: number,
   ): Promise<void>;
@@ -847,16 +840,10 @@ export interface VenueServiceContribution {
   ): Promise<OrderServiceContext>;
   closedZoneIdsAt(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     at: Date,
     zoneIds?: readonly string[],
   ): Promise<ReadonlySet<string>>;
-  assertZoneTakesNewOrders(
-    tx: Transaction,
-    cfg: { locationId: LocationId },
-    zoneId: string,
-    at: Date,
-  ): Promise<void>;
+  assertZoneTakesNewOrders(tx: Transaction, zoneId: string, at: Date): Promise<void>;
   resolveDepartmentService(
     tx: Transaction,
     cfg: { locationId: LocationId },
@@ -895,7 +882,6 @@ export interface VenueServiceContribution {
   ): Promise<{ zone: KeepOpenSubject | null }>;
   readZoneKeepOpenState(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     zoneId: string,
     at: Date,
   ): Promise<ZoneOffers["service"]["zoneKeepOpen"]>;
@@ -903,7 +889,6 @@ export interface VenueServiceContribution {
    *  closing summary. */
   readZoneClosingStates(
     tx: Transaction,
-    cfg: { locationId: LocationId },
     zoneIds: readonly string[],
     at: Date,
     prepared?: PreparedServiceDay,

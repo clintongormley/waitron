@@ -450,7 +450,7 @@ async function makeProduct(
     unitPrice: "1.50",
     vatClass: "general",
   });
-  if (route.stationId !== undefined) await routeProductTo(tx, cfg, id, route.stationId);
+  if (route.stationId !== undefined) await routeProductTo(tx, id, route.stationId);
   if (route.courseId !== undefined) await setProductCourse(tx, cfg, id, route.courseId);
   return id;
 }
@@ -1169,7 +1169,7 @@ describe("a dish sold by the piece prints no unit", () => {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await routeProductTo(tx, cfg, id, kitchenStation.id);
+      await routeProductTo(tx, id, kitchenStation.id);
       return id;
     };
     return {
@@ -2158,7 +2158,7 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     const { kitchen, bar, screen } = await inTx(v, async (tx) => {
       const station = async (name: string, dish: string, withPrinter: boolean) => {
         const { id } = await createStation(tx, v.cfg, { name });
-        await routeProductTo(tx, v.cfg, v.productId(dish), id);
+        await routeProductTo(tx, v.productId(dish), id);
         const printerId = withPrinter ? await makeSharedPrinter(tx, name, [id]) : null;
         return { id, printerId };
       };
@@ -2306,7 +2306,7 @@ async function ticketWithNames(frozen: {
       unitPrice: "1.50",
       vatClass: "general",
     });
-    await routeProductTo(tx, cfg, productId, station.id);
+    await routeProductTo(tx, productId, station.id);
     const orderId = randomUUID();
     const { lineRows } = await createOfferedOrder(tx, cfg, orderId, [line(productId)]);
     const parent = lineRows[0]!;
@@ -2752,7 +2752,7 @@ describe("A803 portion grouping", () => {
       unitPrice: "20.00",
       vatClass: "general",
     });
-    await routeProductTo(tx, cfg, octopus, fryer.id);
+    await routeProductTo(tx, octopus, fryer.id);
     const { listId, productIds } = await addExtras(
       tx,
       cfg,
@@ -3003,7 +3003,7 @@ describe("A803 portion grouping", () => {
         unitPrice: "1.50",
         vatClass: "general",
       });
-      await routeProductTo(tx, cfg, bread, k.fryer);
+      await routeProductTo(tx, bread, k.fryer);
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       await addPortionRound(
         tx,
@@ -3147,7 +3147,7 @@ describe("A803 portion grouping", () => {
     const { cfg, catalogueId } = await setupVenue();
     const fryer = await asApp(cfg, async (tx) => {
       const k = await portionKitchen(tx, cfg, catalogueId);
-      await routeProductTo(tx, cfg, k.ids.cheese, k.fryer);
+      await routeProductTo(tx, k.ids.cheese, k.fryer);
       await addPortionRound(
         tx,
         cfg,

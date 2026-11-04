@@ -44,7 +44,6 @@ useVenueDb({
       const extra = await createStation(tx, venue.cfg, { name: "Extra station" });
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: venue.olivesId }, zoneId: null },
         { kind: "station", stationId: extra.id },
       );

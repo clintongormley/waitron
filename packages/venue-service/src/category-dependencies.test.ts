@@ -68,12 +68,11 @@ it("deleting a category removes its own and its subtree's category cells and kee
       row: { kind: "category" as const, categoryId },
       zoneId: null,
     });
-    await setRoutingCell(tx, cfg, category(food.id), { kind: "station", stationId: kitchen! });
-    await setRoutingCell(tx, cfg, category(drinks.id), { kind: "no_preparation" });
-    await setRoutingCell(tx, cfg, category(cocktails.id), { kind: "no_preparation" });
+    await setRoutingCell(tx, category(food.id), { kind: "station", stationId: kitchen! });
+    await setRoutingCell(tx, category(drinks.id), { kind: "no_preparation" });
+    await setRoutingCell(tx, category(cocktails.id), { kind: "no_preparation" });
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "product", productId: negroni.id }, zoneId: null },
       { kind: "station", stationId: bar! },
     );

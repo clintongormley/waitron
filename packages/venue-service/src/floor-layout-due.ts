@@ -4,7 +4,6 @@ import type { DueFloorLayout, PreparedServiceDay, ZoneFloorLayout } from "@waitr
 import type { BusinessDayClock } from "@waitron/shared";
 import { momentAt, resolveDepartmentsDays, serviceDayOf, type DayPlan } from "./day-resolver.js";
 import { serviceRuns } from "./menu-timetable.js";
-import type { VenueScope } from "./operations.js";
 import { departmentFloorPlanSets } from "./schema/floor-plan-sets.js";
 import { menuPeriods } from "./schema/menus.js";
 import { departments, zoneServicePolicies } from "./schema/service.js";
@@ -91,7 +90,6 @@ const NO_LAYOUT: DueFloorLayout = {
  *  keep open play no part. */
 export async function dueFloorLayouts(
   tx: Transaction,
-  cfg: VenueScope,
   zones: readonly {
     zoneId: string;
     recordedOccurrence: string | null;
@@ -173,7 +171,6 @@ export async function dueFloorLayouts(
       ? null
       : await dueDays(
           tx,
-          cfg,
           withSets,
           moment,
           clock,
@@ -215,7 +212,6 @@ export async function dueFloorLayouts(
  *  independent of how many departments there are. */
 async function dueDays(
   tx: Transaction,
-  cfg: VenueScope,
   departmentIds: readonly string[],
   moment: ServiceMoment,
   clock: BusinessDayClock,
@@ -223,7 +219,7 @@ async function dueDays(
 ): Promise<{ moment: ServiceMoment; context: ServiceDayContext; days: Map<string, DueDay> }> {
   const { businessDay } = moment;
   const context = serviceDayContext(clock, businessDay);
-  const resolved = await resolveDepartmentsDays(tx, cfg, departmentIds, [businessDay], clock, plan);
+  const resolved = await resolveDepartmentsDays(tx, departmentIds, [businessDay], clock, plan);
   const days = new Map<string, DueDay>();
   for (const departmentId of departmentIds)
     days.set(departmentId, {

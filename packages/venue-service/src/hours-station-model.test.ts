@@ -127,7 +127,7 @@ it("keeps local department names in the Opening hours model without station colu
       .returning();
     return row!.id;
   });
-  const model = await withTransaction(suite.db, (tx) => readOpeningHoursModel(tx, f.cfg, at));
+  const model = await withTransaction(suite.db, (tx) => readOpeningHoursModel(tx, at));
   expect(model.departments.map(({ id, name }) => ({ id, name }))).toEqual([
     { id: f.department, name: "Dining" },
   ]);

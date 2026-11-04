@@ -57,7 +57,6 @@ useVenueDb({
       const { id: stationId } = await createStation(tx, v.cfg, { name: "Quesos" });
       await setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: cheese.productId }, zoneId: null },
         { kind: "station", stationId },
       );
@@ -67,7 +66,6 @@ useVenueDb({
       const { id: barStation } = await createStation(tx, v.cfg, { name: "Barra" });
       await setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId("Vino") }, zoneId: null },
         { kind: "station", stationId: barStation },
       );

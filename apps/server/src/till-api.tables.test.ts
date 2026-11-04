@@ -116,7 +116,6 @@ const suite = useVenueDb({
     await withTransaction(db, (tx) =>
       setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "product", productId: product.breadId }, zoneId: null },
         { kind: "no_preparation" },
       ),

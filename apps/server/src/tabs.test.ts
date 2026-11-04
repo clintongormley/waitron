@@ -991,7 +991,7 @@ describe("readTabLines", () => {
 
   it("reads a no-preparation line that was released as sent, with no ticket state", async () => {
     const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: aguaOffer, quantity: "1" }]),
@@ -1130,7 +1130,6 @@ describe("listTablesWithState (occupancy)", () => {
       await offerMenuThroughZone(tx, cfg, zone.id, menuId, { makeDefault: true });
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "category", categoryId }, zoneId: null },
         { kind: "no_preparation" },
       );
@@ -1286,11 +1285,10 @@ it("returns a tab line's stored staff names and options answers", async () => {
 });
 
 /** Route `productId` to no station: a bottled drink handed over at the bar. */
-async function routeToNoPreparation(cfg: OriginConfig, productId: string): Promise<void> {
+async function routeToNoPreparation(productId: string): Promise<void> {
   await withTransaction(db, (tx) =>
     setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "product", productId }, zoneId: null },
       { kind: "no_preparation" },
     ),
@@ -1339,7 +1337,7 @@ async function sentState(orderId: string): Promise<
 describe("sent_at: when a line is sent, and what the kitchen was asked to make", () => {
   it("stamps a routed line and a no-preparation line sent in one round; only the routed one has a ticket, at the quantity fired", async () => {
     const { cfg, tableId, cafeId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1359,7 +1357,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("stamps neither held dish until selected line release, then both", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
@@ -1407,7 +1405,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("stamps a held course's no-route line when its routed line is sent by sendLines", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
@@ -1426,7 +1424,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("sending everything held stamps a held no-route line even when nothing routed is held beside it", async () => {
     const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
@@ -1446,7 +1444,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("sending one held line of a course stamps the course's no-route line only once nothing routed in it is still held", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const course = await asApp(cfg, (tx) =>
       createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
     );
@@ -1476,7 +1474,7 @@ describe("sent_at: when a line is sent, and what the kitchen was asked to make",
 
   it("stamps a no-route line with no course at the round even when the round holds another line", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -1961,7 +1959,7 @@ describe("when a station does not allow changes after sending", () => {
 
   it("still changes a no-preparation line that was released, which has no ticket item", async () => {
     const { cfg, tableId, aguaId, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     await asApp(cfg, (tx) => setChangesAfterSending(tx, "never"));
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
@@ -2355,7 +2353,7 @@ describe("editing a line the kitchen has and has not started (plan D10, spec §1
 
   it("edits a held-course line and a no-route line freely, with no notice", async () => {
     const { cfg, tableId, aguaId, cafeOffer, aguaOffer } = await setupVenue();
-    await routeToNoPreparation(cfg, aguaId);
+    await routeToNoPreparation(aguaId);
     const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp(cfg, (tx) =>
       addTabRound(tx, cfg, tabId, [

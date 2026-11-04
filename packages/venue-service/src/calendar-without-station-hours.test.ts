@@ -60,7 +60,7 @@ it.each(["calendar", "special days", "opening hours"] as const)(
           const model = await readSpecialDaysModel(tx, cfg, "2027-10-10", "2027-10-10", at);
           expect(model.days).toEqual([calendarDay]);
         } else {
-          expect(await readOpeningHoursModel(tx, cfg, at)).not.toHaveProperty("namedDays");
+          expect(await readOpeningHoursModel(tx, at)).not.toHaveProperty("namedDays");
         }
         throw rollback;
       }),

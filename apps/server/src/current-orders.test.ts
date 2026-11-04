@@ -223,7 +223,6 @@ async function setupVenue(): Promise<Venue> {
     // Bottled water is handed over at the bar: no kitchen ticket, only a sent stamp.
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "product", productId: productId.water }, zoneId: null },
       { kind: "no_preparation" },
     );

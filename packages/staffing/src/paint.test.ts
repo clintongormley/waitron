@@ -619,7 +619,7 @@ describe("resolveStaffing", () => {
       ]);
     });
     const resolved = await inTx((tx) =>
-      resolveStaffing(tx, v.cfg, ["2026-08-14", "2026-08-15", "2026-08-21", "2026-08-17"]),
+      resolveStaffing(tx, ["2026-08-14", "2026-08-15", "2026-08-21", "2026-08-17"]),
     );
     const plain = (day: string) => Object.fromEntries(resolved.get(day)!);
     expect([...resolved.keys()]).toEqual(["2026-08-14", "2026-08-15", "2026-08-21", "2026-08-17"]);
@@ -651,7 +651,7 @@ describe("resolveStaffing", () => {
       ]);
     });
     // 2027-08-15 is a Sunday: without the special day it would take the season's Sunday.
-    const resolved = await inTx((tx) => resolveStaffing(tx, v.cfg, ["2027-08-15"]));
+    const resolved = await inTx((tx) => resolveStaffing(tx, ["2027-08-15"]));
     expect(Object.fromEntries(resolved.get("2027-08-15")!)).toEqual({
       [`department:${v.departmentId}`]: fiesta,
     });
@@ -664,19 +664,19 @@ describe("resolveStaffing", () => {
       special: new Map([["2026-08-14", null]]),
     };
     await expect(
-      inTx((tx) => resolveStaffing(tx, v.cfg, ["2026-08-14", "2026-08-15"], { plan })),
+      inTx((tx) => resolveStaffing(tx, ["2026-08-14", "2026-08-15"], { plan })),
     ).rejects.toThrow("the day plan does not cover 2026-08-15");
     plan.special.delete("2026-08-14");
-    await expect(
-      inTx((tx) => resolveStaffing(tx, v.cfg, ["2026-08-14"], { plan })),
-    ).rejects.toThrow("the day plan does not cover 2026-08-14");
+    await expect(inTx((tx) => resolveStaffing(tx, ["2026-08-14"], { plan }))).rejects.toThrow(
+      "the day plan does not cover 2026-08-14",
+    );
   });
 
   it("returns empty days when there are no days or no season", async () => {
     const v = await venue();
-    expect(await inTx((tx) => resolveStaffing(tx, v.cfg, []))).toEqual(new Map());
+    expect(await inTx((tx) => resolveStaffing(tx, []))).toEqual(new Map());
     await inTx((tx) => tx.delete(seasons).where(eq(seasons.id, v.seasonId)));
-    expect(await inTx((tx) => resolveStaffing(tx, v.cfg, ["2026-08-17"]))).toEqual(
+    expect(await inTx((tx) => resolveStaffing(tx, ["2026-08-17"]))).toEqual(
       new Map([["2026-08-17", new Map()]]),
     );
   });
@@ -698,7 +698,7 @@ describe("switched-off areas", () => {
           areas: (await listStaffingAreas(tx)).map((a) => a.area),
           season: await readSeasonStaffing(tx, v.cfg, v.seasonId),
           special: await readSpecialDayStaffing(tx, v.cfg, v.specialDayId),
-          resolved: await resolveStaffing(tx, v.cfg, ["2026-08-14", "2026-08-15"]),
+          resolved: await resolveStaffing(tx, ["2026-08-14", "2026-08-15"]),
         }));
       const before = await reads();
       await switchOff(area, false);
@@ -810,7 +810,6 @@ async function guideVenue() {
     });
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "all" }, zoneId: zone!.id },
       { kind: "station", stationId: v.stationId },
     );
@@ -931,7 +930,6 @@ it("A724 keeps the sending department identity of every station range", async ()
     });
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "all" }, zoneId: zone!.id },
       { kind: "station", stationId: v.stationId },
     );

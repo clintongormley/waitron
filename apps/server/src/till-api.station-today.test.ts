@@ -141,7 +141,6 @@ async function stationDish(station = grill) {
   await inTx(v, (tx) =>
     setRoutingCell(
       tx,
-      v.cfg,
       { row: { kind: "product", productId: v.productId("Burger") }, zoneId: null },
       { kind: "station", stationId: station },
     ),
@@ -319,7 +318,6 @@ describe("the till's station day", () => {
     await inTx(v, (tx) =>
       setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId("Burger") }, zoneId: null },
         { kind: "station", stationId: grill },
       ),
@@ -642,7 +640,6 @@ describe("the till's station day", () => {
     await inTx(v, (tx) =>
       setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId("Burger") }, zoneId: null },
         { kind: "station", stationId: grill },
       ),

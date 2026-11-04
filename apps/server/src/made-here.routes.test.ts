@@ -93,7 +93,7 @@ useVenueDb({
         .select({ id: products.id })
         .from(products)
         .where(eq(products.name, "Paella"));
-      await routeProductTo(tx, venue.cfg, paella!.id, grill.id);
+      await routeProductTo(tx, paella!.id, grill.id);
       const grillPrinter = await createPrinter(tx, {
         name: "Grill",
         transport: "cloud_poll",

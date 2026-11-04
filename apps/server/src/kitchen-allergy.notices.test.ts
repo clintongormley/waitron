@@ -394,7 +394,7 @@ describe("A669 notices", () => {
         );
         await writeProductModifiers(tx, v.productId("Burger"), [{ kind: "extras", id: list.id }]);
         const station = await createStation(tx, v.cfg, { name: "Sides kitchen" });
-        await routeProductTo(tx, v.cfg, side.id, station.id);
+        await routeProductTo(tx, side.id, station.id);
         await republishMenus(tx);
         return { side, list, station };
       });

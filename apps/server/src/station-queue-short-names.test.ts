@@ -44,7 +44,6 @@ useVenueDb({
       grill = (await createStation(tx, v.cfg, { name: "Grill" })).id;
       await setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId("Burger") }, zoneId: null },
         { kind: "station", stationId: grill },
       );

@@ -579,7 +579,7 @@ it("routed child extras inherit and release their dish's retained deleted course
   const v = await setup();
   const station = await withTransaction(v.db, async (tx) => {
     const station = await createStation(tx, v.cfg, { name: "Sauce kitchen" });
-    await routeProductTo(tx, v.cfg, v.sauce.id, station.id);
+    await routeProductTo(tx, v.sauce.id, station.id);
     return station;
   });
   const draft = await v.saved([

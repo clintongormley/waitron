@@ -152,7 +152,7 @@ const routedExtra = () =>
     );
     await writeProductModifiers(tx, v.productId("Burger"), [{ kind: "extras", id: list.id }]);
     const station = await createStation(tx, v.cfg, { name: "Side station" });
-    await routeProductTo(tx, v.cfg, side.id, station.id);
+    await routeProductTo(tx, side.id, station.id);
     await republishMenus(tx);
     return { side, list, station };
   });
@@ -275,7 +275,7 @@ describe("A669 reads", () => {
     await sent();
     const other = await inTx(v, async (tx) => {
       const station = await createStation(tx, v.cfg, { name: "Other cook" });
-      await routeProductTo(tx, v.cfg, v.productId("Burger"), station.id);
+      await routeProductTo(tx, v.productId("Burger"), station.id);
       return station;
     });
     const p = await sent("fire", false);

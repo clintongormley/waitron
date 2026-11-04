@@ -67,7 +67,6 @@ async function fixture() {
       });
       await replaceMenuWeek(
         tx,
-        cfg,
         owner.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -320,7 +319,7 @@ it("returns the country's area options and the chosen venue area without inventi
   });
   expect(before.localHolidaysPerYear).toBe(2);
   const { saveHolidayArea } = await import("./holidays.js");
-  await run((tx) => saveHolidayArea(tx, f.cfg, { areaKey: "tenerife" }));
+  await run((tx) => saveHolidayArea(tx, { areaKey: "tenerife" }));
   const after = await run((tx) => readSpecialDaysModel(tx, f.cfg, "2026-02-02", "2026-02-02", now));
   expect(after.area).toEqual({ ...before.area, required: false, chosen: "tenerife" });
   expect(after.days[0]!.tone).toBe("public_holiday");

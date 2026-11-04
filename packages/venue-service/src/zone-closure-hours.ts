@@ -3,7 +3,6 @@ import { AppError } from "@waitron/shared";
 import { resolveDepartmentsDays } from "./day-resolver.js";
 import type { LocalDate } from "./hours-types.js";
 import type { ClosedWeekDay } from "./menu-timetable-types.js";
-import type { VenueScope } from "./operations.js";
 import { readDepartmentSeasonWeeks, type ServingRead } from "./season-weeks.js";
 import { inForceClock, serviceDayContext } from "./service-day-context.js";
 import { readServiceZones } from "./zone-closed-times.js";
@@ -25,7 +24,6 @@ function departmentIn(departmentOf: ReadonlyMap<string, string>) {
  *  zones are read here. */
 export async function assertSeasonClosuresInHours(
   tx: Transaction,
-  cfg: VenueScope,
   seasonId: string,
   zones: readonly { zoneId: string; field: string; days: readonly ClosedWeekDay[] }[],
   at: Date,
@@ -34,15 +32,12 @@ export async function assertSeasonClosuresInHours(
   if (zones.length === 0) return;
   const { clock, departmentOf } = read ?? {
     clock: await readVenueClock(tx),
-    departmentOf: new Map(
-      (await readServiceZones(tx, cfg)).map((zone) => [zone.id, zone.departmentId]),
-    ),
+    departmentOf: new Map((await readServiceZones(tx)).map((zone) => [zone.id, zone.departmentId])),
   };
   const department = departmentIn(departmentOf);
   const { dayCutover } = inForceClock(clock, at);
   const weeks = await readDepartmentSeasonWeeks(
     tx,
-    cfg,
     [...new Set(zones.map((zone) => department(zone.zoneId)))],
     dayCutover,
   );
@@ -68,7 +63,6 @@ export async function assertSeasonClosuresInHours(
  *  `saveSpecialDay` stores it. */
 export async function assertDatedClosuresInHours(
   tx: Transaction,
-  cfg: VenueScope,
   zonePaint: readonly {
     zoneId: string;
     date: LocalDate;
@@ -84,7 +78,6 @@ export async function assertDatedClosuresInHours(
   const department = departmentIn(departmentOf);
   const resolved = await resolveDepartmentsDays(
     tx,
-    cfg,
     [...new Set(checked.map(([, entry]) => department(entry.zoneId)))],
     [...new Set(checked.map(([, entry]) => entry.date))],
     clock,

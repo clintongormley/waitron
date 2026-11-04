@@ -130,11 +130,10 @@ function ownerDb(): Database {
 describe("provisionVenue", () => {
   it("leaves holiday storage empty, while the stored address reads its shipped holidays at once", async () => {
     const db = ownerDb();
-    const result = await provisionVenue(
+    await provisionVenue(
       { ownerDb: db, moduleConfig: ES_CONFIG, database: "waitron", stateDir },
       { environment: "preproduction", venue: venueRequest(nextNif()) },
     );
-    const cfg = { locationId: brandLocationId(result.locationId) };
 
     const { rows } = await db.execute<Record<string, number>>(sql`
       select
@@ -142,8 +141,8 @@ describe("provisionVenue", () => {
         (select cast(count(*) as int) from special_days) as entries`);
     expect(rows[0]).toEqual({ geographies: 0, entries: 0 });
     const read = await withTransaction(db, async (tx) => ({
-      may: await readHolidays(tx, cfg, "2026-05-01", "2026-05-31"),
-      model: await readHolidayAreaModel(tx, cfg),
+      may: await readHolidays(tx, "2026-05-01", "2026-05-31"),
+      model: await readHolidayAreaModel(tx),
     }));
     // Madrid's 2026: 1 May everywhere, and 2 May, the Comunidad de Madrid's own day.
     expect(read.may.facts.map(({ date, scope }) => ({ date, scope }))).toEqual([
@@ -470,13 +469,12 @@ describe("clearProvisionFixture", () => {
     const request = venueRequest(nextNif());
     request.city = "Vielha e Mijaran";
     request.province = "Lleida";
-    const result = await applyHistoricalTestVenue(
-      planVenue(request, enabledModules(ALL_MODULES, ES_CONFIG)),
-      { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
-    );
-    const cfg = { locationId: brandLocationId(result.locationId) };
+    await applyHistoricalTestVenue(planVenue(request, enabledModules(ALL_MODULES, ES_CONFIG)), {
+      db,
+      modules: enabledModules(ALL_MODULES, ES_CONFIG),
+    });
     await withTransaction(db, async (tx) => {
-      await saveHolidayArea(tx, cfg, { areaKey: "aran" });
+      await saveHolidayArea(tx, { areaKey: "aran" });
     });
 
     await clearProvisionFixture(db);
@@ -597,7 +595,6 @@ describe("clearProvisionFixture", () => {
       planVenue(venueRequest(nextNif()), enabledModules(ALL_MODULES, ES_CONFIG)),
       { db, modules: enabledModules(ALL_MODULES, ES_CONFIG) },
     );
-    const cfg = { locationId: brandLocationId(result.locationId) };
     await withTransaction(db, async (tx) => {
       const [bar] = await tx
         .insert(kitchenStations)
@@ -606,7 +603,6 @@ describe("clearProvisionFixture", () => {
       const folder = await createCategory(tx, { name: "Drinks" });
       await setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "category", categoryId: folder.id }, zoneId: null },
         { kind: "station", stationId: bar!.id },
       );

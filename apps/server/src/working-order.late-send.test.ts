@@ -144,7 +144,6 @@ async function mealVenue(weekdays: readonly number[] = [1]) {
       const dinner = await period("Dinner", menus.brunch);
       await replaceMenuWeek(
         tx,
-        cfg,
         restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,

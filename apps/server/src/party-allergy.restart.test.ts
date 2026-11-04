@@ -106,7 +106,6 @@ describe("A669 consideration through a server process restart", () => {
         await inTx(v, (tx) =>
           setRoutingCell(
             tx,
-            v.cfg,
             {
               row: { kind: "product", productId: v.productId(productName) },
               zoneId: v.tables.zoneId,

@@ -86,8 +86,8 @@ export async function placeOpenPeriod(
     .where(eq(menuPeriods.departmentId, departmentId))
     .limit(1);
   if (existing !== undefined) return;
-  const language = staffLanguage ?? (await readStarterStaffLanguage(tx, cfg));
-  const clockRevision = await readBusinessDayScheduleRevision(tx, cfg);
+  const language = staffLanguage ?? (await readStarterStaffLanguage(tx));
+  const clockRevision = await readBusinessDayScheduleRevision(tx);
   const { id } = await saveMenuPeriod(tx, cfg, departmentId, {
     name: starterName(STARTER_PERIOD_NAMES, OPEN_PERIOD_NAME, language),
     menuId,
@@ -95,7 +95,6 @@ export async function placeOpenPeriod(
   });
   await replaceMenuWeek(
     tx,
-    cfg,
     departmentId,
     [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
       weekday,
@@ -144,7 +143,6 @@ export type DepartmentWeekReads = {
 
 export async function readDepartmentWeekReads(
   tx: Transaction,
-  cfg: VenueScope,
   departmentIds: readonly string[],
   clock: BusinessDayClock,
 ): Promise<DepartmentWeekReads> {
@@ -163,13 +161,12 @@ export async function readDepartmentWeekReads(
   return {
     active: new Set(activeRows.map((row) => row.id)),
     periods,
-    seasonWeeks: await readDepartmentSeasonWeeks(tx, cfg, ids, clock.dayCutover),
+    seasonWeeks: await readDepartmentSeasonWeeks(tx, ids, clock.dayCutover),
   };
 }
 
 export async function departmentDay(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   moment: ServiceMoment | null,
   clock: BusinessDayClock,
@@ -190,14 +187,7 @@ export async function departmentDay(
     .where(eq(menuPeriodStaffMenus.departmentId, departmentId))
     .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
   if (moment === null) return { periods, staff, ranges: [] };
-  const days = await resolveDepartmentDays(
-    tx,
-    cfg,
-    departmentId,
-    [moment.businessDay],
-    clock,
-    plan,
-  );
+  const days = await resolveDepartmentDays(tx, departmentId, [moment.businessDay], clock, plan);
   return { periods, staff, ranges: days.get(moment.businessDay)!.ranges };
 }
 
@@ -247,7 +237,7 @@ export async function resolveDepartmentService(
   await assertDepartment(tx, cfg, departmentId);
   const clock = prepared?.clock ?? (await readVenueClock(tx));
   const moment = serviceMomentAt(at, clock);
-  const day = await departmentDay(tx, cfg, departmentId, moment, clock, prepared?.plan);
+  const day = await departmentDay(tx, departmentId, moment, clock, prepared?.plan);
   const { periods, staff } = day;
   const menusOf = (periodId: string): string[] => {
     const period = periods.find((entry) => entry.id === periodId)!;
@@ -467,7 +457,6 @@ export async function updateMenuPeriod(
 
 export async function replaceMenuWeek(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   days: unknown,
   at: Date,
@@ -476,21 +465,19 @@ export async function replaceMenuWeek(
 ): Promise<void> {
   const clock = await readVenueClock(tx);
   const inForce = inForceClock(clock, at);
-  const staged = await stageMenuWeek(tx, cfg, departmentId, days, inForce, options.seasonId);
+  const staged = await stageMenuWeek(tx, departmentId, days, inForce, options.seasonId);
   await assertBusinessDayScheduleWrite(
     tx,
-    cfg,
     staged.changed ? "time" : "metadata",
     expectedClockRevision,
   );
   await staged.write();
-  if (staged.changed) await assertWaitingChangeFits(tx, cfg, at, clock);
+  if (staged.changed) await assertWaitingChangeFits(tx, at, clock);
 }
 
 /** A department week checked and compared with what its seasons hold, written by `write`. */
 export async function stageMenuWeek(
   tx: Transaction,
-  cfg: VenueScope,
   departmentId: string,
   days: unknown,
   clock: BusinessDayClock,
@@ -501,13 +488,13 @@ export async function stageMenuWeek(
     const parsed = scheduleCutovers(clock).map((cutover) => parseServiceDay(value, field, cutover));
     return parsed[0]!;
   });
-  const known = reads ?? (await readDepartmentWeekReads(tx, cfg, [departmentId], clock));
+  const known = reads ?? (await readDepartmentWeekReads(tx, [departmentId], clock));
   if (!known.active.has(departmentId)) throw new AppError("department.not_found", { departmentId });
   assertOwnPeriods(
     known.periods.get(departmentId)!,
     week.slots.map((slots, weekday) => ({ field: `days.${week.indexOf[weekday]}.slots`, slots })),
   );
-  const targets = typeof season === "object" ? [season] : await targetSeasons(tx, cfg, season);
+  const targets = typeof season === "object" ? [season] : await targetSeasons(tx, season);
   const samePeriod = (a: ServiceRange, b: ServiceRange) => a.periodId === b.periodId;
   const seasonWeek = week.slots.map((slots) => joinTouching(slots, samePeriod));
   const seasonsNow = known.seasonWeeks.get(departmentId);
@@ -590,7 +577,6 @@ function routingRowPlaces(folders: readonly Folder[]) {
  * zone (Every zone first); `periodId`'s alone when given. */
 export async function readRoutingUses(
   tx: Transaction,
-  _cfg: VenueScope,
   periodId?: string,
 ): Promise<Map<string, PeriodRoutingUse[]>> {
   const rows = await tx
@@ -666,11 +652,7 @@ export async function readRoutingUses(
 }
 
 /** The venue's active departments, the default first. */
-export async function readActiveDepartments(
-  tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: VenueScope,
-) {
+export async function readActiveDepartments(tx: Transaction) {
   return tx
     .select({ id: departments.id, name: departments.name, active: departments.active })
     .from(departments)
@@ -679,11 +661,7 @@ export async function readActiveDepartments(
 }
 
 /** The menu periods of the venue's active departments. */
-export async function readActivePeriods(
-  tx: Transaction,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- callers still pass it; A1301 S18 removes it
-  _cfg: VenueScope,
-) {
+export async function readActivePeriods(tx: Transaction) {
   return tx
     .select({
       id: menuPeriods.id,
@@ -699,40 +677,35 @@ export async function readActivePeriods(
     .orderBy(asc(menuPeriods.name), asc(menuPeriods.id));
 }
 
-export async function readOpeningHoursModel(
-  tx: Transaction,
-  cfg: VenueScope,
-  at: Date,
-): Promise<OpeningHoursModel> {
+export async function readOpeningHoursModel(tx: Transaction, at: Date): Promise<OpeningHoursModel> {
   const clock = await readVenueClock(tx);
   const moment = serviceMomentAt(at, clock);
-  const status = await readBusinessDayScheduleStatus(tx, cfg, clock, at);
+  const status = await readBusinessDayScheduleStatus(tx, clock, at);
   const cutover =
     moment === null ? clock.dayCutover : serviceDayContext(clock, moment.businessDay).dayCutover;
-  const departmentRows = await readActiveDepartments(tx, cfg);
-  const periods = await readActivePeriods(tx, cfg);
+  const departmentRows = await readActiveDepartments(tx);
+  const periods = await readActivePeriods(tx);
   const staff = await tx
     .select({ periodId: menuPeriodStaffMenus.periodId, menuId: menuPeriodStaffMenus.menuId })
     .from(menuPeriodStaffMenus)
     .innerJoin(departments, eq(departments.id, menuPeriodStaffMenus.departmentId))
     .where(eq(departments.active, true))
     .orderBy(asc(menuPeriodStaffMenus.displayOrder), asc(menuPeriodStaffMenus.menuId));
-  const seasonList = await readSeasons(tx, cfg);
+  const seasonList = await readSeasons(tx);
   const currentSeasonId =
     moment === null ? null : (seasonOn(seasonList, moment.businessDay)?.id ?? null);
   const seasonWeeks = await readDepartmentSeasonWeeks(
     tx,
-    cfg,
     departmentRows.map((department) => department.id),
     cutover,
   );
-  const zones = await readZoneClosedTimes(tx, cfg, cutover, seasonList);
+  const zones = await readZoneClosedTimes(tx, cutover, seasonList);
   const menus = await tx
     .select({ id: catalogues.id, name: catalogues.name, active: catalogues.active })
     .from(catalogues)
     .orderBy(asc(catalogues.name), asc(catalogues.id));
   const graph = await loadSectionGraph(tx);
-  const routingUses = await readRoutingUses(tx, cfg);
+  const routingUses = await readRoutingUses(tx);
   const menuNames = new Map(menus.map((menu) => [menu.id, menu.name]));
   return {
     ...status,

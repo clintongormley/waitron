@@ -124,7 +124,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     expect(steps.rows).toEqual(
       STARTER_STEPS.map((step) => ({ name: STARTER_STEP_NAMES[step.name].es })),
     );
-    const seasons = await db.transaction((tx) => readSeasons(tx, { locationId }));
+    const seasons = await db.transaction((tx) => readSeasons(tx));
     expect(seasons.map(({ name }) => name)).toEqual(
       (["Spring", "Summer", "Autumn", "Winter"] as const).map(
         (season) => STARTER_SEASON_NAMES[season].es,
@@ -205,7 +205,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
 
     await db.transaction((tx) => VENUE_SERVICE_PROVISIONING.seed!.run(tx, node));
 
-    const read = await db.transaction((tx) => readSeasons(tx, { locationId }));
+    const read = await db.transaction((tx) => readSeasons(tx));
     expect(read.map(({ name, startsOn }) => ({ name, startsOn }))).toEqual([
       { name: "Spring", startsOn: "03-01" },
       { name: "Summer", startsOn: "06-01" },
@@ -398,8 +398,8 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     await runSeed();
     expect(await stored()).toEqual({ geographies: 0, entries: 0 });
     const fresh = await db.transaction(async (tx) => ({
-      read: await readHolidays(tx, cfg, "2026-01-01", "2026-01-31"),
-      model: await readHolidayAreaModel(tx, cfg),
+      read: await readHolidays(tx, "2026-01-01", "2026-01-31"),
+      model: await readHolidayAreaModel(tx),
     }));
     expect(fresh.read.facts.map(({ date, scope }) => ({ date, scope }))).toEqual([
       { date: "2026-01-01", scope: "national" },
@@ -418,7 +418,6 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const entry = await db.transaction((tx) =>
       saveSpecialDay(
         tx,
-        cfg,
         null,
         {
           name: "Corpus Christi",

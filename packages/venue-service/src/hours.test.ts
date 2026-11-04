@@ -97,7 +97,6 @@ async function fixture(): Promise<Fixture> {
     });
     await replaceMenuWeek(
       tx,
-      cfg,
       restaurant!.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -119,7 +118,6 @@ async function fixture(): Promise<Fixture> {
 
 /** Saves special day `id` (a new one when null) holding `dates`, through the special-day writer. */
 const saveDay = (
-  f: Fixture,
   id: string | null,
   name: string,
   dates: readonly LocalDate[],
@@ -134,7 +132,6 @@ const saveDay = (
   withTransaction(db, (tx) =>
     saveSpecialDay(
       tx,
-      f.cfg,
       id,
       {
         name,
@@ -257,7 +254,6 @@ describe("the calendar's Closed colour", () => {
       });
       await replaceMenuWeek(
         tx,
-        f.cfg,
         f.departmentIds.restaurant,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -278,7 +274,7 @@ describe("the calendar's Closed colour", () => {
       ["2026-10-22", true],
       ["2026-10-23", true],
     ] as const) {
-      await saveDay(f, null, `Special ${date}`, [date], {
+      await saveDay(null, `Special ${date}`, [date], {
         paint: open
           ? [
               {
@@ -301,7 +297,6 @@ describe("the calendar's Closed colour", () => {
       });
       await replaceMenuWeek(
         tx,
-        f.cfg,
         terrace.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -315,7 +310,7 @@ describe("the calendar's Closed colour", () => {
     await setDepartmentActive(terrace, false);
     expect(await toneAndClosed(f, "2026-10-21")).toEqual(["special_day", true]);
     expect(await toneAndClosed(f, "2026-10-26")).toEqual(["standard", false]);
-    await saveDay(f, null, "Closed Monday", ["2026-10-26"], { closedAllDay: true });
+    await saveDay(null, "Closed Monday", ["2026-10-26"], { closedAllDay: true });
     expect(await toneAndClosed(f, "2026-10-26")).toEqual(["special_day", true]);
   });
 });
@@ -390,17 +385,17 @@ describe("holiday facts beside the calendar", () => {
     const before = holidaysOn(await calendar(f, reader), "2026-10-14");
     expect(before).toEqual(["h1", "h2"]);
 
-    const added = await saveDay(f, null, "Our own party", ["2026-10-14"]);
+    const added = await saveDay(null, "Our own party", ["2026-10-14"]);
     let days = await calendar(f, reader);
     expect(days[1]!.specialDay).toEqual({ id: added.id, name: "Our own party" });
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
 
-    await saveDay(f, added.id, "Renamed party", ["2026-10-14"]);
+    await saveDay(added.id, "Renamed party", ["2026-10-14"]);
     days = await calendar(f, reader);
     expect(days[1]!.specialDay?.name).toBe("Renamed party");
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
 
-    await withTransaction(db, (tx) => deleteSpecialDay(tx, f.cfg, added.id, AT, 0));
+    await withTransaction(db, (tx) => deleteSpecialDay(tx, added.id, AT, 0));
     days = await calendar(f, reader);
     expect(days[1]!.specialDay).toBeNull();
     expect(holidaysOn(days, "2026-10-14")).toEqual(before);
@@ -408,7 +403,7 @@ describe("holiday facts beside the calendar", () => {
 
   it("lets another module read facts and a special date's id from the package, without the page", async () => {
     const f = await fixture();
-    const added = await saveDay(f, null, "Harvest festival", ["2026-10-16"]);
+    const added = await saveDay(null, "Harvest festival", ["2026-10-16"]);
     const { reader } = fakeReader();
     const days = await withTransaction(db, (tx) =>
       packageReadCalendarDays(tx, f.cfg, "2026-10-16", "2026-10-16", reader),
@@ -577,19 +572,19 @@ describe("Hours with the holiday store", () => {
         readCalendarDays(tx, f.cfg, "2026-12-24", "2026-12-25", store.readHolidayFacts),
       );
     const before = await calendar();
-    const added = await saveDay(f, null, "Ours", ["2026-12-25"]);
+    const added = await saveDay(null, "Ours", ["2026-12-25"]);
     expect((await calendar())[1]).toEqual({
       ...before[1],
       specialDay: { id: added.id, name: "Ours" },
       tone: "public_holiday",
     });
-    await saveDay(f, added.id, "Renamed", ["2026-12-25"]);
+    await saveDay(added.id, "Renamed", ["2026-12-25"]);
     expect((await calendar())[1]!.holidays).toEqual(before[1]!.holidays);
-    await saveDay(f, added.id, "Renamed", ["2026-12-24"]);
+    await saveDay(added.id, "Renamed", ["2026-12-24"]);
     const moved = await calendar();
     expect(moved.map(({ specialDay }) => specialDay?.id ?? null)).toEqual([added.id, null]);
     expect(moved.map(({ holidays }) => holidays)).toEqual(before.map(({ holidays }) => holidays));
-    await withTransaction(db, (tx) => deleteSpecialDay(tx, f.cfg, added.id, AT, 0));
+    await withTransaction(db, (tx) => deleteSpecialDay(tx, added.id, AT, 0));
     expect(await calendar()).toEqual(before);
   });
 });

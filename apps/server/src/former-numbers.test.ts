@@ -57,7 +57,6 @@ useVenueDb({
         stations[key] = id;
         await setRoutingCell(
           tx,
-          v.cfg,
           { row: { kind: "product", productId: v.productId(dish) }, zoneId: null },
           { kind: "station", stationId: id },
         );

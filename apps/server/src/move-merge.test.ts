@@ -555,7 +555,6 @@ async function stationWithPrinter(v: PartyVenue, name: string, dishes: string[])
     for (const dish of dishes)
       await setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId(dish) }, zoneId: null },
         { kind: "station", stationId: station.id },
       );
@@ -983,7 +982,6 @@ describe("when a MOVED slip prints: the dishes are on an order with another numb
     await inTx(v, (tx) =>
       setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId("Agua") }, zoneId: null },
         { kind: "no_preparation" },
       ),
@@ -1094,7 +1092,6 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
       const station = await createStation(tx, v.cfg, { name: "Screen" });
       await setRoutingCell(
         tx,
-        v.cfg,
         { row: { kind: "product", productId: v.productId("Flan") }, zoneId: null },
         { kind: "station", stationId: station.id },
       );

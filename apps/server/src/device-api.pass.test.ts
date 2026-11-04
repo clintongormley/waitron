@@ -563,7 +563,7 @@ describe("A773 pass board: routes", () => {
   /** Grill waits; the burger is routed there, so the waiter's Fire leaves it Requested. */
   async function requestedBurger(f: Awaited<ReturnType<typeof fixture>>): Promise<string> {
     await inTx(f.v, async (tx) => {
-      await routeProductTo(tx, f.v.cfg, f.v.productId("Burger"), f.grill);
+      await routeProductTo(tx, f.v.productId("Burger"), f.grill);
       await setStationsWaitForPass(tx, true, [f.grill]);
     });
     return burgerOrder(f.v);
@@ -654,8 +654,8 @@ describe("A773 pass display policy", () => {
   ): Promise<{ burger: string; paella: string }> {
     const cold = (await inTx(f.v, (tx) => createStation(tx, f.v.cfg, { name: "Cold" }))).id;
     await inTx(f.v, async (tx) => {
-      await routeProductTo(tx, f.v.cfg, f.v.productId("Burger"), f.grill);
-      await routeProductTo(tx, f.v.cfg, f.v.productId("Paella"), cold);
+      await routeProductTo(tx, f.v.productId("Burger"), f.grill);
+      await routeProductTo(tx, f.v.productId("Paella"), cold);
       if (grillWaits) await setStationsWaitForPass(tx, true, [f.grill]);
     });
     const seated = await seat(f.v, await f.v.table("Inside"));
@@ -1125,7 +1125,7 @@ describe("A773 pass release: route", () => {
   async function releaseFixture(deps: { attendance?: boolean } = {}) {
     const f = await fixture();
     const printerId = await inTx(f.v, async (tx) => {
-      await routeProductTo(tx, f.v.cfg, f.v.productId("Burger"), f.grill);
+      await routeProductTo(tx, f.v.productId("Burger"), f.grill);
       await setStationsWaitForPass(tx, true, [f.grill]);
       const printer = await createPrinter(tx, {
         name: "Grill paper",

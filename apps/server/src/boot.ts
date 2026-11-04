@@ -1615,7 +1615,7 @@ async function bootServer(
           return result;
         },
         seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
-        readOpeningHours: (result) => readSetupOpeningHours(db, result),
+        readOpeningHours: () => readSetupOpeningHours(db),
         adopt: (req, hooks) =>
           adoptFromPrimary(
             {

@@ -539,13 +539,12 @@ async function paintSeasons(tx: Transaction) {
     .values({ departmentId: f.department, name: "Lunch", menuId: menu!.id })
     .returning();
   const seasonsByName = new Map(
-    (await ensureDefaultSeasons(tx, f.cfg)).map((season) => [season.name, season.id]),
+    (await ensureDefaultSeasons(tx)).map((season) => [season.name, season.id]),
   );
   const at = new Date("2030-01-01T12:00:00Z");
   const week = (seasonId?: string) =>
     replaceMenuWeek(
       tx,
-      f.cfg,
       f.department,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,

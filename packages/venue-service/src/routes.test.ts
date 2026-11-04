@@ -3401,7 +3401,6 @@ it("the station planning route returns the configured period ranges for a non-de
     const ranges = [{ periodId, startsAt: "12:00", endsAt: "16:00" }];
     await replaceMenuWeek(
       tx,
-      cfg,
       departmentId,
       Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: weekday === 1 ? ranges : [] })),
       new Date("2026-10-10T10:00:00Z"),
@@ -3413,7 +3412,6 @@ it("the station planning route returns the configured period ranges for a non-de
       .returning();
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "category", categoryId: f.categoryId }, zoneId: f.zoneId },
       { kind: "station", stationId: station!.id },
     );
@@ -3920,7 +3918,6 @@ it("A724: the station planning route returns last orders at its period's own end
     const ranges = [{ periodId, startsAt: "12:00", endsAt: "16:00" }];
     await replaceMenuWeek(
       tx,
-      cfg,
       departmentId,
       Array.from({ length: 7 }, (_, weekday) => ({ weekday, slots: weekday === 1 ? ranges : [] })),
       new Date("2026-10-10T10:00:00Z"),
@@ -3932,7 +3929,6 @@ it("A724: the station planning route returns last orders at its period's own end
       .returning();
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "category", categoryId: f.categoryId }, zoneId: f.zoneId },
       { kind: "station", stationId: station!.id },
     );

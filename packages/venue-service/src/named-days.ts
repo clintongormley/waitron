@@ -20,9 +20,9 @@ export async function readSpecialDaysModel(
 ): Promise<SpecialDaysModel> {
   const clock = await readVenueClock(tx);
   const civilDate = venueLocalMoment(at, clock)?.civilDate ?? null;
-  const status = await readBusinessDayScheduleStatus(tx, cfg, clock, at);
-  const read = await readHolidays(tx, cfg, from, to);
-  const area = await readHolidayAreaModel(tx, cfg);
+  const status = await readBusinessDayScheduleStatus(tx, clock, at);
+  const read = await readHolidays(tx, from, to);
+  const area = await readHolidayAreaModel(tx);
   return {
     ...status,
     timeZone: clock.timeZone,

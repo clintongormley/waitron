@@ -150,13 +150,12 @@ export async function seedDemoRestaurant(
         weekday,
         ranges: [{ startsAt: "23:00", endsAt: "00:00" }],
       })),
-      await readBusinessDayScheduleRevision(tx, cfg),
+      await readBusinessDayScheduleRevision(tx),
     );
     const at = new Date();
     const year = venueLocalMoment(at, clock)!.civilDate.slice(0, 4);
     await saveSpecialDay(
       tx,
-      cfg,
       null,
       {
         name: demoPlainText(dataSet.specialDayName, dataSet, locale),
@@ -164,7 +163,7 @@ export async function seedDemoRestaurant(
         dates: [{ date: `${year}-12-25`, closedAllDay: true }],
       },
       at,
-      await readBusinessDayScheduleRevision(tx, cfg),
+      await readBusinessDayScheduleRevision(tx),
     );
   });
   return { passStationIds };

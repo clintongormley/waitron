@@ -5631,31 +5631,20 @@ it("exports and imports all seven cell classes into another venue, remapping eve
     const atStation = (id: string) => ({ kind: "station" as const, stationId: id });
     const categoryRow = { kind: "category" as const, categoryId: category.id };
     const productRow = { kind: "product" as const, productId: product.id };
-    await setRoutingCell(tx, scope, { row: categoryRow, zoneId: null }, atStation(bar!.id));
+    await setRoutingCell(tx, { row: categoryRow, zoneId: null }, atStation(bar!.id));
     await setRoutingCell(
       tx,
-      scope,
       { row: categoryRow, zoneId: terrace.id },
       {
         kind: "no_preparation",
       },
     );
-    await setRoutingCell(tx, scope, { row: productRow, zoneId: null }, atStation(griddle!.id));
-    await setRoutingCell(tx, scope, { row: productRow, zoneId: lounge.id }, atStation(bar!.id));
-    await setRoutingCell(
-      tx,
-      scope,
-      { row: { kind: "all" }, zoneId: terrace.id },
-      atStation(griddle!.id),
-    );
+    await setRoutingCell(tx, { row: productRow, zoneId: null }, atStation(griddle!.id));
+    await setRoutingCell(tx, { row: productRow, zoneId: lounge.id }, atStation(bar!.id));
+    await setRoutingCell(tx, { row: { kind: "all" }, zoneId: terrace.id }, atStation(griddle!.id));
     const noCategoryRow = { kind: "no_category" as const };
-    await setRoutingCell(
-      tx,
-      scope,
-      { row: noCategoryRow, zoneId: null },
-      { kind: "no_preparation" },
-    );
-    await setRoutingCell(tx, scope, { row: noCategoryRow, zoneId: terrace.id }, atStation(bar!.id));
+    await setRoutingCell(tx, { row: noCategoryRow, zoneId: null }, { kind: "no_preparation" });
+    await setRoutingCell(tx, { row: noCategoryRow, zoneId: terrace.id }, atStation(bar!.id));
     return [
       source.locationId,
       department.id,
@@ -5772,13 +5761,11 @@ it("carries a cell's period choices with their cell, including a period whose me
     const atBar = { kind: "station" as const, stationId: bar!.id };
     await setRoutingCell(
       tx,
-      scope,
       { row: { kind: "product", productId: product.id }, zoneId: null },
       atBar,
     );
     await setRoutingCell(
       tx,
-      scope,
       { row: { kind: "category", categoryId: category.id }, zoneId: terrace.id },
       atBar,
     );
@@ -6234,7 +6221,7 @@ describe("public holidays in a configuration transfer", () => {
     });
     await moveTo(suite.db, source, "Lleida", "Vielha e Mijaran");
     await withTransaction(suite.db, async (tx) => {
-      await saveHolidayArea(tx, cfg, { areaKey: "aran" });
+      await saveHolidayArea(tx, { areaKey: "aran" });
     });
     await moveTo(suite.db, source, "Madrid", "  MADRID ");
     const versions = await schemaVersionsByModule(
@@ -6303,12 +6290,11 @@ describe("public holidays in a configuration transfer", () => {
     }
     expect(target.locationId).not.toBe(source.locationId);
 
-    const cfg = scope(target);
     const read = () =>
       withTransaction(targetSuite.db, async (tx) => ({
-        model: await readHolidayAreaModel(tx, cfg),
-        epiphany: await readHolidays(tx, cfg, "2026-01-06", "2026-01-06"),
-        aran: await readHolidays(tx, cfg, "2026-06-17", "2026-06-17"),
+        model: await readHolidayAreaModel(tx),
+        epiphany: await readHolidays(tx, "2026-01-06", "2026-01-06"),
+        aran: await readHolidays(tx, "2026-06-17", "2026-06-17"),
       }));
     const inMadrid = await read();
 
@@ -6583,7 +6569,6 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     });
     await replaceMenuWeek(
       tx,
-      scope,
       department.id,
       [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
         weekday,
@@ -7189,7 +7174,6 @@ it("round-trips deleted kitchen configuration and preserves archived products an
     });
     await setRoutingCell(
       tx,
-      cfg,
       { row: { kind: "product", productId: product.id }, zoneId: null },
       { kind: "station", stationId: station.id },
     );
@@ -7598,7 +7582,6 @@ describe("dated business-day configuration transfer", () => {
       });
       await replaceMenuWeek(
         tx,
-        scope,
         department.id,
         [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({
           weekday,
@@ -7799,10 +7782,10 @@ describe("seasons in a configuration transfer", () => {
           weekday,
           slots,
         }));
-      await replaceMenuWeek(tx, scope, department.id, week(dinner), HARVEST_SATURDAY, 0, {
+      await replaceMenuWeek(tx, department.id, week(dinner), HARVEST_SATURDAY, 0, {
         seasonId: ids.get("Harvest")!,
       });
-      await replaceMenuWeek(tx, scope, department.id, week(lateBar), HARVEST_SATURDAY, 0, {
+      await replaceMenuWeek(tx, department.id, week(lateBar), HARVEST_SATURDAY, 0, {
         seasonId: ids.get(STARTER_SEASON_NAMES.Winter.es)!,
       });
       const terrace = await createServiceZone(tx, scope, {
@@ -7883,12 +7866,10 @@ describe("seasons in a configuration transfer", () => {
         department!.id,
         WINTER_SATURDAY,
       ),
-      closedInHarvest: await VENUE_SERVICE.closedZoneIdsAt(tx, targetScope, HARVEST_SATURDAY, [
+      closedInHarvest: await VENUE_SERVICE.closedZoneIdsAt(tx, HARVEST_SATURDAY, [
         zone.rows[0]!.id,
       ]),
-      closedInWinter: await VENUE_SERVICE.closedZoneIdsAt(tx, targetScope, WINTER_SATURDAY, [
-        zone.rows[0]!.id,
-      ]),
+      closedInWinter: await VENUE_SERVICE.closedZoneIdsAt(tx, WINTER_SATURDAY, [zone.rows[0]!.id]),
     }));
     expect(answers.harvest).toMatchObject({ open: true, periodName: "Dinner" });
     expect(answers.winter).toMatchObject({ open: true, periodName: "Late bar" });
@@ -8060,9 +8041,7 @@ describe("special days in a configuration transfer", () => {
         department!.id,
         CLOSED_EVENING,
       ),
-      terrace: await VENUE_SERVICE.closedZoneIdsAt(tx, targetScope, FIESTA_EVENING, [
-        zone.rows[0]!.id,
-      ]),
+      terrace: await VENUE_SERVICE.closedZoneIdsAt(tx, FIESTA_EVENING, [zone.rows[0]!.id]),
     }));
     expect(answers.fiesta).toMatchObject({ open: true, periodName: "Bar" });
     expect(answers.closedAllDay).toMatchObject({ open: false });

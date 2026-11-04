@@ -98,7 +98,6 @@ async function fixture(db: Transaction) {
   const lunchRange = { periodId: lunch, startsAt: "12:00", endsAt: "16:00" };
   await replaceMenuWeek(
     db,
-    cfg,
     department,
     week("slots", [lunchRange, { periodId: afternoon, startsAt: "16:00", endsAt: "18:00" }]),
     at,
@@ -107,7 +106,6 @@ async function fixture(db: Transaction) {
   const station = stations[1]!.id;
   await setRoutingCell(
     db,
-    cfg,
     { row: { kind: "category", categoryId: category }, zoneId: terrace!.id },
     { kind: "no_preparation" },
     [{ periodId: lunch, target: { kind: "station", stationId: station } }],
@@ -132,11 +130,8 @@ const planned = (f: Awaited<ReturnType<typeof fixture>>, ranges = [f.lunchRange]
   always: null,
   days: [{ date: day, departments: [{ departmentId: f.department, ranges }] }],
 });
-const specialDay = (
-  db: Transaction,
-  f: Awaited<ReturnType<typeof fixture>>,
-  input: SpecialDayInput,
-) => saveSpecialDay(db, f.cfg, null, input, at, 0);
+const specialDay = (db: Transaction, input: SpecialDayInput) =>
+  saveSpecialDay(db, null, input, at, 0);
 /** A second department whose Monday 15:00-17:00 service reaches the station through its own zone. */
 async function paintableTakeaway(db: Transaction, f: Awaited<ReturnType<typeof fixture>>) {
   const takeaway = (await createDepartment(db, f.cfg, { name: "Takeaway", orderStart: "table" }))
@@ -156,7 +151,6 @@ async function paintableTakeaway(db: Transaction, f: Awaited<ReturnType<typeof f
   ).id;
   await replaceMenuWeek(
     db,
-    f.cfg,
     takeaway,
     week("slots", [{ periodId: period, startsAt: "15:00", endsAt: "17:00" }]),
     at,
@@ -164,7 +158,6 @@ async function paintableTakeaway(db: Transaction, f: Awaited<ReturnType<typeof f
   );
   await setRoutingCell(
     db,
-    f.cfg,
     { row: { kind: "category", categoryId: f.category }, zoneId: counter!.id },
     { kind: "station", stationId: f.station },
   );
@@ -183,12 +176,11 @@ it("shows a special date's painted Dinner 19:00-01:00 for a station routed only 
     ).id;
     await setRoutingCell(
       db,
-      f.cfg,
       { row: { kind: "category", categoryId: f.category }, zoneId: f.terrace },
       { kind: "no_preparation" },
       [{ periodId: dinner, target: { kind: "station", stationId: f.station } }],
     );
-    await specialDay(db, f, {
+    await specialDay(db, {
       name: "Late opening",
       repeatsYearly: false,
       dates: [{ date: day, closedAllDay: false }],
@@ -212,7 +204,7 @@ it("shows only Lunch when the period line sends Cocktails there only during Lunc
 it("applies a special day's painted ranges and zone closures", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    await specialDay(db, f, {
+    await specialDay(db, {
       name: "Celebration",
       repeatsYearly: false,
       dates: [{ date: day, closedAllDay: false }],
@@ -263,7 +255,6 @@ it("unions overlapping zone shares without duplicate ranges", async () =>
     await configureZone(db, f.cfg, { zoneId: inside!.id, departmentId: f.department });
     await setRoutingCell(
       db,
-      f.cfg,
       { row: { kind: "category", categoryId: f.category }, zoneId: inside!.id },
       { kind: "station", stationId: f.station },
     );
@@ -343,7 +334,7 @@ it.each([
       await db.delete(sectionMembers).where(eq(sectionMembers.productId, f.product));
     }
     if (kind === "whole venue closed")
-      await specialDay(db, f, {
+      await specialDay(db, {
         name: "Closed",
         repeatsYearly: false,
         dates: [{ date: day, closedAllDay: true }],
@@ -426,7 +417,7 @@ it("a repeating special day uses its occurrence, with an unpainted department st
   tx(async (db) => {
     const f = await fixture(db);
     const takeaway = await paintableTakeaway(db, f);
-    await specialDay(db, f, {
+    await specialDay(db, {
       name: "Annual day",
       repeatsYearly: true,
       dates: [{ date: day, closedAllDay: false }],
@@ -453,7 +444,6 @@ it("keeps cross-midnight service ranges", async () =>
     const f = await fixture(db);
     await replaceMenuWeek(
       db,
-      f.cfg,
       f.department,
       week("slots", [{ periodId: f.lunch, startsAt: "22:00", endsAt: "02:00" }]),
       at,
@@ -483,7 +473,6 @@ it("keeps each active department's ranges, cut by its own zone", async () =>
     ).id;
     await replaceMenuWeek(
       db,
-      f.cfg,
       second,
       week("slots", [{ periodId: period, startsAt: "15:00", endsAt: "17:00" }]),
       at,
@@ -491,7 +480,6 @@ it("keeps each active department's ranges, cut by its own zone", async () =>
     );
     await setRoutingCell(
       db,
-      f.cfg,
       { row: { kind: "category", categoryId: f.category }, zoneId: zone!.id },
       { kind: "station", stationId: f.station },
     );
@@ -531,7 +519,7 @@ it("reads the last valid calendar date without stepping beyond its requested ran
 it("applies a special day's closure to the date it stands on", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    await specialDay(db, f, {
+    await specialDay(db, {
       name: "Closed Monday",
       repeatsYearly: false,
       dates: [{ date: day, closedAllDay: true }],
@@ -547,7 +535,6 @@ it("clamps a station forecast to the following dated start", async () =>
     const f = await fixture(db);
     await replaceMenuWeek(
       db,
-      f.cfg,
       f.department,
       week("slots", [{ periodId: f.lunch, startsAt: "09:00", endsAt: "06:00" }]),
       at,
@@ -580,7 +567,6 @@ it("sends nothing from a range that starts after the following dated start", asy
     const f = await fixture(db);
     await replaceMenuWeek(
       db,
-      f.cfg,
       f.department,
       week("slots", [{ periodId: f.lunch, startsAt: "04:00", endsAt: "05:00" }]),
       at,
@@ -606,16 +592,16 @@ const seasonDates = [
   "2030-12-01",
   "2030-12-02",
 ];
-async function seasonIds(db: Transaction, f: Awaited<ReturnType<typeof fixture>>) {
-  const seasons = await readSeasons(db, f.cfg);
+async function seasonIds(db: Transaction) {
+  const seasons = await readSeasons(db);
   return (name: string) => seasons.find((season) => season.name === name)!.id;
 }
 async function winterLunchOnly(db: Transaction, f: Awaited<ReturnType<typeof fixture>>) {
-  const seasonId = await seasonIds(db, f);
-  await replaceMenuWeek(db, f.cfg, f.department, week("slots", [f.lunchRange]), at, 0, {
+  const seasonId = await seasonIds(db);
+  await replaceMenuWeek(db, f.department, week("slots", [f.lunchRange]), at, 0, {
     seasonId: seasonId("Winter"),
   });
-  await replaceMenuWeek(db, f.cfg, f.department, week("slots", []), at, 0, {
+  await replaceMenuWeek(db, f.department, week("slots", []), at, 0, {
     seasonId: seasonId("Autumn"),
   });
 }
@@ -640,7 +626,7 @@ it("shows Winter's Monday Lunch on 2 December only, reading each date's own seas
 it("cuts Lunch by the zone's closure in each date's own season", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    const seasonId = await seasonIds(db, f);
+    const seasonId = await seasonIds(db);
     await replaceZoneClosedWeek(
       db,
       f.cfg,
@@ -679,7 +665,7 @@ it("A724: a selected season supplies raw department guides and batched station d
   tx(async (db) => {
     const f = await fixture(db);
     await winterLunchOnly(db, f);
-    const ids = await seasonIds(db, f);
+    const ids = await seasonIds(db);
     const result = await service.readPlannedServiceGuides?.(db, f.cfg, [f.station, f.unused], {
       kind: "season",
       seasonId: ids("Winter"),
@@ -710,7 +696,7 @@ it("A724: scheduled default demand stays bounded and no-preparation stays empty"
       row: { kind: "category", categoryId: f.category },
       zoneId: f.terrace,
     });
-    const ids = await seasonIds(db, f);
+    const ids = await seasonIds(db);
     const result = await service.readPlannedServiceGuides?.(db, f.cfg, [f.defaultStation], {
       kind: "season",
       seasonId: ids("Autumn"),
@@ -724,7 +710,6 @@ it("A724: scheduled default demand stays bounded and no-preparation stays empty"
     ]);
     await setRoutingCell(
       db,
-      f.cfg,
       { row: { kind: "category", categoryId: f.category }, zoneId: f.terrace },
       { kind: "no_preparation" },
     );
@@ -761,7 +746,6 @@ it("A724: a full-day sending window", async () =>
     const f = await fixture(db);
     await replaceMenuWeek(
       db,
-      f.cfg,
       f.department,
       week("slots", [{ periodId: f.lunch, startsAt: "06:00", endsAt: "06:00" }]),
       at,
@@ -776,7 +760,7 @@ it("A724: a full-day sending window", async () =>
 it("A724: season forecasting batches stations and never reads calendar dates", async () =>
   tx(async (db) => {
     const f = await fixture(db);
-    const ids = await seasonIds(db, f);
+    const ids = await seasonIds(db);
     const session = (db as unknown as { session: { prepareQuery: (...args: never[]) => unknown } })
       .session;
     const spy = vi.spyOn(session, "prepareQuery");
@@ -811,11 +795,10 @@ it("A724: two reaching zones union their open shares without filling a shared cl
     await configureZone(db, f.cfg, { zoneId: second!.id, departmentId: f.department });
     await setRoutingCell(
       db,
-      f.cfg,
       { row: { kind: "category", categoryId: f.category }, zoneId: second!.id },
       { kind: "station", stationId: f.station },
     );
-    await replaceMenuWeek(db, f.cfg, f.department, week("slots", [f.lunchRange]), at, 0);
+    await replaceMenuWeek(db, f.department, week("slots", [f.lunchRange]), at, 0);
     await replaceZoneClosedWeek(
       db,
       f.cfg,

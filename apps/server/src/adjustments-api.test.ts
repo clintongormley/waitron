@@ -188,7 +188,6 @@ describe("corrections through order actions on a station's printers", () => {
         .where(eq(products.name, "Cana"));
       await setRoutingCell(
         tx,
-        venue.cfg,
         { row: { kind: "product", productId: beer!.id }, zoneId: null },
         { kind: "station", stationId: bar.id },
       );

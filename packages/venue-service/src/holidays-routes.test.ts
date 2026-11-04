@@ -175,11 +175,10 @@ async function rows() {
   return { geographies, entries };
 }
 
-async function create(fx: Fixture, date: string, name: string) {
+async function create(date: string, name: string) {
   return direct((tx) =>
     saveSpecialDay(
       tx,
-      fx.cfg,
       null,
       { name, repeatsYearly: false, dates: [{ date, closedAllDay: false }] },
       new Date("2026-01-01T12:00:00Z"),
@@ -191,8 +190,8 @@ async function create(fx: Fixture, date: string, name: string) {
 describe("reading holidays", () => {
   it("returns the range's holiday read to anyone who may view the venue", async () => {
     const fx = await fixture();
-    await create(fx, "2026-10-20", "Autumn fair");
-    const expected = await direct((tx) => readHolidays(tx, fx.cfg, "2026-10-01", "2026-10-31"));
+    await create("2026-10-20", "Autumn fair");
+    const expected = await direct((tx) => readHolidays(tx, "2026-10-01", "2026-10-31"));
     const response = await send(
       fx,
       "GET",
@@ -257,8 +256,8 @@ describe("reading holidays", () => {
 describe("the Calendar and holidays", () => {
   it("reads holidays once and returns their coverage and sources with the days", async () => {
     const fx = await fixture();
-    await create(fx, "2026-10-13", "Fair");
-    const expected = await direct((tx) => readHolidays(tx, fx.cfg, "2026-10-11", "2026-10-13"));
+    await create("2026-10-13", "Fair");
+    const expected = await direct((tx) => readHolidays(tx, "2026-10-11", "2026-10-13"));
     const readSpy = vi.spyOn(getCountryPack("ES")!.holidayCalendar!, "read");
     onTestFinished(() => readSpy.mockRestore());
     const response = await send(

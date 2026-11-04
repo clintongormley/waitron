@@ -214,7 +214,7 @@ async function hotAndCold() {
   const venue = await setupSplitExtrasVenue();
   const placed = await withTransaction(db, async (tx) => {
     const cold = (await createStation(tx, venue.cfg, { name: "Cold" })).id;
-    await routeProductTo(tx, venue.cfg, venue.products.cheese, cold);
+    await routeProductTo(tx, venue.products.cheese, cold);
     await setStationsWaitForPass(tx, true, [venue.stations.grill, cold]);
     const group = (
       await placeGroups(tx, venue.cfg, venue.party.partyId, {

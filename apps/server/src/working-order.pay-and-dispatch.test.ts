@@ -2924,7 +2924,6 @@ describe("markCollected (the counter handover)", () => {
     await withTransaction(suite.db, (tx) =>
       setRoutingCell(
         tx,
-        cfg,
         { row: { kind: "product", productId: cafe.id }, zoneId: null },
         { kind: "no_preparation" },
       ),
