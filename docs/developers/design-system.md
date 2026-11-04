@@ -2872,12 +2872,12 @@ and the staffing grid's block editor in the A761 entry):
   its fields when put back and replaces the edit; it keeps that identity instead, and renews on
   disconnect only the token that stops a write started before it left from saving or closing it.
   The staff edit and new person, variant, purchase and bookings forms, the product
-  editor, the unit form, the menus screen's section and menu details form, an include's Edit
-  dialog, the Home page tab's shortcut picker and the department dialogs, Settings and zone settings do this, each with an edit-first reconnect case; so does the Patch
-  live menu window, whose committed value is always no changes. The recipe editor
+  editor, the unit, ingredient, extras list, option list and option label forms, the menus screen's section and menu details form, an include's Edit
+  dialog, the Add to menus and Add products pickers, the Home page tab's shortcut picker and the department dialogs, Settings and zone settings do this, each with an edit-first reconnect case; so does the Patch
+  live menu window, whose committed value is always no changes. A menu's Schedule and Change time window does too, though it takes its scope at opening and again as it is put back rather than in `willUpdate`, so it is not in the list above: put back onto the same menu it keeps its edit, onto a different one it closes unchanged (`menu-publications.unsaved.test.ts`). The recipe editor
   clears its choice on removal by design (batch 2a). The till's party name, bill name, Guests, Split a table, invoice recipient,
   extras picker and station dialogs and the floor's Rename window keep it and count it, each with a reconnect case in its
-  `*.unsaved.test.ts`. The other forms in the list above are untried;
+  `*.unsaved.test.ts`. That accounts for every form in the list above;
 - bind the action through `saveActionState(scope)`: `variant=${s.variant}` and
   `?disabled=${s.unchanged || <the form's own conditions>}`;
 - return early from the save handler while `saveActionState(scope).unchanged`. `disabled` stops a

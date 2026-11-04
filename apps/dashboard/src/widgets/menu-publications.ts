@@ -254,6 +254,8 @@ export class MenuPublicationsPanel extends LitElement {
 
   /** The menu whose editions are followed. */
   #watching: string | null = null;
+  /** The menu last followed: unlike the watch, it survives a removal from the page. */
+  #followed: string | null = null;
   /** Numbers each list read as it starts; a live answer counts as started when it lands. */
   #readCount = 0;
   /** The number of the read whose answer the table shows, so an older one never replaces it. */
@@ -263,6 +265,7 @@ export class MenuPublicationsPanel extends LitElement {
   /** Replaced at each opening of the schedule form, so a late answer cannot reach a later one. */
   #opening = {};
   #scope?: DraftScope<ScheduleDraft>;
+  #baseline?: ScheduleDraft;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.scheduleBusy &&
@@ -306,14 +309,18 @@ export class MenuPublicationsPanel extends LitElement {
 
   #follow(): void {
     if (!this.isConnected || this.menuId === "" || this.menuId === this.#watching) return;
-    this.answer = null;
-    this.cancelling = null;
-    this.cancelError = null;
-    this.#opening = {};
-    this.confirming = null;
-    this.scheduleBusy = false;
-    this.#disposeDraft();
-    this.scheduling = false;
+    if (this.scheduling && this.menuId === this.#followed) this.#takeDraftScope();
+    else {
+      this.answer = null;
+      this.cancelling = null;
+      this.cancelError = null;
+      this.#opening = {};
+      this.confirming = null;
+      this.scheduleBusy = false;
+      this.#disposeDraft();
+      this.scheduling = false;
+    }
+    this.#followed = this.menuId;
     void this.#load();
   }
 
@@ -439,6 +446,12 @@ export class MenuPublicationsPanel extends LitElement {
     this.attempted = false;
     this.scheduleRefusal = null;
     this.#disposeDraft();
+    this.#baseline = this.#draft();
+    this.#takeDraftScope();
+    this.scheduling = true;
+  }
+
+  #takeDraftScope(): void {
     const { coordinator, scope } = draftScopeFor<ScheduleDraft>(this, {
       id: this,
       current: () => this.#draft(),
@@ -453,7 +466,7 @@ export class MenuPublicationsPanel extends LitElement {
     });
     this.#leave = coordinator;
     this.#scope = scope;
-    this.scheduling = true;
+    scope.commit(this.#baseline!);
   }
 
   #scheduleClosed(): void {

@@ -560,11 +560,6 @@ Seen again 2026-10-20 in A757 slice 2's look pictures.
 
 Left open by the completed A331 batches:
 
-### Reconnecting catalogue forms
-
-Still untried: the ingredient form, the options list and its option window, the extras list,
-  Add to menus, Add products, Schedule and Change time.
-
 ### Password managers and form-button checks
 
 - a password manager filling the profile's current-password field: the owner tried Chrome's

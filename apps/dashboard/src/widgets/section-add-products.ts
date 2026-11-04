@@ -158,6 +158,7 @@ export class SectionAddProducts extends LitElement {
   /** Null when no category is chosen. */
   #within: ReadonlySet<string> | null = null;
   #scope?: DraftScope<string[]>;
+  #baseline?: string[];
 
   #bottomHeight = 0;
 
@@ -201,7 +202,8 @@ export class SectionAddProducts extends LitElement {
   }
 
   commitSaved(productIds: readonly string[]): void {
-    this.#scope?.commit([...productIds].sort());
+    this.#baseline = [...productIds].sort();
+    this.#scope?.commit(this.#baseline);
   }
 
   override willUpdate(changed: PropertyValues): void {
@@ -215,6 +217,8 @@ export class SectionAddProducts extends LitElement {
           this.selected = new Set(value);
         },
       }).scope;
+      this.#baseline ??= [...this.selected].sort();
+      this.#scope.commit(this.#baseline);
     }
     if (changed.has("products") || changed.has("inSection")) {
       const held = new Set(this.inSection);

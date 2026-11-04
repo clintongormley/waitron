@@ -4,7 +4,13 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import type { DashboardApi, MenuPreview, MenuPublicationsAnswer } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  dialogClosed,
+  mountWidget,
+  reattachAfterDetachedUpdate,
+} from "./test-helpers.js";
 import "./menu-publications.js";
 
 const LISTED: MenuPublicationsAnswer = {
@@ -214,7 +220,7 @@ async function mountMove() {
   )!;
   await dialog.updateComplete;
   expect(dialog.open).toBe(true);
-  return { app, dialog };
+  return { app, panel, dialog };
 }
 
 it("Change time closes untouched without asking, and warns on Escape once the time changes", async () => {
@@ -245,3 +251,221 @@ it("a moved time cleared by success does not warn", async () => {
   expect(app.api.rescheduleMenuPublication).toHaveBeenCalledTimes(1);
   expect(unload()).toBe(false);
 });
+
+type PutBack = "at once" | "after a detached update";
+type Panel = HTMLElementTagNameMap["dashboard-menu-publications"];
+type Dialog = HTMLElementTagNameMap["wt-dialog"];
+async function putBack(panel: Panel, how: PutBack): Promise<void> {
+  if (how === "after a detached update") return reattachAfterDetachedUpdate(panel);
+  const parent = panel.parentNode!;
+  const next = panel.nextSibling;
+  panel.remove();
+  parent.insertBefore(panel, next);
+  await panel.updateComplete;
+}
+const fieldValue = (dialog: Dialog, name: "date" | "time") =>
+  dialog.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!.value;
+const submitAction = (dialog: Dialog) =>
+  dialog.querySelector<HTMLElementTagNameMap["wt-button"]>('[data-test="schedule-submit"]')!;
+async function expectUnchangedOpen(app: PublicationsLeaveApp, panel: Panel, dialog: Dialog) {
+  await panel.updateComplete;
+  expect(dialog.open).toBe(true);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(submitAction(dialog).disabled).toBe(true);
+  expect(submitAction(dialog).variant).toBe("secondary");
+}
+async function choose(app: PublicationsLeaveApp, decision: "keep" | "discard") {
+  const q = await question(app);
+  q.shadowRoot!.querySelector<HTMLElement>(`[data-choice=${decision}]`)!.click();
+}
+function deferred() {
+  let resolve!: (value: unknown) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+const editionRow = (panel: Panel) =>
+  panel
+    .shadowRoot!.querySelector("wt-data-table")!
+    .shadowRoot!.querySelector<HTMLElement>('[data-test="move-v-lunch-1"]');
+const LATER_LISTED: MenuPublicationsAnswer = {
+  ...LISTED,
+  editions: [
+    {
+      ...LISTED.editions[0]!,
+      local: { date: "2026-10-08", time: "09:30", offset: "+02:00", repeated: false },
+    },
+  ],
+};
+
+const SCHEDULE_PATHS = [
+  {
+    path: "Schedule",
+    mountPath: mount,
+    edited: "date",
+    editedValue: "2026-10-10",
+    openedValue: "",
+    other: "time",
+    otherOpened: "",
+    otherEdit: "12:00",
+    reopen: async (panel: Panel) => {
+      panel.shadowRoot!.querySelector<HTMLElement>('[data-test="schedule-open"]')!.click();
+    },
+    writeOf: (app: PublicationsLeaveApp) => app.api.scheduleMenuPublication,
+    sent: [
+      "menu-lunch",
+      { expectedHash: PREVIEW.hash, activatesAt: { date: "2026-10-12", time: "12:00" } },
+    ],
+    afterUndo: "2026-10-12",
+    editAfter: "2026-10-12",
+  },
+  {
+    path: "Change time",
+    mountPath: mountMove,
+    edited: "time",
+    editedValue: "09:00",
+    openedValue: "08:00",
+    other: "date",
+    otherOpened: "2026-10-08",
+    otherEdit: "2026-10-09",
+    reopen: async (panel: Panel) => {
+      await vi.waitFor(() => expect(editionRow(panel)).not.toBeNull());
+      editionRow(panel)!.click();
+    },
+    writeOf: (app: PublicationsLeaveApp) => app.api.rescheduleMenuPublication,
+    sent: ["menu-lunch", "v-lunch-1", { activatesAt: { date: "2026-10-09", time: "09:15" } }],
+    afterUndo: "09:15",
+    editAfter: "09:15",
+  },
+] as const;
+
+for (const p of SCHEDULE_PATHS) {
+  for (const how of ["at once", "after a detached update"] as const) {
+    for (const route of ["close", "escape"] as const) {
+      it(`${p.path}: an edit made before being taken out counts when put back ${how}, and ${route} asks`, async () => {
+        const { app, panel, dialog } = await p.mountPath();
+        await enter(dialog, p.edited, p.editedValue);
+        await putBack(panel, how);
+        expect(dialog.open).toBe(true);
+        expect(fieldValue(dialog, p.edited)).toBe(p.editedValue);
+        expect(app.leave.coordinator.isDirty()).toBe(true);
+        expect(submitAction(dialog).disabled).toBe(false);
+        expect(submitAction(dialog).variant).toBe("primary");
+        expect(dialog.querySelector('[data-test="schedule-intro"]')!.textContent).toContain(
+          LISTED.timeZone,
+        );
+        if (route === "close")
+          dialog.querySelector<HTMLElement>('[data-test="schedule-close"]')!.click();
+        else {
+          dialog.querySelector(`[name="${p.edited}"]`)!.shadowRoot!.querySelector("input")!.focus();
+          await userEvent.keyboard("{Escape}");
+        }
+        expect((await question(app)).open).toBe(true);
+        expect(dialog.open).toBe(true);
+        const closed = dialogClosed(dialog);
+        await choose(app, "discard");
+        await closed;
+        await panel.updateComplete;
+        expect(dialog.open).toBe(false);
+        expect(fieldValue(dialog, p.edited)).toBe(p.openedValue);
+        expect(app.leave.coordinator.isDirty()).toBe(false);
+        await p.reopen(panel);
+        await expectUnchangedOpen(app, panel, dialog);
+        expect(fieldValue(dialog, p.edited)).toBe(p.openedValue);
+      });
+    }
+    it(`${p.path}: an edit made after being put back ${how} is what the action sends`, async () => {
+      const { app, panel, dialog } = await p.mountPath();
+      await enter(dialog, p.edited, p.editedValue);
+      await enter(dialog, p.other, p.otherEdit);
+      await putBack(panel, how);
+      await enter(dialog, p.edited, p.editAfter);
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+      const closed = dialogClosed(dialog);
+      submitAction(dialog).click();
+      await closed;
+      expect(p.writeOf(app)).toHaveBeenCalledExactlyOnceWith(...p.sent);
+    });
+    it(`${p.path}: an edit undone after being put back ${how} is unchanged again`, async () => {
+      const { app, panel, dialog } = await p.mountPath();
+      await enter(dialog, p.edited, p.editedValue);
+      await putBack(panel, how);
+      await enter(dialog, p.edited, p.openedValue);
+      await expectUnchangedOpen(app, panel, dialog);
+    });
+    it(`${p.path}: put back onto a different menu ${how} closes and is not changed`, async () => {
+      const { app, panel, dialog } = await p.mountPath();
+      await enter(dialog, p.edited, p.editedValue);
+      panel.remove();
+      panel.menuId = "menu-dinner";
+      if (how === "after a detached update") await panel.updateComplete;
+      app.shadowRoot!.prepend(panel);
+      await panel.updateComplete;
+      expect(dialog.open).toBe(false);
+      expect(app.leave.coordinator.isDirty()).toBe(false);
+      expect(app.api.getMenuPublications).toHaveBeenLastCalledWith("menu-dinner");
+      expect((await question(app)).open).toBe(false);
+      await p.reopen(panel);
+      await expectUnchangedOpen(app, panel, dialog);
+      expect(fieldValue(dialog, p.edited)).toBe(p.openedValue);
+    });
+    for (const answered of ["while it is out", "once it is back"] as const) {
+      for (const outcome of ["accepted", "refused"] as const) {
+        it(`${p.path}: a write ${outcome} ${answered} (put back ${how}) neither saves nor closes it`, async () => {
+          const { app, panel, dialog } = await p.mountPath();
+          const write = deferred();
+          p.writeOf(app).mockReturnValueOnce(write.promise as never);
+          await enter(dialog, p.edited, p.editedValue);
+          await enter(dialog, p.other, p.otherEdit);
+          submitAction(dialog).click();
+          await expect.poll(() => p.writeOf(app).mock.calls.length).toBe(1);
+          const settle = () =>
+            outcome === "accepted"
+              ? write.resolve({ versionId: "v", number: 2, activatesAt: "" })
+              : write.reject({ code: "menu_publication.time_past", params: {} });
+          const parent = panel.parentNode!;
+          const next = panel.nextSibling;
+          panel.remove();
+          if (answered === "while it is out") {
+            settle();
+            await closeReportsDelivered();
+          }
+          if (how === "after a detached update") await panel.updateComplete;
+          parent.insertBefore(panel, next);
+          await panel.updateComplete;
+          if (answered === "once it is back") {
+            settle();
+            await closeReportsDelivered();
+          }
+          await panel.updateComplete;
+          expect(dialog.open).toBe(true);
+          expect(fieldValue(dialog, p.edited)).toBe(p.editedValue);
+          expect(app.leave.coordinator.isDirty()).toBe(true);
+          expect(submitAction(dialog).loading).toBe(false);
+          expect(
+            dialog.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="time"]')!.error,
+          ).toBe("");
+          dialog.querySelector<HTMLElement>('[data-test="schedule-close"]')!.click();
+          expect((await question(app)).open).toBe(true);
+        });
+      }
+    }
+  }
+  it(`${p.path}: reopening after a save starts unchanged from the stored value`, async () => {
+    const { app, panel, dialog } = await p.mountPath();
+    app.api.getMenuPublications.mockResolvedValue(LATER_LISTED);
+    await enter(dialog, p.edited, p.editedValue);
+    await enter(dialog, p.other, p.otherEdit);
+    await putBack(panel, "at once");
+    const closed = dialogClosed(dialog);
+    submitAction(dialog).click();
+    await closed;
+    await vi.waitFor(() => expect(editionRow(panel)).not.toBeNull());
+    await p.reopen(panel);
+    await expectUnchangedOpen(app, panel, dialog);
+    expect(fieldValue(dialog, "time")).toBe(p.path === "Schedule" ? "" : "09:30");
+  });
+}

@@ -148,6 +148,7 @@ export class AddToMenus extends LitElement {
   #places = new Map<string, { name: string; topLevel: boolean }>();
   #hasShared = false;
   #scope?: DraftScope<string[]>;
+  #baseline?: string[];
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
@@ -170,6 +171,7 @@ export class AddToMenus extends LitElement {
     if (changed.has("open") && this.open) {
       this.#scope?.dispose();
       this.#scope = undefined;
+      this.#baseline = undefined;
       this.selected = new Set();
       this.attempted = false;
     }
@@ -193,6 +195,8 @@ export class AddToMenus extends LitElement {
       });
       this.#leave = coordinator;
       this.#scope = scope;
+      this.#baseline ??= [...this.selected].sort();
+      scope.commit(this.#baseline);
     }
   }
 
@@ -262,6 +266,7 @@ export class AddToMenus extends LitElement {
   commitAdded(sectionIds: readonly string[]): void {
     const accepted = new Set(sectionIds);
     this.selected = new Set([...this.selected].filter((id) => !accepted.has(id)));
+    this.#baseline = [];
     this.#scope?.commit([]);
   }
 

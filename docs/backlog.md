@@ -1169,11 +1169,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A category's naming square does not announce the inherited colour's source.**
   [Detail](backlog/catalogue.md#a-categorys-naming-square-does-not-announce-the-inherited-colours-source)
 
-- **Re-check whether these forms keep an edit’s unsaved state when taken out of the page and
-  put back.** Left open after the unit-form fix in A397 part 2 (#1439):
-  the ingredient form, the options list and its option window, the extras list, Add to menus, Add products, Schedule and Change time. It matters only if a
-  screen ever moves an open form. Left open by A331 batch 2a (#1422).
-
 - **A menu published before this keeps a variant's own unit, frozen in its published copy, until the
   menu is next published** — left open by A222 (#1101) (`applyLiveFields`,
   `packages/catalogue/src/menu-document.ts`, serves that copy; read, not run).
