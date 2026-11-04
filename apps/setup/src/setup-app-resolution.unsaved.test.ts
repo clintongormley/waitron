@@ -4,6 +4,7 @@ import { leaveCoordinatorFor, type WtInput } from "@waitron/ui";
 import { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initial, wizardApi } from "../test/first-setup-browser.js";
+import { OLD_RECOVERY_ROUTE } from "../test/wipe-browser.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 
 afterEach(async () => {
@@ -70,7 +71,7 @@ it("Recover from backup opens its confirmation in place, keeping an entered setu
   expect(
     el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("wt-unsaved-changes")!.open,
   ).toBe(false);
-  expect(requests.filter((r) => /\/resolution\/backup\//.test(r.path))).toEqual([]);
+  expect(requests.filter((r) => OLD_RECOVERY_ROUTE.test(r.path))).toEqual([]);
   const kept = el.shadowRoot!.querySelector<WtInput>("[data-test=resume-password]")!;
   await kept.updateComplete;
   expect(kept.shadowRoot!.querySelector<HTMLInputElement>("input")!.value).toBe(

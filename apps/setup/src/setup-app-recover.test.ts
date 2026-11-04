@@ -37,7 +37,7 @@ const locales = [
   ["en-GB", "en"],
   ["es-ES", "es"],
 ] as const;
-const oldRecoveryMounted = (requests: Sent[]) =>
+const oldRoutesRequested = (requests: Sent[]) =>
   requests.some((r) => OLD_RECOVERY_ROUTE.test(r.path));
 const tick = (app: SetupApp) => q<HTMLInputElement>(app, "retire-confirmed")!;
 const tickLabel = (app: SetupApp) => tick(app).closest("label")!.textContent!.trim();
@@ -50,9 +50,9 @@ for (const c of cases)
       summary: () => Response.json(c.summary),
     });
     await click(app, "recover-backup");
-    expect(oldRecoveryMounted(requests)).toBe(false);
+    expect(oldRoutesRequested(requests)).toBe(false);
     await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
-    expect(oldRecoveryMounted(requests)).toBe(false);
+    expect(oldRoutesRequested(requests)).toBe(false);
     expect(fieldsIn(confirmation(app, "confirm-recover"))).toEqual([]);
     await userEvent.click(tick(app));
     await click(app, "confirm-recover");
@@ -64,9 +64,8 @@ for (const c of cases)
       ...c.sent,
     });
     await expect.poll(() => text(app)).toContain(t.restarting);
-    expect(oldRecoveryMounted(requests)).toBe(false);
+    expect(oldRoutesRequested(requests)).toBe(false);
     expect(requests.some((r) => r.headers.has(OWNER_HEADER))).toBe(false);
-    expect(requests.some((r) => OLD_RECOVERY_ROUTE.test(r.path))).toBe(false);
   });
 
 for (const [locale, lang] of locales)
@@ -173,7 +172,7 @@ it.each(refusals)(
       expect(q(app, name), name).toBeNull();
     expect(q(app, "reconnect-first")).not.toBeNull();
     expect(sends(requests)).toEqual([]);
-    expect(oldRecoveryMounted(requests)).toBe(false);
+    expect(oldRoutesRequested(requests)).toBe(false);
   },
 );
 
@@ -188,7 +187,7 @@ it.each([
     expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(true);
     expect(q(app, "start-again-refused")!.textContent).toBe(t.wipeUnavailable);
     if (name === "uncheckable") expect(text(app)).toContain(t.uncheckable);
-    expect(oldRecoveryMounted(requests)).toBe(false);
+    expect(oldRoutesRequested(requests)).toBe(false);
   },
 );
 
@@ -280,7 +279,7 @@ for (const [locale, lang] of locales)
       say("role.heading", locale),
     );
     for (const name of otherScreens) expect(q(app, name), name).toBeNull();
-    expect(oldRecoveryMounted(requests)).toBe(false);
+    expect(oldRoutesRequested(requests)).toBe(false);
   });
 
 it("Reconnect while the box is still restarting keeps the choice, and the next Reconnect opens Join or recover", async () => {
@@ -463,7 +462,7 @@ it("from Join or recover, Restore from backup opens the fresh-box restore screen
   const { options } = restartingBox();
   const { app, requests } = await wipeFixture(options);
   await confirmWipe(app, "recover");
-  expect(oldRecoveryMounted(requests)).toBe(false);
+  expect(oldRoutesRequested(requests)).toBe(false);
   await click(app, "reconnect-first");
   await expect.poll(() => q(app, "screen-role")).not.toBeNull();
   const role = q<LitElement>(app, "screen-role")!;
@@ -471,8 +470,7 @@ it("from Join or recover, Restore from backup opens the fresh-box restore screen
   const choose = role.shadowRoot!.querySelector<WtButton>("[data-test=choose-restore]")!;
   await userEvent.click(choose.shadowRoot!.querySelector("button")!);
   await expect.poll(() => q(app, "screen-restore")).not.toBeNull();
-  expect(oldRecoveryMounted(requests)).toBe(false);
-  expect(requests.some((r) => OLD_RECOVERY_ROUTE.test(r.path))).toBe(false);
+  expect(oldRoutesRequested(requests)).toBe(false);
 });
 
 it("a Reconnect that finds the setup claimed and then cannot read it still forgets the choice", async () => {

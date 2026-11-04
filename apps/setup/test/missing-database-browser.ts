@@ -84,7 +84,6 @@ export async function openMissing(app: SetupApp) {
       () =>
         q(app, "missing-reached") ??
         q(app, "start-again-refused") ??
-        q(app, "check-again") ??
         [
           ...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions"),
         ].find((f) => f.error) ??

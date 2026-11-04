@@ -189,6 +189,26 @@ it("ignores duplicate clicks and a retirement answer after the app has left", as
   expect(app.shadowRoot!.textContent).not.toContain(initialOwnerStrings.en.restarting);
 });
 
+it("a second click on Start again's outer element while the summary is being read reads the box and the summary once", async () => {
+  const held: ((response: Response) => void)[] = [];
+  const { app, requests } = await missingDatabaseFixture({
+    intercept(path) {
+      if (path.endsWith("/start-again/summary"))
+        return new Promise<Response>((done) => held.push(done));
+    },
+  });
+  const reads = (suffix: string) => requests.filter((r) => r.path.endsWith(suffix)).length;
+  const inspections = reads("/first-setup/resolution");
+  q(app, "start-again")!.dispatchEvent(new MouseEvent("click"));
+  await expect.poll(() => reads("/start-again/summary")).toBe(1);
+  q(app, "start-again")!.dispatchEvent(new MouseEvent("click"));
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  for (const done of held) done(Response.json(namedSummary));
+  await expect.poll(() => q(app, "missing-reached")).not.toBeNull();
+  expect(reads("/first-setup/resolution")).toBe(inspections + 1);
+  expect(reads("/start-again/summary")).toBe(1);
+});
+
 it("a setup read on pressing Start again that outlives its page opens no confirmation", async () => {
   let answer!: (value: Response) => void;
   let inspections = 0;
@@ -300,21 +320,16 @@ it.each(locales)(
   },
 );
 
-it.each(locales)(
-  "draws Recover from backup beside Start again, with no recovery note ($locale)",
-  async ({ browser }) => {
-    const { app } = await missingDatabaseFixture({ locale: browser });
-    expect(q(app, "recover-backup")).not.toBeNull();
-    expect(q(app, "start-again")).not.toBeNull();
-    expect(q(app, "recover-backup-note")).toBeNull();
-    await openMissing(app);
-    const actions = q(app, "missing-actions")!;
-    expect(
-      [...actions.querySelectorAll("wt-button")].map((b) => b.getAttribute("data-test")),
-    ).toEqual(["recover-backup"]);
-    expect(q(app, "recover-backup-note")).toBeNull();
-  },
-);
+it.each(locales)("draws Recover from backup beside Start again ($locale)", async ({ browser }) => {
+  const { app } = await missingDatabaseFixture({ locale: browser });
+  expect(q(app, "recover-backup")).not.toBeNull();
+  expect(q(app, "start-again")).not.toBeNull();
+  await openMissing(app);
+  const actions = q(app, "missing-actions")!;
+  expect(
+    [...actions.querySelectorAll("wt-button")].map((b) => b.getAttribute("data-test")),
+  ).toEqual(["recover-backup"]);
+});
 
 it.each(locales)(
   "shows none of the ask's lines before Start again is pressed ($locale)",
