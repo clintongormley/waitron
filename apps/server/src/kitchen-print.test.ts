@@ -3328,7 +3328,7 @@ describe("A773 fire paper: course headings", () => {
       const { id: grill } = await createStation(tx, v.cfg, { name: "Grill" });
       const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 });
       for (const name of ["Burger", "Paella"]) {
-        await routeProductTo(tx, v.cfg, v.productId(name), grill);
+        await routeProductTo(tx, v.productId(name), grill);
         await setProductCourse(tx, v.cfg, v.productId(name), mains.id);
       }
       return { printerId: await makeSharedPrinter(tx, "Grill", [grill]) };
@@ -3395,7 +3395,7 @@ describe("A773 fire paper: course headings", () => {
     const { printerId, courseId } = await inTx(v, async (tx) => {
       const { id: grill } = await createStation(tx, v.cfg, { name: "Grill" });
       const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 });
-      await routeProductTo(tx, v.cfg, v.productId("Burger"), grill);
+      await routeProductTo(tx, v.productId("Burger"), grill);
       await setProductCourse(tx, v.cfg, v.productId("Burger"), mains.id);
       await setStationPrinting(tx, { printHeldWork: true }, [grill]);
       return { printerId: await makeSharedPrinter(tx, "Grill", [grill]), courseId: mains.id };
@@ -3424,7 +3424,7 @@ describe("A773 fire paper: course headings", () => {
     expect(await newGrillHeadings(v, printerId, seen)).toEqual([`${word} 1 · MAIN COURSES`]);
 
     await inTx(v, async (tx) => {
-      await deleteCourse(tx, v.cfg, courseId);
+      await deleteCourse(tx, courseId);
       await reprintOrderTickets(tx, v.cfg, tabId);
     });
     const kept = await asApp(v.cfg, (tx) =>
@@ -3447,7 +3447,7 @@ describe("A773 fire paper: course headings", () => {
         ["Burger", mains],
         ["Paella", starters],
       ] as const) {
-        await routeProductTo(tx, v.cfg, v.productId(name), grill);
+        await routeProductTo(tx, v.productId(name), grill);
         await setProductCourse(tx, v.cfg, v.productId(name), course.id);
       }
       return makeSharedPrinter(tx, "Grill", [grill]);
@@ -3484,7 +3484,7 @@ describe("A773 fire paper: course headings", () => {
         ["Burger", mains],
         ["Flan", desserts],
       ] as const) {
-        await routeProductTo(tx, v.cfg, v.productId(name), grill);
+        await routeProductTo(tx, v.productId(name), grill);
         await setProductCourse(tx, v.cfg, v.productId(name), course.id);
       }
       return makeSharedPrinter(tx, "Grill", [grill]);
