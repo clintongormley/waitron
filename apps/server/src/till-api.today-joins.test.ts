@@ -980,4 +980,32 @@ describe("a party change that changes a room answers its revision", () => {
     expect(await holders(a, b, c)).toEqual([p, split.partyId, null]);
     expect((await zoneRevisionOf(v, zoneId))!).toBe(read + 1);
   });
+
+  it("A803 split: the route: a selection that takes a table out of a group answers the room's new revision", async () => {
+    const { zoneId, a, b } = await room();
+    const p = await seat(a);
+    await ok(
+      join(p, {
+        tableId: b,
+        expectedPartyRevision: await revision(p),
+        otherPartyId: null,
+        merge: { moving: b, target: a, side: "right", seats: 8 },
+      }),
+    );
+    const read = (await zoneRevisionOf(v, zoneId))!;
+
+    const split = (await ok(
+      post(`/api/parties/${p}/split-table`, {
+        tableId: b,
+        selection: { wholeBillIds: [], loose: [] },
+        expectedPartyRevision: await revision(p),
+      }),
+    )) as { partyId: string };
+
+    expect(split).toEqual({
+      partyId: split.partyId,
+      billIds: [await onlyBill(split.partyId)],
+      zoneRevisions: { [zoneId]: read + 1 },
+    });
+  });
 });

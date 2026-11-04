@@ -170,7 +170,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/parties/:id/bills                             | party                  | refuses POST /api/parties/:id/bills                  |
  * | PUT  /api/parties/:id/guests                            | party                  | refuses PUT /api/parties/:id/guests                  |
  * | POST /api/parties/:id/move, /join                       | party; body table      | refuses POST /api/parties/:id/<move|join> (party), (table) |
- * | POST /api/parties/:id/split-table                       | party                  | refuses POST /api/parties/:id/split-table            |
+ * | POST /api/parties/:id/split-table                       | party; each bill of the selection | refuses POST /api/parties/:id/split-table, (whole bill), (loose source) |
  * | GET  /api/parties/:id/bills|groups|current-orders|drafts | party                  | refuses GET /api/parties/:id/<read>                  |
  * | POST /api/parties/:id/groups                            | party                  | refuses POST /api/parties/:id/groups                 |
  * | POST /api/parties/:id/groups/:gid/fire|ready|served|snooze|unsnooze | party | refuses POST /api/parties/:id/groups/:gid/<verb>  |
@@ -1016,6 +1016,30 @@ const ROUTES: readonly Row[] = [
     "POST",
     (x) => `/api/parties/${x.deliParty}/split-table`,
     (x) => ({ tableId: x.deliTable, billId: null, expectedPartyRevision: 0, expectedEdits: [] }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/parties/:id/split-table (whole bill)",
+    "POST",
+    (x) => `/api/parties/${x.restParty}/split-table`,
+    (x) => ({
+      tableId: x.restTable,
+      selection: { wholeBillIds: [x.deliTab], loose: [] },
+      expectedPartyRevision: 0,
+      expectedEdits: [],
+    }),
+    deliTableZone,
+  ],
+  [
+    "POST /api/parties/:id/split-table (loose source)",
+    "POST",
+    (x) => `/api/parties/${x.restParty}/split-table`,
+    (x) => ({
+      tableId: x.restTable,
+      selection: { wholeBillIds: [], loose: [{ billId: x.deliTab, lineIds: [id] }] },
+      expectedPartyRevision: 0,
+      expectedEdits: [],
+    }),
     deliTableZone,
   ],
   ...(["bills", "groups", "current-orders", "drafts"] as const).map((read): Row => [

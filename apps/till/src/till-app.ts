@@ -15618,7 +15618,7 @@ export class TillApp extends LitElement {
       await asked.api.splitTable(
         party.id,
         tableId,
-        billId,
+        { wholeBillIds: billId === null ? [] : [billId], loose: [] },
         asked.revisions.expectedPartyRevision!,
         asked.expectedEdits,
         guestCounts,

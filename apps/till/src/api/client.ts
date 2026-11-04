@@ -2225,6 +2225,12 @@ export interface TableActionResult {
   zoneRevisions?: Record<string, number>;
 }
 
+/** Which bills go whole, and which dishes go loose, to the party Split a table starts. */
+export interface SplitSelection {
+  wholeBillIds: string[];
+  loose: { billId: string; lineIds: string[] }[];
+}
+
 /** What a bill action sends of the party the till read the bill under: its revision and its id. Both
  * are left out for a bill of no party. */
 export interface BillRevisions {
@@ -4696,26 +4702,28 @@ export class TillApi {
   }
 
   /**
-   * `tableId` leaves the party and a new party starts there with `billId`, or with a new empty bill
-   * when it is null → `POST /api/parties/:id/split-table`, answering the new party and its bill. `guestCounts`, when given, is each side's
-   * guest count afterwards; without it the staying party keeps its count. Rejects, among others, `table.not_shared`,
-   * `table.not_joined` and `party.out_of_date`.
+   * `tableId` leaves the party and a new party starts there with the selection's whole bills and a
+   * new bill holding its loose dishes, or a new empty bill when nothing is selected →
+   * `POST /api/parties/:id/split-table`, answering the new party and its bills in number order.
+   * `guestCounts`, when given, is each side's guest count afterwards; without it the staying party
+   * keeps its count. Rejects, among others, `table.not_shared`, `table.not_joined` and
+   * `party.out_of_date`.
    */
   splitTable(
     partyId: string,
     tableId: string,
-    billId: string | null,
+    selection: SplitSelection,
     expectedPartyRevision: number,
     expectedEdits: BillEditExpected[],
     guestCounts?: { staying: number | null; leaving: number | null },
   ): Promise<{
     partyId: string;
-    billId: string;
+    billIds: string[];
     zoneRevisions?: Record<string, number>;
   }> {
     return this.#request(`/api/parties/${partyId}/split-table`, "POST", {
       tableId,
-      billId,
+      selection,
       expectedPartyRevision,
       expectedEdits,
       ...(guestCounts === undefined ? {} : { guestCounts }),

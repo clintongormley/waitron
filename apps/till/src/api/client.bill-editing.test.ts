@@ -106,16 +106,19 @@ describe("split-table editing request", () => {
       billId === null
         ? []
         : [{ billId: "bill-2", editorVersion: 7, draftId: "draft-2", draftRevision: 3 }];
-    const fetch = vi.fn(async () => Response.json({ partyId: "new-party", openingBillId: billId }));
+    const fetch = vi.fn(async () =>
+      Response.json({ partyId: "new-party", billIds: [billId ?? "new-bill"] }),
+    );
     const guests = { staying: 2, leaving: null };
-    await new TillApi("", fetch).splitTable("party", "table", billId, 4, expectedEdits, guests);
+    const selection = { wholeBillIds: billId === null ? [] : [billId], loose: [] };
+    await new TillApi("", fetch).splitTable("party", "table", selection, 4, expectedEdits, guests);
     expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/parties/party/split-table", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         tableId: "table",
-        billId,
+        selection,
         expectedPartyRevision: 4,
         expectedEdits,
         guestCounts: guests,

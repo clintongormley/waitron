@@ -2,6 +2,7 @@ import { observedTableActionBody } from "./testing/table-action-fixture.js";
 import { observedMoveBillBody } from "./testing/move-bill-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
+import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -18,6 +19,11 @@ import "./errors.js";
 import { readBillEditState } from "./bill-editing.js";
 import { createTable } from "./testing/live-table.js";
 import { numbersOf } from "./testing/bill-identities.js";
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { saveDraftForTest } from "./testing/draft-command-fixture.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
+import { mountTillApi } from "./till-api.js";
+import { decimal } from "@waitron/shared";
 
 // The routes of Move guests, Join tables and Split a table (table actions plan, Task 8). The
 // actions themselves are tested in `party-table-actions.test.ts`.
@@ -1032,5 +1038,351 @@ describe("Join tables' guest counts", () => {
     expect(answer.json).toMatchObject({ partyId: ana.partyId });
     expect(await floorGuests(ana.tableId)).toBe(5);
     expect(await floorGuests(luis.tableId)).toBe(5);
+  });
+});
+
+describe("A803 split: the route", () => {
+  /** Ana at two tables: her first bill holds the dishes named, and a second bill holds a Pulpo. */
+  async function anaWith(...names: string[]) {
+    const ana = await seatedWith(venue, ...names, "Pulpo");
+    const second = await freeTable();
+    const joined = await post(`/api/parties/${ana.partyId}/join`, {
+      tableId: second,
+      expectedPartyRevision: revisionOf(ana.partyId),
+    });
+    expect(joined.status).toBe(200);
+    const split = await post(
+      `/api/bills/${ana.tabId}/split`,
+      await observedBillActionBody(venue.db, `/api/bills/${ana.tabId}/split`, {
+        transfers: [{ lineNo: names.length + 1 }],
+        expectedPartyRevision: revisionOf(ana.partyId),
+      }),
+    );
+    expect(split.status).toBe(200);
+    return { ana, second, pulpoBill: split.json.billId as string };
+  }
+
+  function lineIdsOf(billId: string): string[] {
+    return venue.db
+      .all<{ id: string }>(
+        sql`select id from working_order_lines where working_order_id = ${billId} order by line_no`,
+      )
+      .map((row) => row.id);
+  }
+
+  function pay(billId: string, body: Record<string, unknown>) {
+    return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
+      submissionId: randomUUID(),
+      tip: "0.00",
+      method: "cash",
+      ...body,
+    });
+  }
+
+  function splitting(partyId: string, tableId: string, selection: unknown) {
+    return {
+      tableId,
+      selection,
+      expectedPartyRevision: revisionOf(partyId),
+    };
+  }
+
+  it("a selection answers the new party and its bills, whole first and the new bill last, and no source", async () => {
+    const { ana, second, pulpoBill } = await anaWith("Tarta", "Caña");
+    const [, caña] = lineIdsOf(ana.tabId);
+
+    const answer = await post(
+      `/api/parties/${ana.partyId}/split-table`,
+      splitting(ana.partyId, second, {
+        wholeBillIds: [pulpoBill],
+        loose: [{ billId: ana.tabId, lineIds: [caña] }],
+      }),
+    );
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const billIds = answer.json.billIds as string[];
+    expect(answer.json).toEqual({ partyId: answer.json.partyId, billIds });
+    expect(billIds).toHaveLength(2);
+    expect(billIds[0]).toBe(pulpoBill);
+    expect(lineIdsOf(billIds[1]!)).toEqual([caña]);
+    expect(lineIdsOf(ana.tabId)).toHaveLength(1);
+    expect(tablesOf(answer.json.partyId as string)).toEqual([second]);
+    expect(tablesOf(ana.partyId)).toEqual([ana.tableId]);
+  });
+
+  it("upper-case ids name the same bills and dishes, and are answered lower-cased", async () => {
+    const { ana, second, pulpoBill } = await anaWith("Tarta", "Caña");
+    const [, caña] = lineIdsOf(ana.tabId);
+
+    const answer = await post(
+      `/api/parties/${ana.partyId.toUpperCase()}/split-table`,
+      splitting(ana.partyId, second.toUpperCase(), {
+        wholeBillIds: [pulpoBill.toUpperCase()],
+        loose: [{ billId: ana.tabId.toUpperCase(), lineIds: [caña!.toUpperCase()] }],
+      }),
+    );
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const billIds = answer.json.billIds as string[];
+    expect(billIds[0]).toBe(pulpoBill);
+    expect(lineIdsOf(billIds[1]!)).toEqual([caña]);
+  });
+
+  it("an empty selection opens a new empty bill at the leaving table", async () => {
+    const { ana, second } = await anaWith("Tarta", "Caña");
+
+    const answer = await post(
+      `/api/parties/${ana.partyId}/split-table`,
+      splitting(ana.partyId, second, { wholeBillIds: [], loose: [] }),
+    );
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const billIds = answer.json.billIds as string[];
+    expect(billIds).toHaveLength(1);
+    expect(lineIdsOf(billIds[0]!)).toEqual([]);
+  });
+
+  it.each<[string, (billId: string, lineId: string) => unknown]>([
+    ["null", () => null],
+    ["a number", () => 5],
+    ["a list", () => []],
+    ["no wholeBillIds", () => ({ loose: [] })],
+    ["wholeBillIds not a list", () => ({ wholeBillIds: 5, loose: [] })],
+    ["no loose", () => ({ wholeBillIds: [] })],
+    ["loose not a list", () => ({ wholeBillIds: [], loose: {} })],
+    ["a whole id not a UUID", () => ({ wholeBillIds: ["not-a-uuid"], loose: [] })],
+    ["a whole id not a string", () => ({ wholeBillIds: [7], loose: [] })],
+    ["a loose entry not an object", () => ({ wholeBillIds: [], loose: ["x"] })],
+    ["a loose entry null", () => ({ wholeBillIds: [], loose: [null] })],
+    [
+      "a loose entry with no billId",
+      (_, lineId) => ({ wholeBillIds: [], loose: [{ lineIds: [lineId] }] }),
+    ],
+    [
+      "a loose billId not a UUID",
+      (_, lineId) => ({ wholeBillIds: [], loose: [{ billId: "nope", lineIds: [lineId] }] }),
+    ],
+    ["a loose entry with no lineIds", (billId) => ({ wholeBillIds: [], loose: [{ billId }] })],
+    [
+      "a line id not a UUID",
+      (billId) => ({ wholeBillIds: [], loose: [{ billId, lineIds: ["nope"] }] }),
+    ],
+    [
+      "a loose entry with no lines",
+      (billId) => ({ wholeBillIds: [], loose: [{ billId, lineIds: [] }] }),
+    ],
+    [
+      "one bill both whole and loose",
+      (billId, lineId) => ({
+        wholeBillIds: [billId],
+        loose: [{ billId, lineIds: [lineId] }],
+      }),
+    ],
+    ["a whole id twice", (billId) => ({ wholeBillIds: [billId, billId], loose: [] })],
+  ])("%s is refused management.request_invalid on selection, changing nothing", async (_, make) => {
+    const { ana, second } = await anaWith("Tarta", "Caña");
+    const [tarta] = lineIdsOf(ana.tabId);
+    const revision = revisionOf(ana.partyId);
+
+    const answer = await post(
+      `/api/parties/${ana.partyId}/split-table`,
+      splitting(ana.partyId, second, make(ana.tabId, tarta!)),
+    );
+
+    expect(answer.status).toBe(400);
+    expect(answer.json).toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "selection" },
+    });
+    expect(revisionOf(ana.partyId)).toBe(revision);
+    expect(tablesOf(ana.partyId)).toContain(second);
+  });
+
+  it("the old request with a bill id still works beside the new one", async () => {
+    const { ana, second, pulpoBill } = await anaWith("Tarta");
+
+    const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
+      tableId: second,
+      billId: pulpoBill,
+      expectedPartyRevision: revisionOf(ana.partyId),
+    });
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toEqual({ partyId: answer.json.partyId, billId: pulpoBill });
+    expect(tablesOf(answer.json.partyId as string)).toEqual([second]);
+  });
+
+  it("a body naming both goes by its selection", async () => {
+    const { ana, second, pulpoBill } = await anaWith("Tarta");
+
+    const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
+      expectedEdits: [],
+      tableId: second,
+      billId: pulpoBill,
+      selection: { wholeBillIds: [], loose: [] },
+      expectedPartyRevision: revisionOf(ana.partyId),
+    });
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const billIds = answer.json.billIds as string[];
+    expect(billIds).not.toContain(pulpoBill);
+    expect(lineIdsOf(billIds[0]!)).toEqual([]);
+  });
+
+  describe("a loose refusal answers its code's status, moving nothing", () => {
+    async function refusal(
+      ana: { partyId: string; tabId: string },
+      second: string,
+      lineId: string,
+      app = venue.app,
+    ) {
+      const revision = revisionOf(ana.partyId);
+      const lines = lineIdsOf(ana.tabId);
+      const body = await observedTableActionBody(
+        venue.db,
+        `/api/parties/${ana.partyId}/split-table`,
+        splitting(ana.partyId, second, {
+          wholeBillIds: [],
+          loose: [{ billId: ana.tabId, lineIds: [lineId] }],
+        }),
+      );
+      const answer = await send(
+        app,
+        venue.cookie,
+        "POST",
+        `/api/parties/${ana.partyId}/split-table`,
+        body,
+      );
+      expect(revisionOf(ana.partyId)).toBe(revision);
+      expect(lineIdsOf(ana.tabId)).toEqual(lines);
+      expect(tablesOf(ana.partyId)).toContain(second);
+      return answer;
+    }
+
+    it("a dish the bill does not hold: 404 tab.line_not_found", async () => {
+      const { ana, second } = await anaWith("Tarta", "Caña");
+
+      const answer = await refusal(ana, second, randomUUID());
+
+      expect(answer.status).toBe(404);
+      expect(answer.json).toMatchObject({ code: "tab.line_not_found" });
+    });
+
+    it("a paid dish: 409 bill.line_paid", async () => {
+      const { ana, second } = await anaWith("Tarta", "Caña");
+      const paid = await pay(ana.tabId, {
+        kind: "items",
+        lines: [{ lineNo: 1 }],
+        tendered: "18.00",
+        applied: "18.00",
+      });
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+
+      const answer = await refusal(ana, second, lineIdsOf(ana.tabId)[0]!);
+
+      expect(answer.status).toBe(409);
+      expect(answer.json).toMatchObject({ code: "bill.line_paid" });
+    });
+
+    it("a pick leaving less than was received: 409 bill.received_exceeds_total", async () => {
+      const { ana, second } = await anaWith("Tarta", "Caña");
+      const paid = await pay(ana.tabId, {
+        kind: "contribution",
+        amount: "18.00",
+        tendered: "18.00",
+        applied: "18.00",
+      });
+      expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+
+      const answer = await refusal(ana, second, lineIdsOf(ana.tabId)[0]!);
+
+      expect(answer.status).toBe(409);
+      expect(answer.json).toMatchObject({ code: "bill.received_exceeds_total" });
+    });
+
+    it("a dish the kitchen holds outside a held group: 400 tab.split_held_line", async () => {
+      const { ana, second } = await anaWith("Caña");
+      await withTransaction(venue.db, (tx) =>
+        addTabRound(tx, venue.cfg, ana.tabId, [
+          { menuItemId: venue.offerFor("Tarta"), quantity: "1", hold: true },
+        ]),
+      );
+
+      const answer = await refusal(ana, second, lineIdsOf(ana.tabId).at(-1)!);
+
+      expect(answer.status).toBe(400);
+      expect(answer.json).toMatchObject({ code: "tab.split_held_line" });
+    });
+
+    it("an extra's id: 400 tab.transfer_modifier_line", async () => {
+      const { ana, second } = await anaWith("Tarta", "Caña");
+      const [tarta, caña] = lineIdsOf(ana.tabId);
+      venue.db.run(
+        sql`update working_order_lines set parent_line_id = ${tarta} where id = ${caña}`,
+      );
+
+      const answer = await refusal(ana, second, caña!);
+
+      expect(answer.status).toBe(400);
+      expect(answer.json).toMatchObject({ code: "tab.transfer_modifier_line" });
+    });
+
+    it("a new bill over the simplified-invoice limit: 409 sale.total_exceeds_simplified_limit", async () => {
+      const { ana, second } = await anaWith("Tarta", "Caña");
+      const app = new Hono();
+      mountTillApi(
+        app,
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+          cfg: { ...venue.cfg, simplifiedInvoiceLimit: decimal("10.00") },
+          secureCookies: false,
+          venueLocale: venue.cfg.locale,
+        },
+        () => {},
+      );
+
+      const answer = await refusal(ana, second, lineIdsOf(ana.tabId)[0]!, app);
+
+      expect(answer.status).toBe(409);
+      expect(answer.json).toMatchObject({ code: "sale.total_exceeds_simplified_limit" });
+    });
+
+    it("another person's unsent dishes on the source: 409 draft.taken_over with the conflicts", async () => {
+      const { ana, second } = await anaWith("Tarta", "Caña");
+      await withTransaction(venue.db, (tx) =>
+        saveDraftForTest(tx, venue.cfg, ana.partyId, venue.adminId, {
+          billId: ana.tabId,
+          draftId: null,
+          revision: 0,
+          lines: [
+            {
+              menuItemId: venue.offerFor("Paella"),
+              variantId: null,
+              menuVersionId: null,
+              quantity: "1",
+              options: [],
+              extras: [],
+              note: null,
+              courseId: null,
+              noMerge: false,
+              slot: 1,
+              joinGroupId: null,
+              afterGroupId: null,
+            },
+          ],
+        }),
+      );
+
+      const answer = await refusal(ana, second, lineIdsOf(ana.tabId)[0]!);
+
+      expect(answer.status).toBe(409);
+      expect(answer.json).toMatchObject({
+        code: "draft.taken_over",
+        params: { billId: ana.tabId, ownerId: venue.adminId, conflicts: [{ billId: ana.tabId }] },
+      });
+    });
   });
 });

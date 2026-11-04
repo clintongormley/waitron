@@ -526,6 +526,23 @@ describe("each till route checks the profile action it needs", () => {
   }
 });
 
+describe("A803 split: the route", () => {
+  it("refuses a loose selection without take-orders", async () => {
+    const answer = await send(
+      sessions.get("take-orders")!,
+      "POST",
+      `/api/parties/${id}/split-table`,
+      {
+        tableId: id,
+        selection: { wholeBillIds: [], loose: [{ billId: id, lineIds: [id] }] },
+        expectedPartyRevision: 0,
+        expectedEdits: [],
+      },
+    );
+    expect({ status: answer.status, error: answer.body.error }).toEqual(forbidden("take-orders"));
+  });
+});
+
 describe("screens and actions are separate", () => {
   it("lets a visible, read-only live-orders profile look at the station and the pass, and refuses it preparing, handing over and payment", async () => {
     const { cookie } = await signIn(["show-station", "show-expo", "take-orders"]);

@@ -156,7 +156,13 @@ import type { BillCommand } from "./bill-actions.js";
 import { billNameZoneSubject, setBillName } from "./bill-identities.js";
 import { moveBill, moveWouldSend, previewBillMoveAllergy } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
-import { joinTables, moveGuests, splitTable, type SplitGuestCounts } from "./table-actions.js";
+import {
+  joinTables,
+  moveGuests,
+  splitTable,
+  type SplitGuestCounts,
+  type SplitSelection,
+} from "./table-actions.js";
 import { joinMergeMembers, writeMerge } from "./floor-today-merges.js";
 import { withMovedSlips, type SlipsLater } from "./moved-slips.js";
 import type { TableActionOptions } from "./table-actions.js";
@@ -973,6 +979,30 @@ function requireOtherBill(value: unknown, field: string): string {
     throw new AppError("tab.not_open", { tabId: String(value) });
   }
   return value;
+}
+
+/** What Split a table takes, every id lower-cased; a bad shape is the request's fault. */
+function requireSplitSelection(value: unknown): SplitSelection {
+  const { wholeBillIds, loose } = selectionObject(value);
+  if (!Array.isArray(wholeBillIds) || !Array.isArray(loose)) throw invalid("selection");
+  return {
+    wholeBillIds: wholeBillIds.map(selectionId),
+    loose: loose.map((entry: unknown) => {
+      const { billId, lineIds } = selectionObject(entry);
+      if (!Array.isArray(lineIds)) throw invalid("selection");
+      return { billId: selectionId(billId), lineIds: lineIds.map(selectionId) };
+    }),
+  };
+}
+
+function selectionObject(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    throw invalid("selection");
+  return value as Record<string, unknown>;
+}
+
+function selectionId(value: unknown): string {
+  return requireBodyUuid(value, "selection").toLowerCase();
 }
 
 /** A list of line ids: a non-UUID is the request's fault, not a line the bill lacks. */
@@ -3148,38 +3178,63 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       if (typeof tableId !== "string" || !isUuid(tableId)) {
         throw new AppError("table.not_joined", { tableId: String(tableId), partyId });
       }
-      const billId =
-        body.billId === null ? null : requireOtherBill(body.billId, "billId").toLowerCase();
+      const selection: SplitSelection =
+        body.selection !== undefined
+          ? requireSplitSelection(body.selection)
+          : {
+              wholeBillIds:
+                body.billId === null ? [] : [requireOtherBill(body.billId, "billId").toLowerCase()],
+              loose: [],
+            };
       const expectedPartyRevision = requireRevision(
         body.expectedPartyRevision,
         "expectedPartyRevision",
       );
       const guestCounts = requireSplitGuestCounts(body.guestCounts);
       const sendCfg = sendingCfg(cfg, c, session.device);
-      const result = await withTransaction(deps.db, async (tx) => {
-        await catchUpFloor(tx);
-        await checkZones(tx, session, [{ partyId }]);
-        const held = [...(await memberTables(tx, partyId)), tableId.toLowerCase()];
-        return movingRooms(tx, held, undefined, async () => {
-          const split = await splitTable(
-            tx,
-            sendCfg,
-            partyId,
-            tableId.toLowerCase(),
-            { wholeBillIds: billId === null ? [] : [billId], loose: [] },
-            {
-              expectedPartyRevision,
-              operatorId: personId,
-              guestCounts,
-              expectedEdits: parseBillEditExpecteds(body.expectedEdits),
-            },
-            deps.attendance === undefined
-              ? undefined
-              : { recorder: deps.attendance, clock: deps.clock },
-          );
-          return { partyId: split.partyId, billId: split.billIds[0]! };
-        });
-      });
+      const attendance =
+        deps.attendance === undefined
+          ? undefined
+          : { recorder: deps.attendance, clock: deps.clock };
+      const result = await withIssuanceTransaction(
+        deps.db,
+        async (tx) => {
+          await catchUpFloor(tx);
+          await checkZones(tx, session, [
+            { partyId },
+            ...selection.wholeBillIds.map((orderId) => ({ orderId })),
+            ...selection.loose.map(({ billId: orderId }) => ({ orderId })),
+          ]);
+          const held = [...(await memberTables(tx, partyId)), tableId.toLowerCase()];
+          return movingRooms(tx, held, undefined, async () => {
+            const split = await splitTable(
+              tx,
+              sendCfg,
+              partyId,
+              tableId.toLowerCase(),
+              selection,
+              {
+                expectedPartyRevision,
+                operatorId: personId,
+                guestCounts,
+                expectedEdits: parseBillEditExpecteds(body.expectedEdits),
+              },
+              attendance,
+            );
+            for (const source of split.looseSourceIds)
+              await issueIfFullyPaid(tx, fiscal, sendCfg, source, personId);
+            if (split.looseSourceIds.length > 0)
+              await captureKitchenActivity(tx, attendance, personId, [
+                ...split.looseSourceIds,
+                split.billIds.at(-1)!,
+              ]);
+            return body.selection === undefined
+              ? { partyId: split.partyId, billId: split.billIds[0]! }
+              : { partyId: split.partyId, billIds: split.billIds };
+          });
+        },
+        log,
+      );
       return c.json(result);
     }),
   );

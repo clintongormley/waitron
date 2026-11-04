@@ -69,6 +69,9 @@ const zone: FloorZone = {
   serviceMode: "table_tab",
 };
 
+const NO_BILLS = { wholeBillIds: [], loose: [] };
+const oneBill = (billId: string) => ({ wholeBillIds: [billId], loose: [] });
+
 function table(over: Partial<TableState> = {}): TableState {
   return {
     id: "t4",
@@ -2303,7 +2306,7 @@ describe("till-app: table actions on the party", () => {
     expect(api.splitTable).toHaveBeenCalledWith(
       "v1",
       "t5",
-      "wo-check",
+      oneBill("wo-check"),
       3,
       [{ billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null }],
       guests,
@@ -2312,7 +2315,7 @@ describe("till-app: table actions on the party", () => {
 
     emit(tableOrder(el)!, "split-table", { tableId: "t4", billId: null, guestCounts: guests });
     await flush(el);
-    expect(api.splitTable).toHaveBeenLastCalledWith("v1", "t4", null, 4, [], guests);
+    expect(api.splitTable).toHaveBeenLastCalledWith("v1", "t4", NO_BILLS, 4, [], guests);
   });
 
   it("passes the guests the waiter gave each side of a split to the split", async () => {
@@ -2344,7 +2347,7 @@ describe("till-app: table actions on the party", () => {
     });
     await flush(el);
 
-    expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", null, 3, [], {
+    expect(api.splitTable).toHaveBeenCalledWith("v1", "t5", NO_BILLS, 3, [], {
       staying: 3,
       leaving: 2,
     });
@@ -2374,7 +2377,7 @@ describe("till-app: table actions on the party", () => {
         expect(api.splitTable).toHaveBeenCalledWith(
           "v1",
           "t5",
-          "wo-check",
+          oneBill("wo-check"),
           3,
           [{ billId: "wo-check", editorVersion: 0, draftId: null, draftRevision: null }],
           guests,
@@ -11808,7 +11811,7 @@ describe("till-app: split-table editing observations", () => {
     expect(api.splitTable).toHaveBeenCalledExactlyOnceWith(
       "v1",
       "t5",
-      billId,
+      billId === null ? NO_BILLS : oneBill(billId),
       3,
       billId === null ? [] : [edit],
       guests,
@@ -12019,7 +12022,7 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
     expect(api.splitTable).toHaveBeenCalledExactlyOnceWith(
       "v1",
       "t5",
-      billId === "none" ? null : billId,
+      billId === "none" ? NO_BILLS : oneBill(billId),
       3,
       billId === "none"
         ? []
@@ -12068,7 +12071,7 @@ describe("till-app: Split a table retains the guests prompt observation", () => 
     expect(api.splitTable).toHaveBeenCalledExactlyOnceWith(
       "v1",
       "t5",
-      "wo-check",
+      oneBill("wo-check"),
       3,
       [{ billId: "wo-check", editorVersion: 2, draftId: null, draftRevision: null }],
       { staying: 3, leaving: null },
