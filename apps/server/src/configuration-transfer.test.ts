@@ -4465,7 +4465,6 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
       name: "Terrace",
       departmentId: restaurant.id,
     });
-    await tx.insert(kitchenStations).values({ locationId: source.locationId, name: "Grill" });
     const [live, retired] = await tx
       .insert(deviceProfiles)
       .values([
