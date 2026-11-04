@@ -490,7 +490,6 @@ it("a finishable Start again while another connection holds the venue lock keeps
   try {
     const before = { state: await listing(f.stateDir), venue: await listing(f.venueDir) };
     const entry = await resolveFirstSetupEntry(f, {});
-    if (entry.kind === "resolution") await entry.dispose();
     expect(entry.kind).toBe("resolution");
     expect({ state: await listing(f.stateDir), venue: await listing(f.venueDir) }).toEqual(before);
   } finally {
@@ -643,7 +642,6 @@ it("a move whose resume fails with an error that is not a refusal is refused set
   } finally {
     await chmod(stem, 0o700);
   }
-  if (entry.kind === "resolution") await entry.dispose();
   expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_move_unfinished" });
   if (entry.kind !== "refused") throw new Error("expected a refused start");
   expect(entry.error.reason).toBe(
@@ -689,7 +687,6 @@ it("a move to resume while another connection holds the venue lock is refused se
   } finally {
     await holder.stop();
   }
-  if (entry.kind === "resolution") await entry.dispose();
   expect(entry).toMatchObject({ kind: "refused", code: "setup.start_again_move_unfinished" });
   if (entry.kind !== "refused") throw new Error("expected a refused start");
   expect(entry.error.reason).toBe("set-aside failed: provisioning.database_in_use");

@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { mountSetupSpa } from "./setup-spa.js";
 import { isUnset } from "./env-value.js";
 import { readModuleConfig } from "./module-config.js";
@@ -11,16 +10,13 @@ import {
   assertStartAgainNotKept,
   canonicalFirstSetupDirectory,
   classifyStartAgainRefusal,
-  createFirstSetupBackupWorkspace,
-  emptyAbandonedBackupRecovery,
   finishStartAgainDeletion,
-  isEmptiedTombstone,
   recordedStartAgainMove,
   resumeStartAgainSetAside,
   rootRelativePath,
   type StartAgainSurvey,
 } from "@waitron/provisioning";
-import { AppError, sqliteFailureOf } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { errnoOf } from "./errno.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
@@ -29,10 +25,7 @@ import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 import { readBoxPublicCa } from "./box-tls-repair.js";
-import { firstSetupBackupRecoveryFor } from "./first-setup-backup-entry.js";
-import { FULL_DISK_BYTES, startFailureCode } from "./boot-failure.js";
 import type { Statfs } from "./free-bytes.js";
-import { releaseSpare, releaseSpareBeforeStartAgain } from "./spare-space.js";
 import { START_FREE_SPACE_FLOOR, lowestFreeBytes } from "./start-space.js";
 
 async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHost>) {
@@ -62,7 +55,7 @@ export async function resolveFirstSetupEntry(
   log: Logger = () => {},
   spare?: SpareOption,
 ) {
-  const refused = await refusedAtStart(roots, log, spare);
+  const refused = await refusedAtStart(roots);
   if (refused !== undefined) return refused;
   return resolveLegacyFirstSetupEntry(roots, environment, requestRestart, log, spare);
 }
@@ -102,11 +95,7 @@ type StartRefused = {
 };
 
 /** Runs before A731's entry, which would otherwise serve its repair page from a half-deleted attempt. */
-async function refusedAtStart(
-  roots: FirstSetupRoots,
-  log: Logger,
-  spare: SpareOption | undefined,
-): Promise<StartRefused | undefined> {
+async function refusedAtStart(roots: FirstSetupRoots): Promise<StartRefused | undefined> {
   let canonical: FirstSetupRoots;
   try {
     canonical = {
@@ -116,7 +105,6 @@ async function refusedAtStart(
   } catch {
     return undefined;
   }
-  await emptyDiscardedRecovery(canonical, log, spare);
   const refused = (error: unknown): StartRefused | undefined => {
     if (!(error instanceof AppError)) return undefined;
     const code = START_REFUSALS.find((candidate) => candidate === error.code);
@@ -195,47 +183,6 @@ function setAsideFailure(roots: FirstSetupRoots, error: unknown): string {
   return `set-aside failed: ${code}${where === undefined ? "" : ` ${where}`}`;
 }
 
-/**
- * Finishes a discard a power cut stopped after the abandon, first deleting the box's spare file on a
- * nearly full disk; a refusal is logged and the start goes on.
- */
-async function emptyDiscardedRecovery(
-  roots: FirstSetupRoots,
-  log: Logger,
-  spare: SpareOption | undefined,
-) {
-  let target: string | undefined;
-  let path: string | undefined;
-  try {
-    const last = (await createFirstSetupBackupWorkspace(roots).readChain()).at(-1);
-    if (last?.phase !== "abandoned") return;
-    const id = last.target.recoveryId;
-    target = last.target.target.venueDir;
-    path = join(roots.stateDir, "first-setup-resolutions", "backup-recovery", id);
-    if (await isEmptiedTombstone(roots, id)) return;
-    if (spare !== undefined) {
-      const free = await lowestFreeBytes([roots.stateDir, roots.venueDir, target], spare.statfs);
-      if (free !== null && free < FULL_DISK_BYTES) await releaseSpare(spare.stateDir, log);
-    }
-    await emptyAbandonedBackupRecovery(roots, id);
-  } catch (error) {
-    const errno = errnoOf(error);
-    const errcode = sqliteFailureOf(error)?.errcode;
-    log("warn", "setup.recovery_cleanup_refused", {
-      reason:
-        error instanceof AppError
-          ? error.code
-          : await startFailureCode(error, [
-              roots.venueDir,
-              ...(target === undefined ? [] : [target]),
-            ]),
-      ...(errno === undefined ? {} : { errno }),
-      ...(errcode === undefined ? {} : { errcode }),
-      ...(path === undefined ? {} : { path }),
-    });
-  }
-}
-
 async function resolveLegacyFirstSetupEntry(
   roots: FirstSetupRoots,
   environment: Readonly<Record<string, string | undefined>>,
@@ -309,18 +256,6 @@ async function resolutionApp(
     moduleConfig,
   });
   const app = new Hono();
-  const backup = firstSetupBackupRecoveryFor(roots, environment, host, log);
-  if (spare !== undefined)
-    app.use(
-      "*",
-      releaseSpareBeforeStartAgain({
-        stateDir: spare.stateDir,
-        roots,
-        statfs: spare.statfs,
-        recovery: backup,
-        log,
-      }),
-    );
   app.get("/setup-api/status", async (c) => {
     const pair = await host.store.readResumable().catch(() => null);
     const frozenEnvironment = pair?.state.frozen.environment;
@@ -370,5 +305,5 @@ async function resolutionApp(
   });
   if (!isUnset(environment.WAITRON_SETUP_APP_DIR))
     mountSetupSpa(app, environment.WAITRON_SETUP_APP_DIR!, log);
-  return { app, dispose: () => backup.dispose() };
+  return { app };
 }

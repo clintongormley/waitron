@@ -2,20 +2,10 @@ import { constants } from "node:fs";
 import { lstat, open as openFile, unlink as unlinkFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import type { MiddlewareHandler } from "hono";
-import { isAppError } from "@waitron/shared";
-import {
-  ABANDONABLE_BACKUP_PHASES,
-  SPARE_SPACE_FILE,
-  SPARE_SPACE_RELEASED_FILE,
-  createFirstSetupBackupWorkspace,
-  isEmptiedTombstone,
-  type FirstSetupRoots,
-} from "@waitron/provisioning";
+import { SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE } from "@waitron/provisioning";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
 import type { Statfs } from "./free-bytes.js";
 import { lowestFreeBytes } from "./start-space.js";
-import { START_AGAIN_ROUTES } from "./setup-first-fiscal-api.js";
 import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
 
@@ -213,45 +203,4 @@ export async function releaseSpare(
     if (errno !== "ENOENT") log("warn", "storage.spare_release_failed", { errno: errno ?? null });
     return 0;
   }
-}
-
-const START_AGAIN_STEPS = new Set(
-  Object.values(START_AGAIN_ROUTES).map(({ method, path }) => `${method} ${path}`),
-);
-
-/**
- * Before each step of the repair page's Start-again flow, deletes the box's spare file on a nearly
- * full disk when the journal names a recovery Start again would discard and none runs in this
- * process, so the venue locks Start again takes have room. Always serves the request.
- */
-export function releaseSpareBeforeStartAgain(options: {
-  stateDir: string;
-  roots: FirstSetupRoots;
-  statfs?: Statfs;
-  recovery: { runningInMemory(): boolean };
-  log: Logger;
-}): MiddlewareHandler {
-  const { stateDir, roots, statfs, recovery, log } = options;
-  return async (c, next) => {
-    if (START_AGAIN_STEPS.has(`${c.req.method} ${c.req.path}`) && !recovery.runningInMemory()) {
-      try {
-        const free = await lowestFreeBytes([roots.stateDir, roots.venueDir], statfs);
-        if (free !== null && free < FULL_DISK_BYTES && (await discardable(roots)))
-          await releaseSpare(stateDir, log);
-      } catch (error) {
-        log("warn", "storage.spare_release_skipped", {
-          errno: errnoOf(error) ?? null,
-          errorCode: isAppError(error) ? error.code : null,
-        });
-      }
-    }
-    await next();
-  };
-}
-
-async function discardable(roots: FirstSetupRoots): Promise<boolean> {
-  const last = (await createFirstSetupBackupWorkspace(roots).readChain()).at(-1);
-  if (last === undefined) return false;
-  if (ABANDONABLE_BACKUP_PHASES.includes(last.phase)) return true;
-  return last.phase === "abandoned" && !(await isEmptiedTombstone(roots, last.target.recoveryId));
 }

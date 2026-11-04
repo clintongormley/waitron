@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { ServerResponse } from "node:http";
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
+import { FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
 import { LOG_FILE_NAME } from "@waitron/db";
 import type { StartAgainSurvey, chooseStartAgainLeftovers } from "@waitron/provisioning";
 import type { Statfs } from "./free-bytes.js";
@@ -44,8 +44,6 @@ export interface RecoveryDeps {
   onRetry: (level: RecoveryLevel) => Promise<void>;
   /** Bytes free on the box's disk, read on every request; null when it cannot be read. */
   freeSpace?: () => Promise<number | null>;
-  /** Bytes a discarded backup recovery's copy still holds, read on every request; null when there is none. */
-  discardedCopyBytes?: () => Promise<number | null>;
   /** This start could not record its failure, so `failures` does not count it. */
   uncounted?: true;
   /** This start was refused before it began, so `failures` does not count it. */
@@ -189,30 +187,11 @@ function freeSpaceLine(bytes: FreeSpaceReading, locale: SupportedLocale): string
   return `<p>${escapeHtml(page.freeSpace(amount))}</p>\n`;
 }
 
-async function readDiscardedCopy(deps: RecoveryDeps): Promise<number | null> {
-  if (deps.discardedCopyBytes === undefined) return null;
-  try {
-    return await deps.discardedCopyBytes();
-  } catch (error) {
-    deps.log?.("warn", "recovery.discarded_copy_unreadable", {
-      errno: errnoOf(error) ?? null,
-      ...(error instanceof AppError ? { reason: error.code } : {}),
-    });
-    return null;
-  }
-}
-
-function discardedCopyLine(bytes: number | null, locale: SupportedLocale): string {
-  if (bytes === null) return "";
-  return `<p>${escapeHtml(RECOVERY_PAGE_WORDS[locale].discardedCopy(megabytes(bytes, locale)))}</p>\n`;
-}
-
 function renderPage(
   deps: RecoveryDeps,
   log: LogView,
   locale: SupportedLocale,
   freeBytes: FreeSpaceReading,
-  copyBytes: number | null,
   state: RecoveryState = deps.state,
   section = "",
   answer?: string,
@@ -248,7 +227,7 @@ function renderPage(
     answer ??
     `<p>${escapeHtml(text.title)}</p>
 <p>${escapeHtml(text.action)}</p>
-${discardedCopyLine(copyBytes, locale)}${section}<form method="post" action="/recovery-api/retry">
+${section}<form method="post" action="/recovery-api/retry">
 <button type="submit">${escapeHtml(page.retry)}</button>
 </form>
 `;
@@ -287,12 +266,8 @@ export function startAgainDraw(
   let moveUnfinished = false;
   let moved: StartAgainView["message"];
   return async (view) => {
-    const [log, freeBytes, copyBytes] = await Promise.all([
-      readLog(deps.logDir),
-      readFreeSpace(deps),
-      readDiscardedCopy(deps),
-    ]);
-    if (startAgain === undefined) return renderPage(deps, log, view.locale, freeBytes, copyBytes);
+    const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
+    if (startAgain === undefined) return renderPage(deps, log, view.locale, freeBytes);
     if (view.code === "setup.start_again_move_unfinished") moveUnfinished = true;
     if (view.message?.kind === "moved") moved = view.message;
     if (moved !== undefined) view = { ...view, message: moved };
@@ -303,7 +278,7 @@ export function startAgainDraw(
         : null;
     if (settled !== null) {
       const state: RecoveryState = { ...deps.state, lastErrorCode: settled };
-      return renderPage(deps, log, view.locale, freeBytes, copyBytes, state);
+      return renderPage(deps, log, view.locale, freeBytes, state);
     }
     const section = renderStartAgainSection({
       survey: startAgain.survey,
@@ -313,8 +288,8 @@ export function startAgainDraw(
       ...(view.chosen === undefined ? {} : { chosen: view.chosen }),
     });
     if (view.message?.kind === "moved")
-      return renderPage(deps, log, view.locale, freeBytes, copyBytes, deps.state, "", section);
-    return renderPage(deps, log, view.locale, freeBytes, copyBytes, deps.state, section);
+      return renderPage(deps, log, view.locale, freeBytes, deps.state, "", section);
+    return renderPage(deps, log, view.locale, freeBytes, deps.state, section);
   };
 }
 

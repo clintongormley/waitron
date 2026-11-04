@@ -29,7 +29,6 @@ import { assertNotAhead as assertDatabaseNotAhead } from "@waitron/provisioning"
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { loadBoxEnv } from "./box-env.js";
 import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
-import { discardedCopyBytes } from "./discarded-copy.js";
 import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink } from "./log-file.js";
@@ -268,18 +267,12 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
  * or under FULL_DISK_BYTES when the last start failed for a full disk. A folder whose free space
  * cannot be read is left out of the lowest; when none can be read, nothing is released.
  */
-async function releaseSpareToStart(
-  deps: EntryDeps,
-  roots: { stateDir: string; venueDir: string },
-): Promise<void> {
-  const lowest = await lowestFreeBytes(
-    [...new Set([deps.stateDir, deps.venueDir, roots.stateDir, roots.venueDir])],
-    deps.statfs,
-  );
+async function releaseSpareToStart(deps: EntryDeps): Promise<void> {
+  const lowest = await lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs);
   if (lowest === null || lowest >= FULL_DISK_BYTES) return;
   if (
     lowest < SPARE_SPACE_BYTES ||
-    (await deps.readRecoveryState(roots.stateDir)).lastErrorCode === "storage.disk_full"
+    (await deps.readRecoveryState(deps.stateDir)).lastErrorCode === "storage.disk_full"
   )
     await releaseSpare(deps.stateDir, deps.log);
 }
@@ -360,7 +353,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     log: deps.log,
   });
 
-  await releaseSpareToStart(deps, deps);
+  await releaseSpareToStart(deps);
 
   const admission = await resolveFirstSetupEntry(
     deps,
@@ -387,7 +380,6 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     onRepaired: async () => {
       (deps.exit ?? DEFAULT_EXIT)(0);
     },
-    ...(admission.kind === "resolution" ? { onClose: admission.dispose } : {}),
     operatorTls:
       !isUnset(transportEnv.WAITRON_TLS_CERT_FILE) || !isUnset(transportEnv.WAITRON_TLS_KEY_FILE),
   };
@@ -413,8 +405,6 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     const lowest = await lowestFreeBytes([deps.stateDir, deps.venueDir, ...dirs], deps.statfs);
     belowFloor = (lowest ?? floor) < floor;
   }
-  const discardedCopy = () =>
-    discardedCopyBytes({ stateDir: deps.stateDir, venueDir: deps.venueDir });
   let check: CountCheck;
   if (belowFloor && !(check = await countWritable(rooted)).written) {
     const exit = deps.exit ?? DEFAULT_EXIT;
@@ -428,7 +418,6 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
           exit(0);
         },
         freeSpace: () => lowestFreeBytes(dirs, deps.statfs),
-        discardedCopyBytes: discardedCopy,
         log: deps.log,
       }),
       transport,
@@ -503,15 +492,12 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       landing: landingConfigFrom(deps.baseEnv, admission.roots.stateDir, port),
       onRepaired: transport.onRepaired,
       operatorTls: transport.operatorTls,
-      onClose: admission.dispose,
     });
     return;
   }
 
   const selected = !moved ? deps : rooted;
-  return admission.run((venueHeld) =>
-    runAdmittedEntry(selected, transport, venueHeld, discardedCopy),
-  );
+  return admission.run((venueHeld) => runAdmittedEntry(selected, transport, venueHeld));
 }
 
 type CountCheck = { written: true } | { written: false; freeBytes: number | null };
@@ -546,15 +532,11 @@ export function recordedStartFailureCode(error: unknown): string | undefined {
   return typeof error === "object" && error !== null ? recordedCodes.get(error) : undefined;
 }
 
-/**
- * `venueHeld`: the caller holds `deps.venueDir`'s lock for the whole call. `discardedCopy` reads the
- * box's configured folders, which `deps` may not be.
- */
+/** `venueHeld`: the caller holds `deps.venueDir`'s lock for the whole call. */
 async function runAdmittedEntry(
   deps: EntryDeps,
   transport: RecoveryServeOptions,
   venueHeld: boolean,
-  discardedCopy: () => Promise<number | null>,
 ): Promise<void> {
   // Outside the recovery lock: it decides only whether this start boots or serves the page. Every change
   // below re-reads under the lock, so a write made since is kept rather than overwritten.
@@ -579,10 +561,6 @@ async function runAdmittedEntry(
           exit(0);
         },
         freeSpace: () => lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs),
-        // Only after a full-disk failure: its words say the disk has no room.
-        ...(state.lastErrorCode === "storage.disk_full"
-          ? { discardedCopyBytes: discardedCopy }
-          : {}),
         log: deps.log,
       }),
       {

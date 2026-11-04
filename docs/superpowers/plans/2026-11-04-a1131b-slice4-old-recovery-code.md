@@ -1352,6 +1352,7 @@ with the repair page's old recovery.
 | same | 103, 117, 130, 141, 150, 274; the spy helper (88-98) and the old-entry import and mock (14, 20) | deleted | emptying and the repair host's release | B4 |
 | same | the helper's `dispose` (186) and every kept case's `repair.dispose()` / `entry.dispose()` | removed | the repair app has no `dispose` (D16) | B4 |
 | `apps/server/src/first-setup-entry.test.ts` | `entry.dispose()` at 502, 658, 705 | removed; cases kept | D16 | B4 |
+| `apps/server/src/first-setup-workspace.test.ts` | "a first-setup request on a box whose earlier Waitron's selection appears after the start answers 409 setup.workspace_unsupported" (its `entry.dispose()` in `finally`) | removed; 409 and code kept | found red in B4 (typecheck): the repair app has no `dispose` (D16) | B4 |
 | `apps/server/src/node-entry.test.ts` | 2348 | "did not move" → "folders below a linked folder" (explicit symlinked parent) | D5, red first on every system | B3 |
 | same | describe 2437 (2 cases) | deleted | the discarded-copy line | B4 |
 | `apps/server/src/node-entry.full-disk-order.test.ts` | it.each repair/selected (258) | deleted | no stages | B3 |

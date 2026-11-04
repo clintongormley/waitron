@@ -11,19 +11,14 @@ import { TLSSocket } from "node:tls";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import "@waitron/provisioning";
 import { SPARE_SPACE_FILE } from "@waitron/provisioning";
-import { selectedRepair } from "../test/first-setup-backup-recovery-fixture.js";
 import { heldSetup } from "../test/held-setup-database.js";
 import { diskSnapshot } from "../test/start-again-deleted.js";
 import "./testing/hour-test-clock.js";
 import { PASSWORD } from "../test/first-fiscal.js";
-import "./first-setup-backup-source.js";
-import * as backupEntry from "./first-setup-backup-entry.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 import { SPARE_SPACE_BYTES } from "./spare-space.js";
 
-vi.mock("./first-setup-backup-source.js", { spy: true });
-vi.mock("./first-setup-backup-entry.js", { spy: true });
 vi.mock("@waitron/provisioning", { spy: true });
 
 let opened: ReturnType<typeof openSmallDisk> | undefined;
@@ -75,11 +70,9 @@ const spareOption = (roots: { stateDir: string; venueDir: string }) => ({
 
 type Inspection = { inspectionId: string; revision: number; ownerGeneration: number };
 
-it("without a spare file, the password step of the Start-again flow on a full disk answers 507 storage.disk_full", async (ctx) => {
+it("on a full disk, Continue's password step answers 507 storage.disk_full", async (ctx) => {
   const small = needDisk(ctx);
-  const f = await selectedRepair();
-  await f.service.close(f.session.sessionId);
-  vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockReturnValue(f.service);
+  const f = await heldSetup();
   const entry = await resolveFirstSetupEntry(
     f.roots,
     { WAITRON_ENV: "preproduction" },
@@ -118,7 +111,6 @@ it("in the held state with no recovery, on a full disk with the box's spare file
   const small = needDisk(ctx);
   const f = await heldSetup();
   expect(realpathSync(f.roots.venueDir).startsWith(`${process.env.TMPDIR}/`)).toBe(true);
-  vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockReset();
   const spare = join(f.roots.stateDir, SPARE_SPACE_FILE);
   await writeFile(spare, Buffer.alloc(SPARE_SPACE_BYTES, 1));
   const entry = await resolveFirstSetupEntry(
