@@ -396,8 +396,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   and series, through a separate optional reader. Cash sales and their retries have now been exercised
   while a lookup is pending, failed or incomplete. Archive and stream restore tests now complete
   without enrolled devices or internet time, then pair a fresh device through the approval routes
-  and issue under the recovered series. Optional evidence reporting and whole-item qualification
-  remain unfinished; this is not a partial publication candidate.
+  and issue under the recovered series. The recovery form now displays this browser's retained
+  observations for the selected taxpayer and environment without sending them as recovery authority.
+  Archive/stream fresh-device pairing also runs over a real loopback HTTP listener. Whole-item
+  review, the normal hook and current-head CI remain before owner review.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

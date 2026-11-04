@@ -6,7 +6,9 @@ import { FISCAL_SETUP } from "./first-fiscal-screen.js";
 import type { RecoveryHourEntry } from "./recovery-hour.js";
 import type { LitElement } from "lit";
 const hosts: HTMLElement[] = [];
+const observationKey = 'waitron.invoiceEvidence.v1:["B12345674","production","A-0CNNY"]';
 afterEach(() => {
+  localStorage.removeItem(observationKey);
   hosts.splice(0).forEach((host) => host.remove());
   document.body.style.background = "";
   document.documentElement.style.background = "";
@@ -15,6 +17,17 @@ for (const theme of ["light", "dark"] as const)
   for (const locale of ["en", "es"] as const)
     it(`${locale} ${theme} recovery hours fit and remain accessible in each state`, async () => {
       const original = [window.innerWidth, window.innerHeight];
+      localStorage.setItem(
+        observationKey,
+        JSON.stringify({
+          taxpayerId: "B12345674",
+          environment: "production",
+          series: "A-0CNNY",
+          invoiceNumber: "A-0CNNY/9007199254740993",
+          issuedDate: "2026-10-16",
+          fingerprint: "A".repeat(64),
+        }),
+      );
       try {
         for (const width of [390, 1280]) {
           await page.viewport(width, 2000);

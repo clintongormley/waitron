@@ -1366,3 +1366,80 @@ it("names the box's own clock reading «Servidor» in Spanish, apart from a till
   );
   expect(labels).toEqual(["Servidor", "Navegador", "Internet"]);
 });
+
+const observationKey = 'waitron.invoiceEvidence.v1:["B12345674","production","A-0CNNY"]';
+const observation = {
+  taxpayerId: "B12345674",
+  environment: "production",
+  series: "A-0CNNY",
+  invoiceNumber: "A-0CNNY/9007199254740993",
+  issuedDate: "2026-10-16",
+  fingerprint: "A".repeat(64),
+};
+afterEach(() => localStorage.removeItem(observationKey));
+
+it("shows the returning device's old-series observation without sending it as recovery authority", async () => {
+  localStorage.setItem(observationKey, JSON.stringify(observation));
+  const { el, prepare } = await mount();
+  const report = el.shadowRoot!.querySelector("[data-test=device-invoices]");
+  expect(report, "the recovery form reports this browser's retained invoice").not.toBeNull();
+  expect(report!.textContent).toContain("A-0CNNY/9007199254740993");
+  expect(report!.textContent).toContain("2026-10-16");
+  expect(report!.textContent).toContain("A".repeat(64));
+  expect(report!.textContent).toContain("Invoices seen on this device");
+  expect(report!.textContent).toContain("The list may be incomplete");
+  expect(report!.querySelectorAll("input, wt-input, wt-select, button, wt-button")).toHaveLength(0);
+  await ready(el);
+  await compare(el);
+  button(el, "select").click();
+  await vi.waitFor(() => expect(text(el)).toContain("0CSQW"));
+  expect(el.readCredentials()).toEqual({
+    recoveryOperation: { binding, input: selected.input },
+    nodeRecoverySecret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    recoveryContext: { selectedSourceId: selection.sourceId, oldBoxGone: true, soleRecovery: true },
+  });
+  expect(JSON.stringify(prepare.mock.calls)).not.toContain("9007199254740993");
+  expect(localStorage.getItem(observationKey)).toBe(JSON.stringify(observation));
+});
+
+it.each(["missing", "corrupt", "blocked"])(
+  "allows recovery with %s device invoice storage",
+  async (kind) => {
+    if (kind === "corrupt") localStorage.setItem(observationKey, "{");
+    if (kind === "blocked")
+      vi.spyOn(Storage.prototype, "length", "get").mockImplementation(() => {
+        throw new Error("site data unavailable");
+      });
+    const { el } = await mount();
+    expect(el.shadowRoot!.querySelector("[data-test=device-invoices]")).toBeNull();
+    await ready(el);
+    await compare(el);
+    button(el, "select").click();
+    await vi.waitFor(() => expect(text(el)).toContain("0CSQW"));
+    expect(el.readCredentials()?.recoveryOperation?.input).toEqual(selected.input);
+  },
+);
+
+it("drops a returning device's report when the selected backup scope changes", async () => {
+  localStorage.setItem(observationKey, JSON.stringify(observation));
+  const { el } = await mount();
+  expect(el.shadowRoot!.querySelector("[data-test=device-invoices]")).not.toBeNull();
+  const recovery = el as Entry & {
+    context: Parameters<NonNullable<typeof FISCAL_SETUP.createRecovery>>[0];
+  };
+  const context = recovery.context;
+  recovery.context = { ...context, selection: { ...selection, taxId: "OTHER" } };
+  await recovery.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=device-invoices]")).toBeNull();
+  recovery.context = {
+    ...context,
+    selection: { ...selection, environment: "preproduction" },
+  };
+  await recovery.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=device-invoices]")).toBeNull();
+  recovery.context = context;
+  await recovery.updateComplete;
+  expect(el.shadowRoot!.querySelector("[data-test=device-invoices]")!.textContent).toContain(
+    observation.invoiceNumber,
+  );
+});

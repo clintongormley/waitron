@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { serve } from "@hono/node-server";
+import { fetch as httpFetch } from "undici";
 import { afterEach, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import {
@@ -36,9 +38,14 @@ afterEach(async () => {
   restore = undefined;
 });
 
-it.each(["archive", "stream"] as const)(
-  "pairs a new device after offline %s recovery without changing the recovered allocation",
-  async (kind) => {
+it.each([
+  ["archive", "mounted"],
+  ["stream", "mounted"],
+  ["archive", "http"],
+  ["stream", "http"],
+] as const)(
+  "pairs a new device after offline %s recovery over %s without changing the recovered allocation",
+  async (kind, transport) => {
     const network = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("offline"));
     const outsideClock = vi.spyOn(internetClock, "observeInternetHourClock").mockResolvedValue({
       source: "internet",
@@ -59,6 +66,7 @@ it.each(["archive", "stream"] as const)(
       ["A-0CNQT", "FF-0CNQT", "R-0CNQT"],
     );
     const store = await openVenueDatabase(restore.venueDir);
+    let listener: ReturnType<typeof serve> | undefined;
     try {
       expect(await store.venue.select().from(devices)).toEqual([]);
       const cfg = {
@@ -89,15 +97,30 @@ it.each(["archive", "stream"] as const)(
         { db: store.venue, cfg, pairingMode, deviceAddress: "https://box.test" },
         () => {},
       );
-      const send = (path: string, cookie?: string, body?: unknown) =>
-        app.request(`https://box.test${path}`, {
+      let origin = "https://box.test";
+      if (transport === "http") {
+        listener = serve({ fetch: app.fetch, hostname: "127.0.0.1", port: 0 });
+        await new Promise<void>((resolve, reject) => {
+          listener!.once("listening", resolve);
+          listener!.once("error", reject);
+        });
+        const address = listener.address();
+        if (address === null || typeof address === "string") throw new Error("missing HTTP port");
+        origin = `http://127.0.0.1:${address.port}`;
+      }
+      const send = (path: string, cookie?: string, body?: unknown) => {
+        const options = {
           method: body === undefined ? "GET" : "POST",
           headers: {
             ...(cookie === undefined ? {} : { cookie }),
             "content-type": "application/json",
           },
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        });
+        };
+        return transport === "http"
+          ? httpFetch(`${origin}${path}`, options)
+          : app.request(`${origin}${path}`, options);
+      };
       const hold = await send("/management-api/pairing-mode/holds", manager, {});
       expect(hold.status).toBe(200);
       const { holdId } = await hold.json();
@@ -175,7 +198,14 @@ it.each(["archive", "stream"] as const)(
       ).toEqual([123, 123, 123]);
       expect(network).not.toHaveBeenCalled();
     } finally {
-      await store.close();
+      try {
+        if (listener !== undefined)
+          await new Promise<void>((resolve, reject) =>
+            listener!.close((error) => (error ? reject(error) : resolve())),
+          );
+      } finally {
+        await store.close();
+      }
     }
   },
 );

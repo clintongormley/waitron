@@ -163,6 +163,16 @@ equipo. Conserva las claves de recuperación y las copias existentes si el recha
 
 ## Crea las nuevas series {#series}
 
+Si este navegador guardó observaciones de facturas del contribuyente y entorno seleccionados, el
+formulario muestra **Facturas vistas en este dispositivo**. Cada entrada indica el último número
+que el navegador guardó de esa serie, su fecha de expedición y su huella. Compáralas con el
+historial que conservas: la lista puede estar incompleta y desaparece si borras los datos del
+navegador. Una serie anterior sigue siendo una observación; la recuperación usa series nuevas.
+Puedes recuperar desde un dispositivo nuevo o aunque el almacenamiento del navegador no esté
+disponible. Las observaciones permanecen en este navegador y no se envían con la solicitud de
+recuperación. El informe lee el almacenamiento disponible en esta dirección de Waitron; no busca
+observaciones en otros dispositivos.
+
 Elige **Comparar relojes**. Sigue las instrucciones sobre relojes y esperas; no hay ningún código de
 instalación que escribir. Elige **Crear las series** cuando la página lo permita; después muestra el
 nombre de las nuevas series. Marca la confirmación que muestra la página —«Confirmo que ningún otro

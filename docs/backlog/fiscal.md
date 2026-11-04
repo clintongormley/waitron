@@ -1471,3 +1471,23 @@ installation code a UTC minute but kept the `packages/fiscal-verifactu/src/hour-
 their identifiers, the `source: "hour"` label the allocations carry, and test titles that still
 say "hour" for what is now a minute (for example "same-hour code", "burns the entire hour"). Before go-live it needs
 no compatibility code: until then any installation may be reset (CLAUDE.md §3).
+
+### W41s-10a optional recovery observation report, 4 November 2026
+
+The recovery form reads this browser's retained receipt observations for the selected taxpayer and
+environment. It shows each series' last retained invoice number, issue date and fingerprint,
+including older series, with an incomplete-history qualification. The list is read-only and does
+not travel in the recovery request. Missing, damaged or inaccessible storage leaves it absent;
+the existing recovery controls still select their fresh series. A changed backup scope rereads
+only that scope. The till and recovery form share the storage reader in the fiscal contract
+package, while every existing till storage assertion remains.
+
+Archive and stream fresh-device pairing also run over a real loopback HTTP listener, preserving
+the same approval, cookie and fiscal-state assertions as the mounted cases. This qualifies HTTP
+pairing and direct core issuance; it does not claim a production TLS connection or a till payment
+through a booted restored server. The till client separately makes a received invoice available
+to the same report reader without another request.
+
+The remaining gate is whole-item reviews, the normal hook and current-head CI before owner fiscal
+review. The browser report does not recover missing invoices or prove that an unlisted number was
+unused.

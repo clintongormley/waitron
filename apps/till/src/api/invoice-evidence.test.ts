@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TillApi } from "./client.js";
+import { readInvoiceEvidenceReport } from "@waitron/fiscal/src/invoice-evidence.js";
 import {
   readInvoiceEvidence,
   rememberInvoiceEvidence,
@@ -214,4 +215,17 @@ it("keeps an old series as an observation while a new device joins and reads a r
 it("retains the invoice embedded in a completed bill payment", () => {
   rememberInvoiceEvidence({ invoice: ticket(evidence) });
   expect(readInvoiceEvidence(evidence)).toEqual(evidence);
+});
+
+it("makes a received till invoice available to the recovery report without another network request", async () => {
+  const fetch = vi.fn(async () => new Response(JSON.stringify(ticket(evidence))));
+  await new TillApi("", fetch).getFiledTicket("order-for-recovery");
+  expect(readInvoiceEvidenceReport({ taxpayerId: "89890001K", environment: "production" })).toEqual(
+    [evidence],
+  );
+  expect(
+    readInvoiceEvidenceReport({ taxpayerId: "89890001K", environment: "preproduction" }),
+  ).toEqual([]);
+  expect(readInvoiceEvidenceReport({ taxpayerId: "OTHER", environment: "production" })).toEqual([]);
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
