@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { asc, eq, inArray, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
@@ -30,6 +30,7 @@ import {
   readReleaseReminders,
   snoozeReminder,
 } from "./order-groups.js";
+import * as groupWrites from "./order-groups.js";
 import { saveDraft } from "./order-drafts.js";
 import { holderOf, insertPartyBill } from "./parties.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -1243,4 +1244,95 @@ describe("A803 waiting copy: what the copy does afterwards", () => {
       ].sort(),
     );
   });
+});
+
+describe("A803 waiting copy: a move that fails", () => {
+  it("A803 waiting copy: a move refused before it writes leaves every row as it was", async () => {
+    const a = await seatWith([
+      { names: ["Burger"], release: "fire" },
+      { names: ["Flan"], release: "hold" },
+    ]);
+    const stale = await revisionOf(v, a.partyId);
+    const joined = await v.table(`Copy ${++tableNumber}`);
+    const joining = { operatorId: OPERATOR, expectedPartyRevision: stale };
+    await inTx(v, (tx) => joinTables(tx, v.cfg, a.partyId, joined, joining));
+    const tableId = await v.table(`Copy ${++tableNumber}`);
+    const before = await rowsOf([a.partyId], [a.billId]);
+
+    await expect(
+      inTx(v, (tx) =>
+        moveBill(
+          tx,
+          v.cfg,
+          a.billId,
+          { tableId },
+          {
+            operatorId: OPERATOR,
+            partyId: a.partyId,
+            expectedPartyRevision: stale,
+            otherPartyId: null,
+          },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "party.out_of_date" });
+
+    expect(await rowsOf([a.partyId], [a.billId])).toEqual(before);
+  });
+
+  for (const path of ["Move this bill", "Split a table"] as const) {
+    it(`A803 waiting copy: a failure after the copy rolls the copy back too (${path})`, async () => {
+      const a = await seatWith([
+        { names: ["Burger"], release: "fire" },
+        { names: ["Flan"], release: "hold" },
+      ]);
+      const flan = await lineOf(a.billId, "Flan");
+      const tableId = await v.table(`Copy ${++tableNumber}`);
+      if (path === "Split a table") {
+        const joining = {
+          operatorId: OPERATOR,
+          expectedPartyRevision: await revisionOf(v, a.partyId),
+        };
+        await inTx(v, (tx) => joinTables(tx, v.cfg, a.partyId, tableId, joining));
+      }
+      const before = await rowsOf([a.partyId], [a.billId]);
+      const marker = new Error("A803 waiting copy: failure after the copy");
+      const real = groupWrites.printHoldTickets;
+      let copiedBeforeFailure = false;
+      const failing = vi
+        .spyOn(groupWrites, "printHoldTickets")
+        .mockImplementation(async (tx, cfg, groupIds) => {
+          await real(tx, cfg, groupIds);
+          const [row] = await tx
+            .select({ groupId: workingOrderLines.groupId })
+            .from(workingOrderLines)
+            .where(eq(workingOrderLines.id, flan.id));
+          copiedBeforeFailure = row!.groupId !== flan.groupId;
+          throw marker;
+        });
+      const command = await commandFor(v, a.partyId);
+
+      let outcome: unknown = "committed";
+      try {
+        await inTx(v, (tx) =>
+          path === "Move this bill"
+            ? moveBill(
+                tx,
+                v.cfg,
+                a.billId,
+                { tableId },
+                { ...command, partyId: a.partyId, otherPartyId: null },
+              )
+            : splitTable(tx, v.cfg, a.partyId, tableId, a.billId, command),
+        );
+      } catch (error) {
+        outcome = error;
+      } finally {
+        failing.mockRestore();
+      }
+
+      expect(copiedBeforeFailure).toBe(true);
+      expect(await rowsOf([a.partyId], [a.billId])).toEqual(before);
+      expect(outcome).toBe(marker);
+    });
+  }
 });
