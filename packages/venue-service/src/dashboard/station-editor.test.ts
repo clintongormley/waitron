@@ -25,6 +25,7 @@ const GRILL: StationEditorStation = {
   printMovedSlips: true,
   ticketGrouping: "combined",
   printHeldWork: false,
+  waitsForPass: false,
   bumpMode: "line",
   changesAfterSending: "held-or-waiting",
   printerIds: ["epson"],
@@ -78,6 +79,13 @@ const changesField = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=changesAfterSending]")!;
 const heldSwitch = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-switch"]>(el, "wt-switch[name=printHeldWork]")!;
+const waitsSwitch = (el: StationEditor) =>
+  $<HTMLElementTagNameMap["wt-switch"]>(el, "wt-switch[name=waitsForPass]")!;
+const waitsHint = (el: StationEditor) => $(el, "[data-test=waits-for-pass-hint]")!;
+async function flipWaits(el: StationEditor, checked: boolean) {
+  waitsSwitch(el).dispatchEvent(new CustomEvent("wt-change", { detail: { checked } }));
+  await el.updateComplete;
+}
 const saveButton = (el: StationEditor) =>
   $<HTMLElementTagNameMap["wt-button"]>(el, "[data-test=save-station-edit]")!;
 const timingField = (el: StationEditor, name: string) =>
@@ -650,6 +658,66 @@ it("reads the ticket grouping and held printing in Spanish", async () => {
   );
 });
 
+it("A773 station policy: opens on the station's pass waiting, after the printers", async () => {
+  const el = await mount({ ...GRILL, waitsForPass: true });
+  expect(waitsSwitch(el).label).toBe("Waits for the pass");
+  expect(waitsSwitch(el).checked).toBe(true);
+  expect(waitsHint(el).textContent).toBe("Its dishes wait at the pass until the pass fires them.");
+  expect(waitsHint(el).matches("p.note")).toBe(true);
+  expect(waitsSwitch(el).previousElementSibling).toBe(printersField(el));
+  expect(waitsSwitch(el).nextElementSibling).toBe(waitsHint(el));
+  expect(waitsHint(el).nextElementSibling!.tagName).toBe("FIELDSET");
+  expect(waitsHint(el).nextElementSibling!.querySelector("legend")!.textContent).toBe(
+    "Late flags (minutes)",
+  );
+  cleanup();
+  const removed = await mount({ ...GRILL, active: false });
+  expect(waitsSwitch(removed).checked).toBe(false);
+  expect(waitsSwitch(removed).previousElementSibling!.textContent).toBe(
+    "Enable the station to change its printers.",
+  );
+});
+
+it("A773 station policy: sends only a changed pass waiting, and nothing once put back", async () => {
+  const el = await mount();
+  const seen = saves(el);
+  await flipWaits(el, true);
+  expect(saveButton(el).disabled).toBe(false);
+  await flipWaits(el, false);
+  expect(saveButton(el).disabled).toBe(true);
+  await flipWaits(el, true);
+  await save(el);
+  expect(seen).toEqual([{ waitsForPass: true }]);
+});
+
+it("A773 station policy: reads the switch in Spanish", async () => {
+  const el = await mount(GRILL, { locale: "es" });
+  expect(waitsSwitch(el).label).toBe("Espera al pase");
+  expect(waitsHint(el).textContent).toBe(
+    "Sus platos esperan en el pase hasta que el pase los marcha.",
+  );
+});
+
+it("A773 station policy: a refusal naming waitsForPass keeps the draft and shows above the buttons", async () => {
+  const el = await mount();
+  await flipWaits(el, true);
+  el.refusal = { code: "management.request_invalid", params: { field: "waitsForPass" } };
+  await el.updateComplete;
+  expect(waitsSwitch(el).checked).toBe(true);
+  expect(formMessage(el)).toBe("The change could not be saved.");
+  expect(nameField(el).error).toBe("");
+  expect(printersField(el)!.error).toBe("");
+  expect(picker(el).error).toBe("");
+  for (const name of [
+    "warmAfterMinutes",
+    "overdueAfterMinutes",
+    "forgottenAfterMinutes",
+    "readyWarningAfterMinutes",
+  ])
+    expect(timingField(el, name).error).toBe("");
+  expect(saveButton(el).disabled).toBe(false);
+});
+
 it("opens on the station's bump mode, right after the late flags", async () => {
   const el = await mount({ ...GRILL, bumpMode: "ticket" });
   expect(bumpField(el).label).toBe("Done on the screen");
@@ -991,7 +1059,7 @@ it.each([
         ),
       ];
       expect(blocks.filter((block) => block.matches(".note"))).toHaveLength(
-        canManagePrinters ? 3 : 2,
+        canManagePrinters ? 4 : 3,
       );
       expect(blocks.some((block) => block.matches(".readout"))).toBe(true);
       const name = nameField(el).getBoundingClientRect();

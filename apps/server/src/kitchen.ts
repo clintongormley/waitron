@@ -45,6 +45,7 @@ export interface Station {
   printHeldWork: boolean;
   bumpMode: BumpMode;
   changesAfterSending: ChangesAfterSending;
+  waitsForPass: boolean;
   warmAfterMinutes: number;
   overdueAfterMinutes: number;
   forgottenAfterMinutes: number;
@@ -90,6 +91,7 @@ export async function createStation(
     colour?: StationColour;
     thresholds?: StationTimingPatch;
     printerIds?: readonly string[];
+    waitsForPass?: boolean;
   },
 ): Promise<{ id: string }> {
   const thresholds = input.thresholds ?? {};
@@ -105,6 +107,7 @@ export async function createStation(
         name: input.name,
         isDefault: input.isDefault ?? false,
         printMovedSlips: true,
+        waitsForPass: input.waitsForPass ?? false,
         colour: input.colour === undefined ? await nextStationColour(tx) : input.colour,
         warmAfterMinutes:
           thresholds.warmAfterMinutes ?? DEFAULT_STATION_THRESHOLDS.warmAfterMinutes,
@@ -146,6 +149,7 @@ export async function listStations(
       printHeldWork: kitchenStations.printHeldWork,
       bumpMode: kitchenStations.bumpMode,
       changesAfterSending: kitchenStations.changesAfterSending,
+      waitsForPass: kitchenStations.waitsForPass,
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
@@ -188,6 +192,7 @@ export async function updateStation(
     printHeldWork?: boolean;
     bumpMode?: BumpMode;
     changesAfterSending?: ChangesAfterSending;
+    waitsForPass?: boolean;
     printerIds?: readonly string[];
   } & StationTimingPatch,
 ): Promise<void> {

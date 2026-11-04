@@ -3,9 +3,10 @@ import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, applyTokens } from "@waitron/ui";
-import { setLocale } from "@waitron/dashboard-kit";
+import { LiveData, setLocale } from "@waitron/dashboard-kit";
 import type { PrepStationsApi } from "./routing-client.js";
 import { PrepStationsScreen } from "./prep-stations-screen.js";
+import type { StationEditor } from "./station-editor.js";
 const view: PrepStationsView = {
   routing: {
     zones: [],
@@ -55,6 +56,7 @@ const view: PrepStationsView = {
       printMovedSlips: true,
       ticketGrouping: "combined",
       printHeldWork: false,
+      waitsForPass: false,
       bumpMode: "line",
       changesAfterSending: "held-or-waiting",
     },
@@ -91,11 +93,13 @@ function deferred() {
   });
   return { promise, resolve, reject };
 }
-async function mount(write?: Promise<void>, refreshFails = false) {
+async function mount(write?: Promise<void>, refreshFails = false, liveData?: LiveData) {
   const writes: unknown[] = [];
   let reads = 0;
   app = document.createElement("station-leave-test-app") as StationLeaveApp;
   app.api = {
+    liveData,
+    readPassCoverage: async () => [],
     load: async () => {
       if (++reads > 1 && refreshFails) throw { code: "connection.failed" };
       return structuredClone(view);
@@ -582,4 +586,34 @@ it("Add station counts picking the opened colour again as no change and closes w
   await expect.poll(() => modalIn(screen)).toBeNull();
   expect((await question()).open).toBe(false);
   expect(writes).toEqual([]);
+});
+
+it("A773 station policy: a refreshed station list keeps a changed switch", async () => {
+  const liveData = new LiveData();
+  const { screen } = await mount(undefined, false, liveData);
+  let loads = 0;
+  const load = app.api.load.bind(app.api);
+  app.api.load = (async () => {
+    loads++;
+    return load();
+  }) as PrepStationsApi["load"];
+  await open(screen, true);
+  const waits = () =>
+    modalIn(screen)!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      "wt-switch[name=waitsForPass]",
+    )!;
+  waits().dispatchEvent(new CustomEvent("wt-change", { detail: { checked: true } }));
+  await screen.updateComplete;
+  liveData.invalidate([{ type: "kitchen_stations", id: "bar" }]);
+  await expect.poll(() => loads).toBe(1);
+  await screen.updateComplete;
+  const editor = screen.shadowRoot!.querySelector<StationEditor>("prep-station-editor")!;
+  await editor.updateComplete;
+  expect(waits().checked).toBe(true);
+  expect(
+    modalIn(screen)!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "[data-test=save-station-edit]",
+    )!.disabled,
+  ).toBe(false);
+  expect(unload()).toBe(true);
 });

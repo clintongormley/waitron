@@ -57,6 +57,7 @@ const view: PrepStationsView = {
       printMovedSlips: true,
       ticketGrouping: "combined",
       printHeldWork: false,
+      waitsForPass: false,
       bumpMode: "line",
       changesAfterSending: "held-or-waiting",
     },
@@ -115,6 +116,7 @@ async function mount(write?: Promise<void>, refresh?: Promise<void>) {
       return structuredClone(view);
     },
     preview: async () => [move],
+    readPassCoverage: async () => [],
     setCell: async (address: unknown, target: unknown) => {
       writes.push({ address, target });
       await write;

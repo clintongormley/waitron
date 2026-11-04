@@ -20,6 +20,7 @@ class StationEditorLeaveApp extends LitElement {
           printMovedSlips: true,
           ticketGrouping: "combined",
           printHeldWork: false,
+          waitsForPass: false,
           bumpMode: "line",
           changesAfterSending: "held-or-waiting",
           printerIds: ["epson"],
@@ -305,6 +306,24 @@ it("a changed held printing choice asks before closing, and choosing back the op
   await choose("keep");
   expect(await close).toBe(false);
   await setHeld(false);
+  expect(unload()).toBe(false);
+  expect(await modal(el).requestClose("cancel")).toBe(true);
+});
+
+it("A773 station policy: a changed pass waiting asks before closing, and choosing back the opened one does not", async () => {
+  const el = await mount();
+  const setWaits = async (checked: boolean) => {
+    el.shadowRoot!.querySelector("wt-switch[name=waitsForPass]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { checked } }),
+    );
+    await el.updateComplete;
+  };
+  await setWaits(true);
+  expect(unload()).toBe(true);
+  const close = modal(el).requestClose("cancel");
+  await choose("keep");
+  expect(await close).toBe(false);
+  await setWaits(false);
   expect(unload()).toBe(false);
   expect(await modal(el).requestClose("cancel")).toBe(true);
 });

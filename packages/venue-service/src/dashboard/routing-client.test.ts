@@ -15,6 +15,17 @@ it("has no station-hours, fallback or today writer, and reads output failures pa
   ]);
 });
 
+it("A773 station policy: reads the pass coverage passively", async () => {
+  for (const background of [false, true]) {
+    const request = vi.fn(async () => []);
+    const api = new PrepStationsApi(request as DashboardRequest);
+    await (background ? api.background : api).readPassCoverage();
+    expect(request.mock.calls).toEqual([
+      ["/management-api/stations/pass-coverage", "GET", undefined, { passive: true }],
+    ]);
+  }
+});
+
 it("loads the routing and station context, including each station printer assignment", async () => {
   const responses: Record<string, unknown> = {
     "/management-api/venue-service/routing": {

@@ -1496,6 +1496,12 @@ whether those reads should follow today's map once a group is left.
 
 ## Decisions and deliberate limits
 
+- **An order with no service zone is warned about only once one of its dishes waits (A773-2 PR C,
+  D101).** In a venue with zones, the Prep stations coverage warning checks each waiting station
+  against each active zone; a dish on an order with no service zone needs a pass screen on every
+  zone, and the warning names it only once such a dish is waiting at the pass. Reasoned, not
+  measured ([plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md), D101).
+
 - **Request-device proof on profile-gated till actions, payments, refunds and printing (A941,
   device enrolment design).** Authenticate the enrolled device and match it to the PIN session. Keep management order reprints and invoice delivery
   available through their management session without a device cookie. Request-device proof is
@@ -2500,9 +2506,10 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 ## A773. Courses, groups and the pass
 
 **A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
-with PRs B–D remaining. PR B is cut into B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
+with PR D remaining. PR B is cut into B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
 B4 is cut into B4a and B4b by its [task plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md);
-PR B is complete, PR C is next, and no station can be set to wait for the pass until PR C. B3
+PR B and PR C ([task plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) are
+complete. PR D is next. B3
 ([task plan](../superpowers/plans/2026-11-02-a773-2b3-pass-release.md)) built the pass's board
 reads (`GET /api/device/pass-board`, `GET /api/device/pass-monitor-board`) and its Fire
 (`POST /api/device/pass-screen/release`), which gives a card's waiting dishes to their stations
@@ -2512,12 +2519,11 @@ till's every-station view on `GET /api/expo/board`) and retired the old pass rea
 cards under a Held heading at the bottom of the station's Waiting and the pass's To fire by default,
 made every kitchen column a choice in Columns, gave the waiter's table screen "at the pass", and
 added a pass's choice to show or hide other stations' dishes (per profile and per device, migration
-0073). What B4 leaves for PRs C, D and later is in [the B4 plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)'s
+0073). What B4 leaves for PR D and later is in [the B4 plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)'s
 "Left for PR C, PR D and later". Old nonempty stamps remain in regression fixtures, outside the till's
 public contracts. Physical schema and configuration-transfer fields remain for Task 12.
 
-PRs C–D expose station settings and coverage warnings, finish tickets, then remove the retired schema and
-configuration fields. Preserve separately routed extras and the allergy snapshot child when
+PR D finishes tickets, then removes the retired schema and configuration fields. Preserve separately routed extras and the allergy snapshot child when
 rebuilding ticket items. Recheck current main and other lanes' actual reservations before
 each slice. A797's completed Q42 design revision, pictures and FYI landed on 2026-10-21; no new
 Q42 answer is required. New copy still follows the plan's wording-review gate.
@@ -2548,7 +2554,8 @@ The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
 Sent/New order and bill ownership behavior. Physical dragging and partial-serving trials remain
 separate backlog entries. A803 owns its pass/station presentation tail.
 
-Next: PR C (the station editor's "Waits for the pass", its import check and the coverage warning).
+Next: PR D (master plan Tasks 11–12): ticket headings, "Goes with kitchen food", and removing
+`away_at`, `pass_item_marks` and `fire_control`.
 
 What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the
 Columns store to reuse, and a key missing from a stored layout returns to its default place, not

@@ -3,6 +3,7 @@ import type { OrderGroupRequestKind } from "@waitron/db";
 import { initiatedAt, kitchenPhase, type KitchenPhase } from "./kitchen-phase.js";
 import { passSees, type PassScope } from "./pass-board.js";
 import { canonicalJson } from "./parties.js";
+import { byText } from "./text-order.js";
 import type { ExpoItem } from "./working-order.js";
 
 export type PassTarget =
@@ -116,8 +117,6 @@ export interface PassBoard {
 export function passCardKey(row: PassRow): string {
   return row.group === null ? `bill:${row.orderId}` : `group:${row.group.id}`;
 }
-
-const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 const phaseOf = (row: PassRow): KitchenPhase =>
   kitchenPhase({ requestedAt: row.requestedAt, firedAt: row.firedAt, state: row.item.state });

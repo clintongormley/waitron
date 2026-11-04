@@ -109,6 +109,7 @@ import {
   readProfileServiceAccess,
   readProfileServiceScopes,
   readProfileZones,
+  readProfilesZones,
   setProfileServiceScope,
 } from "./profile-access.js";
 import {
@@ -222,6 +223,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   resolveNewOrderZone,
   readProfileServiceAccess,
   readProfileZones,
+  readProfilesZones,
   assertProfileZone,
   readProfileServiceScopes,
   setProfileServiceScope,

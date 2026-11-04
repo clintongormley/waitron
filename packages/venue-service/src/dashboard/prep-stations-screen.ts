@@ -34,8 +34,10 @@ import {
 } from "../routing.js";
 import type { RoutingChange, RoutingMove, StationTimes } from "../routing-types.js";
 import { format } from "./hours-view.js";
+import { listOf } from "./painter-labels.js";
 import { QUERY_DEPENDENCIES } from "./live-queries.js";
 import type {
+  PassCoverageGap,
   PrepStation,
   PrepStationsApi,
   PrepStationsView,
@@ -156,6 +158,9 @@ export class PrepStationsScreen extends LitElement {
       .warning {
         color: var(--wt-color-warning);
       }
+      .warning a {
+        color: var(--wt-color-primary-text);
+      }
     `,
   ];
   @property({ attribute: false }) api!: PrepStationsApi;
@@ -222,6 +227,16 @@ export class PrepStationsScreen extends LitElement {
     () => this.#showReadError(t("prep.load_error")),
     () => {
       if (this.#readErrorShown) this.#showError("");
+    },
+  );
+  @state() private passCoverage: PassCoverageGap[] = [];
+  @state() private passCoverageFailed = false;
+  /** Its own controller, so its failure never shows `prep.load_error` and the routing's recovery never clears it. */
+  readonly #coverageQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    () => {
+      this.passCoverageFailed = true;
     },
   );
   #cellScope?: DraftScope<string>;
@@ -375,9 +390,9 @@ export class PrepStationsScreen extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     this.requestUpdate();
-    void this.#load();
+    void this.#load({ coverage: true });
     if (!this.api.liveData) {
-      this.#routingTimer = setInterval(() => void this.#load(), 60_000);
+      this.#routingTimer = setInterval(() => void this.#load({ coverage: true }), 60_000);
     }
   }
   override disconnectedCallback() {
@@ -405,7 +420,62 @@ export class PrepStationsScreen extends LitElement {
     if (this.#routingTimer) clearInterval(this.#routingTimer);
     super.disconnectedCallback();
   }
-  async #load() {
+  async #loadPassCoverage() {
+    try {
+      await this.#coverageQueries.watch(
+        "pass-coverage",
+        {
+          key: "venue-service:pass-coverage",
+          dependencies: QUERY_DEPENDENCIES["pass-coverage"].map((type) => ({ type })),
+          refreshMs: 60_000,
+          read: () => this.api.readPassCoverage(),
+        },
+        (gaps) => {
+          this.passCoverage = gaps;
+          this.passCoverageFailed = false;
+        },
+      );
+    } catch {
+      this.passCoverageFailed = true;
+    }
+  }
+  #passCoverageWarning() {
+    if (this.passCoverageFailed)
+      return html`<section data-test="pass-coverage" class="warning" role="status">
+        <p>${t("prep.pass_gap_error")}</p>
+      </section>`;
+    if (this.passCoverage.length === 0) return nothing;
+    const zones = new Map<
+      string | null,
+      { zoneId: string | null; zoneName: string; stations: string[] }
+    >();
+    for (const gap of this.passCoverage) {
+      const zone = zones.get(gap.zoneId) ?? {
+        zoneId: gap.zoneId,
+        zoneName: gap.zoneName ?? "",
+        stations: [],
+      };
+      zone.stations.push(gap.stationName);
+      zones.set(gap.zoneId, zone);
+    }
+    return html`<section data-test="pass-coverage" class="warning" role="status">
+      ${[...zones.values()].map(({ zoneId, zoneName, stations }) => {
+        const values: Record<string, string> = { stations: listOf(stations), zone: zoneName };
+        // Split before filling, so a name holding "{devices}" stays text.
+        const [before = "", after = ""] = t(
+          zoneId === null ? "prep.pass_gap_no_zone" : "prep.pass_gap",
+        )
+          .split("{devices}")
+          .map((part) =>
+            part.replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole),
+          );
+        return html`<p>${before}<a href="/manage/devices">${t("prep.devices")}</a>${after}</p>`;
+      })}
+    </section>`;
+  }
+  /** `coverage` only for a change that can alter the pass coverage's answer (D104's tables). */
+  async #load({ coverage = false } = {}) {
+    if (coverage) void this.#loadPassCoverage();
     try {
       let initial = !this.#loaded;
       this.#loaded = true;
@@ -725,7 +795,7 @@ export class PrepStationsScreen extends LitElement {
         this.#stationGone(edit.station.id);
         this.stationEditBusy = false;
         this.#showError(t("prep.station_not_found"));
-        void this.#load();
+        void this.#load({ coverage: true });
         return;
       }
       this.stationEditRefusal = refusalOf(error);
@@ -741,7 +811,7 @@ export class PrepStationsScreen extends LitElement {
     // never sent this save and cannot answer saved(); that one closes unless the person has
     // changed it since.
     if (shown === sender ? shown.saved() : shown?.dirty === false) this.stationEdit = undefined;
-    await this.#load();
+    await this.#load({ coverage: true });
   }
   #stationEditor() {
     const edit = this.stationEdit;
@@ -766,6 +836,7 @@ export class PrepStationsScreen extends LitElement {
           printMovedSlips: station.printMovedSlips,
           ticketGrouping: station.ticketGrouping,
           printHeldWork: station.printHeldWork,
+          waitsForPass: station.waitsForPass,
           bumpMode: station.bumpMode,
           changesAfterSending: station.changesAfterSending,
           printerIds: this.#printersOf(station.id),
@@ -890,7 +961,7 @@ export class PrepStationsScreen extends LitElement {
           ?.closeAfter("saved");
         this.editor = undefined;
       }
-      await this.#load();
+      await this.#load({ coverage: true });
     } catch (e) {
       if (!this.isConnected || identity !== this.#stationIdentity) return;
       const refusal = refusalOf(e);
@@ -1016,7 +1087,7 @@ export class PrepStationsScreen extends LitElement {
       if (codeOf(error) === "station.not_found") {
         this.#stationGone(id);
         this.#showError(t("prep.station_not_found"));
-        void this.#load();
+        void this.#load({ coverage: true });
       } else {
         this.stationAction = {
           ...this.stationAction,
@@ -1034,7 +1105,7 @@ export class PrepStationsScreen extends LitElement {
     }
     if (!this.isConnected || identity !== this.#stationActionIdentity) return;
     this.#stationGone(id);
-    await this.#load();
+    await this.#load({ coverage: true });
   }
   #field(field: keyof StationInput, label: string, type = "number") {
     const identity = this.#stationIdentity;
@@ -1405,7 +1476,7 @@ export class PrepStationsScreen extends LitElement {
     return html`<div class="toolbar">
         <h1>${t("prep.title")}</h1>
       </div>
-      ${
+      ${this.#passCoverageWarning()}${
         view
           ? html`<wt-tabs
               label=${t("prep.title")}

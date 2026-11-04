@@ -11,6 +11,7 @@ import "@waitron/printing";
 import "@waitron/catalogue";
 import { parseStationTimingPatch } from "./kitchen-timing.js";
 import { stationPrintersDown, stationScreensDark } from "./station-outputs-down.js";
+import { readPassCoverage } from "./pass-coverage.js";
 import type { Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -1573,6 +1574,7 @@ export function mountManagementApi(
         forgottenAfterMinutes?: unknown;
         readyWarningAfterMinutes?: unknown;
         printerIds?: unknown;
+        waitsForPass?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1587,6 +1589,12 @@ export function mountManagementApi(
           throw new AppError("management.request_invalid", { field: "isDefault" });
         isDefault = body.isDefault;
       }
+      let waitsForPass: boolean | undefined;
+      if (body.waitsForPass !== undefined) {
+        if (typeof body.waitsForPass !== "boolean")
+          throw new AppError("management.request_invalid", { field: "waitsForPass" });
+        waitsForPass = body.waitsForPass;
+      }
       const colour = parseStationColour(body.colour);
       const { name } = body;
       const thresholds = parseStationTimingPatch(body);
@@ -1599,6 +1607,7 @@ export function mountManagementApi(
           colour,
           thresholds,
           printerIds,
+          waitsForPass,
         });
       });
       return c.json(result, 201);
@@ -1626,6 +1635,15 @@ export function mountManagementApi(
     }),
   );
 
+  app.get("/management-api/stations/pass-coverage", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const cfg = requireVenueCfg(deps);
+      const result = await withVenueAuth(deps, sessionId, (tx) => readPassCoverage(tx, cfg));
+      return c.json(result);
+    }),
+  );
+
   app.patch("/management-api/stations/:id", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
@@ -1646,6 +1664,7 @@ export function mountManagementApi(
         forgottenAfterMinutes?: unknown;
         readyWarningAfterMinutes?: unknown;
         printerIds?: unknown;
+        waitsForPass?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
@@ -1661,6 +1680,7 @@ export function mountManagementApi(
         printHeldWork?: boolean;
         bumpMode?: BumpMode;
         changesAfterSending?: ChangesAfterSending;
+        waitsForPass?: boolean;
         warmAfterMinutes?: number;
         overdueAfterMinutes?: number;
         forgottenAfterMinutes?: number;
@@ -1688,6 +1708,11 @@ export function mountManagementApi(
         if (typeof body.printHeldWork !== "boolean")
           throw new AppError("management.request_invalid", { field: "printHeldWork" });
         patch.printHeldWork = body.printHeldWork;
+      }
+      if (body.waitsForPass !== undefined) {
+        if (typeof body.waitsForPass !== "boolean")
+          throw new AppError("management.request_invalid", { field: "waitsForPass" });
+        patch.waitsForPass = body.waitsForPass;
       }
       const colour = parseStationColour(body.colour);
       if (colour !== undefined) patch.colour = colour;

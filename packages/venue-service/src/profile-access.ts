@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { deviceProfiles, floorZones } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, type ErrorParams } from "@waitron/shared";
@@ -128,6 +128,67 @@ export async function readProfileZones(
       ? profile.startingZoneId
       : (allowedZoneIds[0] ?? null),
   };
+}
+
+/** Each named profile's {@link readProfileZones} `allowedZoneIds`, in two queries whatever the
+ *  number of profiles; an unknown id is absent from the map. */
+export async function readProfilesZones(
+  tx: Transaction,
+  profileIds: readonly string[],
+): Promise<Map<string, string[] | null>> {
+  const answers = new Map<string, string[] | null>();
+  if (profileIds.length === 0) return answers;
+  const profiles = await tx
+    .select({
+      id: deviceProfiles.id,
+      formFactor: deviceProfiles.formFactor,
+      departmentId: deviceProfileServiceAccess.departmentId,
+      startingZoneId: deviceProfileServiceAccess.startingZoneId,
+    })
+    .from(deviceProfiles)
+    .leftJoin(
+      deviceProfileServiceAccess,
+      eq(deviceProfileServiceAccess.deviceProfileId, deviceProfiles.id),
+    )
+    .where(inArray(deviceProfiles.id, [...profileIds]));
+  const scoped: string[] = [];
+  for (const profile of profiles) {
+    const everyZone =
+      profile.formFactor === SHARED_DISPLAY ||
+      profile.departmentId === null ||
+      profile.startingZoneId === null;
+    answers.set(profile.id, everyZone ? null : []);
+    if (!everyZone) scoped.push(profile.id);
+  }
+  if (scoped.length === 0) return answers;
+
+  const zones = await tx
+    .select({ profileId: deviceProfileServiceAccess.deviceProfileId, zoneId: floorZones.id })
+    .from(deviceProfileServiceAccess)
+    .innerJoin(
+      zoneServicePolicies,
+      eq(zoneServicePolicies.departmentId, deviceProfileServiceAccess.departmentId),
+    )
+    .innerJoin(floorZones, eq(floorZones.id, zoneServicePolicies.zoneId))
+    .innerJoin(departments, eq(departments.id, zoneServicePolicies.departmentId))
+    .leftJoin(
+      deviceProfileZones,
+      and(
+        eq(deviceProfileZones.deviceProfileId, deviceProfileServiceAccess.deviceProfileId),
+        eq(deviceProfileZones.zoneId, floorZones.id),
+      ),
+    )
+    .where(
+      and(
+        inArray(deviceProfileServiceAccess.deviceProfileId, scoped),
+        eq(floorZones.active, true),
+        eq(departments.active, true),
+        or(eq(deviceProfileServiceAccess.everyZone, true), isNotNull(deviceProfileZones.zoneId)),
+      ),
+    )
+    .orderBy(asc(floorZones.displayOrder), asc(floorZones.name), asc(floorZones.id));
+  for (const row of zones) answers.get(row.profileId)!.push(row.zoneId);
+  return answers;
 }
 
 /** The department and zone half of {@link ProfileServiceAccessInput}. */

@@ -92,8 +92,8 @@ Everything not listed here needs more spec work first.
    ([B4 plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)). PR B is complete: B4a put
    the pass on the new board (#2425) and B4b gave the station and the pass their held cards and
    column choices, the waiter's "at the pass" and a pass's choice to show other stations' dishes.
-   Next is PR C (the station editor's "Waits for the pass", its import check and the coverage
-   warning), then PR D.
+   PR C ([plan](superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) is complete. Next is PR D (ticket
+   headings, "Goes with kitchen food" and removing the retired fields).
    **A803 — bills and tables** follows A773-1 (owner, 2026-10-18); its pass and station-setting
    slices wait for A773-2.
 2. **A646 — a Modules page where the administrator switches optional modules on and sets them up**
@@ -1718,6 +1718,17 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   value suits a printer-only station too. Spanish «Cambios tras el envío», «No permitidos», «Solo
   en espera», «En espera o sin empezar». Say if other words read better (A756 PR 8).
 
+- **A1318. `wt-data-table` has no per-column heading wrap, and the Prep stations table scrolls
+  sideways at 390 px.** With two stations that have printers and screens it scrolls 343 px in
+  English and 342 px in Spanish; the "Waits for the pass" heading alone takes about 130 px and does
+  not wrap. `wrap-to-fit` narrows every column and still scrolled at 320 px. Left open by A773-2 PR C.
+
+- **A1319. The station editor's three switches show their hint line without linking it as the
+  switch's accessible description** ("Waits for the pass", "Also list the order's dishes from other
+  stations" and "Print held groups in advance", `station-editor.ts`): each hint is a separate
+  paragraph, and the switch has no `description`. Department settings passes its hint as
+  `.description` (`department-settings.ts:897`). Fix all three together. Left open by A773-2 PR C.
+
 - **A1079. Owner question: should a supervisor see each station's "Changes after sending"?** The
   Kitchen tab let a supervisor read it (owner, 2026-10-04); since #2044 it lives only in the station
   editor, which needs `venue_service.manage`. Decide whether a supervisor gets a read-only view
@@ -2461,12 +2472,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Decision](backlog/till.md#decisions-and-deliberate-limits)
 
 - **A773-2. Firing and the pass.** The [reviewed implementation
-  plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) leaves PRs B–D: Requested, scoped
-  pass release, station settings and coverage warnings, ticket presentation and physical
-  schema/configuration retirement. PR B is complete (B4a #2425, then B4b #2440; [B4
-  plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)). Next: PR C, the station editor's
-  "Waits for the pass", its import check and the coverage warning; no station can be set to wait
-  for the pass until then. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
+  plan](superpowers/plans/2026-10-19-a773-2-firing-and-pass.md) leaves PR D: ticket presentation
+  and physical schema/configuration retirement. PR B (B4a #2425, then B4b #2440; [B4
+  plan](superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)) and PR C
+  ([plan](superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) are complete. Next: PR D, ticket headings, "Goes with kitchen food" and removing
+  `away_at`, `pass_item_marks` and `fire_control`. [Detail](backlog/till.md#a773-courses-groups-and-the-pass)
 
 - **The pass board and the station board still carry copies of each other's code (left open by
   A773-2 B4a's finish review).** Two copies remain: the width watcher that switches between columns
@@ -2490,6 +2500,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **Pin a pass-board rule no test holds (left open by A773-2 B3's reviews; predates it).** No suite
   fails if a pass screen's zone that is listed but switched off is still read (`passScopeOf`,
   `apps/server/src/pass-board.ts`). Add a case.
+
+- **Index the dishes not yet fired, so the pass's reads stop scanning every ticket item ever kept
+  (left open by A773-2 PR C's review).** The coverage warning's read of dishes waiting for the pass
+  (`readPassCoverage`, `apps/server/src/pass-coverage.ts`) begins `SCAN ticket_items` in
+  `explain query plan`, measured on a freshly migrated database: no index on `ticket_items` leads on
+  `fired_at` or `requested_at`, so each refresh reads the venue's whole ticket history. The review
+  measured the same plan for the pass board's own card read (`scopedItems`,
+  `apps/server/src/pass-board.ts`), which predates PR C (its `ticket_items` read blames to
+  073d37ae9b, 2026-10-09). A partial index on unfired items could serve both and the Fire's card
+  read. This needs a migration.
 
 - **Pin the pass board's live-dish filter (left open by A773-2 B4a's reviews).** No case fails if
   the board's card reader stops leaving out a dish made at the till, or a bill collected or

@@ -52,6 +52,7 @@ export const stationView: PrepStationsView = {
       printMovedSlips: true,
       ticketGrouping: "combined",
       printHeldWork: false,
+      waitsForPass: false,
       bumpMode: "line",
       changesAfterSending: "held-or-waiting",
     },
@@ -102,6 +103,7 @@ export async function mountDelete(overrides: Partial<PrepStationsApi> = {}, them
   const screen = new PrepStationsScreen();
   const api = {
     load: vi.fn().mockResolvedValue(stationView),
+    readPassCoverage: vi.fn().mockResolvedValue([]),
     getStationDeleteImpact: vi.fn().mockResolvedValue(allowedImpact),
     deleteStation: vi.fn().mockResolvedValue(allowedImpact),
     ...overrides,
