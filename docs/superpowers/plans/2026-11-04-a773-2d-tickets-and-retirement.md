@@ -598,6 +598,7 @@ branch's own new cases (Tasks 1a–3, R1, R2) add assertions and remove none tha
 | `watchers.leave` › "leaves a table bill paid at the till on the station queue and pass until collection" | (a) | as the table above says |
 | `working-order` › "refuses an AWAY (ready + dispatched) line …" | (a) | the stamp write and `expect(away.awayAt).not.toBeNull()` go; renamed "refuses a ready line …" |
 | `working-order` › two pass-board cases, `bumpCourseReady` cases | (a), (b) | stamp writes and `awayAt === null` / `toBeNull()` checks go; "legacy Away …" leaves two titles |
+| `canvas-retirement-upgrade` › "records the no-holder admission-rule loss and retains every other surviving value" | like (b), for the dropped table; found by CI's `test-server (24)` at finish | `delete retained.pass_item_marks` joins the other dropped tables' lines; the case snapshots every table before and after the full migration, so the dropped table is no longer "retained" |
 | `working-order-reads.sqlite`, `party-move-bill`, `served`, `till-api.groups`, `split-off-extras.groups`, `split-off-extras.release`, `device-levers`, `department-transfer-api:607` | (a), (b) | stamp writes go; `awayAt` keys leave selects and expected objects; no other value changes |
 
 Rule (c) hits that remain, each asserting that an API answer has no `awayAt`:
