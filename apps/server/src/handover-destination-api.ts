@@ -55,12 +55,18 @@ async function verifiedOffer(c: Context, deps: PeerStatusApiDeps): Promise<Verif
   const binding = bindingOf(verdict.body);
   if (verdict.signerNodeId !== binding.sourceNodeId) invalid("sourceNodeId");
   if (binding.destinationNodeId !== deps.nodeId) invalid("destinationNodeId");
+  if (binding.scenario !== "controlled") invalid("scenario");
   return { envelope: raw as SignedHandoverEnvelope<unknown>, binding };
 }
 
 async function matchesThisBox(deps: PeerStatusApiDeps, binding: HandoverBinding): Promise<boolean> {
   // `currentBinding` treats a box with no chart as a fault; a spare may simply not hold one yet.
-  if ((await readNodeMembership(deps.db)) === null) return false;
+  const held = await readNodeMembership(deps.db);
+  if (held === null) return false;
+  const namesSourceAsMain = held.body.nodes.some(
+    (entry) => entry.nodeId === binding.sourceNodeId && entry.standing === "serving-primary",
+  );
+  if (!namesSourceAsMain) return false;
   const own = await currentBinding(
     deps,
     binding.scenario,

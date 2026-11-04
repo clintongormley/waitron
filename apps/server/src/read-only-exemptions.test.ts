@@ -6,6 +6,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   openVenueDatabase,
+  readTenant,
   stampDeployment,
   writeNodeMembership,
   type Database,
@@ -13,13 +14,27 @@ import {
   type VenueDatabase,
 } from "@waitron/db";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
-import { setNodeMode, setSingletonRole, writeMirrorLink } from "@waitron/node-db";
-import type { SignedMembershipDocument } from "@waitron/membership";
+import {
+  readHandoverOperation,
+  setNodeMode,
+  setSingletonRole,
+  writeMirrorLink,
+} from "@waitron/node-db";
+import { sha256Hex, signEnvelope } from "@waitron/handover";
+import {
+  canonicalize,
+  endorseKey,
+  generateNodeKeyPair,
+  signDocumentBody,
+  type CanonicalValue,
+  type MembershipDocumentBody,
+  type SignedMembershipDocument,
+} from "@waitron/membership";
 import { loadKeyRing } from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePort } from "./testing/free-ports.js";
-import { establishNodeIdentity } from "./node-identity.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { beginHandover } from "./handover-store.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { READ_ONLY_EXEMPTIONS, isReadOnlyExempt } from "./read-only-exemptions.js";
@@ -144,6 +159,7 @@ writeFileSync(
   JSON.stringify({ modules: { "fiscal-none": false } }),
 );
 const ORIGIN_NODE_ID = "77777777-7777-4777-8777-777777777777";
+const MAIN_BOX = { nodeId: "66666666-6666-4666-8666-666666666666", ...generateNodeKeyPair() };
 const MIRROR_OPERATION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const KEY_ENV = {
   WAITRON_HTTP_LANDING_PORT: "0",
@@ -167,6 +183,7 @@ const openStores: VenueDatabase[] = [];
 const venueDirs: string[] = [];
 let mirror: { dir: string; nodeId: string };
 let fenced: { dir: string; nodeId: string };
+let spare: { dir: string; nodeId: string; node: NodeDatabase; offer: unknown };
 
 async function seededVenue(): Promise<[string, string, Database, NodeDatabase]> {
   const directory = await mkdtemp(join(tmpdir(), "waitron-exemptions-venue-"));
@@ -193,6 +210,19 @@ function sellOnlyChart(nodeId: string): SignedMembershipDocument {
   };
 }
 
+async function linkMirror(node: NodeDatabase, nodeId: string): Promise<void> {
+  await writeMirrorLink(node, nodeId, {
+    relayUrl: "http://127.0.0.1:1/",
+    boxHostname: "mirror-box.local",
+    boxCaPem: mintSelfSignedServerCert({
+      hostnames: ["mirror-box.local"],
+      ipAddresses: [],
+      now: new Date(),
+    }).caCertPem,
+    originNodeId: ORIGIN_NODE_ID,
+  });
+}
+
 beforeAll(async () => {
   const fromSource = migrationOptionsFor(manifestSets(), null);
   migrationsRoot = await mkdtemp(join(tmpdir(), "waitron-exemptions-migrations-"));
@@ -205,16 +235,7 @@ beforeAll(async () => {
   const [mDir, mId, mDb, mNode] = await seededVenue();
   mirror = { dir: mDir, nodeId: mId };
   await setNodeMode({ venue: mDb, node: mNode }, mId, "mirror");
-  await writeMirrorLink(mNode, mId, {
-    relayUrl: "http://127.0.0.1:1/",
-    boxHostname: "mirror-box.local",
-    boxCaPem: mintSelfSignedServerCert({
-      hostnames: ["mirror-box.local"],
-      ipAddresses: [],
-      now: new Date(),
-    }).caCertPem,
-    originNodeId: ORIGIN_NODE_ID,
-  });
+  await linkMirror(mNode, mId);
   await beginHandover(
     { node: mNode, nodeId: mId },
     {
@@ -227,6 +248,54 @@ beforeAll(async () => {
     },
     "destination",
   );
+
+  // A second mirror with no open operation, holding a chart that names the main box.
+  const [sDir, sId, sDb, sNode] = await seededVenue();
+  await setNodeMode({ venue: sDb, node: sNode }, sId, "mirror");
+  await linkMirror(sNode, sId);
+  const spareKey = await readNodeIdentityKey(sNode, RING, sId);
+  const chartBody: MembershipDocumentBody = {
+    term: 3,
+    nodes: [
+      {
+        nodeId: MAIN_BOX.nodeId,
+        contactUrl: "https://main-box.example",
+        standing: "serving-primary",
+      },
+      { nodeId: sId, contactUrl: "https://spare-box.example", standing: "serving-secondary" },
+    ],
+  };
+  const chart: SignedMembershipDocument = {
+    body: chartBody,
+    signerNodeId: sId,
+    signature: signDocumentBody(chartBody, spareKey),
+    endorsements: [endorseKey(MAIN_BOX.nodeId, MAIN_BOX.publicKey, sId, spareKey)],
+  };
+  await writeNodeMembership(sDb, chart);
+  const tenant = await readTenant(sDb);
+  spare = {
+    dir: sDir,
+    nodeId: sId,
+    node: sNode,
+    offer: signEnvelope(
+      "stepdown",
+      {
+        binding: {
+          operationId: MIRROR_OPERATION_ID,
+          scenario: "controlled",
+          venue: { country: tenant!.country, taxId: tenant!.taxId, environment: "preproduction" },
+          sourceNodeId: MAIN_BOX.nodeId,
+          destinationNodeId: sId,
+          membership: {
+            term: 3,
+            digest: sha256Hex(canonicalize(chart as unknown as CanonicalValue)),
+          },
+        },
+        authorisedBy: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      },
+      MAIN_BOX,
+    ),
+  };
 
   // A held chart marking this box sell-only: boot fences it and mounts the read-only gate.
   const [fDir, fId, fDb, fNode] = await seededVenue();
@@ -319,6 +388,38 @@ describe("each listed route is reached on a real read-only start, and nothing el
         retire: GATED,
         unlisted: GATED,
         statusRead: { status: 200, signerNodeId: mirror.nodeId, state: "prepared" },
+      });
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
+
+  it("a valid offer on a mirror records `prepared`", async () => {
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: spare.dir,
+      WAITRON_NODE_ID: spare.nodeId,
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    });
+    const base = `http://127.0.0.1:${httpPort()}`;
+    try {
+      await waitForFirstPass(server);
+      const response = await fetch(`${base}/api/node/handover/offer`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(spare.offer),
+      });
+      const answer = (await response.json()) as { body?: { state?: unknown } };
+      expect({ status: response.status, state: answer.body?.state }).toEqual({
+        status: 200,
+        state: "prepared",
+      });
+      const row = await readHandoverOperation(spare.node, spare.nodeId, MIRROR_OPERATION_ID);
+      expect(row).toMatchObject({
+        role: "destination",
+        state: "prepared",
+        sourceNodeId: MAIN_BOX.nodeId,
       });
     } finally {
       await server.close();

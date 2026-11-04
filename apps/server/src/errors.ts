@@ -191,7 +191,7 @@ declare module "@waitron/shared" {
     "handover.not_a_spare": Record<string, never>;
     /**
      * A handover offer's taxpayer, environment, chart term or chart digest differs from this box's
-     * own, or this box holds no chart.
+     * own, this box holds no chart, or its chart does not name the offer's source `serving-primary`.
      */
     "handover.membership_mismatch": { operationId: string };
     /**

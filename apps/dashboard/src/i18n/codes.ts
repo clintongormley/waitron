@@ -1362,8 +1362,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este equipo no es un equipo de reserva, así que no puede pasar a llevar el local. No se ha cambiado nada.",
   },
   "handover.membership_mismatch": {
-    en: "This box and the main box do not hold the same venue details or the same list of the venue's boxes, so this box did not accept the handover. Nothing was changed.",
-    es: "Este equipo y el equipo principal no tienen los mismos datos del local o la misma lista de equipos del local, así que este equipo no ha aceptado el traspaso. No se ha cambiado nada.",
+    en: "The box offering this handover is not the main box on this box's list of the venue's boxes, or the two boxes hold different venue details or different lists, so this box did not accept the handover. Nothing was changed.",
+    es: "El equipo que ofrece este traspaso no es el equipo principal en la lista de equipos del local de este equipo, o los dos equipos tienen datos del local o listas distintos, así que este equipo no ha aceptado el traspaso. No se ha cambiado nada.",
   },
   "handover.summary_failed": {
     en: "The old box could not read part of the venue's data from its final copy, so it sent neither the copy nor its description. Its venue data is unchanged. Asking again makes it take a new copy and read that.",

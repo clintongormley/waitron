@@ -55,7 +55,7 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
     path: "/api/node/handover/offer",
     boxes: ["mirror"],
     authenticates:
-      "a `stepdown` envelope signed by a key this box stores for that node or the held chart vouches for (`peerKeyOf`), whose binding names its signer as the source and this box as the destination; answers only signed status",
+      "a `stepdown` envelope signed by a key this box stores for that node or the held chart vouches for (`peerKeyOf`), whose binding names its signer as the source and this box as the destination; a new operation also needs the held chart to name that source `serving-primary`; answers only signed status",
   },
 ];
 

@@ -215,6 +215,24 @@ describe("POST /api/node/handover/offer", () => {
       expect((await signedStatusOf(await post(envelopeOf()))).state).toBe("prepared");
     });
 
+    it("a replay answers once the chart no longer names the source as the main box", async () => {
+      await post(envelopeOf());
+      const body: MembershipDocumentBody = {
+        term: 4,
+        nodes: [
+          { nodeId: self, contactUrl: "https://box-1", standing: "serving-primary" },
+          { nodeId: SOURCE.nodeId, contactUrl: "https://box-0", standing: "serving-secondary" },
+        ],
+      };
+      const selfKey = await readNodeIdentityKey(suite.node, RING, self);
+      await writeNodeMembership(suite.db, {
+        ...held,
+        body,
+        signature: signDocumentBody(body, selfKey),
+      });
+      expect((await signedStatusOf(await post(envelopeOf()))).state).toBe("prepared");
+    });
+
     it("is accepted once an earlier operation has closed", async () => {
       await post(envelopeOf({ operationId: OTHER_OP }));
       await advanceHandover(store(), OTHER_OP, "abandoned", {});
@@ -249,6 +267,22 @@ describe("POST /api/node/handover/offer", () => {
         refusal(400, "handover.request_invalid", { field: "sourceNodeId" }),
       );
       await expectNothingRecorded();
+    });
+  });
+
+  describe("a source the held chart does not name as the main box", () => {
+    it("refuses an endorsed spare naming itself as the source, recording nothing", async () => {
+      const envelope = envelopeOf({ sourceNodeId: BYSTANDER.nodeId }, BYSTANDER);
+      expect(await post(envelope)).toEqual(
+        refusal(409, "handover.membership_mismatch", { operationId: OP }),
+      );
+      await expectNothingRecorded();
+    });
+
+    it("says first that a box which is not a mirror is not a spare", async () => {
+      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary");
+      const envelope = envelopeOf({ sourceNodeId: BYSTANDER.nodeId }, BYSTANDER);
+      expect(await post(envelope)).toEqual(refusal(409, "handover.not_a_spare"));
     });
   });
 
@@ -306,6 +340,21 @@ describe("POST /api/node/handover/offer", () => {
         refusal(400, "handover.request_invalid", { field: "scenario" }),
       );
       await expectNothingRecorded();
+    });
+
+    it("refuses an otherwise valid emergency offer, recording nothing", async () => {
+      expect(await post(envelopeOf({ scenario: "emergency" }))).toEqual(
+        refusal(400, "handover.request_invalid", { field: "scenario" }),
+      );
+      await expectNothingRecorded();
+    });
+
+    it("refuses an emergency offer even when this box holds that operation", async () => {
+      await beginHandover(store(), { ...binding, scenario: "emergency" }, "destination");
+      expect(await post(envelopeOf({ scenario: "emergency" }))).toEqual(
+        refusal(400, "handover.request_invalid", { field: "scenario" }),
+      );
+      expect(events()).toEqual([]);
     });
 
     // A later step names a folder after the operation id.
