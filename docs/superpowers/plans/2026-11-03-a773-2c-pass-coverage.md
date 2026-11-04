@@ -429,7 +429,7 @@ callers of `listStations`/`listStationsToday` that gain the key in their answers
 `apps/server/scripts/dev-setup.ts:294`. P1 ran each route's suites; only the two `kitchen.test.ts`
 pins and the migration case changed.
 
-**Re-run at the branch tip (Task 10, `f50474c214`).** Every hit of the same `rg` is in a row above
+**Re-run at the branch tip (Task 10, `9fdf38aff8`).** Every hit of the same `rg` is in a row above
 or is one of the new readers: `packages/db/src/configuration-transfer.ts:30-31` (the 0/1 check that
 replaced the `omit`, Task 2); `apps/server/src/kitchen.ts` (Task 1); `apps/server/src/pass-coverage.ts:46`
 (Tasks 3a–3b); and the dashboard's `routing-client.ts`, `station-editor.ts`, `station-table.ts`,

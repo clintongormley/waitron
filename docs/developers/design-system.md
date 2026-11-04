@@ -4791,7 +4791,9 @@ to the station. A date with no orders says so once, and the default station show
 this is the default station" in place of the dates. The station choices require
 `venue_service.manage`; a read-only Calendar keeps its department choices.
 
-Prep stations itself has only Stations and Routes. The former Times tab and each station's
+Prep stations itself has only Stations and Routes. Above its tabs, a warning names, zone by zone,
+the waiting stations no pass screen can fire, with a link to Devices; a failed read shows one line
+in its place. The former Times tab and each station's
 "When it gets orders" link are retired. Station lists use name order, with the Default badge at
 its alphabetical place and a colour square on every Stations row. Add and Edit use
 `wt-colour-chooser`; a missing creation colour takes the first colour no active station uses,
@@ -4854,7 +4856,7 @@ when the labels do not fit.
 
 Stations shows no live kitchen numbers: each station's name with its
 Default mark, Printed on (its printers, or "No printer"), Shown on (the devices whose kitchen screens
-show it, and a link to Devices) and Actions, the row's menu.
+show it, and a link to Devices), Waits for the pass (Yes or No) and Actions, the row's menu.
 A closure note beside its name reads Closed for today and its destination;
 open and default stations need no closure note (`packages/venue-service/src/dashboard/station-table.ts`).
 Use the till's Station screen or the kitchen display for Close for today and Open for today.
@@ -4953,8 +4955,8 @@ product, an extra once per sentence — and the full list under a closed "Show p
 variant reads "Product (Variant)" beside its product. A product's own choice, and a choice that
 moves nothing, saves at once. A cell with a saved choice of its own, other than the default cell, offers
 Clear setting, red, at the left of the bottom row after Cancel; Save stands alone on the right. Edit, in a
-Stations row's menu, opens the station editor (`station-editor.ts`): name, Colour, Printers, the four
-minutes fields, two to a row, under "Late flags (minutes)" (Waiting, Overdue, Forgotten, then Ready
+Stations row's menu, opens the station editor (`station-editor.ts`): name, Colour, Printers, "Waits for the pass"
+with its note, the four minutes fields, two to a row, under "Late flags (minutes)" (Waiting, Overdue, Forgotten, then Ready
 warning), "Done on the screen" (One item at
 a time or Whole ticket at once), "Also list the order's dishes from other
 stations" with "On this station's tickets and kitchen screen", "Print a slip when sent dishes

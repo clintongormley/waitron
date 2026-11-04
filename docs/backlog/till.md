@@ -2506,12 +2506,10 @@ already holds a zone list and a starting zone (`device_profile_service_access`,
 ## A773. Courses, groups and the pass
 
 **A773-2**, firing and the pass, has a [reviewed implementation plan](../superpowers/plans/2026-10-19-a773-2-firing-and-pass.md)
-with PRs B–D remaining. PR B is cut into B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
+with PR D remaining. PR B is cut into B1–B4 by a [slice plan](../superpowers/plans/2026-11-01-a773-2b-requested-release.md);
 B4 is cut into B4a and B4b by its [task plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md);
-PR B is complete, and PR C ([task plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md))
-lands with this PR: a station can be set to wait for the pass in its editor (and the stations
-table shows which do), a configuration copy carries the setting, and Prep stations warns when no
-pass screen can fire a waiting station's dishes. PR D is next. B3
+PR B and PR C ([task plan](../superpowers/plans/2026-11-03-a773-2c-pass-coverage.md)) are
+complete. PR D is next. B3
 ([task plan](../superpowers/plans/2026-11-02-a773-2b3-pass-release.md)) built the pass's board
 reads (`GET /api/device/pass-board`, `GET /api/device/pass-monitor-board`) and its Fire
 (`POST /api/device/pass-screen/release`), which gives a card's waiting dishes to their stations
@@ -2522,7 +2520,7 @@ cards under a Held heading at the bottom of the station's Waiting and the pass's
 made every kitchen column a choice in Columns, gave the waiter's table screen "at the pass", and
 added a pass's choice to show or hide other stations' dishes (per profile and per device, migration
 0073). What B4 leaves for PR D and later is in [the B4 plan](../superpowers/plans/2026-11-02-a773-2b4-pass-screens.md)'s
-"Left for PR C, PR D and later", whose PR C points PR C built. Old nonempty stamps remain in regression fixtures, outside the till's
+"Left for PR C, PR D and later". Old nonempty stamps remain in regression fixtures, outside the till's
 public contracts. Physical schema and configuration-transfer fields remain for Task 12.
 
 PR D finishes tickets, then removes the retired schema and configuration fields. Preserve separately routed extras and the allergy snapshot child when
