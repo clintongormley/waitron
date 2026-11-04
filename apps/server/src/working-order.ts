@@ -8528,7 +8528,7 @@ export async function groupsWithPassFood(
         liveKitchenDish(),
         or(
           eq(ticketItems.passControlled, true),
-          and(isNull(ticketItems.requestedAt), eq(kitchenStations.waitsForPass, true)),
+          and(heldItem(), eq(kitchenStations.waitsForPass, true)),
         ),
       ),
     );

@@ -2119,4 +2119,22 @@ describe("A773 fire paper: Goes with kitchen food", () => {
     expect(slip).toContain("GROUP 4 · DESSERTS");
     expect(slip).not.toContain("Goes with kitchen food");
   });
+
+  it("A773 fire paper: a heading over flagged and unflagged dishes prints the cue once and keeps them apart", () => {
+    const arranged = arrangeTicketItems(
+      [
+        { qty: 1, name: "Moscatel", group: 4, course: desserts, goesWithKitchenFood: true },
+        { qty: 1, name: "Moscatel", group: 4, course: desserts },
+      ],
+      "combined",
+    );
+    expect(arranged).toHaveLength(2);
+    expect(lines(ticket(arranged)).slice(4)).toEqual([
+      "GROUP 4 · DESSERTS",
+      "Goes with kitchen food",
+      "1.000 x Moscatel",
+      "1.000 x Moscatel",
+      "",
+    ]);
+  });
 });

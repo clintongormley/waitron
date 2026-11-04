@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   deviceProfiles,
   printJobs,
+  ticketItems,
   withTransaction,
   workingOrderLines,
   type Database,
@@ -14,7 +15,8 @@ import { createPrinter } from "@waitron/printing";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { fireGroup } from "./order-groups.js";
-import { groupsWithPassFood, listStationQueue } from "./working-order.js";
+import { reprintOrderTickets } from "./kitchen-print.js";
+import { groupsWithPassFood, listStationQueue, markServed } from "./working-order.js";
 import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { passScopeOf, readScopedPassBoard } from "./pass-board.js";
@@ -208,6 +210,23 @@ describe("A773 fire paper: Goes with kitchen food", () => {
     expect(await inTx(k.v, (tx) => groupsWithPassFood(tx, []))).toEqual(new Set());
   });
 
+  it("A773 fire paper: a dish fired before request times were kept counts as released", async () => {
+    const k = await kitchen(false);
+    const [group] = await place(k, [{ names: ["Tarta"], release: "fire" }]);
+    await inTx(k.v, async (tx) => {
+      await setStationsWaitForPass(tx, true, [k.grill]);
+      const [line] = await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.groupId, group!));
+      await tx
+        .update(ticketItems)
+        .set({ requestedAt: null })
+        .where(eq(ticketItems.workingOrderLineId, line!.id));
+    });
+    expect(await inTx(k.v, (tx) => groupsWithPassFood(tx, [group!]))).toEqual(new Set());
+  });
+
   it("A773 fire paper: the bar's ticket says it goes with the kitchen's food", async () => {
     const k = await kitchen(true);
     const [desserts] = await place(k, [{ names: ["Tarta", "Vino"], release: "hold" }]);
@@ -255,6 +274,43 @@ describe("A773 fire paper: Goes with kitchen food", () => {
     expect(fromHeading(bar[0]!).slice(0, 2)).toEqual([`${words.group} 1 · DESSERTS`, CUE]);
   });
 
+  it("A773 fire paper: a reprint after the kitchen's dish is served has no cue", async () => {
+    const k = await kitchen(true);
+    const [desserts] = await place(k, [{ names: ["Tarta", "Vino"], release: "hold" }]);
+    await fire(k, desserts!);
+    await releaseAtPass(k, desserts!);
+
+    await inTx(k.v, (tx) => reprintOrderTickets(tx, k.v.cfg, k.tabId));
+    const before = await papers(k, k.barPrinter);
+    expect(before).toHaveLength(2);
+    expect(before[1]!.filter((text) => text === CUE)).toHaveLength(1);
+
+    const [tarta] = await inTx(k.v, (tx) =>
+      tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, k.tabId),
+            eq(workingOrderLines.productId, k.v.productId("Tarta")),
+          ),
+        ),
+    );
+    const expectedPartyRevision = await revisionOf(k.v, k.partyId);
+    await inTx(k.v, (tx) =>
+      markServed(tx, k.v.cfg, k.partyId, [{ lineId: tarta!.id, quantity: "1" }], {
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision,
+      }),
+    );
+    await inTx(k.v, (tx) => reprintOrderTickets(tx, k.v.cfg, k.tabId));
+    const after = await papers(k, k.barPrinter);
+    expect(after).toHaveLength(3);
+    expect(after[2]).toContain("1.000 x TINTO");
+    expect(after[2]).not.toContain(CUE);
+  });
+
   describe("A773 fire paper: no cue without food at the pass", () => {
     it("A773 fire paper: no cue when nobody waits for the pass", async () => {
       const k = await kitchen(false);
@@ -263,6 +319,58 @@ describe("A773 fire paper: Goes with kitchen food", () => {
       const both = [...(await papers(k, k.barPrinter)), ...(await papers(k, k.grillPrinter))];
       expect(both).toHaveLength(2);
       for (const paper of both) expect(paper).not.toContain(CUE);
+    });
+
+    it("A773 fire paper: no cue when a held kitchen dish on another bill sits at a station that does not wait", async () => {
+      const k = await kitchen(false);
+      const [desserts] = await place(k, [{ names: ["Vino", "Tarta"], release: "hold" }]);
+      const [tarta] = await inTx(k.v, (tx) =>
+        tx
+          .select({ lineNo: workingOrderLines.lineNo })
+          .from(workingOrderLines)
+          .where(
+            and(
+              eq(workingOrderLines.workingOrderId, k.tabId),
+              eq(workingOrderLines.productId, k.v.productId("Tarta")),
+            ),
+          ),
+      );
+      const billTwo = await split(k.v, k.partyId, k.tabId, [tarta!.lineNo]);
+      expect(billTwo).not.toBe(k.tabId);
+      await fire(k, desserts!);
+
+      const bar = await papers(k, k.barPrinter);
+      expect(bar).toHaveLength(1);
+      expect(fromHeading(bar[0]!).slice(0, 2)).toEqual([
+        `${words.group} 1 · DESSERTS`,
+        "1.000 x TINTO",
+      ]);
+      expect(bar[0]).not.toContain(CUE);
+    });
+
+    it("A773 fire paper: no cue for an anomalous held made-here record", async () => {
+      const k = await kitchen(true);
+      const [desserts] = await place(k, [{ names: ["Tarta", "Vino"], release: "hold" }]);
+      await inTx(k.v, async (tx) => {
+        const [vino] = await tx
+          .select({ id: workingOrderLines.id })
+          .from(workingOrderLines)
+          .where(
+            and(
+              eq(workingOrderLines.workingOrderId, k.tabId),
+              eq(workingOrderLines.productId, k.v.productId("Vino")),
+            ),
+          );
+        await tx
+          .update(ticketItems)
+          .set({ madeHere: true })
+          .where(eq(ticketItems.workingOrderLineId, vino!.id));
+      });
+      await fire(k, desserts!);
+      const bar = await papers(k, k.barPrinter);
+      expect(bar).toHaveLength(1);
+      expect(bar[0]).toContain("1.000 x TINTO");
+      expect(bar[0]).not.toContain(CUE);
     });
 
     it("A773 fire paper: no cue on a group with nothing for the kitchen", async () => {
