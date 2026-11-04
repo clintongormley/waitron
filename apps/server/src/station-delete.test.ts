@@ -59,7 +59,6 @@ async function food(
     held?: boolean;
     retained?: boolean;
     madeHere?: boolean;
-    away?: boolean;
     served?: boolean;
     collected?: boolean;
     servedQuantity?: number;
@@ -107,7 +106,6 @@ async function food(
         firedAt: flags.held ? null : at,
         stationRetainedAtRelease: flags.retained ?? false,
         madeHere: flags.madeHere ?? false,
-        awayAt: flags.away ? at : null,
       });
     if (flags.status && flags.status !== "open")
       await tx
@@ -221,7 +219,6 @@ describe("permanent station deletion", () => {
     ["held ready", { held: true, state: "ready" }, true],
     ["made here", { madeHere: true }, false],
     ["fired ready", { state: "ready" }, false],
-    ["legacy away queued", { away: true }, true],
     ["served", { served: true }, false],
     ["collected", { collected: true }, false],
     ["abandoned", { status: "abandoned" }, false],
@@ -685,7 +682,6 @@ describe("A773 no dispatch state", () => {
       const { v, id } = await fixture();
       const { order } = await food(v, id, {
         state: "ready",
-        away: true,
         servedQuantity,
         ticketQuantity,
       });
@@ -697,9 +693,9 @@ describe("A773 no dispatch state", () => {
     },
   );
 
-  it("requires a closing choice for ready legacy-Away food", async () => {
+  it("requires a closing choice for a ready dish", async () => {
     const { v, id } = await fixture();
-    await food(v, id, { state: "ready", away: true });
+    await food(v, id, { state: "ready" });
     const destination = await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Destination" }));
     const before = await snapshot(v);
     await expect(
@@ -724,9 +720,9 @@ describe("A773 no dispatch state", () => {
   it("closing sends only queued unserved food and retains started work", async () => {
     const { v, id } = await fixture();
     const destination = await inTx(v, (tx) => createStation(tx, v.cfg, { name: "Destination" }));
-    const queued = await food(v, id, { away: true });
-    const preparing = await food(v, id, { state: "preparing", away: true });
-    const ready = await food(v, id, { state: "ready", away: true });
+    const queued = await food(v, id);
+    const preparing = await food(v, id, { state: "preparing" });
+    const ready = await food(v, id, { state: "ready" });
     const served = await food(v, id, { served: true });
     const made = await food(v, id, { madeHere: true });
     await inTx(v, (tx) =>

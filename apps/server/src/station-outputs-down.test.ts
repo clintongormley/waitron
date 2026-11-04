@@ -638,19 +638,6 @@ describe("passScreensDark", () => {
     expect(await read(f)).toEqual([]);
   });
 
-  it("A773 no dispatch state: a legacy Away stamp does not silence a dark monitor", async () => {
-    const f = await passFixture();
-    const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
-    await suite.db
-      .update(ticketItems)
-      .set({ awayAt: "2026-10-02T18:00:00.000Z" })
-      .where(eq(ticketItems.workingOrderId, orderId));
-    const monitor = await passDevice(f, "pass_monitor");
-    expect(await read(f)).toEqual([
-      { deviceId: monitor, deviceName: "pass_monitor", kind: "pass_monitor", lastSeenAt: dark },
-    ]);
-  });
-
   it("A773 no dispatch state: a dark pass is listed while its waiting dish is unserved, and not once it is fully served", async () => {
     const f = await passFixture();
     const orderId = await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
@@ -671,7 +658,7 @@ describe("passScreensDark", () => {
       const deviceId = await passDevice(f, kind);
       await suite.db
         .update(ticketItems)
-        .set({ state: "ready", awayAt: "2026-10-02T18:00:00.000Z" })
+        .set({ state: "ready" })
         .where(eq(ticketItems.workingOrderId, orderId));
       await suite.db
         .update(workingOrderLines)

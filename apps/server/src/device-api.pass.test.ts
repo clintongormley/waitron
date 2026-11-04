@@ -138,7 +138,7 @@ async function burgerOrder(v: Awaited<ReturnType<typeof setupPartyVenue>>) {
 }
 
 describe("the pass screen's device routes", () => {
-  it("A773 waiter authority: Done and Undo cannot write marks or change kitchen work", async () => {
+  it("A773 waiter authority: Done and Undo cannot change kitchen work", async () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
     const before = await inTx(f.v, async (tx) => ({
@@ -346,7 +346,7 @@ describe("the pass screen's device routes", () => {
     ]);
   });
 
-  it("retires malformed Done and mixed local/foreign Done and Undo without writing marks", async () => {
+  it("retires malformed Done and mixed local/foreign Done and Undo", async () => {
     const f = await fixture();
     const local = await burgerOrder(f.v);
     const badDone = await done(f.app, f.a.cookie, { ticketItemIds: [local], done: "true" });
@@ -421,7 +421,7 @@ describe("the pass screen's device routes", () => {
 });
 
 describe("the pass monitor's device route", () => {
-  it("lists the pass queue with no marks, and offers no Done", async () => {
+  it("lists the pass queue, and offers no Done", async () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
     const monitor = await f.device("Pass monitor", f.kds, {
@@ -447,7 +447,7 @@ describe("the pass monitor's device route", () => {
 });
 
 describe("a pass monitor on a till", () => {
-  it("needs a signed-in session, then lists its zones' dishes with no marks", async () => {
+  it("needs a signed-in session, then lists its zones' dishes", async () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
     const monitorOn = async (name: string, zoneId: string) => {

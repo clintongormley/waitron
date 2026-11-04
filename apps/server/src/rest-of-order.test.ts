@@ -102,7 +102,6 @@ describe("rest of the order read", () => {
         station: "Fryer",
         state: "ready",
         held: false,
-        away: true,
       },
       {
         order: orderId,
@@ -151,7 +150,6 @@ describe("rest of the order read", () => {
         firedAt: item.held ? null : nowIso(),
         quantity: item.no * 1000,
         madeHere: "madeHere" in item && item.madeHere,
-        awayAt: "away" in item && item.away ? nowIso() : null,
       });
     }
     const result = await withTransaction(db, (tx) => readRestOfOrder(tx, [orderId]));

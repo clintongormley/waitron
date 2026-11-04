@@ -53,7 +53,6 @@ async function records(tx: Transaction, tabId: string) {
       lineId: ticketItems.workingOrderLineId,
       stationId: ticketItems.stationId,
       state: ticketItems.state,
-      awayAt: ticketItems.awayAt,
     })
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderId, tabId));
@@ -68,7 +67,7 @@ async function slips(tx: Transaction, printerId: string) {
 }
 
 describe("groups with split-off extras", () => {
-  it("reads ready only after both stations finish and keeps both components ready with legacy stamps", async () => {
+  it("reads ready only after both stations finish and keeps both components ready", async () => {
     const v = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       const first = await placeGroups(tx, v.cfg, v.party.partyId, {
@@ -103,10 +102,6 @@ describe("groups with split-off extras", () => {
           .filter((item) => item.lineId !== grill.lineId && item.lineId !== fryer.lineId)
           .map((item) => item.state),
       ).toEqual(["ready", "ready"]);
-      await tx
-        .update(ticketItems)
-        .set({ awayAt: "2026-10-20T12:01:00.000Z" })
-        .where(eq(ticketItems.workingOrderId, second.tabId));
       expect(
         (await listOrderGroups(tx, v.party.partyId)).groups.find(
           (group) => group.id === second.groups[0]!.id,
@@ -116,11 +111,6 @@ describe("groups with split-off extras", () => {
         (await listOrderGroups(tx, v.party.partyId)).groups.find(
           (group) => group.id === second.groups[0]!.id,
         )?.ready,
-      ).toBe(true);
-      expect(
-        (await records(tx, second.tabId))
-          .filter((item) => item.lineId !== grill.lineId && item.lineId !== fryer.lineId)
-          .every((item) => item.awayAt !== null),
       ).toBe(true);
     });
   });

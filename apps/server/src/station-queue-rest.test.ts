@@ -119,7 +119,6 @@ describe("station queue rest of the order", () => {
         station: "A Freidora",
         state: "ready",
         held: false,
-        away: true,
       },
       {
         no: 7,
@@ -157,7 +156,6 @@ describe("station queue rest of the order", () => {
           stationId: station(item.station),
           state: item.state,
           firedAt: item.held ? null : nowIso(),
-          awayAt: "away" in item ? nowIso() : null,
           madeHere: "madeHere" in item,
         })
         .returning({ id: ticketItems.id });

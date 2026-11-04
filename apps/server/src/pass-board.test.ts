@@ -275,7 +275,7 @@ describe("the pass board", () => {
 });
 
 describe("retired pass completion", () => {
-  it("refuses Done and Undo for an id that names no dish without writing marks", async () => {
+  it("refuses Done and Undo for an id that names no dish", async () => {
     const v = await setupPartyVenue(suite.db);
     const [device] = await passDevices(v, 1);
     const app = new Hono();

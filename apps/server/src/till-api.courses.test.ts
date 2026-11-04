@@ -728,7 +728,6 @@ describe("KDS-3 expo routes: the All stations board + whole-course ready", () =>
         }));
       const before = await stored();
       expect(before.items).toHaveLength(2);
-      expect(before.items.every((item) => item.awayAt === null)).toBe(true);
       if (state === "held") {
         expect(before.items.find((item) => item.courseId === priCourseId)!.firedAt).toBeNull();
       }
