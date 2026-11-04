@@ -8,6 +8,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   diningTables,
+  kitchenCourses,
   kitchenPrintJobLines,
   kitchenPrintJobs,
   kitchenStations,
@@ -41,13 +42,19 @@ import {
 } from "@waitron/printing";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
-import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
+import {
+  createCourse,
+  createStation,
+  setProductCourse,
+  updateCourse,
+  updateStation,
+} from "./kitchen.js";
 import { createOpenOrder, fireOrderLines, fireLines, listStationQueue } from "./working-order.js";
 import { kitchenNotices, listStationNotices, setStationToday } from "@waitron/venue-service";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroups } from "./testing/group-submit-fixture.js";
-import { fireGroup } from "./order-groups.js";
+import { fireGroup, reorderHeldGroups } from "./order-groups.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import {
   enqueueAllergyCorrectionSlips,
@@ -3369,5 +3376,111 @@ describe("A773 fire paper: course headings", () => {
         .where(eq(workingOrderLines.workingOrderId, tabId));
     });
     expect(headings).toEqual([`${kitchenTicketWords("es").group} 1 · MAINS`]);
+  });
+
+  /** The headings of the Grill printer's jobs enqueued since `seen`, which this call then extends. */
+  async function newGrillHeadings(
+    v: PartyVenue,
+    printerId: string,
+    seen: Set<string>,
+  ): Promise<string[]> {
+    const jobs = (await asApp(v.cfg, (tx) => printJobsFor(tx))).filter(
+      (job) => job.printerId === printerId && !seen.has(job.id),
+    );
+    for (const job of jobs) seen.add(job.id);
+    expect(jobs).toHaveLength(1);
+    const word = kitchenTicketWords("es").group;
+    return printedLines(jobs[0]!.payload).filter((text) => text.startsWith(word));
+  }
+
+  it("A773 fire paper: the heading reads the course as it is when the paper is planned, deactivated or not", async () => {
+    const v = await setupPartyVenue(db);
+    const { printerId, courseId } = await inTx(v, async (tx) => {
+      const { id: grill } = await createStation(tx, v.cfg, { name: "Grill" });
+      const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 });
+      await routeProductTo(tx, v.cfg, v.productId("Burger"), grill);
+      await setProductCourse(tx, v.cfg, v.productId("Burger"), mains.id);
+      await setStationPrinting(tx, { printHeldWork: true }, [grill]);
+      return { printerId: await makeSharedPrinter(tx, "Grill", [grill]), courseId: mains.id };
+    });
+    const { partyId, tabId } = await seatWithNoAllergies(v, await v.table("Table 141"));
+    const placed = await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [{ lines: [{ menuItemId: v.item("Burger"), quantity: "1" }], release: "hold" }],
+        operatorId: OPERATOR,
+        billId: tabId,
+      }),
+    );
+    const word = kitchenTicketWords("es").group;
+    const seen = new Set<string>();
+    expect(await newGrillHeadings(v, printerId, seen)).toEqual([`${word} 1 · MAINS`]);
+
+    await inTx(v, (tx) => updateCourse(tx, v.cfg, courseId, { name: "Main courses" }));
+    const expectedPartyRevision = await revisionOf(v, partyId);
+    await inTx(v, (tx) =>
+      fireGroup(tx, v.cfg, partyId, placed.groups[0]!.id, {
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision,
+      }),
+    );
+    expect(await newGrillHeadings(v, printerId, seen)).toEqual([`${word} 1 · MAIN COURSES`]);
+
+    await inTx(v, async (tx) => {
+      await tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, courseId));
+      await reprintOrderTickets(tx, v.cfg, tabId);
+    });
+    expect(await newGrillHeadings(v, printerId, seen)).toEqual([`${word} 1 · MAIN COURSES`]);
+  });
+
+  it("A773 fire paper: reordering held groups keeps each heading's number and course", async () => {
+    const v = await setupPartyVenue(db);
+    const printerId = await inTx(v, async (tx) => {
+      const { id: grill } = await createStation(tx, v.cfg, { name: "Grill" });
+      const mains = await createCourse(tx, v.cfg, { name: "Mains", displayOrder: 2 });
+      const desserts = await createCourse(tx, v.cfg, { name: "Desserts", displayOrder: 3 });
+      for (const [name, course] of [
+        ["Burger", mains],
+        ["Flan", desserts],
+      ] as const) {
+        await routeProductTo(tx, v.cfg, v.productId(name), grill);
+        await setProductCourse(tx, v.cfg, v.productId(name), course.id);
+      }
+      return makeSharedPrinter(tx, "Grill", [grill]);
+    });
+    const { partyId, tabId } = await seatWithNoAllergies(v, await v.table("Table 141"));
+    const dish = (name: string) => ({ menuItemId: v.item(name), quantity: "1" });
+    const placed = await inTx(v, (tx) =>
+      placeGroups(tx, v.cfg, partyId, {
+        groups: [
+          { lines: [dish("Burger")], release: "hold" },
+          { lines: [dish("Flan")], release: "hold" },
+        ],
+        operatorId: OPERATOR,
+        billId: tabId,
+      }),
+    );
+    const [mainsGroup, dessertsGroup] = placed.groups.map((group) => group.id);
+    const seen = new Set<string>();
+
+    const reorderRevision = await revisionOf(v, partyId);
+    await inTx(v, (tx) =>
+      reorderHeldGroups(tx, partyId, [dessertsGroup!, mainsGroup!], {
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision: reorderRevision,
+      }),
+    );
+    const expectedPartyRevision = await revisionOf(v, partyId);
+    await inTx(v, (tx) =>
+      fireGroup(tx, v.cfg, partyId, dessertsGroup!, {
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision,
+      }),
+    );
+    expect(await newGrillHeadings(v, printerId, seen)).toEqual([
+      `${kitchenTicketWords("es").group} 2 · DESSERTS`,
+    ]);
   });
 });
