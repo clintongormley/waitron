@@ -24,6 +24,7 @@ const DELETES_NOTE = /\bdeleteBackupRoomNote\(/;
 /** Files that replace or remove the live venue.db. Matched or not, each must delete the note. */
 const REPLACES: readonly string[] = [
   "apps/server/src/db-wipe.ts",
+  "apps/server/src/handover-place-copy.ts",
   "apps/server/src/restore.ts",
   "packages/provisioning/src/first-setup-start-again-deletion.ts",
   "packages/provisioning/src/first-setup-start-again-set-aside.ts",

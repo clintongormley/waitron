@@ -284,6 +284,44 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
         "Pulsa «Reintentar un arranque normal». Si sigue fallando, pide a quien instaló este equipo que lo revise.",
     },
   },
+  // These three name no next step beyond the retry: Waitron's own steps should not produce them.
+  "handover.accepted_copy_missing": {
+    "en-GB": {
+      title: "The copy of the venue this box accepted is no longer on its disk.",
+      action:
+        "This is a fault in Waitron or this box's disk. This box cannot take over without that copy, and its own database is unchanged. The old box has given up filing and stays stopped. Press “Retry a normal boot” if the file has been put back.",
+    },
+    "es-ES": {
+      title: "La copia del local que este equipo aceptó ya no está en su disco.",
+      action:
+        "Es un fallo de Waitron o del disco de este equipo. Este equipo no puede hacerse cargo sin esa copia, y su propia base de datos no ha cambiado. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo ha vuelto a su sitio.",
+    },
+  },
+  "handover.copy_mismatch": {
+    "en-GB": {
+      title: "The copy of the venue this box accepted has changed on its disk.",
+      action:
+        "This is a fault in Waitron or this box's disk. This box did not put it in place, and its own database is unchanged. The old box has given up filing and stays stopped. Press “Retry a normal boot” if the file has been put back as it was.",
+    },
+    "es-ES": {
+      title: "La copia del local que este equipo aceptó ha cambiado en su disco.",
+      action:
+        "Es un fallo de Waitron o del disco de este equipo. Este equipo no la ha puesto en su sitio, y su propia base de datos no ha cambiado. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo ha vuelto a su sitio tal como estaba.",
+    },
+  },
+  "handover.preparation_state_unusable": {
+    "en-GB": {
+      title: "This box cannot record the old box's selections, so it did not take over.",
+      action:
+        "This is a fault in Waitron or this box's disk: its module preparation file is unreadable or too full. Without those selections this box could reuse a name the old box already used, so its own database stays unchanged. The old box has given up filing and stays stopped. Press “Retry a normal boot” if the file has been repaired.",
+    },
+    "es-ES": {
+      title:
+        "Este equipo no puede guardar las selecciones del equipo antiguo, así que no se ha hecho cargo.",
+      action:
+        "Es un fallo de Waitron o del disco de este equipo: su archivo de preparación de módulos no se puede leer o está demasiado lleno. Sin esas selecciones, este equipo podría repetir un nombre que el equipo antiguo ya usó, así que su propia base de datos sigue sin cambios. El equipo antiguo ha cedido el envío de registros y sigue detenido. Pulsa «Reintentar un arranque normal» si el archivo se ha reparado.",
+    },
+  },
   "restore.placement_failed": {
     // Shown only if this is the last failure when the box reaches recovery; a failed setup restore
     // is not retried, so one failed placement does not get here. Which database was kept is in the

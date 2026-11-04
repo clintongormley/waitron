@@ -1469,6 +1469,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "According to the copy the spare received, the person who authorised this handover may not move the venue to another box, so the spare did not accept it. The old box stays stopped.",
     es: "Según la copia que ha recibido el equipo de reserva, la persona que autorizó este traspaso no puede pasar el local a otro equipo, así que no la ha aceptado. El equipo antiguo sigue detenido.",
   },
+  "handover.preparation_state_unusable": {
+    en: "This box's module preparation file is unreadable or too full to take the old box's selections, so this box did not put the accepted copy in place.",
+    es: "El archivo de preparación de módulos de este equipo no se puede leer o está demasiado lleno para añadir las selecciones del equipo antiguo, así que este equipo no ha puesto en su sitio la copia aceptada.",
+  },
   "handover.accepted_copy_missing": {
     en: "The copy of the venue this box accepted is no longer on its disk, so this box cannot take over the venue.",
     es: "La copia del local que este equipo aceptó ya no está en su disco, así que este equipo no puede pasar a llevar el local.",

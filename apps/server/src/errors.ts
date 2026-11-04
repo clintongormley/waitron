@@ -259,6 +259,11 @@ declare module "@waitron/shared" {
     "handover.chain_broken": { module: string };
     /** The old box's retained selections and the spare's own would leave their file too full. */
     "handover.preparation_state_too_large": Record<string, never>;
+    /**
+     * At the start that places the accepted copy, this box's own preparation file could not be read
+     * or could not take the old box's retained selections, so the copy was not placed.
+     */
+    "handover.preparation_state_unusable": Record<string, never>;
     /** `module`'s summary, worked out from the received copy, is not the one the old box signed. */
     "handover.summary_mismatch": { module: string };
     /** The spare could not work out `module`'s summary from the copy it received. */

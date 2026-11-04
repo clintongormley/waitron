@@ -702,6 +702,34 @@ describe("a start refused by a holder that stopped", () => {
   });
 });
 
+describe("a spare's start refused while placing the copy it accepted", () => {
+  it.each([
+    [
+      "handover.accepted_copy_missing",
+      "The copy of the venue this box accepted is no longer on its disk.",
+      "La copia del local que este equipo aceptó ya no está en su disco.",
+    ],
+    [
+      "handover.copy_mismatch",
+      "The copy of the venue this box accepted has changed on its disk.",
+      "La copia del local que este equipo aceptó ha cambiado en su disco.",
+    ],
+    [
+      "handover.preparation_state_unusable",
+      "This box cannot record the old box's selections, so it did not take over.",
+      "Este equipo no puede guardar las selecciones del equipo antiguo, así que no se ha hecho cargo.",
+    ],
+  ])("%s says what happened and offers the retry, in both languages", async (code, en, es) => {
+    const english = await pageFor(code);
+    expect(english).toContain(escapeHtml(en));
+    expect(english).toContain(escapeHtml("The old box has given up filing and stays stopped."));
+    expect(english).toContain("Retry a normal boot");
+    const spanish = await pageFor(code, undefined, SPANISH);
+    expect(spanish).toContain(escapeHtml(es));
+    expect(spanish).toContain("Reintentar un arranque normal");
+  });
+});
+
 describe("a restore whose database could not be put in place, if it is the last failure", () => {
   it("sends the operator to whoever installed the box, and to the failed start's details on this page", async () => {
     const text = OPERATOR_TEXT["restore.placement_failed"];
