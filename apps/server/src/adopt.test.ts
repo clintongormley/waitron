@@ -193,11 +193,9 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(cfg.relayUrl).toBe("https://relay.test:9000/");
     expect(cfg.originNodeId).toBe(DESIGNATED.nodeId);
 
-    // The venue's ids, but the mirror's OWN node id.
     expect(persistedTrading).toHaveLength(1);
     expect(persistedTrading[0]).not.toHaveProperty("seriesId");
     expect(persistedTrading[0]).toMatchObject({
-      locationId: DESIGNATED.locationId,
       nodeId: capturedStandby!.nodeId,
       environment: "preproduction",
     });

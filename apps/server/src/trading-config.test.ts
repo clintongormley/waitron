@@ -16,7 +16,6 @@ const newDir = async () => {
 
 const cfg: TradingConfig = {
   nodeId: "node-3",
-  locationId: "location-5",
   environment: "production",
   onboardingIntent: "live",
   accountKey: Buffer.alloc(32, 8).toString("base64"),

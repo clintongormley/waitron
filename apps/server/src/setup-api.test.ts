@@ -546,7 +546,6 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     expect(persistTrading.mock.calls[0][0]).not.toHaveProperty("seriesId");
     expect(persistTrading.mock.calls[0][0]).toEqual({
       nodeId: NODE_ID,
-      locationId: LOCATION_ID,
       environment: "preproduction",
       onboardingIntent: "demo",
     });

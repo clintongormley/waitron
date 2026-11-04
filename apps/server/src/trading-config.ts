@@ -17,7 +17,6 @@ export type OnboardingIntent = "demo" | "prepare" | "live";
  */
 export interface TradingConfig {
   nodeId: string;
-  locationId: string;
   environment: "production" | "preproduction";
   /** Persist WAITRON_ENV=dev while exercising a Live-shaped onboarding in development. */
   developmentMode?: boolean;
