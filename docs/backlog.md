@@ -1301,11 +1301,12 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **Guest count** (bundle of 2, size S, needs the owner). [Detail](backlog/printers.md#bundle-guest-count)
 
-- **A790. Choose a document and its permitted printer.** Build the unconnected foundation
-  (Cut A) from the [venue-only plan](superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md),
-  then the complete live routing cut before A739's payment-window integration. Keep the live
-  node/restore recovery prerequisites; overlapping files or migration numbers are resolved on rebase.
-  After A760, rebase onto the squashed base and regenerate its migrations there; its tables go in core's set (`packages/db`). Before landing, show its new tables in `apps/server`'s `pnpm protection-list`: a table in a retired migration folder creates nothing.
+- **A790. Connect document and printer routing to the live entries.** Build Cut B from the
+  [venue-only plan](superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md), using the
+  unmounted offers and browser recovery foundation. Qualify the live node/restore origin before
+  enabling its request services; then connect Orders, till history and Equipment. A739's payment
+  window follows the complete live routing cut; Cut C verifies that integration.
+  Before landing Cut A, show the new core tables in `apps/server`’s `pnpm protection-list`; a retired migration folder creates nothing.
   [Detail](backlog/printers.md#a790-document-and-printer-routing-plan)
 
 - **Loose ends left by A661 (#1745).**

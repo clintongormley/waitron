@@ -9,12 +9,7 @@ const STATE = "manager configuration / live service; copied to a standby, never 
  * The tables core's own module code owns. Core's change sources and its own backup check read this
  * list; the modules hosted in core's set name theirs in their own packages.
  */
-<<<<<<< HEAD
 export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
-||||||| parent of ab224e0e47 (feat: persist node owned document routing operations)
-export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
-=======
-export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify(
     "document_delivery_requests",
     "local",
@@ -32,7 +27,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
   ),
   classify("device_invoice_revisions", "state", "revision of the device's existing Invoice choice"),
   classify("document_page_jobs", "state", "recorded F2 Receipt page transport and claim history"),
->>>>>>> ab224e0e47 (feat: persist node owned document routing operations)
+
   // ledger — copied to a standby AND drained back from a returned box.
   appendOnly("sales", "ledger", LEDGER),
   appendOnly("sale_lines", "ledger", LEDGER),
