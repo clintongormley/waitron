@@ -353,3 +353,18 @@ describe("guide pages", () => {
     );
   });
 });
+
+it.each(["en", "es"])(
+  "serves the Opening hours holiday guide with a named frame in %s",
+  async (lang) => {
+    const app = new Hono();
+    mountGuidePages(app, {}, vi.fn());
+    const response = await app.request(`/help/${lang}/opening-hours`);
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain(`<html lang="${lang}">`);
+    expect(html).toContain('id="holiday-names"');
+    expect(html).toContain('id="holiday-area"');
+    expect(html).not.toContain("undefined");
+  },
+);
