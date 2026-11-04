@@ -389,18 +389,6 @@ Reconnect to continue."; two "Start again" buttons are drawn at once, the one th
 confirmation and the one that confirms; and Continue sits tight against the password field at
 phone width (`apps/setup/src/setup-app.ts`, the first-owner screen).
 
-## Close a discarded recovery's Cloud approval from the box
-
-Left open by A1042. Show the saved link and code beside the repair page's stopped line, so the
-person can close the approval in Waitron Cloud. The box no longer shows that link and code anywhere: its only
-place was the old recovery's Cloud wait screen (`apps/setup/src/screens/first-setup-backup-screen.ts`),
-which the repair page stopped opening in A1131b/c slice 3, and the box's Cloud
-client has no action that closes an approval (`apps/server/src/cloud-recovery.ts`: `start`,
-`status`, `info`, `read`, `restored`). Cloud closes the approval by itself an hour after it was
-given, and refuses a new one for that venue until then (Waitron Cloud at 4eed93d6:
-`packages/registration/migrations/011_managed_backups.sql`, `expires_at` default;
-`packages/backups/src/recovery.ts`, `recovery_active`).
-
 ## Other full-disk words still send the person elsewhere or end with the short reinstall sentence
 
 - **Other full-disk words still send the person elsewhere or end with the short reinstall
@@ -802,6 +790,8 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
   `apps/setup/src/i18n/strings/shell.ts`) sends the person to somebody else, against the refusal rule
   in `CLAUDE.md` §3. Wanted: say what happened and what each choice does. The words date from C42
   (#837, 2026-09-29). Noticed while planning A1131bc slice 3, not changed there.
+  Between A1131bc slice 4's two pull requests, the page also draws these words for a summary
+  that still names an old recovery from backup.
 
 ## Decisions and deliberate limits
 

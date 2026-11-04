@@ -449,11 +449,10 @@ Screen: Setup wizard. Fix: [setup-state](#setup-state).
 
 Wording: `apps/setup/src/i18n/strings/shell.ts:8` and `apps/setup/src/i18n/strings/shell.ts:147`.
 
-Added by A1042 (2026-10-26): the setup screen shows the same words in two more places — when the
-box's Start again summary does not have the expected shape (`summaryOf`,
-`apps/setup/src/first-setup-session.ts`), and when the backup recovery status read on the
-missing-database path is not one that page expects (`#readMissingAsk`, called from
-`#resumeFirstSetup`, `apps/setup/src/setup-app.ts`).
+Added by A1042 (2026-10-26): the setup screen shows the same words in one more place — when the
+box's Start again summary does not have the expected shape (`summaryOf`, now in
+`apps/setup/src/start-again-wipe.ts:17`). (2026-11-04, A1131bc slice 4: the backup-status read on
+the missing-database path is deleted.)
 
 State: Saved setup/owner data cannot be parsed or checked, or a protected read fails. Corruption and filesystem errors are not proved to be bug-only. Receipt: `packages/provisioning/src/durable-host-json.ts:15`; `packages/provisioning/src/first-setup-owner.ts:131`; `apps/setup/src/setup-app.ts:200`.
 
@@ -539,23 +538,6 @@ Wording: `apps/setup/src/i18n/strings/shell.ts:23`, `apps/setup/src/i18n/strings
 State: The setup shell maps setup.not_ready to this message (setup-app.ts:214, :220, :353 and :1528). The code also means a Cloud recovery dependency is absent (first-setup-backup-source.ts:40), a required reset callback is absent (setup-api.ts:1053), or a recovery artifact/directory fails a size/type/count check (first-setup-resolution-inspection.ts:161 and :196). None of those conditions changes merely by waiting. Bug-only: no, persistent dependency/file conditions are explicit.
 
 Route: Missing: distinguish temporary preparation from unsupported/unavailable recovery and retained-file refusal. Offer a supported source or administrator recovery route. A1042 (#2101, landed 2026-10-26) changed some of these paths; recheck them against main.
-
-### Recovery from a backup
-
-Message: `failed`. Fix: [setup-readiness](#setup-readiness).
-
-| Language | Current words |
-| --- | --- |
-| EN | Recovery could not continue. Check the source and try again. |
-| ES | No se pudo continuar. Revisa el origen e inténtalo de nuevo. |
-
-Wording: `apps/setup/src/i18n/backup-repair.ts:36`, `apps/setup/src/i18n/backup-repair.ts:79`.
-
-State: This screen catches unrecognised refusals as backupRepairStrings.failed (first-setup-backup-screen.ts:308). The backend can refuse missing Cloud support or an incompatible module operation (first-setup-backup-recovery.ts:167, :363, :445 and :517). Repeating an unchanged source cannot add the missing implementation. Bug-only: not established.
-
-Route: Existing: archive, bucket and Cloud source choices. Missing: retain a safe refusal category and name an applicable source/image/administrator action. Do not prescribe reinstalling over recorded sales.
-
-_2026-10-31, A1131b/c slice 3: the setup page no longer opens this screen, so these words are no longer shown; the entry records the earlier tree._
 
 ### Passkey sign-in
 
