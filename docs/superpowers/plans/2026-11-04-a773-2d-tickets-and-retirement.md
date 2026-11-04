@@ -367,8 +367,9 @@ tickets, station ticket modes and one cross-bill ticket per action (D124). The c
   asked for (master Contract 10); the second is the current setting for held ones, as the pass board
   classifies held previews (same contract), and it is what makes Bill 1's Bar ticket see Bill 2's
   still-held Grill dish (finding 11). This is the spec's "the same group has lines at a station that
-  waits for the pass", read literally: a held group fired one dish at a time keeps the cue while its
-  waiting station's dishes are still held, because those dishes still go with it.
+  waits for the pass", read literally. The held half matters while one group's several bills print
+  one after another. A dish fired ahead of its group (`fireHeldLine`, `order-groups.ts`) moves into a
+  new group of its own, so it gets no cue from the held dishes it left.
 
 - **D118 The cue on paper.** A dish on a station ticket carries `goesWithKitchenFood: true` when its
   group is in D117's answer, its own ticket item is not pass-controlled and not made here, and the
@@ -613,8 +614,8 @@ drinks.
 name (`GRUPO 4 · POSTRES`) as picture 8 does; a group with two courses on one ticket reads `GRUPO 3 ·
 ENTRANTES, PRINCIPALES`; a merged table's repeated number keeps its tables first (`GRUPO 1 · Mesa 4,
 9 · PRINCIPALES`). A counter order gets no heading and no cue, since it has no groups (D120; asked
-later as a backlog question). The cue stays while the kitchen's part of the group is still held,
-because those dishes still go with it (D117). `locations.fire_control` is not dropped here, though the
+later as a backlog question). A dish fired ahead of its group moves into a group of its own, so it
+gets no cue from the held dishes it left; the cue appears when the group is fired together (D117). `locations.fire_control` is not dropped here, though the
 spec (§9) puts its removal in A773-2: dropping it rebuilds the `locations` table, and that rebuild
 fails to start on any box with a venue set up (`FOREIGN KEY constraint failed`); A1301 drops the
 whole `locations` table in its slice S28, which takes the column with it (D113).
@@ -787,7 +788,7 @@ D117), `kitchen-print.ts` (`planKitchenTickets` only, D118), `kitchen-ticket.ts`
 **Files.** `apps/server/src/working-order.ts` (`QueueGroup`, `listStationQueues`); till
 `apps/till/src/api/client.ts` (`QueueGroup`), `widgets/station-queue.ts` (`#card`),
 `i18n/strings.ts` (EN and ES `station.goes_with_kitchen_food`); tests server
-`station-queue-rest.test.ts` or a new `station-queue.goes-with.test.ts`, till
+`station-queue-rest.test.ts` or `goes-with-kitchen-food.test.ts`, till
 `widgets/station-queue.test.ts`, `widgets/station-queue.a11y.test.ts`.
 
 - [ ] **Failing tests** (`A773 fire paper`):
@@ -804,7 +805,7 @@ D117), `kitchen-print.ts` (`planKitchenTickets` only, D118), `kitchen-ticket.ts`
   4. Server: "A773 fire paper: the pass board's groups carry no cue key" — the same fixture's
      `readPassRows` (or the pass board read built on it) → no group has `goesWithKitchenFood`.
      Mutation: add the key inside `queueGroup` → red.
-- [ ] **RED.** Server: `pnpm --filter @waitron/server exec vitest run src/station-queue.goes-with.test.ts -t 'A773 fire paper'`;
+- [ ] **RED.** Server: `pnpm --filter @waitron/server exec vitest run src/goes-with-kitchen-food.test.ts -t 'A773 fire paper'`;
   till (memory first): `pnpm --filter @waitron/till exec vitest run src/widgets/station-queue.test.ts -t 'A773 fire paper'`.
 - [ ] **Minimal implementation.** In `listStationQueues`, one `groupsWithPassFood` call over the
   read's group ids; add the key at its `queueGroup` call (`working-order.ts:8429`) only when true.
@@ -1025,3 +1026,14 @@ The per-task reviews are in `~/waitron-campaign-c/a773-2d-reviews/` (`task-1b.md
 | 2 review M1: D118 clarified (lane's decision) | The cue follows the DISH, not the printing station. A released dish that did not wait for the pass, later moved to a station that waits, still carries the cue on that station's paper and card, because it still goes out with the kitchen's food. D118 already reads this way (it asks only about the dish's own ticket item); the printing station's `waits_for_pass` is not consulted. Paper (D118) and screen (D119) use the same rule. |
 | 2 review M3: the planner's `!entry.madeHere` check | Kept, and pinned. Established by running: with `planKitchenTickets` instrumented to log a made-here entry, 20 server suites that exercise made-here dishes (973 tests) reached it once, in `station-move.test.ts` › "does not reroute an anomalous held made-here record", where the test sets `made_here` on a held item by a direct update and then fires its group. `goes-with-kitchen-food.test.ts` › "no cue for an anomalous held made-here record" builds the same row; deleting the check turns it red. Whether any production writer can leave a held item made here was not established. |
 | 2 review M4: the held test | D117's second half now uses `heldItem()` (`kitchen-phase.ts`: `fired_at` and `requested_at` both null) instead of `requested_at` null alone, matching the pass board's phases. Current writers stamp `requested_at` whenever they stamp `fired_at`, so current rows answer the same; a row fired without a request time now reads as released (pinned: "a dish fired before request times were kept counts as released", red before the change). |
+
+## Revision 3 (2026-11-04, Task 3 review)
+
+The review is `~/waitron-campaign-c/a773-2d-reviews/task-3.md`.
+
+| Finding | Change |
+| --- | --- |
+| 3 review I1: what the plan said about held kitchen food | D117 and the owner FYI said the cue stays while the kitchen's part of the group is still held. A dish fired ahead (`fireHeldLine`, `order-groups.ts`) moves into a new group of its own, so it gets no cue from the held dishes it left. Both now say so: the held half of D117 matters while one group's several bills print one after another. The guide's `#station-waits` sections (EN and ES) make no "still held" claim and are unchanged. Behaviour unchanged. |
+| 3 review M1: the till predicate's comment | `goesWithKitchenFood` in `apps/till/src/widgets/station-queue.ts`: "the pass does not hold" became "the pass does not control". |
+| 3 review M2: the `phase !== "requested"` condition | Deleted. Every server writer that leaves a dish Requested (`requested_at` set, `fired_at` null) also sets `pass_controlled` true: `requestStamps` and `requestHeldItems` (`kitchen-release.ts`) and `keptStamps` (`working-order.ts`), so `!item.passControlled` already covers it. |
+| 3 review M3: the test file Task 3 names | Task 3's Files list and RED command name `goes-with-kitchen-food.test.ts`, where the cases are, instead of `station-queue.goes-with.test.ts`. |

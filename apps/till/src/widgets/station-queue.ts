@@ -137,13 +137,11 @@ export function stationColumnNames(): Map<ColumnKey, string> {
   ]);
 }
 
-/** A card whose group has kitchen food at the pass, holding a released dish the pass does not hold. */
+/** A card whose group has kitchen food at the pass, holding a released dish the pass does not control. */
 function goesWithKitchenFood(card: KitchenCard): boolean {
   return (
     card.group?.goesWithKitchenFood === true &&
-    card.items.some(
-      (item) => item.phase !== "held" && item.phase !== "requested" && !item.passControlled,
-    )
+    card.items.some((item) => item.phase !== "held" && !item.passControlled)
   );
 }
 
