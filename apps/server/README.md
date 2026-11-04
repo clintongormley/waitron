@@ -47,15 +47,12 @@ error as it starts, not silently.
 
 If your first setup is interrupted, direct and supervised startup can serve a restricted recovery
 API before ordinary database opens or staged restore/reset work. It offers inspection
-(`GET /setup-api/first-setup/resolution`), ownership recovery with the setup password, recovery from
-a backup (under `/setup-api/first-setup/resolution/backup/`), which the setup page no longer starts,
-Start again and publication-only
-Finish (`apps/server/src/setup-first-fiscal-api.ts`, `setup-first-backup-api.ts`). Start again runs
+(`GET /setup-api/first-setup/resolution`), ownership recovery with the setup password, Start again and
+publication-only Finish (`apps/server/src/setup-first-fiscal-api.ts`). Start again runs
 over HTTPS only: it deletes the interrupted attempt, keeping no record of the invoice series names
 it chose, and ends the process so its supervisor starts it again.
 It needs no password. With the venue database missing it needs a confirmation that nothing was
-filed or sold; with it partly unreadable, or when it discards a stopped backup recovery, it needs
-the summary the page showed sent back unchanged. To finish over HTTPS, recover ownership, retrieve the staged publication
+filed or sold; with it partly unreadable, it needs the summary the page showed sent back unchanged. To finish over HTTPS, recover ownership, retrieve the staged publication
 reference, confirm the current document and submit the unchanged publication inputs.
 
 Ordinary boot failures exit non-zero, but not all of them reach stdout the same way. A port that will

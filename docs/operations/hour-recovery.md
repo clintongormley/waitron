@@ -91,6 +91,12 @@ cannot be read or carries a mark that needs repair. The bilingual
 controls. It is served with the other guides during normal operation; the repair-only listener does
 not link to or serve those guides.
 
+A box that holds a recovery from backup begun on the repair page by a Waitron from before November
+2026 does not start, whether that recovery ran, stopped, or was discarded by Start again (which kept
+its records): its page says the box holds a setup from an older version of Waitron and asks for
+Waitron to be reinstalled (`setup.workspace_unsupported`). Reinstalling deletes the backups kept on
+the box, so keep the backup you will restore from somewhere else first.
+
 ## Make the new series
 
 If the backup has no usable time zone, the clock comparison and a reissued recovery pack

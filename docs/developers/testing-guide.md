@@ -1491,20 +1491,19 @@ Desktop during the slice's review (2026-10-21), where the 32 MiB tmpfs mounted a
 `Tests  36 passed (36)`.
 
 **A second real-disk file has its own small filesystem.** `apps/server/src/start-again-full-disk.e2e.test.ts`
-(A1127) runs the repair page's Start-again flow beside a stopped backup recovery on a full disk: with
-the box's spare file the flow works and the spare is gone; without it Continue's password step
-(`/recover`) answers `507 storage.disk_full`. Beside a held setup database with no recovery the
-spare is not released, so the summary and Start again answer `507 storage.disk_full` and delete
-nothing. It builds its stopped recovery from the A731 fixture, whose module-level
-hooks must not run in `start-full-disk.e2e.test.ts`, so it is a file of its own, and two files filling
-one filesystem at once could fail each other: the server's test files run up to four at once
+(A1127) runs the repair page's flows on a full disk beside a held setup database: Continue's
+password step (`/recover`) answers `507 storage.disk_full`, and the summary and Start again answer
+`507 storage.disk_full` and delete nothing, since nothing releases the spare there. It builds its
+held setup from the held-database fixture (`apps/server/test/held-setup-database.ts`), whose
+module-level hooks must not run in `start-full-disk.e2e.test.ts`, so it is a file of its own, and
+two files filling one filesystem at once could fail each other: the server's test files run up to four at once
 (`maxWorkers: 4`, `apps/server/vitest.config.ts`). It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_START_AGAIN", 32)`,
 and CI mounts a second 32 MiB tmpfs at `$RUNNER_TEMP/full-disk-start-again` for it in the same
 `test-server-stream` step. On macOS each file makes its own image. While it runs, the file points
 `TMPDIR` at the small disk's `tmp` folder, so each case's folders land on the small disk (the suite's
 database, made earlier, does not). In `start-full-disk.e2e.test.ts`, `entryDeps` (which
 `startedBefore` uses) sets `spareBytes` to 1 MiB, so a start with room writes a 1 MiB spare; a case
-passes `spareBytes: 0` for none, as the discarded-recovery case without a spare does.
+passes `spareBytes: 0` for none.
 
 **A third real-disk file boots a real server from the spare.** `apps/server/src/start-from-spare.e2e.test.ts`
 (A1127 slice 2) runs `runEntry` with a real `startServer` on a full disk: with a spare the server

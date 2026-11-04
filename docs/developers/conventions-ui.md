@@ -49,6 +49,8 @@ For example, `setup.not_ready` can mean an absent Cloud recovery service
 (`apps/server/src/first-setup-backup-source.ts:40`), yet the shell says to wait. A backup's
 `backup.staging_space_low` comes from an explicit free-space comparison
 (`apps/server/src/backup-sweep.ts:108`), yet its alert substitution says to contact support.
+_2026-11-04, A1131bc slice 4: `first-setup-backup-source.ts` is deleted; that cause of
+`setup.not_ready` is gone._
 _2026-10-28, A1167 slice 1: those staging-space words are gone; the bell now draws the owner's
 «Backup not made: …» sentence with the sizes (the third exception above)._
 Those reads demonstrate why wording must follow the actual cause; they do not qualify a recovery
@@ -1184,16 +1186,12 @@ that holds a name: "Missing triggers:" and "Changed triggers:". `/recovery-api/s
 `refused`, not the names.
 
 **A full disk at start** (A798-B slice 2). Every start through the box's entry point (`runEntry`,
-`apps/server/src/node-entry.ts`; a direct `dist/server.js` start runs none of this), except one that
-finds a backup recovery's journal at its repair stage or unreadable,
+`apps/server/src/node-entry.ts`; a direct `dist/server.js` start runs none of this)
 deletes the copies a cut-off backup run left in backup staging, and the staged recovery copies in `restore-staging/staged-recovery`,
-unless another process holds the venue folder's lock — in the folders a backup recovery from the
-setup repair page selected instead, when there is one (the heartbeat fallback is in
+unless another process holds the venue folder's lock (the heartbeat fallback is in
 conventions-data.md, "Every start takes the venue lock"); one that
 finds under 256 MiB free also deletes rotated logs but the newest and crash reports older than a
-week (a start at a backup recovery's repair stage only when the logs folder, followed through links,
-is inside neither the state folder nor the venue folder; `apps/server/src/start-space.ts`). Then, under 8 MiB free (16 MiB after a start that failed on a full disk), and never at the repair stage, it deletes the box's spare file (conventions-data.md, "The box's spare file"). If it is still below the 256 MiB floor, or the folders the
-start goes on to run from are (a selected backup recovery's), and it cannot write its count back unchanged
+week (`apps/server/src/start-space.ts`). Then, under 8 MiB free (16 MiB after a start that failed on a full disk), it deletes the box's spare file (conventions-data.md, "The box's spare file"). If it is still below the 256 MiB floor, and it cannot write its count back unchanged
 because the disk is full, it serves the page AT ONCE under `storage.disk_full`, and writes nothing.
 The count was not raised, so where the page would say "Failed N times." it says "Level: recovery. This start was not counted: the
 disk is full." («Nivel: recovery. Este arranque no se ha contado: el disco está lleno.»). The
@@ -1308,8 +1306,7 @@ the record write, for example) keeps its own code. A plain `waitron.sh reset` ke
 included; `reset --all` removes them. Anyone who copies the set-aside folder off the box copies
 that key ring too. On two filesystems the copy sits in the state root's stem folder, which the
 repair page's moved-folder message does not name: it names `…/<stem>/state` and the venue
-folder's `…/<stem>` (`movedFolder`, `apps/server/src/recovery-start-again.ts`). A backup recovery's check of the box's files skips `first-setup-set-aside` in
-each root (`originals`, `packages/provisioning/src/first-setup-backup-workspace.ts`).
+folder's `…/<stem>` (`movedFolder`, `apps/server/src/recovery-start-again.ts`).
 
 After a Keep, the process serves the kept page on `GET /` (the `onKept` latch in `recoveryApp`,
 drawn by `startAgainDraw`, `apps/server/src/recovery-surface.ts`); the next start reads the

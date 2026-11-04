@@ -3120,15 +3120,6 @@ printed:
 is killed" case (`packages/store/src/venue-lock.test.ts`) runs in CI on `ubuntu-latest`; that run is
 the Linux reading, not this paragraph.
 
-**A discarded backup recovery keeps its lock files.** The state folder can hold discarded
-backup-recovery tombstones (`first-setup-resolutions/backup-recovery/<id>/`). Emptying one, by
-Start again or by its retry at the next start, keeps the journal records and the lock files of its
-restored copy (`KEPT_IN_TARGET` in `packages/provisioning/src/first-setup-backup-discard.ts`), and
-Start again's deletion of the attempt leaves the folder in place
-(`packages/provisioning/src/first-setup-start-again-deletion.ts`, `backupRecoveryKept`). A plain
-`sudo bash waitron.sh reset` stops the box and deletes them with the rest of the state folder
-(`wipe_box` in `deploy/waitron.sh`).
-
 **Why the migrator's lock cannot serve.** It is held only while migrations run and then released, and
 it WAITS (up to two minutes, `LOCK_WAIT_MS`) for another migrator, where a second server has to be
 refused at once. Held for the life of the process, it would make that process's own later migrate
@@ -3170,8 +3161,7 @@ dies leaves its file behind; the next holder overwrites it.
 **Every start takes the venue lock before it deletes backup staging; the holder file decides only
 when the lock cannot be taken.** Whatever the free space, a start through the box's entry point
 (`runEntry`, `apps/server/src/node-entry.ts`; a direct `dist/server.js` start runs none of this
-clean-up) — except one that finds a backup recovery's journal at its repair stage or unreadable —
-deletes the copies a backup run leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
+clean-up) deletes the copies a backup run leaves in `<state>/backup-staging` (`freeSpaceAtStart`, `apps/server/src/start-space.ts`) unless
 `lockVenue` is refused `provisioning.database_in_use`; it deletes under the hold and releases it.
 The same section deletes `<state>/restore-staging/staged-recovery` whole. That is where the setup
 wizard's recovery step (`stage` in `createSetupRecoveryPreparation`,
@@ -3183,9 +3173,6 @@ of `createSetupRecoveryPreparation`. On a
 box, only the server runs a backup (`BackupSupervisor`, started in
 `apps/server/src/boot.ts` after its store has taken the lock), so while a backup is writing
 staging, the start is refused. With no venue folder it deletes without the lock, because taking it creates the folder.
-When a backup recovery from the setup repair page has selected its own folders, the start runs the
-clean-up on those folders instead, under their own venue lock, and cleans the logs in that state
-folder (`runEntry`, `apps/server/src/node-entry.ts`).
 Measured 2026-10-21, Node v26.11.1, macOS, on the 32 MiB HFS+ image `apps/server/src/testing/full-disk.ts`
 makes, with a second process holding `venue.lock` by `begin immediate`: `lockVenueDatabase` was
 refused `provisioning.database_in_use` with 0, 4 KiB and 16 KiB left. The control, with no other
@@ -3381,23 +3368,17 @@ name — it covers only the duties it names, so a new one that forgets is seen b
 
 **The rule.** The box keeps `<state>/spare-space` (`SPARE_SPACE_FILE`, `@waitron/provisioning`;
 `SPARE_SPACE_BYTES`, 8 MiB of random bytes, `apps/server/src/spare-space.ts`) so that, on a nearly full
-disk, it still has the room to start and to take the venue locks that freeing a backup recovery's
-copy needs. Within the server, three paths delete it, all through `releaseSpare`:
+disk, it still has the room to start and take the venue lock. Within the server, one path deletes
+it, through `releaseSpare`:
 
 - **The start** (`releaseSpareToStart`, `apps/server/src/node-entry.ts`), before first-setup
   resolution, whose inspection opens the database: when the lowest free space of the configured
   and the starting folders is under 8 MiB, or under `FULL_DISK_BYTES` (16 MiB) when the recovery
-  state's last error was `storage.disk_full`. Never at a backup recovery's repair stage. A start at
-  the recovery level still releases, then serves the recovery page.
-- **The start's emptying of a discarded recovery** (`emptyDiscardedRecovery`,
-  `apps/server/src/first-setup-entry.ts`), under 16 MiB.
-- **The repair host before the four requests of the Start-again flow**
-  (`releaseSpareBeforeStartAgain`, mounted first in `resolutionApp`), under 16 MiB.
+  state's last error was `storage.disk_full`. A start at the recovery level still releases, then
+  serves the recovery page.
 
 **Old backups go before the spare.** Just before the start's release, `runEntry` calls
-`deleteOldBackupsAtStart` (`apps/server/src/start-backup-room.ts`, called at
-`apps/server/src/node-entry.ts:375`, the release at `:389`), except at a backup recovery's repair
-or selected stage. It does anything only under `FULL_DISK_BYTES` (16 MiB) free on the venue
+`deleteOldBackupsAtStart` (`apps/server/src/start-backup-room.ts`, called by `runEntry` just before the release). It does anything only under `FULL_DISK_BYTES` (16 MiB) free on the venue
 folder's disk, the one its deletions free, and only with a backup room note that passes every check ([The backup room note](#the-backup-room-note)). It
 deletes old backups toward the start's floor (256 MiB) when the deletable ones reach it, otherwise
 toward the spare plus 16 MiB (24 MiB), and deletes nothing when even that is out of reach. The
@@ -3405,13 +3386,11 @@ release then reads free space again, so a step that brought the venue folder's d
 plus 16 MiB releases nothing, unless the state folder is on another disk that is itself under
 16 MiB free.
 
-`waitron.sh reset` deletes the spare too. The spare is never venue data: never backed up, exported or streamed,
-and the backup recovery's originals walk (`packages/provisioning/src/first-setup-backup-workspace.ts`)
-leaves it and its marker out, so writing or deleting either cannot refuse a resume.
+`waitron.sh reset` deletes the spare too. The spare is never venue data: never backed up, exported or streamed.
 
 **The release marker.** A release that deleted bytes writes `<state>/spare-space.released`
-(`SPARE_SPACE_RELEASED_FILE`) straight after the unlink, inside `releaseSpare`, so every one of the
-three paths leaves it. While it exists the till stop holds, across restarts (owner, A1127 Q3 A):
+(`SPARE_SPACE_RELEASED_FILE`) straight after the unlink, inside `releaseSpare`, so the start's release
+leaves it. While it exists the till stop holds, across restarts (owner, A1127 Q3 A):
 `noteFullAtStart` notes the stop when `spareReleased` answers true, and `full()` keeps it while the
 marker exists, whatever the free space ([A full disk stops the till's writes](#a-full-disk-stops-the-tills-writes)).
 `spareReleased` answers true for a marker it cannot read (`storage.spare_marker_unread`, at start, at
@@ -3450,11 +3429,6 @@ Skipping the release while `readVenueHolder` shows a fresh holder was not taken:
 leaves its file and reads fresh for 30 s (`VENUE_HOLDER_STALE_MS`), so a start within 30 s of a
 server that died on a full disk would serve the full-disk page instead of booting.
 
-**The spare's folder after a start from a selected backup recovery.** `runEntry` hands the server an
-environment whose `WAITRON_STATE_DIR` is the recovery's target, while the spare lives in the
-configured state folder; it sets `WAITRON_SPARE_SPACE_DIR` to that folder, and the boot uses it,
-falling back to `config.stateDir`. It is not operator configuration.
-
 **The bucket stream does not use the spare's room** (measured once each on HFS+, idle box: 16 KiB
 below the control's free space, local stream files at most 451,603 bytes, no refusal; scripts and
 output in `~/waitron-campaign/a1127-measure/full-boot/stream/README.txt`). Not measured: a box that
@@ -3466,8 +3440,7 @@ under `scripts/` or `deploy/` (`waitron.sh reset` among them) are seen. It looks
 `SPARE_SPACE_FILE`, `SPARE_SPACE_RELEASED_FILE`, the two names as literals in any quotes, and the
 release, top-up and write-back function names (`restoreSpare` included), and requires each allowed
 file to still name its entry. A path built another way, or a function reached under another name,
-escapes it; `spareReleased` is not guarded at all (it changes nothing); and it never checks that the
-originals walk leaves the files out.
+escapes it; and `spareReleased` is not guarded at all (it changes nothing).
 
 **Why 8 MiB.** Measured on a 32 MiB HFS+ image (scripts and output kept outside the repo, under
 `~/waitron-campaign/a1127-measure/`): one lock needed 8 KiB, the emptying 16 KiB, the whole
@@ -3475,17 +3448,18 @@ Start-again flow 64 KiB; a 16 KiB spare released on a full disk was enough for t
 4 KiB one was not. 8 MiB stays under `FULL_DISK_BYTES`, so a disk whose spare was just released still
 reads as full to `fullDiskFailure`. Random bytes written out, never `truncate`: on a 32 MiB APFS image
 a file truncated to 4 MiB took 4096 bytes. ext4 and copy-on-write filesystems are not measured (the
-backlog holds that).
+backlog holds that). (2026-11-04, A1131bc slice 4: the emptying is deleted; the size still covers
+the start's lock.)
 
 **Why no lock is taken to delete or write it.** It is in neither a venue folder nor
 `<state>/backup-staging`, and a lock taken to delete it would need the room it exists to give. A
 release is an `unlink` that treats `ENOENT` as done; a top-up appends only while the file is short of
 the cap and opens with `O_NOFOLLOW`, leaving anything that is not a regular file alone
-(`storage.spare_unusable`). The lock rule itself is unchanged: the emptying and every Start-again
-step still take the venue locks; the spare only gives them room to.
+(`storage.spare_unusable`). The lock rule itself is unchanged: the start still takes the venue lock; the
+spare only gives it room to.
 
-**Which walks see it.** Only code that lists the state folder: the originals walk (which leaves it
-and its marker out). Start again's deletion list and its leftovers survey read named entries
+**Which walks see it.** None of the walks the design names, since A1131bc slice 4 deleted the
+originals walk: Start again's deletion list and its leftovers survey read named entries
 only, as do the setup inspection's fingerprints. The design
 (`docs/superpowers/specs/2026-10-28-a1127-full-disk-spare-file-design.md`, "Which walks see it") has
 the line references and says which were read rather than run.
@@ -5155,9 +5129,6 @@ backup run raises, then deletes the record. A malformed record, or one for anoth
 (`other_venue_db`), is logged `backup.start_room_record_dropped` and deleted with no alert; an
 unreadable record, an unreadable `venue.db` or a failed alert keeps it for the next start.
 
-**Kept out of** venue data: the originals walk of a backup recovery leaves the note, its temporary
-files and the record out (`isBackupRoomFileName`, `packages/provisioning/src/spare-space-name.ts`).
-
 **The guard.** `scripts/backup-room-note.test.ts`, weaker than its name: it reads text, against two
 hand-kept lists. A non-test `.ts` file under `apps/<app>/src` or `packages/<package>/src` that names
 `VENUE_FILE`, or `venue.db` after a quote or a `/`, beside one of `rm`, `rename`, `unlink`,
@@ -5177,7 +5148,6 @@ only the rejoin's wipe, through `db-wipe.ts`, is guarded.
   identity check; only the guard, which reads text, would notice.
 - A peer's fence that demotes the box at boot (`boot.ts`, `fenced && axes.singletonRole ===
   "primary"`) is not visible to the step, which checks no role.
-- A box at a backup recovery's repair or selected stage never gets the start's deletion.
 - `venue.db`'s device number and birth time are not measured on Linux or in Docker; a mismatch
   skips, which is safe. The in-place-write control in `apps/server/src/backup-room-note.test.ts`, run
   by CI on Linux, is the only receipt that ordinary writes keep them.
@@ -5666,6 +5636,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
 
 ### Spare file release and recovery
 
+_2026-11-04, A1131bc slice 4: the discarded recovery's emptying, the repair page's release and the originals walk are deleted; the root rule now names the start alone._
+
 - **Within the server, only the start (on a nearly full disk, before first-setup resolution), its
   emptying of a discarded recovery and the repair page's Start-again flow delete
   `<state>/spare-space` (`waitron.sh reset` deletes it too); a release writes
@@ -5782,6 +5754,8 @@ These excerpts retain the root instruction receipts from `CLAUDE.md` at
   two. [Rules and sites](conventions-data.md#a-local-row-belongs-to-one-node-so-no-foreign-key-may-join-a-local-table-to-a-ledgerstate-one).
 
 ### Spare file deletion and release
+
+_2026-11-04, A1131bc slice 4: the discarded recovery's emptying, the repair page's release and the originals walk are deleted; the root rule now names the start alone._
 
 - **Within the server, only the start (on a nearly full disk, before first-setup resolution), its
   emptying of a discarded recovery and the repair page's Start-again flow delete

@@ -1851,6 +1851,9 @@ venue-privacy API file use hosted measurements from PR run `40384194599`.
 That first run used local coverage timings for the split files; its twenty shard
 jobs took 164–266 seconds, median 244. Its logs contain each of the 1,040 selected
 ordinary-shard paths exactly once, and its server coverage merge passed.
+_2026-11-04, A1131bc slice 4: `first-setup-start-again-backup.test.ts`,
+`first-setup-backup-lease.test.ts` and `setup-first-backup-api.test.ts` are deleted with the old
+recovery._
 
 A four-worker scheduling model over the three newest measured runs, with an assumed
 55 seconds of job overhead and equal-duration subdivisions, estimated 265–284 seconds

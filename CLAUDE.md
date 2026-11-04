@@ -486,12 +486,10 @@ called weaker than its name, the topic file lists what it does not see.
   `fullDiskFailure` in `apps/server/src/boot-failure.ts` classifies 13 always, 14/4874/`ENOSPC` only
   under 16 MiB free. Guard: its test suite,
   weaker than the rule: stubbed errors, no real `ENOSPC` case.
-- **Within the server, only the start (on a nearly full disk, before first-setup resolution), its
-  emptying of a discarded recovery and the repair page's Start-again flow delete
-  `<state>/spare-space` (`waitron.sh reset` deletes it too); a release writes
-  `spare-space.released` (exceptions in the topic file), which holds the till stop, across restarts,
-  until the spare is written back whole. It is never venue data, and a recovery's originals walk
-  leaves both out.**
+- **Within the server, only the start (on a nearly full disk, before first-setup resolution)
+  deletes `<state>/spare-space` (`waitron.sh reset` deletes it too); a release writes
+  `spare-space.released` (exceptions in the topic file), which holds the till stop, across
+  restarts, until the spare is written back whole. It is never venue data.**
   Guard: `scripts/spare-space.test.ts`, weaker than its name: reads text.
   [Cost and detail](docs/developers/conventions-data.md#the-boxs-spare-file).
 - **Every server path that replaces or removes the live `venue.db` deletes
