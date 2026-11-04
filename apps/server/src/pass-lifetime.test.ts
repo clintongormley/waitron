@@ -2,7 +2,7 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { parties, passItemMarks, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { parties, ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readScopedPassBoard, type PassScope } from "./pass-board.js";
@@ -75,22 +75,14 @@ describe.each(["table", "counter"] as const)("A773 no dispatch projection: %s", 
             .update(ticketItems)
             .set({ awayAt: "2026-10-20T12:00:00.000Z" })
             .where(eq(ticketItems.id, item.id));
-          await tx.insert(passItemMarks).values({
-            deviceId: v.cfg.origin.deviceId,
-            ticketItemId: item.id,
-            doneAt: "2026-10-20T12:00:00.000Z",
-            doneByPersonId: OPERATOR,
-          });
         });
         const stored = await inTx(v, async (tx) => ({
           ticket: await tx.select().from(ticketItems).where(eq(ticketItems.id, item.id)),
-          marks: await tx.select().from(passItemMarks),
         }));
         expect(await read()).toEqual(before);
         expect(
           await inTx(v, async (tx) => ({
             ticket: await tx.select().from(ticketItems).where(eq(ticketItems.id, item.id)),
-            marks: await tx.select().from(passItemMarks),
           })),
         ).toEqual(stored);
       } finally {
@@ -132,18 +124,12 @@ async function tableWork(quantity = "1", shape?: "grouped") {
 }
 
 describe("A773 lifetime", () => {
-  it("keeps a ready paid dish on both boards despite legacy Away and device Done marks", async () => {
+  it("keeps a ready paid dish on both boards despite legacy Away", async () => {
     const { v, party, item } = await tableWork();
     await pay(v, party.tabId, "12.00");
     const expected = [{ id: item.id, qty: "1.000" }];
     expect(await boards(v)).toEqual({ screen: expected, monitor: expected });
     await inTx(v, async (tx) => {
-      await tx.insert(passItemMarks).values({
-        deviceId: v.cfg.origin.deviceId,
-        ticketItemId: item.id,
-        doneAt: new Date().toISOString(),
-        doneByPersonId: OPERATOR,
-      });
       await tx
         .update(ticketItems)
         .set({ awayAt: new Date().toISOString() })

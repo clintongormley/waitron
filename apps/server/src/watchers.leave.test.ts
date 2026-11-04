@@ -1,15 +1,14 @@
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { kitchenStations, passItemMarks, ticketItems } from "@waitron/db";
+import { kitchenStations } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import {
   billRow,
   inTx,
-  OPERATOR,
   orderForParty,
   pay,
   seat,
@@ -55,7 +54,7 @@ describe("what takes a paid table bill's dishes off today's kitchen screens", ()
   it("leaves a table bill paid at the till on the station queue and pass until collection", async () => {
     const v = await setupPartyVenue(suite.db);
     const stationId = await cocina(v);
-    const deviceId = await seedSessionDevice(suite.db, v.cfg);
+    await seedSessionDevice(suite.db, v.cfg);
     const { partyId, tabId } = await seat(v, await v.table("Mesa 1"));
     await orderForParty(v, partyId, ["Burger"], tabId);
     await pay(v, tabId, "12.00");
@@ -63,28 +62,6 @@ describe("what takes a paid table bill's dishes off today's kitchen screens", ()
     expect(await billRow(v, tabId)).toMatchObject({ status: "settled", collectedAt: null });
     expect(await onStationQueue(v, stationId, tabId)).toBe(true);
     expect(await onPass(v, tabId)).toBe(true);
-    expect(await onPassScreen(v, tabId)).toBe(true);
-
-    const [item] = await inTx(v, (tx) =>
-      tx
-        .select({ id: ticketItems.id })
-        .from(ticketItems)
-        .where(eq(ticketItems.workingOrderId, tabId)),
-    );
-    await inTx(v, (tx) =>
-      tx.insert(passItemMarks).values({
-        deviceId,
-        ticketItemId: item!.id,
-        doneAt: new Date().toISOString(),
-        doneByPersonId: OPERATOR,
-      }),
-    );
-    expect(await onPassScreen(v, tabId)).toBe(true);
-    await inTx(v, (tx) =>
-      tx
-        .delete(passItemMarks)
-        .where(and(eq(passItemMarks.deviceId, deviceId), eq(passItemMarks.ticketItemId, item!.id))),
-    );
     expect(await onPassScreen(v, tabId)).toBe(true);
     await inTx(v, (tx) => serveLine(tx, v.cfg, tabId, 1));
     expect(await onPassScreen(v, tabId)).toBe(false);
