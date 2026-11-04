@@ -49,6 +49,7 @@ const EXPECTED = [
   "fiscal_lookup_conflicts",
   "fiscal_reservations",
   "fiscal_series_conflicts",
+  "handover_activations",
   "invoice_pdf_downloads",
   "membership_clearances",
   "membership_removals",

@@ -4,6 +4,7 @@ import * as handover from "./index.js";
 describe("the package barrel", () => {
   it("exports the envelope, the binding and the order of steps", () => {
     expect(Object.keys(handover).sort()).toEqual([
+      "HANDOVER_BACKUP_VERIFICATION",
       "HANDOVER_CLASSIFICATION",
       "HANDOVER_KINDS",
       "HANDOVER_MIGRATIONS",

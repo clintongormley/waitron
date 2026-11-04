@@ -741,6 +741,9 @@ importers:
       '@waitron/fiscal-verifactu':
         specifier: workspace:*
         version: link:../fiscal-verifactu
+      '@waitron/handover':
+        specifier: workspace:*
+        version: link:../handover
       '@waitron/identity':
         specifier: workspace:*
         version: link:../identity
@@ -1297,9 +1300,15 @@ importers:
       '@waitron/membership':
         specifier: workspace:*
         version: link:../membership
+      '@waitron/module':
+        specifier: workspace:*
+        version: link:../module
       '@waitron/shared':
         specifier: workspace:*
         version: link:../shared
+      '@waitron/store':
+        specifier: workspace:*
+        version: link:../store
       '@waitron/sync-enrolment':
         specifier: workspace:*
         version: link:../sync-enrolment

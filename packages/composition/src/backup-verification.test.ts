@@ -175,7 +175,7 @@ it("admits the actual identity descriptor with all authenticator and ceremony ob
   expect(owner.data.checks).toEqual(["data", "secret"]);
 });
 
-it.each(["scheduler", "bookings", "fiscal-none"])(
+it.each(["scheduler", "bookings", "fiscal-none", "handover"])(
   "registers the real %s verification owner without an activation hook",
   (name) => {
     const modules = ALL_MODULES.filter((module) => module.name === "core" || module.name === name);

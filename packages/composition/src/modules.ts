@@ -57,6 +57,7 @@ import {
   BOOKINGS_PERMISSIONS,
   BOOKINGS_ROUTES,
 } from "@waitron/bookings";
+import { HANDOVER_BACKUP_VERIFICATION, HANDOVER_CLASSIFICATION } from "@waitron/handover";
 import {
   IDENTITY_CLASSIFICATION,
   IDENTITY_BACKUP_VERIFICATION,
@@ -171,6 +172,20 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     },
     classification: NODE_CLASSIFICATION,
     backup: { verification: NODE_BACKUP_VERIFICATION },
+    configurationTransfer: { kind: "none" },
+  },
+  {
+    name: "handover",
+    version: "0.0.0",
+    tier: "mandatory",
+    requires: { core: "*" },
+    migrations: {
+      name: "handover",
+      table: "__drizzle_migrations_handover",
+      from: "../handover/drizzle",
+    },
+    classification: HANDOVER_CLASSIFICATION,
+    backup: { verification: HANDOVER_BACKUP_VERIFICATION },
     configurationTransfer: { kind: "none" },
   },
   {
