@@ -19,7 +19,11 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId, type BusinessDayClock } from "@waitron/shared";
+import {
+  locationId as brandLocationId,
+  type BusinessDayClock,
+  type LocationId,
+} from "@waitron/shared";
 import {
   readDayPlan,
   readServiceDayPlan,
@@ -30,13 +34,7 @@ import {
 } from "./day-resolver.js";
 import { replaceMenuWeek, resolveDepartmentService, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import {
-  configureZone,
-  createDepartment,
-  menuState,
-  readZoneClosingStates,
-  type VenueScope,
-} from "./operations.js";
+import { configureZone, createDepartment, menuState, readZoneClosingStates } from "./operations.js";
 import {
   departmentDayRanges,
   departmentDays as departmentDayRows,
@@ -76,7 +74,9 @@ async function venue(options: { oneSeason?: boolean } = {}) {
     timeZone: "Europe/Madrid",
     dayCutover: "06:00",
   });
-  const cfg: VenueScope = { locationId: brandLocationId(await venueLocationId(db)) };
+  const cfg: { locationId: LocationId } = {
+    locationId: brandLocationId(await venueLocationId(db)),
+  };
   const zones = await db
     .insert(floorZones)
     .values([

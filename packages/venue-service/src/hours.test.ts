@@ -17,14 +17,13 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
+import { locationId, type LocationId } from "@waitron/shared";
 import { readCalendarDays, type HolidayReader } from "./hours.js";
 import { createHolidayStore, readHolidayFacts as installedReadHolidayFacts } from "./holidays.js";
 import { stationStates } from "./routing-store.js";
 import { readCalendarDays as packageReadCalendarDays } from "./index.js";
 import { type CalendarDay, type HolidayFact, type LocalDate } from "./hours-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import type { VenueScope } from "./operations.js";
 import { departments } from "./schema/service.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
@@ -43,7 +42,7 @@ beforeAll(() => {
 const AT = new Date("2026-10-06T10:00:00Z");
 
 interface Fixture {
-  cfg: VenueScope;
+  cfg: { locationId: LocationId };
   restaurant: HoursSubject;
   deli: HoursSubject;
   bar: HoursSubject;

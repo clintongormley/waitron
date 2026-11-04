@@ -136,7 +136,7 @@ async function casaMarina() {
   const app = new Hono();
   VENUE_SERVICE_ROUTES.mount(
     app,
-    { db, cfg, core: fake.core as unknown as ModuleRouteContext["core"] },
+    { db, cfg: {}, core: fake.core as unknown as ModuleRouteContext["core"] },
     noopLog,
   );
   const made = await withTransaction(db, async (tx) => {

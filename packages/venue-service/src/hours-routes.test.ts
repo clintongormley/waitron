@@ -32,11 +32,10 @@ import type { SpecialDaysModel } from "./holiday-types.js";
 import { readCalendarDays } from "./hours.js";
 import { readSpecialDaysModel } from "./named-days.js";
 import { saveSpecialDay } from "./special-days.js";
-import { locationId } from "@waitron/shared";
+import { locationId, type LocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { WEEK_DISPLAY_ORDER } from "./hours-types.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import type { VenueScope } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { routingModel } from "./routing-store.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
@@ -65,7 +64,7 @@ const noopLog: Logger = () => {};
 
 interface Fixture {
   app: Hono;
-  cfg: VenueScope;
+  cfg: { locationId: LocationId };
   restaurant: HoursSubject;
   deli: HoursSubject;
   bar: HoursSubject;
@@ -155,11 +154,7 @@ async function fixture(): Promise<Fixture> {
     .set({ lastSeenAt: "2000-01-01T00:00:00.000Z" })
     .where(eq(managementSessions.tokenHash, hashSessionToken(made.expired)));
   const app = new Hono();
-  VENUE_SERVICE_ROUTES.mount(
-    app,
-    { db, cfg: made.cfg, core: {} as ModuleRouteContext["core"] },
-    noopLog,
-  );
+  VENUE_SERVICE_ROUTES.mount(app, { db, cfg: {}, core: {} as ModuleRouteContext["core"] }, noopLog);
   const cookie = (token: string) => `${MANAGEMENT_COOKIE}=${token}`;
   return {
     ...made,

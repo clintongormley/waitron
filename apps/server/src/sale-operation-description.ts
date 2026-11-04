@@ -1,5 +1,5 @@
 import type { Transaction } from "@waitron/db";
-import { AppError, type LocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { offeredOperationDescriptionDefault } from "./operation-description-default.js";
 import "./errors.js";
@@ -7,7 +7,6 @@ import "./errors.js";
 export async function readSaleOperationDescription(
   tx: Transaction,
   cfg: {
-    locationId: LocationId;
     operationDescriptionRequired?: boolean;
     operationDescriptionDefault?: string;
   },

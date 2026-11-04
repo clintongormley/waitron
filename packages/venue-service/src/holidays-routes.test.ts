@@ -24,12 +24,11 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId } from "@waitron/shared";
+import { locationId, type LocationId } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import type { HolidayGeography, HolidayRead, SpecialDaysModel } from "./holiday-types.js";
 import { readHolidays } from "./holidays.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import type { VenueScope } from "./operations.js";
 import { VENUE_SERVICE_PERMISSIONS } from "./permissions.js";
 import { VENUE_SERVICE_ROUTES } from "./routes.js";
 import { holidayGeographies } from "./schema/holidays.js";
@@ -76,7 +75,7 @@ interface Address {
 
 interface Fixture {
   app: Hono;
-  cfg: VenueScope;
+  cfg: { locationId: LocationId };
   manager: string;
   supervisor: string;
   staff: string;
@@ -114,11 +113,7 @@ async function fixture(address: Address = {}): Promise<Fixture> {
     .set({ lastSeenAt: "2000-01-01T00:00:00.000Z" })
     .where(eq(managementSessions.tokenHash, hashSessionToken(made.expired)));
   const app = new Hono();
-  VENUE_SERVICE_ROUTES.mount(
-    app,
-    { db, cfg: made.cfg, core: {} as ModuleRouteContext["core"] },
-    noopLog,
-  );
+  VENUE_SERVICE_ROUTES.mount(app, { db, cfg: {}, core: {} as ModuleRouteContext["core"] }, noopLog);
   const cookie = (token: string) => `${MANAGEMENT_COOKIE}=${token}`;
   return {
     ...made,

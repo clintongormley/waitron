@@ -2,13 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
-import {
-  CORE_MIGRATIONS,
-  withTransaction,
-  workingOrderLines,
-  type Database,
-  venueLocationId,
-} from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, workingOrderLines, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTenant, seedVenue, seedWorkingOrder as seedOrder } from "@waitron/db/testing/seed.js";
 import {
@@ -20,7 +14,7 @@ import {
   type PersonRoleValue,
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
-import { decimal, locationId } from "@waitron/shared";
+import { decimal } from "@waitron/shared";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { ADJUSTMENTS_PERMISSIONS } from "./permissions.js";
@@ -74,7 +68,7 @@ interface Fixture {
   cookie: Record<PersonRoleValue, string>;
 }
 
-async function fixture(venueLocation = "00000000-0000-4000-8000-000000000001"): Promise<Fixture> {
+async function fixture(): Promise<Fixture> {
   await seedTenant(db);
   const cookie = {} as Record<PersonRoleValue, string>;
   await db.transaction(async (tx) => {
@@ -92,7 +86,7 @@ async function fixture(venueLocation = "00000000-0000-4000-8000-000000000001"): 
     app,
     {
       db,
-      cfg: { locationId: locationId(venueLocation) },
+      cfg: {},
       core: {} as ModuleRouteContext["core"],
     },
     noopLog,
@@ -633,8 +627,7 @@ describe("adjustment report routes", () => {
       timeZone: "Europe/Madrid",
       dayCutover: "05:00:00",
     });
-    const venueId = await venueLocationId(db);
-    const fx = await fixture(venueId);
+    const fx = await fixture();
     const people = await db.select({ id: persons.id, role: persons.role }).from(persons);
     const idOf = (role: PersonRoleValue) => people.find((p) => p.role === role)!.id;
     const bill = await seedOrder(db, {
@@ -964,20 +957,6 @@ describe("adjustment report routes", () => {
         expect(((await entries.json()) as { entries: unknown[] }).entries).toHaveLength(count);
       },
     );
-  });
-
-  // A1301: deleted with cfg in S18
-  it("reads the venue's clock whatever location the module names", async () => {
-    await seedVenue(db, {
-      name: "Sala",
-      invoiceLocales: ["es"],
-      operationDescription: "Restaurante",
-      timeZone: "Europe/Madrid",
-      dayCutover: "05:00:00",
-    });
-    const fx = await fixture();
-    const response = await send(fx.app, "GET", `${REPORT}?${DAY}`, fx.cookie.manager);
-    expect(response.status).toBe(200);
   });
 
   it("refuses with venue.not_found when the database holds no venue", async () => {

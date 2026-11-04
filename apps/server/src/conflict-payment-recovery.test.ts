@@ -191,7 +191,7 @@ it("finalises an already captured bill once after the actual administrator switc
     app,
     {
       db: suite.db,
-      cfg: { locationId: node.locationId },
+      cfg: {},
       core: {} as ModuleRouteContext["core"],
       liveOperations: createLiveModuleOperation({ node, preparation, requestFromBox: () => false }),
     },

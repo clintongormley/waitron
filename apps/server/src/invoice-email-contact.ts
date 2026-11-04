@@ -1,5 +1,5 @@
-import { venueLocationId, type Transaction } from "@waitron/db";
-import { AppError, locationId } from "@waitron/shared";
+import type { Transaction } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 
 export type InvoiceEmailContactSource =
@@ -9,7 +9,6 @@ export async function resolveInvoiceEmailContact(
   tx: Transaction,
   source: InvoiceEmailContactSource,
 ): Promise<{ email: string; phone?: string } | null> {
-  const cfg = { locationId: locationId(await venueLocationId(tx)) };
   const departmentId =
     source.kind === "sale"
       ? await VENUE_SERVICE.receiptDepartmentForSale(tx, source.saleId)
@@ -19,7 +18,7 @@ export async function resolveInvoiceEmailContact(
     try {
       const receipt = await VENUE_SERVICE.readRetainedDepartmentReceipt(
         tx,
-        { ...cfg, receiptLanguages: [] },
+        { receiptLanguages: [] },
         id,
       );
       return receipt.email

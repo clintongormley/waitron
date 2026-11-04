@@ -171,7 +171,7 @@ async function routed() {
     };
   });
   const app = new Hono();
-  VENUE_SERVICE_ROUTES.mount(app, { db, cfg, core: {} as ModuleRouteContext["core"] }, noopLog);
+  VENUE_SERVICE_ROUTES.mount(app, { db, cfg: {}, core: {} as ModuleRouteContext["core"] }, noopLog);
   const send = (method: "GET" | "POST", path: string, cookie: string, body?: unknown) =>
     app.request(`${BASE}${path}`, {
       method,

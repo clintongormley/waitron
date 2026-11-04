@@ -14,7 +14,6 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { locationId } from "@waitron/shared";
 import { uploadImage } from "./images.js";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { MEDIA_CLASSIFICATION, MEDIA_CONFIGURATION_TRANSFER, MEDIA_MODULE } from "./module.js";
@@ -88,7 +87,7 @@ describe("the media module descriptor", () => {
       app,
       {
         db: suite.db,
-        cfg: { locationId: locationId("00000000-0000-4000-8000-000000000001") },
+        cfg: {},
         core: {
           floorPlanSets: {
             create: () => Promise.reject(new Error("unused floor plan sets")),

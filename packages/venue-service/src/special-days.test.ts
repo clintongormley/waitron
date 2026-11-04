@@ -20,10 +20,10 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { configureZone, createDepartment, type VenueScope } from "./operations.js";
+import { configureZone, createDepartment } from "./operations.js";
 import { departmentDays, specialDayDates, specialDays, zoneDays } from "./schema/seasons.js";
 import {
   deleteSpecialDay,
@@ -52,7 +52,7 @@ async function venue() {
     dayCutover: "06:00",
   });
   const venueId = await venueLocationId(db);
-  const cfg: VenueScope = { locationId: brandLocationId(venueId) };
+  const cfg: { locationId: LocationId } = { locationId: brandLocationId(venueId) };
   const [zone] = await db
     .insert(floorZones)
     .values({ locationId: cfg.locationId, name: "Dining room", displayOrder: 0 })

@@ -31,7 +31,7 @@ import {
 import { resolveDepartmentDays } from "./day-resolver.js";
 import { saveMenuPeriod } from "./menu-timetable.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { configureZone, createDepartment, type VenueScope } from "./operations.js";
+import { configureZone, createDepartment } from "./operations.js";
 import { departmentDays, seasons, zoneDays } from "./schema/seasons.js";
 import {
   DEFAULT_SEASONS,
@@ -215,7 +215,7 @@ async function autumnVenue() {
     dayCutover: "06:00",
   });
   const venueId = await venueLocationId(db);
-  const cfg: VenueScope = { locationId: brandLocationId(venueId) };
+  const cfg: { locationId: LocationId } = { locationId: brandLocationId(venueId) };
   const [zone] = await db
     .insert(floorZones)
     .values({ locationId: cfg.locationId, name: "Terrace", displayOrder: 0 })

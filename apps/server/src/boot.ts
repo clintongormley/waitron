@@ -2686,7 +2686,6 @@ async function bootServer(
     }),
     db,
     cfg: {
-      locationId: tradingContext.locationId,
       contentDefaultLanguage: venueLocale,
       operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
       operationDescriptionDefault,

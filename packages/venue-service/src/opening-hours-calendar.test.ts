@@ -21,7 +21,7 @@ import {
 import { eq } from "drizzle-orm";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
+import { locationId, type LocationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
 import { CALENDAR_MONTH_PLAN_READS } from "./dashboard/live-queries.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
@@ -31,7 +31,7 @@ import {
   readOpeningHoursYear,
   readSeasonDays,
 } from "./opening-hours-calendar.js";
-import { configureZone, createDepartment, type VenueScope } from "./operations.js";
+import { configureZone, createDepartment } from "./operations.js";
 import { specialDayDates } from "./schema/seasons.js";
 import { ensureDefaultSeasons, readSeasons } from "./seasons.js";
 import { missingHolidaysIn, saveSpecialDay } from "./special-days.js";
@@ -64,7 +64,7 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
     });
   const venueId = await venueLocationId(suite.db);
   const suffix = existing === undefined ? "" : ` ${randomUUID()}`;
-  const cfg: VenueScope = { locationId: locationId(venueId) };
+  const cfg: { locationId: LocationId } = { locationId: locationId(venueId) };
   return run(async (tx) => {
     const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);

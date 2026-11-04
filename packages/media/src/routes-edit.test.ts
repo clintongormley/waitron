@@ -17,7 +17,7 @@ import {
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { ModuleRouteContext } from "@waitron/module";
-import { locationId, type ReceiptLogoRasters } from "@waitron/shared";
+import { type ReceiptLogoRasters } from "@waitron/shared";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { MEDIA_ROUTES } from "./routes.js";
 import { DEFAULT_FRAMING } from "./framing.js";
@@ -62,7 +62,6 @@ async function fixture(
   const ctx = {
     db: suite.db,
     cfg: {
-      locationId: locationId("00000000-0000-4000-8000-000000000001"),
       contentDefaultLanguage: "en",
     },
     maxUploadBytes: 1000,

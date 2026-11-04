@@ -1,16 +1,15 @@
 import { readBusinessDayScheduleRevision } from "../business-day-schedule.js";
 import { and, asc, eq } from "drizzle-orm";
 import { catalogues, readVenueClock, type Transaction } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, type LocationId } from "@waitron/shared";
 import { replaceMenuWeek, saveMenuPeriod, updateMenuPeriod } from "../menu-timetable.js";
 import { menuPeriods, menuPeriodStaffMenus } from "../schema/menus.js";
-import type { VenueScope } from "../operations.js";
 import { zoneServicePolicies } from "../schema/service.js";
 import "../errors.js";
 
 export async function offerMenuThroughZone(
   tx: Transaction,
-  cfg: VenueScope,
+  cfg: { locationId: LocationId },
   zoneId: string,
   menuId: string,
   options: { displayOrder?: number; makeDefault?: boolean } = {},

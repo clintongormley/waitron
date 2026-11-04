@@ -13,9 +13,9 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId as brandLocationId } from "@waitron/shared";
+import { locationId as brandLocationId, type LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import { listVenueReadiness, type VenueScope } from "./operations.js";
+import { listVenueReadiness } from "./operations.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
 import { listSpecialDays, readSpecialDay, saveSpecialDay, specialDaysOn } from "./special-days.js";
 
@@ -117,7 +117,7 @@ async function venue() {
     city: "Villa Real",
   });
   const venueId = await venueLocationId(db);
-  const cfg: VenueScope = { locationId: brandLocationId(venueId) };
+  const cfg: { locationId: LocationId } = { locationId: brandLocationId(venueId) };
   return { cfg };
 }
 type Venue = Awaited<ReturnType<typeof venue>>;

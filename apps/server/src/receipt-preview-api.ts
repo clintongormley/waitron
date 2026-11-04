@@ -304,7 +304,6 @@ export function mountReceiptPreviewApi(
       const snapshot = await withTransaction(deps.db, async (tx) => {
         const checked = await checkedDepartmentReceiptWrite(
           tx,
-          deps.cfg,
           id,
           sessionId,
           { receipt: body.receipt, policy: body.policy },

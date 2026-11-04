@@ -131,7 +131,7 @@ function mounted(
     app,
     {
       db: suite.db,
-      cfg: { locationId: node.locationId },
+      cfg: {},
       core: {} as ModuleRouteContext["core"],
       liveOperations: bridge,
     },

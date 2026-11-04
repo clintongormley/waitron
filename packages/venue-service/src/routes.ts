@@ -732,7 +732,7 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
             ...(await listVenueReadiness(tx)),
             ...(ctx.cfg.operationDescriptionRequired === true &&
             ctx.cfg.operationDescriptionDefault === undefined
-              ? await listDepartmentReceiptReadiness(tx, ctx.cfg)
+              ? await listDepartmentReceiptReadiness(tx)
               : []),
           ],
           releaseReminderMinutesByDepartment: await listDepartmentReminderMinutes(tx),

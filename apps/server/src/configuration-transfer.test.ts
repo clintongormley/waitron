@@ -240,7 +240,7 @@ it("transfers two photo identities sharing replacement bytes with framing, names
   expect(transferred.tables.media_image_blobs).toHaveLength(1);
   expect(transferred.tables.media_image_edits).toHaveLength(2);
   const originalBundle = structuredClone(transferred);
-  const target = await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
@@ -284,7 +284,7 @@ it("transfers two photo identities sharing replacement bytes with framing, names
     .select()
     .from(departments)
     .where(eq(departments.name, "Photo receipt"));
-  const scope = { locationId: brandLocationId(target.locationId), receiptLanguages: ["es-ES"] };
+  const scope = { receiptLanguages: ["es-ES"] };
   for (const paper of ["58mm", "80mm"] as const) {
     const printed = await readPrintedDepartmentReceipt(
       targetSuite.db,
@@ -2152,7 +2152,7 @@ it("transfers a department's receipt logo with its image and pictures, and the i
   });
   const { writeDepartmentReceipt, readDepartmentReceipt, readPrintedDepartmentReceipt } =
     await import("@waitron/venue-service");
-  const cfg = { locationId: brandLocationId(source.locationId), receiptLanguages: ["es-ES"] };
+  const cfg = { receiptLanguages: ["es-ES"] };
   const pictures = await drawLogoRasters(photo.bytes);
   await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, { name: "Logo receipt" });
@@ -2168,27 +2168,26 @@ it("transfers a department's receipt logo with its image and pictures, and the i
     versions,
   );
   expect(transferred.tables).not.toHaveProperty("tenant_receipts");
-  const target = await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
+  await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
     db: targetSuite.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, transferred, ALL_MODULES, versions),
   });
-  const printed = async (db: typeof suite.db, location: string) =>
+  const printed = async (db: typeof suite.db) =>
     withTransaction(db, async (tx) => {
       const [department] = await tx
         .select()
         .from(departments)
         .where(eq(departments.name, "Logo receipt"));
-      const scope = { ...cfg, locationId: brandLocationId(location) };
       return {
-        receipt: await readDepartmentReceipt(tx, scope, department!.id),
-        narrow: (await readPrintedDepartmentReceipt(tx, scope, department!.id, "58mm")).logo,
-        wide: (await readPrintedDepartmentReceipt(tx, scope, department!.id, "80mm")).logo,
+        receipt: await readDepartmentReceipt(tx, cfg, department!.id),
+        narrow: (await readPrintedDepartmentReceipt(tx, cfg, department!.id, "58mm")).logo,
+        wide: (await readPrintedDepartmentReceipt(tx, cfg, department!.id, "80mm")).logo,
         image: (await readImageBytes(tx, logo)) !== null,
       };
     });
-  const imported = await printed(targetSuite.db, target.locationId);
-  expect(imported).toEqual(await printed(suite.db, source.locationId));
+  const imported = await printed(targetSuite.db);
+  expect(imported).toEqual(await printed(suite.db));
   expect(imported.receipt).toEqual({ logo });
   // 10 × 6 fitted inside 160 dots high on either paper.
   expect([imported.narrow?.widthDots, imported.wide?.widthDots, imported.image]).toEqual([
@@ -6733,7 +6732,6 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
   const { getStoredLogoRasters } = await import("@waitron/layouts");
   const { resolveReceiptTrim } = await import("@waitron/shared");
   const cfg = {
-    locationId: brandLocationId(source.locationId),
     receiptLanguages: ["es-ES", "ca-ES"],
   };
   const logo = `${"a".repeat(64)}.png`;
@@ -6793,16 +6791,15 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
       .from(departments)
       .where(eq(departments.locationId, target.locationId));
     const idFor = (name: string) => rows.find((row) => row.name === name)!.id;
-    const targetCfg = { ...cfg, locationId: brandLocationId(target.locationId) };
     const global = await getReceipt(tx);
-    const empty = await readDepartmentReceipt(tx, targetCfg, idFor("Empty receipt"));
+    const empty = await readDepartmentReceipt(tx, cfg, idFor("Empty receipt"));
     return {
       ids: [idFor("Own receipt"), idFor("Empty receipt"), idFor("Bad optional receipt")],
-      own: await readDepartmentReceipt(tx, targetCfg, idFor("Own receipt")),
-      printed: await readPrintedDepartmentReceipt(tx, targetCfg, idFor("Own receipt"), "58mm"),
+      own: await readDepartmentReceipt(tx, cfg, idFor("Own receipt")),
+      printed: await readPrintedDepartmentReceipt(tx, cfg, idFor("Own receipt"), "58mm"),
       empty,
       inherited: resolveReceiptTrim(empty, {}, "es-ES", "es-ES"),
-      bad: await readDepartmentReceipt(tx, targetCfg, idFor("Bad optional receipt")),
+      bad: await readDepartmentReceipt(tx, cfg, idFor("Bad optional receipt")),
       global,
       pictures: await getStoredLogoRasters(tx, logo),
     };

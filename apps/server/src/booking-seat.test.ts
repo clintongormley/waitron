@@ -88,7 +88,7 @@ async function setupVenue(): Promise<Venue> {
   });
   const ctx: ModuleRouteContext = {
     db,
-    cfg: { locationId: tillCfg.locationId },
+    cfg: {},
     // What boot wires (boot.ts): the module reaches the seat verb ONLY through this seat.
     core: moduleCoreServices(tillCfg, enabledTableRemovals(ALL_MODULES)),
   };

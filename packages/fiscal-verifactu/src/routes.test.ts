@@ -13,7 +13,7 @@ import {
 } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
 import { MANAGEMENT_COOKIE, type Logger } from "@waitron/server-kit";
-import { AppError, locationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
 import { FISCAL_ROUTES } from "./routes.js";
@@ -76,7 +76,7 @@ function mount(
   const log = vi.fn<Logger>();
   const ctx: ModuleRouteContext = {
     db: options.db ?? suite.db,
-    cfg: { locationId: locationId("00000000-0000-4000-8000-000000000001") },
+    cfg: {},
     core: {} as ModuleRouteContext["core"],
     ...(options.drain === false
       ? {}

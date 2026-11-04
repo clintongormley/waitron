@@ -22,7 +22,7 @@ import {
   orderServiceContexts,
   saleReceiptHeaders,
 } from "./schema/service.js";
-import { setDepartmentSalePolicyField, type VenueScope } from "./operations.js";
+import { setDepartmentSalePolicyField } from "./operations.js";
 import "./errors.js";
 
 const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
@@ -166,9 +166,9 @@ function parsePicture(text: string | null, paper: ReceiptPaperWidth): ReceiptLog
   }
 }
 
-export async function listDepartmentReceiptReadiness(tx: Transaction, cfg: VenueScope) {
+export async function listDepartmentReceiptReadiness(tx: Transaction) {
   const rows = await tx
-    .select({ ...trimProjection({ ...cfg, receiptLanguages: [] }), name: departments.name })
+    .select({ ...trimProjection({ receiptLanguages: [] }), name: departments.name })
     .from(departments)
     .leftJoin(departmentReceipts, eq(departmentReceipts.departmentId, departments.id))
     .where(eq(departments.active, true));

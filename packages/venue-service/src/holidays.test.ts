@@ -14,7 +14,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedVenue } from "@waitron/db/testing/seed.js";
-import { locationId } from "@waitron/shared";
+import { locationId, type LocationId } from "@waitron/shared";
 import {
   createHolidayStore,
   readHolidayFacts as packageReadHolidayFacts,
@@ -23,7 +23,6 @@ import {
 import { saveSpecialDay } from "./special-days.js";
 import * as packageIndex from "./index.js";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
-import type { VenueScope } from "./operations.js";
 import { holidayGeographies } from "./schema/holidays.js";
 import { specialDayDates, specialDays } from "./schema/seasons.js";
 
@@ -154,7 +153,7 @@ async function setCountry(tx: Transaction, country: string) {
     .onConflictDoUpdate({ target: tenants.id, set: { country } });
 }
 
-async function venue(address: Address = {}): Promise<VenueScope> {
+async function venue(address: Address = {}): Promise<{ locationId: LocationId }> {
   return withTransaction(db, async (tx) => {
     await setCountry(tx, address.country ?? "ZZ");
     await seedVenue(tx, {
@@ -169,7 +168,7 @@ async function venue(address: Address = {}): Promise<VenueScope> {
   });
 }
 
-async function moveTo(cfg: VenueScope, address: Address) {
+async function moveTo(cfg: { locationId: LocationId }, address: Address) {
   await withTransaction(db, async (tx) => {
     if (address.country !== undefined) await setCountry(tx, address.country);
     const set: { province?: string | null; city?: string | null } = {};
@@ -183,7 +182,12 @@ async function moveTo(cfg: VenueScope, address: Address) {
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(db, fn);
 
 /** A special day closed all day on `date`, written straight to its tables. */
-async function specialDay(cfg: VenueScope, date: string, name: string, repeatsYearly = false) {
+async function specialDay(
+  cfg: { locationId: LocationId },
+  date: string,
+  name: string,
+  repeatsYearly = false,
+) {
   await run(async (tx) => {
     const [day] = await tx
       .insert(specialDays)
@@ -197,7 +201,7 @@ async function specialDay(cfg: VenueScope, date: string, name: string, repeatsYe
 
 async function seedRetainedGeographyWithSpecialDay(
   tx: Transaction,
-  cfg: VenueScope,
+  cfg: { locationId: LocationId },
   date: string,
   name: string,
 ) {

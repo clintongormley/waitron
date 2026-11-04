@@ -14,7 +14,6 @@ import {
   startManagementSession,
 } from "@waitron/identity";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
-import { locationId } from "@waitron/shared";
 import { MEDIA_MIGRATIONS } from "./migrations.js";
 import { MEDIA_ROUTES } from "./routes.js";
 import { prepareImage } from "./prepare.js";
@@ -62,7 +61,6 @@ async function fixture(
     {
       db: suite.db,
       cfg: {
-        locationId: locationId("00000000-0000-4000-8000-000000000001"),
         ...(contentDefaultLanguage === null ? {} : { contentDefaultLanguage }),
       },
       ...(maxUploadBytes === null ? {} : { maxUploadBytes }),

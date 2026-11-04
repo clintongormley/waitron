@@ -7,7 +7,6 @@ import {
 } from "@waitron/shared";
 import type { DepartmentReceiptLanguages } from "./department-receipt-languages.js";
 import type { Transaction } from "@waitron/db";
-import type { LocationId } from "@waitron/shared";
 import { authorizeManager } from "@waitron/identity";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -19,7 +18,6 @@ function object(value: unknown): value is Record<string, unknown> {
 
 export async function checkedDepartmentReceiptWrite(
   tx: Transaction,
-  cfg: { locationId: LocationId },
   departmentId: string,
   managementSessionId: string,
   input: unknown,
@@ -32,7 +30,7 @@ export async function checkedDepartmentReceiptWrite(
     touch: options.touch,
   });
   const languages = await departmentReceiptLanguages(tx);
-  const scope = { ...cfg, receiptLanguages: languages.storageLanguages };
+  const scope = { receiptLanguages: languages.storageLanguages };
   const current = await VENUE_SERVICE.readDepartmentReceipt(tx, scope, departmentId);
   const checked = validateDepartmentReceiptWrite(
     input,

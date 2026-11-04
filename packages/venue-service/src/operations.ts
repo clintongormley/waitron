@@ -43,7 +43,7 @@ import {
   type ServedMenu,
 } from "@waitron/catalogue";
 import type { PreparedServiceDay, ServiceMode, ZoneMenuState, ZoneOffers } from "@waitron/module";
-import { AppError, type LocationId } from "@waitron/shared";
+import { AppError } from "@waitron/shared";
 import {
   departmentSalePolicies,
   departments,
@@ -60,10 +60,6 @@ import { readStarterStaffLanguage } from "./starter-language.js";
 import { routingCellPeriods, routingCells } from "./schema/routing.js";
 import { readProfileZones } from "./profile-access.js";
 import "./errors.js";
-
-export interface VenueScope {
-  locationId: LocationId;
-}
 
 export interface Department {
   id: string;
