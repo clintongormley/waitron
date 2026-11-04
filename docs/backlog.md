@@ -6069,6 +6069,15 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **Investigate the store's SQL bound-value test timing out in CI.** The unchanged case hit its
+  five-second limit on A790's first run; the local file passes, which does not explain the failure.
+  Retain phase timings before changing the fixture or its deadline.
+  [Receipt and next check](backlog/ci.md#store-bound-value-test-timeout).
+
+- **Investigate the till logo retry's missing request in CI.** Its unchanged retry case counted
+  one request instead of two after the retry. The local file passes; the cause remains unknown.
+  [Receipt and next check](backlog/ci.md#till-logo-retry-missing-request).
+
 - **The resume-authority test's ciphertext damage can leave the value unchanged** (left open by
   A1314). In `apps/server/src/first-setup-backup-resume-authority.test.ts`, `slice(0, -4) + "AAAA"`
   changes nothing when the ciphertext decodes to a multiple of three bytes ending in three zero

@@ -38,6 +38,10 @@ const NOT_YET: Record<string, string> = Object.fromEntries(
     "bill_payments.attested_by",
     "bill_payments.requested_by",
     "daily_closes.closed_by",
+    "device_invoice_save_operations.person_id",
+    "document_delivery_requests.person_id",
+    "document_page_jobs.person_id",
+    "document_page_reprints.person_id",
     "incidents.acknowledged_by",
     "invoice_deliveries.person_id",
     "invoice_pdf_downloads.person_id",
@@ -72,6 +76,7 @@ const COVERED_ELSEWHERE: Record<string, string> = {
 
 const NOT_A_PERSON: Record<string, string> = {
   "print_jobs.claimed_by": "the claiming print agent's id",
+  "document_page_jobs.claimed_by": "the page-print transport claim holder, not its requester",
   "invoice_deliveries.claimed_by": "the claiming print agent's id, or the node's for an email",
 };
 

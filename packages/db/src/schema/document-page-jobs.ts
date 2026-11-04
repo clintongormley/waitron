@@ -43,6 +43,7 @@ export const documentPageJobs = table(
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
     completedAt: tsString("completed_at"),
     claimTokenHash: label("claim_token_hash"),
+    // Identifies the page-print transport claim holder.
     claimedBy: label("claimed_by"),
     claimedAgentId: id("claimed_agent_id").references(() => printAgents.id, {
       onDelete: "restrict",

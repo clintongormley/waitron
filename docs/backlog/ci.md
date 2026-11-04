@@ -1397,3 +1397,37 @@ after 2026-11-02 is the proof: read each `mutation-db (N)` job's duration. A sha
 20 minutes means the table needs refreshing with `scripts/mutation-costs.mjs` from that run's
 reports (receipt in `docs/developers/ci-and-gates.md`, "db's mutation shards are packed by
 estimated cost").
+
+## Store bound-value test timeout
+
+On 4 November, A790's first CI run
+[41879243123, light-a job126747319929](https://github.com/clintongormley/waitron/actions/runs/41879243123/job/126747319929)
+timed out after 5,000 ms in `packages/store/src/index.test.ts:648`, “refuses a statement binding
+one value more on the reader and the writer of both files”. Its other 319 store cases passed.
+The log does not locate the slow phase. The entire store source tree is byte-identical between
+A790's base `e0da0ad18a` and failed head `87d06fc39e`; the focused local file passed 54 cases.
+That local pass does not explain or repair the CI failure.
+
+The investigation read 94 earlier failed-run logs among the latest 100 failed CI runs; five
+historical logs were unavailable and the remaining run was this occurrence. No matching prior
+failure was found in the logs read. Do not call it a known flake or a branch regression from
+that search alone. Retain timings for opening the store, constructing the large query and each
+reader/writer call on a comparable Linux runner. Preserve every bound-value assertion and locate
+the slow work before changing the fixture or its deadline. A790's campaign receipt is
+`receipts/a790-cut-a-20261104/unresolved-ci-classification.json`; the root-cause fix remains open.
+
+## Till logo retry missing request
+
+On 4 November, the same run's
+[till2 job126747320199](https://github.com/clintongormley/waitron/actions/runs/41879243123/job/126747320199)
+failed `apps/till/src/widgets/till-shell.venue-logo.test.ts:424`: “while a logo only it fits keeps
+failing, the bar asks for it once every 60 s” counted one resource request where it expected two.
+The till shell, its test, the live-image helper and the logo component are byte-identical to
+A790's base `e0da0ad18a`; the focused local file passed 22 cases. This is an unresolved failure,
+not a fix established by that local pass.
+
+The same failure-history search found no earlier matching failure in the logs read. Retain the
+retry timer, image-error events, image generation and resource-timing entries on a comparable
+browser run, so a missing retry can be separated from publication of its observation. Keep the
+existing assertion and deadline while finding the cause; a later clean run does not close this
+investigation. A790 retains the raw job log and failure screenshot path in its campaign receipts.
