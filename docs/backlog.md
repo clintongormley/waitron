@@ -380,29 +380,12 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   behavioral assertions and protected-file scope intact.
   [Detail](backlog/fiscal.md#protected-write-path-test-policy-quotation).
 
-- **W41s. Fiscal prevention and offline recovery** — filing investigation, startup/daily
-  reconciliation, optional device-held invoice evidence, signed witnesses and fencing, and the
-  complete old-backup/new-hardware exercise remain queued. Task 8's synthetic correction and
-  held-record actions keep disputed production remedies disabled pending Q35/Q37/Q38/Q40 or a
-  case-specific owner decision. A held cancellation from another issuing chain has no qualified
-  release here.
-  The candidate now wires a module-owned startup/daily sweep beside submission, scoped to the
-  node, venue taxpayer and environment. Lookups include empty intervening months from the oldest
-  locally known period through the current month, retaining periods already observed during this
-  start. Their daily/retry deadlines begin after the pass finishes; incomplete responses and live
-  or changed filing claims remain unknown. A complete lookup
-  can retain a fingerprint, software-identity or different-date conflict for a locally held invoice
-  number and use the existing administrator stop without changing its filing result. It also queries
-  the current venue month without local invoices and retains an externally held number in an active
-  series without inventing a local record or filing case. Lookup-only recovery preserves the existing
-  filing results. The next candidate retains receipt observations on the till by taxpayer, environment
-  and series, through a separate optional reader. Cash sales and their retries have now been exercised
-  while a lookup is pending, failed or incomplete. Archive and stream restore tests now complete
-  without enrolled devices or internet time, then pair a fresh device through the approval routes
-  and issue under the recovered series. The recovery form now displays this browser's retained
-  observations for the selected taxpayer and environment without sending them as recovery authority.
-  Archive/stream fresh-device pairing also runs over a real loopback HTTP listener. Whole-item
-  review, the normal hook and current-head CI remain before owner review.
+- **W41s. Fiscal prevention and offline recovery.** Filing investigation (W41s-9), signed
+  witnesses and fencing (W41s-10b), and the complete old-backup/new-hardware exercise (W41s-11)
+  remain queued. Qualify live AEAT reconciliation, production TLS, a till payment through a booted
+  restored server, and history before the oldest known month. Task 8's disputed production remedies
+  remain disabled pending Q35/Q37/Q38/Q40 or a case-specific owner decision; a held cancellation
+  from another issuing chain has no qualified release here.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
@@ -3923,10 +3906,10 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **Loose ends left by A663 Part 3b (#1827).**
   [Detail](backlog/printers.md#loose-ends-left-by-a663-part-3b-1827)
 
-- **A790. Choose a document and its permitted printer.** The
-  [implementation plan](superpowers/plans/2026-10-22-a790-document-printer-routing.md) is
-  approved for build (owner, 2026-10-23); implementation waits for A739/G4 recovery gates
-  and release of the overlapping paths.
+- **A790. Choose a document and its permitted printer.** Build the unconnected foundation
+  (Cut A) from the [venue-only plan](superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md),
+  then the complete live routing cut before A739's payment-window integration. Keep the live
+  node/restore recovery prerequisites; overlapping files or migration numbers are resolved on rebase.
   [Detail](backlog/printers.md#a790-document-and-printer-routing-plan)
 
 - **Loose ends left by A661 (#1745).**

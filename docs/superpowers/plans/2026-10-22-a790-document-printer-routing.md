@@ -1,5 +1,12 @@
 # A790 document and printer routing implementation plan
 
+**4 November 2026:** Use the [venue-only successor](2026-11-04-a790-venue-document-printer-routing.md)
+for execution. The owner approved this plan and build on 23 October; the later removal of
+locations and 4 November revision replace the location contracts and cross-location checks
+below. File overlaps and migration numbers are resolved on rebase. The original plan follows
+unchanged as history, including its older approval and release waits.
+
+
 > **Execution:** Native, inline, one task at a time after explicit plan/build agreement and the release gates below. Use `superpowers:executing-plans` and read the TDD skill before writing implementation or tests. Do not dispatch automatic implementer/reviewer pairs. Checkboxes describe future work; none is completed by publishing this plan.
 
 **Goal:** You choose a recorded document, see its eligible printers, and explicitly confirm a named destination, with recoverable requests and the agreed Equipment/browser preferences.

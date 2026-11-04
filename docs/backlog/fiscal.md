@@ -433,118 +433,39 @@ file's edit scope is authorised. The live procedure is documented in
 
 ## W41s. Fiscal prevention and offline recovery — DESIGN AND REVISED PLAN APPROVED (2026-10-04)
 
-Filing investigation, outside evidence and fencing for the other tasks, and the complete
-old-backup/new-hardware operational exercise remain queued. The latest Task 8 qualification is
-below; earlier dated implementation checkpoints retain their historical scope.
+Filing investigation (W41s-9), signed witnesses and fencing (W41s-10b), and the complete
+old-backup/new-hardware exercise (W41s-11) remain queued. Keep their authority, recovery and
+public fiscal-enablement gates. W41s-10a's remaining qualification work follows.
 
-### W41s-10a runtime candidate checkpoint, 2 November 2026
+### Qualify reconciliation against live AEAT
 
-The unpublished candidate starts a module-owned reconciliation sweep separately from submission.
-`slot.reconciliation.test.ts` exercises the real SOAP client with a fake authority and checks lost
-acknowledgements, failed-lookups' retry times, taxpayer/node/environment scope and transport cleanup.
-`boot.fiscal-reconciliation.test.ts` holds a lookup while HTTP and submission continue; normal close
-and a later failed-start step both wait for it. Demo, Prepare, preproduction without submission
-opt-in and a secondary node do not call the lookup pass. No authority response certifies freshness
-or reserves an identity.
+Exercise the startup/daily lookup through the real AEAT service. Retain the taxpayer, node and
+environment scope; incomplete or failed lookup remains unknown. Do not treat a lookup result as
+freshness, allocation authority or evidence that an old writer stopped. W41s-10b owns signed
+witnesses and fencing.
 
-Foreign or different-date invoice evidence, the Task 7 conflict path, optional device-held evidence
-and recovery qualification remain unfinished. The whole item still needs its reviews and CI before
-owner review; this checkpoint is not a partial pull request.
+### Qualify offline recovery through production TLS
 
-### W41s-10a lookup-conflict candidate checkpoint, 2 November 2026
+Extend W41s-11's old-backup/new-hardware exercise to the production HTTPS connection and fresh
+device pairing. Keep the administrator approval, cookie admission, recovered-series and retired
+counter checks. The loopback HTTP qualification in #2449 is not a production TLS result.
 
-For a locally held invoice number, the scoped runtime lookup compares the invoice date, fingerprint
-and software identity after every page arrives. A confirmed mismatch retains a separate append-only
-lookup observation and feeds Task 7's existing administrator stop. It preserves the original records,
-delivery results and acknowledgements, including when the box has made no submission attempt or the
-record already has an unrelated filing case. Missing fingerprint or software fields remain unknown;
-a failed later page commits no partial conflict. Matching contents with another reference remain an
-agreement. Retired-identity observations retain their evidence without stopping the current identity.
+### Take a till payment through a booted restored server
 
-`reconcile.conflicts.test.ts` checks those boundaries and refused evidence writes; the new
-`backup-lookup-conflicts.test.ts` checks preserved evidence and dangling links in real backup files.
-The generated migration adds only `fiscal_lookup_conflicts`. Its table-name entries join the existing
-append-only and ownership lists; predecessor fixtures omit its triggers until its migration exists.
-This is still an unpublished milestone. Foreign invoices whose numbers have no local row, current
-months without stored records, optional device-held evidence, recovery qualification and the whole
-item's reviews and CI remain unfinished.
+In W41s-11, restore both archive and stream backups without enrolled devices or internet time,
+start the recovered server, pair a fresh till and take a payment through its API. Check the
+recovered series, one invoice and one tender, original records, retired counters and replay.
+Keep optional browser receipt observations separate from recovery authority; missing storage or
+an unlisted invoice number is not proof that a number was unused.
 
-### W41s-10a absent-invoice candidate checkpoint, 2 November 2026
+### Account for history before the oldest known month
 
-The next unpublished milestone extends the preceding lookup checkpoint to invoices absent from the
-box. The runtime caller includes the current venue month, using the clock's offset, even when that
-month has no stored invoice. The library's stored-period audit remains available separately.
-`slot.reconciliation.test.ts` checks the empty month and daily deadline through the real SOAP client
-and fake authority.
+W41s-10a's monthly starting point can omit a wholly missing earlier period. Carry that uncertainty
+into W41s-10b's evidence/fencing design and W41s-11's exercise. Name the evidence required before
+claiming completeness; querying later months or showing retained receipt observations alone does
+not resolve earlier missing history.
 
-An externally held invoice in an active series is retained in the append-only
-`fiscal_series_conflicts` table. It references the actual identity and series, without inventing a
-local invoice, filing case or submission attempt. The lookup checks the identity and series again
-inside its write transaction and excludes an invoice recorded while the lookup was pending.
-`reconcile.unheld.test.ts` checks these boundaries, different-date reuse across months, complete
-pagination, taxpayer scope and refused evidence writes. A number already represented by this
-lookup's local conflict is not given a second conflict entry.
-
-The administrator procedure accepts an observation reference as well as a record/case reference.
-`conflict-recovery.test.ts` checks activation and replay with both the observation-only reference
-and existing pending or accepted filing results; the results and records stay unchanged.
-The route and real Chromium screen checks carry the exact observation reference. The generated
-migration adds the separate table, its two foreign keys and its unique index. Backup checks use
-real files to reject dangling identity and series links and changed evidence.
-
-Optional device-held evidence, the sale-under-unknown exercise, necessary rebase, both whole-item
-reviews and current-head CI remain before owner review. This checkpoint is not a partial PR.
-
-### W41s-10a receipt-observation candidate checkpoint, 4 November 2026
-
-A separate optional fiscal reader returns the original invoice's taxpayer, stored environment,
-series, number, issue date and fingerprint. It leaves the existing filed-receipt result unchanged.
-The receipt response carries this observation on a cash sale, its replay and a later receipt read.
-The till reads direct receipts and the `ticket` and `invoice` payment envelopes, retaining the
-observation in browser storage under the taxpayer/environment/series combination. An older
-receipt cannot replace a later invoice number; malformed values or unavailable storage supply no
-evidence and do not refuse the receipt response. Unknown fields and the rest of the receipt are
-not stored with the observation.
-
-`device-receipt-evidence.test.ts` checks stored facts after the taxpayer and backend settings change,
-a retired series, and original-versus-cancellation/correction selection. The till's
-`api/invoice-evidence.test.ts` checks browser persistence, separate scopes, corrupted or blocked
-storage, and a client joining before reading a different series. That last case is a client exchange,
-not an exercise of the server's offline recovery and pairing procedure. Device observations grant
-no allocation authority; their use in the full recovery flow remains unfinished.
-
-`till-sale-reconciliation.test.ts` records and replays a real cash sale through the till API while a
-real scoped sweep is pending, failed or incomplete. It checks one new invoice, one new cash tender,
-the retained original record and pending deliveries. These cases use the fake authority; they make
-no claim about a live authority outage. Reconciliation also joins main's shared shutdown table,
-with its closer selected for stepdown and shared with ordinary shutdown.
-
-This is an unpublished checkpoint. Full device/recovery qualification, both whole-item reviews,
-the normal push hook and current-head CI remain before owner review. No partial PR is ready.
-
-### W41s-10a offline restore and fresh-device candidate checkpoint, 4 November 2026
-
-`apps/server/src/device-after-offline-restore.test.ts` adds archive and stream cases using the real
-interactive restore writers and migrated venue directories. The selected backup and recovered
-database contain no device. The internet clock answers unavailable; a simulated browser on another
-machine supplies the second clock. Each case then opens pairing through an administrator session,
-checks the displayed number, approves a fresh device and proves its cookie can read its identity.
-Pairing preserves the recovered allocations, registrations, series and preparation journal. The
-core writer refuses that device's retired standard series, issues `A-0CNQT/1` under the recovered
-series and leaves every retired counter at 123. No global fetch call occurs in these cases.
-
-The shared fixture now offers an interactive entry alongside its existing staged-restart entry.
-The restart entry reconstructs clock state and still refuses without a fresh second clock; existing
-restart assertions remain unchanged. The new cases exercise mounted pairing routes and the core
-invoice writer, without starting an HTTP listener or making a payment through the till API.
-
-Source recovery checks pass 23 cases, including the existing interrupted-restore suite. An
-independently installed copy passes the five focused restore/pairing cases before and after four
-fault controls: retired-series admission, a changed starting counter, a wrong device cookie and
-premature approval. The unchanged fiscal write-path and immutability pair passes 20 cases.
-Optional device-evidence reporting, complete connection-path qualification, both whole-item
-reviews, the normal push hook and current-head CI remain before owner review. No partial PR is
-ready.
+Evidence inspection and persistent-repair policy remain separate A1089 work.
 
 ### Task 8 staff refund and held-cancellation qualification, 2 November 2026
 
@@ -1480,65 +1401,3 @@ installation code a UTC minute but kept the `packages/fiscal-verifactu/src/hour-
 their identifiers, the `source: "hour"` label the allocations carry, and test titles that still
 say "hour" for what is now a minute (for example "same-hour code", "burns the entire hour"). Before go-live it needs
 no compatibility code: until then any installation may be reset (CLAUDE.md §3).
-
-### W41s-10a optional recovery observation report, 4 November 2026
-
-The recovery form reads this browser's retained receipt observations for the selected taxpayer and
-environment. It shows each series' last retained invoice number, issue date and fingerprint,
-including older series, with an incomplete-history qualification. The list is read-only and does
-not travel in the recovery request. Missing, damaged or inaccessible storage leaves it absent;
-the existing recovery controls still select their fresh series. A changed backup scope rereads
-only that scope. The till and recovery form share the storage reader in the fiscal contract
-package, while every existing till storage assertion remains.
-
-Archive and stream fresh-device pairing also run over a real loopback HTTP listener, preserving
-the same approval, cookie and fiscal-state assertions as the mounted cases. This qualifies HTTP
-pairing and direct core issuance; it does not claim a production TLS connection or a till payment
-through a booted restored server. The till client separately makes a received invoice available
-to the same report reader without another request.
-
-The remaining gate is whole-item reviews, the normal hook and current-head CI before owner fiscal
-review. The browser report does not recover missing invoices or prove that an unlisted number was
-unused.
-
-### W41s-10a whole-item review corrections, 4 November 2026
-
-The two run-it reviews found a per-invoice local read in a complete month's missing-history check,
-a false stop when a reply matched another local version, continued work after stepdown, an empty
-intervening-month gap and retries whose deadline had already elapsed. The candidate now reads the
-month's local identities once. A known earlier fingerprint is not a contents conflict and cannot
-acknowledge a pending correction. A cancellation without a local counterpart keeps the existing
-state-discrepancy path; that change does not depend on choosing which cancellation fingerprint an
-outside service reports. The original recorded versions and filing results remain separate.
-
-The host's stop signal reaches the sweep, transaction checks and lookup transport. The sweep
-starts no later month after that signal, and a reply received after it cannot commit a correction.
-Empty months between the oldest local or already-observed period and the current month are queried;
-this makes no claim about a wholly missing period before that starting point. Daily/retry deadlines
-are saved using the end of the pass, so an early host wake does not bypass a slow failure's wait.
-
-The boot failed-start test also waited for a lookup before allowing for boot's duration. It now
-waits for the lookup-start event or an earlier boot outcome, retaining its prior assertions and
-60-second case deadline. A deliberate 1.2-second startup delay reproduced the earlier failure.
-
-A conflict on a locally stored invoice opens an internal filing case alongside its lookup evidence;
-an absent-local invoice observation does not create a fictional local invoice, filing result or
-submission attempt. The earlier review brief's broader "no invented filing cases" phrase was
-inaccurate. Evidence inspection and persistent-repair policy remain separate A1089 work.
-
-The initial reports are retained with their findings and qualification limits. This candidate
-still needs the normal hook and exact-head CI before owner fiscal review; no automatic landing is
-authorized for this item.
-
-The first pull-request CI run reached an older-schema fixture in
-`record-replacement-upgrade.test.ts` that installed the new tables' triggers before their
-migrations. Its predecessor descriptor now omits those two tables; its full post-upgrade
-comparison adds only their empty rows. Every earlier expected row and fiscal refusal remains.
-The fixture failed locally before both additions; all three predecessor-upgrade cases and the
-unedited write-path/immutability pair then passed 23 cases. Exact-head package CI remains required.
-
-The same run found the regime-specific evidence field in the base fiscal contract and two more
-fixture omissions. The base now retains opaque `recordEvidence`; Veri*Factu supplies and displays
-its own value. Its unchanged vocabulary guard and the complete base package pass 363 cases with
-100% coverage in every column. The Madrid seed's empty-table list and the staged older backup's
-removed-table list each gain the two new tables, preserving their existing assertions and captures.

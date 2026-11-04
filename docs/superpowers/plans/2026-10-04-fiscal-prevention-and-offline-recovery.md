@@ -615,6 +615,13 @@ rename the original sale or replace its stored payload.
 
 ## Task 10: outside evidence, deployment checks and clock warnings
 
+**4 November 2026, W41s-10a landed:** #2449 (`1b0d8c7655854dbb5959432964ebafa92080dbd3`)
+completes the first two implementation bullets below. Keep the
+[remaining qualification work](../../backlog/fiscal.md#qualify-reconciliation-against-live-aeat)
+with W41s-10b's witnesses/fencing and Task 11's full offline exercise. The older task text is
+historical; the landing adds no live AEAT, production TLS or complete-history receipt.
+
+
 **Landing update, 2026-10-06:** W41s-10c landed as [#1264](https://github.com/clintongormley/waitron/pull/1264),
 squash `8e2fc9b095f1d7249c2cfa8771f9f87aa4d3a045`. The three dated implementation
 checkpoints below now have a landed implementation. Other Task 10 work remains queued;

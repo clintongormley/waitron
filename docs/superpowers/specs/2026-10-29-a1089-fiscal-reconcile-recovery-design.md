@@ -1,9 +1,16 @@
 # A1089: inspect reconciliation evidence before choosing recovery
 
+**4 November 2026, after landing:** W41s-10a landed in #2449 at
+`1b0d8c7655854dbb5959432964ebafa92080dbd3`. Its candidate and review/CI waits below are
+historical. Read the [remaining qualification work](../../backlog/fiscal.md#qualify-reconciliation-against-live-aeat)
+for live AEAT, production TLS, a payment through a booted restored server and earlier missing
+history. Evidence inspection and persistent repair remain separate A1089 work.
+
+
 **4 November 2026, W41s-10a candidate update:** the earlier statements below about a missing
 production fiscal reconciliation caller are historical. The candidate adds a scoped startup/daily
 module duty, qualified by `apps/server/src/fiscal-reconciliation.test.ts` and
-`boot.fiscal-reconciliation.test.ts`. See the [current backlog checkpoint](../../backlog/fiscal.md#w41s-10a-runtime-candidate-checkpoint-2-november-2026).
+`boot.fiscal-reconciliation.test.ts`. See the [remaining qualification work](../../backlog/fiscal.md#qualify-reconciliation-against-live-aeat).
 It still needs the fiscal review/CI gate. The separate evidence-inspection and persistent-repair
 work is unchanged.
 

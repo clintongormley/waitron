@@ -107,29 +107,30 @@ the cause was not found.
 
 ## A790: document and printer routing plan
 
-The owner approved the complete
-[implementation plan](../superpowers/plans/2026-10-22-a790-document-printer-routing.md)
-and build on 2026-10-23. Implementation waits for the A739/G4 recovery gates and release of
-the overlapping paths.
+Build the unconnected Cut A foundation from the
+[venue-only plan](../superpowers/plans/2026-11-04-a790-venue-document-printer-routing.md),
+then its complete live Cut B before A739's payment-window integration. The owner approved the
+routing plan and build on 23 October; the 4 November revision applies the later removal of
+locations. It introduces no location field, partition or cross-location fixture. Overlapping
+files and migration numbers require inventory and rebase/regeneration, not a release wait.
 
 Keep device Invoice selection in the same Equipment Invoice setting, Receipt holding under
-A796 and the dashboard's separate browser memory. Every accepted print keeps its fixed intent;
-original/copy and active-delivery checks cover both renderings of the recorded full invoice.
-The print queue's separate Resend policy remains an open owner decision under A661, outside
-A790. This plan does not claim profile-wide enforcement on that recovery route.
+A796 and the dashboard's separate browser memory by appliance and document. Every accepted
+print keeps its fixed intent; original/copy and active-delivery checks cover both renderings
+of the recorded full invoice. Preserve person/session/device/profile/zone authority, node and
+recovery-generation binding, request replay, unknown-outcome recovery and fixed destinations.
+The print queue's separate Resend policy remains an open owner decision under A661, outside A790.
 
-The current A739 flow asks for the final document after settlement or a settling edit; only
-card offers a slip checkbox and cash never prints a slip. Its remaining reader-paper display,
-pending recovery and complete integration agreement stay with A739. Execute dependent tasks
-only after that contract and the overlapping paths are released. Full invoice replacement
-for an already-issued simplified sale remains A556's separate fiscal work, with public F1/F3
-gated. The [design's dated precedence](../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
-preserves all earlier proposals and static boards as history.
+A739's agreed contract remains separate: dismissal means None, no durable unanswered document
+choice or fallback, separate final Print/Email, eligible card slips and no cash/manual-card slip.
+Its live final-entry adapter follows A790's complete routing Cut B; A790 Cut C verifies the
+integration afterwards. Live activation/restore-origin qualification still gates the dependent
+routing services. F2 replacement remains A556's separate fiscal work; preserve A948's released
+F1 capability rather than restoring a historical blanket refusal.
 
-It specifies proposed durable print
-and Invoice-setting request identities, local storage, retention, migration boundaries and
-independently checked tasks. Preserve permission checks and the shared original/copy
-guard.
+The [design's dated precedence](../superpowers/specs/2026-10-19-a790-document-and-printer-choice-design.md)
+and the original plan preserve earlier proposals as history. No product implementation is
+completed by this plan revision.
 
 ## Show a failed automatic invoice copy to staff
 

@@ -1,3 +1,23 @@
+# 4 November 2026: execute the venue-only routing plan
+
+The owner approved the complete routing plan and build on 23 October. The later decision to
+remove locations applies to every cut: use the
+[venue-only successor plan](../plans/2026-11-04-a790-venue-document-printer-routing.md).
+The 4 November watcher instruction authorizes this adaptation, fresh plan review and docs-only
+publication before Cut A. The historical location contracts and cross-location examples below
+are superseded; they create no new venue identifier or access partition.
+
+Keep every person/session/device/profile/zone, sale-visibility, holder, node-origin and replay
+check that does not exist solely to separate locations. Dashboard memory is by appliance and
+document. The A739 [approved contract and plan](../plans/2026-10-27-a739-approved-payment-flow.md)
+settle the old unanswered-choice questions; its live integration still follows A790's live cut.
+Preserve separately released F1 capability, the F2-replacement boundary and the live origin/restore
+qualification. No runtime, migration or physical-printer result is claimed by this revision.
+
+The previous layered design follows unchanged.
+
+---
+
 # 2026-10-22: routing design approved for planning; plan awaiting agreement
 
 The owner approved the complete consolidated **A–M / Q1–Q6 routing design, including its
