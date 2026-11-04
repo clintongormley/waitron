@@ -79,6 +79,8 @@ Enviar a preparar el trabajo en espera en la misma estación no duplica una corr
 existente. Recuperar un plato a un borrador termina su trabajo anterior en cocina. Volver a enviar
 ese borrador crea una copia nueva con las instrucciones que confirmas para ese envío.
 
+## Lee el encabezado de un grupo en el papel de cocina {#group-headings}
+
 En el papel de cocina, el encabezado de un grupo nombra los cursos de los platos impresos debajo, en
 el orden de los cursos: **GRUPO 3 · ENTRANTES, PRINCIPALES**. Una reimpresión los muestra como estén
 al reimprimir.
