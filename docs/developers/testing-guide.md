@@ -1,5 +1,18 @@
 # Testing guide
 
+## Retiring test cases also updates their fresh-process wrappers
+
+Before you move or retire cases, search for their test file name, family key and expected child
+case count. A wrapper can invoke the real file without naming any identifier inside it.
+
+A1009's 4 November 2026 CI run `41892351289` failed two host-zone cases after the demo-only
+checks were removed from `zone-script-callers.test.ts`: the child ran four cases while
+`src/testing/zone-process-matrix.ts` still expected eleven. The local wrapper reproduced both
+failures. The correction retains the live script cases and adds the replacement catalogue and
+reporting suites to both fresh UTC and Madrid processes. Run
+`pnpm --filter @waitron/server exec vitest run src/zone-process-matrix.callers.test.ts`
+to exercise the child dispatch, exact counts, source names and original behavioral assertions.
+
 ## Keep original identities distinct after applying comparison mappings
 
 When an upgrade comparator renames an original object, refuse two source tables
