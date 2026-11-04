@@ -185,9 +185,9 @@ Each card carries its order's kitchen note and any printing problem. On a till, 
 **Reprint**, and **Collect** once its order is paid and waiting to be collected; a kitchen screen
 that nobody signs in on shows neither.
 
-When a card has a dish sent to be cooked and its group has dishes for the pass, the card shows,
-under its dishes, **Goes with** and the stations whose dishes the pass is holding for that group,
-such as **Goes with Grill and Pastry**
+When a card has a dish that started without waiting for the pass, and its group has dishes for the
+pass, the card shows, under its dishes, **Goes with** and the names of those dishes' stations, such
+as **Goes with Grill and Pastry**
 ([Make a station wait for the pass](kitchen-service.md#station-waits)).
 
 ## Work the pass {#pass-screen}

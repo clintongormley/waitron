@@ -7865,7 +7865,8 @@ export interface QueueGroup {
   numberPartyId: string;
   numberPartyLabel?: string;
   state: "held" | "fired";
-  /** On a station's queue only: the stations holding the group's dishes for the pass. */
+  /** On a station's queue only: the names of the stations of the group's dishes for the pass, until
+   * each is served; each name once, in the stations list's order. */
   goesWith?: readonly string[];
 }
 

@@ -212,9 +212,9 @@ terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pe
 pendiente de recoger; una pantalla de cocina en la que nadie inicia sesión no muestra ninguno de los
 dos.
 
-Cuando una tarjeta tiene un plato enviado a preparar y su grupo tiene platos para el pase, la
-tarjeta muestra debajo de sus platos **Sale con** y las estaciones cuyos platos de ese grupo retiene
-el pase, por ejemplo **Sale con Grill y Pastry** ([Haz que una estación espere
+Cuando una tarjeta tiene un plato que se empezó sin esperar al pase y su grupo tiene platos para el
+pase, la tarjeta muestra debajo de sus platos **Sale con** y los nombres de las estaciones de esos
+platos, por ejemplo **Sale con Parrilla y Pastelería** ([Haz que una estación espere
 al pase](kitchen-service.md#station-waits)).
 
 ## Trabaja en el pase {#pass-screen}
@@ -386,7 +386,7 @@ incluye el ajuste.
 Un plato que no espera al pase se empieza enseguida. Si su grupo tiene también platos para el pase,
 esperándolo o ya marchados por él y sin servir, la comanda del plato y su tarjeta en la pantalla de
 la estación dicen **Sale con** y los nombres de las estaciones de esos platos, por ejemplo **Sale
-con Grill y Pastry**: sácalo con esos platos, no por separado. Un
+con Parrilla y Pastelería**: sácalo con esos platos, no por separado. Un
 ticket anticipado de espera nunca lo dice. Una comanda lo dice según estén las cosas al imprimirse;
 una reimpresión lo vuelve a comprobar.
 

@@ -5529,6 +5529,20 @@ describe("A773 fire paper: the cue on the station card", () => {
     expect(cue(grill.el)).toBeNull();
     cleanupWidgets();
 
+    const heldBeside = await mountCard([
+      ageDish("held", 18, { firedAt: null, group: dessertsGroup }),
+      ageDish("moscatel", 18, { name: "Moscatel", group: dessertsGroup }),
+    ]);
+    expect(cue(heldBeside.el)!.textContent!.trim()).toBe("Goes with Grill");
+    cleanupWidgets();
+
+    const tartaBeside = await mountCard([
+      ageDish("tarta", 18, { name: "Tarta", passControlled: true, group: dessertsGroup }),
+      ageDish("moscatel", 18, { name: "Moscatel", group: dessertsGroup }),
+    ]);
+    expect(cue(tartaBeside.el)!.textContent!.trim()).toBe("Goes with Grill");
+    cleanupWidgets();
+
     const plain = await mountCard([ageDish("moscatel", 18, { group: plainGroup })]);
     expect(cardOf(plain.el, 7)).not.toBeNull();
     expect(cue(plain.el)).toBeNull();
