@@ -679,6 +679,20 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
   archive. Decide whether those tests should
   place archives through `runStagedRestore` instead, then delete it. Left open by A1131bc slice 4.
 
+## Start again's own disk check answers a different code for the old recovery folder
+
+- **Start again's own disk check answers a different code for the old recovery folder.** Since
+  A1131bc slice 4, `assertNoLegacyFirstSetupWorkspace`
+  (`packages/provisioning/src/first-setup-workspace.ts`) refuses a box holding
+  `first-setup-resolutions/backup-recovery` with `setup.workspace_unsupported`, but Start again's
+  own check (`assertStartAgainAllowedOnDisk`, the `LEGACY` list in
+  `packages/provisioning/src/first-setup-start-again-deletion.ts`) does not name it, so it refuses
+  the same folder `setup.not_ready` (a records folder whose entry is not a uuid). The server is not
+  affected: the start and the boot run the first check before Start again can be reached (read, and
+  run by #2461's first Codex review). Making them agree means adding the name to `LEGACY` and moving
+  the marker cases titled "beside an A731 journal" to expect `setup.workspace_unsupported`. Left open
+  by A1131bc slice 4 (#2461's convention review).
+
 ## Decisions and deliberate limits
 
 - **A reload between the deletion and Reconnect forgets which button was pressed (A1131bc slice 3,

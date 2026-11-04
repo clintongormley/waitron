@@ -641,6 +641,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   decide whether they should place archives through `runStagedRestore`, then delete it.
   [Detail](backlog/setup.md#restorefromartifact-has-no-production-caller)
 
+- **Start again's own disk check answers `setup.not_ready` for the old recovery folder**, where the
+  start answers `setup.workspace_unsupported`; the server runs the start's check first. Left open by
+  A1131bc slice 4.
+  [Detail](backlog/setup.md#start-agains-own-disk-check-answers-a-different-code-for-the-old-recovery-folder)
+
 - **"The saved setup cannot be read. Contact support."** sends the person to somebody else. Left
   open by A1131bc slice 3.
   [Detail](backlog/setup.md#the-saved-setup-cannot-be-read-contact-support)
