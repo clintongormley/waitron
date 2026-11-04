@@ -347,7 +347,7 @@ describe("A773 fire paper: Goes with the stations holding dishes for the pass", 
     ]);
   });
 
-  it("A773 fire paper: a reprint after the kitchen's dish is served has no cue", async () => {
+  it("A773 fire paper: a reprint after the pass's dish is served has no cue", async () => {
     const k = await kitchen(true);
     const [desserts] = await place(k, [{ names: ["Tarta", "Vino"], release: "hold" }]);
     await fire(k, desserts!);

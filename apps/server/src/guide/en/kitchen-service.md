@@ -185,8 +185,9 @@ Each card carries its order's kitchen note and any printing problem. On a till, 
 **Reprint**, and **Collect** once its order is paid and waiting to be collected; a kitchen screen
 that nobody signs in on shows neither.
 
-When a card has a dish sent to be cooked and its group has dishes for the pass, the card shows
-**Goes with kitchen food** under its dishes
+When a card has a dish sent to be cooked and its group has dishes for the pass, the card shows,
+under its dishes, **Goes with** and the stations whose dishes the pass is holding for that group,
+such as **Goes with Grill and Pastry**
 ([Make a station wait for the pass](kitchen-service.md#station-waits)).
 
 ## Work the pass {#pass-screen}
@@ -346,7 +347,8 @@ stays where it is. A configuration export carries the setting.
 
 A dish that does not wait for the pass starts at once. When its group also has dishes for the pass,
 waiting for it or fired by it and not yet served, the dish's ticket and its card on the station's
-screen say **Goes with kitchen food**: send it out with that food, not on its own. An advance HOLD
+screen say **Goes with** and the names of those dishes' stations, such as **Goes with Grill and
+Pastry**: send it out with those dishes, not on its own. An advance HOLD
 ticket never says it. A ticket says it as things stand when it prints; a reprint checks again.
 
 Only a pass screen whose device can press **Fire** releases the dishes. For a station's dishes in a

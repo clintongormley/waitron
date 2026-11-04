@@ -5471,7 +5471,8 @@ describe("A773 fire paper: the cue on the station card", () => {
     numberPartyId: "pa-1",
     state: "fired" as const,
   };
-  const dessertsGroup = { ...plainGroup, goesWithKitchenFood: true as const };
+  const dessertsGroup = { ...plainGroup, goesWith: ["Grill"] as const };
+  const twoStationsGroup = { ...plainGroup, goesWith: ["Grill", "Pastry"] as const };
   const mountCard = (items: StationQueueItem[]) =>
     mountWidget<TillStationQueue>("till-station-queue", {
       groups: [ageBill(7, items)],
@@ -5481,11 +5482,11 @@ describe("A773 fire paper: the cue on the station card", () => {
   const cue = (el: TillStationQueue) =>
     cardOf(el, 7).querySelector<HTMLElement>("[data-goes-with]");
 
-  it("A773 fire paper: a released card whose group has food at the pass says so", async () => {
+  it("A773 fire paper: a released card whose group has dishes held for the pass names their stations", async () => {
     const moscatel = ageDish("moscatel", 18, { name: "Moscatel", group: dessertsGroup });
     const { el } = await mountCard([moscatel]);
     expect(cue(el)).not.toBeNull();
-    expect(cue(el)!.textContent!.trim()).toBe("Goes with kitchen food");
+    expect(cue(el)!.textContent!.trim()).toBe("Goes with Grill");
     const lines = [...cardOf(el, 7).querySelectorAll(".line-name")];
     expect(
       lines.at(-1)!.compareDocumentPosition(cue(el)!) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -5496,8 +5497,21 @@ describe("A773 fire paper: the cue on the station card", () => {
     setLocale("es-ES");
     try {
       const spanish = await mountCard([moscatel]);
-      expect(cue(spanish.el)!.textContent!.trim()).toBe(es["station.goes_with_kitchen_food"]);
-      expect(es["station.goes_with_kitchen_food"]).toBe("Sale con la comida de cocina");
+      expect(cue(spanish.el)!.textContent!.trim()).toBe("Sale con Grill");
+    } finally {
+      setLocale(previousLocale);
+    }
+    cleanupWidgets();
+
+    const both = ageDish("moscatel", 18, { name: "Moscatel", group: twoStationsGroup });
+    const twoNames = await mountCard([both]);
+    expect(cue(twoNames.el)!.textContent!.trim()).toBe("Goes with Grill and Pastry");
+    cleanupWidgets();
+
+    setLocale("es-ES");
+    try {
+      const spanish = await mountCard([both]);
+      expect(cue(spanish.el)!.textContent!.trim()).toBe("Sale con Grill y Pastry");
     } finally {
       setLocale(previousLocale);
     }

@@ -433,12 +433,12 @@ exact paths/signatures against the new Requested/pass design before writing code
 - `planKitchenTickets` and `enqueueKitchenTickets` (`apps/server/src/kitchen-print.ts`), which take
   one `orderId`, and `linkKitchenJob`, which links a job to one `working_order_id`;
 - `buildTicketItems` (`kitchen-print.ts`), where a bill name would join each dish beside its
-  `course`; `goesWithKitchenFood` is added after it, in `planKitchenTickets`, so slips never carry
-  it.
+  `course`; `goesWith` (the names of the stations the dish goes out with) is added after it, in
+  `planKitchenTickets`, so slips never carry it.
 
 What a cross-bill ticket reuses unchanged: the heading's course list is computed from the dishes
 under each heading (`headingCourses`, `apps/server/src/kitchen-ticket.ts`), and the cue's group fact
-(`groupsWithPassFood`, `apps/server/src/working-order.ts`) already reads a group across every bill
+(`passStationsByGroup`, `apps/server/src/working-order.ts`) already reads a group across every bill
 of the party.
 
 ## Recorded move/join/split defects: closure requires an experiment

@@ -834,7 +834,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
     );
     await expectNoA11yViolations(host);
   });
-  it("A773 fire paper: a Bar card saying it goes with kitchen food has no violations", async () => {
+  it("A773 fire paper: a Bar card naming the stations it goes with has no violations", async () => {
     const moscatel = {
       allergy: null,
       id: "ti-moscatel",
@@ -851,7 +851,7 @@ describe.each(["light", "dark"] as const)("till-station-queue a11y (%s theme)", 
         displayNumber: 4,
         numberPartyId: "pa-1",
         state: "fired" as const,
-        goesWithKitchenFood: true as const,
+        goesWith: ["Grill", "Pastry"],
       },
     };
     const { host, el } = await mountWidget<TillStationQueue>(

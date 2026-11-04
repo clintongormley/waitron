@@ -2554,7 +2554,7 @@ The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
 Sent/New order and bill ownership behavior. Physical dragging and partial-serving trials remain
 separate backlog entries. A803 owns its pass/station presentation tail.
 
-Next: PR D (master plan Tasks 11–12): ticket headings, "Goes with kitchen food", and removing
+Next: PR D (master plan Tasks 11–12): ticket headings, the "Goes with {stations}" cue, and removing
 `away_at`, `pass_item_marks` and `fire_control`.
 
 What A797 leaves for the pass (slices 9 and 9b): `apps/till/src/state/kitchen-columns.ts` is the

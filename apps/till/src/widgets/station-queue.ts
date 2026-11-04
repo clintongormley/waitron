@@ -9,8 +9,13 @@ import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles, registerIcons } from "@waitron/ui";
-import { type TimingBand, classifyBand, thousandthsToDecimal } from "@waitron/shared";
-import { clockTime, t } from "../i18n/t.js";
+import {
+  type TimingBand,
+  classifyBand,
+  conjunctionList,
+  thousandthsToDecimal,
+} from "@waitron/shared";
+import { clockTime, currentLocale, fill, t } from "../i18n/t.js";
 import { dietBadgeStyles, dietBadges } from "./diet-badges.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { dishLine, trimQuantity } from "./dish-format.js";
@@ -137,12 +142,20 @@ export function stationColumnNames(): Map<ColumnKey, string> {
   ]);
 }
 
-/** A card whose group has kitchen food at the pass, holding a released dish the pass does not control. */
-function goesWithKitchenFood(card: KitchenCard): boolean {
-  return (
-    card.group?.goesWithKitchenFood === true &&
-    card.items.some((item) => item.phase !== "held" && !item.passControlled)
-  );
+/** The cue naming the stations a card's group goes out with, when the card holds a released dish the
+ * pass does not control. */
+function goesWith(card: KitchenCard): TemplateResult | typeof nothing {
+  const stations = card.group?.goesWith;
+  if (
+    stations === undefined ||
+    !card.items.some((item) => item.phase !== "held" && !item.passControlled)
+  ) {
+    return nothing;
+  }
+  const names = conjunctionList(stations, currentLocale());
+  return html`<p class="goes-with" data-goes-with>
+    ${fill(t("station.goes_with"), { stations: names })}
+  </p>`;
 }
 
 function afterPeriodWords(period: string): string {
@@ -1329,8 +1342,7 @@ export class TillStationQueue extends LitElement {
       ${card.orders.map((order) => this.#kitchenNote(order, tag(order)))}
       ${card.orders.map((order) => this.#printProblem(order, tag(order)))}
       ${sections.map((section) => this.#courseSection(section, row, sections.length > 1))}
-      ${goesWithKitchenFood(card) ? html`<p class="goes-with" data-goes-with>${t("station.goes_with_kitchen_food")}</p>` : nothing}
-      ${card.orders.map((order) => this.#elsewhere(order, tag(order)))}
+      ${goesWith(card)} ${card.orders.map((order) => this.#elsewhere(order, tag(order)))}
       ${card.orders.map((order) => this.#collectAction(order, tag(order)))}
       ${card.orders.map((order) => this.#reprintAction(order, tag(order)))}
       ${
