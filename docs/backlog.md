@@ -1930,6 +1930,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   inherits is earlier than its own seating, and a first order clears only steps that started before
   it, so the step stays although the table has ordered.
 
+- **A1333. A table with no dishes left can still show "Another order?" (left open by A803 slice 4b).**
+  A table that sent its own order keeps those order times after every bill has left, so the step
+  stays. Run at `c11d7ff0c3`, before 4b's service-step fix, a party moving its one fired bill to a
+  free table left its old table on "Another order?". Decide whether that is wrong: the people may
+  still be sitting there. See #2454's "Left open".
+
 - **A Spanish invoice recipient's locality or province holding a comma is refused only at the
   server.** The server checks a Spanish recipient's joined address by splitting it on commas
   (`completeSpanishPostalAddress`, `packages/country-es/src/spain.ts`), so "Centro, Madrid" as the
