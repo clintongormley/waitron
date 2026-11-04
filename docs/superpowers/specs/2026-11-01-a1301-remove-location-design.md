@@ -26,6 +26,16 @@ Inputs: the inventory and the fiscal check written for this item by two read-onl
   `first-fiscal-setup.e2e.test.ts`, and more: see its "Amendments to the design this plan makes"
   ([plan](../plans/2026-11-01-a1301-remove-location.md)).
 
+**Amendment 2026-11-04**, from A1308's review (owner; [A1308's design](2026-11-02-rationalisation/README.md),
+U8): S23 builds no `venue_settings`, no `venue_catalogues` and no `business_day_settings`. The venue's
+settings become the `settings.venue` and `settings.business_day` documents in the shared `settings`
+table, the default menu becomes a flag, `is_default`, on the menu's row, and `location_catalogues` goes with
+no replacement, because no screen uses the venue's list of extra menus. Of S23's four new tables, only
+`day_cutover_changes` stays. `operation_description` does not move: A1308 deletes it as a venue setting.
+A1308 also absorbs S20–S28 into its venue-and-box slice. Its `tables-venuebox.md` §2 and `tables-menu.md`
+§1.1 draw the result. The mentions below are changed to match. The i18n keys `venue_settings.*` (§5) are
+translation keys, not the table, and stay.
+
 Words used below, once:
 
 - A **location** is today's `locations` row, a place a box was imagined to serve one of several of.
@@ -56,9 +66,9 @@ Words used below, once:
 column on 39 tables go. Nothing passes a location id any more: the module contract's
 `cfg.locationId`, the server's `NodeConfig.locationId`, the `LocationId` id type, the
 `?locationId=` queries and the `/management-api/locations…` routes all go. The venue's settings
-(name, address, receipt languages, time zone, start of the business day, operation description,
-tax territory) live in one new one-row table, `venue_settings`, read through one function that
-takes no id. Every "is this row at the same location?" check, and every test that exists only to
+(name, address, receipt languages, time zone, start of the business day, tax territory) live in
+the `settings.venue` and `settings.business_day` documents and `day_cutover_changes`, read through one
+function that takes no id. Every "is this row at the same location?" check, and every test that exists only to
 prove such a check, is deleted rather than rewritten.
 
 **For the venue's staff.** Nothing behaves differently on a box, because every box today serves
@@ -78,45 +88,29 @@ at its node, the migrations cannot run at all (§4), so the reset is forced, not
 
 ## 2. Where the venue's settings live
 
-### Decision: a new one-row `venue_settings` table in the core migration set
+### Decision: documents in the shared `settings` table (owner, 2026-11-04)
 
-Three homes were weighed.
+The venue's settings are two rows of the shared `settings` table that A1308 creates (its
+`tables-venuebox.md` §2). `settings.venue` holds the name, address, receipt languages and tax
+territory. `settings.business_day` holds the time zone, and its `revision` is the venue clock's
+revision, kept apart from `venue` so a venue-name save does not wake or conflict with the business-day
+screens. `day_cutover_changes` stays a table: other rows read it by date, and each change is history.
+This replaces the one-row `venue_settings` table this section first chose.
 
-1. **The `tenants` row — rejected.** `tenants` is the taxpayer: "One taxpayer per database. Fiscal
-   identity is country + tax_id" (`packages/db/src/schema/tenants.ts:34-37`). Request code already
-   writes it, through the three files `scripts/write-path-tables.json:13-17` allows
-   (`apps/server/src/location-settings-api.ts:12` imports `renameTaxpayer` and `savePrivacyContact`
-   from two of them), so a request write to `tenants` would not by itself break a rule. The reasons
-   that remain:
-   - it keeps the taxpayer row narrow: the venue's dozen settings would sit beside the fiscal
-     identity;
-   - the venue settings have more writers (the venue details page, the business-day start editor,
-     A696's zone repair, the configuration bundle), and each would join the short list of files
-     allowed to touch the taxpayer row, or route through one of them;
-   - the four core triggers that check receipt languages (§2.3) and every clock reader would read the
-     taxpayer row.
+Two rejections from the first draft stand. The `tenants` row stays the taxpayer alone. The core fields
+are not split by owning module: the receipt languages are read by four core-set triggers on
+`working_order_lines` (§2.3), and the time zone and business-day start by reporting, core, workforce,
+bookings and venue-service (`readLocationClock`, 101 call lines in 40 files, per inventory.md §4). The
+convenio settings stay in `workforce-es` (§2.2).
 
-   These are reasons of separation, not of necessity. They are enough to choose a table of its own,
-   and the choice costs one table.
-2. **Split by owning module** (the inventory's §7 suggestion: default menu to `catalogue_settings`,
-   business day to reporting) — **rejected for the core fields.** The receipt languages are read by
-   four core-set triggers on `working_order_lines` (§2.3), the time zone and business-day start by
-   reporting, core, workforce, bookings and venue-service (`readLocationClock`, 101 call lines in 40
-   files, per inventory.md §4), the tax territory by generic provisioning. Splitting them would put
-   core-set triggers and readers on module-owned tables. The one field that does belong to a module
-   already lives in one: the convenio settings stay in `workforce-es` (§2.2).
-3. **A new one-row table — chosen.** One row, `id = 1` enforced by a check, as `catalogue_settings`
-   (`packages/catalogue/src/schema/settings.ts:16`), `tenant_receipts`, `payment_policy` and other
-   one-row tables do. It is keyed by nothing, which fits "There is no tenant column … a query that
-   wants 'this tenant's rows' reads the table" (CLAUDE.md §3): no child table gains a `venue_id`. It
-   is not in `scripts/write-path-tables.json`, so request code may write it, as it writes `locations`
-   today.
+A `settings` row is keyed by its module and nothing else, which fits "There is no tenant column …
+a query that wants 'this tenant's rows' reads the table" (CLAUDE.md §3): no child table gains a
+`venue_id`, and the primary key on `module` makes a second venue row impossible.
 
-**Reason for entering the core migration set** (CLAUDE.md §3 asks for one): it replaces `locations`,
-which is in the core set (`packages/db/src/classification.ts:104`), and its readers include the
-core set's own triggers. The same reason covers the three replacement side tables below, each a
-one-for-one replacement of a core table. All four are classified `state`, as their predecessors are
-(`classification.ts:104-106,116`).
+**Reason for entering the core migration set** (CLAUDE.md §3 asks for one): `day_cutover_changes`
+replaces `location_day_cutover_changes`, a core table, one for one, and is classified `state` as its
+predecessor is (`classification.ts:104-106,116`). The `settings` table is A1308's, and its reason is
+stated there.
 
 ### 2.1 Field-by-field mapping
 
@@ -124,19 +118,19 @@ one-for-one replacement of a core table. All four are classified `state`, as the
 
 | Today | New home | Note |
 | --- | --- | --- |
-| `locations.id` | deleted | `venue_settings.id` is the constant 1 |
-| `name` | `venue_settings.name` | read in 32 files (inventory.md §7); the art. 34.9 export's "Workplace / Centro de trabajo" shows it |
-| `invoice_locales` (1–2 entries, `locations_invoice_locales_len`) | `venue_settings.invoice_locales`, same check | each sale still snapshots its own copy in `sales.invoice_locales` (`tenants.ts` comment above `locations`) |
-| `operation_description` | `venue_settings.operation_description` | kept: it is the fallback the demo seed and tests file with (fiscal-check.md path 1); production callers always pass their own |
-| `fiscal_territory` (default `ES-common`) | `venue_settings.fiscal_territory` | decides the fiscal module at setup and restore (fiscal-check.md path 4) |
-| `address_line1`, `address_line2`, `postal_code`, `city`, `province` | `venue_settings`, same names | printed on receipts and invoices; `city`/`province` drive holidays and receipt language |
-| `time_zone` (default `Europe/Madrid`) | `venue_settings.time_zone` | see §2.4 for A696 |
-| `day_cutover` (default `06:00:00`) | `venue_settings.day_cutover` | |
+| `locations.id` | deleted | a `settings` row is keyed by its module |
+| `name` | `settings.venue.name` | read in 32 files (inventory.md §7); the art. 34.9 export's "Workplace / Centro de trabajo" shows it |
+| `invoice_locales` (1–2 entries, `locations_invoice_locales_len`) | `settings.venue.invoiceLocales`, same check, as a `settings` trigger for `module = 'venue'` | each sale still snapshots its own copy in `sales.invoice_locales` (`tenants.ts` comment above `locations`) |
+| `operation_description` | **deleted by A1308** | not carried: it becomes a required input when a sale is recorded, which is fiscal, so the owner lands it (`tables-venuebox.md` §6.5) |
+| `fiscal_territory` (default `ES-common`) | `settings.venue.fiscalTerritory` | decides the fiscal module at setup and restore (fiscal-check.md path 4) |
+| `address_line1`, `address_line2`, `postal_code`, `city`, `province` | `settings.venue`, as `addressLine1` and so on | printed on receipts and invoices; `city`/`province` drive holidays and receipt language |
+| `time_zone` (default `Europe/Madrid`) | `settings.business_day.timeZone` | see §2.4 for A696 |
+| `day_cutover` (default `06:00:00`) | `day_cutover_changes` | setup writes the first row, and the earliest row applies to every day before it (A1308, `tables-venuebox.md` §1.9) |
 | `bump_mode` | **deleted, unused** | "Read by nothing: each station has its own `bump_mode`" (`tenants.ts:20-24`); re-checked: `git grep -n -E 'locations\.bumpMode\|l\.bump_mode\|locations\.bump_mode' -- apps packages ':!**/drizzle/**'` prints nothing (the `bumpMode` readers in `apps/server/src/kitchen.ts:146` read `kitchenStations`). The `bumpMode` builder in `tenants.ts:25` goes with the column; `kitchen_stations` types its own `bump_mode` with `BumpMode` from `@waitron/shared` |
 | `fire_control` | **deleted, unused** | only the configuration bundle reads or writes it (`packages/provisioning/src/configuration-transfer.ts:104,174,536`; re-checked with `git grep -n -w -E 'fireControl\|fire_control' -- 'apps/*/src/**' 'packages/*/src/**' ':!*.test.ts'`), and its removal is already planned under A773-2 (`docs/backlog/kitchen.md:296`). Whichever lands first does it; the other drops the step. When firing is built it adds its own setting |
-| `catalogue_id` (the default menu) | `venue_settings.default_catalogue_id` → `catalogues.id` | `catalogues` is a core table (`packages/db/src/schema/catalogue.ts:28`), so this stays a core-to-core key, as today |
-| `location_catalogues(location_id, catalogue_id)` | `venue_catalogues(catalogue_id)` primary key | the extra menus offered; kept separate from the default on purpose — "membership and the default stay independent" (`packages/catalogue/src/operations.ts:1310-1316`) |
-| `location_business_day_settings(location_id, revision)` | `business_day_settings(id = 1, revision)` | kept a table of its own so the live subscriptions that depend on it keep the same table dependencies and do not wake on every venue-details save |
+| `catalogue_id` (the default menu) | a flag, `is_default`, on the menu's row | a partial unique index allows at most one (A1308, `tables-menu.md` §1.1). No id sits in a settings document (A1308 R4) |
+| `location_catalogues(location_id, catalogue_id)` | **deleted** | no screen calls its routes, and sales run from menu periods and staff menus (A1308, `tables-menu.md` §1.1) |
+| `location_business_day_settings(location_id, revision)` | the `settings.business_day` row's `revision` | a row of its own, so the live subscriptions that depend on it do not wake on every venue-details save |
 | `location_day_cutover_changes(location_id, effective_business_day, day_cutover)` | `day_cutover_changes(effective_business_day` primary key`, day_cutover)` | same checks |
 
 2026-11-04, on the `fire_control` row above: A773-2 PR D landed first but left `fire_control` to S28: dropping it alone rebuilds `locations`, which the upgrade guard refuses (PR D plan D113). S28's `DROP TABLE` takes it; S28 also deletes the tests that still set it (listed in D113).
@@ -158,8 +152,8 @@ location part of their unique keys (§4).
 `working_order_lines_check_variant_locales_insert/_update`
 (`packages/db/drizzle/0110_printing_retirement_restore_readers.sql:1,29,58,91`, re-read) each join
 `locations l ON l.id = wo.location_id` and `json_each(l.invoice_locales)`. S23 drops them and creates
-them again reading only `(SELECT invoice_locales FROM venue_settings WHERE id = 1)`, with no join
-through the order. Two consequences:
+them again reading only the `invoiceLocales` field of the `settings` row `venue`, with no join through
+the order (A1308, `tables-venuebox.md` §8.2 sets their time limit). Two consequences:
 
 - After S23 these four no longer read `working_orders` or `locations`, so they are not in the way of
   the `working_orders` rebuild (S27) or the `locations` drop (S28).
@@ -172,13 +166,13 @@ through the order. Two consequences:
 What the behaviour cases in `scripts/behavioural-triggers.test.ts:288-405` become:
 
 - `wo-orphan` (an order naming a location that does not exist, refused at `:1343`) is replaced by a
-  case with no `venue_settings` row: a line is refused. That defines what an order on a box with no
+  case with no `settings` row `venue`: a line is refused. That defines what an order on a box with no
   venue settings does.
 - `loc-es-only` ("the locale triggers must read the order's location, not its device's", `:361`) is
   a cross-location case and is deleted.
 - `loc-relocale` (`:366-370`) exists so the venue's languages can change without moving what other
   cases read. Its purpose — a served line survives a change of the venue's languages — stays; the case
-  changes the one `venue_settings` row, in a database of its own or as the file's last case (the plan
+  changes the `settings` row `venue`, in a database of its own or as the file's last case (the plan
   picks which).
 
 ### 2.4 A696 (open PR #2369) adds location-keyed time-zone code
@@ -196,7 +190,7 @@ freezes `offsetMinutes` from that zone. In `packages/fiscal-verifactu/src/backen
 record time is in the huella (fiscal-check.md "The hash, checked by running it"). Traced by reading,
 not run. **This changes one fiscal-check finding once #2369 lands:** fiscal-check.md (at `790214ba8c`)
 found the record offset taken from the host's clock, "never `locations.time_zone`". After #2369,
-moving the zone from `locations` to `venue_settings` moves the source of a hashed input. The value is
+moving the zone from `locations` to `settings.business_day` moves the source of a hashed input. The value is
 the same, so no hash changes, but the slices that move it (S2, S23) are fiscal and the owner lands
 them.
 
@@ -280,16 +274,16 @@ Per fiscal-check.md, with the claims re-checked marked.
   `adopt.ts:131`, `boot.ts:949`, `boot.ts:1588` (with `assertSingleOperationalVenue`, comparing against
   the node's location), `reset-request.ts:62` and
   `packages/provisioning/src/first-setup-resolution-inspection.ts:90`. **What replaces the count: "an
-  operational venue exists" means the `venue_settings` row exists.** `venue-apply.ts` writes it in the
-  same transaction that writes the `locations` row today, and its `id = 1` check makes a second one
-  impossible, so "exactly one" becomes "the row exists". S18 drops the id comparison at `boot.ts:1588`
+  operational venue exists" means the `settings` row `venue` exists.** `venue-apply.ts` writes it in the
+  same transaction that writes the `locations` row today, and the primary key on `module` makes a second
+  one impossible, so "exactly one" becomes "the row exists". S18 drops the id comparison at `boot.ts:1588`
   (the count stays on `locations` until then); S23, an owner slice because `adopt.ts` is on the
-  adoption path, switches every reader to `venue_settings`. The refusal `provisioning.second_venue`
+  adoption path, switches every reader to that row. The refusal `provisioning.second_venue`
   keeps its name and meaning.
 - **AEAT body.** One location field can reach it: `operation_description` → `DescripcionOperacion`,
   only as a fallback no production route takes (`apps/server/src/sale-operation-description.ts:7-50`
-  always supplies one, per fiscal-check.md path 1). It moves to `venue_settings` with the same value.
-  Not in the huella (the probe above).
+  always supplies one, per fiscal-check.md path 1). It does not move: A1308 deletes it as a venue
+  setting, in a fiscal slice the owner lands (§2.1). Not in the huella (the probe above).
 - **Other dated values.** `sales.operation_date` (path 2), the certificate check's AEAT query month
   (path 3), the daily-close hash's business day and zone (path 7) and, after #2369, the record offset
   (§2.4) all read the time zone or business-day start; they keep the same values from the venue.
@@ -412,7 +406,7 @@ From inventory.md §1, re-checked where marked.
   `scripts/migration-upgrade.test.ts` and an empty-database migrate, never the `sqlite3` command line
   (CLAUDE.md §3: macOS's `sqlite3` 3.51.0 refuses the rename the app's 3.54.0 runs).
 - **drizzle-kit 0.31.x rebuild plus added column** fails with `no such column` (CLAUDE.md §3): S23
-  creates the four new tables and drops the three old side tables, and adds no column to a rebuilt
+  creates `day_cutover_changes` and drops the three old side tables, and adds no column to a rebuilt
   table. Where a slice must do both, it uses two generations. If `drizzle-kit generate` stops to ask
   whether a new table is a renamed old one, the slice splits the create and the drop into separate
   generations; the build records which happened.
@@ -426,7 +420,8 @@ From inventory.md §1, re-checked where marked.
   fields; `LocationDraft` (`apps/setup/src/api/client.ts:60-72`) folds into the venue draft. The
   default catalogue is not a setup field, so it travels outside `venue`'s own keys (CLAUDE.md §3,
   "A configuration bundle value that is not a setup field stays out of `venue`'s own keys"); the plan
-  names the key. `venue_catalogues.catalogue_id` is a declared reference.
+  names the key. Under A1308 the default travels inside the exported menu rows as the `is_default` flag,
+  so that key and the `location_catalogues` entry both go.
 - **Host files.** Three kinds of file on the box name a location, and a box holding one when its slice
   lands is reset:
   - the dormant-standby state in `<state>/module-preparation-state.json` and the standby join bundle
@@ -619,7 +614,7 @@ from before this cannot be restored or imported".
 | **S20** | bookings, staffing, workforce-es (`convenio_config` one row) | three packages' `schema/`, `drizzle/`, classification, own fixtures | S9, S13, S18, F2 | lane |
 | **S21** | venue-service's 8 tables; one-default keys on the flag column | `packages/venue-service/src/schema/*`, `drizzle/`, own fixtures | S6, S8, S18, F2 | lane |
 | **S22** | The workforce tables A1268 leaves: `roster_versions`, `shifts` and `shift_templates` (state tables, outside A1268's scope), and any `attendance_*` table whose `location_id` A1268 keeps. No hash function and no append-only table: A1268 changes `time_entries`, `pay_period_closures`, `chain-hash.ts`, `pay-period-chain.ts` and backup verification's closure grouping | those tables' `packages/workforce/src/schema/*` files, `drizzle/`, own fixtures | A1268 landed; S13, S18, F2 | lane |
-| **S23** | Core settings move: create `venue_settings`, `venue_catalogues`, `business_day_settings`, `day_cutover_changes`; drop the three old side tables; `readVenue`/`readVenueClock` and every writer switch; the four language-check triggers recreated reading `venue_settings` (§2.3, with the behaviour cases); the live-venue guard and S4's check read `venue_settings` (§3); `locations` left as it is, read only for its id by `venueLocationId` and still written at setup; live-query table lists (`packages/*/src/dashboard/live-queries.ts`, `apps/dashboard/src/api/live-queries.ts`) | `packages/db/src/schema/*`, `drizzle/`, `venue.ts`, `classification.ts`; writers in `venue-apply.ts`, `venue-settings-api.ts`, `business-day-start.ts`, zone repair, `configuration-transfer.ts`; `tenant-guard.ts` and its five readers (§3); `seedVenue` | S18, F1–F5 | **owner** (b, c) |
+| **S23** | Core settings move: write the `settings.venue` and `settings.business_day` rows; create `day_cutover_changes`; add `is_default` and its one-default index to the menu's row; drop the three old side tables; `readVenue`/`readVenueClock` and every writer switch; the four language-check triggers recreated reading the `settings` row `venue` (§2.3, with the behaviour cases), and the language-count check becomes a `settings` trigger; the live-venue guard and S4's check read that row (§3); `locations` left as it is, read only for its id by `venueLocationId` and still written at setup; live-query table lists (`packages/*/src/dashboard/live-queries.ts`, `apps/dashboard/src/api/live-queries.ts`) | `packages/db/src/schema/*`, `drizzle/`, `venue.ts`, `classification.ts`; writers in `venue-apply.ts`, `venue-settings-api.ts`, `business-day-start.ts`, zone repair, `configuration-transfer.ts`; `tenant-guard.ts` and its five readers (§3); `seedVenue` | S18, F1–F5; A1308's `settings` table | **owner** (b, c) |
 | **S24** | Core floor, kitchen and printing tables lose `location_id` | `dining_tables`, `floor_plan_sets`, `floor_zones`, `kitchen_stations`, `kitchen_courses`, `print_agents`, `printers`, `print_jobs`, `page_printers` schemas, `drizzle/`; their fixtures | S23 | lane |
 | **S25** | `nodes` loses `location_id` (a rebuild; 22 child keys, §4) | `packages/db/src/schema/*`, `drizzle/`, `seedNode`; `insertReservedNodeTx` and `node-identity.ts` writers | S4, S23, S24 | **owner** (c, d) |
 | **S26** | `devices` loses `location_id`; `device_profile_form_factor_locked` dropped before and recreated after | `packages/db/src/schema/*`, `drizzle/`, `seedDevice` | S25 | **owner** (d) |
@@ -817,7 +812,7 @@ fiscal-check.md …". Re-checked for this design, by running or reading at `7902
 its `file:line` before folding; none was rejected.
 
 - **C1** → folded: confirmed by reading (§9.11). S4 (owner) keeps adoption refused on purpose; the
-  live-venue guard reads `venue_settings` from S23; §1 and §3's identity claim narrowed to "provided S4
+  live-venue guard reads the `settings` row `venue` from S23; §1 and §3's identity claim narrowed to "provided S4
   lands before S25".
 - **I1** → folded: `dropcol.mjs` and the drizzle-kit output re-run and re-read (§9.7, §9.10); §4 says the
   reset is forced and names the 22 keys.

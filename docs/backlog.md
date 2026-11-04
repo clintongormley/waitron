@@ -822,8 +822,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Repeated allergen kinds from direct callers.** The allergen validator accepts, for example,
   `{ gluten: { kinds: ["wheat", "wheat"] } }`; the dashboard picker and published derivation remove
-  repeats. A668-1's Claude probe recorded that result. Decide whether direct declarations should
-  be refused or normalised, then check both ingredient and product requests with repeated kinds.
+  repeats. A668-1's Claude probe recorded that result. A1308's one allergen column normalises them
+  on write. Decide whether direct declarations should be refused instead, then check product requests
+  with repeated kinds.
 
 - **A670 — printed menus (owner, 2026-10-14; open, not designed).** A printed menu carries each
   dish's allergen icons after its name and a key on the page naming every icon.
@@ -4308,7 +4309,7 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
 - **A1227. The Catalogue screen replaces its live stream once per load when catalogues exist (left
   open by A1222).** It watches `ingredients` and `recipe_lines` only after awaited reads, so its
   first stream is replaced once those reads answer. Decide whether it should watch them from the
-  start.
+  start. A1308 removes both tables.
   [Detail](backlog/dashboard.md#a1227-the-catalogue-screen-replaces-its-live-stream-once-per-load-when-catalogues-exist-left-open-by-a1222)
 
 - **A1214. A second sign-in factor for people with no authenticator app (owner's idea,
@@ -5033,8 +5034,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   deleted or changed invoice leaves no trace, though it may have fed a VAT return. A1308 leaves the
   tables as they are and logs nothing.
 
-- **The recipe routes and the recipe screen are unreached.**
-  [Detail](backlog/back-office.md#the-recipe-routes-and-the-recipe-screen-are-unreached)
+- **Recipes are removed under A1308 (owner, 2026-11-04).** "Remove it, and remove recipes. we don't
+  use them." The routes and the screen are unreached today; A1308's menu slice deletes them with
+  `ingredients`, `recipe_lines` and `packages/recipes`.
+  [Detail](backlog/back-office.md#recipes-are-removed-under-a1308-owner-2026-11-04)
 
 - **A supplier credit note cannot be entered through the dashboard** — OPEN, unqueued.
   [Detail](backlog/back-office.md#a-supplier-credit-note-cannot-be-entered-through-the-dashboard)
@@ -6548,9 +6551,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
-  [design](superpowers/specs/2026-11-02-rationalisation/README.md) is written, builder-checked and
-  refreshed against main on 2026-11-03 (A1317), and **waits for the owner's approval before any
-  work starts**.
+  [design](superpowers/specs/2026-11-02-rationalisation/README.md) is written, and the owner has
+  reviewed every file and answered every question (2026-11-04). **It waits for the owner's final
+  approval before any work starts.** 246 tables become 145, or 144 once A1323 removes
+  `recovery_packs`; 111 environment variables become 51, or 55 until A951 lands.
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
 
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
@@ -6616,7 +6620,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   refused. [Detail](backlog/architecture.md#a-table-round-of-more-than-about-1100-dishes-is-refused-too-many-sql-variables)
 
 - **A760. Squash every migration set before go-live.** If A1308 is approved, the squash runs
-  first, merged into its eight sets (owner, 2026-11-02).
+  first, merged into its eight sets (owner, 2026-11-02; eight sets confirmed 2026-11-04).
   [Detail](backlog/architecture.md#a760-squash-every-migration-set-before-go-live)
 
 - **A913's fix items: general code English only (owner's answers, 2026-10-20).** The audit
@@ -6779,8 +6783,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **`floor_zones`: decide the remaining DELETE restriction (A805 follow-up).**
 
 - **`incidents`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
-
-- **`ingredients`: decide the remaining DELETE restriction (A805 follow-up).**
 
 - **`invoice_series`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
 
@@ -7122,7 +7124,7 @@ partial scope; the detail for a live thread is in its area.
 | 15  | Online ordering              | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (later phase)                                                                                                                                                     |
 | 16  | Workforce                    | _registro de jornada_ library (chain per node since #268), till clocking and breaks, D2 scheduling, roster authoring + approvals, staff request path + portal; own/manager Hours and PDF/CSV working-time exports | inspector remote access; advisor export checks; wage-computation engine (convenio-gated); D3 payroll export (integrate-not-build)                                         |
 | 17  | Accounting export            | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (core subset; extends Reporting)                                                                                                                                  |
-| 18  | Menu/recipes/allergens       | EU-14 allergens, recipe/BOM allergen inheritance, recipe-authoring UI (**withdrawn from the dashboard by #345**; declarations are now direct on the product), product images, location↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | menu schedule (publishing landed, #677); customer-facing menu surface parked; nested sub-recipes / plate costing / stock depletion parked       |
+| 18  | Menu/recipes/allergens       | EU-14 allergens, declared directly on the product since #345 (recipes are removed under A1308, owner 2026-11-04), product images, location↔menu membership, extras and options lists end to end (the legacy option groups are gone — Task 13 dropped their tables), per-option and dish-line quantity, dietary classification, order-line customisation; departments and menus (#297) | menu schedule (publishing landed, #677); customer-facing menu surface parked       |
 | 19  | Opening hours & channel sync | —                                                                                                                                                                                                                                                                                                                                                                                                                                 | not started (Google Business Profile / Maps)                                                                                                                                  |
 | 20  | Procurement & inventory      | received purchase invoices (`@waitron/purchasing`, feeds modelo 303)                                                                                                                                                                                                                                                                                                                                                              | suppliers/POs/goods-in/stock/3-way reconcile/reorder (parked); AI forecast deferred                                                                                           |
 
@@ -7219,7 +7221,6 @@ while it holds decisions still open.
 | [POS architecture](superpowers/specs/2026-07-18-pos-architecture-design.md)                                                                                                                       | the strategy; §2's sub-projects                                                                                                                                            | _What's built_                                                            |
 | [Workforce and time record](superpowers/specs/2026-07-22-workforce-and-time-record-design.md)                                                                                                     | clocking, corrections, Hours and working-time exports built; inspector access, advisor checks and payroll remain                                                                                                                                               | _Working time and staff_: inspector access, advisor checks, payroll and wages                 |
 | [Deli hardware](superpowers/specs/2026-07-30-deli-hardware-design.md)                                                                                                                             | partly built; the outage path changed 2026-09-11                                                                                                                           | _Payments and card readers_                                               |
-| [Nested sub-recipes](superpowers/specs/2026-08-16-nested-sub-recipes-design.md) and its plan                                                                                                      | not started; parked; the plan predates SQLite and Vitest 4                                                                                                                 | _Later and parked_ (recipes depth)                                        |
 | [Expo device kind](superpowers/specs/2026-08-17-expo-device-kind-design.md)                                                                                                                       | superseded by A366 slice 5 Part A (a device's pass screen and pass monitor)                                                                                                  | —                                                                         |
 | [Star CloudPRNT](superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md) and [Epson Server Direct Print](superpowers/specs/2026-08-17-printing-epson-server-direct-print-design.md) | not started beyond the `cloud_poll` columns; low priority                                                                                                                  | _Printers, the print agent and receipts_                                  |
 | [Failover printing](superpowers/specs/2026-08-26-failover-printing-design.md)                                                                                                                     | partly built (the job lease, network printers any agent may claim, unprinted kitchen tickets shown on the till, #750)                                                      | _Printers, the print agent and receipts_, _Replication, failover and the cloud_ |

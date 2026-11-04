@@ -30,6 +30,11 @@ dashboard, till and setup app), pnpm workspace.
 
 ## Amendments to the design this plan makes
 
+**2026-11-04, from A1308 (owner):** S23 builds no `venue_settings`, `venue_catalogues` or
+`business_day_settings`. The design's own amendment of that date states the result, and every mention
+below is changed to match. Only `day_cutover_changes` stays a new table. The i18n keys `venue_settings.*`
+in Tasks S1a and S1d are translation keys, not the table, and stay.
+
 The design's readers should know these; each is explained where it bites.
 
 1. **Four readers move from S1 to S2.** `saleLanguageFor` and `readOfferedReceiptLanguages`
@@ -449,7 +454,7 @@ function no longer reads the scope. It fails before the change. It is marked
 - **Delete the interim items:** `venueLocationId` (S28); the optional location parameters of
   `seedNode` and `seedDevice` (S25 and S26, with the columns), together with the arguments still
   passed in tests no F task selected (F1's codemod rules 2–3 remove them); `scripts/a1301-seed-codemod.mjs` and
-  its test (S28). `seedVenue`'s body changes in S23 (also writes `venue_settings`) and S28 (stops
+  its test (S28). `seedVenue`'s body changes in S23 (also writes the `settings` rows `venue` and `business_day`) and S28 (stops
   writing `locations`).
 - **`seedKitchenStation`** still takes a `locationId`; S24 gives it the same "at the venue" default.
 - **The `country-es` demo capture** (`packages/country-es/test-fixtures/demo/madrid-before-move.*`) is
@@ -701,7 +706,7 @@ would make S1 owner-landed. Task S2-5 converts the four and every caller (also
   does not exist; `readVenueClock` is not exported by `@waitron/db`.
 - [ ] **Step 3: Implement** `venue.ts` and the two error declarations, each with a one-line comment
   saying what the code means (`venue.not_found` outlives `venueLocationId`: from S23 it is the refusal
-  when `venue_settings` has no row). Export from `index.ts`.
+  when the `settings` row `venue` is missing). Export from `index.ts`.
   `resolveVenueClock` keeps its `nodes` existence check and returns `readVenueClock(tx)`;
   `overdue-orders.ts` passes `await venueLocationId(tx)` to `orderTableLabels`; fix the message at
   `record-daily-close.ts:40` (grep the tests for the old text first; none matched at
@@ -1937,7 +1942,7 @@ if ((await readOperationalVenueIds(tx)).length === 0)
 
 `readOperationalVenueIds` (`packages/provisioning/src/tenant-guard.ts:22-27`) is the live-venue
 guard's reader, already imported by `adopt.ts:131`. Using it means S23, which switches that reader
-to `venue_settings` (design §3, "S23 … the live-venue guard and S4's check read `venue_settings`"),
+to the `settings` row `venue` (design §3, "the live-venue guard and S4's check read that row"),
 moves S4's check with it, with no S4 edit. It sits inside the transaction, at the point where the
 foreign key refuses today, so module operations are prepared exactly as today (`:64`) and the
 outcome is today's.
@@ -2138,7 +2143,8 @@ management routes move from `/management-api/locations/:locationId/…` to
 `/management-api/venue/catalogues`, `/management-api/venue/catalogues/:catalogueId` and
 `/management-api/venue/default-catalogue`. The error code `location.not_found` is deleted, because
 nothing can name a missing location any more. The tables stay `locations.catalogue_id` and
-`location_catalogues` until S23 renames them.
+`location_catalogues` until S23 replaces the first with the `is_default` flag and drops the second
+(design, Amendment 2026-11-04).
 
 - **Depends on:** S1. S5, S6, S7 and S8 land in any order (header, "Dependencies"): S6 leaves S5's
   `department-receipt-languages.ts:17` call for S5, and the overlap is a rebase.
@@ -2273,7 +2279,7 @@ Consumes S1's `readVenue`, `venueLocationId`, `readVenueClock`.
 - [ ] **Step 7: Done-check.**
   `git grep -n -E "$P" -- packages/catalogue/src apps/till/src/widgets/menu-switcher.ts`.
   It may print: `operations.ts`'s import of `locationCatalogues, locations` and its uses of those
-  two tables (renamed by S23), `venueLocationId` calls, the ignored `_locationId` parameters (S2 or
+  two tables (gone after S23), `venueLocationId` calls, the ignored `_locationId` parameters (S2 or
   S18), `errors.ts:93-94` (Task S5-2), and nothing else. Also `git grep -n -E 'CatalogueToLocation|ForLocation\(|LocationDefaultCatalogue|LocationCatalogue\b' -- apps packages`.
   Expected: only the dashboard client lines that Task S5-2 changes.
 - [ ] **Step 8: Commit** (`git commit -s`), naming the cross-slice call lines in the body.
@@ -2309,7 +2315,7 @@ Consumes S1's `readVenue`, `venueLocationId`, `readVenueClock`.
 - [ ] **Step 5: Done-check.**
   `git grep -n -E "$P" -- packages/catalogue/src apps/server/src/catalogue-api.ts apps/till/src/widgets/menu-switcher.ts`.
   It may print: `operations.ts`'s `locationCatalogues`/`locations` table names, `venueLocationId`
-  calls, and `provisioning.ts`'s `locationCatalogues` import (renamed by S23). Nothing in
+  calls, and `provisioning.ts`'s `locationCatalogues` import (gone after S23). Nothing in
   `catalogue-api.ts`. Also `git grep -n -E 'Location(Catalogue|Catalogues)|locations/' -- apps/dashboard/src`.
   Expected: nothing.
 - [ ] **Step 6: Commit** (`git commit -s`).
@@ -3616,7 +3622,7 @@ Every S16 file in the TSV, with what changes (lines at main `929c1e70e0`):
 | `packages/provisioning/src/fiscal-readiness-input.ts` | a | `:24` territory |
 | `packages/provisioning/src/cli.ts` | a | `--venue-name`, `:263-264,292,301` request shape |
 | `packages/provisioning/src/recover-provisioned-venue.ts` | a | `:29,40-42` venue fields; the lookup compares `readVenue(tx)`'s `name`/`fiscalTerritory` with the request and finds the node by `n.name` alone, dropping the `locations` join; the `locationId` that `:45` (S2's call) and `:59,81` (the result shape, S18) still need comes from `venueLocationId(tx)` |
-| `packages/provisioning/src/errors.ts` | a | `:75` comment names `locations_invoice_locales_len`; cut to "the receipt-language length check" (the check moves to `venue_settings` in S23) |
+| `packages/provisioning/src/errors.ts` | a | `:75` comment names `locations_invoice_locales_len`; cut to "the receipt-language length check" (the check moves to a `settings` trigger in S23) |
 | `apps/server/src/setup-api.ts` | b | `:437-511` parses venue fields from `v` directly; `:571-589` `demoVenueNameSource`; `:596-606,882` territory/description reads; `:953` stays (S18) |
 | `apps/server/src/setup-first-fiscal-api.ts` | b | `:416-447` one `exact(body.venue, …)` list with the eleven fields; the second `exact(raw.location…)` and its spread go |
 | `apps/server/src/first-fiscal-activation.ts` | b | `:68` territory; `:290` stays (S18) |
@@ -4205,7 +4211,7 @@ canonical keys are schema-slice territory). So no slice regenerates them: regene
 both digest checks and erase what the capture proves. Schema changes are absorbed in the baseline
 test by transforms, as `RENAMED_COLUMNS`, `ADDED_TABLES`, `REMOVED_TABLES` and the column pushes at
 `seed.madrid-baseline.test.ts:22-35,115-150` do today. The schema slices that change `locations` or
-drop a `location_id` (S20–S28, and S23's new tables as `ADDED_TABLES` entries) add those transforms;
+drop a `location_id` (S20–S28, and S23's `day_cutover_changes` and A1308's `settings` as `ADDED_TABLES` entries) add those transforms;
 see the header's "Carried to the schema plan" for the one transform `REMOVED_TABLES` cannot express.
 
 ### Task F2a — venue-service `src/[a-h]*` (21) and `src/testing/zone-menus.ts`
@@ -4321,7 +4327,7 @@ brackets.
 | `allocated-provision.ts`, `dormant-contract.ts` (`:22,31,70`), `staged-hour-crash.ts`, `staged-hour-restore.ts`, `stream-loop-scenario.ts:466` | F5a/F5b | `ProvisionedNode` lines (S18) stay; `dormant-contract.ts:39` `insert(nodes)` → `seedNode` |
 | `backup-verification-fixture.ts` | F5a | `:187-193` venue and node → helpers; `:50` the fixture node's `locationId` (S18) |
 | `boot-harness.ts` | F5a | `:57-65,335-341` venue and node inserts → helpers with the ids `TILL_ENV`/`KEY_ENV` name (pass them as overrides); `:217` request (S16) |
-| `clear-provision-fixture.ts` | — | `:51-54` table list for clearing (S23/S28 rename the tables) |
+| `clear-provision-fixture.ts` | — | `:51-54` table list for clearing (S23/S28 replace the tables) |
 | `fiscal-fixtures.ts` | F5a | `:111-118` venue, device, node → helpers; `:52,76-78` (S27) |
 | `floor-sets.ts`, `floor-today-venue.ts`, `kitchen-allergy-fixture.ts`, `live-table.ts`, `service-steps.ts`, `service-zone.ts` | — | module rows and `cfg` (S7, S24, S18) |
 | `full-invoice-fixture.ts` | — | `:69` text "Current mutable location address" (S19) |
@@ -4434,16 +4440,16 @@ landed.
 | Cloud file:line | Uses | Waitron slice that changes it | Cloud change | Lands with/after |
 | --- | --- | --- | --- | --- |
 | **Area: cost model (`scripts/cloud-cost/`). Lane G reported it as D466 / Cloud PR 711.** | | | | |
-| `scripts/cloud-cost/conformance-prepare.mjs:20` | imports `tenants,locations` from Waitron `packages/db/src/schema/tenants.ts` (at the replay pin) | **S23** creates `venue_settings` and moves the venue's settings into it. `locations` stays, but only its id is read (design §6, S23 row). **S28** drops `locations` (design S28; `file-assignment.tsv:433` gives `tenants.ts` to S28) | Remove `locations` from the import list. Import whatever writes the venue at the new pin, either `venue_settings` (S23) or F1's `seedVenue` (`packages/db/src/testing/seed.ts`, F1's "Helper API" above) | Moving `replayRevision` past S23. Required past S28 |
+| `scripts/cloud-cost/conformance-prepare.mjs:20` | imports `tenants,locations` from Waitron `packages/db/src/schema/tenants.ts` (at the replay pin) | **S23** moves the venue's settings into `settings.venue` and `settings.business_day`. `locations` stays, but only its id is read (design §6, S23 row). **S28** drops `locations` (design S28; `file-assignment.tsv:433` gives `tenants.ts` to S28) | Remove `locations` from the import list. Import whatever writes the venue at the new pin, either the `settings` rows (S23) or F1's `seedVenue` (`packages/db/src/testing/seed.ts`, F1's "Helper API" above) | Moving `replayRevision` past S23. Required past S28 |
 | `scripts/cloud-cost/conformance-prepare.mjs:25`; `scripts/cloud-cost/fixtures/source-clock-conformance.test.mjs:39,44` | imports `readLocationClock` from `packages/reporting/src/business-day.ts` and calls `readLocationClock(tx, locationId)`. The fixture inserts rows into `location_day_cutover_changes(location_id,…)` | **S1** adds `readVenueClock(tx)` in `packages/db/src/venue.ts` (S1's "API" above). `readLocationClock` stays until **S18** (S1's Files table above; design S18 row). **S23** renames the table to `day_cutover_changes` (design S23 row) | Call `readVenueClock(tx)` from `@waitron/db` with no id. Insert into `day_cutover_changes` with no `location_id` | Possible from S1. Required once the pin passes S18 (the function) and S23 (the table) |
-| `scripts/cloud-cost/waitron-adapter.mjs:56-67,103-110` | builds a venue by inserting directly into `tenants`, `locations` (from `initial.location`: name, invoiceLocales, operationDescription, timeZone, dayCutover) and `nodes` with `locationId` | **S23**: `readVenue` reads `venue_settings`, so a venue made by a bare `locations` insert is incomplete. **S25** drops `nodes.location_id`. **S28** drops `locations` | Create the venue with Waitron's `seedVenue`/`seedNode` (F1) or `provisionVenue`. Drop `locationId` from the `nodes` insert. Flatten `initial.location` into venue fields, matching S16's request shape (S16's "The new request shape" above) | Moving the pin past S23. Required past S25 and S28 |
+| `scripts/cloud-cost/waitron-adapter.mjs:56-67,103-110` | builds a venue by inserting directly into `tenants`, `locations` (from `initial.location`: name, invoiceLocales, operationDescription, timeZone, dayCutover) and `nodes` with `locationId` | **S23**: `readVenue` reads the `settings` rows, so a venue made by a bare `locations` insert is incomplete. **S25** drops `nodes.location_id`. **S28** drops `locations` | Create the venue with Waitron's `seedVenue`/`seedNode` (F1) or `provisionVenue`. Drop `locationId` from the `nodes` insert. Flatten `initial.location` into venue fields, matching S16's request shape (S16's "The new request shape" above) | Moving the pin past S23. Required past S25 and S28 |
 | `scripts/cloud-cost/waitron-adapter.mjs:113` | writes `WAITRON_TILL_NODE_ID` and `WAITRON_TILL_LOCATION_ID` into `trading.env` | **Not A1301: #2198** removed both settings. Since then Waitron writes only `WAITRON_NODE_ID` for identity (`trading-config.ts:31-42`) and reads only it (`node-config.ts:35`) | Write `WAITRON_NODE_ID` only | Any move of `replayRevision` past `b1b0f10952`, now, ahead of A1301 |
-| `scripts/cloud-cost/local.mjs:171-182` (`readReplayClock`) | `SELECT time_zone, day_cutover FROM locations WHERE id=?` and `location_day_cutover_changes WHERE location_id=?` on a captured Waitron `venue.db` | **S23** moves the time zone and day cut-over into `venue_settings` and `day_cutover_changes` and drops the old side tables | Read the one `venue_settings` row and `day_cutover_changes`, with no id | Moving the pin past S23 (the captured database follows the pin) |
+| `scripts/cloud-cost/local.mjs:171-182` (`readReplayClock`) | `SELECT time_zone, day_cutover FROM locations WHERE id=?` and `location_day_cutover_changes WHERE location_id=?` on a captured Waitron `venue.db` | **S23** moves the time zone and day cut-over into `settings.business_day` and `day_cutover_changes` and drops the old side tables | Read the `settings` row `business_day` and `day_cutover_changes`, with no id | Moving the pin past S23 (the captured database follows the pin) |
 | `scripts/cloud-cost/private-replay.mjs:33`, `source-bills.mjs:73-75`, `source-days.mjs:24` | `JOIN nodes n … WHERE n.location_id=?`; `SELECT id FROM locations WHERE id=?` | **S25** (`nodes.location_id`), **S28** (`locations`) | Remove the location filter, since a database holds one venue. Stop passing `locationId` through `isolated-replay.mjs:91,109,174`, `run-local.mjs:26`, `local.mjs:148-152,200,210`, `private-replay.mjs:24,74,104-119` and `fixtures/streamed-day-smoke.mjs:32-33,42`. Update the synthetic schemas in `source-bills.test.mjs:23-25`, `source-days.test.mjs:37-39,105` and `source-clock.test.mjs:24-26,76-100`, plus the `locationId` arguments in `fixtures/*-conformance.test.mjs` | Moving the pin past S25. Required past S28 |
 | `scripts/cloud-cost/fixtures/remote-browser-backend.mjs:14-16,28,31` | provisioning request with `location: {name, fiscalTerritory, …}`; `mountReportApi(…, cfg: {nodeId, locationId})`; `mountCatalogueApi(…, venueCfg: {nodeId, locationId})`; `provisioned.locationId`. Runs at `browserRevision` `99c265981b` | **S16** flattens the request (S16's "The new request shape" above). **S5** changes the catalogue API (`catalogue-api.ts`). **S11c** changes `report-api.ts`. **S18** removes `cfg.locationId` and `ProvisionedNode.locationId` (the F tasks' category 4 above) | Send the flat request once the pin passes S16. Drop `locationId` from both `cfg` objects once it passes S18 | Moving `browserRevision` past S16, then past S18 |
 | **Area: backup and storage proofs (`scripts/test-local-backups.mjs`, `scripts/backup-stream-probe.mjs`, `deploy/test-cloud` snapshot fixtures)** | | | | |
-| `scripts/test-local-backups.mjs:174-176` (`databaseHead`) | hashes `SELECT id,name FROM locations` and `SELECT id,location_id,public_key FROM nodes` from a Waitron `venue.db` | **S23** moves the name into `venue_settings`. **S25** drops `nodes.location_id`. **S28** drops `locations` | Hash the venue's settings row and `nodes(id,public_key)` | Must land with S25 and S28 in the reset window (it runs against `WAITRON_CHECKOUT`) |
-| `scripts/test-local-backups.mjs:631`; `scripts/backup-stream-probe.mjs:230,257,261` | `UPDATE locations SET name=?`, a change marker that makes the stream ship a new generation | **S23**: the venue name is read from `venue_settings`. **S28** drops `locations`, so the update fails | Write the marker to the venue's name in `venue_settings`, or to any other row that is streamed | After S23. Required by S28 |
+| `scripts/test-local-backups.mjs:174-176` (`databaseHead`) | hashes `SELECT id,name FROM locations` and `SELECT id,location_id,public_key FROM nodes` from a Waitron `venue.db` | **S23** moves the name into `settings.venue`. **S25** drops `nodes.location_id`. **S28** drops `locations` | Hash the venue's settings row and `nodes(id,public_key)` | Must land with S25 and S28 in the reset window (it runs against `WAITRON_CHECKOUT`) |
+| `scripts/test-local-backups.mjs:631`; `scripts/backup-stream-probe.mjs:230,257,261` | `UPDATE locations SET name=?`, a change marker that makes the stream ship a new generation | **S23**: the venue name is read from `settings.venue`. **S28** drops `locations`, so the update fails | Write the marker to the venue's name in `settings.venue`, or to any other row that is streamed | After S23. Required by S28 |
 | `scripts/test-local-backups.mjs:451,609,681,729` | `localVenueId` from Waitron's `cloud-capture-client-fixture.ts` / `cloud-recovery-client-fixture.ts`. The pointer key is `venues/<localVenueId>/current.json` | Waitron's `cloud-recovery-client-fixture.ts:152-160` reads `locations.id` and requires `nodes.locationId` to equal it. F5's table above sends that to S1's `readVenue` and to S18. What the id becomes is **gap 1** below | No change if Waitron keeps sending the same UUID under the same name. Otherwise follow the new name or value | After Waitron decides gap 1, before S28 |
 | `deploy/test-cloud/test-fixtures/snapshot-archive.mjs:17,19`; `deploy/test-cloud/test-fixtures/snapshot-authorised-archive.test.ts:35` | `provisionVenue` request with `venue.location: {…}`; `writeTradingEnv(root, {nodeId, locationId: provisioned.locationId, …})` (verifier pin `ec91a9e34d`) | **S16** flattens the request. **S18** removes `TradingConfig.locationId` (`file-assignment.tsv:361`) and `ProvisionedNode.locationId` | Send the flat request. Drop `locationId` from `writeTradingEnv` | Moving the verifier pin past S16, then past S18 |
 | **Area: pairing, remote access and translation proofs** | | | | |

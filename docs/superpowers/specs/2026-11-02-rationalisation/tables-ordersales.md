@@ -70,7 +70,8 @@ name 1–40 trimmed; bill_number a whole number ≥ 1 and only with a party; par
 department and service mode are all-or-none (a bill with no recorded context today raises
 `order.service_context_missing`, 11 non-test sites, so the columns stay nullable). A merge of two
 parties moves settled bills too, so `party_id` is the one numbering scope; on a settled bill the
-freeze rule gains an exception for `party_id`, `bill_number` and `bill_name` (owner, 2026-11-04; §5).
+freeze rule gains an exception for five columns: `party_id`, `bill_number`, `bill_name`, `editor_id`
+and `editor_version` (owner, 2026-11-04; §5).
 
 ### 1.2 `working_order_lines` — one priced row on a bill: a dish, or an extra under a dish
 
@@ -92,7 +93,7 @@ classification, group_id, credited_to, list_unit_price_gross) and adds:
 | unit_id | text | null, plain id (as today) | working_line_contexts |
 | sold_in_each | integer flag | null | working_line_contexts |
 | hardware_unit | text | null | working_line_contexts |
-| allergens, diet, diet_derivation, diet_override | text | null | working_line_contexts |
+| allergens, diet, diet_override | text | null | working_line_contexts; `diet_derivation` goes with recipes (`tables-menu.md` §4) |
 | late_period_name, late_confirmed_by | text | null; late_confirmed_by FK persons (README U11) | working_line_contexts |
 | offer_unit_name, offer_unit_precision, offer_vat_class, offer_category_name | text/int | null | working_line_contexts — **kept only if measure M3 shows they differ from the line's own `unit_name`/`unit_precision`/`vat_class`/`category`; otherwise dropped** |
 | cohort_id | text | null | order_portions.cohort_id |
@@ -129,11 +130,9 @@ which `activity_log` is not. Read back by the appender (previous hash), `package
 
 ### 1.4 `order_groups` — a batch of a party's order released to the kitchen together
 
-Keep, plus one column `last_joined_at text null` (when lines last joined this group), so
-`apps/server/src/service-step-signals.ts:118-136` can read first/last order times from
-`order_groups.created_at` and `last_joined_at` instead of the event rows. Now that the events stay a
-typed table product code may read, this column needs a fresh look: open question Q1 (§9). Core, `state`.
-≈400–600/day, ≈150,000–220,000/year.
+Keep, unchanged. First and last order times stay a read of the group events
+(`apps/server/src/service-step-signals.ts:118-136`), now from `order_events`. If §8 M7 fails, the group
+gains a column `last_joined_at text null` instead. Core, `state`. ≈400–600/day, ≈150,000–220,000/year.
 
 ### 1.5 `order_group_hold_stations` — stations that printed a held group's HOLD ticket
 
@@ -141,10 +140,9 @@ Keep (link table, both sides are rows: R7). Core, `state`. ≈100–400/day.
 
 ### 1.6 `order_drafts` — one waiter's unsent order round
 
-Keep, plus `taken_over_from text null` (FK persons: the owner before the latest takeover), which
-replaces the till's read of the takeover events in `takenOverFrom`
-(`apps/server/src/order-drafts.ts:1879-1902`). Open question Q1 (§9) applies to this column too.
-Core, `state`. ≈500–750/day, ≈180,000–270,000/year (finished headers are kept; the
+Keep, unchanged. The till's previous owner stays a read of the takeover events in `takenOverFrom`
+(`apps/server/src/order-drafts.ts:1879-1902`), now from `order_events`. If §8 M7 fails, the draft gains
+a column `taken_over_from text null` (FK persons) instead. Core, `state`. ≈500–750/day, ≈180,000–270,000/year (finished headers are kept; the
 `draft.already_submitted` refusal reads their state, `order-drafts.ts:1481-1482`).
 
 ### 1.7 `order_draft_lines` — a line in an unsent round: a new dish, or a sent dish recalled for change
@@ -387,8 +385,7 @@ receipt (`:1112-1115`), so after the move it joins on `data.print_job_id`. The r
 
 **Typed histories that remain:** `order_events` (§1.23; README U3). Attendance reads the group and
 draft kinds by day (`apps/server/src/attendance-facts.ts:22-30`, `attendance-discovery.ts:129-140`;
-people area). `service-step-signals` and the till's `takenOverFrom` read them too, unless Q1 keeps
-the two columns. Nothing reads the dish kinds yet: outside tests and test helpers, a grep for
+people area). `service-step-signals` and the till's `takenOverFrom` read them too (§8 M7). Nothing reads the dish kinds yet: outside tests and test helpers, a grep for
 `orderPortionEvents` finds only its schema, its writer and the package export.
 `order_amendments` (hash chain; read by `append-order-amendment.ts`, `backup-evidence.ts:191-196`,
 attendance). Ledger rows that are history by nature and read back by product code: `sale_settlements`
@@ -411,11 +408,11 @@ attendance). Ledger rows that are history by nature and read back by product cod
 | working_line_portions | merge into working_order_lines | one row per line, keyed by line id |
 | service_commands | keep | idempotency record with its own identity |
 | order_group_events | → order_events | typed history (README U3); attendance and service-step signals read it |
-| order_groups | keep | real thing; gains last_joined_at |
+| order_groups | keep | real thing |
 | order_group_hold_stations | keep | link table of two rows (R7) |
 | order_draft_events | → order_events | typed history (README U3); attendance and the till's takeover read it |
 | order_draft_lines | keep | absorbs recalled lines |
-| order_drafts | keep | real thing; gains taken_over_from |
+| order_drafts | keep | real thing |
 | order_draft_recalled_lines | merge into order_draft_lines | same thing (a line in a draft), same lifetime, same slot columns |
 | line_service_cancellations | keep | its facts change on a frozen line (§1.22) |
 | receipt_reprints | → activity_log | who asked for a copy; the order dialog shows it to a person, nothing decides from it; sale and time already on print_jobs |
@@ -460,17 +457,18 @@ trigger must be rewritten**: it lists, per allowed transition, which columns mus
 (read in `0198_recipient_identifier_guards.sql`); every folded column has to be placed.
 
 - On an open or placed bill, the folded columns are free in the same branches where `party_id` is free.
-- **On a settled bill the freeze gains one exception: `party_id`, `bill_number` and `bill_name` may
-  change, and nothing else may loosen** (owner, 2026-11-04). Today's settled branches pin `party_id`,
+- **On a settled bill the freeze gains one exception: `party_id`, `bill_number`, `bill_name`,
+  `editor_id` and `editor_version` may change, and nothing else may loosen** (owner, 2026-11-04). Today's settled branches pin `party_id`,
   except that a paid bill not yet handed over may leave its party once
   (`moveSettledBillToCounter`, `apps/server/src/move-bill.ts:292-317`). Three things need the exception:
   a merge moving settled bills (§6 item 4), including collected ones, since `rescopeBillNumbers` renumbers
   every bill that is not abandoned (`packages/venue-service/src/bill-identities.ts:32-44`); that counter
-  move, which also clears the number (`move-bill.ts:313`); and naming a settled bill (`setBillName`,
+  move, which also clears the number (`move-bill.ts:313`) and rewrites the editor state
+  (`relocateBillEditor`, `move-bill.ts:314`, which bumps the version, `apps/server/src/bill-editing.ts:76-108`);
+  and naming a settled bill (`setBillName`,
   `apps/server/src/bill-identities.ts:28-52`). As today, only the server limits when these happen.
 - `zone_id`, `department_id` and `service_mode` stay pinned on a settled bill: the move above keeps its
   zone, and the merge's zone change reaches open and placed bills only (`table-actions.ts:237-241`).
-- `editor_id` and `editor_version` do not fit the exception as stated: open question Q2 (§9).
 
 **working_order_lines** — kept: PK; indexes group, parent, order, course; unique (order, line_no); FKs
 order (cascade), group, product (restrict), course, station, parent; CHECKs unit_precision,
@@ -585,8 +583,8 @@ names leave the subscription lists).
 7. **Two location columns** — `working_orders.location_id`, `order_service_contexts.location_id`,
    `tender_refunds.location_id`: removed (R10).
 8. **Two refund tables with ~20 shared columns** — one home `refunds`.
-9. **Draft owner history vs current owner** — the till only needs the previous owner. Whether that stays
-   a column beside `order_events`, or is read from it, is Q1 (§9).
+9. **Draft owner history vs current owner** — the till only needs the previous owner, and reads it from
+   `order_events`, so no second copy is stored unless §8 M7 fails.
 
 Kept on purpose, not duplicates: `sale_lines` copying working lines by value (the filed record must not
 change with the menu); `sales.counterparty_*` copying `working_orders.recipient_*` (the bill's choice
@@ -642,7 +640,7 @@ e.g. `till-sale.ts:1050-1056`) vs `sale_settlements` ("the sale is fully paid", 
   number 1, `packages/db/src/testing/seed.ts:122-138`). Failing result that changes the design: none expected
   for speed; a product path needing a repeated number would keep the counter.
 - **M2 wider line rows.** Time the till bill read and the kitchen print query for a 40-line bill with the
-  ~22 extra columns. Failing result: a measurable slowdown on the bill screen would be the "real need"
+  ~21 extra columns. Failing result: a measurable slowdown on the bill screen would be the "real need"
   (R6) to keep the context columns in a side table.
 - **M3 duplicated line fields.** On a seeded demo venue and across the apps/server suite's databases,
   count lines whose `unit_name`, `unit_precision`, `vat_class`, `category` differ from their context's.
@@ -657,12 +655,17 @@ e.g. `till-sale.ts:1050-1056`) vs `sale_settlements` ("the sale is fully paid", 
   by day through `julianday(r.at)` (`apps/server/src/attendance-facts.ts:43`), which no index on a time
   column can serve as written, and README U3's `(actor_id, at)` index starts with the person. Failing
   result: a slow read means comparing the stored text and giving `order_events` an index on `at` too.
-- **M7 service-step signals.** Only if Q1 keeps `last_joined_at`: compare first/last order times from
-  `order_groups.created_at` / `last_joined_at` against the event-based result in `service-step-signals`
-  tests, including merged parties (events keep the old party id; groups move with `moveGroupsToParty`).
+- **M7 the two reads that stay on the events.** With a year of `order_events` (≈650,000–830,000 rows) and
+  the `party_id` and `draft_id` indexes, time the first/last order read in `service-step-signals` for a
+  party with four merged members, and `takenOverFrom` for a till's whole list of drafts. Failing result: a
+  read measurably slower than on today's three event tables. Then that read gets its column
+  (`order_groups.last_joined_at` or `order_drafts.taken_over_from`), and the group column is checked
+  against the event result, including merged parties: events keep the old party id, and groups move with
+  `moveGroupsToParty`.
 - **M8 triggers.** Run the transition and open-parent trigger suites after the column lists are rewritten;
   add a case per folded column on placed and settled bills, plus: a merge moving a settled, collected
-  bill; a settled bill leaving for the counter; naming a settled bill. Each must pass, and a change to any
+  bill; a settled bill leaving for the counter, with its editor columns rewritten; naming a settled bill.
+  Each must pass, and a change to any
   other column of a settled bill must still be refused.
 - **M9 service_commands.** Time the replay lookup at 1,000,000 rows (a unique-index seek; expected fine).
 - **M10 latest till retry.** Before the tidy-up job prunes `service_commands`, establish how late a till can
@@ -673,16 +676,5 @@ e.g. `till-sale.ts:1050-1056`) vs `sale_settlements` ("the sale is fully paid", 
 
 ## 9. Decisions for the owner
 
-The owner settled D1 to D7 on 4 November 2026; each is now stated in the body. Two questions are left.
-
-- **Q1. Do `order_groups.last_joined_at` and `order_drafts.taken_over_from` still earn their place?** They
-  were added so product code would not read `activity_log`. The events now stay in `order_events`, a typed
-  table product code may read, so both columns can be read from it (R6, one copy of each thing). Keeping
-  them saves a look-up; dropping them removes two columns and M7's risk around merged parties. Not settled
-  by the ledger.
-- **Q2. The two editor columns on a settled bill.** The owner's exception names `party_id`, `bill_number`
-  and `bill_name`. But `moveSettledBillToCounter` also rewrites the bill's editor state
-  (`relocateBillEditor`, `apps/server/src/move-bill.ts:314`, which bumps the version,
-  `bill-editing.ts:76-108`), and `setBillName` checks it. Once `editor_id` and `editor_version` are columns
-  of `working_orders`, that write hits the settled-bill freeze. Either the exception grows to five columns,
-  or the editor state stays a side table, which is one more table (25, not 24). Not settled by the ledger.
+The owner settled D1 to D7 and the five-column exception on 4 November 2026; each is stated in the body.
+No question is open in this area.

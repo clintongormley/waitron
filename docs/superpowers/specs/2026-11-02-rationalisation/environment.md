@@ -74,13 +74,13 @@ moving to settings, so the type and `loadTillAppSettings` go too:
 - `invoiceLocales` has no production reader: `cfg.invoiceLocales` appears only in tests and test
   fixtures (`apps/server/src/testing/`). A sale's languages come from the venue row
   (`readInvoiceLocales`, `working-order.ts:785`; `venue-locale.ts:104-156`).
-- `locale`, the defaulted value, is the one with real readers. It is `es-ES` on every box where
-  the variable is unset. It chooses the unit abbreviation on kitchen tickets and in the made-here
+- `locale`, the defaulted value, is the one with real readers, ten of them. It is `es-ES` on every box
+  where the variable is unset. It chooses the unit abbreviation on kitchen tickets and in the made-here
   answer (`kitchen-print.ts:293, 334, 697`, `till-api.ts:1274`, `working-order.ts:3169`), the
   language of a moved-items notice when no ticket prints (`kitchen-print.ts:1705`), the content language a sale
   falls back on when none is saved (`working-order.ts:787, 1148, 5922`), and the default in
-  `cancelItem`'s signature (`line-cancel.ts:94`). This design has those readers take the venue's display language, `venueLocale`, which
-  boot already computes and hands to the other routes (`boot.ts:2081` onward).
+  `cancelItem`'s signature (`line-cancel.ts:94`). All ten take the venue's display language, `venueLocale`, which
+  boot already computes and hands to the other routes (`boot.ts:2081` onward) (owner, 2026-11-04).
 - That changes these readers only for a venue outside Spain: they said `es-ES` wherever the venue
   was, and now follow its geography. In Spain `venueLocale` is `es-ES` too: an area's own language counts only if it is a supported one
   (`resolveCountryLocale`, `packages/country/src/country.ts:235-258`), and the supported ones are `es-ES` and `en-GB` (`packages/shared/src/locales.ts:8-9`). Read, not run.

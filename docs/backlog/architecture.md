@@ -1015,22 +1015,25 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
 - **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
   2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
-  [design](../superpowers/specs/2026-11-02-rationalisation/README.md) is written and builder-checked,
-  and **waits for the owner's approval before any work starts**. Refreshed on 2026-11-03 against
-  main `68732329c1` (A1317). It proposes 245 tables → 151 in eight migration sets instead of
-  sixteen, one job runner, 111 product environment variables → 53, and one state-folder layout. It
-  keeps the second-box path that A947 and the landed A1018 handover slices build on (adoption, the
-  mirror link, the pinned main-box key, the handover tables) and removes only the standby's
-  reserved identity (`fiscal_reservations`). The owner chose that A760's squash runs first, merged into the eight
-  sets. If approved, it absorbs A1301's schema slices (S20–S28, S23's `venue_settings` included).
-  It also renames every leftover "tenant" name: the `tenants` table becomes `taxpayer`, and
-  names that mean the venue or box get that name (owner, 2026-11-02; design §5 U9).
+  [design](../superpowers/specs/2026-11-02-rationalisation/README.md) is written. The owner has
+  reviewed every file and answered every question (2026-11-04), and **it waits for the owner's final
+  approval before any work starts**. 246 tables become 145, or 144 once A1323 removes
+  `recovery_packs`, in eight migration sets instead of sixteen. There is one job runner. 111 product
+  environment variables become 51, or 55 until A951 lands. There is one state-folder layout. It keeps
+  the second-box path that A947 and the landed A1018 handover slices build on (adoption, the mirror
+  link, the pinned main-box key, the handover tables) and removes only the standby's reserved identity
+  (`fiscal_reservations`). It removes recipes (owner, 2026-11-04). The owner chose that A760's squash
+  runs first, merged into the eight sets. If approved, it absorbs A1301's schema slices (S20–S28);
+  S23 builds no `venue_settings`, because the venue's settings become documents in the shared
+  `settings` table. It also renames every leftover "tenant" name: the `tenants` table becomes
+  `taxpayer`, and names that mean the venue or box get that name (owner, 2026-11-02; design §5 U9).
 
 ## A1301. Remove the "location" concept: the venue holds everything a location held
 
 - **A1301. Remove the "location" concept: the venue holds everything a location held** (owner,
   2026-11-01, high priority; nothing new is built on locations meanwhile). The design is written and
-  reviewed: its settings move to a new one-row `venue_settings` table, and the work is cut into
+  reviewed: its settings move to the `settings.venue` and `settings.business_day` documents (A1308,
+  owner, 2026-11-04), and the work is cut into
   slices S1–S28 and fixture slices F1–F5, eight of them landed by the owner. The owner answered
   every design question (lane B's A1268 does the working-time hashes; the working-time export names
   the venue only). The build plan covers S1–S12, S16, S17 and F1–F5; the watcher hands out its

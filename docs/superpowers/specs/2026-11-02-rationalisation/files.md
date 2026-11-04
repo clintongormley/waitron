@@ -68,7 +68,7 @@ the repair page reads to say how far the setup got, and what Start again needs t
 `record.json`, `documents/`, `import/` and `start-again-guesses.json`. What Continue was holding up,
 read, not run:
 
-- `first-setup-resolutions/<uuid>/` goes whole (item 55; see §6 question 1). Both of its writers
+- `first-setup-resolutions/<uuid>/` goes whole (item 55). Both of its writers
   hang off Continue. The owner audit runs only for `recover` (`first-setup-owner.ts:246-250`). The
   finish audit is reached only when the last ownership event is `recover`
   (`first-setup-activation.ts:238-243`, `:250`). Its other two actions, `retire` and
@@ -88,6 +88,20 @@ read, not run:
   Waitron never deletes stays. T9 checks that nothing is left behind.
 - The repair of a damaged claim mark (`repairMarker`, `first-setup-owner.ts:254-281`) has nothing
   left to repair once the claim goes (below).
+- **`waitron-provision`'s way back in goes with Continue** (builder decision, README §10). Today the
+  command picks up a stopped setup through `recoverFirstSetupOwner`, using the administrator's password
+  (`packages/provisioning/src/cli.ts:313-345`), the same `recover` event as Continue. The command is not
+  in the image (`deploy/Dockerfile:203-213`), so a box never runs it. After A1322 it refuses a stopped
+  attempt, so the command line and the page behave alike. These are then unused and go too, each found
+  by `git grep`, read not run:
+  - `resumeFirstSetupCommand` (`first-setup-command.ts:14`; its one caller is `cli.ts:428`), and the
+    `ownership?.kind === "recover"` block around that call (`cli.ts:424-430`).
+  - `preparation.resume` and its `resumeBinding` (`first-setup-preparation.ts:27`, `:118`,
+    `first-setup-runtime.ts:265`). Its one caller outside tests is `first-setup-command.ts:44`.
+  - The module seat's `commandResume` and `resume` (`packages/module/src/initial-setup.ts:36`, `:40`), and
+    fiscal-verifactu's two implementations (`packages/fiscal-verifactu/src/initial-hour-setup.ts:143`,
+    `:149`). `preparation.resume` is the only caller of the seat's `resume`
+    (`first-setup-preparation.ts:144`). That last change is in the fiscal package, so the owner lands it.
 
 **A backup recovery cut off during setup is redone, not resumed** (owner, 2026-11-04). The approved
 A1131bc already removes the folder that recovery ran from: since its slice 3 the repair page's
@@ -311,14 +325,14 @@ together.
 | 52 | `first-setup-node-key.json` | merge into `flows/setup/record.json` | A verifier, not the key; one record per flow. |
 | 53 | `<module>.recovery.json` | merge into `flows/setup/record.json` | A manifest of the delivered document. |
 | 54 | `module-preparation-state.json` | merge into `module-records/<module>.json` | It is read at every backup, so it is long-lived, not setup-only. |
-| 55 | `first-setup-resolutions/<uuid>/` | delete with Continue (A1322; §6 question 1) | Both writers hang off Continue, and the other two actions have no writer (§1). |
+| 55 | `first-setup-resolutions/<uuid>/` | delete with Continue (A1322) | Both writers hang off Continue, and the other two actions have no writer (§1). |
 | 57 | `first-setup-deleting.json` | keep | Start again's flow record; must survive a crash mid-deletion. |
 | 58 | Start-again confirmations | delete: stop writing them | Nothing reads them, no screen shows them, and they hold the setup administrator's name and email until `reset --all` (owner, 2026-11-04). |
 | 59 | Start-again choices | move to `records/choices/` | Survive reset by owner decision; holds an administrator's name and email. |
 | 60 | Start-again set-aside | move to `records/set-aside/` | Survives reset by owner decision (A1098); holds only files Start again did not create. |
 | 61 | `first-setup-start-again-guesses.json` | keep (in `flows/setup/`) | Must work when the database is missing; counted before checking (`first-setup-start-again-guesses.ts:112-114`). |
 | 62 | `.first-setup-<uuid>.tmp`, `<file>.tmp` | replace with the one durable-write helper | One helper for every file. |
-| 63 | `waitron-provision` outputs | keep; its `modules.json` write goes with item 9, or becomes durable if T5 fails | Not in the image (`deploy/Dockerfile:203-213`). |
+| 63 | `waitron-provision` outputs | keep; its `modules.json` write goes with item 9, or becomes durable if T5 fails; its way back into a stopped setup goes with Continue (§1) | Not in the image (`deploy/Dockerfile:203-213`). |
 | 64 | fiscal emergency/receipt directories | delete (fiscal, owner lands it) | Replaced, so it meets the amended R5: no caller outside its own package (`grep -rln allocation-configuration` → tests only); superseded 2026-10-19; `initial-setup.ts:381-382` still names the variables. |
 | 65 | print-agent `config.json` | keep | Another program's settings. |
 | 66 | print-agent `token` | keep | Its login. |
@@ -418,14 +432,7 @@ together.
 
 ---
 
-## 6. Open questions for the owner
+## 6. Decisions for the owner
 
-Every earlier decision in this file is settled and stated above. One is left.
-
-1. **Does the command-line setup keep its own way back in?** `waitron-provision` picks up a stopped
-   setup through `recoverFirstSetupOwner`, using the administrator's password
-   (`packages/provisioning/src/cli.ts:313-345`, `:428`, `first-setup-command.ts:14`). It is the same
-   `recover` event as Continue, and it is not in the image (`deploy/Dockerfile:203-213`), so a box
-   never runs it. If it stays, `recover` stays in the record and the finish audit keeps its route, so
-   `resolutions/` stays too. **Recommend** removing it with Continue, so the command line and the
-   page behave alike.
+Every decision in this file is settled and stated above. `waitron-provision`'s way back in goes with
+Continue (§1). No question is open in this area.

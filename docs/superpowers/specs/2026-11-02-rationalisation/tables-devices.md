@@ -192,7 +192,7 @@ Protections:
 - new: the shape CHECKs on the JSON columns.
 
 `admitted_roles` holds role values today, and role ids once A1002 lands. A1002 also replaces the
-empty-means-every rule and has role deletion clear the list (A1002 design :56, :346).
+empty-means-every rule and has deleting or retiring a role clear the list (A1002 §3, §6).
 
 There is no `device_profile_admission_persons`, so there are no per-person exceptions: a person's
 access changes with their role (owner, 2026-11-04). The owner was told the limit: today a person
@@ -492,12 +492,14 @@ actually kicked, which today it cannot: "`drawer_opens` holds no job id"
 (`packages/printing/src/outbox.ts:26`). The four `receipt-print.ts` sites insert the open before they
 queue the job, so they swap that order (`:407/415`, `:552/560`, `:643/652`, `:671/678`);
 `print-api.ts:1243-1244` already queues first. This delivers the open backlog item "`drawer_opens`:
-decide the remaining UPDATE/DELETE restriction (A805 follow-up)" (`docs/backlog.md:6771`), because
+decide the remaining UPDATE/DELETE restriction (A805 follow-up)" (`docs/backlog.md:6775`), because
 `activity_log` is append-only. Its deletion from the backlog goes with the slice.
 
 Its one remaining reader is the personal-data export (`apps/server/src/personal-data-actions.ts:172-186`),
 which asks for opens where the person was operator or authoriser. The operator is `person_id`. The
-authoriser is the open question in §9.
+authoriser stays inside `data` as `authorized_by`, so the export filters every `drawer.opened` row.
+`activity_log` gains no second person column unless M7 shows that read matters. A person id inside
+`data` carries no key.
 
 Rows: 100–150 a day (cash payments plus manual opens), 36,000–54,000 a year.
 
@@ -725,20 +727,14 @@ The guard `scripts/id-columns-are-references.test.ts` knows an id column by its 
   `print-agent` and `alert-sources` suites on the new shape with their assertions unchanged. Failing
   result: a behaviour the delivery row carried that neither the job nor the record now does.
 
+- **M7 — the personal-data export's read of `authorized_by`.** Time it on the reference micro PC with
+  five years of `drawer.opened` rows. A stand-in took about 64 ms for 270,000 such rows among 4.15 million
+  others, through the `(kind, at)` index, on a developer Mac with the file in memory. The export runs it
+  inside a write-lock turn (`personal-data-actions.ts:171`), so a sale can wait that long, on the rare
+  day someone exports. Failing result: a wait a person at the till would notice. Then `activity_log`
+  gains a second person column, with an index and a key to `persons`, which changes README §3.
+
 ## 9. Decisions for the owner
 
 The owner settled D1, D4 and D5 on 4 November (§6, §1.3, §3). D2 follows README U1. D3 is handed to
-A980 (README U10). Two points are left:
-
-- **Open: where `authorized_by` is searched.** The personal-data export asks for drawer opens the
-  person authorised, and `activity_log` has no column for a second person. This file keeps it in
-  `data`, so the export filters every `drawer.opened` row. Stand-in test: 270,000 such rows (five
-  years) among 4.15 million others took about 64 ms through the `(kind, at)` index, on a developer Mac
-  with the file in memory. The export runs that read inside a write-lock turn
-  (`personal-data-actions.ts:171`), so a sale could wait that long, on the rare day someone exports.
-  The other way is a second person column on `activity_log`, with an index and a key to `persons`.
-  That is a change to the shared table in README §3, so it is the README's call. A person id inside
-  `data` also carries no key.
-- **Open: README §10 decision 1.** The ledger says this was still to be explained to the owner. This
-  file assumes yes (U1). If it is refused, `device_profile_service_access` stays a table, and the
-  profile lists owned by other sets cannot sit on `device_profiles`.
+A980 (README U10). No question is open in this area.

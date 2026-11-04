@@ -19,14 +19,14 @@ otherwise.
 **Where A1301 stands.** A1301's design (`docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md`)
 moves the venue's settings to a new one-row `venue_settings` table, plus `business_day_settings`,
 `day_cutover_changes` and `venue_catalogues`, in its slice S23 (design §2.1 and its slice table,
-`:620`). This design replaces that (owner, 2026-11-04). The venue's settings become the `settings.venue`
+before their amendment of 2026-11-04). This design replaces that (owner, 2026-11-04). The venue's settings become the `settings.venue`
 and `settings.business_day` documents, the default menu becomes a flag on `menus`, and only
 `day_cutover_changes` stays a table; S23 creates no `venue_settings`, `venue_catalogues` or
 `business_day_settings`. The cost is the language triggers reading JSON (§8.2) and a per-module trigger
 replacing a CHECK. Nothing built changes: S23 has not started (`git grep -n -E
 'table\("(venue_settings|venue_catalogues|business_day_settings|day_cutover_changes)"' -- packages`
-prints nothing), and S20–S28 are still open with no plan (`docs/backlog.md:6557`,
-`docs/superpowers/plans/2026-11-01-a1301-remove-location.md:124-125`).
+prints nothing), and S20–S28 are still open with no plan (`docs/backlog.md:6561`,
+`docs/superpowers/plans/2026-11-01-a1301-remove-location.md:129-130`).
 
 Reference venue: one restaurant, 250 bills a day × 4 lines, 360 trading days a year, one box, 1–3
 departments, about 6 floor zones.
@@ -159,7 +159,16 @@ of who reads it (read, not run):
   331,776 draw.
 - **Going with the server key:** `keyInForceOf` (`backup-recovery-pack-api.ts:193-212`) and the server-key
   half of `keepList` (`backup-recovery-pack-status.ts:148`).
-- **Not covered by one date:** open question Q1 (§9).
+- **Not covered by one date, and handed to A1323's design** (builder decision, §9):
+  - A pack goes out of date when the bucket or archive settings change (`reasonsFor` compares each part's
+    `settingsRevision`, `apps/server/src/backup-recovery-pack-status.ts:77-97`), and A1323 keeps bucket
+    details in the pack. Comparing the saved date with the backup settings document's `updated_at` would
+    keep this, though any save of that document would then count.
+  - First setup uses pack 1's row as its restart marker across the two database files
+    (`packages/provisioning/src/first-setup-node-key.ts:179-205`).
+  - The box remembers packs made but not confirmed, tells old packs to keep after a key change
+    (`unreceivedOf`, `keepList`), and prints a pack number. A1323 keeps one key unless it is lost, so
+    this may simply go.
 - **Lists to update:** `packages/handover/src/manifest.ts:82`, `packages/db/src/classification.ts:268, 281`,
   and A980's personal-data list (`docs/backlog/data-protection.md:92`).
 
@@ -230,7 +239,7 @@ Kept, less `location_id` (A1301):
 - `seasons`: `id`, `name`, `starts_on` (`MM-DD`), `colour`. Unique `name`, unique `starts_on`; CHECKs
   on name and `starts_on`. The colour has no CHECK on purpose today, because adding one rebuilds the
   table and the rebuild's drop cascades its weeks (`schema/seasons.ts:29-30`); if A760 squashes the
-  sets before go-live (`docs/backlog.md:6618`) the CHECK can be written into the new baseline. Rows: 4.
+  sets before go-live (`docs/backlog.md:6622`) the CHECK can be written into the new baseline. Rows: 4.
 - `special_days`: `id`, `name`, `repeats_yearly`. CHECK on name. Rows: 3–10.
 - `special_day_dates`: `id`, `special_day_id` (FK cascade), `date`, `closed_all_day`,
   `holiday_name`. Unique `date`; CHECK on the date. Rows: 5–20, a few more a year.
@@ -437,7 +446,7 @@ change (`apps/server/src/venue-details.ts:255-261`) and by zone repair (`venue-z
 and an edit naming a stale revision is refused `venue.business_day_changed`
 (`business-day-start.ts:107-108`). In the new design a writer of `day_cutover_changes` saves this row
 in the same transaction with the revision it read, which gives the same refusal. It is a separate
-row from `venue` for the reason A1301 kept a separate table (design line 139): a venue-name save must
+row from `venue` for the reason A1301 kept a separate table (design §2.1): a venue-name save must
 not wake, or conflict with, the business-day screens.
 
 ### 2.3 `holidayArea` (a field of `settings.venue`)
@@ -522,12 +531,24 @@ exists".
 | `membership.node_cleared` | `node`, cleared node id; `person_id` | `{ term }` | `membership_clearances` — only inserted (`membership-removal.ts:312`). Second box. |
 | `taxpayer.legal_name_changed` (new) | `taxpayer`, 1; `person_id` | `{ from, to }` | the legal name printed on invoices is editable from the dashboard (A494, `packages/provisioning/src/taxpayer-name.ts`) and the old value is overwritten today |
 | `credentials.saved` / `credentials.removed` (new) | `credential`, purpose; `person_id` | `{ keyVersion }` (never the secret) | who replaced the card-provider keys or the AEAT certificate; `venue_credentials` keeps only `updated_at` |
-| `box.recovery_key_replaced` (new) | `node`, node id; `person_id` | `{ keyName }` | overwritten in place today |
-| `box.signing_key_rotated` (new) | `node`, node id | `{ keyVersion }` | overwritten in place today |
-| `box.role_changed` (new, second box) | `node`, node id | `{ mode, singletonRole, cause: adopt / promote / fenced }` | `node_mode` keeps only the latest |
 
-Settings saves (who changed which document) are the central design's to log. Q2 (§9) asks whether the
-three `box.*` kinds can live in `activity_log` at all.
+Settings saves (who changed which document) are the central design's to log.
+
+**The box's own key and role events stay in `node.db`,** in `node_handover_events`, with `operation_id`
+null. They cannot go to `activity_log`: it lives in `venue.db`, which a copy overwrites, and a spare
+holds the main box's copy while `adopt.ts:177` sets its role and it keeps its own server key
+(`adopt.ts:186`). That table already takes a decision that belongs to no operation (the comment at
+`packages/node-db/src/schema/node-handover.ts:73-75`), has no CHECK on `kind`, and is insert-only, so it
+takes these with no new table or column. They are new: today these facts are overwritten in place.
+
+| kind | `detail` | replaces / why |
+| --- | --- | --- |
+| `box.recovery_key_replaced` | `{ keyName, personId }` | `box.recovery_key_*` keeps only the latest |
+| `box.signing_key_rotated` | `{ keyVersion }` | `box.signing_key_*` keeps only the latest |
+| `box.role_changed` (second box) | `{ mode, singletonRole, cause: adopt / promote / fenced }` | `box.mode` keeps only the latest |
+
+`restricted-page.ts:80-87` lists events by operation id, so it does not show these. A person id here
+carries no key, as nothing in `node.db` does (§1.18).
 
 **Typed history tables that remain**, each read back by product code:
 
@@ -684,7 +705,7 @@ triggers.
     keeps only the key used to match.
 11. **Not removed, named:** the box's role is held both in `node_mode` (`mode`, `singleton_role`) and in
     the membership document's `standing`; the backlog's "Node-role collapse" item owns that
-    (`docs/backlog.md:5989`). `nodes.public_key` also appears inside signed endorsements, and
+    (`docs/backlog.md:5992`). `nodes.public_key` also appears inside signed endorsements, and
     `nodes.endorsement` is copied into the signed document. Signed documents stay verbatim and the
     columns are their sources (§1.2), so both stay.
 
@@ -758,21 +779,6 @@ triggers.
 
 ## 9. Decisions for the owner
 
-The owner settled D1 to D7 on 4 November 2026; each is now stated in the body. Two questions are left.
-
-- **Q1. What replaces the pack history when A1323 lands?** The owner chose one saved date on `box` in
-  place of `recovery_packs`. The trace in §1.8 found three things a date alone does not cover.
-  (a) A pack goes out of date when the bucket or archive settings change (`reasonsFor` compares each
-  part's `settingsRevision`, `apps/server/src/backup-recovery-pack-status.ts:77-97`), and A1323 keeps
-  bucket details in the pack. Comparing the saved date with the backup settings document's `updated_at`
-  would keep this, though any save of that document would then count. (b) First setup uses pack 1's row
-  as its restart marker across the two database files
-  (`packages/provisioning/src/first-setup-node-key.ts:179-205`). (c) The box remembers packs made but not
-  confirmed, tells old packs to keep after a key change (`unreceivedOf`, `keepList`), and prints a pack
-  number. A1323 keeps one key unless it is lost, so (c) may simply go. Not settled: this belongs in
-  A1323's design.
-- **Q2. Can the `box.*` kinds live in `activity_log`?** §3 sends `box.recovery_key_replaced`,
-  `box.signing_key_rotated` and `box.role_changed` there. U5 keeps `node_handover_events` out of
-  `activity_log` because `activity_log` is in `venue.db`, which a copy overwrites. The same reason reaches
-  these three on a spare, which holds the main box's copy: `adopt.ts:177` sets a spare's role, and a spare
-  keeps its own server key (`adopt.ts:186`). Not settled by the ledger.
+The owner settled D1 to D7 on 4 November 2026; each is stated in the body. Pack history under the master
+key goes to A1323's design (§1.8). The `box.*` events stay in `node.db` (§3). No question is open in this
+area.

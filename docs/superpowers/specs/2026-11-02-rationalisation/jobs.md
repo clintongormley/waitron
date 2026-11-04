@@ -128,8 +128,8 @@ place that decides real SMTP versus the practice inbox. That place keeps today's
 
 `outgoing_mail` is the only queue and `mail.send` drains it alone. `invoice_deliveries` is a record only (owner,
 2026-11-04): it says which invoice went where and how that ended, and the on-screen status reads it. An emailed
-invoice is an `outgoing_mail` row and an A4 print is a `print_jobs` row. The columns are drafted in §2. Whether the two request-bound sends join the
-queue is open (§6, question 1).
+invoice is an `outgoing_mail` row and an A4 print is a `print_jobs` row. The columns are drafted in §2. Invitations
+and email-change messages join the queue too (owner, 2026-11-04), so a crash mid-send no longer loses them.
 
 - **The rules a queued mail keeps.** A producer writes its row in the same transaction as the thing that caused
   it. The sender's claim commits before SMTP starts, and it calls the kind's own code in that transaction to word the mail and check that it
@@ -149,6 +149,21 @@ queue is open (§6, question 1).
   live login is only ever stored as a hash (CLAUDE.md §3). The unknown-address path keeps a write of its own
   (`writeAndRemoveDecoyAction`, `packages/identity/src/account-action.ts:362-364, 382`), so that its commit still looks like a known address's
   commit; it has to be rewritten to match the new statements.
+- **An invitation or email-change message is queued in the transaction that causes it, and the link is made when it
+  sends.** As with a reset, the row holds no link and no emailed code, because a live login is stored only as a hash.
+  The sender issues the action at claim, using `issueAccountAction` or its email-change twin, which today run in the
+  request (`management-api.ts:1141-1144`, `me-api.ts:167-172`). So the link's and the code's lives start at sending,
+  and the 30 minutes or 24 hours below is how long the row may wait.
+  - A person's screen can no longer hear about a send that fails. `invitationSent` and `emailVerificationSent` keep their
+    names but mean "in the queue", and the wording follows ("Invitation email sent.", `apps/dashboard/src/i18n/strings.ts:1355`, `:5135`).
+    A failed send becomes a row in `rejected`, retried like any other; the staff screen's resend stays
+    (`management-api.ts:1152-1169`).
+  - They still answer false in the two cases that answer false before any SMTP talk today: a repeat inside the cooldown
+    (`acceptInvitation`, `management-api.ts:1159-1161`) and a box with no email set up, which today fails inside the send
+    (`email.unconfigured`, `boot.ts:2538-2539`). The route has to ask `resolveEmailDelivery` before queuing, so
+    that second case keeps its message and no row waits for a mail that cannot go.
+  - A1002 binds an invitation to the person who issued it (A1002 §5), and the action is now issued later, by the
+    sender. So the row carries who asked, in `requested_by` (§2). Read, not run: measure 15.
 - **The full-disk mail is the one mail that cannot be queued.** A full disk refuses the insert, and the claim
   that must commit before SMTP. So when R7 sees the disk full it sends that mail directly through the same
   transport and writes nothing, which is how every box alert goes today (`box-alert-email.ts:373-379`). A restart
@@ -183,6 +198,12 @@ Waitron Cloud differs from the other backends in three ways, and the service has
 | **Temporary upload permission** | Saved settings, with the bucket's secret sealed | Each upload asks Cloud for permission and receives storage keys that expire, then publishes the finished upload (`reserveCapture`, `publishCapture`, `CloudCaptureGrant`, `cloud-backup.ts:13-23`) | Cloud's backend does reserve, upload and publish inside `putFile`. The finishing of a capture cut off between upload and publish (`cloud-snapshot-worker.ts:222-236`) moves into that backend. |
 | **Who deletes old copies** | The box, after each upload (`pruneBackend`, `backup-sweep.ts:296`) | Cloud: daily for 30 days, monthly for 12 months, longer paid (`waitron-cloud/docs/backlog/decisions-in-progress.md:15`). The box only labels each capture daily or monthly (`cloud-snapshot-worker.ts:271`) | A backend says whether the box prunes it, and Cloud's says no. `StorageBackend` also requires `list`, `get`, `getFile`, `delete` and `deleteMany` (`storage-backend.ts:38-55`), and the upload grant gives none of them, so that part of the interface becomes optional or Cloud's status comes by its own read. Left to the builder. |
 
+Cloud follows the venue's schedule, which must be at least daily while Cloud is a destination (owner, 2026-11-04). The
+one service has one schedule, and Cloud's own promise of daily copies is met through it, so `cloud-snapshot-worker.ts:211-216`'s
+fixed daily time goes. Cloud keeps daily and monthly copies, which needs a copy a day to choose from. So saving a schedule
+less often than daily with Cloud chosen is refused, as is choosing Cloud on such a schedule, and the refusal says why and offers
+daily. Failing to make a day's copy is not refused: a missed run is the health check's business.
+
 Two limits stay. Cloud itself refuses anything over 512 MB (`waitron-cloud/packages/backups/src/catalogue.ts:223`,
 `waitron-cloud/packages/backups/src/object-transfer.ts:9`), so moving onto the sweep ends the read into the box's memory but not that ceiling; measure 13
 compares it with a year's archive. And R14's near-live copy is a separate thing: "Restore from my bucket" and the recovery pack
@@ -202,9 +223,10 @@ today (see J7 below). The till's connection is built after the runner (owner, 20
   `server-router.ts:190, 202-226`), and a box can learn from that chart that it has been superseded. Read, not run.
 - **About 30 seconds with no keepalive counts as down.** The server sends a keepalive every 15 seconds
   (`live-api.ts:136`, `department-transfer-api.ts:140`). The browser's own connection cannot be relied on to
-  notice a dead box, by the second test below. The dashboard's `LiveConnection` has no such rule (grep finds no
-  keepalive check in `packages/dashboard-kit/src/live-connection.ts`), and it needs the same one if its timers
-  are to stop while it is connected.
+  notice a dead box, by the second test below. The rule covers the dashboard too (builder decision, README §10). Its
+  `LiveConnection` has no such rule today (grep finds no keepalive check in
+  `packages/dashboard-kit/src/live-connection.ts`), and it needs the same one if its timers are to stop while it is
+  connected.
 
 Two tests behind this, 4 November 2026, on stand-ins:
 
@@ -242,7 +264,7 @@ Two tests behind this, 4 November 2026, on stand-ins:
 | R16 | `housekeeping`                                     | The one daily tidy-up job (owner, 2026-11-04). It deletes what is listed below, in short batches, on the primary. Told to stop at a stepdown's signal. | Each prune the table reviews approved needs one owner; without this job nothing runs them. |
 | R17 | `cloud.suggestions`                                | Unchanged (5 s while a job runs, 60 s idle, a manager's start wakes it).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | A built feature.                                                                                                                                                                                                                                                                                                                       |
 | R18 | `demo.printer`                                     | Demo and Prepare boxes only. Wakes on `print_jobs` instead of a 500 ms poll.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Practice without hardware.                                                                                                                                                                                                                                                                                                                                                                                 |
-| R19 | `tunnel` (service), until A951 replaces it         | Only on the primary with a relay set.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Its retirement is already planned (`docs/backlog.md:6032-6034`, "`@waitron/tunnel`'s retirement").                                                                                                                                                                                                                                      |
+| R19 | `tunnel` (service), until A951 replaces it         | Only on the primary with a relay set.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Its retirement is already planned (`docs/backlog.md:6036`, "`@waitron/tunnel`'s retirement").                                                                                                                                                                                                                                      |
 | R20 | `fiscal.reconciliation`                            | New with W41s-10a (#2449). Looks up at AEAT what it holds for each month that has filed records and compares it with this box's own (`reconcile-sweep.ts:24-70`). Only when the fiscal module offers the pass (`createReconciliation`, `packages/fiscal/src/contribution.ts:187`). Primary and filing-enabled, read on every pass (`boot.ts:3525`); next due comes from the pass, at most 60 s ahead (`boot.ts:3527`); stops at a stepdown's signal (`background-duties.ts:158`). | The box's own check that AEAT holds what it filed. It stays apart from R1 and from sales (`contribution.ts:186`). |
 
 **R16 `housekeeping`: what the daily tidy-up deletes.** Each step works in short batches, one transaction each, so
@@ -257,7 +279,7 @@ a sale never waits long for the write lock. Its writes stay on the main thread (
 
 Everything else stays out of this job until A980's specialists agree a period (README U10): ended `till_sessions`,
 `staff_activity` and print job payloads. `outgoing_mail` is not pruned either: a finished row is what stops the same
-mail being queued twice (§6, question 3).
+mail being queued twice, and it names a person, so how long it stays goes to A980 (README U10). Until then nothing deletes it.
 
 ### Draft: the `outgoing_mail` table
 
@@ -273,7 +295,8 @@ which is what wakes R5.
 | `dedupe_key` | text | Not null, unique. What makes "never queued twice" hold: `attendance:<question>`, `certificate:<install>:<stage>:<person>`, `alert:<episode>:<person>`, `invoice:<delivery>`, `account:<action request>` |
 | `subject_id` | id | Null. The row the mail is about: the invoice delivery, question, certificate or incident. A plain id, not a foreign key, because core cannot key into a switchable set (U1) |
 | `person_id` | id | Null, FK → `persons`. Who it goes to. Null only for an invoice, which goes to the customer's address |
-| `recipient` | text | Null. The address. Written at claim, as `attendance_mail` does, so a queued row holds no address until it is being sent, except an invoice's, which the customer gave for this one mail |
+| `requested_by` | id | Null, FK → `persons`. Who asked, on an invitation, so the sender can bind the action to its issuer (A1002 §5) |
+| `recipient` | text | Null. The address. Written at claim, as `attendance_mail` does, so a queued row holds no address until it is being sent, except an invoice's, which the customer gave for this one mail. An email-change message goes to the person's pending address |
 | `params` | JSON | Not null, default `{}`. What the wording needs and cannot read from the subject when sending. Never a row id (R4), a secret or a link |
 | `status` | enum | Not null, default `pending`: `pending`, `sending`, `sent`, `rejected`, `unknown`, `expired`, `cancelled` |
 | `attempts` | count | Not null, default 0 |
@@ -305,11 +328,12 @@ which is what wakes R5.
 - A reminder cancelled before it was sent must be able to reopen, and the working-time code must be able to ask whether a mail was attempted (`packages/workforce/src/end-of-day.ts:85-111`, `:215-225`). So a kind reads and changes its own row through the queue's code.
 - `dedupe_key` for a certificate is a text value, not a foreign key, so it does not break the rule that a `local` row may not be keyed to a venue row. What a `local` certificate's reminder row means once it sits in the copy a second box takes is **not established**.
 
-**Proposed "don't send after" times.** The owner decided every queued mail has one; these values are proposals (§6, question 2).
+**"Don't send after" times** (owner, 2026-11-04). `account_action` covers three purposes, so its time depends on the purpose.
 
-| Kind | Proposed time |
+| Kind | Time |
 | --- | --- |
-| `account_action` | 30 minutes, the reset link's own life (`packages/identity/src/account-action.ts:28`) |
+| `account_action`, password reset and email change | 30 minutes, the link's own life (`ACCOUNT_ACTION_TTL_MS`, `packages/identity/src/account-action.ts:26-30`) |
+| `account_action`, invitation | 24 hours, the link's own life (the same table) |
 | `box_alert` | 24 hours; the alert stays in the dashboard's bell |
 | `certificate_reminder`, `attendance_question` | 7 days |
 | `invoice` | 7 days; the record then shows it was not sent, and a person can send it again |
@@ -551,23 +575,17 @@ and the scheduler settings) become the runner's per-job constants.
 14. **A real power cut.** With a till connected, cut a box's power. Assert the till counts it as down within about 30
     seconds and its timed re-reads start. Then, at a venue with two boxes, assert a behind box still receives the newest
     chart from a till on a live connection.
+15. **A queued invitation.** Invite a person, stop the box before the sender runs, and restart it. Assert the mail goes
+    out, its link works, and the action is bound to the person who invited. Control: with the clock past its 24 hours,
+    no mail goes out and the row is `expired`. Also assert a box with no email set up writes no row and the
+    staff screen says the invitation was not sent.
 
 ## 6. Decisions for the owner
 
-Everything the owner was asked here is settled (2026-11-04) and stated above. These questions are still open:
-
-1. **Invitations and email-change messages.** Do they join the queue? Today a person's request sends them directly
-   and waits (§1), and the invitation's result goes back to the screen as `invitationSent`. Queued, they would survive
-   a restart, but the screen could then only say "queued". This file leaves them sending directly through the one
-   transport. U4 says "every notification email", so it needs an answer.
-2. **The "don't send after" times.** The values in §2 are proposals.
-3. **How long a finished `outgoing_mail` row stays.** A finished row is what stops the same mail being queued twice,
-   and it names a person, so its length of stay falls under A980 (U10). Until then nothing deletes it.
-4. **Cloud's backup schedule.** Cloud promises daily copies today (`cloud-snapshot-worker.ts:211-216`), while the one service has one
-   schedule, which the venue sets. Does Cloud follow the venue's schedule, or does each backend keep its own?
-5. **"Add a mirror node" in the setup wizard.** README U5 keeps the adoption finisher and the offer, and the finisher refuses
-   `mirror.venue_not_copied` (`reserved-identity.ts:68-69`) until A947 slice 3b brings the main box's data to the
-   spare. Whether the wizard should offer the option before then is still open at `docs/backlog.md:706-709`.
+Everything the owner was asked here is settled (2026-11-04) and stated above. One item stays open elsewhere, not here:
+whether the setup wizard should offer "Add a mirror node" before A947 slice 3b brings the main box's data to the spare.
+README U5 keeps the adoption finisher and the offer, and the finisher refuses `mirror.venue_not_copied`
+(`reserved-identity.ts:68-69`) until then. That question is the backlog's own entry, `docs/backlog.md:706-709`.
 
 **To confirm before `housekeeping`'s service-command step is switched on:** how late a till can retry a command.
 
@@ -582,8 +600,7 @@ Everything the owner was asked here is settled (2026-11-04) and stated above. Th
 - **J5:** Mailpit does nothing on production (Demo and Prepare are refused there, `config.ts:373-376`), so it
   is not started there. Cloud backups are off on real venues until Cloud's service is ready, and they are a backend
   of R12, not a job. The tunnel already has an approved replacement.
-- **J6:** one queue holds, with one exception: the full-disk mail cannot be written to a full disk (§1). Question 1
-  above may add two more.
+- **J6:** one queue holds, with one exception: the full-disk mail cannot be written to a full disk (§1). Invitations and email-change messages are in the queue.
 - **J7:** tills have no general stream today; only the department-transfer one exists. The synthetic live
   types (`pairing`, `printer_discovery`, `email_inbox`, `backup_status`, `google_config`) are accepted as
   interests but nothing on the server publishes them, which is why those dashboard reads poll every 5–10 s.

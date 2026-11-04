@@ -422,7 +422,6 @@ which the lines' freeze trigger would refuse (0177, above). Changes:
 | change | why |
 | --- | --- |
 | + `allergy_frozen` flag not null default 0, `allergy_original` json null, `allergy_current` json null | from `ticket_item_allergies` (PK `ticket_item_id`, one row per item; "row presence also freezes an unticked dish", `packages/venue-service/src/schema/kitchen-allergy.ts`) |
-| − `node_id` (open, §9) | only reader is the overdue report's filter (`packages/reporting/src/overdue-orders.ts:61`; `git grep -n "ticketItems\.nodeId" -- apps packages` outside tests finds only that line) |
 | − `working_order_id` (proposed, after §8 item 1) | a copy of `working_order_lines.working_order_id`, no FK ("Denormalised grouping key", schema comment) |
 
 Protections: `ticket_items_working_order_line_id_key` (one per line, the double-fire guard),
@@ -434,11 +433,19 @@ Protections: `ticket_items_working_order_line_id_key` (one per line, the double-
 The A773-2 columns `requested_at` and `pass_controlled` stay
 (`packages/db/src/schema/ticket-items.ts:65-66`).
 
+`node_id` stays for now. Its only reader is the overdue report's filter
+(`packages/reporting/src/overdue-orders.ts:61`; `git grep -n "ticketItems\.nodeId" -- apps packages`
+outside tests finds only that line). It stays until §8 item 8 has checked what that report does with a
+ticket written before a takeover.
+
 ### 1.18 `ticket_item_moves` (kept — typed history)
 
 Read back by product code to find the latest mover (`station-move.ts`, `station-queue-moves.ts`,
 `working-order.ts`; ordering by `rowid`, `conventions-data.md` "Latest station move follows insertion
-order"), so it cannot go to `activity_log`, which product logic never reads (README §3). Actor CHECK,
+order"), so it cannot go to `activity_log`, which product logic never reads (README §3). It stays a
+table, not columns on `ticket_items`: the station screen uses only the latest move
+(`apps/server/src/station-queue-moves.ts:14-37`), but when a ticket splits,
+`apps/server/src/working-order.ts:5105-5116` copies every move of the line to the new line. Actor CHECK,
 four FKs, line index kept; `moved_by_person_id` gains a key to `persons` (README U11). Rows 0–3,600 a
 year.
 
@@ -470,10 +477,10 @@ WHERE clauses; four CHECKs and the category (cascade), product, zone and station
 ### 1.22 `bookings` (kept, own set)
 
 Loses `location_id` (A1301 S20, the design's slice table,
-`docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md:619`; no plan for S20–S28 exists
+`docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md`, S20 row; no plan for S20–S28 exists
 yet); `bookings_location_date_idx` becomes an index on `booking_date`. The A1301 plan records the
 same index change, and why the day list keeps its location condition until then: S9a measured the
-read falling back to a scan without it (`docs/superpowers/plans/2026-11-01-a1301-remove-location.md:494-500`).
+read falling back to a scan without it (`docs/superpowers/plans/2026-11-01-a1301-remove-location.md:499-505`).
 `table_label` stays (written when the table is removed, `packages/bookings/src/table-removal.ts`).
 FKs to `dining_tables` and `working_orders`, the status/date index, party-size and status CHECKs kept;
 `created_by` gains a key to `persons` (README U11).
@@ -610,7 +617,7 @@ the migration files, not measured on a migrated database (§8 item 4).
 | `station_day_states_station_fk`, `_day_key` | implicit (one per station) |
 | `station_day_states_sends_to_fk`, `_sends_to_not_self_ck` | self FK and not-self CHECK on `kitchen_stations` |
 | `kitchen_courses_name_key` | kept, without location |
-| `ticket_items_*` (unique line key, four indexes, state CHECK, three FKs) | kept; `node_id` FK and `ticket_items_order_idx` go only with their columns |
+| `ticket_items_*` (unique line key, four indexes, state CHECK, three FKs) | kept; `ticket_items_order_idx` goes only with its column (§8 item 1) |
 | `ticket_item_allergies_ticket_fk` (cascade), `_original_ck`, `_current_ck` | implicit; the two CHECKs on `ticket_items.allergy_*` |
 | `kitchen_print_jobs_*`, `kitchen_print_job_lines_*` | kept |
 | `station_printers_pk` | moved to code: no duplicates in `kitchen_stations.printer_ids`, plus a CHECK that it is a JSON array |
@@ -727,19 +734,15 @@ Kept on purpose, with the reason:
    state while a till moves tables. Failing result: a read that shows no today's state reloads on
    every move and costs more than noise; then give the change feed a narrower type for it.
 
+8. **The overdue report after a takeover.** Write a ticket under another box's `node_id`, as a ticket
+   sent before a takeover would be, and ask this box for the report. By reading the filter, the ticket
+   should be left out. If it is, and the dish is still waiting after the takeover, the filter hides a late
+   dish; the filter and `ticket_items.node_id` then go, with its key to `nodes`. Until this is run, the
+   column stays.
+
 ## 9. Decisions for the owner
 
 The owner has settled everything in this area on 4 November: three floor tables, not one; the party's
 kitchen note stays where it is; allergy, closure and keep-open history goes to `activity_log`;
-`station_printers` becomes a list on the station.
-
-Two questions are still open. The ledger does not settle either.
-
-- **`ticket_items.node_id`: drop it?** The 2 November text proposed dropping it because a venue has
-  one box. README U5 now keeps the second-box path, so that reason no longer stands alone. The one
-  reader filters the overdue report by box (`overdue-orders.ts:61`). What the filter should do for a
-  ticket written before a takeover was not checked.
-- **`ticket_item_moves`: columns on `ticket_items` instead?** The review named it a candidate. The
-  station screen uses only the latest move for a line (`apps/server/src/station-queue-moves.ts:14-37`),
-  but when a ticket splits, `apps/server/src/working-order.ts:5105-5116` copies every move of the line to the new line. Until the
-  owner says otherwise it stays a typed table.
+`station_printers` becomes a list on the station. `ticket_items.node_id` stays until §8 item 8 is done,
+and `ticket_item_moves` stays a table. No question is open in this area.

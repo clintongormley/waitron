@@ -1,7 +1,8 @@
 # A1002: roles you can define, privileges you can trust
 
 **Status: PROPOSED. Awaiting the owner's approval of the complete revised design.**
-Design only, 2026-10-22; **revision 2026-10-28** incorporates the owner's separate answers.
+Design only, 2026-10-22; **revision 2026-10-28** incorporates the owner's separate answers;
+**revision 2026-11-04** applies the owner's decisions from A1308's review (listed in §1 and §11).
 Resolve §11's sole-role deletion question first, then seek full-design approval separately.
 This draft authorizes no plan or build.
 
@@ -59,6 +60,19 @@ it. Her previous refunds keep their recorded authorizer.
   Mirrors are to serve no dashboard; retire the built-in viewer through A1113. Its removal is
   blocked, not claimed built here. A1002 proposes no mirror reader role or viewer-session design.
 
+- **2026-11-04, one role list (A1308):** access and the rota share one list of roles. Staffing's
+  `staff_roles` and `person_staff_roles` fold into this design's roles and memberships, with colour,
+  position and an on-rota flag on the role. A role can grant privileges, appear on the rota, or both.
+  This ends the earlier line that kept access roles apart from job roles: it was a design line, not
+  an owner decision, and §5's rule stops an accidental grant.
+- **2026-11-04, no per-person exceptions:** `device_profile_admission_persons` is deleted. To change who
+  may sign in on a device, change their roles. Several roles per person is what makes that work.
+- **2026-11-04, retiring:** a role a shift has used is retired, not deleted (§6).
+- **2026-11-04, Manager default:** Manager holds `person.admin` by default, so managers assign roles.
+- **2026-11-04, lists as JSON:** device admission, reason and bill-limit role lists hold role IDs as JSON
+  on the row that owns them (§4).
+- **2026-11-04, recipes removed:** `recipe.manage` is retired (§2).
+
 §11 records the answer sources. These accepted sub-decisions do not approve the complete design.
 The union and any-role matching interpretation below is the driver's inference, not the owner's words.
 
@@ -88,8 +102,8 @@ dated current reading in §7. Admin receives every retained or new declared entr
 | `sale.discount`                         | S, C; comment says no call site                  | Retire; explicit adjustment privileges below | Separate application and approval privileges carry adjustment authority.                                   |
 | `sale.rectify`                          | S, C                                             | Keep, S | Keep rectification authority separate; fiscal issuance rules stay unchanged. |
 | `person.manage`                         | M, C                                             | Keep                                         | Employment and ordinary staff details, not another person's sign-in or privileges.                          |
-| `catalogue.manage`                      | M, C                                             | Keep                                         | Includes the accepted image-management merge.                                                               |
-| `person.admin`                          | A, C                                             | Keep, A                                      | Accepted single privilege; a custom holder gains no other privilege. Admin holds the full catalog under §3. |
+| `catalogue.manage`                      | M, C                                             | Keep; A1308 renames it `menu.manage`         | Includes the accepted image-management merge.                                                               |
+| `person.admin`                          | A, C                                             | Keep, M                                      | Accepted single privilege, on Manager by default (owner, 2026-11-04); a custom holder gains no other privilege. Admin holds the full catalog under §3. |
 | `layout.configure`                      | M, C                                             | `venue.configure`, M                         | Combine configuration of themes, receipts and device profiles with venue settings.                          |
 | `venue.view`                            | S, C                                             | Keep                                         | Read-only venue access remains separable from configuration.                                                |
 | `venue.configure`                       | M, C                                             | Keep                                         | Includes layout and venue-service configuration.                                                            |
@@ -98,7 +112,7 @@ dated current reading in §7. Admin receives every retained or new declared entr
 | `swap.approve`                          | M, C                                             | `schedule.manage`, M                         | Same default holders; combine related scheduling decisions.                                                 |
 | `absence.decide`                        | M, C                                             | `schedule.manage`, M                         | Same group; retain subject and state restrictions.                                                          |
 | `purchase.manage`                       | M, C                                             | Keep                                         | Buying and receiving are distinct from catalogue editing.                                                   |
-| `recipe.manage`                         | M, C                                             | Keep                                         | Costed recipes need not confer buying or catalogue authority.                                               |
+| `recipe.manage`                         | M, C                                             | Retire                                       | Recipes are removed (owner, 2026-11-04, A1308); its one gate, `apps/server/src/recipe-api.ts:31`, goes with them. |
 | `report.export`                         | M, C                                             | Keep                                         | Report exports, including current attendance exports; not A980 personal-data requests.                      |
 | `report.view`                           | S, C                                             | Keep                                         | Wider Orders/report visibility; preserve the narrower ordinary staff view.                                  |
 | `device.manage`                         | M, C                                             | `hardware.manage`, M                         | Group device, printer and connected payment equipment administration.                                       |
@@ -112,7 +126,7 @@ dated current reading in §7. Admin receives every retained or new declared entr
 | `fiscal.view`                           | M, C                                             | Keep                                         | Read fiscal status independently from sales or system changes.                                              |
 | `venue_service.manage`                  | M, `packages/venue-service/src/permissions.ts:3` | `venue.configure`, M                         | Remove the duplicate module grant; use the core permission at its consumers.                                |
 | `workforce.correct`                     | S, `packages/workforce/src/permissions.ts:1`     | Keep                                         | Attendance decisions about others; not account administration.                                              |
-| `staffing.manage`                       | M, `packages/staffing/src/permissions.ts:3`      | `schedule.manage`, M                         | Retire module identifier; staffing's job roles remain domain data.                                          |
+| `staffing.manage`                       | M, `packages/staffing/src/permissions.ts:3`      | `schedule.manage`, M                         | Retire module identifier. Staffing's job roles join the one role list (§3).                                  |
 | `booking.manage`                        | M, `packages/bookings/src/permissions.ts:4`      | Keep                                         | Reservations remain an independent domain.                                                                  |
 | `adjustment.manage`                     | M, `packages/adjustments/src/permissions.ts:3`   | Keep                                         | Configure reasons and limits, separately from using or approving one.                                       |
 | `image.manage`                          | M, `packages/media/src/module.ts:26`             | `catalogue.manage`, M                        | Shared catalogue images follow catalogue editing.                                                           |
@@ -140,20 +154,23 @@ once; role order changes nothing. An ordinary role may have no grants.
 
 Policy membership and privileges are independent gates. For an explicit role list, any held role
 may match; the required privilege may come from another held role. A matching role without the
-privilege fails, and a privilege without a policy match fails. Existing person exceptions and
-eligibility still apply to device admission; profile action and zone restrictions still apply to
-till actions. An explicit person exception never grants an action privilege. Preserve explicit
-person-denial precedence for eligible role holders. §6 defines the no-role candidate separately.
+privilege fails, and a privilege without a policy match fails. Eligibility still applies to device
+admission; profile action and zone restrictions still apply to till actions. There are no per-person
+exceptions (owner, 2026-11-04). §6 defines the no-role candidate separately.
 
 Example: Ana's Service lead grants `adjustment.approve`; her Evening team role is on a complaint
 approver list. Together they satisfy both gates. Removing Evening team stops that contextual
 approval even if her privilege union is unchanged. Creating or copying a role inserts it into no
 list. Selecting all roles known today stores those IDs only. This proposal adds no “all future
 roles” mode or default bypass. When replacing the old empty-list “every” representation, seed the
-intended existing preset IDs explicitly; an empty selected list means nobody, subject only to
-existing explicit person exceptions, never an automatic all-roles fallback.
+intended existing preset IDs explicitly; an empty selected list means nobody, never an automatic
+all-roles fallback.
 
-Each role has an opaque stable ID, revision and explicit permission-ID set. All four built-ins
+Each role has an opaque stable ID, revision, explicit permission-ID set, colour, position and on-rota
+flag. The last three come from `staff_roles`. A role with the flag on appears on the rota and the
+staffing painter; one with it off does not, and a role may be on the rota and grant nothing, such as
+"Cook". The rota keeps warning about a person outside a role and does not refuse them, as it does today
+(`packages/staffing/src/dashboard/rota-cards.ts:112`, `:171`, read at `e0da0ad18a`). All four built-ins
 also have immutable preset keys and translated names. Staff, Supervisor and Manager have editable
 grants but cannot be renamed, deleted or converted to custom roles. Admin additionally cannot have
 its grants narrowed. Its immutable identity supports catalog maintenance and integrity checks,
@@ -195,16 +212,19 @@ not a claim about current mirror behavior or permission to implement node work.
 
 ## 4. Storage and references, with schema deferred
 
-Propose IDENTITY-owned `state` tables for roles, catalog, grants, seed completion, person-role
-memberships and authority revisions, with classification and change sources. Replace the required
+Propose `state` tables for roles, catalog, grants, seed completion, person-role memberships and
+authority revisions, with classification and change sources. A1308 names the first and fourth `roles`
+and `person_roles`, in `core`, and draws their columns (`tables-people.md`). Replace the required
 single `persons.role` enum with a membership relation unique on person ID and role ID. A person
 can have several membership rows; the empty-set constraint depends on §11. Keep one person identity,
 status and authentication record, not one per role. No tenant column.
 
-Use declared TypeScript keys/constraints and generated migrations. Prefer relational policy role
-references to JSON lists so deletion and transfer can enumerate every reference. Live membership
-and policy keys restrict deletion until the command removes those references. Never cascade-delete
-people, credentials, sessions or historical decisions through a role. Keep tokens hashed and
+Use declared TypeScript keys/constraints and generated migrations. Policy role references are role
+IDs in JSON lists on the row that owns them: a device profile's admission list, a reason's
+`apply_roles` and `approver_roles`, and `billApproverRoles` (owner, 2026-11-04, under A1308's exception
+for a short list owned by one row). No foreign key sees those IDs, so deletion, retirement and transfer
+enumerate them in code, and a test proves the enumeration complete. Live membership keys restrict
+deletion until the command removes those rows. Never cascade-delete people, credentials, sessions or historical decisions through a role. Keep tokens hashed and
 cryptographic custody unchanged (historical `packages/identity/src/classification.ts:13`).
 
 Store a membership revision per person. Every membership addition/removal advances it, including
@@ -241,8 +261,15 @@ uses `withTransaction`/`withWriteLock` (historical `packages/db/src/tenancy.ts:3
 | Edit role grants | Actor holds each added privilege. Removals may narrow grants the actor lacks. Recompute every holder's union and authority revision; preserve all built-in keys/names and Admin's complete grants. |
 | Assign/edit membership, invite or reactivate | Require `person.admin`. The WHOLE resulting person's union, including retained memberships, must be within the actor's current whole-person union. Check context gains separately even when unions are equal. No self-promotion or representative-role comparison. |
 | Change another person's sign-in/status | Require `person.admin` and dominance over the target's whole current union, preventing takeover through another role. Covers email, PIN/password reset, invitation, suspension/reactivation and MFA/passkey/Google removal. |
-| Delete custom role | Require `person.admin` and domain configuration authority for referenced policies. Remove references under §6; no reassignment. Pure removal does not require holding grants being removed. If §11 chooses Staff fallback, check the entire resulting union and contextual gains before any addition. |
+| Delete or retire custom role | Require `person.admin` and domain configuration authority for referenced policies. Remove references under §6; no reassignment. Pure removal does not require holding grants being removed. If §11 chooses Staff fallback, check the entire resulting union and contextual gains before any addition. |
+| Edit a role's colour, position or on-rota flag | Propose `schedule.manage` alone, as `staffing.manage` gates them today (`packages/staffing/src/routes.ts:161-162`). They change no authority, so no whole-result check. |
 | Edit device/reason/bill-limit policy | Require its configuration privilege; enabling apply/approval access also requires the corresponding action privilege. Check gains for complete person memberships; policy selection cannot grant a missing privilege. |
+
+Manager holds `person.admin` by default, and one privilege covers role assignment and other people's
+sign-in details (§1). So a default Manager also changes the sign-in details of anyone whose whole union
+sits within theirs, which Admin alone may do today. The whole-result rule above still stops them giving
+more than they hold. Admin holds privileges Manager does not by default, such as `node.manage`, so a
+default Manager can neither assign Admin nor change an Admin's sign-in.
 
 Example: Marta holds `person.admin` but lacks `system.manage`. She cannot add a narrow role to a
 person whose retained role grants system administration, then reset that person's login using only
@@ -289,7 +316,7 @@ There is no replacement selector, policy substitution or grant transfer.
 The preview enumerates active, pending and suspended people, their retained roles, privilege losses,
 remaining context access, affected device admission, reason apply/approval and bill-limit lists.
 Show sole-role holders separately as pending §11's choice. Show lists becoming empty as
-“Nobody through roles” or “Approval blocked”; retained device person exceptions are listed explicitly.
+“Nobody through roles” or “Approval blocked”.
 An empty list never becomes all roles. If an approval path requires a nonempty eligible set, keep
 the policy present but blocked: requests needing that approval remain refused until a separate
 authorized policy edit supplies eligible approvers. No automatic substitute or deletion-time
@@ -305,12 +332,23 @@ Deleting Evening lead leaves Ana's Staff membership and removes the role from ea
 Luis's resulting state waits for §11; his old invitation cannot restore Evening lead.
 If the complaint approver list becomes empty, complaints needing approval remain blocked.
 
+**Accepted 2026-11-04: a role a shift has used is retired, not deleted.** Today a delete is refused
+for as long as any shift names the role (`staff_role.in_use`, `packages/staffing/src/staff-roles.ts:221-275`,
+read at `e0da0ad18a`), and shifts are never deleted once published, so such a role could never go. Here
+the same action, with the same one confirmation and the same preview, removes the role from everyone
+and every list, removes its painted staffing blocks, and removes its grants. The role row stays with a
+retirement time, so past shifts keep showing its name. Nobody can hold, list or choose a retired role,
+and its name can be used again. A role no shift has used is deleted outright. Built-ins are neither.
+
+Example: Luis filled Barista on 40 past shifts and the venue stops using the role. Choosing Delete
+removes it from the two people who hold it and from every list. The 40 shifts still read Barista.
+
 **Open sole-role outcome, not decided by this draft:**
 
 - **Recommend no role:** keep the person's identity/status and credentials. An otherwise eligible
   person can authenticate only for own identity/security/data self-service. They have no role grants,
   action authority, device/reason/list authority, approver eligibility or administrator-recipient
-  authority. A person exception cannot turn this state into staff admission. Show “No role” and let
+  authority. Show “No role” and let
   a separate authorized membership edit restore work access.
 - **Alternative Staff:** add canonical Staff membership, subject to §5's whole-result and context
   checks. Its actual saved grants may differ from the default; its device/reason memberships may
@@ -340,13 +378,13 @@ The superseded mirror-principal row is removed; A1113 owns its retirement, as st
 | Attendance views, `apps/server/src/management-attendance-api.ts:206`, `apps/server/src/till-attendance-api.ts:226` | Compute canSelfApprove from the whole union containing BOTH workforce.correct and workforce.self_approve, even across two roles. person.admin alone does not suffice; picker and write agree. |
 | Attendance domain, `packages/workforce/src/corrections.ts:35`, `:42`, `:252`, `:360`; `packages/workforce/src/attendance-response-commands.ts:119` | Replace MANAGER_ROLES and named Admin exceptions with whole-person privilege checks. Preserve own subject/requester, direction and approve-only limits, including refusal to decline your own request. Stored author-kind remains historical. |
 | Adjustment decisions, `packages/adjustments/src/policy.ts:142`, `:171`, `:185`; `apps/server/src/adjustments-apply.ts:558`, `:770` | Use whole union for adjustment.apply/adjustment.approve and any held role for the applicable reason/bill list, as independent gates. Preserve sale.refund cancellation checks, stages, amounts and policy limits. |
-| Adjustment policy/storage/seeds, `packages/adjustments/src/schema/reasons.ts:42`, `packages/adjustments/src/schema/settings.ts:6`, `packages/adjustments/src/provisioning.ts:6` | Resolve preset seed keys to IDs. Keep Complaint S, On the house M, Staff meal T with 50% limit and M approval, Discount M. No new/copied role joins lists. Delete references explicitly; empty approval is blocked. |
+| Adjustment policy/storage/seeds, `packages/adjustments/src/schema/reasons.ts:42`, `packages/adjustments/src/schema/settings.ts:6`, `packages/adjustments/src/provisioning.ts:6` | Resolve preset seed keys to IDs. Keep Complaint S, On the house M, Staff meal T with 50% limit and M approval, Discount M. `apply_roles`, `approver_roles` and `billApproverRoles` become role IDs in JSON (§4). No new/copied role joins lists. Delete references explicitly; empty approval is blocked. |
 | Adjustment client seniority, `packages/adjustments/src/dashboard/reasons-screen.ts:43`, `:94`, `:1251`; client union `packages/adjustments/src/dashboard/client.ts:9`; till text `apps/till/src/widgets/adjustment-dialog.ts:112` | Replace hardcoded role lists/order with catalog IDs, localized label sorting and set equality. Edit role-list restrictions and preview complete person unions; selected current IDs never mean future roles. |
 | PIN prompt wording, `apps/till/src/widgets/supervisor-override-dialog.ts:76`, `:115` | Describe required action/policy and actual eligible people, each once. Remove the default supervisor authority claim; custom role names are literal, never translation keys. |
-| Device admission, `packages/identity/src/profile-admission.ts:15`, `:50`, `:181`; schema `packages/identity/src/schema/profile-admission.ts:9` | Any held role may match the explicit set, with existing person exceptions and status/eligibility checks. Profile actions/zones AND union privileges still bound actions. Replace empty/every sentinel; deletion cannot open admission. No-role candidate follows §6. |
+| Device admission, `packages/identity/src/profile-admission.ts:15`, `:50`, `:181`; schema `packages/identity/src/schema/profile-admission.ts:9` | Any held role may match the explicit set, with status/eligibility checks; per-person exceptions are deleted (owner, 2026-11-04). Profile actions/zones AND union privileges still bound actions. Replace empty/every sentinel; deletion cannot open admission. No-role candidate follows §6. |
 | Dashboard forms/filter/labels, `apps/dashboard/src/widgets/person-form.ts:291`, `widgets/person-edit.ts:332`, `screens/staff-screen.ts:376`, `i18n/domain.ts:147`; unions `apps/dashboard/src/api/client.ts:336`, `apps/till/src/api/client.ts:904` | Multi-select roleIds, display every membership, sort translated built-ins/literal customs by locale and filter by held ID (any selected match). Include an explicit No role filter if approved. No hardcoded Staff fallback. |
 | Shell and permission projections, `apps/dashboard/src/dashboard-app.ts:1178`, `apps/server/src/me-api.ts:331`, `apps/server/src/till-api.ts:1426`, `apps/server/src/alerts-api.ts:46` | Return roleIds, whole-person privilege union and membership/catalog revisions. Refresh passively on changes/refusals; navigation is presentation. Delayed updates cannot retain server authority. |
-| Scheduling/workforce/reporting, `apps/server/src/workforce-api.ts:35`, `packages/staffing/src/routes.ts:194`, `apps/server/src/attendance-export-api.ts:45`, `apps/server/src/orders-api.ts:145` | Use accepted catalog names and whole unions. Preserve own-person exports and Orders non-report scope. Staffing job roles remain separate domain objects. |
+| Scheduling/workforce/reporting, `apps/server/src/workforce-api.ts:35`, `packages/staffing/src/routes.ts:194`, `apps/server/src/attendance-export-api.ts:45`, `apps/server/src/orders-api.ts:145` | Use accepted catalog names and whole unions. Preserve own-person exports and Orders non-report scope. Staffing's job roles join the one role list (§3). |
 | Other direct lookups, `packages/venue-service/src/routes.ts:703`, `apps/server/src/email-settings-api.ts:50`, `apps/server/src/email-inbox-api.ts:39` | Replace roleHasPermission with current whole-person grants, retaining default-setting and sign-in-mail conditions under accepted catalog names. |
 | Provisioning/recovery, `packages/provisioning/src/venue-apply.ts:196`, `packages/provisioning/src/recover-provisioned-venue.ts:46`; CLI `apps/server/src/break-glass-command.ts:94` | Seed canonical built-ins/catalog and a usable active human containing Admin. Resume checks recorded identity/current whole union and protected integrity. Recovery chooses an existing person.admin holder, changes no role, and keeps the anchor. |
 | Transfers, `packages/identity/src/configuration-transfer.ts:1`, `packages/adjustments/src/configuration-transfer.ts:34`, `packages/provisioning/src/configuration-transfer.ts:700`, `:724`, `:737` | Export definitions, grants, every membership and live policy reference; never login secrets/sessions. Remap all role IDs, including canonical references, before union/impact checks. Imported people stay suspended; reactivate against whole current target unions. |
@@ -364,14 +402,27 @@ They do not establish runtime behavior or complete the later implementation audi
 | `packages/identity/src/personal-data.ts:29`, `:42` selects a singular role into profile output. | Export the complete membership set with role IDs/labels, including empty if approved. This is personal-data output, not configuration transfer or a live authority snapshot. |
 | `apps/server/src/personal-data-export-api.ts:117`, `:123` and `:136`, `:145` separate own identity from another person's privileged export; `apps/server/src/invoice-customer-data-api.ts:57` requires the same privilege. | Resolve whole-person authority for privileged exports; preserve own-person identity access and customer-route scope. No new privilege or broader search authority. |
 | `apps/server/src/manager-email-recipients.ts:13`, `:22`, `:33` filters active people with email by singular-role `system.manage`; called by `certificate-reminder-worker.ts:60` and `box-alert-email.ts:153` under `apps/server/src/`. | Select on the whole union at execution, retain active/email/language checks and return each human once. No role means no privileged recipient eligibility. |
-| `packages/identity/src/profile-admission.ts:28`, `:54`, `:111` reads empty as every and gives explicit person exceptions precedence. | Replace that sentinel explicitly; retain exception precedence for eligible role holders. Lists and unions remain independent gates; §6's no-role candidate cannot acquire staff authority through an exception. |
+| `packages/identity/src/profile-admission.ts:28`, `:54`, `:111` reads empty as every and gives explicit person exceptions precedence. | Replace that sentinel explicitly. Per-person exceptions are deleted (owner, 2026-11-04). Lists and unions remain independent gates. |
 | `packages/provisioning/src/venue-apply.ts:99`, `:371`, `:374`, `:500`, `:548` queries singular Admin membership for setup ordering, the initial module operator and profile seeding. | Use the recorded initial human ID and complete membership set for setup integrity. Resume checks current whole-person grants; domain actions use privileges, never a label or an arbitrary first matching role holder. |
+
+### Additions from A1308, reading only, 2026-11-04
+
+These readings use `e0da0ad18a` (`docs/superpowers/specs/2026-11-02-rationalisation/tables-people.md`
+draws the tables). They do not establish runtime behavior.
+
+| Reading receipt | Proposed consequence |
+| --- | --- |
+| `packages/staffing/src/staff-roles.ts:124` lists every staff role, and `packages/staffing/src/rota.ts:53` reads that list; `packages/staffing/src/dashboard/rota-cards.ts:158` finds a shift's role in it. | The rota lists on-rota roles, plus every role that week's shifts name, retired or off the rota, so a past shift keeps its name. |
+| `packages/staffing/src/routes.ts:161-162`, `:337-345` gate holders with `staffing.manage`. | Changing who holds a role moves to §5's membership change. The routes and `dashboard-staff-roles-screen` (`packages/staffing/src/dashboard/index.ts:94`) become part of Roles, or call it. |
+| `packages/staffing/src/configuration-transfer.ts:3-11` exports `staff_roles` and `person_staff_roles`. | Both leave staffing's list for §7's role export. A retired role does not travel: no shift is in that list. |
+| `packages/adjustments/src/schema/settings.ts:30` CHECKs that `billApproverRoles` is not empty. | That check moves to A1308's settings validator, which must accept the emptied list §6 keeps as blocked. |
+| `packages/staffing/src/staff-roles.ts:57-66` compares a name exactly after trimming. | Job role names move to §3's Unicode folding, so “Café” and “CAFE” clash. |
 
 ### Imports and complete API/client shapes
 
 For configuration transfer, export roles/grants, every person-role membership and device/reason/
-bill-limit reference. Remap each membership and list reference, including IDs inside any retained
-JSON, before checking authority. Do not trust a generic whole-value remapper to rewrite JSON lists.
+bill-limit reference. Remap each membership and list reference, including the IDs inside the JSON
+lists, before checking authority. Do not trust a generic whole-value remapper to rewrite JSON lists.
 
 Keep exactly one target canonical role for each built-in, including Admin, using immutable keys,
 never display names. Preserve target names/keys, Admin's full target catalog and a usable human
@@ -406,8 +457,8 @@ No-role response shape is `roleIds: []` if §11 approves it; reject operational 
 
 Propose People / Roles beside Staff at `/manage/roles`, reachable with `person.admin` alone.
 Staff editors with only `person.manage` may read the role labels needed for Staff; full editing
-belongs on Roles. The direct URL has the same server gate. Keep access roles distinct from staffing
-job roles. Show distinct person counts per role, not summed membership counts.
+belongs on Roles. The direct URL has the same server gate. One page holds access and rota settings,
+because there is one list of roles. Show distinct person counts per role, not summed membership counts.
 
 ```text
 Roles                                             [Add role]
@@ -426,6 +477,7 @@ Keep one active human holder with usable dashboard sign-in.
 
 Edit Service lead
 Name * [Service lead]
+Colour [Blue]   Position [3]   [x] On the rota
 Privileges [Search]
 Service: [x] Take payments [x] Void [x] Refund [x] Rectify [ ] Open drawer
 People: [ ] Manage staff  [ ] Manage sign-in and privileges
@@ -448,6 +500,12 @@ Remove from: Front till admission, Complaint approvers, Bill-limit approvers.
 Complaint approvers becomes empty: approvals blocked.
 Past authorizers and snapshots stay unchanged. Old invitations invalidated.
 [localized form message above actions]
+[Stop]                                          [Delete role]
+
+Delete Barista
+Luis, Sam: retain their other roles; listed privilege and context losses.
+40 past shifts name this role. They keep the name; nobody can choose it again.
+Painted staffing needs for this role are removed.
 [Stop]                                          [Delete role]
 ```
 
@@ -535,8 +593,11 @@ These are future acceptance requirements, not results from this documentation re
 - Delete a populated custom role across active/pending/suspended people and every device/reason/
   bill-limit reference. Assert only that membership is removed from multi-role holders, history
   stays, empty lists do not become all, blocked approvals are refused and proofs are invalidated.
-  Force a final refusal and read back complete rollback. Test the sole-role outcome ONLY after
-  §11 chooses it: no-role means identity-only self-service with no operational/list/exception
+  Force a final refusal and read back complete rollback. Retire a role a shift has used: it leaves
+  every membership, list and picker, its name can be reused, and past shifts and past rota weeks still
+  show it. Prove the JSON-list enumeration by adding a list and watching the test fail.
+  Test the sole-role outcome ONLY after
+  §11 chooses it: no-role means identity-only self-service with no operational or list
   authority; Staff fallback must pass whole-result grants and contextual-gain checks.
 - Administrator-issued proofs recheck issuer/target whole unions and revisions. Membership changes
   with equal grants invalidate unused proofs. Self-service recovery/email changes need no admin
@@ -583,6 +644,7 @@ The earlier permission-review and custom-role decisions remain recorded in the d
 | All four built-ins never renamed/deleted; other built-in grants editable | F Names, 2026-10-28 ~11:05: “Built in roles should not be renamed or deleted.” Supersedes the earlier rename allowance; built-in labels always translate. |
 | No mirror dashboard; built-in viewer retirement belongs to A1113 | F OWNER DECISION A1111 withdrawn, 2026-10-26 ~04:25; restated under F Names, 2026-10-28. Retirement remains blocked; no new mirror role is proposed. |
 | Own staff download; separate privilege for other people's/customer data | Owner A980 O5 ~03:45, 2026-10-22, retained in §1. Existing `personal_data.export` is reconciled by §7's current reading, not a new owner question. |
+| One role list for access and rota; no per-person exceptions; a role a shift used is retired; Manager holds `person.admin` by default; role lists as JSON; recipes removed | Owner, 2026-11-04, in the review of A1308: `docs/superpowers/specs/2026-11-02-rationalisation/README.md` §10. Effects in §1. |
 
 ### First, publish only the sole-role deletion question
 

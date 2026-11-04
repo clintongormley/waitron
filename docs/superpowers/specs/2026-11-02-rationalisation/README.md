@@ -1,7 +1,7 @@
 # Rationalising Waitron's tables, background jobs, environment variables and files — design
 
 **Status:** reviewed file by file by the owner, 4 November 2026. Their decisions are applied here and
-in every appendix; §10 lists what is still open. Nothing is built until the owner approves the whole.
+in every appendix, and §10 lists them. Nothing is built until the owner approves the whole.
 Counts and cites were checked against `main` at `e0da0ad18a`. The appendices hold the evidence: each
 cites the code it rests on, and each says what it did not establish. The artifacts published on
 2 November still show the earlier proposal.
@@ -11,7 +11,7 @@ cites the code it rests on, and each says what it did not establish. The artifac
 | [tables-ordersales.md](tables-ordersales.md) | Open bills, ordering, sales, receipts, refunds |
 | [tables-fiscal.md](tables-fiscal.md) | Veri\*Factu filing and chain, card payments, adjustments |
 | [tables-floorkitchen.md](tables-floorkitchen.md) | Floor plan, tables, parties, bookings, kitchen, allergies |
-| [tables-menu.md](tables-menu.md) | Menu, products, photos, purchasing and recipes |
+| [tables-menu.md](tables-menu.md) | Menu, products, photos and supplier invoices |
 | [tables-devices.md](tables-devices.md) | Devices, profiles, printers, print jobs, drawer opens |
 | [tables-venuebox.md](tables-venuebox.md) | Taxpayer, venue, departments, calendar, the box itself, the shared `settings` table |
 | [tables-people.md](tables-people.md) | People, sign-in, working time, rota, staffing |
@@ -116,13 +116,13 @@ Agreed with the owner on 2 November 2026 and amended in their review of 4 Novemb
 
 ## 4. The one picture
 
-**246 tables become 149**, in eight migration sets instead of sixteen (§5, U1), or 148 once A1323
-removes `recovery_packs`. Of the 149, 115 keep a name a table has today, many with fewer or changed
-columns, and 34 have a new name: a rename, a merge of several tables, or a new table. Of today's
-246, 13 are deleted (U6) and the other 118 are renamed or fold into another table, a settings
+**246 tables become 145**, in eight migration sets instead of sixteen (§5, U1), or 144 once A1323
+removes `recovery_packs`. Of the 145, 113 keep a name a table has today, many with fewer or changed
+columns, and 32 have a new name: a rename, a merge of several tables, or a new table. Of today's
+246, 15 are deleted (U6) and the other 118 are renamed or fold into another table, a settings
 document or a history. Measured by matching this section's target list against the table names in
-each set's latest snapshot; every one of the 131 tables leaving the list has a mapping row in its
-appendix. The full current-to-target mapping is in each appendix's §4.
+each set's latest snapshot; every table leaving the list has a mapping row in its appendix. The full
+current-to-target mapping is in each appendix's §4.
 
 ```mermaid
 flowchart LR
@@ -168,15 +168,15 @@ The target, grouped by the real thing each group is about:
 | **Money on a bill** | `bill_payments`, `bill_payment_lines`, `refunds`, `payments`, `payment_refunds`, `card_readers`, `reconciliation_runs` | 7 |
 | **The sale** | `sales`, `sale_lines`, `sale_line_dishes`, `tenders`, `sale_settlements`, `sale_substitutions`, `sale_voids`, `unpaid_departures`, `invoice_deliveries`, `invoice_series`, `daily_closes` | 11 |
 | **Adjustments** | `adjustment_reasons`, `adjustments`, `adjustment_lines`, `adjustment_refunds` | 4 |
-| **Veri\*Factu filing** | `verifactu_records`, `verifactu_submissions`, `verifactu_history`, `verifactu_identities`, `verifactu_sending_state`, `verifactu_certificates`, `verifactu_lookup_conflicts`, `verifactu_series_conflicts` | 8 |
+| **Veri\*Factu filing** | `verifactu_records`, `verifactu_submissions`, `verifactu_history`, `verifactu_identities`, `verifactu_sending_state`, `verifactu_certificates`, `verifactu_series_conflicts` | 7 |
 | **The menu** | `menus`, `categories`, `products`, `units`, `menu_items`, `menu_item_variant_overrides`, `option_lists`, `option_labels`, `extra_lists`, `extra_list_items`, `product_modifiers`, `sections`, `section_members`, `menu_versions`, `menu_version_images`, `menu_releases`, `menu_periods`, `content_suggestion_jobs`, `content_suggestions` | 19 |
 | **Photos** | `media_images`, `media_blobs` | 2 |
-| **Purchasing** | `ingredients`, `recipe_lines`, `purchase_invoices`, `purchase_invoice_vat` | 4 |
+| **Supplier invoices** | `purchase_invoices`, `purchase_invoice_vat` | 2 |
 | **Devices and printing** | `devices`, `device_profiles`, `device_approved_profiles`, `join_requests`, `print_agents`, `printers`, `print_jobs`, `custom_themes` | 8 |
 | **People and sign-in** | `persons`, `till_sessions`, `dashboard_sessions`, `sign_in_challenges`, `account_actions`, `recovery_codes`, `webauthn_credentials`, `roles`, `person_roles` | 9 |
-| **Working time and rota** | `time_entries`, `roster_versions`, `shifts`, `shift_swaps`, `absences`, `attendance_days`, `staff_activity`, `attendance_questions`, `attendance_answers`, `attendance_answer_entries`, `availability`, `employments`, `shift_templates`, `pay_period_closures`, `pay_period_settings`, `convenio_config`, `staffing_days`, `staffing_blocks` | 18 |
+| **Working time and rota** | `time_entries`, `roster_versions`, `shifts`, `shift_swaps`, `absences`, `attendance_days`, `staff_activity`, `attendance_questions`, `attendance_answers`, `availability`, `employments`, `shift_templates`, `pay_period_closures`, `pay_period_settings`, `convenio_config`, `staffing_days`, `staffing_blocks` | 17 |
 | **Shared** | `activity_log`, `outgoing_mail` | 2 |
-| | | **149** |
+| | | **145** |
 
 **What makes it one picture rather than seven:** a bill is one row and a dish is one row (today a
 dish is spread over five tables); a physical table is three rows with one job each, its design, its
@@ -206,7 +206,7 @@ tables go into the core set.** Only modules a venue can do without, or swap, kee
 | `bookings` | — | can be switched off |
 | `fiscal-verifactu`, `fiscal-none` | — | the swappable fiscal slot |
 
-One part of this is still the owner's call (§10, open question 1): identity and credentials are
+The owner approved this on 4 November. Identity and credentials stop being switch-off-able; they are
 `toggleable` today (`packages/composition/src/modules.ts:214, :294`), and CLAUDE.md §3 has "a new
 product domain lands as a MODULE" and "no new table enters the core migration set without a stated
 reason in the commit". The code stays modular; only where the tables live changes, and this section
@@ -239,7 +239,7 @@ mail has a "don't send after" time, so a copy restored from a backup never sends
 link (owner, 2026-11-04). Box alerts and password resets then survive a restart, except the
 full-disk mail, which cannot be queued on a full disk. A password reset is still answered before any
 look-up, so a known address looks the same as an unknown one. Invitations and email-change messages
-also send directly today: §10, open question 3.
+join the queue too (owner, 2026-11-04).
 
 **U5. Keep the second-box path that A947 and A1018 build on; take out only what neither uses.**
 
@@ -285,7 +285,7 @@ and W41s-4's decision A (2026-10-12: "reserve at join, switch on at takeover") �
 by A679 (approved 2026-10-16: "Keep it dormant without reserving a future hour"), which A947 keeps
 (A947 design :418-424, :572-574).
 
-**U6. Delete 13 tables,** each dead, replaced, or dropped by the owner (R5).
+**U6. Delete 15 tables,** each dead, replaced, or dropped by the owner (R5).
 
 | Deleted | Why | Evidence |
 | --- | --- | --- |
@@ -299,6 +299,7 @@ by A679 (approved 2026-10-16: "Keep it dormant without reserving a future hour")
 | `fiscal_reservations` | the standby's reserved identity; A947 reserves none when a box joins | U5; `tables-fiscal.md` §4 |
 | `payment_policy` | owner dropped it, with its Stripe branch | `tables-fiscal.md` §4 |
 | `location_catalogues` | owner dropped `offered`: no screen calls it, and sales run from menu periods and staff menus | `tables-menu.md` §4 |
+| `ingredients`, `recipe_lines` | owner dropped recipes, with `packages/recipes`, the routes and the screen: the screen is unreached today, and allergens and diet are declared on the product | `tables-menu.md` §4 |
 
 `pass_item_marks` has already left `main`. `daily_closes`, `sale_voids`, `availability`,
 `employments`, `shift_templates`, `pay_period_closures`, `pay_period_settings` and `convenio_config`
@@ -325,7 +326,7 @@ A1324 (the bucket copy is not encrypted by the backup key).
 ahead as designed. S23's new `venue_settings`, `venue_catalogues` and `business_day_settings`
 tables are replaced by the `settings.venue` and `settings.business_day` documents and one flag,
 `menus.is_default`; its fourth, `day_cutover_changes`, stays a table (§4) (`tables-menu.md` §1.1;
-`tables-venuebox.md`, "Where A1301 stands"; A1301 design :620). The flag also changes the
+`tables-venuebox.md`, "Where A1301 stands"; A1301 design, S23 row). The flag also changes the
 configuration bundle: format 10 (#2415) carries the default menu as the top-level
 `defaultCatalogueId`, and CLAUDE.md §3's bundle rule names it.
 
@@ -472,8 +473,9 @@ The same treatment, in brief; the appendices hold the detail and the mappings.
   enforced by the filing code itself.
 - *One backup service with backends* (owner, 2026-11-04): a local drive, your own S3 bucket and
   Waitron Cloud, with others later. Cloud is the main target, and how it stores things is hidden from
-  the person using it. It stays off real venues until Cloud's service is ready. Cloud differs in
-  three ways: its key, its temporary upload permission, and that it deletes its own old copies.
+  the person using it. It stays off real venues until Cloud's service is ready. Cloud follows the
+  venue's backup schedule, which must then be at least daily. Cloud differs in three ways: its key,
+  its temporary upload permission, and that it deletes its own old copies.
 - *Merged:* the card payment check loop's steps and card refund recovery become one card follow-up
   job; all mail goes through one sender (U4); one daily `housekeeping` job prunes (U10). The new
   fiscal reconciliation job goes on the runner.
@@ -521,18 +523,17 @@ slice 3b.
 
 ## 8. Features and what they cost in tables
 
-The rules above remove what is unused, duplicated or split for internal reasons. What remains is
-mostly features that are built. If the count is still too high, the lever is the product: a
-feature dropped takes its tables with it. Nothing here says a feature is unused — that is the
-owner's knowledge, not the code's.
+The rules above remove what is dead, duplicated or split for internal reasons. What remains is
+features that are built. The owner went through this list on 4 November: recipes go, and the rest
+stay.
 
 | Feature | Tables |
 | --- | --- |
-| Working-time checker and its questions to staff | 5 (`attendance_days`, `staff_activity`, `attendance_questions`, `attendance_answers`, `attendance_answer_entries`) |
+| Working-time checker and its questions to staff | 4 (`attendance_days`, `staff_activity`, `attendance_questions`, `attendance_answers`) |
 | Seasons, special days and opening hours | 5 (`seasons`, `special_days`, `special_day_dates`, `opening_hours`, `day_cutover_changes`) |
 | Staffing by role | 2 (`staffing_days`, `staffing_blocks`) |
 | Rota, swaps and absences | 4 (`roster_versions`, `shifts`, `shift_swaps`, `absences`) |
-| Purchasing and recipes | 4 |
+| Supplier invoices | 2 (design to come, A1326) |
 | Adjustments (cancel, comp, discount) | 4 |
 | Floor plan sets and layouts per department | 3 (plus `table_merges`) |
 | Published menu versions and scheduled releases | 3 |
@@ -594,52 +595,22 @@ A803 §3.1 and §3.9 (the line is the dish's identity), timed around lane C. The
 | Print agent | Waits on a held request, if the measurement shows a real saving |
 | The venue's stable id | Waitron Cloud assigns it ([design](../2026-11-04-a1301-venue-id-design.md)) |
 
-### Still open, for the owner
+| Tables and people ids (U1) | Eight migration sets; identity and credentials can no longer be switched off |
+| A role a shift has used | Retired: it leaves every list and everyone holding it, and past shifts keep its name |
+| The mail queue | Invitations and email-change messages join it. Dropped after: password reset and email change 30 minutes, invitation 24 hours, box alert 24 hours, reminders and invoices 7 days |
+| Waitron Cloud backups | Follow the venue's schedule, which must be at least daily when Cloud is a destination |
+| Recipes | Removed, with the recipe screen's picker |
+| A settled bill | Five columns may change: `party_id`, `bill_number`, `bill_name`, `editor_id`, `editor_version` |
+| The till's default language | The venue's own language, with no Spanish default in general code |
+| Features (§8) | None of the others goes |
 
-1. **Eight bundles of tables instead of sixteen (U1).** Tables are created in bundles, and a table
-   can only have a database-checked link to a table in a bundle created before it. Today the people
-   tables sit in a bundle many others cannot see, so a shift's person is plain text. *Example:* a bug
-   leaves a shift naming a person who does not exist. With a checked link the database refuses it; today
-   nothing does. To get this, identity and credentials stop being switch-off-able, which costs nothing
-   real, because no venue can run without people or without sealed secrets. If you say no, about ten
-   merges in four areas stay separate tables or plain ids. CLAUDE.md §3 gets a sentence saying why these
-   tables are in core. *Recommend yes.*
-2. **Deleting a role that a shift has used.** *Example:* Luis filled "Barista" on 40 past shifts and the
-   venue stops using the role. Either the delete stays refused for ever, or the role is retired: it
-   disappears from every list and from everyone holding it, and past shifts keep showing the name.
-   *Recommend retiring it.*
-3. **Should invitations and email-change messages join the mail queue?** They send directly today, so a
-   crash mid-send loses them with no trace. *Example:* a manager invites a new waiter, the box restarts,
-   and nothing arrives. In the queue, the mail goes out after the restart. *Recommend yes.*
-4. **How long may a queued mail wait before it is dropped?** *Example:* the mail server is down all
-   weekend. Proposed: a password link 30 minutes, which is the link's own life; a box alert 24 hours,
-   since it stays in the dashboard's bell; reminders and invoices 7 days. *Recommend these values.*
-5. **Does Cloud keep its own daily backup time, or follow the venue's backup schedule?** *Example:* a
-   venue sets backups for 04:00 and keeps Cloud as its one destination. With one service, the simple
-   answer is that Cloud follows that schedule. Cloud's plan of daily and monthly copies then depends on
-   the venue running a backup at least daily, so Cloud would have to refuse a less frequent schedule.
-   *Recommend following the venue's schedule, with at least one a day.*
-6. **The recipe screen's "Choose a catalogue" picker.** A product no longer belongs to one menu, so the
-   picker has nothing to filter on. *Example:* a cook opens Recipes to cost the tortilla. Either the
-   screen goes straight to "Choose a product", or it stays as "Choose a menu" and lists what that menu
-   offers. *Recommend removing the picker.*
-7. **Moving a settled bill to the counter.** You allowed three columns to change on a settled bill. Moving
-   one also changes two more that record who is editing it, because that state moves onto the bill.
-   *Example:* a paid bill is moved to the counter to be collected; with only the three columns, the
-   database refuses the move. Either the exception grows to five, or the editor state stays a side table,
-   which makes 150 tables. *Recommend five columns.*
-8. **The till's default language outside Spain.** The same variable also sets a hidden default of Spanish,
-   read in ten places: names on kitchen tickets, and the language menu text falls back to. Deleting it
-   points those at the venue's own language. *Example:* a venue in Portugal gets Portuguese where it would have got Spanish; in Spain nothing
-   changes. *Recommend yes.*
-9. **Features (§8):** any feature you would rather not have.
+### Applied as the design, for the owner's final look
 
-### The builder goes ahead on these unless the owner objects
+Chosen on the recommendation; the owner has not ruled on each one.
 
 - A1002 lands before the people slice.
 - The rota keeps warning about someone outside a role, and does not refuse them.
-- `attendance_answers` keeps its list of entries as a column, so `attendance_answer_entries` goes and the
-  people area is 26 tables (148 in all, 147 after A1323).
+- `attendance_answers` keeps its list of entries as a column, so `attendance_answer_entries` goes.
 - `pay_period_settings` stays a table.
 - `order_groups.last_joined_at` and `order_drafts.taken_over_from` are read from `order_events` if the
   slice's measurement allows.
@@ -647,11 +618,17 @@ A803 §3.1 and §3.9 (the line is the dish's identity), timed around lane C. The
   table.
 - The lookup conflict folds into `verifactu_history`; the series conflict stays a table.
 - `authorized_by` stays inside `activity_log.data`, unless the bench shows the export's read matters.
-- The box's own key and role events stay in `node.db`, because a copy overwrites `venue.db` on a spare.
+- The box's own key and role events stay in `node.db`, in `node_handover_events` with no operation id,
+  because a copy overwrites `venue.db` on a spare.
 - The 30-second silence rule applies to the dashboard as well as tills.
 - A certificate repair's older copy is deleted after the next healthy start.
 - The `waitron-provision` command-line resume goes with Continue (A1322).
-- Pack history under the master key goes to A1323's design. How long finished mail rows stay goes to A980.
+
+### Left to other designs
+
+- Pack history under the master key: A1323.
+- How long finished mail rows stay: A980.
+- Whether the wizard offers "Add a mirror node" before A947 slice 3b: the existing backlog entry.
 
 ## 11. Left to the builder
 

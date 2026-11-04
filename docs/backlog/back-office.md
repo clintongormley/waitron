@@ -3,18 +3,23 @@
 The open entries are listed in [the backlog](../backlog.md), under "Purchasing, recipes, stock and reports". This file holds
 their full text.
 
-## The recipe routes and the recipe screen are unreached
+## Recipes are removed under A1308 (owner, 2026-11-04)
 
-Recipe authoring is gone from the dashboard, and nothing replaces it as a surface; the parked
-recipe depth work (nested sub-recipes, plate costing, stock depletion) assumes an authoring
-surface that no longer exists. Nothing outside tests mounts `/management-api/ingredients` or
-`/management-api/products/:id/recipe`, and `apps/dashboard/src/screens/recipe-screen.ts` is imported
-by nothing, while its client methods in `apps/dashboard/src/api/client.ts` still call those routes
-(read, not run).
+The question here was whether to delete the recipe routes and screen or to remount them. The owner
+decided: "remove it, and remove recipes. we don't use them." Nothing outside tests mounts
+`/management-api/ingredients` or `/management-api/products/:id/recipe`, and
+`apps/dashboard/src/screens/recipe-screen.ts` is imported by nothing, so no box can reach them
+(read, not run). Allergens and diet stay declared directly on the product, as they have been since
+#345.
 
-Next action: the owner decides whether to delete `recipe-api.ts`, the screen and the client
-methods, or to remount the routes and route the screen; whoever reopens recipe depth decides
-first whether recipe authoring returns as its own surface.
+[A1308's menu slice](../superpowers/specs/2026-11-02-rationalisation/tables-menu.md) does the work; its §4
+lists everything that goes. These backlog lines go stale with that slice, not before:
+
+- `dashboard.md`: A1227's two tables, the form-width entry's "ingredient form", and the refusal list's
+  ingredient form and dietary-origin picker.
+- `architecture.md`: A974's and A976's "recipe ingredient" fixture text.
+- `docs/developers/products.md:563`, `:784-785`, `:891`, `docs/developers/design-system.md:2863`, `:2882`,
+  `:2980`, `docs/developers/ci-and-gates.md:278`, `:319`, `docs/developers/conventions-data.md:1352`.
 
 ## Comments and test titles left open by #615
 
@@ -53,6 +58,11 @@ note should become its own document type.
   day it opened on.
 
 ## Decisions and deliberate limits
+
+- **Recipes are dropped, not parked (owner, 2026-11-04).** Recipe depth (nested sub-recipes, plate
+  costing, stock depletion) ended with this decision: it assumed an authoring surface that no longer
+  exists. If recipes are ever wanted again, they start from a new design. A product's allergens and
+  diet are what a person declares on it, and a variant inherits them.
 
 - **Supplier invoice numbers are unique within their issue year (owner, 2026-10-21, A981).**
   The same supplier may reuse a number in another calendar year; the purchase form names the

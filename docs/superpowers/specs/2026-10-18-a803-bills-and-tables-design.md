@@ -58,6 +58,8 @@ Read from the code on 2026-10-17, not run:
 
 ### 3.1 One portion per order line
 
+2026-11-04 pointer: A1308 makes the order line the dish's identity, replacing the portion row ([design](2026-11-02-rationalisation/tables-ordersales.md), §1.2).
+
 - Every order line holds **one portion of one dish**, with that portion's own extras. "2 ×
   Hamburguesa" is two lines. "Burger with chips" and "burger with double chips" are two different
   lines, so the kitchen and the bill both know which is which.

@@ -14,8 +14,7 @@ checked at `main` e0da0ad18a, and so was every cite kept into a file that change
 `68732329c1`. Everything else was last read at `68732329c1` or earlier, with a `git diff` as the
 receipt. Reading only: where a claim needs a measurement it is listed in section 8.
 
-**In one line:** 36 tables become 17: 8 for filing, of which 2 are an open question (section 9),
-1 for numbering, 1 for the daily close, 3 for cards and 4 for adjustments.
+**In one line:** 36 tables become 16: 7 for filing, 1 for numbering, 1 for the daily close, 3 for cards and 4 for adjustments.
 
 ## 0. The owner's question: why ~15 fiscal tables, and does "3 or 4" hold?
 
@@ -25,7 +24,8 @@ history log; (4) the box's fiscal identity and sending state as one row or setti
 
 Tested against the code, **(1), (2) and (3) hold with adjustments, and (4) breaks.** The result is
 six fiscal tables, not four, and each of the two extra ones is there for a reason the code states.
-Two more, added by W41s-10a after this question was asked, wait on section 9.
+W41s-10a added two more after this question was asked: the lookup conflict folds into (3), and the
+series conflict stays a seventh table (1.1).
 
 | Proposal part | Verdict | Why |
 | --- | --- | --- |
@@ -36,14 +36,14 @@ Two more, added by W41s-10a after this question was asked, wait on section 9.
 | (2) absorbs `fiscal_conflict_evidence` | **Breaks** — it is many rows per record (one per sending attempt and cause). | Goes to (3) instead. |
 | (3) one history log: clock checks and confirmations, conflicts, case notes | **Holds**, with every typed CHECK and unique index re-expressed per kind (section 5). | Read back on the sale path, so it needs its own indexes (section 8). |
 | (3) absorbs certificate installs and reminders | **Breaks.** Installs stay a table; reminders go to `outgoing_mail`. | Installs are classified `local` (`packages/fiscal-verifactu/src/classification.ts:22-26`); the history log is `ledger`. A table has one classification. Reminders are updated in place (claim, then report: `certificate-reminders.ts:87-150`), so they are not history: they are a mail queue, and fold into `outgoing_mail` (README U4). See 1.1. |
-| (3) absorbs the lookup conflicts W41s-10a added | **Not decided.** | See section 9. |
+| (3) absorbs the conflicts W41s-10a added | **Holds for the lookup conflict, breaks for the series conflict.** | A lookup conflict is one per record and names it, so it folds. A series conflict names no record, and `readActiveConflicts` joins on its series on every sale, so it stays a table. See 1.1. |
 | (3) absorbs identity allocations | **Better elsewhere** — fold them into the identity table. | Each activation writes exactly one identity row and one allocation row in one transaction (`allocation.ts:437-465`); the two rows repeat the same NIF, software id and installation number (`allocation.ts:444-447` vs `:465-473`). |
 | (4) identity as one row | **Breaks.** | Every record points at the identity that made it (`sif_id`), and setup, restore and promotion must refuse an installation name ever used before (`hour-history-reader.ts:225-259`; `docs/compliance/verifactu-findings.md:276-280`, "No puede repetirse nunca"). Past identities are rows, so identity is a table of identities. |
 | (4) sending state as settings | **Breaks.** | It is machine state written after every AEAT reply in the same transaction as the submission rows (`drain.ts:505`, `:1244`, `:1261`), with a compare-and-clear on the incident token (`drain.ts:1261-1262`). A settings save bumps a revision and names a person; a background writer would collide with every owner save. It must also stay in `venue.db`: it commits with `envios` updates, and `node.db` is a separate file with its own write queue (CLAUDE.md §3). It stays a one-row state table. |
 
 The fiscal tables in the target: `verifactu_records`, `verifactu_submissions`, `verifactu_history`,
-`verifactu_identities`, `verifactu_sending_state` and `verifactu_certificates`, plus
-`verifactu_lookup_conflicts` and `verifactu_series_conflicts` unless section 9 folds them. Down from
+`verifactu_identities`, `verifactu_sending_state`, `verifactu_certificates` and
+`verifactu_series_conflicts`. Down from
 18 in the `fiscal-verifactu` set. `invoice_series` (core) stays beside them.
 
 **The names (owner, 2026-11-04).** A table in a swappable module is named after the module, not the
@@ -209,15 +209,15 @@ append-only, with a guard trigger.
 - **Rows:** about 92,000 a year, one per record.
 
 **`verifactu_history`** — the fiscal module's own append-only log. It holds clock checks, clock
-confirmations, conflicts AEAT reported, and case notes. `ledger`, append-only. This is the module's
+confirmations, conflicts AEAT reported, lookup conflicts, and case notes. `ledger`, append-only. This is the module's
 own log, not `activity_log` (README §3): product code decides from it on the sale path.
 
 | Column | Type | Key / null | Notes |
 | --- | --- | --- | --- |
 | `id` | text | PK | |
 | `seq` | integer | not null, UNIQUE | `max(seq)+1` in the write transaction, as `clock-checks.ts:60-70` does today. `seq` orders the log, not time, because the clock is what is in doubt |
-| `kind` | text | not null, CHECK in (`clock.check_opened`, `clock.confirmed`, `conflict.observed`, `aeat.answer_cleared`, `case.note`) | `case.note` from `filing_case_events` kind `note` |
-| `event_key` | text | null, UNIQUE | Natural idempotency key: `clock.confirmed:<check id>` (one confirmation per check), `conflict:<registro>:<attempt>:<cause>`, and a note's `action_key` |
+| `kind` | text | not null, CHECK in (`clock.check_opened`, `clock.confirmed`, `conflict.observed`, `conflict.lookup`, `aeat.answer_cleared`, `case.note`) | `case.note` from `filing_case_events` kind `note` |
+| `event_key` | text | null, UNIQUE | Natural idempotency key: `clock.confirmed:<check id>` (one confirmation per check), `conflict:<registro>:<attempt>:<cause>`, `lookup:<registro>` (one lookup conflict per record), and a note's `action_key` |
 | `node_id` | text | not null, FK → nodes | |
 | `at` | text | not null | The box's time when written |
 | `registro_id` | text | null, FK → verifactu_records | The record a confirmation, conflict or cleared answer names |
@@ -321,16 +321,22 @@ The deciding half stays in this module: `claimReminder` works out the stage and 
 - `packages/handover/src/manifest.ts:95`, `backup-verification-secrets.ts:17` and
   `backup-verification-history.ts:443` name the table and lose it.
 
-**`verifactu_lookup_conflicts`** (was `fiscal_lookup_conflicts`) and
-**`verifactu_series_conflicts`** (was `fiscal_series_conflicts`) — what the box learned by asking
-AEAT: a record of ours whose stored copy differs, and an invoice in one of our series that this box
-has no record of. W41s-10a (#2449) added both; `ledger`, append-only, and read on every sale through
-`readActiveConflicts` (`conflict-evidence.ts:34`, `:104`). Nothing else about them is settled here,
-so they keep today's shape under the naming rule, less the case id: `fiscal_lookup_conflicts.case_id`
-goes, because the case is now the same record's submission row. Their unique indexes
-(`registro_id`, and `(sif_id, invoice_identity)`) and their keys stay. Whether they fold into
-`verifactu_history` is an open question (section 9).
+**`verifactu_series_conflicts`** (was `fiscal_series_conflicts`) — an invoice in one of our series that
+this box has no record of, learned by asking AEAT. W41s-10a (#2449) added it; `ledger`, append-only.
+It stays a table: the row names no record, so it has no `registro_id`, and `readActiveConflicts` joins
+on its series on every sale (`conflict-evidence.ts:104-121`), which from `verifactu_history` would be a
+read from JSON on the sale path. It keeps today's shape under the naming rule, with its unique
+`(sif_id, invoice_identity)` and its keys.
 - **Rows:** none normally: one row per conflict the reconciliation finds.
+
+**The lookup conflict folds into `verifactu_history`** (was `fiscal_lookup_conflicts`, also from
+W41s-10a): a record of ours whose stored copy differs from AEAT's. It becomes kind `conflict.lookup`
+(section 3).
+- Its `event_key`, `lookup:<registro>`, does the job of the unique `registro_id`: `reconcile-conflicts.ts:19-21`
+  inserts with "do nothing on a conflict", now targeting `event_key`.
+- `case_id` goes, because the case is now the same record's submission row.
+- Readers: `readActiveConflicts` (`conflict-evidence.ts:48`, `:66`, `:73`), `conflict-recovery.ts:87-95`,
+  and the list of keys at `backup-verification-history.ts:437-438`, which loses both rows. Read, not run.
 
 ### 1.2 Invoice numbering and the daily close (`core` set)
 
@@ -471,9 +477,9 @@ lists owned by one row (`tables-devices.md` §1). `device_profile_card_readers` 
 - **Unchanged:** the 12 columns, the unique `name`, and the seven CHECKs.
 - **`apply_roles` and `approver_roles` stay JSON arrays,** under the R4 exception for short lists
   owned by one row (owner, 2026-11-04). Today they hold the role enum (`staff`, `supervisor`,
-  `manager`, `admin`). Once A1002 lands they hold role ids (A1002 design :343, "Resolve preset seed
-  keys to IDs"), so they need what every other JSON id list needs: the configuration import must
-  rewrite ids inside them (A1002 :373), and deleting a role must clear it from them (A1002 :56).
+  `manager`, `admin`). Once A1002 lands they hold role ids (A1002 §4 and §7), so they need what every
+  other JSON id list needs: the configuration import must rewrite ids inside them, and deleting or
+  retiring a role must clear it from them (A1002 §6).
 - **Rows:** 9–15.
 
 **`adjustments`** — one row per cancellation, comp or discount. `ledger`, append-only.
@@ -506,8 +512,7 @@ covered. `ledger`, append-only.
 
 ### Count
 
-The 36 current tables become **17 target tables**: 8 fiscal (6 if section 9 folds the two conflict
-tables), 1 for numbering, 1 daily close, 3 for payments and 4 for adjustments. The design also adds
+The 36 current tables become **16 target tables**: 7 fiscal, 1 for numbering, 1 daily close, 3 for payments and 4 for adjustments. The design also adds
 one settings row (`adjustments`), and two columns outside this area: `devices.card_reader_id` and
 `device_profiles.card_readers`. `refunds` is the orders area's.
 
@@ -556,6 +561,9 @@ Its kinds, and what each one's `data` holds:
 - **`conflict.observed`** (from `fiscal_conflict_evidence`): `attempt`, `cause`
   (fiscal.huella_divergente, fiscal.duplicado_anulado) and `evidence`, with `registro_id` as a column.
   Its old `case_id` is dropped: the case is now the same record's submission row.
+- **`conflict.lookup`** (from `fiscal_lookup_conflicts`): `evidence` in `data`, `registro_id` and `at`
+  (its `recorded_at`) as columns, and `event_key` `lookup:<registro>`. Its `case_id` is dropped the same
+  way.
 - **`case.note`** (from `filing_case_events` kind `note`): `action` in `data`; `registro_id` (the
   case's record), `person_id` and `event_key` (the action key) as columns.
 - **`aeat.answer_cleared`** (new; owner, 2026-11-04) keeps the values a submission row held — `csv`,
@@ -620,8 +628,8 @@ Saves to `settings.adjustments` are logged however the shared `settings` table l
 | `fiscal_certificate_installs` | rename to `verifactu_certificates` | Classified `local`, so it cannot join the `ledger` history log. Named after the module. |
 | `fiscal_certificate_reminders` | → `outgoing_mail` | A mail queue with a dedupe rule (README U4; 1.1). |
 | `fiscal_conflict_evidence` | → fiscal history | Many rows per record: one per attempt and cause. |
-| `fiscal_lookup_conflicts` | rename to `verifactu_lookup_conflicts`, loses `case_id` | Named after the module. Open: section 9. |
-| `fiscal_series_conflicts` | rename to `verifactu_series_conflicts` | Named after the module. Open: section 9. |
+| `fiscal_lookup_conflicts` | → fiscal history | One per record, so it fits `event_key`; loses `case_id`. |
+| `fiscal_series_conflicts` | rename to `verifactu_series_conflicts` | Named after the module. It names no record, and every sale reads it by series. |
 | `fiscal_reservations` | delete (U5) | Serves only a second box, and A947 does not use it. Fiscal, so the owner lands it. See below. |
 | `registro_sif` | rename to `verifactu_identities` | Records point at past identities, and the never-reuse rule needs all of them. |
 | `registros_facturacion` | rename to `verifactu_records` | The legal record, unchanged but for its name. |
@@ -670,8 +678,8 @@ payments and adjustments research, found none.
 | **envio_flujo**: `envio_flujo_singleton_ck` | `verifactu_sending_state`. |
 | **filing_cases**: append-only pair; unique `registro_id`; `filing_cases_cause_ck`; FK to registros | The set-once guard on the case columns. Uniqueness comes from the submission row's primary key, the cause CHECK moves to `case_cause`, and the FK is the row's own. |
 | **filing_case_events**: append-only pair; unique `action_key`; a partial unique allowing one resolution per case; kind CHECK; FKs to filing_cases and registros (`remedy_registro_id`) | A resolution: the set-once guard on `verifactu_submissions`' resolution columns, "one per case" built into the shape, its key unique as `case_resolution_key`, and the remedy FK as `case_remedy_registro_id`. A note: a `verifactu_history` row of kind `case.note`, its key as `event_key`. The kind CHECK goes: the kind is now which table holds the row. One unique key across both kinds is lost (1.1). |
-| **fiscal_lookup_conflicts**: append-only pair; unique `registro_id`; FKs to registros and filing_cases | `verifactu_lookup_conflicts`, unchanged, except that the case FK goes with `case_id`. Section 9 may move them. |
-| **fiscal_series_conflicts**: append-only pair; unique `(sif_id, invoice_identity)`; FKs to registro_sif and invoice_series | `verifactu_series_conflicts`, unchanged. Section 9 may move them. |
+| **fiscal_lookup_conflicts**: append-only pair; unique `registro_id`; FKs to registros and filing_cases | `verifactu_history`: the append-only pair; the unique `event_key` (`lookup:<registro>`) in place of the unique `registro_id`; the FK to records. The case FK goes with `case_id`. |
+| **fiscal_series_conflicts**: append-only pair; unique `(sif_id, invoice_identity)`; FKs to registro_sif and invoice_series | `verifactu_series_conflicts`, unchanged. |
 | **fiscal_conflict_evidence**: append-only pair; unique `(registro_id, attempt, cause)`; attempt CHECK `> 0`; cause CHECK; FKs to registros and filing_cases | `verifactu_history`: the append-only pair, the unique `event_key`, `json_extract` CHECKs for attempt and cause on kind `conflict.observed`, and the FK to registros. The case FK is dropped, because the case is now the same record's submission row. |
 | **clock_checks**: append-only pair; unique `seq`; reason CHECK; FK to nodes | `verifactu_history`: the shared unique `seq`, the reason CHECK on kind `clock.check_opened`, and the FK to nodes. |
 | **clock_confirmations**: append-only pair; unique `seq`; unique `check_id`; index on `registro_id`; CHECKs on source, reason, person pairing and record pairing; FKs to nodes, clock_checks, registros | `verifactu_history` (see the note after this table). |
@@ -798,7 +806,8 @@ How `clock_confirmations`' protections land in `verifactu_history`:
 2. **The case check now reads a table with one row per record.**
    - `readActiveConflicts` runs on every sale (`backend.ts:187`, `conflict-evidence.ts:25`). Today it
      starts from the small `filing_cases` table; in this design it reads `verifactu_submissions`,
-     which has a row for every record, and left-joins the conflict evidence and the lookup conflicts.
+     which has a row for every record, and left-joins the history log for `conflict.observed` and
+     `conflict.lookup`.
    - Measure: plan and time it with 500,000 submission rows and the partial index on
      `case_opened_at`.
    - Failing result: a scan of `verifactu_submissions`. That keeps cases as their own table.
@@ -831,21 +840,8 @@ How `clock_confirmations`' protections land in `verifactu_history`:
 
 ## 9. Decisions for the owner
 
-The owner settled the rest on 4 November: `verifactu_` names, keep `daily_closes` and drop its chain
+The owner settled this area on 4 November: `verifactu_` names, keep `daily_closes` and drop its chain
 copy, delete `payment_policy`, `devices.card_reader_id`, fold card follow-ups into `payments`, keep
 cleared AEAT answers (`aeat.answer_cleared`), and a profile's readers as a list. `fiscal_reservations`
-was settled by README U5. One question is left.
-
-- **Open: do the two lookup conflict tables fold into `verifactu_history`?** W41s-10a (#2449) added
-  `fiscal_lookup_conflicts` and `fiscal_series_conflicts` on 4 November, and the counts of 34 and 14
-  in the ledger leave them out.
-  - For folding: both are append-only evidence read back in order, like `conflict.observed`. Each
-    has one natural key: `lookup:<record>` and `series:<identity>:<invoice>` fit `event_key`. It would
-    leave 6 filing tables, as first planned.
-  - Against: the series row names no record, so it has no `registro_id`, and its key to
-    `invoice_series` would go into JSON. `readActiveConflicts` joins on that series and runs on every
-    sale (`conflict-evidence.ts:104-121`), which makes it a read from JSON on the sale path, unless it
-    gets a column. Section 8's measurement 2 would have to cover it.
-  - Recommendation: fold the lookup conflict, which is one per record and has `registro_id`, and keep
-    the series conflict as a table. That leaves 7 filing tables. Fiscal, so the owner lands either
-    way. Until this is answered the target keeps both as tables, under the naming rule.
+was settled by README U5. The lookup conflict folds into `verifactu_history` and the series conflict
+stays a table (1.1). No question is open in this area.

@@ -9,8 +9,7 @@ their full text.
 generic CSV menu import · accounting export (SP17) · opening hours and channel sync (SP19) ·
 per-seat ordering and multiple tabs per table (each reopens a
 settled decision — specced with the owner, never landed unattended) · KDS ops polish (routing
-audit view, station kind, definable kitchen statuses) · recipes depth (nested
-sub-recipes, plate costing, stock depletion, variants, customer-facing browse) · inventory and
+audit view, station kind, definable kitchen statuses) · customer-facing menu browse · inventory and
 procurement (SP20; the AI forecast waits for the deterministic system) ·
 **Bizum** (research in
 [2026-09-18-online-payment-providers-bizum.md](../research/2026-09-18-online-payment-providers-bizum.md)).

@@ -1,6 +1,6 @@
 > Appendix to [README.md](README.md), the rationalisation design of 2 November 2026: one researcher's proposal for this area, written to the shared rules. Where README.md §5 decides differently, README.md wins.
 
-# Target design — the menu area (menus, products, photos, recipes, purchasing)
+# Target design — the menu area (menus, products, photos, supplier invoices)
 
 Read only. Every "today" claim cites the file it came from or the grep that showed it. Where I say
 "I propose", that is the design; where I say "could not establish", I did not find the answer in the
@@ -9,8 +9,9 @@ code.
 This file carries the owner's review of 4 November 2026, and its cites were re-read on `main` at
 `e0da0ad18a`.
 
-Summary: **36 current tables → 25 tables plus one `settings` row (`settings.menu`)** (owner,
-2026-11-04). Content languages join `settings.venue` instead.
+Summary: **36 current tables → 23 tables plus one `settings` row (`settings.menu`)** (owner,
+2026-11-04). Content languages join `settings.venue` instead. Supplier invoices keep their two tables,
+`purchase_invoices` and `purchase_invoice_vat`.
 
 The moves that matter most:
 
@@ -32,9 +33,13 @@ The moves that matter most:
 6. **No ids inside JSON,** with one exception. The include-folder photo moves out of
    `section_members.folder_overrides` into a column. The preselected option label becomes a flag on
    `option_labels` instead of an id that nothing checks. The exception is R4's for a short list owned
-   by one row: a period's staff menus become a list on the period (§1.23).
+   by one row: a period's staff menus become a list on the period (§1.21).
 7. **The word "catalogue" goes,** from the package, the settings document, the screen file and the
    visible wording, not only the table (§1, "The rename").
+8. **Recipes go** (owner, 2026-11-04: "remove it, and remove recipes. we don't use them"). `ingredients`,
+   `recipe_lines`, the two derivation columns on `products`, `packages/recipes`, the routes and the
+   screen all leave (§4). A product's allergens and diet are what a person declared on it, and a
+   variant inherits them (§1.3).
 
 ---
 
@@ -59,7 +64,7 @@ to everything below. New names are proposals.
 | `apps/dashboard/src/screens/catalogue-screen.ts`, `apps/dashboard/src/widgets/catalogue-browser.ts` | `products-screen.ts`, `product-browser.ts` |
 | the `/management-api/catalogues/…` routes, `apps/server/src/catalogue-api.ts` | `/management-api/menus/…` and, for products, `/management-api/products/…` |
 | the `catalogue.manage` permission (`packages/identity/src/permissions.ts:14`) | `menu.manage` |
-| "Choose a catalogue" / "Elige un catálogo" (`apps/dashboard/src/i18n/strings.ts:2365`, `:6162`) | see §9 |
+| "Choose a catalogue" / "Elige un catálogo" (`apps/dashboard/src/i18n/strings.ts:2365`, `:6162`) | removed with the recipe screen (§4) |
 | "catalogue" in the guide (`apps/server/src/guide/en/kitchen-service.md:30`, `products.md:342`) | "menu" |
 | "catálogo" in the guide (`apps/server/src/guide/es/kitchen-service.md:32`, `products.md:360`) | "carta", the dashboard's word (`apps/dashboard/src/i18n/strings.ts:5192`) |
 
@@ -171,8 +176,8 @@ category, photo, colour, and the allergen and diet facts that people declare.
 | `ordering` | text | not null, default `public`; **CHECK** in three values | |
 | `image` | text | null; photo by filename (trigger-checked) | |
 | `color` | text | null | |
-| `manual_allergens` | json | null | what a person declared |
-| `diet_override` | json | null | what a person forced |
+| `allergens` | json | null = not yet reviewed; `{}` = reviewed, contains none | was `manual_allergens`: what a person declared |
+| `diet_override` | json | null | what a person declared about the diets: vegan, vegetarian, halal, kosher and contains-tags |
 | `created_at`, `updated_at` | ts | not null | |
 
 
@@ -187,17 +192,45 @@ category, photo, colour, and the allergen and diet facts that people declare.
     from `units.hardware_unit`.
   - `name_key`. It is a folded copy of `name`, used only to look rows up for the "staff name taken"
     check. It is not a unique index (`packages/db/src/schema/catalogue.ts:76-78`), and menus already
-    do the same check by scanning in code (`menu-names.ts:11-15`). See §8, item 2.
-  - `allergens`, `diet`, `recipe_derivation` and `diet_derivation` (owner, 2026-11-04, after §8
-    item 1). These are four computed copies (`catalogue.ts:107-140`): the published allergens are
-    "the computed union of [manual_allergens] and `recipe_derivation`", and `recipe_derivation` is
-    worked out from `recipe_lines` and `ingredients`. Every reader is in `packages/catalogue` or the
-    dashboard product list. The grep `products\.(allergens|diet|recipeDerivation|dietDerivation)|effective\.(…)`
-    over `apps` and `packages` finds only
-    `packages/catalogue/src/{operations,product-editor,variant-fallback,menu-types}.ts`,
-    `apps/dashboard/src/widgets/product-list.ts`, a demo script and a comment in
-    `packages/db/src/schema/recipes.ts`. The published truth is already frozen in each
-    `menu_versions.document`.
+    do the same check by scanning in code (`menu-names.ts:11-15`). See §8, item 1.
+  - `recipe_derivation` and `diet_derivation` (owner, 2026-11-04). Recipes go (§4). Only
+    `applyRecipeDerivation` and `applyDietDerivation` write these columns
+    (`packages/catalogue/src/operations.ts:990`, `:1009`), and outside tests only
+    `packages/recipes/src/recipes.ts:65-81` calls those. `mountRecipeApi` has no caller outside tests,
+    so on a real box nothing can reach that code. The one other route to it is the demo script
+    `apps/server/scripts/recipes-demo.ts`.
+  - `manual_allergens` as a second column, and `diet` (owner, 2026-11-04). With no recipe, each is a copy
+    of what a person declared. `republish` returns the declaration itself once its derivation is null
+    (`packages/catalogue/src/derivation.ts:23-31`), so `allergens` and `manual_allergens` become one
+    column, keeping the name `allergens`, which its readers already use. `diet` is always
+    `overlayDietProfile` of the starting profile and `diet_override` (`operations.ts:1082`, `:943-948`).
+    Code works it out on read from the inherited `diet_override`, as the till already does
+    (`apps/till/src/state/as-served.ts:37-39`). No read gains a table, so the timing this design once
+    asked for is not needed. That is reasoned, not timed.
+- **Variants inherit.** `effectiveProductColumns` keeps `allergens` and `dietOverride` as they are: a
+  variant's blank value reads its parent's, and its own value stands alone, not merged with the
+  parent's (`packages/catalogue/src/variant-fallback.ts:110`, `:114`; `operations.ts:934-936`). The
+  entries `manualAllergens`, `recipeDerivation`, `dietDerivation` and `diet` go.
+  `product-editor.ts:40`, `:53` stop reading two columns.
+- **Writing allergens gains one step.** Today only the published copy has its kinds sorted and
+  repeats removed, by `mergeAllergenMaps` (`derivation.ts:11-19`); `updateProduct` stores what it was
+  given as `manualAllergens` (`operations.ts:1290`). With one column, the write normalises through
+  `mergeAllergenMaps`, so readers see what they see today.
+- **"Not yet reviewed" stays; the unreviewed-ingredient rule goes.**
+  - `null` still means nobody has reviewed this product's allergens, and `{}` still means reviewed, none
+    (`packages/db/src/schema/catalogue.ts:105-106`). Its readers do not change: the publish warning
+    (`packages/catalogue/src/menu-publication.ts:531`) and the till (`as-served.ts:18-19`).
+  - `null` can now only mean no declaration. Today `republish` also forces `null` over a person's
+    declaration when a recipe names an unreviewed ingredient (`derivation.ts:27`). That line goes
+    with `recipe_derivation`. It cannot fire on a real box today, for the reason above.
+  - Diet has the same caution and keeps it. With no `diet_override`, vegan and vegetarian read
+    "unknown", never "yes" (`operations.ts:1082`, `apps/till/src/state/as-served.ts:37`). The starting
+    profile is now a fixed value, and the `pending` flag goes.
+  - `derivation.ts` loses `RecipeDerivation` and `republish`. It keeps `mergeAllergenMaps`, which the
+    till imports (`apps/till/src/state/party-allergy.ts:2`). `dietary.ts` loses `DIETARY_ORIGINS`,
+    `validateOrigin`, `DietDerivation` and `deriveDietProfile`; the diet override, the contains-tags
+    and `overlayDietProfile` stay. `operations.ts` loses `republishOverlays`, `applyDerivation`,
+    `applyRecipeDerivation` and `applyDietDerivation`.
 - **What `catalogue_id` takes with it.** `products_id_catalogue_key` and `products_catalogue_id_idx`
   go, and `parent_id` becomes a plain self key, RESTRICT as today. Nothing else targets that key (the
   only use in `packages/*/src/schema` is the composite key at `catalogue.ts:149-150`), and no trigger
@@ -207,8 +240,7 @@ category, photo, colour, and the allergen and diet facts that people declare.
   `apps/server/src/catalogue-api.ts:1446-1465`, `:1522-1585`; `apps/dashboard/src/api/client.ts:3248-3270`.
   Media's usage list drops the field (`packages/media/src/images.ts:59`, `:69`, `:192`), which no
   screen reads. The till's `catalogueId` is a different value, the offer's menu
-  (`apps/till/src/api/client.ts:507`); it keeps its meaning and is renamed. The recipe screen's picker
-  is §9's open question.
+  (`apps/till/src/api/client.ts:507`); it keeps its meaning and is renamed.
 - **Protections kept:** `products_top_level_owns_ck`, without its `pricing_unit` term;
   `products_vat_class_ck`; `products_parent_id_key`; and the indexes on course and unit. Also
   the triggers `products_variant_one_level_insert`, `products_variant_parent_fixed_update`,
@@ -234,35 +266,7 @@ Columns are as today: `id` PK, `seed_key` null unique, `staff_name`, `staff_abbr
 - **Protections:** `units_seed_key_key`, `units_precision_ck`, `units_hardware_unit_ck`, all kept.
 - state; 5–8 rows. "Each" is still not a row (`units.ts:42-44`).
 
-### 1.5 `ingredients` (kept)
-
-Columns are as today: `id`, `name`, `allergens` json null, `dietary_origin` null, `active`,
-`created_at`, `updated_at`.
-
-- **Protections:** `ingredients_dietary_origin_ck`.
-- state; 100–300 rows.
-
-### 1.6 `recipe_lines` (kept; a link table, R7)
-
-Which ingredients a product is made of. Both sides are real rows, so it stays a table with two
-foreign keys.
-
-| column | type | key |
-| --- | --- | --- |
-| `product_id` | text | PK part, FK → products.id |
-| `ingredient_id` | text | PK part, FK → ingredients.id, indexed |
-
-- **Optional tidy:** drop the surrogate `id` and `created_at`, and make `(product_id, ingredient_id)`
-  the primary key. It is already unique (`recipe_lines_product_ingredient_key`). Today the only use
-  of `created_at`/`id` is the order of the list (`packages/recipes/src/recipes.ts:40`). The whole set
-  is rewritten in one transaction (`recipes.ts:111`), so I believe that order is effectively by
-  random id. I have not tested this; it is an assumption. If the order matters, add a `position`
-  column instead.
-- **Protections:** both foreign keys and the unique pair (as the primary key); the
-  `recipe_lines_ingredient_id_idx` index.
-- state; 500–1,000 rows.
-
-### 1.7 `purchase_invoices` (kept, unchanged)
+### 1.5 `purchase_invoices` (kept, unchanged)
 
 A supplier invoice the venue received. It feeds the deductible input VAT in the quarterly VAT return
 (modelo 303). Supplier invoices need their own design (backlog A1326), so this design changes nothing
@@ -279,7 +283,7 @@ Columns are as today: `id`, `supplier_tax_id`, `supplier_name`, `supplier_invoic
   (`packages/purchasing/src/operations.ts:300,337`). Not append-only. 3–8 a day, about 1,000–3,000
   after a year.
 
-### 1.8 `purchase_invoice_vat` (kept, unchanged)
+### 1.6 `purchase_invoice_vat` (kept, unchanged)
 
 One VAT rate's base and tax on a supplier invoice.
 
@@ -290,7 +294,7 @@ Columns: `id`, `purchase_invoice_id`, `rate`, `base`, `tax`, `kind`.
   JSON: they are many per invoice and grouped in SQL (`packages/reporting/src/input-vat.ts`).
 - ledger; about 2,000–5,000 after a year.
 
-### 1.9 `menu_items` (kept)
+### 1.7 `menu_items` (kept)
 
 One product on one menu, with that menu's price (blank means the product's own price).
 
@@ -301,7 +305,7 @@ null.
   `menu_items_gross_price_ck`; both foreign keys.
 - state; 150–450 rows.
 
-### 1.10 `menu_item_variant_overrides` (kept)
+### 1.8 `menu_item_variant_overrides` (kept)
 
 A different price for one variant on one menu.
 
@@ -311,7 +315,7 @@ Columns: `menu_item_id`, `product_id`, `variant_id`, `price`.
   `products(parent_id, id)` (restrict); `…_price_ck` and `…_overrides_ck`.
 - state; 0–50 rows.
 
-### 1.11 `option_lists`
+### 1.9 `option_lists`
 
 A reusable list of kitchen choices (cooking point).
 
@@ -323,7 +327,7 @@ Columns: `id`, `name`, `customer_name`, `kitchen_name`, `sort`, `active`.
   table).
 - state; 5–15 rows.
 
-### 1.12 `option_labels`
+### 1.10 `option_labels`
 
 One choice inside an options list.
 
@@ -336,7 +340,7 @@ Columns: `id`, `list_id` FK → option_lists CASCADE, `name`, `customer_name`, `
   belongs to that list.
 - state; 30–60 rows.
 
-### 1.13 `extra_lists`, 1.14 `extra_list_items`, 1.15 `product_modifiers` (kept unchanged)
+### 1.11 `extra_lists`, 1.12 `extra_list_items`, 1.13 `product_modifiers` (kept unchanged)
 
 - `extra_lists`: `extra_lists_picks_ck`.
 - `extra_list_items`: list FK (cascade), product FK (restrict), `_qty_ck`, `_price_ck`, `_portion_ck`,
@@ -346,7 +350,7 @@ Columns: `id`, `list_id` FK → option_lists CASCADE, `name`, `customer_name`, `
   product (R7).
 - state; 5–15, 30–100 and 50–150 rows.
 
-### 1.16 `sections`
+### 1.14 `sections`
 
 A folder or page staff tap through. Each menu has exactly one root section and one home-page section.
 
@@ -364,7 +368,7 @@ Columns: `id`, `internal_name` (**null on the root**, see below), `names` json, 
   in `menus.name`. Today a rename writes both copies (`operations.ts:878-886`).
 - state; 20–50 rows.
 
-### 1.17 `section_members`
+### 1.15 `section_members`
 
 One place in a section's list: a product, a nested section, or a placeholder for a missing item.
 
@@ -384,7 +388,7 @@ One place in a section's list: a product, a nested section, or a placeholder for
   writes an expression index back wrongly (`packages/catalogue/src/schema/sections.ts:93-94`).
 - state; 200–500 rows.
 
-### 1.18 `menu_versions` — append-only (typed history)
+### 1.16 `menu_versions` — append-only (typed history)
 
 One frozen copy of a whole menu document, published at once or queued for later. It is never changed.
 Sales point at it.
@@ -406,9 +410,9 @@ Sales point at it.
 - It must be kept for ever. `sale_lines.menu_version_id` (`packages/db/src/schema/sales.ts:207`) and
   `working_line_contexts.menu_version_id` (FK, `packages/venue-service/src/schema/service.ts:294`)
   point at it.
-- state (append-only); 1–5 a week, 100–300 rows a year, each holding the whole menu (§8, item 4).
+- state (append-only); 1–5 a week, 100–300 rows a year, each holding the whole menu (§8, item 3).
 
-### 1.19 `menu_version_images` — append-only, kept
+### 1.17 `menu_version_images` — append-only, kept
 
 The photo filenames each version's document names. It exists so the database can refuse to delete a
 photo that a live or queued menu still shows.
@@ -425,7 +429,7 @@ Columns: `version_id` FK → menu_versions, `filename`; primary key on the pair;
   `menu_scheduled_publications`.
 - state (append-only); 50–150 rows per version, about 5,000–15,000 a year.
 
-### 1.20 `menu_releases` — NEW (replaces `menu_publications` and `menu_scheduled_publications`)
+### 1.18 `menu_releases` — NEW (replaces `menu_publications` and `menu_scheduled_publications`)
 
 Where each version stands: queued for a time, live now, replaced by a later one, or cancelled. It is
 a separate table from `menu_versions` because the version can never change while this fact changes
@@ -461,7 +465,7 @@ later (R1's lifetime and protection reason).
     this table instead of `menu_scheduled_publications` (its `SCHEDULE` constant, line 8).
 - state; one row per version, 100–300 a year.
 
-### 1.21 `content_suggestion_jobs`, 1.22 `content_suggestions` (kept)
+### 1.19 `content_suggestion_jobs`, 1.20 `content_suggestions` (kept)
 
 These are the batches of a "translate everything" run sent to Waitron Cloud, and the suggestions
 waiting for a person to accept or discard.
@@ -477,7 +481,7 @@ waiting for a person to accept or discard.
   possible (`packages/catalogue/src/schema/suggestions.ts:87-89`). It stays that way, as stated at the column.
 - state; 0 to a few batch rows, and 0 to a few hundred suggestion rows.
 
-### 1.23 `menu_periods` (kept, gains the staff menu list)
+### 1.21 `menu_periods` (kept, gains the staff menu list)
 
 A department's service period (Breakfast, Lunch), with its calendar colour, starting menu, floor-plan
 set and the extra menus staff may also sell from.
@@ -510,7 +514,7 @@ set and the extra menus staff may also sell from.
   (`packages/venue-service/src/schema/routing.ts:116`).
 - state; 3–8 rows.
 
-### 1.24 `media_images` (takes in `media_image_edits`)
+### 1.22 `media_images` (takes in `media_image_edits`)
 
 The photo library: one row per photo, with its stable filename, translated names, current framing
 and edit revision.
@@ -537,7 +541,7 @@ and edit revision.
   `*_media_image_fk_*` triggers (listed in `scripts/behavioural-triggers.test.ts:99-113`), all kept.
 - state; 100–200 rows.
 
-### 1.25 `media_blobs` (takes in `media_image_data` and `media_image_blobs`)
+### 1.23 `media_blobs` (takes in `media_image_data` and `media_image_blobs`)
 
 The stored bytes of every picture, original or replacement, kept once per content hash.
 
@@ -634,10 +638,10 @@ saves is the central `settings` design's business, not this area's.
 | --- | --- | --- |
 | catalogues | rename to `menus` | the menu; drops unused `version`; takes in menu_details and the default flag |
 | categories | keep | takes in category_details |
-| products | keep | takes in product_units as `unit_id`; drops `catalogue_id` and the copies (`pricing_unit`, `name_key`, four derived allergen/diet columns) |
+| products | keep | takes in product_units as `unit_id`; drops `catalogue_id`, the copies (`pricing_unit`, `name_key`, `manual_allergens` as a second column, `diet`) and the two recipe columns |
 | location_catalogues | delete (owner, 2026-11-04) | no screen uses the venue's list of extra menus; supersedes A1301's `venue_catalogues` |
-| ingredients | keep | |
-| recipe_lines | keep | link table (R7); optional primary key tidy |
+| ingredients | delete (owner, 2026-11-04) | recipes removed |
+| recipe_lines | delete (owner, 2026-11-04) | recipes removed |
 | purchase_invoice_vat | keep, unchanged | many per invoice, grouped in SQL |
 | purchase_invoices | keep, unchanged | needs its own design (backlog A1326) |
 | content_languages | → `settings.venue` | one-row policy (R3), beside the invoice languages (owner, 2026-11-04) |
@@ -669,10 +673,45 @@ saves is the central `settings` design's business, not this area's.
 | media_image_edits | merge into `media_images` | one row per photo (R1) |
 | media_images | keep | takes in the edit columns and `original_hash` |
 
-`location_catalogues` is the one table in this area deleted outright, by the owner's choice. Every
-other table has a product writer named in the tables file, and none serves only a second box (R11).
-The classification reason "copied to a standby" (`packages/catalogue/src/classification.ts`) describes
-replication, not a second-box-only feature.
+`location_catalogues`, `ingredients` and `recipe_lines` are the three tables in this area deleted
+outright, by the owner's choice. Every other table has a product writer named in the tables file, and
+none serves only a second box (R11). The classification reason "copied to a standby"
+(`packages/catalogue/src/classification.ts`) describes replication, not a second-box-only feature.
+
+**What removing recipes takes with it** (owner, 2026-11-04). Found with `git grep` over the whole tree,
+leaving out `docs/`; read, not run.
+
+- **Package and server:** `packages/recipes`; `apps/server/src/recipe-api.ts` and its two test files;
+  `apps/server/scripts/recipes-demo.ts`, with `demo:recipes` and the dependency in
+  `apps/server/package.json:36`, `:67`.
+- **Dashboard:** `apps/dashboard/src/screens/recipe-screen.ts`; the widgets `recipe-editor.ts`,
+  `ingredient-form.ts`, `ingredient-list.ts` and `dietary-origin-picker.ts`, whose only user is the
+  ingredient form; the client methods and types (`apps/dashboard/src/api/client.ts:480-494`, `:604-624`,
+  `:3445-3461`); the two tables in the live query lists (`apps/dashboard/src/api/live-queries.ts:341-342`,
+  `:515-516`); the recipe, ingredient and `origin.*` strings; and `recipeOrigins` in the product list
+  (`apps/dashboard/src/widgets/product-list.ts:105-107`). Today the list's "has dietary info" check
+  reads it (`:112`, `:119`). After this it reads the declarations and the override alone.
+- **The permission:** `recipe.manage` (`packages/identity/src/permissions.ts:27`, `:69`). Its one gate is
+  `apps/server/src/recipe-api.ts:31`.
+- **Schema lists:** `packages/db/src/schema/recipes.ts`, `packages/db/src/classification.ts:119-120`,
+  `packages/db/src/index.ts:176`, and `packages/db/src/configuration-transfer.ts:74-75`, so the
+  configuration bundle's `version` moves on again (§1.1).
+- **The `dietDerivation` field, which reaches further than `products`:** the menu types and change lists
+  (`packages/catalogue/src/menu-types.ts:49`, `:82`, `:144`, `menu-document.ts:755`,
+  `menu-navigation.ts:175`), so a new menu document stops carrying it; the line's frozen copy
+  (`packages/venue-service/src/schema/service.ts:271`, `operations.ts:1200`, `:1219`,
+  `apps/server/src/working-order.ts:5215`, `:5426`, `packages/module/src/module.ts:239`, `:439`, `:1195`),
+  which `tables-ordersales.md` §1.2 no longer takes; and the till
+  (`apps/till/src/api/client.ts:391`, `:407`, `:423`, `:528`, `apps/till/src/state/as-served.ts:37`).
+- **Guards and CI:** `scripts/schema-constraints.test.ts:274-275`, `:489`, `scripts/changed-scope.mjs:314`
+  and `.github/workflows/ci.yml:3415`. Adding or removing a workspace package also touches the root
+  guards' shard lists (CLAUDE.md §2).
+- **Fixtures:** `apps/server/src/testing/fixtures/configuration-v1-before-printing-retirement.json:135-136`
+  and the `madrid-before-move` files in `packages/country-es/test-fixtures/demo/`, which name both
+  tables, holding no rows.
+- **Not touched:** `apps/server/src/kitchen-allergy.ts:247`, `:251` and `:289` say "ingredients", but they
+  mean a dish's declared allergens: `readAsServedAllergens` reads the line, and the word is only a label
+  for what changed. That code stays.
 
 ---
 
@@ -688,13 +727,13 @@ replication, not a second-box-only feature.
 | products: parent composite FK | a plain self FK, RESTRICT |
 | products: `products_parent_id_key`, FKs to category and course | products |
 | products: course index | products |
-| products: `products_name_key_idx` | **dropped** with `name_key` (subject to §8, item 2) |
+| products: `products_name_key_idx` | **dropped** with `name_key` (subject to §8, item 1) |
 | products: triggers `variant_one_level_insert`, `variant_parent_fixed_update`, `id_fixed_update` | products, unchanged |
 | products: triggers `ordering_check_insert`/`_update` | a declared CHECK on `products.ordering`; triggers dropped |
 | products: `products_media_image_fk_{insert,update,parent_delete,parent_rename}` | unchanged |
 | location_catalogues PK and FKs | **dropped** with the table (owner, 2026-11-04) |
-| ingredients: `ingredients_dietary_origin_ck` | ingredients |
-| recipe_lines: FKs, indexes, `recipe_lines_product_ingredient_key` | recipe_lines (the unique pair may become the PK) |
+| ingredients: `ingredients_dietary_origin_ck` | **dropped** with the table (owner, 2026-11-04): recipes removed |
+| recipe_lines: FKs, indexes, `recipe_lines_product_ingredient_key` | **dropped** with the table (owner, 2026-11-04): recipes removed |
 | purchase_invoices: expression unique index, received index, regime CHECK, deductible CHECK | purchase_invoices |
 | purchase_invoice_vat: cascade FK, index, rate CHECK, kind CHECK | purchase_invoice_vat |
 | content_languages: `_singleton_ck` | not needed (one `settings` row per module by primary key) |
@@ -728,12 +767,12 @@ replication, not a second-box-only feature.
 | catalogue_settings: singleton, vat CHECK | moved to code (`settings.menu` validator) |
 | content_suggestion_jobs, content_suggestions: all keys, CHECKs, indexes | unchanged |
 | menu_period_staff_menus: PK | **moved to code**: `writeMenuPeriod` refuses a duplicate |
-| menu_period_staff_menus: menu FK | **moved to code**: `writeMenuPeriod` refuses an unknown or inactive menu, and the import check moves onto the list; menus are never deleted (§1.23) |
+| menu_period_staff_menus: menu FK | **moved to code**: `writeMenuPeriod` refuses an unknown or inactive menu, and the import check moves onto the list; menus are never deleted (§1.21) |
 | menu_period_staff_menus: composite period FK `(period_id, department_id)` cascade | not needed (the list is on the period) |
 | menu_periods: FKs, name unique, name CHECK, colour CHECK | unchanged |
-| menu_periods: `menu_periods_department_key` | kept: `opening_hours` and `routing_cell_periods` target it (§1.23) |
+| menu_periods: `menu_periods_department_key` | kept: `opening_hours` and `routing_cell_periods` target it (§1.21) |
 | media_images: filename unique, date index, filename CHECK, names CHECK | unchanged |
-| media_image_data: PK, cascade FK | `media_images.original_hash` FK restrict; deletion by code (§1.25) |
+| media_image_data: PK, cascade FK | `media_images.original_hash` FK restrict; deletion by code (§1.23) |
 | media_image_blobs: hash CHECK | `media_blobs` hash CHECK, plus a format CHECK |
 | media_image_edits: image FK cascade | not needed |
 | media_image_edits: source FK restrict, focus/zoom/revision/filename CHECKs | `media_images` |
@@ -748,8 +787,8 @@ replication, not a second-box-only feature.
 | a menu's root and home sections | `menu_details.root_section_id`/`default_home_layout_id` and `sections.role` + `owner_menu_id` (`section-graph.ts:91-93`) | `sections` with a unique `(owner_menu_id, role)` |
 | a menu's staff name | `catalogues.name` and the root section's `internal_name`; a rename writes both (`operations.ts:878-886`), a copy writes both (`menu-copy.ts:69`) | `menus.name` |
 | whether a product is sold by weight | `products.pricing_unit` and `units.hardware_unit` via `product_units` (`operations.ts:331-333`) | `products.unit_id` → `units.hardware_unit` |
-| a product's published allergens and diet | `products.allergens`/`diet`/`recipe_derivation`/`diet_derivation`, computed from `manual_allergens`, `diet_override`, `recipe_lines`, `ingredients` | the inputs; worked out on read (after §8, item 1) |
-| a product's folded name | `products.name_key` and `name` | `name` (after §8, item 2) |
+| a product's published allergens and diet | `products.allergens` and `diet`, computed from `manual_allergens` and `diet_override` | `products.allergens`, holding the declaration, and `diet_override`; the diet profile is worked out on read |
+| a product's folded name | `products.name_key` and `name` | `name` (after §8, item 1) |
 | a queued edition's time and author | `menu_scheduled_publications.queued_at`/`queued_by` = `menu_versions.published_at`/`published_by` (`menu-schedule.ts:58-67`) | `menu_versions.created_at`/`created_by` |
 | the live version and since when | `menu_publications.version_id`/`published_at`, alongside the version and schedule rows | `menu_releases.state = 'live'` and its `activates_at` |
 | when a queued edition went live | `menu_scheduled_publications.activated_at`: written (`menu-publication.ts:166`), never read (grep `activatedAt` in `packages/catalogue/src` and `apps/dashboard/src` finds only the schema and that write) | dropped; `activates_at` is the time |
@@ -770,9 +809,8 @@ replication, not a second-box-only feature.
   `menu_periods` → `departments` and `floor_plan_sets`.
 - **Venue and box (A1301).** This design replaces A1301's `venue_catalogues` table and
   `venue_settings.default_catalogue_id` with `menus.is_default`
-  (`docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md:138`, and its S23 row at
-  `:622`). A1301 S23 must drop `venue_catalogues` from its slice, and its spec and plan change before
-  S23 is planned. That area must not add the id to its document. Both of today's homes are still on main
+  (`docs/superpowers/specs/2026-11-01-a1301-remove-location-design.md` §2.1 and its S23 row). A1301's
+  spec and plan already say so (their amendments of 2026-11-04). That area must not add the id to its document. Both of today's homes are still on main
   (`packages/db/src/schema/tenants.ts:90`, `packages/db/src/schema/location-catalogues.ts`).
   - Configuration export format 10 (#2415) carries the default as a top-level bundle field, not a
     venue field. The venue area's document must not take it back (§1.1).
@@ -793,29 +831,22 @@ replication, not a second-box-only feature.
 
 ## 8. Measure before building
 
-1. **Allergens and diet worked out on read.** Time two things on the reference data (250
-   products, 7 ingredients each, a quarter of them variants): `buildMenuDocument` for one menu, and
-   the dashboard product list read (`listProducts` plus its live query). Compare today's cached
-   columns with the same results computed from `manual_allergens`, `diet_override`, `recipe_lines`
-   and `ingredients`. **Failing result:** a product list read over about 50 ms, or a document build
-   that more than doubles. Then keep `allergens` and `diet` as caches, with a trigger or a test that
-   pins them to the inputs, and still drop `recipe_derivation`/`diet_derivation`.
-2. **Dropping `name_key`.** Time the staff-name uniqueness check by scan (fold every product name in
+1. **Dropping `name_key`.** Time the staff-name uniqueness check by scan (fold every product name in
    code, as `menu-names.ts` does) at 1,000 products. **Failing result:** more than about 20 ms per
    product save. Then keep `name_key` and its index.
-3. **The rewritten photo-in-use triggers.** Delete a photo while 3 menus are live and 2 editions are
+2. **The rewritten photo-in-use triggers.** Delete a photo while 3 menus are live and 2 editions are
    queued, with 15,000 `menu_version_images` rows, using the new join on `menu_releases`. Use
    `EXPLAIN QUERY PLAN` and a timing. **Failing result:** a full scan of `menu_version_images`, or a
    delete over 10 ms. Then add an index `(version_id)`, or a `(state, version_id)` index on
    `menu_releases`.
-4. **The size of a menu document.** Measure `length(document)` for the reference menu, times 300
+3. **The size of a menu document.** Measure `length(document)` for the reference menu, times 300
    versions a year. **Failing result:** over about 100 MB a year. Versions cannot be pruned (sales
    point at them), so the design would then need a compressed `document` or one shared store of
    unchanged sub-documents. I could not measure this: the brief allowed no test runs.
-5. **`menu_releases` versus the pointer on the sale path.** `liveVersions` reads the `live` row
+4. **`menu_releases` versus the pointer on the sale path.** `liveVersions` reads the `live` row
    instead of `menu_publications`. Time `readLiveDocuments` for 3 menus. **Failing result:** slower
    than today by more than noise. Then add a covering index `(menu_id, state)`.
-6. **The lists through a configuration export.** Export and import a period with two staff menus.
+5. **The lists through a configuration export.** Export and import a period with two staff menus.
    **Failing result:** `staff_menu_ids` arrives naming the exporting venue's menus, or out of order.
 
 ---
@@ -824,22 +855,13 @@ replication, not a second-box-only feature.
 
 The owner has settled this area's decisions on 4 November: the tables go into core (README U1); the
 default is a flag and `offered` goes; `catalogues` becomes `menus`, and the rename reaches the package,
-the settings document and the screen file; computed allergens and diet stop being stored, after §8
-item 1; replaced photo bytes are pruned; content languages join `settings.venue`; the two CHECKs are
-declared; staff menus become a list on the period; `products.catalogue_id` goes.
-
-**One question is open: the recipe screen's "Choose a catalogue" picker.** The ledger says the visible
-wording must stop saying "catalogue", and separately that `products.catalogue_id` goes. Today this
-picker filters the product list by that column (`apps/dashboard/src/screens/recipe-screen.ts:244-255`,
-`:377-395`), so with the column gone it has nothing to filter by. Two ways out:
-
-- **Remove the picker,** so the screen goes straight to "Choose a product". A product on no menu can
-  still have a recipe. *Recommended.*
-- **Keep it as "Choose a menu" / "Elige una carta",** listing that menu's products through
-  `menu_items`. A product on no menu then cannot be reached from this screen.
+the settings document and the screen file; computed allergens and diet stop being stored; recipes
+go, and the recipe screen's picker with them; replaced photo bytes are pruned; content languages join
+`settings.venue`; the two CHECKs are declared; staff menus become a list on the period;
+`products.catalogue_id` goes. No question is open in this area.
 
 **Could not establish:**
 
-- The size of a published menu document (§8, item 4).
+- The size of a published menu document (§8, item 3).
 - Whether the Cloud translation service that `content_suggestion_*` talks to is reachable today. The
   box side is built (`apps/server/src/cloud-translation.ts`); I kept the tables.

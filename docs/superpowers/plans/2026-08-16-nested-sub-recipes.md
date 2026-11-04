@@ -1,5 +1,8 @@
 # Nested sub-recipes Implementation Plan
 
+> 2026-11-04: recipes are removed under A1308 (owner), so this work is dropped, not parked; see
+> [the decision](../../backlog/back-office.md#decisions-and-deliberate-limits).
+>
 > 2026-10-16: A668 replaces allergen presence/source declarations with explicit cereal and nut
 > kinds. The historical examples below describe the earlier shape; see
 > [A668's data contract](../specs/2026-10-14-a668-allergen-info-editor-and-till-design.md#what-it-stores).

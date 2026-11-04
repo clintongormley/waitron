@@ -1296,7 +1296,8 @@ Left as they were, from #827's review: unlike the two staff
   `catalogue-screen.ts` `#load` watches `ingredients` and `recipe_lines` only from
   `#reloadProducts`, after awaited reads, so the stream that opened with the screen's other types
   is replaced once those reads answer. Decide whether the screen should watch those types from the
-  start, and check other screens that watch after an awaited read the same way.
+  start, and check other screens that watch after an awaited read the same way. A1308 removes both
+  tables, which ends the Catalogue's case; the check of other screens stays.
 
 ## A1315. Bring every help bubble down to orientation, one area per PR
 

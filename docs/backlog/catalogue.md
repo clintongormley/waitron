@@ -609,10 +609,9 @@ From **The product editor and catalogue (#345, #379, #387) — what is left open
   dish name above modifier text resolved in the device's own locale. A joined customer-facing line
   can mix languages when a locale exists on one half only. `wt-price-input` was built from scratch
   rather than on `wt-input`'s end slot. `modifier-limits.ts` holds a product rule as well as modifier
-  ones. And four interface faults seen then: the products list heads its Name column "Description",
+  ones. And three interface faults seen then: the products list heads its Name column "Description",
   "Top sellers" is rendered
-  twice on the overview, the login screen shows an error before anything is submitted, and the
-  recipe screen is not routed from anywhere.
+  twice on the overview, and the login screen shows an error before anything is submitted.
 
 ## "May contain" survives in the data with no way to see or set it
 
@@ -1216,7 +1215,7 @@ also when it is sold out; the owner chose this column over badges beside the nam
 offers the column's three states (Pending / None / Declared) rather than one "nutritional info" filter,
 so a product never checked stays apart from one checked and allergen-free. A668-3 (2026-10-16) renames the displayed Pending label to Not reviewed and applies each variant's effective state to its cell and filter; inherited badges are italic. Dietary info's "Has" means a
 categorised dietary origin from the product's recipe, or a Vegan, Vegetarian, Halal or Kosher override (owner); the list also counts a
-ticked dietary declaration. Made at offers only the stations the column names for some product, not
+ticked dietary declaration. (2026-11-04: recipes go under A1308, and the origin half of "Has" goes with them.) Made at offers only the stations the column names for some product, not
 every kitchen station, and matches the station the column shows, including a switched-off station a
 product has no replacement for; the backlog entry marked that matching "assumed, not asked".
 **2026-10-10 update:** A435 step 5 removes deleted stations from current routing settings and

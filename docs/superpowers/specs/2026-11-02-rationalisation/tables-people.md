@@ -13,18 +13,17 @@ nothing was run or timed. Row counts are for the reference venue (one restaurant
 × 4 lines, 360 days a year) and come from the area inventory unless I say otherwise.
 
 The `location_id` columns and the keys that lead with them stay until A1301's schema slices
-(`docs/superpowers/plans/2026-11-01-a1301-remove-location.md:436-475`), so each "drop `location_id`"
+(`docs/superpowers/plans/2026-11-01-a1301-remove-location.md:441-480`), so each "drop `location_id`"
 below is work those slices do anyway; this design only says what replaces each location-led key.
 
-**Result: 32 current tables → 27 target tables**, one of them a new link table. No `location_id`
-anywhere (R10).
+**Result: 32 current tables → 26 target tables.** No `location_id` anywhere (R10).
 
 | Group | Tables | Count |
 | --- | --- | --- |
 | Sign-in | `persons`, `till_sessions`, `dashboard_sessions`, `sign_in_challenges`, `account_actions`, `recovery_codes`, `webauthn_credentials` | 7 |
 | Roles | `roles`, `person_roles` | 2 |
 | The working-time record and rota | `time_entries`, `roster_versions`, `shifts`, `shift_swaps`, `absences` | 5 |
-| The attendance checker | `attendance_days`, `staff_activity`, `attendance_questions`, `attendance_answers`, `attendance_answer_entries` | 5 |
+| The attendance checker | `attendance_days`, `staff_activity`, `attendance_questions`, `attendance_answers` | 4 |
 | Built, kept for planned work | `availability`, `employments`, `shift_templates`, `pay_period_closures`, `pay_period_settings`, `convenio_config` (until A586) | 6 |
 | Staffing | `staffing_days`, `staffing_blocks` | 2 |
 
@@ -95,7 +94,9 @@ anywhere (R10).
   roles join core (README U1).
 - **One list of roles for access and for the rota** (owner, 2026-11-04). `staff_roles` and
   `person_staff_roles` go into A1002's roles and memberships, with colour, position and an on-rota
-  flag on the role, and `persons.role` goes with them. A person may hold several roles.
+  flag on the role, and `persons.role` goes with them. A person may hold several roles. A1002 lands
+  before this area's slice, so the slice only folds `staff_roles` and `person_staff_roles` in.
+  `persons.role` can only go with A1002's whole-person checks.
 - **Two-step sign-in secrets use one sealing method, with a key per purpose** (owner, 2026-11-04),
   and `WAITRON_ACCOUNT_KEY` goes (§6 item 8).
 - **Reminder emails leave the attendance tables.** `attendance_mail` becomes rows in `outgoing_mail`
@@ -247,10 +248,11 @@ and `person_roles` are proposed: A1002 leaves its storage open (its §4).
 | --- | --- | --- |
 | id | id | PK |
 | preset_key | text | null, UNIQUE where not null, CHECK staff/supervisor/manager/admin — A1002's four built-ins |
-| name, name_folded | text | null on a built-in, whose name is translated in code; set on every other role; folded UNIQUE where not null; CHECK `trim(name) <> ''` — from `staff_roles.name` |
+| name, name_folded | text | null on a built-in, whose name is translated in code; set on every other role; folded UNIQUE where not null and `retired_at` is null, so a retired role's name can be used again; CHECK `trim(name) <> ''` — from `staff_roles.name` |
 | colour | text | not null, default `grey`, CHECK the calendar colours — from `staff_roles` |
 | position | count | not null, default 0 — from `staff_roles` |
 | on_rota | bool | not null — **new**: the role appears on the rota and the staffing painter |
+| retired_at | ts | null — **new**: set when a role a shift has used is retired (owner, 2026-11-04) |
 | revision | count | not null — A1002 §3 |
 
 What A1002 stores beside this (the privilege catalogue, grants, seed completion, authority
@@ -266,8 +268,22 @@ What changes for the rota, read in `packages/staffing/src/`:
   (`routes.ts:161-162`, `:337-345`), to A1002's membership change. That needs `person.admin`, and
   the person's whole result must stay within what the assigner holds (A1002 §5). Manager holds
   `person.admin` by default (owner, 2026-11-04), so managers go on assigning roles.
-- Deleting a role a shift has used: §9 question 1.
-- A rota slot still offers people outside the role, with a warning: §9 question 2.
+- **A role a shift has used is retired, not deleted** (owner, 2026-11-04). Today the delete is refused
+  for as long as a shift names the role (`staff_role.in_use`,
+  `packages/staffing/src/staff-roles.ts:221-275`), and shifts are never deleted once published, so such
+  a role can never go. Under this design the same action sets `retired_at` and, in one transaction,
+  removes the role's memberships, its list references and its painted `staffing_blocks` rows, which
+  today go through the foreign key's cascade when the role row is deleted. The role leaves every list
+  and every holder, and its row stays, so past shifts keep the name. A role no shift has used is
+  deleted, as today. Built-in roles are neither (A1002 §3).
+- A past week's rota must still name a retired role. The cards look a shift's role up in the week's
+  list (`packages/staffing/src/dashboard/rota-cards.ts:158`), so `readRotaWeek` adds every role that
+  week's shifts name, retired or off the rota. Read, not run.
+- **The rota keeps warning about someone outside a role, and does not refuse them.** The rota offers
+  everyone, sorted into people who hold the role and people who do not
+  (`packages/staffing/src/dashboard/rota-model.ts:229-242`), and draws "outside staff role" as a warning
+  (`rota-cards.ts:112`, `:171`). `addRotaShift` checks that the role exists, not that the person holds it
+  (`rota.ts:226-249`). A manager covering a gap can put a waiter on the bar and see the warning.
 
 #### `person_roles` — merge of `persons.role` and `person_staff_roles` (state, link)
 Who holds which role, several per person (A1002 §3). 30–70 rows. PK (person_id, role_id).
@@ -421,16 +437,14 @@ deletes it today (grep of `update(attendanceResponseCommands)` in non-test code:
 | requested_by_person_id, authorized_by_person_id, person_id | id | not null, FK → persons (restrict) |
 | question_id | id | null, FK (question_id, person_id) → attendance_questions |
 | action | text | CHECK confirm/request/propose/approve/decline/accept/disagree |
+| entry_ids | json | not null; CHECK a JSON array with at least one id, as today |
 | input | json | not null |
 | created_at | ts | not null |
 
-`entry_ids` (JSON list of time-entry ids, R4) moves to the link table below; its "at least one"
-CHECK becomes a write-path assertion plus a test.
-
-#### `attendance_answer_entries` — new link table (ledger, **append-only**)
-Which working-time entries an answer wrote. ≈1–2 per answer.
-Columns: `answer_id` FK → attendance_answers, `entry_id` FK → time_entries; PK (answer_id, entry_id).
-§9 question 4 asks whether this table is still needed.
+`entry_ids` stays a list on the answer, under R4's exception for a short list owned by one row: ≈1–2 ids
+an answer, and every read found goes through the answer it belongs to
+(`attendance-response-commands.ts:44`, `:190`, `attendance-reads.ts:52`, `attendance-responses.ts:68-72`).
+The ids are labels the database does not check, which is the price of having no link table.
 
 #### `availability`, `employments`, `shift_templates` — keep (state)
 Built, with no product writer yet; they stay under the amended R5 (owner, 2026-11-04). The rota and
@@ -464,7 +478,7 @@ One painted need ("two waiters 13:00–16:00") inside a staffing day. 100–300 
 ## 2. Settings documents
 
 **None required by this design.** `pay_period_settings` and `convenio_config` are settings in shape,
-but both stay tables for now (§1; §9 question 5).
+but both stay tables (§1).
 
 ## 3. History
 
@@ -473,7 +487,7 @@ but both stay tables for now (§1; §9 question 5).
   Hours, dashboard My hours), `apps/server/src/till-clock-state.ts`, the checker
   (`end-of-day.ts:144-146`) and `packages/workforce-es/src/record-export.ts` (registro de jornada,
   which since A1301 S14/S15b (#2404, #2408) takes no location and prints the venue's name).
-- `attendance_answers` + `attendance_answer_entries` — read by `attendance-response-commands.ts`
+- `attendance_answers` — read by `attendance-response-commands.ts`
   (replay), `attendance-reads.ts`, `attendance-question-responses.ts`.
 
 **To `activity_log`.** It is for people to read, and product logic never decides from it (README
@@ -518,7 +532,7 @@ and 50–200 a day is the most frequent identity event. A reminder's sending sta
 | attendance_mail | merge into | outgoing_mail | one queue for every email (README U4); the rules that must survive are in §1 |
 | attendance_operation_facts | rename to | staff_activity | only activity with no other actor-stamped row; copies of sessions, payments, refunds, draft/group events go; `outcome` goes |
 | attendance_questions | keep | attendance_questions | gains a day FK; loses copied bounds and location |
-| attendance_response_commands | rename to | attendance_answers | becomes append-only; `entry_ids` → link table |
+| attendance_response_commands | rename to | attendance_answers | becomes append-only; `entry_ids` stays a list |
 | attendance_source_state | delete | null | a per-row change detector; replaced by per-day dirty marks and an evidence hash (§8) |
 | availability | keep | availability | built and sound; A587 builds on it (amended R5) |
 | employments | keep | employments | built and sound; the rota and overtime read it; A586 builds on it (amended R5) |
@@ -533,7 +547,7 @@ and 50–200 a day is the most frequent identity event. A reminder's sending sta
 | convenio_config | keep until A586 | convenio_config | one row per venue today; A586 replaces it with rule sets per person; loses location |
 | person_staff_roles | merge into | person_roles | one list of roles (owner, 2026-11-04) |
 | shift_assignments | merge into | shifts | one-to-one with shifts |
-| staff_roles | merge into | roles | one list of roles; colour and position kept, on-rota flag added, location lost |
+| staff_roles | merge into | roles | one list of roles; colour and position kept, on-rota flag and `retired_at` added, location lost |
 | staffing_blocks | keep | staffing_blocks | grows, a list people edit |
 | staffing_days | keep | staffing_days | has identity, blocks point at it |
 
@@ -597,7 +611,7 @@ does not name `attendance_mail`, so its move changes no backup check.
 | | CHECKs kind, bounds, activity, canonical, automatic | kept; bounds CHECK moves to `attendance_days` (where the bounds now live) |
 | | FKs to time_entries (id, person) ×3, to itself, to persons | kept, location dropped from the composite |
 | attendance_response_commands | index (person, question); CHECK action; FKs persons ×3, question composite | `attendance_answers`, kept |
-| | CHECK entry_ids non-empty JSON array | dropped with the column; the write path asserts ≥1 link row and a test pins it; the link table's two FKs are stronger than the JSON CHECK |
+| | CHECK entry_ids non-empty JSON array | `attendance_answers`, kept |
 | | (none) | **new** append-only triggers |
 | attendance_source_state | UNIQUE scope, watch index, CHECKs source/kind/shape, FK location | dropped with the table |
 | availability | index; CHECKs weekday, minutes, window, effective; FK | kept |
@@ -761,35 +775,10 @@ does not name `attendance_mail`, so its move changes no backup check.
    then sign in with their authenticator; send an emailed code, rotate, then use the code inside its
    10 minutes. Failing result: either one stops working → the rotation is not finished.
 
-## 9. Open questions for the owner
+## 9. Decisions for the owner
 
-Every earlier decision in this file is settled and stated above. These five are left.
-
-1. **Deleting a role that a shift has used.** Today the delete is refused for as long as any shift
-   names the role (`staff_role.in_use`, `packages/staffing/src/staff-roles.ts:221-275`), and shifts
-   are never deleted once published, so such a role can never go. A1002's accepted rule is removal
-   from everyone with one confirmation and no replacement, and it does not mention shifts. Example:
-   Luis filled "Barista" on 40 past shifts and the venue stops using the role. Either the delete
-   stays refused and A1002 adds that case, or the role is retired: its memberships and list
-   references go, it leaves every list, and its row stays so past shifts keep their name.
-   **Recommend** retiring it, which needs one more column on `roles`.
-2. **Should the rota refuse someone outside a role?** Today it does not. The rota offers everyone,
-   sorted into people who hold the role and people who do not
-   (`packages/staffing/src/dashboard/rota-model.ts:229-242`), and draws "outside staff role" as a
-   warning (`rota-cards.ts:112`, `:171`). `addRotaShift` checks that the role exists, not that the
-   person holds it (`rota.ts:226-249`). This design keeps that behaviour. **Recommend** keeping it:
-   a manager covering a gap can put a waiter on the bar and see the warning.
-3. **Which lands first, A1002 or this area's slice?** `persons.role` can only go with A1002's
-   whole-person checks, and A1002 is still proposed, with its question about a person left holding
-   no role (its §11) unanswered. **Recommend** A1002 first. This area's slice then only folds
-   `staff_roles` and `person_staff_roles` in.
-4. **Is `attendance_answer_entries` still needed?** It exists because R4 banned ids in JSON. The owner
-   has since allowed short lists owned by one row, and `entry_ids` is one: ≈1–2 ids an answer, and
-   every read found goes through the answer it belongs to (`attendance-response-commands.ts:44`,
-   `:190`, `attendance-reads.ts:52`, `attendance-responses.ts:68-72`). Keeping the column as today
-   saves one table and two append-only triggers, and keeps its "at least one" CHECK; the link table
-   gives each entry id a real foreign key. **Recommend** keeping the column, which makes this area 26.
-5. **Should `pay_period_settings` become `settings.workforce`?** It is one row of switches, which is
-   what R3 calls a document. Nothing in the product writes it, and A793 slice 6 will settle how it
-   is used, so moving it now gains little. `convenio_config` is the same shape, but A586 removes it.
-   **Recommend** leaving both as tables.
+Every decision in this file is settled and stated above: a role a shift has used is retired, and the
+rota keeps warning (§1, `roles`); A1002 lands first (the short version); `entry_ids` stays a list, so
+`attendance_answer_entries` goes; `pay_period_settings` stays a table. A1002's own §11 question, what
+happens to a person whose only role is deleted, is that design's to settle. No question is open in this
+area.
