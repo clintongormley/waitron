@@ -314,7 +314,7 @@ export async function splitTable(
   let firers: ReadonlyMap<string, Firer> = new Map();
   if (billId !== null) {
     await refuseUnsplittableBill(tx, partyId, billId);
-    firers = await leaveParty(tx, billId);
+    ({ firers } = await leaveParty(tx, billId, "refuse"));
   }
 
   return withMovedSlips(tx, cfg, { parties: [partyId] }, async () => {

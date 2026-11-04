@@ -10,21 +10,25 @@ import {
   orderGroupEvents,
   orderGroupHoldStations,
   orderGroups,
+  parties,
+  partyTables,
+  printJobs,
   ticketItems,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
-import { setRoutingCell } from "@waitron/venue-service";
+import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
 import { createCourse, createStation } from "./kitchen.js";
 import { copyHeldGroups, snoozeReminder } from "./order-groups.js";
 import { saveDraft } from "./order-drafts.js";
-import { insertPartyBill } from "./parties.js";
+import { holderOf, insertPartyBill } from "./parties.js";
 import { readBillEditState } from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
+import { moveBill, type MoveTarget } from "./testing/move-bill-fixture.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import {
   readChangesAfterSending,
@@ -36,6 +40,7 @@ import {
   commandFor,
   inTx,
   orderForParty,
+  revisionOf,
   seatWithNoAllergies as seat,
   setupPartyVenue,
   type PartyVenue,
@@ -625,5 +630,170 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
         },
       ]),
     ).rejects.toMatchObject({ code: "group.not_held", params: { groupId: g } });
+  });
+});
+
+/** Moves the whole bill with the real `moveBill`, reading both parties' revisions first. */
+async function moveWholeBill(billId: string, partyId: string, to: MoveTarget) {
+  const target = "tableId" in to ? await inTx(v, (tx) => holderOf(tx, to.tableId)) : null;
+  const options = {
+    operatorId: OPERATOR,
+    partyId,
+    expectedPartyRevision: await revisionOf(v, partyId),
+    otherPartyId: target,
+    ...(target === null ? {} : { expectedOtherPartyRevision: await revisionOf(v, target) }),
+  };
+  return inTx(v, (tx) => moveBill(tx, v.cfg, billId, to, options));
+}
+
+/** Every row of the tables a move writes, for these parties and bills, in a stable order. */
+async function rowsOf(partyIds: string[], billIds: string[]) {
+  const groups = await v.db
+    .select()
+    .from(orderGroups)
+    .where(inArray(orderGroups.partyId, partyIds))
+    .orderBy(asc(orderGroups.id));
+  const groupIds = groups.map((group) => group.id);
+  const drafts = await v.db
+    .select()
+    .from(orderDrafts)
+    .where(inArray(orderDrafts.billId, billIds))
+    .orderBy(asc(orderDrafts.id));
+  const draftIds = drafts.map((draft) => draft.id);
+  return {
+    groups,
+    holdStations: await v.db
+      .select()
+      .from(orderGroupHoldStations)
+      .where(inArray(orderGroupHoldStations.groupId, groupIds))
+      .orderBy(asc(orderGroupHoldStations.groupId), asc(orderGroupHoldStations.stationId)),
+    events: await v.db
+      .select()
+      .from(orderGroupEvents)
+      .where(inArray(orderGroupEvents.partyId, partyIds))
+      .orderBy(asc(orderGroupEvents.id)),
+    lines: await v.db
+      .select()
+      .from(workingOrderLines)
+      .where(inArray(workingOrderLines.workingOrderId, billIds))
+      .orderBy(asc(workingOrderLines.id)),
+    tickets: await ticketsOf(billIds),
+    notices: await v.db
+      .select()
+      .from(kitchenNotices)
+      .where(inArray(kitchenNotices.workingOrderId, billIds))
+      .orderBy(asc(kitchenNotices.id)),
+    printJobs: await v.db.select().from(printJobs).orderBy(asc(printJobs.id)),
+    drafts,
+    draftLines: await v.db
+      .select()
+      .from(orderDraftLines)
+      .where(inArray(orderDraftLines.draftId, draftIds))
+      .orderBy(asc(orderDraftLines.id)),
+    recalledLines: await v.db
+      .select()
+      .from(orderDraftRecalledLines)
+      .where(inArray(orderDraftRecalledLines.draftId, draftIds))
+      .orderBy(asc(orderDraftRecalledLines.id)),
+    parties: await v.db
+      .select()
+      .from(parties)
+      .where(inArray(parties.id, partyIds))
+      .orderBy(asc(parties.id)),
+    partyTables: await v.db
+      .select()
+      .from(partyTables)
+      .where(inArray(partyTables.partyId, partyIds))
+      .orderBy(asc(partyTables.partyId), asc(partyTables.tableId)),
+    bills: await v.db
+      .select()
+      .from(workingOrders)
+      .where(inArray(workingOrders.id, billIds))
+      .orderBy(asc(workingOrders.id)),
+  };
+}
+
+function kitchenItemOf(lineId: string) {
+  return v.db
+    .select()
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderLineId, lineId))
+    .then((rows) => rows[0]!);
+}
+
+describe("A803 waiting copy: Move this bill", () => {
+  it("A803 waiting copy: Move this bill to a free table takes a held dish, held, in its own copy of the group", async () => {
+    const a = await seatWith([
+      { names: ["Burger"], release: "fire" },
+      { names: ["Flan"], release: "hold" },
+    ]);
+    const source = (await lineOf(a.billId, "Flan")).groupId!;
+    const tableId = await v.table(`Copy ${++tableNumber}`);
+
+    const result = await moveWholeBill(a.billId, a.partyId, { tableId });
+
+    expect(result.billId).toBe(a.billId);
+    expect(result.partyId).not.toBeNull();
+    expect(result.partyId).not.toBe(a.partyId);
+    const flan = await lineOf(a.billId, "Flan");
+    expect(flan.groupId).not.toBe(source);
+    expect(await groupRow(flan.groupId!)).toMatchObject({
+      partyId: result.partyId,
+      state: "held",
+      firedAt: null,
+    });
+    expect(await kitchenItemOf(flan.id)).toMatchObject({ firedAt: null, requestedAt: null });
+    expect((await groupRow(source)).state).toBe("removed");
+  });
+
+  it("A803 waiting copy: Move this bill to a seated table takes a held dish, held, in its own copy of the group after all of that party's groups", async () => {
+    const a = await seatWith([
+      { names: ["Burger"], release: "fire" },
+      { names: ["Flan"], release: "hold" },
+    ]);
+    const source = (await lineOf(a.billId, "Flan")).groupId!;
+    const b = await seatWith([
+      { names: ["Agua"], release: "fire" },
+      { names: ["Tarta"], release: "hold" },
+    ]);
+    const before = await groupsOf(b.partyId);
+    const [table] = await v.db
+      .select({ tableId: partyTables.tableId })
+      .from(partyTables)
+      .where(eq(partyTables.partyId, b.partyId));
+
+    const result = await moveWholeBill(a.billId, a.partyId, { tableId: table!.tableId });
+
+    expect(result).toEqual({ partyId: b.partyId, billId: a.billId });
+    const burger = await lineOf(a.billId, "Burger");
+    const flan = await lineOf(a.billId, "Flan");
+    const after = await groupsOf(b.partyId);
+    expect(after.map((group) => [group.id, group.state])).toEqual([
+      [before[0]!.id, "fired"],
+      [before[1]!.id, "held"],
+      [burger.groupId, "fired"],
+      [flan.groupId, "held"],
+    ]);
+    expect(flan.groupId).not.toBe(source);
+    expect(after[3]).toMatchObject({ partyId: b.partyId, state: "held", firedAt: null });
+    expect(await kitchenItemOf(flan.id)).toMatchObject({ firedAt: null, requestedAt: null });
+    expect((await groupRow(source)).state).toBe("removed");
+  });
+
+  it("A803 waiting copy: Move this bill to the counter still refuses a held dish, writing nothing", async () => {
+    const a = await seatWith([
+      { names: ["Burger"], release: "fire" },
+      { names: ["Flan"], release: "hold" },
+    ]);
+    const before = await rowsOf([a.partyId], [a.billId]);
+
+    await expect(
+      moveWholeBill(a.billId, a.partyId, { counter: { zoneId: v.counter.zoneId } }),
+    ).rejects.toMatchObject({
+      code: "group.held_leaves_party",
+      params: { tabId: a.billId, lineNo: 2 },
+    });
+
+    expect(await rowsOf([a.partyId], [a.billId])).toEqual(before);
   });
 });

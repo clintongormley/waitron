@@ -4733,7 +4733,107 @@ describe("source-backed draft foundations", () => {
     expect((await inTx((tx) => readPartyAllergy(tx, target.partyId))).ticks).toEqual(ticksBefore);
   });
 
-  it.each(["free table", "occupied table", "split table"] as const)(
+  it.each(["free table", "occupied table"] as const)(
+    "a recalled companion travels as a draft row while active held work leaves for a %s with its own copy of the group",
+    async (destination) => {
+      const v = await setupVenue();
+      const moving = await movingFamily(v, "held");
+      const active = await family(v, moving.billId, 3);
+      await db
+        .update(workingOrderLines)
+        .set({ groupId: moving.groupId })
+        .where(eq(workingOrderLines.id, active.parentId));
+      const target = destination === "occupied table" ? await seated(v, "Occupied") : null;
+      const tableId =
+        target?.tableId ??
+        (await inTx(
+          async (tx) =>
+            (await createTable(tx, v.cfg, { label: "Destination", zoneId: v.zoneId })).id,
+        ));
+      const freshBefore = await storedLines(moving.draft.id);
+      const [recalledBefore] = await db
+        .select()
+        .from(orderDraftRecalledLines)
+        .where(eq(orderDraftRecalledLines.id, moving.id));
+
+      const result = await inTx(async (tx) =>
+        moveBill(
+          tx,
+          v.cfg,
+          moving.billId,
+          { tableId },
+          {
+            operatorId: SAM,
+            partyId: moving.from.partyId,
+            expectedPartyRevision: await partyRevision(moving.from.partyId),
+            otherPartyId: target?.partyId ?? null,
+            ...(target === null
+              ? {}
+              : { expectedOtherPartyRevision: await partyRevision(target.partyId) }),
+          },
+        ),
+      );
+
+      const partyId = result.partyId!;
+      const [copy] = await db
+        .select()
+        .from(orderGroups)
+        .where(and(eq(orderGroups.partyId, partyId), eq(orderGroups.state, "held")));
+      expect(copy).toMatchObject({ partyId, state: "held", firedAt: null });
+      expect(copy!.id).not.toBe(moving.groupId);
+      const lines = await db
+        .select({ id: workingOrderLines.id, groupId: workingOrderLines.groupId })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, moving.billId))
+        .orderBy(asc(workingOrderLines.lineNo));
+      expect(lines).toEqual([
+        { id: moving.parentId, groupId: null },
+        { id: moving.extraId, groupId: null },
+        { id: active.parentId, groupId: copy!.id },
+        { id: active.extraId, groupId: copy!.id },
+      ]);
+      expect(
+        await db
+          .select()
+          .from(orderDraftRecalledLines)
+          .where(eq(orderDraftRecalledLines.id, moving.id)),
+      ).toEqual([{ ...recalledBefore!, afterGroupId: copy!.id }]);
+      expect(await storedLines(moving.draft.id)).toEqual([
+        { ...freshBefore[0]!, joinGroupId: copy!.id },
+        { ...freshBefore[1]!, afterGroupId: copy!.id },
+      ]);
+      expect(
+        (await db.select().from(orderGroups).where(eq(orderGroups.id, moving.groupId)))[0],
+      ).toMatchObject({ partyId: moving.from.partyId, state: "removed" });
+      const read = (await draftsOf(v, partyId)).find((row) => row.id === moving.draft.id)!;
+      expect(read.lines).toMatchObject([
+        { id: moving.draft.lines[0]!.id, slot: 0, joinGroupId: copy!.id },
+        { id: moving.draft.lines[1]!.id, slot: 2, afterGroupId: copy!.id },
+        { id: moving.id, sourceLineId: moving.parentId, slot: 2, afterGroupId: copy!.id },
+      ]);
+      const saved = await save(v, partyId, ALEX, read.id, read.revision, [
+        { ...item(v, "beer"), id: read.lines[0]!.id, joinGroupId: read.lines[0]!.joinGroupId },
+        {
+          ...item(v, "fish"),
+          id: read.lines[1]!.id,
+          slot: 2,
+          afterGroupId: read.lines[1]!.afterGroupId,
+        },
+        {
+          ...sourceInput(moving.id, moving.parentId),
+          courseId: v.courseId,
+          afterGroupId: read.lines[2]!.afterGroupId,
+        },
+      ]);
+      expect(saved.lines).toMatchObject([
+        { id: moving.draft.lines[0]!.id, joinGroupId: copy!.id },
+        { id: moving.draft.lines[1]!.id, afterGroupId: copy!.id },
+        { id: moving.id, sourceLineId: moving.parentId, afterGroupId: copy!.id },
+      ]);
+    },
+  );
+
+  it.each<"free table" | "occupied table" | "split table">(["split table"])(
     "a recalled companion does not let active held work leave for a %s, and refusal changes nothing",
     async (destination) => {
       const v = await setupVenue();

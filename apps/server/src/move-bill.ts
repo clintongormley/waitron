@@ -24,7 +24,12 @@ import {
 import type { BillEditExpected } from "./order-drafts.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
-import { groupArrivingDishes, printHoldTickets, type Firer } from "./order-groups.js";
+import {
+  copyHeldGroups,
+  groupArrivingDishes,
+  printHoldTickets,
+  type Firer,
+} from "./order-groups.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import {
   applyPartyAllergyPatch,
@@ -194,7 +199,13 @@ async function moveBillOnce(
   const source = path.partyId === null ? null : await readSourceParty(tx, path.partyId);
   const noteScope = path.partyId === null ? { workingOrderId: billId } : { partyId: path.partyId };
   let firers: ReadonlyMap<string, Firer> = new Map();
-  if (source !== null) firers = await leaveParty(tx, billId);
+  let heldLineIds: string[] = [];
+  if (source !== null)
+    ({ firers, heldLineIds } = await leaveParty(
+      tx,
+      billId,
+      destination.kind === "counter" ? "refuse" : "keep",
+    ));
   const before = await readSentWork(tx, billId);
 
   let result: MoveBillResult;
@@ -256,6 +267,8 @@ async function moveBillOnce(
       firers,
       activity,
     ));
+    if (source !== null)
+      await copyHeldGroups(tx, source.id, partyId, heldLineIds, options.operatorId, activity);
     result = { partyId, billId };
   } else {
     const partyId = destination.partyId;
@@ -272,6 +285,8 @@ async function moveBillOnce(
       firers,
       activity,
     ));
+    if (source !== null)
+      await copyHeldGroups(tx, source.id, partyId, heldLineIds, options.operatorId, activity);
     await VENUE_SERVICE.allocateBillNumber(tx, billId, partyId);
     await moveBillDraftsToParty(tx, billId, partyId, expectedEdit);
     result = { partyId, billId };
@@ -308,7 +323,7 @@ export async function moveSettledBillToCounter(
     throw new AppError("management.request_invalid", { field: "billId" });
   const before = await workStillToCome(tx, await readSentWork(tx, billId));
   await inheritKitchenNote(tx, cfg, from, { workingOrderId: billId }, "copy");
-  await leaveParty(tx, billId);
+  await leaveParty(tx, billId, "refuse");
   await tx.update(workingOrders).set({ partyId: null }).where(eq(workingOrders.id, billId));
   await VENUE_SERVICE.releaseBillNumber(tx, billId);
   await relocateBillEditor(tx, billId, expectedEdit);
@@ -491,19 +506,23 @@ export async function takeIntoParty(
 }
 
 /**
- * Active held kitchen work cannot leave its party. Recalled sources travel as unsent draft rows.
- * Sent dishes leave their groups, keeping their ticket and served state. Returns,
- * by line id, the person or kitchen display that fired each dish's group, for the dishes that were
- * in one.
+ * Take the bill's dishes out of their party's groups. A dish of a held group, not recalled into a
+ * draft, is refused `group.held_leaves_party` under `held: "refuse"`; under `"keep"` it stays in
+ * its group and its id is returned in `heldLineIds`, for the caller to give it a copy of the group
+ * at the party it joins ({@link copyHeldGroups}). Recalled sources travel as unsent draft rows.
+ * Sent dishes leave their groups, keeping their ticket and served state. `firers` maps each dish
+ * that was in a fired group, by line id, to the person or kitchen display that fired it.
  */
 export async function leaveParty(
   tx: Transaction,
   billId: string,
-): Promise<ReadonlyMap<string, Firer>> {
+  held: "refuse" | "keep",
+): Promise<{ firers: ReadonlyMap<string, Firer>; heldLineIds: string[] }> {
   const lines = await tx
     .select({
       id: workingOrderLines.id,
       groupId: workingOrderLines.groupId,
+      groupState: orderGroups.state,
       firedBy: orderGroups.firedBy,
       firedByDeviceId: orderGroups.firedByDeviceId,
       recalledId: orderDraftRecalledLines.id,
@@ -517,21 +536,24 @@ export async function leaveParty(
     .where(
       and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
     );
-  await refuseHeldLeavingParty(
-    tx,
-    billId,
-    lines.filter((line) => line.recalledId === null).map((line) => line.id),
-  );
+  const staysHeld = (line: (typeof lines)[number]) =>
+    held === "keep" && line.groupState === "held" && line.recalledId === null;
+  if (held === "refuse")
+    await refuseHeldLeavingParty(
+      tx,
+      billId,
+      lines.filter((line) => line.recalledId === null).map((line) => line.id),
+    );
   await clearGroups(
     tx,
-    lines.filter((line) => line.groupId !== null).map((line) => line.id),
+    lines.filter((line) => line.groupId !== null && !staysHeld(line)).map((line) => line.id),
   );
   const firers = new Map<string, Firer>();
   for (const line of lines) {
     if (line.firedBy !== null) firers.set(line.id, { personId: line.firedBy });
     else if (line.firedByDeviceId !== null) firers.set(line.id, { deviceId: line.firedByDeviceId });
   }
-  return firers;
+  return { firers, heldLineIds: lines.filter(staysHeld).map((line) => line.id) };
 }
 
 /**
