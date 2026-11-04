@@ -2030,10 +2030,12 @@ export async function readNamesOnPaper(
 }
 
 /**
- * A reader of which of `tableIds` a party held at a time, in epoch milliseconds, or, when it held
- * none then, the first party along its merges that did. A closed party's rows are gone, and it keeps
- * only the label of every table it ever held, so up to its closing it answers all of those: a table
- * it joined after that time counts as held.
+ * A reader of which of `tableIds` a party held at a time, in epoch milliseconds, or, after it closed,
+ * the next party along its merges. A closed party's rows are gone, and it keeps only the label of
+ * every table it ever held, in the order it joined them, so up to its closing it answers the first
+ * of those among `tableIds`, or nothing when none is. That leans towards telling, because a needless
+ * slip costs a line of paper and a missed one can send a plate to the wrong guests. It can still
+ * miss: a first table let go before the paper printed, back here through another party.
  */
 async function readTablesHeldOverTime(
   tx: Transaction,
@@ -2073,26 +2075,28 @@ async function readTablesHeldOverTime(
     .select({ id: diningTables.id, label: diningTables.label })
     .from(diningTables)
     .where(inArray(diningTables.id, [...tableIds]));
+  const idByLabel = new Map(tables.map((table) => [table.label, table.id]));
   return (partyId, at) => {
     const seen = new Set<string>();
     let party = partyById.get(partyId);
     while (party !== undefined && !seen.has(party.id)) {
       seen.add(party.id);
       const { id, closedAt, tableNames } = party;
-      const held =
-        closedAt === null
-          ? seats
-              .filter(
-                (seat) =>
-                  seat.partyId === id &&
-                  Date.parse(seat.joinedAt) <= at &&
-                  (seat.leftAt === null || Date.parse(seat.leftAt) >= at),
-              )
-              .map((seat) => seat.tableId)
-          : at < Date.parse(closedAt)
-            ? tables.filter((table) => tableNames?.includes(table.label)).map((table) => table.id)
-            : [];
-      if (held.length > 0) return new Set(held);
+      if (closedAt === null) {
+        return new Set(
+          seats
+            .filter(
+              (seat) =>
+                seat.partyId === id &&
+                Date.parse(seat.joinedAt) <= at &&
+                (seat.leftAt === null || Date.parse(seat.leftAt) >= at),
+            )
+            .map((seat) => seat.tableId),
+        );
+      }
+      if (at < Date.parse(closedAt)) {
+        return new Set((tableNames ?? []).flatMap((name) => idByLabel.get(name) ?? []).slice(0, 1));
+      }
       party = party.next === null ? undefined : partyById.get(party.next);
     }
     return new Set();
@@ -2102,7 +2106,7 @@ async function readTablesHeldOverTime(
 /**
  * {@link enqueueMovedSlipsFor} for the dishes of `before` no name on whose paper
  * ({@link readNamesOnPaper}) is still one of their order's places, so long as the order had a name
- * at all. One slip per order, naming only those dishes.
+ * at all. One slip per order per station, naming only those dishes.
  */
 export async function enqueueMovedSlipsForNamesGone(
   tx: Transaction,
