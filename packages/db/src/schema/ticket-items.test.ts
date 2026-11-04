@@ -200,6 +200,13 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     expect(indexes.map((row) => row.name)).toContain("ticket_items_order_idx");
   });
 
+  it("A773 retired storage: a migrated database has no pass marks table", () => {
+    const tables = suite.db.all<{ name: string }>(
+      sql`select name from sqlite_master where name = 'pass_item_marks'`,
+    );
+    expect(tables).toEqual([]);
+  });
+
   it("carries a nullable note column (spec §2/§3, NON-FISCAL)", async () => {
     const meta = suite.db
       .all<{ name: string; type: string; notnull: number }>(

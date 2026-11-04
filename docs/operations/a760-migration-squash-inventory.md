@@ -256,7 +256,7 @@ These 187 source rows were obtained by importing today’s descriptors, not infe
 | `kitchen_station_timing`                 | `kitchen_station_timing`                     | `packages/db/src/classification.ts:118`           |
 | `kitchen_courses`                        | `kitchen_courses`                            | `packages/db/src/classification.ts:119`           |
 | `station_printers`                       | `station_printers`                           | `packages/db/src/classification.ts:120`           |
-| `pass_item_marks`                        | `pass_item_marks`                            | `packages/db/src/classification.ts:122`           |
+| `pass_item_marks` (dropped 2026-11-04, A773-2 PR D) | `pass_item_marks`                            | `packages/db/src/classification.ts` (its `classify("pass_item_marks", …)` entry removed by A773-2 PR D) |
 | `ticket_item_moves`                      | `ticket_item_moves`                          | `packages/db/src/classification.ts:127`           |
 | `printers`                               | `printers`                                   | `packages/db/src/classification.ts:131`           |
 | `page_printers`                          | `page_printers`                              | `packages/db/src/classification.ts:132`           |
@@ -405,6 +405,8 @@ These 187 source rows were obtained by importing today’s descriptors, not infe
 **2026-10-25 (A980 S2b):** workforce 0010 adds `attendance_operation_facts_person_idx`, `shift_swaps_requested_by_person_idx` and `shift_swaps_to_person_idx`. A squash writes the end state.
 
 **2026-10-26 (A797 slice 6):** core 0193 adds `kitchen_stations.ready_warning_after_minutes`. A squash writes the end state.
+
+**2026-11-04 (A773-2 PR D):** core 0205 drops `pass_item_marks`. A squash leaves it out.
 
 ## Removed and superseded material
 

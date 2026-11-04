@@ -231,8 +231,6 @@ const EXPECTED_FOREIGN_KEYS = [
   ["parties", ["merged_into_party_id"], "parties"],
   ["party_tables", ["party_id"], "parties"],
   ["party_tables", ["table_id"], "dining_tables"],
-  ["pass_item_marks", ["device_id"], "devices"],
-  ["pass_item_marks", ["ticket_item_id"], "ticket_items"],
   ["payment_hold_outcomes", ["hold_id"], "payment_holds"],
   ["payment_holds", ["payment_id"], "payments"],
   ["payment_refunds", ["payment_id"], "payments"],

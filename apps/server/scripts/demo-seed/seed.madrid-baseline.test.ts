@@ -33,7 +33,7 @@ const ADDED_TABLES = [
   "working_line_portions",
 ];
 /** Tables dropped after the capture; the seed wrote no row to them. */
-const REMOVED_TABLES = ["mirror_config", "node_roles"];
+const REMOVED_TABLES = ["mirror_config", "node_roles", "pass_item_marks"];
 const byName = <T>(tables: Record<string, T>) =>
   Object.fromEntries(Object.entries(tables).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
