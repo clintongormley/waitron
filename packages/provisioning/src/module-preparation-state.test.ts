@@ -401,6 +401,25 @@ describe("a damaged file names itself in the log", () => {
     }
   });
 
+  it("a file that read correctly and then failed to close is not called damaged", async () => {
+    const f = await fixture();
+    await fs.writeFile(join(f.stateDir, FILE), JSON.stringify({ version: 1, revisions: [] }));
+    const { open } = await vi.importActual<typeof fs>("node:fs/promises");
+    const closeFailure = Object.assign(new Error("close failed"), { code: "EIO" });
+    vi.mocked(fs.open).mockImplementationOnce(async (...args) => {
+      const handle = await open(...args);
+      const close = handle.close.bind(handle);
+      handle.close = async () => {
+        await close();
+        throw closeFailure;
+      };
+      return handle;
+    });
+    await expect(readModulePreparationRevisions({ stateDir: f.stateDir })).rejects.toBe(
+      closeFailure,
+    );
+  });
+
   it("control: a file that reads gives no refusal", async () => {
     const f = await fixture();
     await fs.writeFile(join(f.stateDir, FILE), JSON.stringify({ version: 1, revisions: [] }));

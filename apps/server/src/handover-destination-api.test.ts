@@ -1,6 +1,9 @@
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   readTenant,
@@ -50,6 +53,7 @@ const PERSON = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const SOURCE = { nodeId: "11111111-1111-4111-8111-111111111111", ...generateNodeKeyPair() };
 const BYSTANDER = { nodeId: "22222222-2222-4222-8222-222222222222", ...generateNodeKeyPair() };
 const STRANGER = { nodeId: "33333333-3333-4333-8333-333333333333", ...generateNodeKeyPair() };
+const SETTINGS = { backupSettings: null, moduleSettings: null, ringVersions: [1] };
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, CREDENTIALS_MIGRATIONS, NODE_MIGRATIONS],
@@ -59,10 +63,12 @@ let self: string;
 let app: Hono;
 let held: SignedMembershipDocument;
 let binding: HandoverBinding;
+let stateDir: string;
 
 const store = () => ({ node: suite.node as NodeDatabase, nodeId: self });
 
 beforeEach(async () => {
+  stateDir = await mkdtemp(join(tmpdir(), "handover-destination-"));
   await seedVenue(suite.db);
   self = await seedNode(suite.db);
   await stampDeployment(suite.db, "preproduction");
@@ -102,9 +108,13 @@ beforeEach(async () => {
   app = new Hono();
   mountHandoverDestinationApi(
     app,
-    { db: suite.db, node: suite.node, ring: RING, nodeId: self },
+    { db: suite.db, node: suite.node, ring: RING, nodeId: self, stateDir },
     () => undefined,
   );
+});
+
+afterEach(async () => {
+  await rm(stateDir, { recursive: true, force: true });
 });
 
 function envelopeOf(
@@ -112,7 +122,7 @@ function envelopeOf(
   signer: { nodeId: string; privateKey: string } = SOURCE,
   kind: HandoverKind = "stepdown",
 ) {
-  const body = { binding: { ...binding, ...overrides }, authorisedBy: PERSON };
+  const body = { binding: { ...binding, ...overrides }, authorisedBy: PERSON, settings: SETTINGS };
   return signEnvelope(kind, body as unknown as CanonicalValue, signer);
 }
 
@@ -245,7 +255,7 @@ describe("POST /api/node/handover/offer", () => {
       const told = new Hono();
       mountHandoverDestinationApi(
         told,
-        { db: suite.db, node: suite.node, ring: RING, nodeId: self },
+        { db: suite.db, node: suite.node, ring: RING, nodeId: self, stateDir },
         () => undefined,
         onOfferRecorded,
       );
@@ -355,8 +365,16 @@ describe("POST /api/node/handover/offer", () => {
       ["no binding", { authorisedBy: PERSON }, "body"],
       ["no person", { binding: "later" }, "body"],
       ["an extra key", { binding: "later", authorisedBy: PERSON, extra: 1 }, "body"],
-      ["a person that is not an id", { binding: "later", authorisedBy: "someone" }, "authorisedBy"],
-      ["a person that is not text", { binding: "later", authorisedBy: 7 }, "authorisedBy"],
+      [
+        "a person that is not an id",
+        { binding: "later", authorisedBy: "someone", settings: SETTINGS },
+        "authorisedBy",
+      ],
+      [
+        "a person that is not text",
+        { binding: "later", authorisedBy: 7, settings: SETTINGS },
+        "authorisedBy",
+      ],
     ])("refuses a body holding %s", async (_name, shape, field) => {
       const body =
         shape !== null && !Array.isArray(shape) && "binding" in shape
@@ -370,7 +388,11 @@ describe("POST /api/node/handover/offer", () => {
     it("refuses a binding the parser refuses", async () => {
       const envelope = signEnvelope(
         "stepdown",
-        { binding: { ...binding, scenario: "other" }, authorisedBy: PERSON } as CanonicalValue,
+        {
+          binding: { ...binding, scenario: "other" },
+          authorisedBy: PERSON,
+          settings: SETTINGS,
+        } as CanonicalValue,
         SOURCE,
       );
       expect(await post(envelope)).toEqual(
@@ -476,6 +498,167 @@ describe("POST /api/node/handover/offer", () => {
         refusal(409, "handover.operation_conflict", { operationId: OP }),
       );
       expect(events()).toEqual([]);
+    });
+  });
+
+  describe("the settings the offer carries", () => {
+    const DIGEST = "a".repeat(64);
+    const offerWith = (settings: unknown, overrides: Partial<HandoverBinding> = {}) =>
+      signEnvelope(
+        "stepdown",
+        {
+          binding: { ...binding, ...overrides },
+          authorisedBy: PERSON,
+          settings,
+        } as unknown as CanonicalValue,
+        SOURCE,
+      );
+
+    it.each([
+      ["not an object", "digest", "settings"],
+      ["a list", [], "settings"],
+      ["nothing", null, "settings"],
+      ["a missing key", { backupSettings: null, moduleSettings: null }, "settings"],
+      ["an extra key", { ...SETTINGS, extra: 1 }, "settings"],
+      [
+        "a backup digest that is not a digest",
+        { ...SETTINGS, backupSettings: "abc" },
+        "settings.backupSettings",
+      ],
+      [
+        "a backup digest in capitals",
+        { ...SETTINGS, backupSettings: "A".repeat(64) },
+        "settings.backupSettings",
+      ],
+      [
+        "a module digest that is a number",
+        { ...SETTINGS, moduleSettings: 7 },
+        "settings.moduleSettings",
+      ],
+      ["a ring that is not a list", { ...SETTINGS, ringVersions: 1 }, "settings.ringVersions"],
+      ["a ring with no versions", { ...SETTINGS, ringVersions: [] }, "settings.ringVersions"],
+      ["a ring version of nought", { ...SETTINGS, ringVersions: [0] }, "settings.ringVersions"],
+      ["a fractional ring version", { ...SETTINGS, ringVersions: [1.5] }, "settings.ringVersions"],
+      ["a ring version as text", { ...SETTINGS, ringVersions: ["1"] }, "settings.ringVersions"],
+    ])("refuses settings that are %s, recording nothing", async (_name, settings, field) => {
+      expect(await post(offerWith(settings))).toEqual(
+        refusal(400, "handover.request_invalid", { field }),
+      );
+      await expectNothingRecorded();
+    });
+
+    it("refuses an offer with settings and an extra key", async () => {
+      const envelope = signEnvelope(
+        "stepdown",
+        {
+          binding,
+          authorisedBy: PERSON,
+          settings: SETTINGS,
+          extra: 1,
+        } as unknown as CanonicalValue,
+        SOURCE,
+      );
+      expect(await post(envelope)).toEqual(
+        refusal(400, "handover.request_invalid", { field: "body" }),
+      );
+      await expectNothingRecorded();
+    });
+
+    it.each([
+      ["backup settings", { backupSettings: DIGEST }, "handover.backup_settings_differ"],
+      ["module settings", { moduleSettings: DIGEST }, "handover.modules_differ"],
+      ["a ring version this box lacks", { ringVersions: [1, 2] }, "handover.key_ring_mismatch"],
+    ])("a difference in %s refuses and records nothing", async (_name, change, code) => {
+      expect(await post(offerWith({ ...SETTINGS, ...change }))).toEqual(refusal(409, code));
+      await expectNothingRecorded();
+    });
+
+    it("a ring version this box holds beyond the offer's is no difference", async () => {
+      const ring = loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x8).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "2",
+        WAITRON_CREDENTIALS_KEY_PREVIOUS: Buffer.alloc(32, 0x7).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
+      });
+      const rotated = new Hono();
+      mountHandoverDestinationApi(
+        rotated,
+        { db: suite.db, node: suite.node, ring, nodeId: self, stateDir },
+        () => undefined,
+      );
+      const response = await rotated.request("/api/node/handover/offer", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(envelopeOf()),
+      });
+      expect(response.status).toBe(200);
+      expect(await readHandoverOperation(suite.node, self, OP)).toMatchObject({
+        state: "prepared",
+      });
+    });
+
+    it("the checks already there come first", async () => {
+      const differing = { ...SETTINGS, backupSettings: DIGEST };
+      expect(await post(offerWith(differing, { membership: { term: 9, digest: DIGEST } }))).toEqual(
+        refusal(409, "handover.membership_mismatch", { operationId: OP }),
+      );
+      await setNodeMode({ venue: suite.db, node: suite.node }, self, "primary");
+      expect(await post(offerWith(differing))).toEqual(refusal(409, "handover.not_a_spare"));
+      await expectNothingRecorded();
+    });
+
+    it("a replay of a stored operation answers its stored status, whatever the settings are now", async () => {
+      const first = await post(envelopeOf());
+      await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RETAIN=5\n");
+      expect(await post(envelopeOf())).toEqual(first);
+      await writeFile(join(stateDir, "modules.json"), "not json");
+      expect(await post(envelopeOf())).toEqual(first);
+      expect(events()).toHaveLength(1);
+    });
+
+    describe("this box's own bad file", () => {
+      const unreadableFile = refusal(409, "handover.destination_settings_unreadable", {
+        file: "modules.json",
+      });
+
+      it.each([
+        ["modules.json", "not json"],
+        ["modules.json", JSON.stringify({ modules: "every one" })],
+        ["module-preparation-state.json", "not json"],
+        ["module-preparation-state.json", JSON.stringify({ version: 2, revisions: [] })],
+      ])("a damaged %s refuses and records nothing: %s", async (file, text) => {
+        await writeFile(join(stateDir, file), text);
+        expect(await post(envelopeOf())).toEqual({
+          ...unreadableFile,
+          body: { error: { ...unreadableFile.body.error, params: { file } } },
+        });
+        await expectNothingRecorded();
+      });
+
+      it.each(["backup.env", "modules.json", "module-preparation-state.json"])(
+        "%s being a folder rather than a file refuses and records nothing",
+        async (file) => {
+          await mkdir(join(stateDir, file));
+          expect(await post(envelopeOf())).toEqual(
+            refusal(409, "handover.destination_settings_unreadable", { file }),
+          );
+          await expectNothingRecorded();
+        },
+      );
+
+      it
+        .skipIf(process.getuid?.() === 0)
+        .each(["backup.env", "modules.json", "module-preparation-state.json"])(
+        "%s with no read permission refuses and records nothing",
+        async (file) => {
+          await writeFile(join(stateDir, file), "{}");
+          await chmod(join(stateDir, file), 0o000);
+          expect(await post(envelopeOf())).toEqual(
+            refusal(409, "handover.destination_settings_unreadable", { file }),
+          );
+          await expectNothingRecorded();
+        },
+      );
     });
   });
 });

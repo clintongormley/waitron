@@ -1405,6 +1405,30 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The venue's details or its list of boxes changed after this handover was started, so it was cancelled and this box keeps selling. Start a new handover to try again.",
     es: "Los datos del local o su lista de equipos han cambiado después de empezar este traspaso, así que se ha cancelado y este equipo sigue vendiendo. Empieza un traspaso nuevo para volver a intentarlo.",
   },
+  "handover.backup_settings_differ": {
+    en: "The two boxes hold different backup settings, so the spare did not accept this handover.",
+    es: "Los dos equipos tienen ajustes de copia de seguridad distintos, así que el equipo de reserva no ha aceptado este traspaso.",
+  },
+  "handover.modules_differ": {
+    en: "The two boxes have different modules switched on, so the spare did not accept this handover.",
+    es: "Los dos equipos tienen activados módulos distintos, así que el equipo de reserva no ha aceptado este traspaso.",
+  },
+  "handover.key_ring_mismatch": {
+    en: "The spare does not hold every encryption key this box uses, so it did not accept this handover.",
+    es: "El equipo de reserva no tiene todas las claves de cifrado que usa este equipo, así que no ha aceptado este traspaso.",
+  },
+  "handover.settings_unreadable": {
+    en: "This box could not read one of its own files (backup.env, modules.json or module-preparation-state.json), so this handover did not go ahead and this box keeps selling. Once that file is repaired, start a new handover.",
+    es: "Este equipo no ha podido leer uno de sus archivos (backup.env, modules.json o module-preparation-state.json), así que este traspaso no ha seguido adelante y este equipo sigue vendiendo. Cuando ese archivo esté reparado, empieza un traspaso nuevo.",
+  },
+  "handover.destination_settings_unreadable": {
+    en: "The spare could not read one of its own files (backup.env, modules.json or module-preparation-state.json), so it did not accept this handover. Once that file is repaired, start a new handover.",
+    es: "El equipo de reserva no ha podido leer uno de sus archivos (backup.env, modules.json o module-preparation-state.json), así que no ha aceptado este traspaso. Cuando ese archivo esté reparado, empieza un traspaso nuevo.",
+  },
+  "handover.settings_changed": {
+    en: "This box's settings changed after this handover was started, so it was cancelled and this box keeps selling. Start a new handover to try again.",
+    es: "Los ajustes de este equipo han cambiado después de empezar este traspaso, así que se ha cancelado y este equipo sigue vendiendo. Empieza un traspaso nuevo para volver a intentarlo.",
+  },
   "handover.summary_failed": {
     en: "The old box could not read part of the venue's data from its final copy, so it sent neither the copy nor its description. Its venue data is unchanged. Asking again makes it take a new copy and read that.",
     es: "El equipo antiguo no ha podido leer parte de los datos del local en su copia final, así que no ha enviado ni la copia ni su descripción. Sus datos del local no han cambiado. Si se vuelve a pedir, hará una copia nueva y la leerá.",

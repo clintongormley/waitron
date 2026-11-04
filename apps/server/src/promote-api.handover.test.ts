@@ -196,7 +196,7 @@ beforeEach(async () => {
   app = new Hono();
   mountHandoverDestinationApi(
     app,
-    { db: suite.db, node: suite.node, ring: RING, nodeId: self },
+    { db: suite.db, node: suite.node, ring: RING, nodeId: self, stateDir: stateRoot },
     () => undefined,
   );
   mountPromoteApi(app, {
@@ -266,6 +266,7 @@ function offer(
     {
       binding: { ...binding, ...overrides },
       authorisedBy: AUTHORISER,
+      settings: { backupSettings: null, moduleSettings: null, ringVersions: [1] },
     } as unknown as CanonicalValue,
     SOURCE,
   );

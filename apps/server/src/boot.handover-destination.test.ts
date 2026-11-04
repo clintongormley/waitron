@@ -21,6 +21,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readHandoverOperation, setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import type { StartedServer } from "./boot.js";
+import { readOfferSettings } from "./handover-manifest.js";
 import { beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
@@ -198,6 +199,11 @@ describe("the spare's handover duty in a full start", () => {
           {
             binding: binding(LATER_OP) as unknown as CanonicalValue,
             authorisedBy: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            settings: (await readOfferSettings(
+              scratch!,
+              loadKeyRing(KEY_ENV),
+              "handover.settings_unreadable",
+            )) as unknown as CanonicalValue,
           },
           MAIN_BOX,
         ),

@@ -11,6 +11,12 @@ import { servingPrimaryNodeId } from "@waitron/membership";
 import { readHandoverOperation, readNodeMode } from "@waitron/node-db";
 import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError, isUuid } from "@waitron/shared";
+import {
+  offerSettingsDifference,
+  parseOfferSettings,
+  readOfferSettings,
+  type OfferSettings,
+} from "./handover-manifest.js";
 import { currentBinding, peerKeyOf } from "./handover-signing.js";
 import { signedHandoverStatus } from "./handover-status-api.js";
 import { recordOfferInTurn } from "./handover-promotion-turn.js";
@@ -27,25 +33,37 @@ const STATUS = {
   "handover.membership_mismatch": 409,
   "handover.operation_in_progress": 409,
   "handover.operation_conflict": 409,
+  "handover.backup_settings_differ": 409,
+  "handover.modules_differ": 409,
+  "handover.key_ring_mismatch": 409,
+  "handover.destination_settings_unreadable": 409,
 } as const;
 
-interface VerifiedOffer {
-  envelope: SignedHandoverEnvelope<unknown>;
+export interface HandoverDestinationDeps extends PeerStatusApiDeps {
+  stateDir: string;
+}
+
+interface OfferBody {
   binding: HandoverBinding;
+  settings: OfferSettings;
+}
+
+interface VerifiedOffer extends OfferBody {
+  envelope: SignedHandoverEnvelope<unknown>;
 }
 
 function invalid(field: string): never {
   throw new AppError("handover.request_invalid", { field });
 }
 
-function bindingOf(body: unknown): HandoverBinding {
+function offerBodyOf(body: unknown): OfferBody {
   if (body === null || typeof body !== "object" || Array.isArray(body)) invalid("body");
   const fields = body as Record<string, unknown>;
-  if (Object.keys(fields).sort().join() !== "authorisedBy,binding") invalid("body");
+  if (Object.keys(fields).sort().join() !== "authorisedBy,binding,settings") invalid("body");
   if (typeof fields.authorisedBy !== "string" || !isUuid(fields.authorisedBy)) {
     invalid("authorisedBy");
   }
-  return parseBinding(fields.binding);
+  return { binding: parseBinding(fields.binding), settings: parseOfferSettings(fields.settings) };
 }
 
 async function verifiedOffer(c: Context, deps: PeerStatusApiDeps): Promise<VerifiedOffer> {
@@ -55,11 +73,11 @@ async function verifiedOffer(c: Context, deps: PeerStatusApiDeps): Promise<Verif
     if (verdict.reason === "malformed" || verdict.reason === "wrong_purpose") invalid("envelope");
     throw new AppError("handover.peer_unknown", {});
   }
-  const binding = bindingOf(verdict.body);
+  const { binding, settings } = offerBodyOf(verdict.body);
   if (verdict.signerNodeId !== binding.sourceNodeId) invalid("sourceNodeId");
   if (binding.destinationNodeId !== deps.nodeId) invalid("destinationNodeId");
   if (binding.scenario !== "controlled") invalid("scenario");
-  return { envelope: raw as SignedHandoverEnvelope<unknown>, binding };
+  return { envelope: raw as SignedHandoverEnvelope<unknown>, binding, settings };
 }
 
 async function matchesThisBox(deps: PeerStatusApiDeps, binding: HandoverBinding): Promise<boolean> {
@@ -80,7 +98,7 @@ async function matchesThisBox(deps: PeerStatusApiDeps, binding: HandoverBinding)
 /** `POST /api/node/handover/offer` — a spare receives a main box's offer to hand the venue over. */
 export function mountHandoverDestinationApi(
   app: Hono,
-  deps: PeerStatusApiDeps,
+  deps: HandoverDestinationDeps,
   log: Logger,
   onOfferRecorded: () => void = () => {},
 ): void {
@@ -88,7 +106,7 @@ export function mountHandoverDestinationApi(
 
   app.post("/api/node/handover/offer", (c) =>
     run(c, log, async () => {
-      const { envelope, binding } = await verifiedOffer(c, deps);
+      const { envelope, binding, settings } = await verifiedOffer(c, deps);
       const { operationId } = binding;
       const stored = await readHandoverOperation(deps.node, deps.nodeId, operationId);
       // Before the mode and the chart: a retry must still answer once this box has moved on.
@@ -101,6 +119,13 @@ export function mountHandoverDestinationApi(
         if (!(await matchesThisBox(deps, binding))) {
           throw new AppError("handover.membership_mismatch", { operationId });
         }
+        const own = await readOfferSettings(
+          deps.stateDir,
+          deps.ring,
+          "handover.destination_settings_unreadable",
+        );
+        const difference = offerSettingsDifference(settings, own);
+        if (difference !== null) throw new AppError(difference, {});
         await beginHandoverFromOffer(deps, binding, "destination", envelope);
       });
       const recorded = await readHandoverOperation(deps.node, deps.nodeId, operationId);

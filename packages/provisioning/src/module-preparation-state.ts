@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import "./errors.js";
 import { type FirstSetupCoordinator, type FirstSetupHold } from "./first-setup-state.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
@@ -74,7 +74,8 @@ function snapshot(value: unknown): unknown {
 async function readStateFile(stateDir: string): Promise<File> {
   try {
     return parse(await readDurableHostJson(join(stateDir, FILE_NAME), LIMIT));
-  } catch {
+  } catch (error) {
+    if (!isAppError(error)) throw error;
     throw new AppError("setup.attempt_invalid", {}, { reason: `${FILE_NAME} cannot be read` });
   }
 }

@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import type { Context, Hono } from "hono";
 import { readNodeMembership } from "@waitron/db";
 import {
@@ -29,6 +30,7 @@ import {
 import { AppError, isAppError, isUuid } from "@waitron/shared";
 import { askPeerStatus, originOf, postToBox } from "./boot-peer-check.js";
 import { confirmFreshSignIn } from "./fresh-sign-in.js";
+import { isManifestStateFile, readOfferSettings, type OfferSettings } from "./handover-manifest.js";
 import { currentBinding, peerKeyOf, signAsThisBox } from "./handover-signing.js";
 import type { HandoverGate } from "./handover-gate.js";
 import { handoverPageAt, handoverPageOf } from "./handover-status-api.js";
@@ -45,6 +47,7 @@ import type { PeerStatusApiDeps } from "./peer-status-api.js";
 import "./errors.js";
 
 export interface HandoverSourceStartDeps extends PeerStatusApiDeps {
+  stateDir: string;
   advertisedOrigin: string;
   credentialKeyRing: TotpKeyRing;
   rpId: string;
@@ -89,6 +92,12 @@ const STATUS = {
   "handover.destination_unreachable": 409,
   "handover.restarted_before_stepdown": 409,
   "handover.membership_changed": 409,
+  "handover.backup_settings_differ": 409,
+  "handover.modules_differ": 409,
+  "handover.key_ring_mismatch": 409,
+  "handover.settings_unreadable": 409,
+  "handover.destination_settings_unreadable": 409,
+  "handover.settings_changed": 409,
   "handover.superseded_during_start": 409,
   "handover.restriction_conflict": 409,
   "handover.step_out_of_order": 409,
@@ -113,6 +122,10 @@ const OFFER_REFUSALS: Readonly<
   "handover.membership_mismatch": { name: "operationId", isValid: isOperationId },
   "handover.operation_in_progress": { name: "operationId", isValid: isOperationId },
   "handover.operation_conflict": { name: "operationId", isValid: isOperationId },
+  "handover.backup_settings_differ": null,
+  "handover.modules_differ": null,
+  "handover.key_ring_mismatch": null,
+  "handover.destination_settings_unreadable": { name: "file", isValid: isManifestStateFile },
 };
 
 interface StartRequest {
@@ -328,6 +341,18 @@ export function mountHandoverSourceStartApi(
     const offer = await readHandoverEvent(deps.node, deps.nodeId, operationId, "offer");
     // A fault in Waitron: this route records the offer in the transaction that begins the operation.
     if (offer?.envelope == null) throw new Error(`no offer event for handover ${operationId}`);
+    // A spare that recorded this offer answers from its store, comparing nothing, so a file that
+    // went bad or changed since is found only here.
+    let settings: OfferSettings;
+    try {
+      settings = await readOfferSettings(deps.stateDir, deps.ring, "handover.settings_unreadable");
+    } catch (error) {
+      return abandon(operationId, refusalOf(error));
+    }
+    const offered = (JSON.parse(offer.envelope) as { body: { settings: unknown } }).body.settings;
+    if (!isDeepStrictEqual(offered, settings)) {
+      return abandon(operationId, { code: "handover.settings_changed", params: {} });
+    }
     return offerThenStepDown(c, binding, destination.contactUrl, offer.envelope);
   };
 
@@ -365,9 +390,15 @@ export function mountHandoverSourceStartApi(
       destinationNodeId,
       operationId,
     );
+    const settings = await readOfferSettings(
+      deps.stateDir,
+      deps.ring,
+      "handover.settings_unreadable",
+    );
     const envelope: SignedHandoverEnvelope<CanonicalValue> = await signAsThisBox(deps, "stepdown", {
       binding: binding as unknown as CanonicalValue,
       authorisedBy: personId,
+      settings: settings as unknown as CanonicalValue,
     });
     if (deps.gate.isClosed()) {
       // A stepped-down box records nothing and offers nothing. With no operation of its own open,

@@ -2306,7 +2306,7 @@ async function bootServer(
   }
   mountHandoverDestinationApi(
     app,
-    { db, node: store.node, ring, nodeId: tradingContext.nodeId },
+    { db, node: store.node, ring, nodeId: tradingContext.nodeId, stateDir: config.stateDir },
     log,
     () => handoverDestinationDuty?.wake(),
   );
@@ -3409,6 +3409,7 @@ async function bootServer(
       node: store.node,
       ring,
       nodeId: tradingContext.nodeId,
+      stateDir: config.stateDir,
       advertisedOrigin: config.advertisedOrigin,
       credentialKeyRing: totpKeyRing,
       rpId: config.managementRpId,

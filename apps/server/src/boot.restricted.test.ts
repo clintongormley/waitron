@@ -370,6 +370,7 @@ describe("a full start's stepdown, through its test seam", () => {
               membership: { term: 1, digest: "a".repeat(64) },
             },
             authorisedBy: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            settings: { backupSettings: null, moduleSettings: null, ringVersions: [1] },
           },
           MAIN_BOX,
         ),

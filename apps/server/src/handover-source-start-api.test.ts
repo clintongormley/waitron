@@ -1,4 +1,8 @@
+import { existsSync } from "node:fs";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket, type AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { serve } from "@hono/node-server";
 import { sql } from "drizzle-orm";
@@ -99,6 +103,8 @@ let exchange: Exchange;
 let exchanged: string[];
 let stepDownAfterOffer: ReturnType<typeof vi.fn<HandoverSourceStartDeps["stepDownAfterOffer"]>>;
 let socket: TLSSocket;
+let mainState: string;
+let spareState: string;
 const closers: (() => Promise<void>)[] = [];
 
 const toSpare: Exchange = (path, init) => spareApp.request(path, init);
@@ -149,6 +155,7 @@ function mount(
       node: mainBox.node as NodeDatabase,
       ring: RING,
       nodeId: self,
+      stateDir: mainState,
       advertisedOrigin: MAIN_URL,
       credentialKeyRing: TOTP_KEY_RING,
       rpId: "localhost",
@@ -171,6 +178,10 @@ function mount(
 }
 
 beforeEach(async () => {
+  mainState = await mkdtemp(join(tmpdir(), "handover-main-state-"));
+  spareState = await mkdtemp(join(tmpdir(), "handover-spare-state-"));
+  closers.push(() => rm(mainState, { recursive: true, force: true }));
+  closers.push(() => rm(spareState, { recursive: true, force: true }));
   await seedVenue(mainBox.db);
   await seedVenue(spareBox.db);
   const tenant = await readTenant(mainBox.db);
@@ -201,7 +212,7 @@ beforeEach(async () => {
   const spareDeps = { db: spareBox.db, node: spareBox.node, ring: RING, nodeId: spare };
   mountPeerStatusApi(spareApp, spareDeps, () => undefined);
   mountHandoverStatusApi(spareApp, spareDeps, () => undefined);
-  mountHandoverDestinationApi(spareApp, spareDeps, () => undefined);
+  mountHandoverDestinationApi(spareApp, { ...spareDeps, stateDir: spareState }, () => undefined);
   app = mount();
 });
 
@@ -1150,6 +1161,306 @@ describe("two requests at once", () => {
     await start();
     await setNodeMode({ venue: spareBox.db, node: spareBox.node }, spare, "mirror");
     expect((await start({ operationId: NEXT_OP })).status).toBe(200);
+  });
+});
+
+describe("the settings the offer carries", () => {
+  const BACKUP = "WAITRON_BACKUP_RETAIN=5\nWAITRON_BACKUP_SCHEDULE=hourly\n";
+  const write = (state: string, file: string, text: string) => writeFile(join(state, file), text);
+  const switchedOff = (...names: string[]) =>
+    JSON.stringify({ modules: Object.fromEntries(names.map((name) => [name, false])) });
+
+  /** Asks first and then checks, so a spare that accepted prints its row. */
+  async function expectRefusedByTheSpare(code: string, params: object = {}): Promise<void> {
+    const answer = await start();
+    expect(operations(spareBox).map((row) => row.state)).toEqual([]);
+    expect(events(spareBox)).toEqual([]);
+    expect(answer).toEqual(refusal(409, code, params));
+    await expectAbandoned(code, params);
+  }
+
+  describe("a spare whose settings differ", () => {
+    it("An offer whose backup settings differ is refused, records nothing on the spare, and the main box records abandoned and keeps selling", async () => {
+      await write(mainState, "backup.env", BACKUP);
+      await expectRefusedByTheSpare("handover.backup_settings_differ");
+    });
+
+    it("the same when only the spare holds backup settings", async () => {
+      await write(spareState, "backup.env", BACKUP);
+      await expectRefusedByTheSpare("handover.backup_settings_differ");
+    });
+
+    it("An offer whose module settings differ is refused the same way", async () => {
+      await write(mainState, "modules.json", switchedOff("bookings"));
+      await expectRefusedByTheSpare("handover.modules_differ");
+    });
+
+    it("A ring version the spare lacks is refused the same way", async () => {
+      const rotated = loadKeyRing({
+        WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x8).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_VERSION: "2",
+        WAITRON_CREDENTIALS_KEY_PREVIOUS: Buffer.alloc(32, 0x7).toString("base64"),
+        WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
+      });
+      app = mount({ ring: rotated });
+      await expectRefusedByTheSpare("handover.key_ring_mismatch");
+    });
+
+    it("a second try with the same id answers the same refusal, sending nothing", async () => {
+      await write(mainState, "backup.env", BACKUP);
+      const first = await start();
+      exchanged = [];
+      expect(await start()).toEqual(first);
+      expect(exchanged).toEqual([]);
+    });
+
+    it("a new attempt once the settings match goes ahead", async () => {
+      await write(mainState, "backup.env", BACKUP);
+      await start();
+      await write(spareState, "backup.env", BACKUP);
+      expect((await start({ operationId: NEXT_OP })).status).toBe(200);
+      expect(operations(spareBox).map((row) => row.state)).toEqual(["prepared"]);
+    });
+  });
+
+  describe("settings that match", () => {
+    it("the same settings in another key order pass", async () => {
+      await write(mainState, "backup.env", BACKUP);
+      await write(
+        spareState,
+        "backup.env",
+        "WAITRON_BACKUP_SCHEDULE=hourly\nWAITRON_BACKUP_RETAIN=5\n",
+      );
+      await write(mainState, "modules.json", switchedOff("bookings", "workforce"));
+      await write(spareState, "modules.json", switchedOff("workforce", "bookings"));
+
+      expect((await start()).status).toBe(200);
+
+      expect(operations(spareBox).map((row) => row.state)).toEqual(["prepared"]);
+      expect(stepDownAfterOffer).toHaveBeenCalledTimes(1);
+    });
+
+    it("limit: on settings owned by the environment both digests are null and nothing compares them, and the digest reads backup.env alone", async () => {
+      await write(mainState, "trading.env", "WAITRON_BACKUP_RETAIN=5\n");
+      await write(mainState, "secrets.env", "WAITRON_BACKUP_RECOVERY_KEY=main\n");
+      await write(spareState, "trading.env", "WAITRON_BACKUP_RETAIN=9\n");
+
+      expect((await start()).status).toBe(200);
+
+      expect(operations(spareBox).map((row) => row.state)).toEqual(["prepared"]);
+    });
+
+    it("the signed offer carries digests and versions, and none of the settings' values", async () => {
+      await write(mainState, "backup.env", BACKUP);
+      await write(spareState, "backup.env", BACKUP);
+      await write(mainState, "modules.json", switchedOff("bookings"));
+      await write(spareState, "modules.json", switchedOff("bookings"));
+
+      await start();
+
+      const envelope = events()[0]!.envelope!;
+      const { settings } = (JSON.parse(envelope) as { body: { settings: Record<string, unknown> } })
+        .body;
+      expect(settings).toEqual({
+        backupSettings: expect.stringMatching(/^[0-9a-f]{64}$/),
+        moduleSettings: expect.stringMatching(/^[0-9a-f]{64}$/),
+        ringVersions: [1],
+      });
+      expect(envelope).not.toContain("hourly");
+      expect(envelope).not.toContain("bookings");
+    });
+  });
+
+  const DAMAGED = [
+    ["modules.json", "text that is not JSON", "not json"],
+    ["modules.json", "a value of the wrong kind", JSON.stringify({ modules: "every one" })],
+    ["module-preparation-state.json", "text that is not JSON", "not json"],
+    [
+      "module-preparation-state.json",
+      "the wrong shape",
+      JSON.stringify({ version: 2, revisions: [] }),
+    ],
+  ] as const;
+  const FILES = ["backup.env", "modules.json", "module-preparation-state.json"] as const;
+
+  const unreadableByPermission = async (state: string, file: string) => {
+    await write(state, file, "{}");
+    await chmod(join(state, file), 0o000);
+  };
+  const noPermissionToReadIt = process.getuid?.() === 0;
+
+  describe("this box's own bad file", () => {
+    let restart: ReturnType<typeof vi.fn<() => void>>;
+
+    /** With the real stepdown, so a route that went ahead prints a stepped-down box. */
+    function realBox(): Hono {
+      restart = vi.fn<() => void>();
+      return mount({
+        stepDownAfterOffer: async (c, binding) => {
+          await stepDown(
+            {
+              node: mainBox.node as NodeDatabase,
+              nodeId: self,
+              gate,
+              duties: { aborts: [], closers: [] },
+              close: async () => {},
+              restart,
+              log: () => undefined,
+            },
+            { binding, kind: "handed-over", self: c },
+          );
+        },
+      });
+    }
+
+    async function expectStillSellingNoOfferNoCopy(on: Hono, file: string): Promise<void> {
+      const answer = await start({}, on);
+      expect(await readHandoverRestriction(mainBox.node, self)).toBeNull();
+      expect(gate.isClosed()).toBe(false);
+      expect(restart).not.toHaveBeenCalled();
+      expect(answer).toEqual(refusal(409, "handover.settings_unreadable", { file }));
+      expect(exchanged).not.toContain(OFFER_PATH);
+      expect(existsSync(join(mainState, "handover", OP))).toBe(false);
+      await expectNothingRecorded(on);
+    }
+
+    it.each(DAMAGED)(
+      "a damaged %s holding %s refuses before any offer",
+      async (file, _name, text) => {
+        await write(mainState, file, text);
+        await expectStillSellingNoOfferNoCopy(realBox(), file);
+      },
+    );
+
+    it.each(FILES)("%s being a folder refuses before any offer", async (file) => {
+      await mkdir(join(mainState, file));
+      await expectStillSellingNoOfferNoCopy(realBox(), file);
+    });
+
+    it.skipIf(noPermissionToReadIt).each(FILES)(
+      "%s with no read permission refuses before any offer",
+      async (file) => {
+        await unreadableByPermission(mainState, file);
+        await expectStillSellingNoOfferNoCopy(realBox(), file);
+      },
+    );
+
+    it("control: with the file put right, the same real stepdown goes ahead", async () => {
+      await write(mainState, "modules.json", "{}");
+      const on = realBox();
+      expect((await start({}, on)).status).toBe(200);
+      expect(gate.isClosed()).toBe(true);
+    });
+
+    it("leaves no record, so the same id goes ahead once the file is put right", async () => {
+      await write(mainState, "modules.json", "not json");
+      await start();
+      await rm(join(mainState, "modules.json"));
+      expect((await start()).status).toBe(200);
+      expect(operations().map((row) => row.state)).toEqual(["prepared"]);
+    });
+  });
+
+  describe("the spare's own bad file", () => {
+    it.each(DAMAGED)(
+      "a damaged %s holding %s refuses, recording nothing on the spare",
+      async (file, _name, text) => {
+        await write(spareState, file, text);
+        await expectRefusedByTheSpare("handover.destination_settings_unreadable", { file });
+      },
+    );
+
+    it.each(FILES)("%s being a folder refuses the same way", async (file) => {
+      await mkdir(join(spareState, file));
+      await expectRefusedByTheSpare("handover.destination_settings_unreadable", { file });
+    });
+
+    it.skipIf(noPermissionToReadIt).each(FILES)(
+      "%s with no read permission refuses the same way",
+      async (file) => {
+        await unreadableByPermission(spareState, file);
+        await expectRefusedByTheSpare("handover.destination_settings_unreadable", { file });
+      },
+    );
+
+    it.each([
+      ["a file name that is no settings file", { file: "../secrets" }],
+      ["no file name", {}],
+    ])("a refusal naming %s is the spare being unreachable", async (_name, params) => {
+      exchange = offerAnswers(() =>
+        answered(409, {
+          error: { code: "handover.destination_settings_unreadable", params },
+        }),
+      );
+      const unreachable = { destinationNodeId: spare };
+      expect(await start()).toEqual(refusal(409, "handover.destination_unreachable", unreachable));
+      await expectAbandoned("handover.destination_unreachable", unreachable);
+    });
+  });
+
+  describe("a `prepared` one tried again", () => {
+    /** A first start that reached the seam, so the retry below is the only call to look at. */
+    async function startedThenForgotten(): Promise<void> {
+      await start();
+      stepDownAfterOffer.mockClear();
+      exchanged = [];
+    }
+
+    async function expectRefusedUnsent(code: string, params: object = {}): Promise<void> {
+      const answer = await start();
+      expect(stepDownAfterOffer).not.toHaveBeenCalled();
+      expect(answer).toEqual(refusal(409, code, params));
+      expect(exchanged).toEqual([]);
+      await expectAbandoned(code, params);
+    }
+
+    it.each(DAMAGED)(
+      "a %s damaged since, holding %s, is abandoned, sending nothing",
+      async (file, _name, text) => {
+        await startedThenForgotten();
+        await write(mainState, file, text);
+        await expectRefusedUnsent("handover.settings_unreadable", { file });
+      },
+    );
+
+    it("backup settings changed since are abandoned, sending nothing", async () => {
+      await startedThenForgotten();
+      await write(mainState, "backup.env", BACKUP);
+      await expectRefusedUnsent("handover.settings_changed");
+    });
+
+    it("module settings changed since are abandoned, sending nothing", async () => {
+      await startedThenForgotten();
+      await write(mainState, "modules.json", switchedOff("bookings"));
+      await expectRefusedUnsent("handover.settings_changed");
+    });
+
+    it("a key ring changed since is abandoned, sending nothing", async () => {
+      await startedThenForgotten();
+      app = mount({
+        ring: loadKeyRing({
+          WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 0x8).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_VERSION: "2",
+          WAITRON_CREDENTIALS_KEY_PREVIOUS: Buffer.alloc(32, 0x7).toString("base64"),
+          WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION: "1",
+        }),
+      });
+      await expectRefusedUnsent("handover.settings_changed");
+    });
+
+    it("control: the same settings in another spelling send the same offer again", async () => {
+      await write(mainState, "backup.env", BACKUP);
+      await write(spareState, "backup.env", BACKUP);
+      await startedThenForgotten();
+      await write(
+        mainState,
+        "backup.env",
+        "WAITRON_BACKUP_SCHEDULE=hourly\nWAITRON_BACKUP_RETAIN=5\n",
+      );
+      expect((await start()).status).toBe(200);
+      expect(exchanged).toEqual([OFFER_PATH]);
+      expect(stepDownAfterOffer).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

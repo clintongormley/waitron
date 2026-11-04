@@ -5,13 +5,16 @@ import {
   NODE_LOCAL_MANIFEST,
   sha256Hex,
   type NodeLocalItem,
+  type NodeLocalManifestRow,
   type RetainedRevision,
 } from "@waitron/handover";
 import { canonicalize } from "@waitron/membership";
 import { readModulePreparationRevisions } from "@waitron/provisioning";
+import { AppError, isAppError, type ErrorCode } from "@waitron/shared";
 import { parseEnvFile } from "./env-file.js";
 import { isUnset } from "./env-value.js";
 import { readModuleConfig } from "./module-config.js";
+import "./errors.js";
 
 const BACKUP_SETTINGS = "backup.env";
 const MODULE_SETTINGS = "modules.json";
@@ -28,22 +31,125 @@ export async function buildNodeLocalManifest(
   ring: KeyRing,
 ): Promise<NodeLocalItem[]> {
   const items: NodeLocalItem[] = [];
-  for (const row of NODE_LOCAL_MANIFEST) {
-    if (row.where === "state" && row.item === BACKUP_SETTINGS) {
-      items.push({ ...row, sha256: await backupSettingsDigest(stateDir) });
-    } else if (row.where === "state" && row.item === MODULE_SETTINGS) {
-      items.push({ ...row, sha256: await moduleSettingsDigest(stateDir) });
-    } else if (row.where === "state" && row.item === RING) {
-      items.push({ ...row, ringVersions: ringVersions(ring) });
-    } else if (row.where === "state" && row.item === RETAINED_SELECTIONS) {
+  for (const row of NODE_LOCAL_MANIFEST) items.push(await manifestItem(row, stateDir, ring));
+  return items;
+}
+
+async function manifestItem(
+  row: NodeLocalManifestRow,
+  stateDir: string,
+  ring: KeyRing,
+): Promise<NodeLocalItem> {
+  if (row.where !== "state") return { ...row };
+  switch (row.item) {
+    case BACKUP_SETTINGS:
+      return { ...row, sha256: await backupSettingsDigest(stateDir) };
+    case MODULE_SETTINGS:
+      return { ...row, sha256: await moduleSettingsDigest(stateDir) };
+    case RING:
+      return { ...row, ringVersions: ringVersions(ring) };
+    case RETAINED_SELECTIONS: {
       // The file holds parsed JSON, so each value is one a signed body can carry.
       const revisions = await readModulePreparationRevisions({ stateDir });
-      items.push({ ...row, revisions: revisions as readonly RetainedRevision[] });
-    } else {
-      items.push({ ...row });
+      return { ...row, revisions: revisions as readonly RetainedRevision[] };
+    }
+    default:
+      return { ...row };
+  }
+}
+
+/** What a handover offer says of the box making it, for the box receiving it to compare. */
+export interface OfferSettings {
+  readonly backupSettings: string | null;
+  readonly moduleSettings: string | null;
+  readonly ringVersions: readonly number[];
+}
+
+/**
+ * The manifest's own facts, built whole so that a file the final copy's indicator could not read
+ * is found now. `unreadable` is the refusal for that, naming the file and never what it holds.
+ */
+export async function readOfferSettings(
+  stateDir: string,
+  ring: KeyRing,
+  unreadable: "handover.settings_unreadable" | "handover.destination_settings_unreadable",
+): Promise<OfferSettings> {
+  let backupSettings: string | null = null;
+  let moduleSettings: string | null = null;
+  for (const row of NODE_LOCAL_MANIFEST) {
+    let item: NodeLocalItem;
+    try {
+      item = await manifestItem(row, stateDir, ring);
+    } catch (error) {
+      const cause = isAppError(error) ? error.code : (error as NodeJS.ErrnoException).code;
+      throw new AppError(
+        unreadable,
+        { file: row.item },
+        { reason: `${row.item}: ${cause ?? "unknown"}` },
+      );
+    }
+    if (row.where === "state" && row.item === BACKUP_SETTINGS) {
+      backupSettings = item.sha256 ?? null;
+    } else if (row.where === "state" && row.item === MODULE_SETTINGS) {
+      moduleSettings = item.sha256 ?? null;
     }
   }
-  return items;
+  return { backupSettings, moduleSettings, ringVersions: ringVersions(ring) };
+}
+
+/** Whether `file` is one of the box's own files the manifest reads. */
+export function isManifestStateFile(file: unknown): boolean {
+  return NODE_LOCAL_MANIFEST.some((row) => row.where === "state" && row.item === file);
+}
+
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+
+function refuse(field: string): never {
+  throw new AppError("handover.request_invalid", { field });
+}
+
+function digestAt(value: unknown, field: string): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string" || !SHA256_HEX.test(value)) refuse(field);
+  return value;
+}
+
+/** A received offer's settings; a wrong shape refuses `handover.request_invalid`. */
+export function parseOfferSettings(raw: unknown): OfferSettings {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) refuse("settings");
+  const fields = raw as Record<string, unknown>;
+  if (Object.keys(fields).sort().join() !== "backupSettings,moduleSettings,ringVersions") {
+    refuse("settings");
+  }
+  const { ringVersions: versions } = fields;
+  if (
+    !Array.isArray(versions) ||
+    versions.length === 0 ||
+    !versions.every((version) => Number.isSafeInteger(version) && (version as number) >= 1)
+  ) {
+    refuse("settings.ringVersions");
+  }
+  return {
+    backupSettings: digestAt(fields.backupSettings, "settings.backupSettings"),
+    moduleSettings: digestAt(fields.moduleSettings, "settings.moduleSettings"),
+    ringVersions: versions as number[],
+  };
+}
+
+/** The refusal for the first way `offered` differs from this box's `own`; a box may hold more. */
+export function offerSettingsDifference(
+  offered: OfferSettings,
+  own: OfferSettings,
+): Extract<
+  ErrorCode,
+  "handover.backup_settings_differ" | "handover.modules_differ" | "handover.key_ring_mismatch"
+> | null {
+  if (offered.backupSettings !== own.backupSettings) return "handover.backup_settings_differ";
+  if (offered.moduleSettings !== own.moduleSettings) return "handover.modules_differ";
+  if (offered.ringVersions.some((version) => !own.ringVersions.includes(version))) {
+    return "handover.key_ring_mismatch";
+  }
+  return null;
 }
 
 function ringVersions(ring: KeyRing): number[] {

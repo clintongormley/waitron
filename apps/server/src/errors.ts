@@ -226,6 +226,21 @@ declare module "@waitron/shared" {
      * differ from this box's own now, so this box closed it rather than offer it again.
      */
     "handover.membership_changed": Record<string, never>;
+    /** A handover's two boxes hold different values in `backup.env`. */
+    "handover.backup_settings_differ": Record<string, never>;
+    /** A handover's two boxes switch off different modules in `modules.json`. */
+    "handover.modules_differ": Record<string, never>;
+    /** The box handing over lists a credentials key version the receiving box does not hold. */
+    "handover.key_ring_mismatch": Record<string, never>;
+    /** The box handing over could not read `file`, one of its own files a handover needs. */
+    "handover.settings_unreadable": { file: string };
+    /** A handover's spare could not read `file`, one of its own files a handover needs. */
+    "handover.destination_settings_unreadable": { file: string };
+    /**
+     * A start request repeats a handover whose settings on this box differ from those its stored
+     * offer signed, so this box closed it rather than offer it again.
+     */
+    "handover.settings_changed": Record<string, never>;
     /**
      * A node booting as primary found, by reconciling with its cloud peer, a higher-term membership
      * document that fences it, so it boots read-only rather than sell beside the promoted primary
