@@ -154,6 +154,18 @@ async function askForIndicator(port: number): Promise<{ status: number; code: un
   return { status: response.status, code };
 }
 
+async function readStatusOfUnknown(port: number): Promise<{ status: number; code: unknown }> {
+  const response = await fetch(`http://127.0.0.1:${port}/api/node/handover/${FINAL_COPY_OP}`);
+  const text = await response.text();
+  let code: unknown = null;
+  try {
+    code = (JSON.parse(text) as { error?: { code?: unknown } }).error?.code ?? null;
+  } catch {
+    // A route that is not mounted answers no JSON.
+  }
+  return { status: response.status, code };
+}
+
 describe("a box holding a handover restriction starts restricted", () => {
   // Every case here only reads, so they share one start.
   const suite = useVenueDb({ migrations, resetPerTest: false });
@@ -217,6 +229,13 @@ describe("a box holding a handover restriction starts restricted", () => {
 
   it("serves the final copy's routes", async () => {
     expect(await askForIndicator(start().port)).toEqual({
+      status: 404,
+      code: "handover.operation_unknown",
+    });
+  }, 60_000);
+
+  it("serves the handover status read, with no sign-in", async () => {
+    expect(await readStatusOfUnknown(start().port)).toEqual({
       status: 404,
       code: "handover.operation_unknown",
     });
@@ -288,6 +307,14 @@ describe("a full start's stepdown, through its test seam", () => {
     const answer = await askForIndicator(port);
     expect(answer.status).toBe(404);
     expect(answer.code).not.toBe("handover.operation_unknown");
+  }, 60_000);
+
+  it("a full start answers the handover status read", async () => {
+    const { port } = await boot(suite, { restricted: false });
+    expect(await readStatusOfUnknown(port)).toEqual({
+      status: 404,
+      code: "handover.operation_unknown",
+    });
   }, 60_000);
 
   it("a full start answers a peer's signed query", async () => {

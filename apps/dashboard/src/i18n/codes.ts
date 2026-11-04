@@ -1350,8 +1350,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "El equipo antiguo no ha pasado su trabajo en este cambio de servidor, así que no enviará su copia final del local. No se ha cambiado nada.",
   },
   "handover.operation_unknown": {
-    en: "The old box holds no record of that handover, so it sent nothing. Nothing was changed.",
-    es: "El equipo antiguo no tiene constancia de ese cambio de servidor, así que no ha enviado nada. No se ha cambiado nada.",
+    en: "That box holds no record of that handover, so it sent nothing. Nothing was changed.",
+    es: "Ese equipo no tiene constancia de ese cambio de servidor, así que no ha enviado nada. No se ha cambiado nada.",
   },
   "handover.final_copy_changed": {
     en: "The old box's venue data changed after it made its final copy, so it did not send the copy. Nothing was changed.",

@@ -207,6 +207,7 @@ import { createHandoverGate } from "./handover-gate.js";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
+import { mountHandoverStatusApi } from "./handover-status-api.js";
 import { mountNodeMembershipApi } from "./node-membership-api.js";
 import { readPeerNames } from "./waiting-page.js";
 import { startWaiting, WAIT_RECHECK_MS } from "./waiting-start.js";
@@ -1710,6 +1711,12 @@ async function bootServer(
         (restrictedApp) =>
           mountNodeMembershipApi(restrictedApp, { db, node: store.node, nodeId: node.nodeId }, log),
         (restrictedApp) =>
+          mountHandoverStatusApi(
+            restrictedApp,
+            { db, node: store.node, ring, nodeId: node.nodeId },
+            log,
+          ),
+        (restrictedApp) =>
           mountHandoverSourceApi(
             restrictedApp,
             {
@@ -2279,6 +2286,7 @@ async function bootServer(
     log,
   );
   mountPeerStatusApi(app, { db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
+  mountHandoverStatusApi(app, { db, node: store.node, ring, nodeId: tradingContext.nodeId }, log);
   mountNodeMembershipApi(
     app,
     {

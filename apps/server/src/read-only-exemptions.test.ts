@@ -20,6 +20,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePort } from "./testing/free-ports.js";
 import { establishNodeIdentity } from "./node-identity.js";
+import { beginHandover } from "./handover-store.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { READ_ONLY_EXEMPTIONS, isReadOnlyExempt } from "./read-only-exemptions.js";
 
@@ -75,6 +76,64 @@ describe("the read-only exemption list", () => {
       ),
     ).toBe(false);
   });
+
+  describe("a row holding :operationId", () => {
+    const mirror = { mirror: true, fenced: false };
+    const ROWS = [
+      {
+        method: "POST",
+        path: "/api/node/handover/:operationId/activate",
+        boxes: ["mirror"],
+        authenticates: "named by this test",
+      },
+    ] as const;
+    const exempt = (path: string, method = "POST", box = mirror) =>
+      isReadOnlyExempt({ method, path }, box, ROWS);
+
+    it("passes any one non-empty segment in that place", () => {
+      expect(exempt("/api/node/handover/a/activate")).toBe(true);
+      expect(exempt("/api/node/handover/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/activate")).toBe(true);
+    });
+
+    it("refuses another number of segments, an empty one and an unlisted suffix", () => {
+      for (const path of [
+        "/api/node/handover/a/b/activate",
+        "/api/node/handover/activate",
+        "/api/node/handover//activate",
+        "/api/node/handover/a",
+        "/api/node/handover/a/activate/",
+        "/api/node/handover/a/activate/x",
+        "/api/node/handover/a/relinquish",
+        "/api/other/handover/a/activate",
+      ]) {
+        expect([path, exempt(path)]).toEqual([path, false]);
+      }
+    });
+
+    it("still answers to the row's method and boxes", () => {
+      expect(exempt("/api/node/handover/a/activate", "PUT")).toBe(false);
+      expect(exempt("/api/node/handover/a/activate", "POST", { mirror: false, fenced: true })).toBe(
+        false,
+      );
+    });
+
+    it("holds only that one name as a parameter: any other colon segment is literal", () => {
+      const rows = [{ ...ROWS[0], path: "/api/node/:other/activate" }];
+      const box = mirror;
+      expect(isReadOnlyExempt({ method: "POST", path: "/api/node/a/activate" }, box, rows)).toBe(
+        false,
+      );
+      expect(
+        isReadOnlyExempt({ method: "POST", path: "/api/node/:other/activate" }, box, rows),
+      ).toBe(true);
+    });
+  });
+
+  it("a row with no parameter is still an exact match", () => {
+    const box = { mirror: true, fenced: false };
+    expect(isReadOnlyExempt({ method: "POST", path: "/api/node/peer-status/" }, box)).toBe(false);
+    expect(isReadOnlyExempt({ method: "POST", path: "/api/node/membership" }, box)).toBe(true);
+  });
 });
 
 // Disables `fiscal-none` so a trading or mirror boot does not refuse `module.fiscal_slot_ambiguous`.
@@ -84,6 +143,7 @@ writeFileSync(
   JSON.stringify({ modules: { "fiscal-none": false } }),
 );
 const ORIGIN_NODE_ID = "77777777-7777-4777-8777-777777777777";
+const MIRROR_OPERATION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const KEY_ENV = {
   WAITRON_HTTP_LANDING_PORT: "0",
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
@@ -154,6 +214,18 @@ beforeAll(async () => {
     }).caCertPem,
     originNodeId: ORIGIN_NODE_ID,
   });
+  await beginHandover(
+    { node: mNode, nodeId: mId },
+    {
+      operationId: MIRROR_OPERATION_ID,
+      scenario: "controlled",
+      venue: { country: "ES", taxId: "B12345678", environment: "preproduction" },
+      sourceNodeId: ORIGIN_NODE_ID,
+      destinationNodeId: mId,
+      membership: { term: 1, digest: "a".repeat(64) },
+    },
+    "destination",
+  );
 
   // A held chart marking this box sell-only: boot fences it and mounts the read-only gate.
   const [fDir, fId, fDb, fNode] = await seededVenue();
@@ -182,6 +254,22 @@ async function post(base: string, path: string): Promise<{ status: number; code:
   });
   const body = (await response.json()) as { error?: { code?: unknown } };
   return { status: response.status, code: body.error?.code };
+}
+
+async function readStatus(
+  base: string,
+  operationId: string,
+): Promise<{ status: number; signerNodeId: unknown; state: unknown }> {
+  const response = await fetch(`${base}/api/node/handover/${operationId}`);
+  const answer = (await response.json()) as {
+    signerNodeId?: unknown;
+    body?: { state?: unknown };
+  };
+  return {
+    status: response.status,
+    signerNodeId: answer.signerNodeId,
+    state: answer.body?.state,
+  };
 }
 
 /** The membership route answers a body holding no chart with a bare refusal, not an error code. */
@@ -218,6 +306,8 @@ describe("each listed route is reached on a real read-only start, and nothing el
         // Listed for a fenced box only.
         retire: await post(base, "/api/box/retire"),
         unlisted: await post(base, "/management-api/catalogues"),
+        // A GET: the gate never refuses it, and this box's own id finds this box's row.
+        statusRead: await readStatus(base, MIRROR_OPERATION_ID),
       }).toEqual({
         promote: { status: 401, code: "password.invalid" },
         preparation: PREPARATION_REFUSAL,
@@ -225,6 +315,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
         membership: { status: 200, body: { accepted: false } },
         retire: GATED,
         unlisted: GATED,
+        statusRead: { status: 200, signerNodeId: mirror.nodeId, state: "prepared" },
       });
     } finally {
       await server.close();

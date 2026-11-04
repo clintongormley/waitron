@@ -177,8 +177,8 @@ declare module "@waitron/shared" {
      */
     "handover.not_stepped_down": { operationId: string };
     /**
-     * A box asked for the final copy, or its indicator, of a handover operation this box holds no
-     * record of.
+     * A caller asked for the status, the final copy or the indicator of a handover operation this
+     * box holds no record of.
      */
     "handover.operation_unknown": { operationId: string };
     /**

@@ -8,7 +8,7 @@ export type ReadOnlyBox = "mirror" | "fenced";
 
 export interface ReadOnlyExemption {
   readonly method: "POST";
-  /** Matched exactly. */
+  /** Matched exactly, except that a segment spelled `:operationId` takes any one non-empty segment. */
   readonly path: string;
   /** The read-only boxes on which the route passes the gate. */
   readonly boxes: readonly ReadOnlyBox[];
@@ -52,14 +52,28 @@ export const READ_ONLY_EXEMPTIONS: readonly ReadOnlyExemption[] = [
   },
 ];
 
+function pathMatches(rowPath: string, requestPath: string): boolean {
+  const rowSegments = rowPath.split("/");
+  const requestSegments = requestPath.split("/");
+  return (
+    rowSegments.length === requestSegments.length &&
+    rowSegments.every((segment, index) =>
+      segment === ":operationId"
+        ? requestSegments[index] !== ""
+        : segment === requestSegments[index],
+    )
+  );
+}
+
 export function isReadOnlyExempt(
   request: { readonly method: string; readonly path: string },
   box: { readonly mirror: boolean; readonly fenced: boolean },
+  rows: readonly ReadOnlyExemption[] = READ_ONLY_EXEMPTIONS,
 ): boolean {
-  return READ_ONLY_EXEMPTIONS.some(
+  return rows.some(
     (row) =>
       row.method === request.method &&
-      row.path === request.path &&
+      pathMatches(row.path, request.path) &&
       row.boxes.some((kind) => box[kind]),
   );
 }
