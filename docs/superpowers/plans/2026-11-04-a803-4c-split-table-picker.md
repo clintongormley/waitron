@@ -991,7 +991,7 @@ The new signature (D1) with `loose` required to be empty until Task 3b (`managem
   1. A sole foreign editor on a whole bill passes (A773 §6; the existing case at `:280` stays green unedited).
   2. Two different editors on whole bills: `draft.taken_over` with `conflicts` both, sorted by id.
   3. A foreign editor on a loose source: refused, whatever the whole bills hold.
-  4. A loose source of Ana and a whole bill of Luis: one refusal with both in `conflicts` (the till shows every row at once).
+  4. A loose source of Ana and a whole bill of Luis: one refusal with both in `conflicts`.
   5. The actor's own draft on either: passes.
   6. A staying bill with a foreign editor is not in the set and refuses nothing.
   7. `expected` missing one id or holding an extra: `management.request_invalid { field: "expectedEdits" }` (`readExpectedBillEdits`). Unsorted: `management.request_invalid { field: "expectedEdits.1.billId" }` (`parseBillEditExpecteds`).
