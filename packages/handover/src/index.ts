@@ -16,6 +16,7 @@ export {
 export { bindingFingerprint, isOperationId, parseBinding } from "./binding.js";
 export type { HandoverBinding, HandoverScenario } from "./binding.js";
 export { assembleIndicator, signIndicator } from "./indicator.js";
+export { parseIndicator } from "./indicator-parse.js";
 export type {
   FinalStateFacts,
   FinalStateIndicator,
@@ -25,7 +26,7 @@ export type {
 export { NODE_LOCAL_MANIFEST } from "./manifest.js";
 export { HANDOVER_MIGRATIONS } from "./migrations.js";
 export { handoverActivations, handoverScenario } from "./schema/index.js";
-export type { NodeLocalItem, NodeLocalManifestRow } from "./manifest.js";
+export type { NodeLocalItem, NodeLocalManifestRow, RetainedRevision } from "./manifest.js";
 export { HANDOVER_STATES, initialState, isOpen, nextState } from "./states.js";
 export type { HandoverRole, HandoverState } from "./states.js";
 export type {

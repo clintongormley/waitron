@@ -5,7 +5,10 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createFirstSetupCoordinator, type FirstSetupHold } from "./index.js";
 import { lockVenueDatabase } from "@waitron/db";
 import type { OperationBinding } from "@waitron/module";
-import { createModulePreparationState } from "./module-preparation-state.js";
+import {
+  createModulePreparationState,
+  readModulePreparationRevisions,
+} from "./module-preparation-state.js";
 
 vi.mock("node:fs/promises", { spy: true });
 const roots: string[] = [];
@@ -338,4 +341,34 @@ it("writes no wait when the grant check refuses", async () => {
     store.withState(binding, (state) => state.replace({ entries: [] }, "wait")),
   ).rejects.toThrow("no grant");
   await expect(fs.readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("reads every module's revisions in the order they were written, bindings included", async () => {
+  const { options } = await fixture();
+  const state = createModulePreparationState(options);
+  const other = { ...binding, module: "payments", eventId: "event2" };
+  await state.withState(binding, (s) => s.replace({ selected: "AAAAA" }));
+  await state.withState(other, (s) => s.replace(null));
+  await state.withState(binding, (s) => s.replace({ selected: "BBBBB" }));
+  expect(await readModulePreparationRevisions({ stateDir: options.stateDir })).toEqual([
+    { binding, value: { selected: "AAAAA" } },
+    { binding: other, value: null },
+    { binding, value: { selected: "BBBBB" } },
+  ]);
+});
+
+it("reads no revisions when the file is absent", async () => {
+  const { options } = await fixture();
+  expect(await readModulePreparationRevisions({ stateDir: options.stateDir })).toEqual([]);
+});
+
+it("refuses to read revisions from a file that is not the file's format", async () => {
+  const { options } = await fixture();
+  await fs.writeFile(
+    join(options.stateDir, "module-preparation-state.json"),
+    JSON.stringify({ version: 1, revisions: [{ binding: {}, value: 1 }] }),
+  );
+  await expect(
+    readModulePreparationRevisions({ stateDir: options.stateDir }),
+  ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
 });

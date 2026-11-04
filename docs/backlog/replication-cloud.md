@@ -511,9 +511,6 @@ Left open by A1018 Slice 3 (`apps/server/src/peer-status-api.ts`):
 ## The handover summaries' and checks' minor follow-ups
 
 Left open by A1018 Slice 4, each checked by reading the code, not run:
-- `checkHandoverCopy` (`packages/module/src/handover.ts`) lets a throwing `checkCopy` through as
-  it was thrown, without the module's name or a `handover.*` code; no test shows that modules are
-  asked one at a time.
 - In `packages/fiscal-verifactu/src/handover-summary.ts`, `ENVIO_STATES` and the acks column list
   are hand copies that no test ties to the schema; a misspelt column becomes the text
   `"undefined"`; a head lookup that finds no row gives an empty head instead of an error.

@@ -17,6 +17,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { CREDENTIALS_MIGRATIONS, loadKeyRing, type KeyRing } from "@waitron/credentials";
 import {
+  parseIndicator,
   sha256Hex,
   verifyEnvelope,
   type FinalStateIndicator,
@@ -40,6 +41,7 @@ import {
 } from "./handover-capture.js";
 import { buildNodeLocalManifest } from "./handover-manifest.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
+import { ALL_MODULES } from "./modules.js";
 import { establishNodeIdentity } from "./node-identity.js";
 
 const RING: KeyRing = loadKeyRing({
@@ -370,7 +372,8 @@ describe("capturing a stepped-down box's final copy", () => {
 
   it("carries the own-state manifest read from this box's state folder", async () => {
     const self = await steppedDown();
-    await writeFile(join(stateDir, "modules.json"), '{"enabled":["core"]}');
+    const off = ALL_MODULES.find((m) => m.tier === "toggleable")!.name;
+    await writeFile(join(stateDir, "modules.json"), JSON.stringify({ modules: { [off]: false } }));
     const envelope = await captureFinalCopy(deps(self), OP);
     expect(envelope.body.nodeLocal).toEqual(
       [...(await buildNodeLocalManifest(stateDir, RING))].sort((a, b) =>
@@ -380,7 +383,34 @@ describe("capturing a stepped-down box's final copy", () => {
     const modulesFile = envelope.body.nodeLocal.find(
       (row) => row.where === "state" && row.item === "modules.json",
     );
-    expect(modulesFile?.sha256).toBe(sha256Hex('{"enabled":["core"]}'));
+    expect(modulesFile?.sha256).toBe(sha256Hex(canonicalize({ [off]: false })));
+  });
+
+  it("signs this box's retained selections inside the indicator, in a body the parser accepts", async () => {
+    const self = await steppedDown();
+    const revisions = [
+      {
+        binding: {
+          module: "fiscal-verifactu",
+          action: "promote",
+          eventId: "e1",
+          sourceId: "s1",
+          targetNodeId: self,
+        },
+        value: { selected: "AAAAA" },
+      },
+    ];
+    await writeFile(
+      join(stateDir, "module-preparation-state.json"),
+      JSON.stringify({ version: 1, revisions }),
+    );
+    const envelope = await captureFinalCopy(deps(self), OP);
+    const parsed = parseIndicator(envelope.body);
+    expect(
+      parsed.nodeLocal.find((row) => row.item === "module-preparation-state.json")?.revisions,
+    ).toEqual(revisions);
+    const stored = await captureFinalCopy(deps(self), OP);
+    expect(parseIndicator(stored.body)).toEqual(parsed);
   });
 
   it("lists a set's journal by when each migration was applied, not by row order", async () => {

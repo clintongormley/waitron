@@ -64,7 +64,7 @@ function assertCanonical(value: unknown, field: string): void {
 }
 
 function nodeLocalItem(row: NodeLocalItem): NodeLocalItem {
-  const { item, where, class: itemClass, treatment, sha256, ringVersions } = row;
+  const { item, where, class: itemClass, treatment, sha256, ringVersions, revisions } = row;
   return {
     item,
     where,
@@ -74,6 +74,10 @@ function nodeLocalItem(row: NodeLocalItem): NodeLocalItem {
     ...(ringVersions === undefined
       ? {}
       : { ringVersions: [...ringVersions].sort((a, b) => a - b) }),
+    // Never sorted: the latest revision of a module is the last one written.
+    ...(revisions === undefined
+      ? {}
+      : { revisions: revisions.map(({ binding, value }) => ({ binding, value })) }),
   };
 }
 

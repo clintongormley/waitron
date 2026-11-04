@@ -81,6 +81,15 @@ export async function readModulePreparationHistory(
     .filter((row) => row.binding.module === module)
     .map((row) => structuredClone(row.value));
 }
+/** Every module's revisions, in the order they were written; none when the file is absent. */
+export async function readModulePreparationRevisions(options: {
+  stateDir: string;
+}): Promise<readonly { binding: OperationBinding; value: unknown }[]> {
+  const file = parse(
+    await readDurableHostJson(join(options.stateDir, "module-preparation-state.json"), LIMIT),
+  );
+  return file.revisions;
+}
 export function createModulePreparationState(options: Options) {
   return {
     async withState<T>(

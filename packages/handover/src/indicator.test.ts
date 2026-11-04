@@ -96,7 +96,62 @@ function faultFrom(run: () => unknown): Error {
   return thrown as Error;
 }
 
+const REVISIONS = [
+  {
+    binding: {
+      module: "fiscal-verifactu",
+      action: "promote",
+      eventId: "e2",
+      sourceId: "s",
+      targetNodeId: "node-m1",
+    },
+    value: { selected: "BBBBB" },
+  },
+  {
+    binding: {
+      module: "fiscal-verifactu",
+      action: "promote",
+      eventId: "e1",
+      sourceId: "s",
+      targetNodeId: "node-m1",
+    },
+    value: null,
+  },
+];
+
+function withRevisions(): FinalStateFacts {
+  return {
+    ...facts(),
+    nodeLocal: [
+      ...facts().nodeLocal,
+      {
+        item: "module-preparation-state.json",
+        where: "state",
+        class: "transferred",
+        treatment: "merged",
+        revisions: REVISIONS,
+      },
+    ],
+  };
+}
+
 describe("assembleIndicator", () => {
+  it("carries the retained selections in the order they were written, inside what is signed", () => {
+    const envelope = signIndicator(withRevisions(), m1);
+    const row = envelope.body.nodeLocal.find(
+      (entry) => entry.item === "module-preparation-state.json",
+    );
+    expect(row?.revisions).toEqual(REVISIONS);
+    expect(verifyEnvelope(envelope, "final-state", () => m1.publicKey).valid).toBe(true);
+    const changed = structuredClone(envelope) as unknown as {
+      body: { nodeLocal: { item: string; revisions?: { value: unknown }[] }[] };
+    };
+    changed.body.nodeLocal.find(
+      (entry) => entry.item === "module-preparation-state.json",
+    )!.revisions![0].value = { selected: "CCCCC" };
+    expect(verifyEnvelope(changed, "final-state", () => m1.publicKey).valid).toBe(false);
+  });
+
   it("lists the schema by set, the modules by name and the node-local items by place and name", () => {
     const indicator = assembleIndicator(facts());
     expect(indicator.snapshot.schema.map((entry) => entry.set)).toEqual([

@@ -21,7 +21,10 @@ export {
 } from "./privacy-contact.js";
 export type { InitialModuleInput, VenueApplyDeps, VenueResult } from "./venue-apply.js";
 export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
-export { readModulePreparationHistory } from "./module-preparation-state.js";
+export {
+  readModulePreparationHistory,
+  readModulePreparationRevisions,
+} from "./module-preparation-state.js";
 export { createRecoveryPreparationHost } from "./recovery-preparation-host.js";
 export type { FiscalModules } from "./fiscal-modules.js";
 export { venueFiscalSelection } from "./venue-fiscal.js";

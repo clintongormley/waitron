@@ -5,10 +5,16 @@ import { createHash, randomBytes } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadKeyRing, type KeyRing } from "@waitron/credentials";
 import { NODE_LOCAL_MANIFEST, type NodeLocalItem } from "@waitron/handover";
+import { canonicalize } from "@waitron/membership";
+import { isAppError } from "@waitron/shared";
 import { buildNodeLocalManifest } from "./handover-manifest.js";
+import { ALL_MODULES } from "./modules.js";
 
 const CURRENT_KEY = randomBytes(32);
 const PREVIOUS_KEY = randomBytes(32);
+
+const TOGGLEABLE = ALL_MODULES.filter((m) => m.tier === "toggleable").map((m) => m.name);
+const [MODULE_A, MODULE_B] = TOGGLEABLE;
 
 function ringWithRotation(): KeyRing {
   return loadKeyRing({
@@ -21,6 +27,10 @@ function ringWithRotation(): KeyRing {
 
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
+}
+
+function valuesDigest(values: Record<string, string | boolean>): string {
+  return sha256(canonicalize(values));
 }
 
 function row(items: NodeLocalItem[], item: string): NodeLocalItem {
@@ -47,6 +57,7 @@ function expectedManifest(
     if (entry.item === "backup.env" || entry.item === "modules.json") {
       return { ...entry, sha256: digests[entry.item] };
     }
+    if (entry.item === "module-preparation-state.json") return { ...entry, revisions: [] };
     return { ...entry };
   });
 }
@@ -80,8 +91,8 @@ describe("buildNodeLocalManifest", () => {
     const items = await buildNodeLocalManifest(stateDir, ring);
     expect(items).toStrictEqual(
       expectedManifest([2, 3], {
-        "backup.env": sha256("WAITRON_BACKUP_BUCKET=b\n"),
-        "modules.json": sha256('{"enabled":[]}'),
+        "backup.env": valuesDigest({ WAITRON_BACKUP_BUCKET: "b" }),
+        "modules.json": null,
       }),
     );
     const texts = [...stringsIn(items), JSON.stringify(items)];
@@ -112,30 +123,160 @@ describe("buildNodeLocalManifest", () => {
     expect(row(items, "modules.json").sha256).toBeNull();
   });
 
-  it("digests backup.env and modules.json as their bytes' SHA-256", async () => {
-    const backup = "WAITRON_BACKUP_BUCKET=venue\n";
-    const modules = '{"enabled":["payments"]}';
-    await writeFile(join(stateDir, "backup.env"), backup);
-    await writeFile(join(stateDir, "modules.json"), modules);
+  it("digests backup.env's values and modules.json's overrides, not their bytes", async () => {
+    await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_BUCKET=venue\n");
+    await writeFile(
+      join(stateDir, "modules.json"),
+      JSON.stringify({ modules: { [MODULE_A]: false } }),
+    );
 
     const items = await buildNodeLocalManifest(stateDir, ringWithRotation());
-    expect(row(items, "backup.env").sha256).toBe(sha256(backup));
-    expect(row(items, "modules.json").sha256).toBe(sha256(modules));
+    expect(row(items, "backup.env").sha256).toBe(valuesDigest({ WAITRON_BACKUP_BUCKET: "venue" }));
+    expect(row(items, "modules.json").sha256).toBe(valuesDigest({ [MODULE_A]: false }));
   });
 
-  it("a changed modules.json changes its digest", async () => {
-    const ring = ringWithRotation();
-    await writeFile(join(stateDir, "modules.json"), '{"enabled":["payments"]}');
-    const before = row(await buildNodeLocalManifest(stateDir, ring), "modules.json").sha256;
-    await writeFile(join(stateDir, "modules.json"), '{"enabled":["payments","bookings"]}');
-    const after = row(await buildNodeLocalManifest(stateDir, ring), "modules.json").sha256;
+  describe("settings two boxes must hold alike", () => {
+    let other: string;
+    beforeEach(async () => {
+      other = await mkdtemp(join(tmpdir(), "handover-manifest-other-"));
+    });
+    afterEach(async () => {
+      await rm(other, { recursive: true, force: true });
+    });
 
-    expect(before).toMatch(/^[0-9a-f]{64}$/);
-    expect(after).toMatch(/^[0-9a-f]{64}$/);
-    expect(after).not.toBe(before);
+    async function digests(folder: string, item: string): Promise<string | null | undefined> {
+      return row(await buildNodeLocalManifest(folder, ringWithRotation()), item).sha256;
+    }
+
+    it("the same backup settings in another order, spacing or with comments digest alike", async () => {
+      await writeFile(join(stateDir, "backup.env"), "A=1\nB=x=y\n");
+      await writeFile(join(other, "backup.env"), "# kept by hand\n\n  B=x=y\nA=1");
+      const digest = await digests(stateDir, "backup.env");
+      expect(digest).toMatch(/^[0-9a-f]{64}$/);
+      expect(await digests(other, "backup.env")).toBe(digest);
+    });
+
+    it("control: one different backup value, and one extra, each digest differently", async () => {
+      await writeFile(join(stateDir, "backup.env"), "A=1\nB=2\n");
+      await writeFile(join(other, "backup.env"), "A=1\nB=3\n");
+      const digest = await digests(stateDir, "backup.env");
+      expect(await digests(other, "backup.env")).not.toBe(digest);
+      await writeFile(join(other, "backup.env"), "A=1\nB=2\nC=3\n");
+      expect(await digests(other, "backup.env")).not.toBe(digest);
+    });
+
+    it("the same module overrides in another order or spacing digest alike", async () => {
+      await writeFile(
+        join(stateDir, "modules.json"),
+        JSON.stringify({ modules: { [MODULE_A]: false, [MODULE_B]: false } }),
+      );
+      await writeFile(
+        join(other, "modules.json"),
+        JSON.stringify({ modules: { [MODULE_B]: false, [MODULE_A]: false } }, null, 2),
+      );
+      const digest = await digests(stateDir, "modules.json");
+      expect(digest).toMatch(/^[0-9a-f]{64}$/);
+      expect(await digests(other, "modules.json")).toBe(digest);
+    });
+
+    it("control: a different module switched off digests differently", async () => {
+      await writeFile(
+        join(stateDir, "modules.json"),
+        JSON.stringify({ modules: { [MODULE_A]: false } }),
+      );
+      await writeFile(
+        join(other, "modules.json"),
+        JSON.stringify({ modules: { [MODULE_B]: false } }),
+      );
+      expect(await digests(other, "modules.json")).not.toBe(
+        await digests(stateDir, "modules.json"),
+      );
+    });
+
+    it.each([['{"modules":{}}'], ["{}"]])(
+      "modules.json holding %s means no overrides, the same as no file",
+      async (text) => {
+        await writeFile(join(stateDir, "modules.json"), text);
+        expect(await digests(stateDir, "modules.json")).toBeNull();
+        expect(await digests(other, "modules.json")).toBeNull();
+      },
+    );
+
+    it("a module named as switched on is the same module set as one not named", async () => {
+      await writeFile(
+        join(stateDir, "modules.json"),
+        JSON.stringify({ modules: { [MODULE_A]: true, [MODULE_B]: false } }),
+      );
+      await writeFile(
+        join(other, "modules.json"),
+        JSON.stringify({ modules: { [MODULE_B]: false } }),
+      );
+      expect(await digests(stateDir, "modules.json")).toBe(await digests(other, "modules.json"));
+
+      await writeFile(
+        join(stateDir, "modules.json"),
+        JSON.stringify({ modules: { [MODULE_A]: true } }),
+      );
+      expect(await digests(stateDir, "modules.json")).toBeNull();
+    });
+
+    it("limit: on settings the environment owns both digests are null and nothing compares them", async () => {
+      const name = "WAITRON_BACKUP_BUCKET";
+      const before = process.env[name];
+      process.env[name] = "this-box";
+      try {
+        expect(await digests(stateDir, "backup.env")).toBeNull();
+        process.env[name] = "that-box";
+        expect(await digests(other, "backup.env")).toBeNull();
+      } finally {
+        if (before === undefined) delete process.env[name];
+        else process.env[name] = before;
+      }
+    });
   });
 
-  it("keeps every manifest row, in order, and adds values only to the three compared files", async () => {
+  it("a modules.json the box could not start on is refused, not digested", async () => {
+    await writeFile(join(stateDir, "modules.json"), "{ not json");
+    const error = await buildNodeLocalManifest(stateDir, ringWithRotation()).catch(
+      (e: unknown) => e,
+    );
+    expect(isAppError(error) && error.code).toBe("module.config_invalid");
+  });
+
+  it("carries this box's retained selections, in the order they were written", async () => {
+    const binding = {
+      module: "fiscal-verifactu",
+      action: "promote",
+      eventId: "e1",
+      sourceId: "s1",
+      targetNodeId: "node-1",
+    };
+    const revisions = [
+      { binding, value: { selected: "AAAAA" } },
+      { binding: { ...binding, eventId: "e0" }, value: null },
+    ];
+    await writeFile(
+      join(stateDir, "module-preparation-state.json"),
+      JSON.stringify({ version: 1, revisions }),
+    );
+    const items = await buildNodeLocalManifest(stateDir, ringWithRotation());
+    expect(row(items, "module-preparation-state.json").revisions).toEqual(revisions);
+  });
+
+  it("carries no retained selections for a box without the file, and needs no copy to do so", async () => {
+    const items = await buildNodeLocalManifest(stateDir, ringWithRotation());
+    expect(row(items, "module-preparation-state.json").revisions).toEqual([]);
+  });
+
+  it("refuses a retained-selections file it cannot read, rather than signing none", async () => {
+    await writeFile(join(stateDir, "module-preparation-state.json"), "{ not json");
+    const error = await buildNodeLocalManifest(stateDir, ringWithRotation()).catch(
+      (e: unknown) => e,
+    );
+    expect(isAppError(error) && error.code).toBe("setup.attempt_invalid");
+  });
+
+  it("keeps every manifest row, in order, and adds values only to the four files it reads", async () => {
     const items = await buildNodeLocalManifest(stateDir, ringWithRotation());
     expect(items).toStrictEqual(
       expectedManifest([2, 3], { "backup.env": null, "modules.json": null }),

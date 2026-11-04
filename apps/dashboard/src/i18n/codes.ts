@@ -1409,6 +1409,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The old box could not read part of the venue's data from its final copy, so it sent neither the copy nor its description. Its venue data is unchanged. Asking again makes it take a new copy and read that.",
     es: "El equipo antiguo no ha podido leer parte de los datos del local en su copia final, así que no ha enviado ni la copia ni su descripción. Sus datos del local no han cambiado. Si se vuelve a pedir, hará una copia nueva y la leerá.",
   },
+  "handover.indicator_mismatch": {
+    en: "The description the old box sent of its final copy is not one this box can read or does not belong to this handover, so this box did not accept the copy. Nothing changed on this box.",
+    es: "La descripción que ha enviado el equipo antiguo de su copia final no se puede leer en este equipo o no corresponde a este traspaso, así que este equipo no ha aceptado la copia. No ha cambiado nada en este equipo.",
+  },
+  "handover.copy_check_failed": {
+    en: "This box could not finish checking part of the old box's final copy, so it did not accept the copy. Nothing changed on this box.",
+    es: "Este equipo no ha podido terminar de comprobar parte de la copia final del equipo antiguo, así que no ha aceptado la copia. No ha cambiado nada en este equipo.",
+  },
   "alert.not_found": {
     en: "This alert no longer exists. Refresh the list.",
     es: "Este aviso ya no existe. Actualiza la lista.",
