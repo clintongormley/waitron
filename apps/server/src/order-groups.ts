@@ -747,6 +747,130 @@ export async function moveGroupsToParty(
 }
 
 /**
+ * Give each held group of `fromPartyId` holding one of `lineIds` a held copy at `toPartyId`, and
+ * move those lines and their extras to it (plan D1–D9). Returns source group id → copy id.
+ */
+export async function copyHeldGroups(
+  tx: Transaction,
+  fromPartyId: string,
+  toPartyId: string,
+  lineIds: readonly string[],
+  operatorId: string,
+  attendance?: { recorder: AttendanceRecorder; at: string },
+): Promise<Map<string, string>> {
+  const copies = new Map<string, string>();
+  if (lineIds.length === 0) return copies;
+  const rows = await tx
+    .select({
+      lineId: workingOrderLines.id,
+      groupId: orderGroups.id,
+      submittedBy: orderGroups.submittedBy,
+      holdPrintedAt: orderGroups.holdPrintedAt,
+    })
+    .from(workingOrderLines)
+    .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
+    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+    .where(
+      and(
+        inArray(workingOrderLines.id, [...new Set(lineIds)]),
+        isNull(workingOrderLines.parentLineId),
+        eq(orderGroups.partyId, fromPartyId),
+        eq(orderGroups.state, "held"),
+        not(isRecalledDish(tx)),
+      ),
+    )
+    .orderBy(
+      asc(orderGroups.position),
+      asc(orderGroups.createdAt),
+      asc(orderGroups.id),
+      asc(workingOrders.orderNumber),
+      asc(workingOrderLines.lineNo),
+    );
+  const sources = new Map<
+    string,
+    { submittedBy: string; holdPrintedAt: string | null; lineIds: string[] }
+  >();
+  for (const row of rows) {
+    const source = sources.get(row.groupId);
+    if (source === undefined)
+      sources.set(row.groupId, {
+        submittedBy: row.submittedBy,
+        holdPrintedAt: row.holdPrintedAt,
+        lineIds: [row.lineId],
+      });
+    else source.lineIds.push(row.lineId);
+  }
+  if (sources.size === 0) return copies;
+  const recorded = await heldPaperStations(tx, [...sources.keys()]);
+  const kitchen = await dishKitchenItems(
+    tx,
+    rows.map((row) => row.lineId),
+  );
+  let position = await lastPosition(tx, toPartyId);
+  for (const [sourceId, source] of sources) {
+    const [copy] = await tx
+      .insert(orderGroups)
+      .values({
+        partyId: toPartyId,
+        position: ++position,
+        displayNumber: await nextGroupNumber(tx, toPartyId),
+        numberPartyId: toPartyId,
+        state: "held",
+        firedAt: null,
+        firedBy: null,
+        firedByDeviceId: null,
+        submittedBy: source.submittedBy,
+        requestKind: "next_course",
+        holdPrintedAt: source.holdPrintedAt,
+        remindAt: null,
+      })
+      .returning({ id: orderGroups.id });
+    const copyId = copy!.id;
+    copies.set(sourceId, copyId);
+    const held = recorded.get(sourceId);
+    const stations = new Set<string>();
+    for (const lineId of source.lineIds)
+      for (const item of kitchen.get(lineId) ?? [])
+        if (item.firedAt === null && held?.has(item.stationId) === true)
+          stations.add(item.stationId);
+    if (stations.size > 0) await recordHeldPaper(tx, copyId, stations);
+    await tx
+      .update(workingOrderLines)
+      .set({ groupId: copyId })
+      .where(
+        or(
+          inArray(workingOrderLines.id, source.lineIds),
+          inArray(workingOrderLines.parentLineId, source.lineIds),
+        ),
+      );
+    await recordGroupEvent(
+      tx,
+      {
+        partyId: fromPartyId,
+        groupId: sourceId,
+        kind: "lines_moved",
+        actorId: operatorId,
+        detail: { lineIds: source.lineIds, to: copyId },
+      },
+      attendance,
+    );
+    await recordGroupEvent(
+      tx,
+      {
+        partyId: toPartyId,
+        groupId: copyId,
+        kind: "lines_moved",
+        actorId: operatorId,
+        detail: { lineIds: source.lineIds, from: sourceId, arrived: true },
+      },
+      attendance,
+    );
+  }
+  await removeEmptiedHeldGroups(tx, fromPartyId, [...sources.keys()], operatorId, attendance);
+  return copies;
+}
+
+/**
  * A group's dishes with a quantity left uncancelled, less any recalled dish, in the order
  * {@link releaseGroup} fires them.
  */
