@@ -3302,8 +3302,14 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Rename the `seedTill` test fixtures** — deferred in the PR of A238 (a till is a device, #1164).
 
+- **A1325. Close the day: count the cash and save the day's close — OPEN, needs a design with the
+  owner, then queue it soon (owner, 2026-11-04).** The north star's "closing". The dashboard shows a
+  day's figures live, and the code that saves a frozen close is built and tested, but no screen or
+  route lets a venue count its cash or close a day. Design it together with A239 and A240.
+  [Detail](backlog/till.md#a1325-close-the-day-count-the-cash-and-save-the-days-close)
+
 - **Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner,
-  2026-10-03).** Each top-up or removal of cash from a till device's drawer is a recorded entry:
+  2026-10-03); part of A1325's design, to queue soon (owner, 2026-11-04).** Each top-up or removal of cash from a till device's drawer is a recorded entry:
   who, how much, why, when (topping up change, paying a supplier, a waiter handing in float cash).
   The entries replace the two typed totals the daily close takes today (opening float and payouts,
   `packages/reporting/src/record-daily-close.ts`).
@@ -3311,7 +3317,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 - **Waiter cash floats (A240) — OPEN, needs a spec before queueing (owner, 2026-10-03).** Piece 3 of
   A238. Open: where a float's opening cash comes from (a till's drawer, or brought in). Needs A238
-  (landed as #1164) and A239.
+  (landed as #1164) and A239. Part of A1325's design, to queue soon (owner, 2026-11-04).
   [Detail](backlog/till.md#waiter-cash-floats-a240--open-needs-a-spec-before-queueing-owner-2026-10-03)
 
 - **The till's schedule screen does not follow the forms rule yet** — left open by C47
@@ -5983,8 +5989,6 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 - **The two-node end-to-end proof over LAN and over WireGuard**, including the same-site cookie
   browser receipt still owed from the till reroute, #257 (needs interactive Chrome + mkcert +
   `/etc/hosts`).
-
-- **Richer daily close** — one close run by the primary across all tills.
 
 - **Replication, membership & failover — residuals.** Until slice 3 a venue has ONE node and no
   failover at all. Read the residuals as requirements for what failover is rebuilt INTO, not as

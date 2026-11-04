@@ -1142,6 +1142,43 @@ tab that misses the dev chooser (the chooser's failure is swallowed, `apps/till/
 lands on the most recently paired device's login. **Next action:** a short spec for per-tab device
 secrets and per-tab sign-ins usable in Demo, and reproduce the owner's report first.
 
+## A1325. Close the day: count the cash and save the day's close
+
+**Owner, 2026-11-04:** a restaurant needs this, so everything it takes is listed here, to be queued
+soon. The north star names it: "selling, printing, paying and closing". A1308's table design keeps
+`daily_closes`.
+
+**What exists.** The dashboard's Sales screen shows one day's figures, worked out live
+(`computeDailyClose`). `recordDailyClose` freezes a day with each till's cash count and tests cover
+it, but only `apps/server/scripts/daily-close-z-demo.ts` calls it.
+
+**What is missing:**
+
+1. **Counting the cash:** a screen where staff count each till's drawer, and a route that saves the
+   close. No screen collects a count yet.
+2. **One close across all tills, run by the primary.**
+3. **Recorded cash in and out (A239):** its entries replace the typed opening float and payouts.
+4. **Waiter floats (A240):** the close lists any float still open.
+5. **Past closes:** a way to see them, and a printed close. No daily-close print exists, and the
+   category report (#738) was meant to print with it.
+6. **Cash handed back for a voided sale:** it shows as a drawer shortfall at cash-up; see that entry.
+7. **The guide,** in English and Spanish.
+
+**For the design to answer:**
+
+- Who may close a day, and who may see the cash difference.
+- What happens when a day is never closed, and whether a close can be redone. Today a day has one
+  close, which can never be changed.
+- What a late payment or refund does to a day already closed. Voids count on the day they are made
+  (owner, 2026-09-24).
+- The first close will start refusing changes to the business-day start
+  (`venue.business_day_locked`), which has never fired on a real box. Check that this is still wanted.
+- **The tamper-evident chain.** The owner doubts it is needed (2026-11-04), and it stays for now. It
+  costs little, but nothing runs `verifyDailyCloseChain` except the demo script, and it is a plain
+  hash with no secret, so whoever can rewrite the rows can rewrite the hashes. The close is an
+  internal cash document in our own wording to the asesor, and that question left the batch unsent.
+  So the design either makes something run the check or takes the chain out.
+
 ## Recorded cash in and out of a till's drawer (A239) — OPEN, needs a spec before queueing (owner, 2026-10-03)
 
 Piece 2 of A238. Each top-up or removal of cash from a till device's drawer is a
