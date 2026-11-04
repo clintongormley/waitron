@@ -33,6 +33,7 @@ import { captureFinalCopy, type CaptureDeps } from "./handover-capture.js";
 import { mountHandoverSourceApi } from "./handover-source-api.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { mountPeerStatusApi } from "./peer-status-api.js";
 
 const files = vi.hoisted(() => ({ rename: vi.fn(), open: vi.fn(), rm: vi.fn() }));
 vi.mock("node:fs/promises", async (original) => {
@@ -168,7 +169,7 @@ function ask(
   route: "indicator" | "final-copy",
   signer: { nodeId: string; privateKey: string },
   operationId = OP,
-  body: Record<string, string | number> = { nonce: NONCE, atMs: 1, operationId },
+  body: Record<string, string | number> = { nonce: NONCE, atMs: 1, operationId, purpose: route },
 ): Promise<Response> {
   return Promise.resolve(
     app.request(`/api/node/handover/${operationId}/${route}`, {
@@ -213,6 +214,71 @@ describe("the final copy and its indicator, served to the selected box only", ()
     expect(sha256(bytes)).toBe(indicator.body.snapshot.sha256);
   });
 
+  it("one signed query opens only the route its purpose names", async () => {
+    const { app, deps, destination } = await boxes();
+    mountPeerStatusApi(
+      app,
+      { db: deps.venue, node: deps.node, ring: deps.ring, nodeId: deps.nodeId },
+      () => {},
+    );
+    const routes = {
+      status: "/api/node/peer-status",
+      indicator: `/api/node/handover/${OP}/indicator`,
+      "final-copy": `/api/node/handover/${OP}/final-copy`,
+    } as const;
+    const answers: Record<
+      string,
+      Record<string, { status: number; code: unknown; field: unknown }>
+    > = {};
+    for (const purpose of Object.keys(routes)) {
+      const envelope = JSON.stringify(
+        signEnvelope("query", { nonce: NONCE, atMs: 1, operationId: OP, purpose }, destination),
+      );
+      const seen: (typeof answers)[string] = {};
+      for (const [name, path] of Object.entries(routes)) {
+        const response = await app.request(path, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: envelope,
+        });
+        const error =
+          response.status === 200
+            ? undefined
+            : ((await response.json()) as { error: { code: string; params: { field: string } } })
+                .error;
+        seen[name] = { status: response.status, code: error?.code, field: error?.params.field };
+      }
+      answers[purpose] = seen;
+    }
+    const passes = { status: 200, code: undefined, field: undefined };
+    const refused = { status: 400, code: "handover.request_invalid", field: "purpose" };
+    expect(answers).toEqual({
+      status: { status: passes, indicator: refused, "final-copy": refused },
+      indicator: { status: refused, indicator: passes, "final-copy": refused },
+      "final-copy": { status: refused, indicator: refused, "final-copy": passes },
+    });
+  });
+
+  it("the same signed query opens its own route again", async () => {
+    const { app, destination } = await boxes();
+    const envelope = JSON.stringify(
+      signEnvelope(
+        "query",
+        { nonce: NONCE, atMs: 1, operationId: OP, purpose: "final-copy" },
+        destination,
+      ),
+    );
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const response = await app.request(`/api/node/handover/${OP}/final-copy`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: envelope,
+      });
+      expect(response.status).toBe(200);
+      await response.arrayBuffer();
+    }
+  });
+
   it("the copy asked for first is the one the indicator then names", async () => {
     const { app, destination } = await boxes();
     const bytes = new Uint8Array(await (await ask(app, "final-copy", destination)).arrayBuffer());
@@ -243,6 +309,7 @@ describe("the final copy and its indicator, served to the selected box only", ()
         nonce: NONCE,
         atMs: 1,
         operationId: OTHER_OP,
+        purpose: route,
       });
       expect(response.status).toBe(400);
       expect(await errorCode(response)).toBe("handover.request_invalid");
@@ -253,6 +320,33 @@ describe("the final copy and its indicator, served to the selected box only", ()
       const response = await ask(app, route, destination, OP, { nonce: NONCE, atMs: 1 });
       expect(response.status).toBe(400);
       expect(await errorCode(response)).toBe("handover.request_invalid");
+    });
+
+    it(`a query naming no purpose is refused for the ${route}`, async () => {
+      const { app, destination } = await boxes();
+      const response = await ask(app, route, destination, OP, {
+        nonce: NONCE,
+        atMs: 1,
+        operationId: OP,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "handover.request_invalid", params: { field: "purpose" } },
+      });
+    });
+
+    it(`a purpose no route has is refused when the query is read, before anything else about it, for the ${route}`, async () => {
+      const { app, bystander } = await boxes();
+      const response = await ask(app, route, bystander, OP, {
+        nonce: NONCE,
+        atMs: 1,
+        operationId: OTHER_OP,
+        purpose: "anything-else",
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: { code: "handover.request_invalid", params: { field: "purpose" } },
+      });
     });
 
     it(`a signer no stored key vouches for is refused the ${route}`, async () => {

@@ -1,14 +1,21 @@
-import type { AddressInfo } from "node:net";
+import { createServer as createHttpServer, type ServerResponse } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import { Readable } from "node:stream";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer as createTcpServer, type AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { X509Certificate } from "node:crypto";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { hasCode, isAppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
-import { fetchMirrorBundle, fetchPrimaryCertificate } from "./mirror-bundle-fetch.js";
+import { boxDownload, fetchMirrorBundle, fetchPrimaryCertificate } from "./mirror-bundle-fetch.js";
 import {
   mintBoxAuthority,
   startBoxServer,
@@ -722,5 +729,260 @@ describe("a main box that never answers is given up on, so setup is not held", (
       const error = await pendingAfter(call, 1);
       expect(isAppError(error) && hasCode(error, "mirror.bundle_fetch_failed")).toBe(true);
     });
+  });
+});
+
+describe("boxDownload streams one answer to a file", () => {
+  const BYTES = Buffer.from(Array.from({ length: 70_000 }, (_, i) => i % 256));
+  let folder: string;
+  let destination: string;
+  let partial: string;
+  const closers: (() => Promise<void>)[] = [];
+
+  beforeEach(async () => {
+    folder = await mkdtemp(join(tmpdir(), "waitron-box-download-"));
+    destination = join(folder, "received.db");
+    partial = `${destination}.partial`;
+  });
+
+  afterEach(async () => {
+    while (closers.length > 0) await closers.pop()!();
+    await rm(folder, { recursive: true, force: true });
+  });
+
+  /** A plain-http box whose answer is whatever `handle` writes, so it can stop part way. */
+  async function httpBox(handle: (res: ServerResponse) => void): Promise<URL> {
+    const server = createHttpServer((req, res) => {
+      req.resume();
+      req.on("end", () => handle(res));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    closers.push(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          server.closeAllConnections();
+          server.close((err) => (err ? reject(err) : resolve()));
+        }),
+    );
+    return new URL(`http://127.0.0.1:${(server.address() as AddressInfo).port}/copy`);
+  }
+
+  /** A box that writes `raw` as its whole answer and hangs up, the way no real server would. */
+  async function rawBox(raw: string): Promise<URL> {
+    const server = createTcpServer((socket) => {
+      socket.once("data", () => socket.end(raw));
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    closers.push(
+      () =>
+        new Promise<void>((resolve, reject) => server.close((e) => (e ? reject(e) : resolve()))),
+    );
+    return new URL(`http://127.0.0.1:${(server.address() as AddressInfo).port}/copy`);
+  }
+
+  function options(signal: AbortSignal = AbortSignal.timeout(5_000)) {
+    return { trust: { rejectUnauthorized: true }, signal, body: '{"signed":true}' };
+  }
+
+  it("a whole answer from a box under the pinned authority lands byte for byte, and its body was sent", async () => {
+    const authority = await mintBoxAuthority();
+    const seen: { method?: string; url?: string; type?: string; body: string }[] = [];
+    const server = createHttpsServer(
+      { key: authority.keyPem, cert: authority.certPem },
+      (req, res) => {
+        const chunks: Buffer[] = [];
+        req.on("data", (chunk: Buffer) => chunks.push(chunk));
+        req.on("end", () => {
+          seen.push({
+            method: req.method,
+            url: req.url,
+            type: req.headers["content-type"],
+            body: Buffer.concat(chunks).toString("utf8"),
+          });
+          res.writeHead(200, { "content-length": String(BYTES.length) });
+          res.end(BYTES);
+        });
+      },
+    );
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    closers.push(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          server.closeAllConnections();
+          server.close((err) => (err ? reject(err) : resolve()));
+        }),
+    );
+    const answer = await boxDownload(
+      new URL(`https://localhost:${(server.address() as AddressInfo).port}/copy`),
+      {
+        trust: { ca: authority.caPem, rejectUnauthorized: true },
+        signal: AbortSignal.timeout(5_000),
+        body: '{"signed":true}',
+      },
+      destination,
+    );
+    expect(answer).toEqual({ status: 200, text: "" });
+    expect((await readFile(destination)).equals(BYTES)).toBe(true);
+    expect(existsSync(partial)).toBe(false);
+    expect(seen).toEqual([
+      { method: "POST", url: "/copy", type: "application/json", body: '{"signed":true}' },
+    ]);
+  });
+
+  it("the answer the final-copy route gives, a declared stream through the real server, lands whole", async () => {
+    const app = new Hono();
+    app.post("/copy", (c) =>
+      c.body(Readable.toWeb(Readable.from([BYTES])) as ReadableStream, 200, {
+        "content-type": "application/octet-stream",
+        "content-length": String(BYTES.length),
+      }),
+    );
+    const base = await startServer(app);
+    expect(await boxDownload(new URL(`${base}/copy`), options(), destination)).toEqual({
+      status: 200,
+      text: "",
+    });
+    expect((await readFile(destination)).equals(BYTES)).toBe(true);
+  });
+
+  it("a box under another authority gets no request and leaves no file", async () => {
+    const box = await startBoxServer(await mintBoxAuthority(), () => ({ status: 200, body: "x" }));
+    closers.push(box.close);
+    const other = await mintBoxAuthority();
+    await expect(
+      boxDownload(
+        new URL(`${box.url}/copy`),
+        {
+          trust: { ca: other.caPem, rejectUnauthorized: true },
+          signal: AbortSignal.timeout(5_000),
+          body: "{}",
+        },
+        destination,
+      ),
+    ).rejects.toThrow();
+    expect(box.requests).toEqual([]);
+    expect(await existingFiles()).toEqual([]);
+  });
+
+  async function existingFiles(): Promise<string[]> {
+    return [destination, partial].filter((path) => existsSync(path));
+  }
+
+  it("the bytes go to the partial file as they arrive, and the destination appears only at the end", async () => {
+    let answer: ServerResponse | undefined;
+    const url = await httpBox((res) => {
+      res.writeHead(200, { "content-length": String(BYTES.length) });
+      res.write(BYTES.subarray(0, 1_000));
+      answer = res;
+    });
+    const download = boxDownload(url, options(), destination);
+    await vi.waitFor(async () => {
+      expect((await readFile(partial)).length).toBe(1_000);
+    });
+    expect(existsSync(destination)).toBe(false);
+    answer!.end(BYTES.subarray(1_000));
+    expect(await download).toEqual({ status: 200, text: "" });
+    expect((await readFile(destination)).equals(BYTES)).toBe(true);
+    expect(existsSync(partial)).toBe(false);
+  });
+
+  it("a connection lost before the declared length is a failure, with neither file left", async () => {
+    const url = await httpBox((res) => {
+      res.writeHead(200, { "content-length": String(BYTES.length) });
+      res.write(BYTES.subarray(0, 1_000), () => res.destroy());
+    });
+    await expect(boxDownload(url, options(), destination)).rejects.toThrow();
+    expect(await existingFiles()).toEqual([]);
+  });
+
+  it("an answer that declares no length is a failure, since its end cannot be told from a lost connection", async () => {
+    const url = await rawBox("HTTP/1.1 200 OK\r\nconnection: close\r\n\r\npart of a file");
+    await expect(boxDownload(url, options(), destination)).rejects.toThrow("no length");
+    expect(await existingFiles()).toEqual([]);
+  });
+
+  it("a stopped download is a failure, with neither file left", async () => {
+    const url = await httpBox((res) => {
+      res.writeHead(200, { "content-length": String(BYTES.length) });
+      res.write(BYTES.subarray(0, 1_000));
+    });
+    const controller = new AbortController();
+    const download = boxDownload(url, options(controller.signal), destination);
+    await vi.waitFor(() => expect(existsSync(partial)).toBe(true));
+    controller.abort();
+    await expect(download).rejects.toThrow();
+    expect(await existingFiles()).toEqual([]);
+  });
+
+  it("a box that never answers is given up on at the signal", async () => {
+    const silent = await startSilentServer();
+    closers.push(silent.close);
+    await expect(
+      boxDownload(
+        new URL(`http://127.0.0.1:${silent.port}/copy`),
+        options(AbortSignal.timeout(100)),
+        destination,
+      ),
+    ).rejects.toThrow();
+    expect(await existingFiles()).toEqual([]);
+  });
+
+  it("what an earlier attempt left in the partial file does not reach the destination", async () => {
+    await writeFile(partial, Buffer.alloc(BYTES.length + 500, 0xee));
+    const url = await httpBox((res) => {
+      res.writeHead(200, { "content-length": String(BYTES.length) });
+      res.end(BYTES);
+    });
+    await boxDownload(url, options(), destination);
+    expect((await readFile(destination)).equals(BYTES)).toBe(true);
+  });
+
+  it("a refusal comes back with its status and words, and writes no file", async () => {
+    const refusal = '{"error":{"code":"handover.not_stepped_down","params":{}}}';
+    const url = await httpBox((res) => {
+      res.writeHead(409, { "content-type": "application/json" });
+      res.end(refusal);
+    });
+    expect(await boxDownload(url, options(), destination)).toEqual({ status: 409, text: refusal });
+    expect(await existingFiles()).toEqual([]);
+  });
+
+  it("a refusal far too long to be one is a failure", async () => {
+    const url = await httpBox((res) => {
+      res.writeHead(500);
+      res.end(Buffer.alloc(64 * 1024 + 1, 0x78));
+    });
+    await expect(boxDownload(url, options(), destination)).rejects.toThrow("too large");
+    expect(await existingFiles()).toEqual([]);
+  });
+
+  it("a refusal of the longest allowed length is still read", async () => {
+    const url = await httpBox((res) => {
+      res.writeHead(500);
+      res.end(Buffer.alloc(64 * 1024, 0x78));
+    });
+    const answer = await boxDownload(url, options(), destination);
+    expect(answer.status).toBe(500);
+    expect(answer.text.length).toBe(64 * 1024);
+  });
+
+  it("a destination that cannot be replaced is a failure, and the partial file is removed", async () => {
+    await mkdir(join(destination, "in-the-way"), { recursive: true });
+    const url = await httpBox((res) => {
+      res.writeHead(200, { "content-length": String(BYTES.length) });
+      res.end(BYTES);
+    });
+    await expect(boxDownload(url, options(), destination)).rejects.toThrow();
+    expect(existsSync(partial)).toBe(false);
+  });
+
+  it("a folder that is not there is a failure: the caller makes it", async () => {
+    const url = await httpBox((res) => {
+      res.writeHead(200, { "content-length": String(BYTES.length) });
+      res.end(BYTES);
+    });
+    await expect(
+      boxDownload(url, options(), join(folder, "missing", "received.db")),
+    ).rejects.toThrow("ENOENT");
   });
 });

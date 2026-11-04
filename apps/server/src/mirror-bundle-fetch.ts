@@ -1,8 +1,11 @@
 // `credential` is the primary's by-id login object (`AdoptCredential`), not the dashboard's
 // by-email body: the primary's mirror-bundle route authenticates it with `loginManagerById`.
 import { X509Certificate } from "node:crypto";
-import { request as httpRequest } from "node:http";
+import { createWriteStream } from "node:fs";
+import { rename, rm } from "node:fs/promises";
+import { request as httpRequest, type IncomingMessage } from "node:http";
 import { request, type RequestOptions } from "node:https";
+import { pipeline } from "node:stream/promises";
 import { AppError } from "@waitron/shared";
 import type { AdoptCredential } from "./adopt.js";
 import type { MirrorBundle } from "./mirror-bundle.js";
@@ -163,6 +166,74 @@ export function boxExchange(
     req.on("error", reject);
     req.end(options.body);
   });
+}
+
+// A refusal is one short JSON error; anything far larger is not one.
+const MAX_REFUSAL_BYTES = 64 * 1024;
+
+async function refusalText(res: IncomingMessage): Promise<string> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of res as AsyncIterable<Buffer>) {
+    size += chunk.length;
+    if (size > MAX_REFUSAL_BYTES) throw new Error("answer too large");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+/**
+ * One POST to a box whose 200 answer is a file: written to `<destinationPath>.partial` as it
+ * arrives, and moved to `destinationPath` only once all of it came. Any other status comes back
+ * with its text and touches no file. The destination's folder must exist.
+ *
+ * A declared length is required because Node reports a body with no length and no chunking as
+ * ended whenever the connection closes; with a length it fails a shorter body, so what the
+ * pipeline finishes is the whole file (the "connection lost" and "no length" cases in
+ * `mirror-bundle-fetch.test.ts`).
+ */
+export async function boxDownload(
+  url: URL,
+  options: {
+    trust: Pick<RequestOptions, "ca" | "rejectUnauthorized">;
+    signal: AbortSignal;
+    body: string;
+  },
+  destinationPath: string,
+): Promise<{ status: number; text: string }> {
+  const res = await new Promise<IncomingMessage>((resolve, reject) => {
+    const req = (url.protocol === "http:" ? httpRequest : request)(
+      url,
+      {
+        method: "POST",
+        agent: false,
+        signal: options.signal,
+        ...options.trust,
+        headers: {
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(options.body),
+        },
+      },
+      resolve,
+    );
+    req.on("error", reject);
+    req.end(options.body);
+  });
+  const status = Number(res.statusCode);
+  if (status !== 200) return { status, text: await refusalText(res) };
+  if (res.headers["content-length"] === undefined) {
+    res.destroy();
+    throw new Error("answer names no length");
+  }
+  const partialPath = `${destinationPath}.partial`;
+  try {
+    await pipeline(res, createWriteStream(partialPath));
+    await rename(partialPath, destinationPath);
+  } catch (error) {
+    await rm(partialPath, { force: true });
+    throw error;
+  }
+  return { status, text: "" };
 }
 
 /**

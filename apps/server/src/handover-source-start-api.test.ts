@@ -1445,7 +1445,7 @@ describe("with the real stepdown", () => {
       expect(await statusRead(nextStart)).toMatchObject({ state: "abandoned" });
       const query = signEnvelope(
         "query",
-        { nonce: "n".repeat(20), atMs: 1, operationId: OP },
+        { nonce: "n".repeat(20), atMs: 1, operationId: OP, purpose: "status" },
         { nodeId: spare, privateKey: spareKey },
       );
       const read = await nextStart.request(QUERY_PATH, {

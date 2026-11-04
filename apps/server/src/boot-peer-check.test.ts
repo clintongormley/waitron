@@ -1115,6 +1115,21 @@ describe("askPeerStatus", () => {
     });
   });
 
+  it("a query option goes into the signed body, naming the operation and its purpose", async () => {
+    const { calls, fetchFn } = answerWith((q) => sign(body(q.nonce)));
+    const asked = await realAsk({
+      fetch: fetchFn,
+      nonce: () => NONCE,
+      now: () => 1_000,
+      query: { operationId: "op-1", purpose: "status" },
+    })(PEER);
+    expect(asked).toEqual(body(NONCE));
+    expect(calls[0]!.url).toBe("https://m2.local/api/node/peer-status");
+    expect(calls[0]!.body).toMatchObject({
+      body: { nonce: NONCE, atMs: 1_000, operationId: "op-1", purpose: "status" },
+    });
+  });
+
   it("an unsigned answer is null", async () => {
     const { fetchFn } = answerWith((q) => body(q.nonce));
     expect(await ask(fetchFn)(PEER)).toBeNull();

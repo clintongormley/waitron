@@ -15,7 +15,7 @@ import {
   type CaptureDeps,
 } from "./handover-capture.js";
 import type { Logger } from "./logger.js";
-import { verifiedPeerQuery } from "./peer-status-api.js";
+import { verifiedPeerQuery, type PeerQueryPurpose } from "./peer-status-api.js";
 import "./errors.js";
 
 const STATUS = {
@@ -29,13 +29,21 @@ const STATUS = {
 
 /**
  * Refuses unless the request's `query` is signed by the destination this box stored for the
- * path's operation, and names that same operation in its body.
+ * path's operation, and names that same operation and this route's purpose in its body.
  */
-async function authorise(c: Context, deps: CaptureDeps, operationId: string): Promise<void> {
+async function authorise(
+  c: Context,
+  deps: CaptureDeps,
+  operationId: string,
+  purpose: PeerQueryPurpose,
+): Promise<void> {
   const { signerNodeId, query } = await verifiedPeerQuery(c, { ...deps, db: deps.venue });
   // A query without the operation, like the one every start sends, must not unlock the copy.
   if (query.operationId !== operationId) {
     throw new AppError("handover.request_invalid", { field: "operationId" });
+  }
+  if (query.purpose !== purpose) {
+    throw new AppError("handover.request_invalid", { field: "purpose" });
   }
   const operation = await readHandoverOperation(deps.node, deps.nodeId, operationId);
   if (operation === null) throw new AppError("handover.operation_unknown", { operationId });
@@ -147,7 +155,7 @@ export function mountHandoverSourceApi(app: Hono, deps: CaptureDeps, log: Logger
   app.post("/api/node/handover/:operationId/indicator", (c) =>
     run(c, log, async () => {
       const operationId = c.req.param("operationId");
-      await authorise(c, deps, operationId);
+      await authorise(c, deps, operationId, "indicator");
       return c.json(await captureFinalCopy(deps, operationId), 200);
     }),
   );
@@ -155,7 +163,7 @@ export function mountHandoverSourceApi(app: Hono, deps: CaptureDeps, log: Logger
   app.post("/api/node/handover/:operationId/final-copy", (c) =>
     run(c, log, async () => {
       const operationId = c.req.param("operationId");
-      await authorise(c, deps, operationId);
+      await authorise(c, deps, operationId, "final-copy");
       const { snapshot } = (await captureFinalCopy(deps, operationId)).body;
       const handle = await openFinalCopy(deps, operationId, snapshot);
       const stream = Readable.toWeb(handle.createReadStream({ start: 0 })) as ReadableStream;

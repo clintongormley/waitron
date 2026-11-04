@@ -173,7 +173,7 @@ async function askForIndicator(port: number): Promise<{ status: number; code: un
       body: JSON.stringify(
         signEnvelope(
           "query",
-          { nonce: "c".repeat(20), atMs: 1, operationId: FINAL_COPY_OP },
+          { nonce: "c".repeat(20), atMs: 1, operationId: FINAL_COPY_OP, purpose: "indicator" },
           MAIN_BOX,
         ),
       ),
@@ -725,7 +725,7 @@ describe("a full start's stepdown, through its test seam", () => {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(
-            signEnvelope("query", { nonce, atMs: 1, operationId: OP }, MAIN_BOX),
+            signEnvelope("query", { nonce, atMs: 1, operationId: OP, purpose: "status" }, MAIN_BOX),
           ),
         }),
       ).toMatchObject({
@@ -822,7 +822,9 @@ describe("a full start's stepdown, through its test seam", () => {
         await overTls(nextPort, "/api/node/peer-status", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(signEnvelope("query", { nonce, atMs: 1, operationId: OP }, SPARE)),
+          body: JSON.stringify(
+            signEnvelope("query", { nonce, atMs: 1, operationId: OP, purpose: "status" }, SPARE),
+          ),
         }),
       ).toMatchObject({
         status: 200,
@@ -841,7 +843,9 @@ describe("a full start's stepdown, through its test seam", () => {
         await overTls(silentPort, "/api/node/peer-status", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(signEnvelope("query", { nonce, atMs: 1, operationId: OP }, SPARE)),
+          body: JSON.stringify(
+            signEnvelope("query", { nonce, atMs: 1, operationId: OP, purpose: "status" }, SPARE),
+          ),
         }),
       ).toMatchObject({
         status: 200,

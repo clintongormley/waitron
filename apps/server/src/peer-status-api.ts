@@ -22,10 +22,17 @@ export interface PeerStatusApiDeps {
   nodeId: string;
 }
 
+export type PeerQueryPurpose = "status" | "indicator" | "final-copy";
+
 export interface PeerQueryBody {
   nonce: string;
   atMs: number;
   operationId?: string;
+  /**
+   * The route this query is for, present exactly when `operationId` is, so a query signed for one
+   * route opens no other.
+   */
+  purpose?: PeerQueryPurpose;
 }
 
 export interface PeerOperationStatus {
@@ -55,7 +62,11 @@ const STATUS = {
   "handover.request_invalid": 400,
 } as const;
 
-const QUERY_KEYS = new Set(["nonce", "atMs", "operationId"]);
+const QUERY_KEYS = new Set(["nonce", "atMs", "operationId", "purpose"]);
+
+function isPurpose(value: unknown): value is PeerQueryPurpose {
+  return value === "status" || value === "indicator" || value === "final-copy";
+}
 
 function invalid(field: string): never {
   throw new AppError("handover.request_invalid", { field });
@@ -65,13 +76,17 @@ function parseQuery(body: unknown): PeerQueryBody {
   if (body === null || typeof body !== "object" || Array.isArray(body)) invalid("body");
   const fields = body as Record<string, unknown>;
   if (Object.keys(fields).some((key) => !QUERY_KEYS.has(key))) invalid("body");
-  const { nonce, atMs, operationId } = fields;
+  const { nonce, atMs, operationId, purpose } = fields;
   if (typeof nonce !== "string" || nonce.length < 16 || nonce.length > 64) invalid("nonce");
   if (typeof atMs !== "number" || !Number.isFinite(atMs)) invalid("atMs");
-  if (operationId === undefined) return { nonce, atMs };
+  if (operationId === undefined) {
+    if (purpose !== undefined) invalid("purpose");
+    return { nonce, atMs };
+  }
   if (typeof operationId !== "string" || operationId.length === 0 || operationId.length > 64)
     invalid("operationId");
-  return { nonce, atMs, operationId };
+  if (!isPurpose(purpose)) invalid("purpose");
+  return { nonce, atMs, operationId, purpose };
 }
 
 /**
@@ -115,6 +130,7 @@ export function mountPeerStatusApi(app: Hono, deps: PeerStatusApiDeps, log: Logg
   app.post("/api/node/peer-status", (c) =>
     run(c, log, async () => {
       const { query } = await verifiedPeerQuery(c, deps);
+      if (query.operationId !== undefined && query.purpose !== "status") invalid("purpose");
       const held = await readNodeMembership(deps.db);
       const restriction = await readHandoverRestriction(deps.node, deps.nodeId);
       const open = await readOpenHandoverOperation(deps.node, deps.nodeId);

@@ -266,6 +266,8 @@ export interface AskPeerStatusDeps {
   nonce?: () => string;
   now?: () => number;
   timeoutMs?: number;
+  /** The operation to read: its state comes back as `requestedOperation`. */
+  query?: { operationId: string; purpose: "status" };
 }
 
 // A status holds at most one chart and two operations; anything far larger is not one.
@@ -372,7 +374,7 @@ export function askPeerStatus(
     const nonce = nonceOf();
     let answer: { status: number; text: string };
     try {
-      const query = await deps.sign({ nonce, atMs: now() });
+      const query = await deps.sign({ nonce, atMs: now(), ...deps.query });
       answer = await postToBox(
         { ...deps, timeoutMs },
         peer.nodeId,
