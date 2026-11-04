@@ -20,6 +20,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
+import type { AttendanceRecorder } from "./attendance-capture.js";
 import { createCourse, createStation } from "./kitchen.js";
 import { copyHeldGroups, snoozeReminder } from "./order-groups.js";
 import { saveDraft } from "./order-drafts.js";
@@ -50,7 +51,7 @@ import "./errors.js";
 const MOVER = "cccccccc-0000-4000-8000-000000000002";
 
 let v: PartyVenue;
-let postres: string;
+let desserts: string;
 
 // `resetPerTest: false`: the venue is provisioned once, and each case seats its own tables.
 useVenueDb({
@@ -59,11 +60,10 @@ useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     v = await setupPartyVenue(db);
-    postres = await inTx(v, async (tx) => {
-      await createCourse(tx, { name: "Entrantes", displayOrder: 1 });
-      await createCourse(tx, { name: "Principales", displayOrder: 2 });
-      return (await createCourse(tx, { name: "Postres", displayOrder: 3 })).id;
-    });
+    desserts = await inTx(
+      v,
+      async (tx) => (await createCourse(tx, { name: "Desserts", displayOrder: 1 })).id,
+    );
   },
 });
 
@@ -81,7 +81,7 @@ async function seatWith(groups: { names: string[]; release: Release }[]) {
         lines: group.names.map((name) => ({
           menuItemId: v.item(name),
           quantity: "1",
-          courseId: postres,
+          courseId: desserts,
         })),
       })),
       operatorId: OPERATOR,
@@ -188,10 +188,16 @@ function reseatBill(tx: Transaction, billId: string, partyId: string) {
   return tx.update(workingOrders).set({ partyId }).where(eq(workingOrders.id, billId));
 }
 
-async function copy(billId: string, from: string, to: string, lineIds: string[]) {
+async function copy(
+  billId: string,
+  from: string,
+  to: string,
+  lineIds: string[],
+  attendance?: { recorder: AttendanceRecorder; at: string },
+) {
   return inTx(v, async (tx) => {
     await reseatBill(tx, billId, to);
-    return copyHeldGroups(tx, from, to, lineIds, MOVER);
+    return copyHeldGroups(tx, from, to, lineIds, MOVER, attendance);
   });
 }
 
@@ -215,12 +221,23 @@ async function stationWithPrinter(name: string, dishes: string[]): Promise<strin
   });
 }
 
+function kitchenItemOf(lineId: string) {
+  return v.db
+    .select()
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderLineId, lineId))
+    .then((rows) => rows[0]!);
+}
+
 const adminId = () =>
   v.db.all<{ id: string }>(sql`select id from persons where role = 'admin'`)[0]!.id;
 
 describe("A803 waiting copy: copyHeldGroups", () => {
   it("A803 waiting copy: copyHeldGroups copies a held group shared by a leaving and a staying bill, moving only the leaving dish and its extras", async () => {
-    const a = await seatWith([{ names: ["Flan", "Tarta"], release: "hold" }]);
+    const a = await seatWith([
+      { names: ["Burger"], release: "fire" },
+      { names: ["Flan", "Tarta"], release: "hold" },
+    ]);
     const flan = await lineOf(a.billId, "Flan");
     const g = flan.groupId!;
     const bill2 = await moveToNewBill(a.partyId, a.billId, [(await lineOf(a.billId, "Tarta")).id]);
@@ -228,6 +245,8 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     const extra = await addExtra(bill2, tarta.id);
     const b = await otherParty();
     const [bFired] = await groupsOf(b);
+    expect((await groupsOf(a.partyId)).map((group) => group.displayNumber)).toEqual([1, 2]);
+    expect(bFired!.displayNumber).toBe(1);
     const source = await groupRow(g);
     const ticketsBefore = await ticketsOf([a.billId, bill2]);
 
@@ -275,10 +294,18 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     const copies = await copy(a.billId, a.partyId, b, [flan.id, tarta.id]);
 
     expect([...copies.keys()]).toEqual([g2, g3]);
-    expect((await groupsOf(b)).map((group) => [group.id, group.position, group.state])).toEqual([
-      [bFired!.id, bFired!.position, "fired"],
-      [copies.get(g2), bFired!.position + 1, "held"],
-      [copies.get(g3), bFired!.position + 2, "held"],
+    expect(
+      (await groupsOf(b)).map((group) => [
+        group.id,
+        group.position,
+        group.displayNumber,
+        group.numberPartyId,
+        group.state,
+      ]),
+    ).toEqual([
+      [bFired!.id, bFired!.position, bFired!.displayNumber, b, "fired"],
+      [copies.get(g2), bFired!.position + 1, bFired!.displayNumber + 1, b, "held"],
+      [copies.get(g3), bFired!.position + 2, bFired!.displayNumber + 2, b, "held"],
     ]);
     expect((await linesOf(a.billId)).map((line) => [line.name, line.groupId])).toEqual([
       ["Tarta", copies.get(g2)],
@@ -328,6 +355,66 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     }
   });
 
+  it("A803 waiting copy: copyHeldGroups gives the copy no HOLD station that never got HOLD paper", async () => {
+    const grill = await stationWithPrinter("Grill without HOLD paper", ["Tarta"]);
+    const pastry = await stationWithPrinter("Pastry with HOLD paper", ["Flan"]);
+    await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }, [pastry]));
+    try {
+      const a = await seatWith([{ names: ["Flan", "Tarta"], release: "hold" }]);
+      const g = (await lineOf(a.billId, "Flan")).groupId!;
+      expect(await holdStationsOf(g)).toEqual([pastry]);
+      const bill2 = await moveToNewBill(a.partyId, a.billId, [
+        (await lineOf(a.billId, "Tarta")).id,
+      ]);
+      const tarta = await lineOf(bill2, "Tarta");
+      expect(await kitchenItemOf(tarta.id)).toMatchObject({ stationId: grill, firedAt: null });
+      const b = await otherParty();
+
+      const copies = await copy(bill2, a.partyId, b, [tarta.id]);
+
+      expect(await holdStationsOf(copies.get(g)!)).toEqual([]);
+    } finally {
+      await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: false }, [pastry]));
+    }
+  });
+
+  it("A803 waiting copy: copyHeldGroups records attendance for each event it writes when given a recorder", async () => {
+    const a = await seatWith([
+      { names: ["Burger"], release: "fire" },
+      { names: ["Tarta"], release: "hold" },
+    ]);
+    const g = (await lineOf(a.billId, "Tarta")).groupId!;
+    const bill2 = await moveToNewBill(a.partyId, a.billId, [(await lineOf(a.billId, "Tarta")).id]);
+    const b = await otherParty();
+    const before = (await eventsOf(g)).length;
+    const facts: Parameters<AttendanceRecorder>[1][] = [];
+    const at = "2026-11-04T12:00:00.000Z";
+    const recorder: AttendanceRecorder = async (_tx, fact) => {
+      facts.push(fact);
+    };
+
+    const copies = await copy(bill2, a.partyId, b, [(await lineOf(bill2, "Tarta")).id], {
+      recorder,
+      at,
+    });
+
+    const sourceEvents = (await eventsOf(g)).slice(before);
+    const copyEvents = await eventsOf(copies.get(g)!);
+    expect(sourceEvents.map((event) => event.kind)).toEqual(["lines_moved", "removed"]);
+    expect(copyEvents.map((event) => event.kind)).toEqual(["lines_moved"]);
+    expect(facts).toEqual(
+      [sourceEvents[0]!, copyEvents[0]!, sourceEvents[1]!].map((event) => ({
+        source: "draft",
+        key: `group:${event.id}`,
+        personId: MOVER,
+        kind: "order",
+        at,
+        offsetMinutes: 0,
+        outcome: "qualified",
+      })),
+    );
+  });
+
   it("A803 waiting copy: copyHeldGroups writes one lines_moved event on each side, naming the mover", async () => {
     const a = await seatWith([{ names: ["Flan", "Tarta"], release: "hold" }]);
     const g = (await lineOf(a.billId, "Flan")).groupId!;
@@ -365,7 +452,7 @@ describe("A803 waiting copy: copyHeldGroups", () => {
     ]);
   });
 
-  it("A803 waiting copy: copyHeldGroups ignores a recalled dish, a dish of a fired group and an extras line it is given", async () => {
+  it("A803 waiting copy: copyHeldGroups ignores a recalled dish, a dish of a fired group, an extras line and a dish of another party's held group it is given", async () => {
     const a = await seatWith([
       { names: ["Burger"], release: "fire" },
       { names: ["Tarta", "Paella"], release: "hold" },
@@ -392,15 +479,21 @@ describe("A803 waiting copy: copyHeldGroups", () => {
           await setChangesAfterSending(tx, value, [stationId]);
       });
     }
+    const c = await seatWith([{ names: ["Tarta"], release: "hold" }]);
+    const cTarta = await lineOf(c.billId, "Tarta");
     const b = await otherParty();
     const linesBefore = await linesOf(a.billId);
     const bGroupsBefore = await groupsOf(b);
+    const cLinesBefore = await linesOf(c.billId);
+    const cGroupsBefore = await groupsOf(c.partyId);
 
-    const copies = await copy(a.billId, a.partyId, b, [burger.id, paella.id, extra]);
+    const copies = await copy(a.billId, a.partyId, b, [burger.id, paella.id, extra, cTarta.id]);
 
     expect([...copies]).toEqual([]);
     expect(await linesOf(a.billId)).toEqual(linesBefore);
     expect(await groupsOf(b)).toEqual(bGroupsBefore);
+    expect(await linesOf(c.billId)).toEqual(cLinesBefore);
+    expect(await groupsOf(c.partyId)).toEqual(cGroupsBefore);
   });
 
   it("A803 waiting copy: copyHeldGroups leaves a snooze behind", async () => {
@@ -593,6 +686,49 @@ describe("A803 waiting copy: copyHeldGroups and drafts", () => {
     expect(await draftLineRows(draftId)).toEqual(before);
   });
 
+  it("A803 waiting copy: copyHeldGroups points each draft reference at its own group's copy", async () => {
+    const a = await seatWith([
+      { names: ["Tarta"], release: "hold" },
+      { names: ["Flan"], release: "hold" },
+    ]);
+    const tarta = await lineOf(a.billId, "Tarta");
+    const flan = await lineOf(a.billId, "Flan");
+    const [g1, g2] = [tarta.groupId!, flan.groupId!];
+    const draftId = await openDraft(a.partyId, a.billId);
+    await draftLine(draftId, 0, { slot: 0, joinGroupId: g1 });
+    await draftLine(draftId, 1, { slot: 0, joinGroupId: g2 });
+    await draftLine(draftId, 2, { slot: 1, afterGroupId: g1 });
+    await draftLine(draftId, 3, { slot: 2, afterGroupId: g2 });
+    const before = await draftLineRows(draftId);
+    const b = await otherParty();
+
+    const copies = await copy(a.billId, a.partyId, b, [tarta.id, flan.id]);
+
+    const [copy1, copy2] = [copies.get(g1)!, copies.get(g2)!];
+    expect(copy1).not.toBe(copy2);
+    expect(await draftLineRows(draftId)).toEqual(
+      before.map((row) => pointedAt(pointedAt(row, g1, copy1), g2, copy2)),
+    );
+  });
+
+  it("A803 waiting copy: copyHeldGroups leaves a discarded draft of the moving bill as it was", async () => {
+    const a = await seatWith([{ names: ["Tarta"], release: "hold" }]);
+    const tarta = await lineOf(a.billId, "Tarta");
+    const g = tarta.groupId!;
+    const draftId = await openDraft(a.partyId, a.billId);
+    await draftLine(draftId, 0, { slot: 0, joinGroupId: g });
+    await inTx(v, (tx) =>
+      tx.update(orderDrafts).set({ state: "discarded" }).where(eq(orderDrafts.id, draftId)),
+    );
+    const before = await draftLineRows(draftId);
+    const b = await otherParty();
+
+    const copies = await copy(a.billId, a.partyId, b, [tarta.id]);
+
+    expect(copies.has(g)).toBe(true);
+    expect(await draftLineRows(draftId)).toEqual(before);
+  });
+
   it("A803 waiting copy: copyHeldGroups: a staying bill's draft naming a source group the copy removed is refused at its next save, as for any emptied held group", async () => {
     const a = await seatWith([{ names: ["Tarta"], release: "hold" }]);
     const g = (await lineOf(a.billId, "Tarta")).groupId!;
@@ -711,14 +847,6 @@ async function rowsOf(partyIds: string[], billIds: string[]) {
       .where(inArray(workingOrders.id, billIds))
       .orderBy(asc(workingOrders.id)),
   };
-}
-
-function kitchenItemOf(lineId: string) {
-  return v.db
-    .select()
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderLineId, lineId))
-    .then((rows) => rows[0]!);
 }
 
 describe("A803 waiting copy: Move this bill", () => {

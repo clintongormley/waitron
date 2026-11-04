@@ -749,7 +749,7 @@ export async function moveGroupsToParty(
 
 /**
  * Give each held group of `fromPartyId` holding one of `lineIds` a held copy at `toPartyId`, and
- * move those lines and their extras to it (plan D1–D9). Returns source group id → copy id.
+ * move those lines and their extras to it. Returns source group id → copy id.
  */
 export async function copyHeldGroups(
   tx: Transaction,
@@ -809,13 +809,14 @@ export async function copyHeldGroups(
     rows.map((row) => row.lineId),
   );
   let position = await lastPosition(tx, toPartyId);
+  let displayNumber = await nextGroupNumber(tx, toPartyId);
   for (const [sourceId, source] of sources) {
     const [copy] = await tx
       .insert(orderGroups)
       .values({
         partyId: toPartyId,
         position: ++position,
-        displayNumber: await nextGroupNumber(tx, toPartyId),
+        displayNumber: displayNumber++,
         numberPartyId: toPartyId,
         state: "held",
         firedAt: null,
