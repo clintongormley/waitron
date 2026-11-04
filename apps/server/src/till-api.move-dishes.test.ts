@@ -178,9 +178,9 @@ function invoiced(billId: string): { names: string[]; tenders: number[] } {
 describe("A803 move dishes route:", () => {
   it("moving to a new bill answers 200 with the new bill's id", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
-    const [, caña] = lineIdsOf(tabId);
+    const [, beerLineId] = lineIdsOf(tabId);
 
-    const answer = await post(tabId, await wellFormed(partyId, tabId, [caña!], null));
+    const answer = await post(tabId, await wellFormed(partyId, tabId, [beerLineId!], null));
 
     expect(answer.status).toBe(200);
     expect(Object.keys(answer.json)).toEqual(["billId"]);
@@ -204,20 +204,23 @@ describe("A803 move dishes route:", () => {
 
   it("a dish's id spelled in upper case moves that dish", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
-    const [, caña] = lineIdsOf(tabId);
+    const [, beerLineId] = lineIdsOf(tabId);
 
-    const answer = await post(tabId, await wellFormed(partyId, tabId, [caña!.toUpperCase()], null));
+    const answer = await post(
+      tabId,
+      await wellFormed(partyId, tabId, [beerLineId!.toUpperCase()], null),
+    );
 
     expect(answer.status).toBe(200);
-    expect(lineIdsOf(answer.json.billId as string)).toEqual([caña]);
+    expect(lineIdsOf(answer.json.billId as string)).toEqual([beerLineId]);
     expect(lineIdsOf(tabId)).toHaveLength(1);
   });
 
   it("401 without a session", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
-    const [, caña] = lineIdsOf(tabId);
+    const [, beerLineId] = lineIdsOf(tabId);
 
-    const answer = await post(tabId, await wellFormed(partyId, tabId, [caña!], null), "");
+    const answer = await post(tabId, await wellFormed(partyId, tabId, [beerLineId!], null), "");
 
     expect(answer.status).toBe(401);
     expect(answer.json).toMatchObject({ code: "session.required" });
@@ -250,8 +253,8 @@ describe("A803 move dishes route:", () => {
 
   it("expectedEdits that are not a list are 400 management.request_invalid naming them", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
-    const [, caña] = lineIdsOf(tabId);
-    const body = await wellFormed(partyId, tabId, [caña!], null);
+    const [, beerLineId] = lineIdsOf(tabId);
+    const body = await wellFormed(partyId, tabId, [beerLineId!], null);
 
     const answer = await post(tabId, { ...body, expectedEdits: "x" });
 
@@ -265,8 +268,8 @@ describe("A803 move dishes route:", () => {
 
   it("a body without toBillId is 400 management.request_invalid naming it, opening no bill", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
-    const [, caña] = lineIdsOf(tabId);
-    const body = await wellFormed(partyId, tabId, [caña!], null);
+    const [, beerLineId] = lineIdsOf(tabId);
+    const body = await wellFormed(partyId, tabId, [beerLineId!], null);
     delete body.toBillId;
     const revision = revisionOf(partyId);
 
@@ -286,8 +289,8 @@ describe("A803 move dishes route:", () => {
 
   it("a destination that is not a UUID is 409 tab.not_open", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
-    const [, caña] = lineIdsOf(tabId);
-    const body = await wellFormed(partyId, tabId, [caña!], null);
+    const [, beerLineId] = lineIdsOf(tabId);
+    const body = await wellFormed(partyId, tabId, [beerLineId!], null);
 
     const answer = await post(tabId, { ...body, toBillId: "not-a-uuid" });
 
@@ -338,7 +341,7 @@ describe("A803 move dishes route:", () => {
 
   it("another person's unsent dishes on the bill are 409 draft.taken_over with the conflicts", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
-    const [, caña] = lineIdsOf(tabId);
+    const [, beerLineId] = lineIdsOf(tabId);
     await inTx(venue, (tx) =>
       saveDraftForTest(tx, venue.cfg, partyId, venue.adminId, {
         billId: tabId,
@@ -364,7 +367,7 @@ describe("A803 move dishes route:", () => {
     );
     const revision = revisionOf(partyId);
 
-    const answer = await post(tabId, await wellFormed(partyId, tabId, [caña!], null));
+    const answer = await post(tabId, await wellFormed(partyId, tabId, [beerLineId!], null));
 
     expect(answer.status).toBe(409);
     expect(answer.json).toMatchObject({
@@ -378,10 +381,10 @@ describe("A803 move dishes route:", () => {
   it("moving the last unpaid dishes off a bill whose contribution covers what stays files one invoice for it, and the moved dishes' new bill none", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña");
     await contribute(tabId, "35.00");
-    const [, caña] = lineIdsOf(tabId);
+    const [, beerLineId] = lineIdsOf(tabId);
     expect(registroCount(venue, tabId)).toBe(0);
 
-    const answer = await post(tabId, await wellFormed(partyId, tabId, [caña!], null));
+    const answer = await post(tabId, await wellFormed(partyId, tabId, [beerLineId!], null));
 
     expect(answer.status).toBe(200);
     expect(await statusOf(venue, tabId)).toBe("settled");
@@ -399,9 +402,9 @@ describe("A803 move dishes route:", () => {
   it("a move that leaves the source owing files nothing", async () => {
     const { partyId, tabId } = await seated("Paella", "Caña", "Caña");
     await contribute(tabId, "35.00");
-    const [, , caña] = lineIdsOf(tabId);
+    const [, , beerLineId] = lineIdsOf(tabId);
 
-    const answer = await post(tabId, await wellFormed(partyId, tabId, [caña!], null));
+    const answer = await post(tabId, await wellFormed(partyId, tabId, [beerLineId!], null));
 
     expect(answer.status).toBe(200);
     expect(await statusOf(venue, tabId)).toBe("open");
@@ -471,9 +474,9 @@ describe("A803 move dishes route:", () => {
     );
     await contribute(tabId, "35.00");
     await contribute(destination, "1.00");
-    const [, caña] = lineIdsOf(tabId);
+    const [, beerLineId] = lineIdsOf(tabId);
 
-    const moved = await post(tabId, await wellFormed(partyId, tabId, [caña!], destination));
+    const moved = await post(tabId, await wellFormed(partyId, tabId, [beerLineId!], destination));
 
     expect(moved.status, JSON.stringify(moved.json)).toBe(200);
     expect(await statusOf(venue, tabId)).toBe("settled");
