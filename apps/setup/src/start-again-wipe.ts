@@ -8,23 +8,10 @@ import type {
 } from "./api/first-setup-types.js";
 import { startAgainRefusalCause } from "./first-setup-session.js";
 
-const SUMMARY_KEYS = ["reached", "recoveryRecordDamaged", "recovery", "databaseUnreadable"];
+const SUMMARY_KEYS = ["reached", "recoveryRecordDamaged", "databaseUnreadable"];
 const SUMMARY_REACHED = ["claimed", "named", "fiscal-started", "fiscal-finished"];
-const RECOVERY_KEYS = ["startedAt", "lastActiveAt", "lastActiveSource", "failed", "cloud"] as const;
 function object(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function readableRecovery(value: unknown): boolean {
-  return (
-    object(value) &&
-    Object.keys(value).length === RECOVERY_KEYS.length &&
-    RECOVERY_KEYS.every((key) => key in value) &&
-    typeof value.startedAt === "string" &&
-    typeof value.lastActiveAt === "string" &&
-    ["memory", "saved-step"].includes(value.lastActiveSource as string) &&
-    typeof value.failed === "boolean" &&
-    typeof value.cloud === "boolean"
-  );
 }
 const flag = (value: unknown) => value === undefined || value === true;
 function summaryOf(value: unknown): StartAgainSummary {
@@ -33,8 +20,7 @@ function summaryOf(value: unknown): StartAgainSummary {
     Object.keys(value).some((key) => !SUMMARY_KEYS.includes(key)) ||
     !SUMMARY_REACHED.includes(value.reached as string) ||
     !flag(value.recoveryRecordDamaged) ||
-    !flag(value.databaseUnreadable) ||
-    !(value.recovery === undefined || readableRecovery(value.recovery))
+    !flag(value.databaseUnreadable)
   )
     throw { code: "setup.attempt_invalid" };
   return value as unknown as StartAgainSummary;
@@ -42,11 +28,7 @@ function summaryOf(value: unknown): StartAgainSummary {
 const sameSummary = (a: StartAgainSummary, b: StartAgainSummary) =>
   a.reached === b.reached &&
   a.recoveryRecordDamaged === b.recoveryRecordDamaged &&
-  a.databaseUnreadable === b.databaseUnreadable &&
-  (a.recovery === undefined
-    ? b.recovery === undefined
-    : b.recovery !== undefined &&
-      RECOVERY_KEYS.every((key) => a.recovery![key] === b.recovery![key]));
+  a.databaseUnreadable === b.databaseUnreadable;
 
 /** What Start again would delete, as the box says it; read with no setup password or owner tab. */
 export async function readWipeSummary(
@@ -72,11 +54,7 @@ export async function sendWipe(
     database === "missing"
       ? { confirmMissingDatabase: { nothingFiledOrSold: true, shown } }
       : {
-          ...(shown.recovery !== undefined
-            ? { confirmRecoveryDiscard: { shown } }
-            : shown.databaseUnreadable === true
-              ? { confirmUnreadableDatabase: { shown } }
-              : {}),
+          ...(shown.databaseUnreadable === true && { confirmUnreadableDatabase: { shown } }),
           ...(shown.recoveryRecordDamaged === true && {
             recoveryRecordDamagedShown: true as const,
           }),

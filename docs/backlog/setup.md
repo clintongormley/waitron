@@ -389,18 +389,6 @@ Reconnect to continue."; two "Start again" buttons are drawn at once, the one th
 confirmation and the one that confirms; and Continue sits tight against the password field at
 phone width (`apps/setup/src/setup-app.ts`, the first-owner screen).
 
-## Close a discarded recovery's Cloud approval from the box
-
-Left open by A1042. Show the saved link and code beside the repair page's stopped line, so the
-person can close the approval in Waitron Cloud. The box no longer shows that link and code anywhere: its only
-place was the old recovery's Cloud wait screen (`apps/setup/src/screens/first-setup-backup-screen.ts`),
-which the repair page stopped opening in A1131b/c slice 3, and the box's Cloud
-client has no action that closes an approval (`apps/server/src/cloud-recovery.ts`: `start`,
-`status`, `info`, `read`, `restored`). Cloud closes the approval by itself an hour after it was
-given, and refuses a new one for that venue until then (Waitron Cloud at 4eed93d6:
-`packages/registration/migrations/011_managed_backups.sql`, `expires_at` default;
-`packages/backups/src/recovery.ts`, `recovery_active`).
-
 ## Other full-disk words still send the person elsewhere or end with the short reinstall sentence
 
 - **Other full-disk words still send the person elsewhere or end with the short reinstall
@@ -437,8 +425,7 @@ stage does, and let the page promise it.
 ## A resume can use the room the spare file gave
 
 After the repair host deletes the spare beside a stopped recovery, a resume of that recovery could
-use the freed room: since A1131bc slice 3 the page's Recover from backup discards a stopped recovery
-rather than resuming it, but the server's `open` accepts its id (`apps/server/src/first-setup-backup-recovery.ts`, `open`); and a
+use the freed room: the server's `open` accepts its id (`apps/server/src/first-setup-backup-recovery.ts`, `open`); and a
 release on a plain read while an idle, unsealed setup session can still continue lets that session
 use the room too. Also: a recovery that fails before its `placement-started` record counts as running
 for up to its 5-minute lease, so the repair host releases nothing until the lease lapses. All read,
@@ -802,6 +789,8 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
   `apps/setup/src/i18n/strings/shell.ts`) sends the person to somebody else, against the refusal rule
   in `CLAUDE.md` §3. Wanted: say what happened and what each choice does. The words date from C42
   (#837, 2026-09-29). Noticed while planning A1131bc slice 3, not changed there.
+  Between A1131bc slice 4's two pull requests, the page also draws these words for a summary
+  that still names an old recovery from backup.
 
 ## Decisions and deliberate limits
 
@@ -882,7 +871,8 @@ minute, a sale is then refused by the clock-behind stop, and a confirmation list
   setup database holds records; the page says what is there and what is lost.** (2026-10-29, A1131bc
   slice 1: the confirmation no longer counts what is there; it says what Start again deletes and
   that no invoice was sent.) (2026-10-30, A1131bc slice 2: offered without a stopped recovery and
-  without a password.)
+  without a password.) (2026-11-04, A1131bc slice 4: the setup page no longer reads, shows or
+  discards an old recovery from backup.)
 - **Built with it, to respect the owner's fiscal stop (A1131 part 1; awaiting the owner's
   confirmation in the PR):** Start again does not go ahead when the database holds an invoice or another
   row Waitron never deletes (said to be a fault), when the setup saved its trading settings, or
@@ -900,7 +890,9 @@ extends the recovery session's 15 minutes.** The page renews every 30 seconds wh
 can stay alive with no time limit while the open page's renewals keep reaching the box. The owner
 accepted that cost so that someone still filling in the recovery form at minute 15 is not told the
 recovery stopped. Without renewals or steps, the session still ends after 15 minutes
-(`apps/server/src/first-setup-backup-lease.test.ts`).
+(`apps/server/src/first-setup-backup-lease.test.ts`). (2026-11-04, A1131bc slice 4: the setup page no
+longer reads, shows, renews or discards an old recovery from backup, and
+`first-setup-backup-session.ts` is deleted.)
 
 (2026-10-29: superseded by A1206 above — the note is retired; Q1's confirmation records and Q4's
 reset rule for them remain.)
@@ -944,7 +936,8 @@ password and the discard confirmation, and only for an empty, never-activated at
 (`startAgainFirstSetup`, `apps/server/src/first-setup-resolution.ts`). A1042. (2026-10-28, A1131:
 a database that holds records goes too, unless it holds a row Waitron never deletes, the setup saved
 its trading settings, or it finished.) (2026-10-30, A1131bc slice 2: offered without a stopped
-recovery and without a password.)
+recovery and without a password.) (2026-11-04, A1131bc slice 4: the setup page no longer reads,
+shows or discards an old recovery from backup.)
 
 **DECIDED (owner, 2026-10-17): setup, and the demo, start only for a country that has a country
 pack.** A country without one is not offered at all, so no venue is set up against settings no pack

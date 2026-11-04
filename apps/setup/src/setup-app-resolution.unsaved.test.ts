@@ -4,6 +4,7 @@ import { leaveCoordinatorFor, type WtInput } from "@waitron/ui";
 import { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initial, wizardApi } from "../test/first-setup-browser.js";
+import { oldRecoveryRequests } from "../test/wipe-browser.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 
 afterEach(async () => {
@@ -50,11 +51,9 @@ it("asks before discarding the interrupted password draft and restores its nativ
 });
 
 it("Recover from backup opens its confirmation in place, keeping an entered setup password, with no leave warning", async () => {
-  const { api } = wizardApi({
+  const { api, requests } = wizardApi({
     claimed: true,
     intercept(path) {
-      if (path.endsWith("/backup/status"))
-        return Response.json({ phase: "unstarted", proofRequired: true });
       if (path.endsWith("/start-again/summary")) return Response.json({ reached: "claimed" });
     },
   });
@@ -72,7 +71,7 @@ it("Recover from backup opens its confirmation in place, keeping an entered setu
   expect(
     el.shadowRoot!.querySelector<HTMLElement & { open: boolean }>("wt-unsaved-changes")!.open,
   ).toBe(false);
-  expect(el.shadowRoot!.querySelector("setup-first-backup")).toBeNull();
+  expect(oldRecoveryRequests(requests)).toEqual([]);
   const kept = el.shadowRoot!.querySelector<WtInput>("[data-test=resume-password]")!;
   await kept.updateComplete;
   expect(kept.shadowRoot!.querySelector<HTMLInputElement>("input")!.value).toBe(

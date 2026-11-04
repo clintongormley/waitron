@@ -74,29 +74,6 @@ contraseñas y claves de recuperación solo cuando HTTPS se abra sin avisos.
 
 Apaga la caja anterior y coordínate con los otros locales: solo una persona debe recuperar este contribuyente a la vez.
 
-Los párrafos siguientes describen una recuperación desde una copia iniciada en la página de
-reparación antes de esta versión de Waitron, que ya no la inicia ahí.
-
-Mientras hay una recuperación desde una copia en curso en otro dispositivo, la página de reparación
-lo indica, con cuándo empezó y cuándo tuvo actividad por última vez. Hasta que se detenga, la página
-solo ofrece **Reconectar** y **Configurar conexión segura**, y lo vuelve a comprobar sola. Una
-recuperación cuenta como en curso mientras alguno de sus pasos está en marcha y durante los cinco
-minutos siguientes a su última actividad. Esos cinco minutos terminan antes si la recuperación falla
-o el equipo se reinicia.
-
-Si una recuperación desde una copia empezó y no terminó, **Empezar de nuevo** o **Recuperar desde
-una copia** la borra junto con la configuración interrumpida, y la página muestra la recuperación
-detenida al pulsar cualquiera de las dos.
-
-Si esa recuperación usaba una copia de Cloud, su aprobación en Waitron Cloud se cierra sola en menos
-de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para
-el local de este equipo.
-
-Si la recuperación llenó el disco del equipo, «Empezar de nuevo» sigue funcionando: el equipo guarda
-unos 8 MB de su disco en reserva, y cede ese espacio para poder quitar la recuperación. Si ni eso
-basta, la página dice que el disco está lleno. Cuando la página puede saberlo, dice si reiniciar el
-equipo puede liberar espacio.
-
 ## Elige tu copia {#source}
 
 En «Unirse a un restaurante existente o recuperarlo», elige **Restaurar una copia de seguridad**

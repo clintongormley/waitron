@@ -5,15 +5,8 @@ import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { setLocale } from "./i18n/t.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { shellEn } from "./i18n/strings/shell.js";
-import type { BackupRepairActivity } from "./api/first-setup-types.js";
-import { initial } from "../test/first-setup-browser.js";
-import {
-  click,
-  namedSummary,
-  q,
-  stoppedActivity,
-  stoppedSummary,
-} from "../test/missing-database-browser.js";
+import { initial, wizardApi } from "../test/first-setup-browser.js";
+import { click, damagedSummary, namedSummary, q } from "../test/missing-database-browser.js";
 import { refusedCause, settled } from "../test/held-database-browser.js";
 import {
   OWNER_HEADER,
@@ -21,13 +14,15 @@ import {
   confirmation,
   fieldsIn,
   formErrors,
+  oldRecoveryRequests,
   sends,
   summaryReads,
   t,
   text,
   wipeFixture,
 } from "../test/wipe-browser.js";
-import { cleanupWidgets } from "./widgets/test-helpers.js";
+import type { SetupApp } from "./setup-app.js";
+import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -40,7 +35,6 @@ for (const c of cases)
   it(`${c.name}: Start again asks for no password, reads the summary with no owner tab, and sends what was shown`, async () => {
     const { app, requests } = await wipeFixture({
       inspection: c.inspection,
-      activity: c.activity,
       summary: () => Response.json(c.summary),
     });
     await click(app, "start-again");
@@ -63,6 +57,53 @@ for (const c of cases)
     expect(requests.some((r) => r.path.endsWith("/resolution/recover"))).toBe(false);
     await expect.poll(() => text(app)).toContain(t.restarting);
   });
+
+for (const database of ["occupied", "missing", "corrupt"] as const)
+  for (const [press, confirm] of [
+    ["start-again", "confirm-start-again"],
+    ["recover-backup", "confirm-recover"],
+  ] as const)
+    it(`setup database ${database}, ${press}: the repair page sends nothing under /resolution/backup/ on load, on the wipe or on Reconnect`, async () => {
+      const { app, requests } = await wipeFixture({ inspection: { database } });
+      expect(oldRecoveryRequests(requests)).toEqual([]);
+      await click(app, press);
+      await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+      await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
+      await click(app, confirm);
+      await expect.poll(() => sends(requests).length).toBe(1);
+      expect(oldRecoveryRequests(requests)).toEqual([]);
+      const before = requests.length;
+      await click(app, "reconnect-first");
+      await expect.poll(() => requests.length).toBeGreaterThan(before);
+      await settled(app);
+      expect(oldRecoveryRequests(requests)).toEqual([]);
+    });
+
+it("an ordinary first setup resumed in a tab that holds its session sends nothing under /resolution/backup/", async () => {
+  sessionStorage.setItem(
+    FIRST_SETUP_SESSION_KEY,
+    JSON.stringify({
+      version: 1,
+      clientClaimNonce: "N".repeat(43),
+      claimPending: false,
+      owner: {
+        attemptId: initial.attemptId,
+        revision: 1,
+        ownerGeneration: 1,
+        capability: "A".repeat(43),
+      },
+    }),
+  );
+  const { api, requests } = wizardApi({ claimed: true });
+  const { el: app } = await mountWidget<SetupApp>("setup-app", {
+    api,
+    browserLanguages: ["en-GB"],
+  });
+  await expect.poll(() => q(app, "resume")).not.toBeNull();
+  await settled(app);
+  expect(requests.some((r) => r.headers.has(OWNER_HEADER))).toBe(true);
+  expect(oldRecoveryRequests(requests)).toEqual([]);
+});
 
 it("with the setup database missing, no Continue or password field is drawn, before or after Start again", async () => {
   const { app } = await wipeFixture({ inspection: { database: "missing" } });
@@ -129,21 +170,6 @@ it("pressing Start again reads the setup again before reading the summary", asyn
   expect(inspected).toBeLessThan(after.findIndex((p) => p.endsWith("/start-again/summary")));
 });
 
-it("a recovery found running when Start again is pressed draws the running recovery and no confirmation", async () => {
-  let activity: BackupRepairActivity | null = null;
-  const { app, requests } = await wipeFixture({ activity: () => activity });
-  activity = {
-    state: "running",
-    startedAt: stoppedActivity.startedAt,
-    lastActiveAt: stoppedActivity.lastActiveAt,
-  };
-  await click(app, "start-again");
-  await expect.poll(() => q(app, "recovery-running")).not.toBeNull();
-  await app.updateComplete;
-  expect(q(app, "retire-confirmed")).toBeNull();
-  expect(summaryReads(requests)).toEqual([]);
-});
-
 it("a send refused kept-records closes the confirmation, says the setup changed, and offers Start again again", async () => {
   const { app } = await wipeFixture({ startAgain: () => refusedCause("kept-records") });
   await click(app, "start-again");
@@ -178,31 +204,7 @@ it("a summary answered after the page has left and been read again draws no conf
   expect(q(app, "retire-confirmed")).toBeNull();
 });
 
-it("beside a stopped recovery, a summary read refused storage.disk_full says so and offers Check again, which reads it again", async () => {
-  let full = true;
-  const { app, requests } = await wipeFixture({
-    activity: stoppedActivity,
-    summary: () =>
-      full
-        ? Response.json(
-            { error: { code: "storage.disk_full", params: { restartDeletesLogs: true } } },
-            { status: 507 },
-          )
-        : Response.json(stoppedSummary),
-  });
-  await click(app, "start-again");
-  await expect.poll(() => q(app, "check-again")).not.toBeNull();
-  await settled(app);
-  expect(formErrors(app)).toContain(shellEn["shell.first_setup.disk_full"]);
-  expect(q(app, "recovery-stopped")).not.toBeNull();
-  expect(q(app, "retire-confirmed")).toBeNull();
-  full = false;
-  await click(app, "check-again");
-  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
-  expect(summaryReads(requests).length).toBe(2);
-});
-
-it("with no stopped recovery, a summary read that fails draws the error beside Start again, still offered", async () => {
+it("a summary read that fails draws the error beside Start again, still offered", async () => {
   let fail = true;
   const { app } = await wipeFixture({
     summary: () =>
@@ -216,7 +218,6 @@ it("with no stopped recovery, a summary read that fails draws the error beside S
   await click(app, "start-again");
   await expect.poll(() => formErrors(app)).toContain(shellEn["shell.first_setup.disk_full"]);
   await settled(app);
-  expect(q(app, "check-again")).toBeNull();
   expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
   fail = false;
   await click(app, "start-again");
@@ -305,7 +306,7 @@ for (const [locale, lang] of locales)
 it("a summary that changed after the confirmation was drawn closes it, says the setup changed, and Start again then opens on the new summary", async () => {
   let reads = 0;
   const { app, requests } = await wipeFixture({
-    summary: () => Response.json(reads++ === 0 ? namedSummary : stoppedSummary),
+    summary: () => Response.json(reads++ === 0 ? namedSummary : damagedSummary),
   });
   await click(app, "start-again");
   await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
@@ -319,7 +320,7 @@ it("a summary that changed after the confirmation was drawn closes it, says the 
   await expect.poll(() => app.shadowRoot!.activeElement).toBe(q(app, "start-again"));
   await click(app, "start-again");
   await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
-  expect(q(app, "recovery-stopped")).not.toBeNull();
+  expect(q(app, "recovery-record-damaged")).not.toBeNull();
 });
 
 for (const [name, refusal, words] of [
@@ -372,17 +373,6 @@ it("where the setup as read on pressing can no longer be deleted, no summary is 
   expect(q(app, "start-again-refused")!.textContent).toBe(t.wipeUnavailable);
   expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
   expect(summaryReads(requests)).toEqual([]);
-});
-
-it("with the setup database missing and a recovery journal the summary does not name, pressing Start again opens no confirmation", async () => {
-  const { app } = await wipeFixture({
-    inspection: { database: "missing" },
-    backupPhase: "uncertain",
-  });
-  await click(app, "start-again");
-  await expect.poll(() => q(app, "missing-reached")).not.toBeNull();
-  await settled(app);
-  expect(q(app, "retire-confirmed")).toBeNull();
 });
 
 it("pressing Start again moves focus to the confirmation's tick box", async () => {

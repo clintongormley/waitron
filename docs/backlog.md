@@ -552,11 +552,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   "Start again" buttons, and Continue tight against the password field at phone width.
   [Detail](backlog/setup.md#the-repair-pages-start-again-oddities-from-1752)
 
-- **Close a discarded recovery's Cloud approval from the box.** Show the saved link and code beside
-  the repair page's stopped line; the approval otherwise stays open up to an hour. Left open by
-  A1042.
-  [Detail](backlog/setup.md#close-a-discarded-recoverys-cloud-approval-from-the-box)
-
 - **Other full-disk words still send the person elsewhere or end with the short reinstall sentence**
   For the owner. Left open by A1127.
   [Detail](backlog/setup.md#other-full-disk-words-still-send-the-person-elsewhere-or-end-with-the-short-reinstall-sentence).

@@ -67,27 +67,6 @@ device that allows it. Enter passwords and recovery keys only after HTTPS opens 
 Stop the former box and coordinate with the other venues:
 only one person should recover this taxpayer at a time.
 
-The next paragraphs describe a recovery from backup begun on the repair page before this version
-of Waitron, which no longer starts one there.
-
-While a recovery from backup is running on another device, the repair page says so, with when it
-started and when it was last active. Until it stops, the page offers only **Reconnect** and **Set
-up secure connection**, and it checks again by itself. A recovery counts as running while one of
-its steps is in progress and for five minutes after its last activity. Those five minutes end early
-if the recovery fails or the box restarts.
-
-If a recovery from backup started and did not finish, **Start again** or **Recover from backup**
-deletes it along with the interrupted setup, and the page shows the stopped recovery when either is
-pressed.
-
-If that recovery used a Waitron Cloud copy, its approval in Waitron Cloud closes by itself within an
-hour of when it was given. Until then, Waitron Cloud cannot approve a new recovery for this box's
-venue.
-
-If the recovery filled the box's disk, Start again still works: the box keeps about 8 MB of its disk
-spare, and gives that space up so it can delete the recovery. If even that is not enough, the page
-says the disk is full. Where the page can tell, it says whether restarting the box can free space.
-
 ## Choose your copy {#source}
 
 On "Join or recover an existing restaurant", choose **Restore a backup** for a backup file, or

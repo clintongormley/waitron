@@ -3,15 +3,12 @@ import { draftScopeFor } from "@waitron/ui";
 import { FirstSetupSession } from "./first-setup-session.js";
 import { readWipeSummary, sendWipe, wipeRefusal } from "./start-again-wipe.js";
 import type {
-  BackupRepairActivity,
-  BackupRepairStatus,
   FirstSetupInspection,
   FirstSetupResolutionSnapshot,
   StartAgainRefusalCause,
   StartAgainSummary,
 } from "./api/first-setup-types.js";
 import "./screens/initial-setup-screen.js";
-import { shownAt } from "./screens/first-setup-backup-screen.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import {
   LeaveController,
@@ -234,11 +231,7 @@ const FIRST_SETUP_ERROR_MESSAGES: Record<string, StringKey> = {
   "setup.attempt_invalid": "shell.first_setup.attempt_invalid",
   "setup.start_again_incomplete": "shell.first_setup.start_again_incomplete",
   "setup.workspace_unsupported": "shell.first_setup.workspace_unsupported",
-  "setup.recovery_in_progress": "shell.first_setup.recovery_in_progress",
-  "setup.recovery_discarded": "shell.first_setup.recovery_discarded",
 };
-const ACTIVITY_REREAD_MS = 30_000;
-const STOPPED_BACKUP_PHASES: readonly string[] = ["prepared", "placement-started", "restored"];
 /** Whether the page may ask the box what Start again would delete; the box decides the rest. */
 const wipeOffered = (inspection: FirstSetupInspection) =>
   inspection.pair === "valid" &&
@@ -679,10 +672,6 @@ export class SetupApp extends LitElement {
     this.#closeWipe();
     this.#afterWipe = undefined;
     this.firstWipeError = undefined;
-    this.#stopActivityWatch();
-    this.firstActivity = undefined;
-    this.firstActivityUnreadable = false;
-    this.firstRecoveryUnsettled = false;
     this.#firstPasswordScope?.dispose();
     this.#firstPasswordScope = undefined;
     ++this.#cloudRecoveryAttempt;
@@ -1110,19 +1099,9 @@ export class SetupApp extends LitElement {
   @state() private firstWipeKind: "start-again" | "recover" = "start-again";
   /** Which wipe the box restarted for, so Reconnect opens that choice's first screen; a reload forgets it. */
   #afterWipe?: "start-again" | "recover";
-  /** Start again's reads failed beside a stopped recovery: the page offers Check again. */
-  @state() private firstWipeUnread = false;
   @state() private firstWipeError?: Message;
-  @state() private firstBackupPhase?: BackupRepairStatus["phase"];
-  /** Read before anything is offered on this page, so nothing is offered while a recovery runs elsewhere. */
-  @state() private firstActivity?: BackupRepairActivity | null;
-  /** The last activity read failed, so the page offers nothing until a read succeeds. */
-  @state() private firstActivityUnreadable = false;
-  /** The ask's summary named a recovery that the backup status did not report as stopped. */
-  @state() private firstRecoveryUnsettled = false;
   /** The box's refusal of Start again, drawn in Start again's place until Reconnect reads the setup again. */
   @state() private firstStartAgainRefused?: StartAgainRefusalCause | "unavailable";
-  #activityTimer?: ReturnType<typeof setInterval>;
   #firstSession?: FirstSetupSession;
   #firstGeneration = 0;
   #firstReplacing = false;
@@ -1151,61 +1130,9 @@ export class SetupApp extends LitElement {
     if (inspect || session.recoveryRequired || session.state) this.#afterWipe = undefined;
     if ((inspect || session.recoveryRequired) && !session.state) {
       const inspection = await this.api.inspectFirstSetupResolution();
-      const activity = await this.#readActivity();
-      if (this.isConnected && this.#firstSession === session) {
-        this.firstActivity = activity;
-        this.firstInspection = inspection;
-        this.#watchActivity();
-      }
-    } else if (session.state) {
-      const activity = await this.#readActivity();
-      if (this.isConnected && this.#firstSession === session) {
-        this.firstActivity = activity;
-        this.#watchActivity();
-      }
+      if (this.isConnected && this.#firstSession === session) this.firstInspection = inspection;
     }
     return session;
-  }
-  async #readActivity(): Promise<BackupRepairActivity | null> {
-    try {
-      const activity = await this.#readActivityAnswer();
-      this.firstActivityUnreadable = false;
-      return activity;
-    } catch (error) {
-      this.firstActivityUnreadable = true;
-      throw error;
-    }
-  }
-  async #readActivityAnswer(): Promise<BackupRepairActivity | null> {
-    const { activity } = (await this.api.firstSetupBackupActivity()) ?? {};
-    if (activity === null) return null;
-    if (
-      (activity?.state === "running" || activity?.state === "stopped") &&
-      typeof activity.startedAt === "string" &&
-      typeof activity.lastActiveAt === "string"
-    )
-      return activity;
-    throw new Error("The backup recovery's activity could not be read.");
-  }
-  #watchActivity(): void {
-    this.#stopActivityWatch();
-    if (this.firstActivity?.state !== "running") return;
-    const timer = setInterval(() => {
-      // A failed read keeps the running view; the next tick asks again.
-      void this.#readActivityAnswer().then(
-        (activity) => {
-          if (this.#activityTimer !== timer) return;
-          this.firstActivity = activity;
-          if (activity?.state !== "running") this.#stopActivityWatch();
-        },
-        () => undefined,
-      );
-    }, ACTIVITY_REREAD_MS);
-    this.#activityTimer = timer;
-  }
-  #stopActivityWatch(): void {
-    clearInterval(this.#activityTimer);
-    this.#activityTimer = undefined;
   }
   #acceptFirstIdentity(): void {
     const state = this.#firstSession!.state!;
@@ -1334,26 +1261,6 @@ export class SetupApp extends LitElement {
       if (current()) this.firstOwnerBusy = false;
     }
   }
-  /** With the database missing: what the setup reached, and whether a recovery has started. */
-  async #readMissingAsk(current: () => boolean): Promise<void> {
-    const summary = await readWipeSummary(this.api, this.#firstResolutionSnapshot());
-    if (!current()) return;
-    const backup = await this.api.firstSetupBackupStatus();
-    if (!current()) return;
-    if (
-      backup?.proofRequired !== true ||
-      !["unstarted", "prepared", "placement-started", "restored", "selected", "uncertain"].includes(
-        backup.phase,
-      )
-    )
-      throw { code: "setup.attempt_invalid" };
-    // Two reads that disagree: another device can move the recovery between them.
-    this.firstRecoveryUnsettled =
-      summary.recovery !== undefined && !STOPPED_BACKUP_PHASES.includes(backup.phase);
-    if (this.firstRecoveryUnsettled) return;
-    this.firstWipeSummary = summary;
-    this.firstBackupPhase = backup.phase;
-  }
   #firstResolutionSnapshot(): FirstSetupResolutionSnapshot {
     const inspection = this.firstInspection;
     if (
@@ -1371,11 +1278,8 @@ export class SetupApp extends LitElement {
   }
   #closeWipe(): void {
     this.firstWipeSummary = undefined;
-    this.firstWipeUnread = false;
     this.firstRestartConfirm = false;
     this.firstRetireConfirmed = false;
-    this.firstBackupPhase = undefined;
-    this.firstRecoveryUnsettled = false;
   }
   /**
    * Start again or Recover from backup: the confirmation is drawn from what the box says now, read
@@ -1388,62 +1292,29 @@ export class SetupApp extends LitElement {
     const current = () => this.isConnected && generation === this.#firstGeneration;
     this.firstOwnerBusy = true;
     this.firstWipeError = undefined;
-    // Check again keeps the unread details and their buttons drawn, disabled, until the box answers.
-    const unread = this.firstWipeUnread;
-    const unsettled = this.firstRecoveryUnsettled;
     this.#closeWipe();
-    this.firstWipeUnread = unread;
-    this.firstRecoveryUnsettled = unsettled;
-    let failed = false;
     try {
       const inspection = await this.api.inspectFirstSetupResolution();
       if (!current()) return;
       this.firstInspection = inspection;
       if (!wipeOffered(inspection)) return;
-      if (inspection.database === "missing") {
-        await this.#readMissingAsk(current);
-        if (!current() || this.firstWipeSummary === undefined) return;
-        if (this.firstBackupPhase !== "unstarted" && this.firstWipeSummary.recovery === undefined)
-          return;
-      } else {
-        const activity = await this.#readActivityAnswer();
-        if (!current()) return;
-        this.firstActivity = activity;
-        if (activity?.state === "running") {
-          this.#watchActivity();
-          return;
-        }
-        const summary = await readWipeSummary(this.api, this.#firstResolutionSnapshot());
-        if (!current()) return;
-        this.firstWipeSummary = summary;
-      }
+      const summary = await readWipeSummary(this.api, this.#firstResolutionSnapshot());
+      if (!current()) return;
+      this.firstWipeSummary = summary;
       this.firstRestartConfirm = true;
       void this.#focusAfterUpdate("retire-confirmed");
     } catch (error) {
       if (!current()) return;
-      failed = true;
-      const unsettledNow = this.firstRecoveryUnsettled;
       this.#closeWipe();
       const refusal = wipeRefusal(error);
       if (refusal !== undefined) {
         this.firstStartAgainRefused = refusal;
         void this.#focusAfterUpdate("start-again-refused");
-      } else if (this.firstActivity?.state === "stopped") {
-        const key = repairErrorKey(error);
-        this.firstWipeUnread = true;
-        this.firstRecoveryUnsettled = unsettledNow;
-        this.firstWipeError = key
-          ? say(key)
-          : () => initialOwnerStrings[setupLocale()].recoveryDetailsUnread;
       } else {
-        this.firstRecoveryUnsettled = unsettledNow;
         this.firstWipeError = this.#describeRepairError(error);
       }
     } finally {
-      if (current()) {
-        if (!failed) this.firstWipeUnread = false;
-        this.firstOwnerBusy = false;
-      }
+      if (current()) this.firstOwnerBusy = false;
     }
   }
   /**
@@ -1518,9 +1389,6 @@ export class SetupApp extends LitElement {
       this.#closeWipe();
       this.firstWipeError = undefined;
       this.firstStartAgainRefused = undefined;
-      this.#stopActivityWatch();
-      this.firstActivity = undefined;
-      this.firstActivityUnreadable = false;
       await this.#openFirstSession();
       const session = this.#firstSession!;
       let inspect = false;
@@ -1535,16 +1403,8 @@ export class SetupApp extends LitElement {
       if (!unclaimed) this.#afterWipe = undefined;
       if ((inspect || session.recoveryRequired) && !session.state) {
         const inspection = await this.api.inspectFirstSetupResolution();
-        const activity = await this.#readActivity();
         if (!this.isConnected || generation !== this.#firstGeneration) return;
-        this.firstActivity = activity;
         this.firstInspection = inspection;
-        this.#watchActivity();
-      } else if (session.state) {
-        const activity = await this.#readActivity();
-        if (!this.isConnected || generation !== this.#firstGeneration) return;
-        this.firstActivity = activity;
-        this.#watchActivity();
       }
       if (!this.isConnected || generation !== this.#firstGeneration) return;
       if (unclaimed) {
@@ -2356,15 +2216,6 @@ export class SetupApp extends LitElement {
     const summary = this.firstWipeSummary;
     const ask = missing ? summary : undefined;
     const confirmOpen = this.firstRestartConfirm && summary !== undefined;
-    // Any journal, an unreadable one ("uncertain") included, means a recovery has started.
-    const recoveryStarted = this.firstBackupPhase !== "unstarted";
-    const running = this.firstActivity?.state === "running" ? this.firstActivity : undefined;
-    const offersNothing = running !== undefined || this.firstActivityUnreadable;
-    const stopped = ask?.recovery;
-    const stoppedHere =
-      !missing && this.firstActivity?.state === "stopped" ? this.firstActivity : undefined;
-    const offersStartAgain = !recoveryStarted || stopped !== undefined;
-    const unsettled = missing && this.firstRecoveryUnsettled;
     const refused = this.firstStartAgainRefused;
     const offered = inspection !== undefined && wipeOffered(inspection);
     const refusalWords =
@@ -2375,11 +2226,6 @@ export class SetupApp extends LitElement {
           : refused === "kept-records"
             ? t.keptFault
             : t.wipeUnavailable;
-    const lastActive = (at: string, source?: "memory" | "saved-step") =>
-      (source === "saved-step" ? t.recoveryLastSaved : t.recoveryLastActive).replace(
-        "{at}",
-        shownAt(at),
-      );
     if (!this.#firstPasswordScope && this.isConnected) {
       this.#firstPasswordScope = draftScopeFor(this, {
         id: this.#firstPasswordOwner,
@@ -2402,25 +2248,10 @@ export class SetupApp extends LitElement {
     const startAgain = html`<wt-button
       data-test="start-again"
       variant="secondary"
-      ?disabled=${this.firstOwnerBusy || !offered || unsettled}
+      ?disabled=${this.firstOwnerBusy || !offered}
       @click=${() => void this.#openWipeConfirmation("start-again")}
       >${t.startAgain}</wt-button
     >`;
-    const stoppedBlock = (
-      recovery: {
-        startedAt: string;
-        lastActiveAt: string;
-        lastActiveSource?: "memory" | "saved-step";
-        cloud?: boolean;
-      },
-      started: string,
-    ) => {
-      return html`<div data-test="recovery-stopped">
-        <p>${started.replace("{started}", shownAt(recovery.startedAt))}</p>
-        <p>${lastActive(recovery.lastActiveAt, recovery.lastActiveSource)}</p>
-        ${recovery.cloud ? html`<p>${t.recoveryStoppedCloud}</p>` : nothing}
-      </div>`;
-    };
     const noInvoiceFound = !missing && summary?.databaseUnreadable !== true;
     const passwordField = html`<wt-input
       data-test="resume-password"
@@ -2441,7 +2272,7 @@ export class SetupApp extends LitElement {
     const recoverBackup = html`<wt-button
       data-test="recover-backup"
       variant="secondary"
-      ?disabled=${this.firstOwnerBusy || !offered || unsettled}
+      ?disabled=${this.firstOwnerBusy || !offered}
       @click=${() => void this.#openWipeConfirmation("recover")}
       >${t.recoverBackup}</wt-button
     >`;
@@ -2453,10 +2284,7 @@ export class SetupApp extends LitElement {
       @click=${() => this.#cancelWipe()}
       >${t.cancel}</wt-button
     >`;
-    const stoppedShown = missing ? undefined : summary?.recovery;
     const recovering = confirmOpen && this.firstWipeKind === "recover";
-    const stoppedWords =
-      this.firstWipeKind === "recover" ? t.recoveryStoppedRecover : t.recoveryStopped;
     const startAgainConfirm = !confirmOpen
       ? nothing
       : html`${
@@ -2477,7 +2305,6 @@ export class SetupApp extends LitElement {
                   ${noInvoiceFound ? `${t.heldLost} ${t.noInvoiceSent}` : t.heldLost}
                 </p>`
           }
-          ${stoppedShown ? stoppedBlock(stoppedShown, stoppedWords) : nothing}
           <label
             ><input
               data-test="retire-confirmed"
@@ -2501,7 +2328,7 @@ export class SetupApp extends LitElement {
             >
           </wt-form-actions>`;
     const wipeError =
-      !confirmOpen && !this.firstWipeUnread && !this.firstOwnerBusy && this.firstWipeError
+      !confirmOpen && !this.firstOwnerBusy && this.firstWipeError
         ? html`<wt-form-actions .error=${this.firstWipeError()}></wt-form-actions>`
         : nothing;
     const refusal =
@@ -2509,24 +2336,14 @@ export class SetupApp extends LitElement {
         ? html`<p data-test="start-again-refused" tabindex="-1">${refusalWords}</p>`
         : nothing;
     return html`<section data-test="screen-first-owner">
-      <h1>${inspection || offersNothing ? t.interrupted : t.heading}</h1>
+      <h1>${inspection ? t.interrupted : t.heading}</h1>
       ${this.firstRestarting ? html`<p role="status">${t.restarting}</p>` : nothing}
       ${inspection?.password === "uncheckable" ? html`<p>${t.uncheckable}</p>` : nothing}
       ${missing ? html`<p data-test="missing-database">${t.missingDatabase}</p>` : nothing}
-      ${
-        running
-          ? html`<div data-test="recovery-running">
-              <p>${t.recoveryRunning.replace("{started}", shownAt(running.startedAt))}</p>
-              <p>${lastActive(running.lastActiveAt)}</p>
-              <p>${t.recoveryRunningNext}</p>
-            </div>`
-          : nothing
-      }
       ${this.firstOwnerBusy ? html`<p role="status">${t.waiting}</p>` : nothing}
       ${
         (!terminal || this.#firstSession?.recoveryRequired) &&
         !missing &&
-        !offersNothing &&
         !this.firstOwnerBusy &&
         !this.firstRestarting &&
         (state !== undefined || inspection?.password === "checkable")
@@ -2545,75 +2362,28 @@ export class SetupApp extends LitElement {
           : nothing
       }
       ${
-        inspection && !this.firstRestarting && !offersNothing
-          ? this.firstWipeUnread
-            ? html`${stoppedHere ? stoppedBlock(stoppedHere, stoppedWords) : nothing}${
-                  unsettled
-                    ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
-                    : nothing
-                }
-                <wt-form-actions .error=${this.firstWipeError?.() ?? ""}>
-                  ${cancelStartAgain}
-                  <wt-button
-                    data-test="check-again"
-                    variant="secondary"
-                    ?disabled=${this.firstOwnerBusy}
-                    @click=${() => void this.#openWipeConfirmation(this.firstWipeKind)}
-                    >${t.checkAgain}</wt-button
-                  >
-                </wt-form-actions>`
-            : ask
-              ? html`<p>${t.missingAsk}</p>
-                  <ul data-test="missing-reached">
-                    <li>
-                      ${
-                        ask.reached === "fiscal-started"
-                          ? t.reachedFiscalStarted
-                          : ask.reached === "fiscal-finished"
-                            ? t.reachedFiscalFinished
-                            : t.reachedNotStarted
-                      }
-                    </li>
-                  </ul>
-                  ${
-                    stopped
-                      ? stoppedBlock(stopped, stoppedWords)
-                      : this.firstBackupPhase === "uncertain"
-                        ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
-                        : offersStartAgain && !recovering
-                          ? html`<p>${t.missingBackup}</p>`
-                          : nothing
-                  }
-                  <div class="missing-actions" data-test="missing-actions">
-                    ${offersStartAgain && !recovering ? recoverBackup : nothing}${offersStartAgain && !confirmOpen ? startAgain : nothing}
-                  </div>
-                  ${startAgainConfirm} ${wipeError}`
-              : html`${
-                  stoppedHere && !confirmOpen
-                    ? stoppedBlock(
-                        stoppedHere,
-                        refused !== undefined ? t.recoveryStoppedRefused : t.recoveryStopped,
-                      )
-                    : nothing
-                }${
-                  unsettled
-                    ? html`<p data-test="recovery-unreadable">${t.recoveryUnreadable}</p>`
-                    : nothing
-                }${refused === undefined && !confirmOpen ? startAgain : nothing}
-                ${refusal} ${startAgainConfirm}
-                ${refused === undefined && !recovering ? recoverBackup : nothing}
-                ${
-                  unsettled
-                    ? html`<wt-button
-                        data-test="check-again"
-                        variant="secondary"
-                        ?disabled=${this.firstOwnerBusy}
-                        @click=${() => void this.#openWipeConfirmation(this.firstWipeKind)}
-                        >${t.checkAgain}</wt-button
-                      >`
-                    : nothing
-                }
-                ${wipeError}`
+        inspection && !this.firstRestarting
+          ? ask
+            ? html`<p>${t.missingAsk}</p>
+                <ul data-test="missing-reached">
+                  <li>
+                    ${
+                      ask.reached === "fiscal-started"
+                        ? t.reachedFiscalStarted
+                        : ask.reached === "fiscal-finished"
+                          ? t.reachedFiscalFinished
+                          : t.reachedNotStarted
+                    }
+                  </li>
+                </ul>
+                ${recovering ? nothing : html`<p>${t.missingBackup}</p>`}
+                <div class="missing-actions" data-test="missing-actions">
+                  ${recovering ? nothing : recoverBackup}${confirmOpen ? nothing : startAgain}
+                </div>
+                ${startAgainConfirm} ${wipeError}`
+            : html`${refused === undefined && !confirmOpen ? startAgain : nothing} ${refusal}
+              ${startAgainConfirm} ${refused === undefined && !recovering ? recoverBackup : nothing}
+              ${wipeError}`
           : nothing
       }
       ${state?.status === "abandoned" ? html`<p>${t.retired}</p>` : nothing}
@@ -2622,7 +2392,6 @@ export class SetupApp extends LitElement {
       ${
         state &&
         !missing &&
-        !offersNothing &&
         ["activation-started", "committed", "publication"].includes(state.status) &&
         !this.#firstSession?.recoveryRequired
           ? html`<p>${t.finishHelp}</p>
@@ -2636,13 +2405,12 @@ export class SetupApp extends LitElement {
           : nothing
       }
       ${
-        ((!terminal && !inspection && !state) || this.firstActivityUnreadable) &&
-        !this.firstOwnerBusy
+        !terminal && !inspection && !state && !this.firstOwnerBusy
           ? html`<wt-form-actions .error=${this.firstOwnerError?.() ?? t.error}></wt-form-actions>`
           : nothing
       }
-      ${!missing && !offersNothing && state?.status === "abandoned" && !state.consumptionIntent ? html`<wt-button data-test="replace-attempt" @click=${() => this.#replaceFirstSetup()}>${t.replace}</wt-button>` : nothing}
-      ${!missing && !offersNothing && state && !terminal ? html`<wt-button data-test="abandon-attempt" variant="ghost" ?disabled=${this.firstOwnerBusy} @click=${() => void this.#abandonFirstSetup()}>${t.abandon}</wt-button>` : nothing}
+      ${!missing && state?.status === "abandoned" && !state.consumptionIntent ? html`<wt-button data-test="replace-attempt" @click=${() => this.#replaceFirstSetup()}>${t.replace}</wt-button>` : nothing}
+      ${!missing && state && !terminal ? html`<wt-button data-test="abandon-attempt" variant="ghost" ?disabled=${this.firstOwnerBusy} @click=${() => void this.#abandonFirstSetup()}>${t.abandon}</wt-button>` : nothing}
       <wt-button
         data-test="reconnect-first"
         variant="secondary"

@@ -8,24 +8,15 @@ import { setLocale, t as say } from "./i18n/t.js";
 import { shellEn } from "./i18n/strings/shell.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { initial, venue } from "../test/first-setup-browser.js";
-import {
-  click,
-  missingDatabaseFixture,
-  namedSummary,
-  openMissing,
-  q,
-  shownTimes,
-  stoppedActivity,
-  stoppedSummary,
-} from "../test/missing-database-browser.js";
+import { click, namedSummary, q } from "../test/missing-database-browser.js";
 import { refusedCause, settled } from "../test/held-database-browser.js";
 import {
-  OLD_RECOVERY_ROUTE,
   OWNER_HEADER,
   cases,
   confirmation,
   fieldsIn,
   formErrors,
+  oldRecoveryRequests,
   sends,
   summaryReads,
   t,
@@ -45,8 +36,6 @@ const locales = [
   ["en-GB", "en"],
   ["es-ES", "es"],
 ] as const;
-const oldRecoveryMounted = (app: SetupApp) =>
-  app.shadowRoot!.querySelector("setup-first-backup") !== null;
 const tick = (app: SetupApp) => q<HTMLInputElement>(app, "retire-confirmed")!;
 const tickLabel = (app: SetupApp) => tick(app).closest("label")!.textContent!.trim();
 const paragraph = (app: SetupApp) => q(app, "recover-deletes")!.textContent!.trim();
@@ -55,13 +44,12 @@ for (const c of cases)
   it(`${c.name}: Recover sends exactly what Start again sends, with no password and no owner header, and never opens the old recovery`, async () => {
     const { app, requests } = await wipeFixture({
       inspection: c.inspection,
-      activity: c.activity,
       summary: () => Response.json(c.summary),
     });
     await click(app, "recover-backup");
-    expect(oldRecoveryMounted(app)).toBe(false);
+    expect(oldRecoveryRequests(requests)).toEqual([]);
     await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
-    expect(oldRecoveryMounted(app)).toBe(false);
+    expect(oldRecoveryRequests(requests)).toEqual([]);
     expect(fieldsIn(confirmation(app, "confirm-recover"))).toEqual([]);
     await userEvent.click(tick(app));
     await click(app, "confirm-recover");
@@ -73,9 +61,8 @@ for (const c of cases)
       ...c.sent,
     });
     await expect.poll(() => text(app)).toContain(t.restarting);
-    expect(oldRecoveryMounted(app)).toBe(false);
+    expect(oldRecoveryRequests(requests)).toEqual([]);
     expect(requests.some((r) => r.headers.has(OWNER_HEADER))).toBe(false);
-    expect(requests.some((r) => OLD_RECOVERY_ROUTE.test(r.path))).toBe(false);
   });
 
 for (const [locale, lang] of locales)
@@ -182,7 +169,7 @@ it.each(refusals)(
       expect(q(app, name), name).toBeNull();
     expect(q(app, "reconnect-first")).not.toBeNull();
     expect(sends(requests)).toEqual([]);
-    expect(oldRecoveryMounted(app)).toBe(false);
+    expect(oldRecoveryRequests(requests)).toEqual([]);
   },
 );
 
@@ -192,26 +179,12 @@ it.each([
 ] as const)(
   "where the wipe is not offered (%s), Recover from backup is drawn disabled like Start again",
   async (name, inspection) => {
-    const { app } = await wipeFixture({ inspection });
+    const { app, requests } = await wipeFixture({ inspection });
     expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
     expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(true);
     expect(q(app, "start-again-refused")!.textContent).toBe(t.wipeUnavailable);
     if (name === "uncheckable") expect(text(app)).toContain(t.uncheckable);
-    expect(oldRecoveryMounted(app)).toBe(false);
-  },
-);
-
-it.each(["selected", "uncertain"] as const)(
-  "in the missing ask, a backup phase %s offers neither button and no 'If you have a backup' line",
-  async (backupPhase) => {
-    const { app } = await missingDatabaseFixture({ backupPhase });
-    await openMissing(app);
-    await settled(app);
-    expect(q(app, "missing-reached")).not.toBeNull();
-    expect(q(app, "recover-backup")).toBeNull();
-    expect(q(app, "start-again")).toBeNull();
-    expect(text(app)).not.toContain(t.missingBackup);
-    if (backupPhase === "uncertain") expect(q(app, "recovery-unreadable")).not.toBeNull();
+    expect(oldRecoveryRequests(requests)).toEqual([]);
   },
 );
 
@@ -232,102 +205,6 @@ it("pressing Recover beside Start again's open confirmation reads the box again 
   expect(sends(requests).length).toBe(1);
 });
 
-const stoppedLines = (app: SetupApp) => {
-  const blocks = app.shadowRoot!.querySelectorAll("[data-test=recovery-stopped]");
-  expect(blocks.length).toBe(1);
-  return [...blocks[0]!.querySelectorAll("p")].map((p) => p.textContent!.trim());
-};
-const recoverStoppedLine = t.recoveryStoppedRecover.replace("{started}", shownTimes.en.started);
-const ids = { inspectionId: "a".repeat(64), revision: 1, ownerGeneration: 1 };
-
-it.each([
-  [
-    "present",
-    () =>
-      wipeFixture({
-        activity: stoppedActivity,
-        summary: () => Response.json(stoppedSummary),
-      }),
-    { ...ids, confirmRecoveryDiscard: { shown: stoppedSummary } },
-  ],
-  [
-    "missing",
-    () =>
-      missingDatabaseFixture({
-        backupPhase: "prepared",
-        activity: stoppedActivity,
-        summary: stoppedSummary,
-      }),
-    { ...ids, confirmMissingDatabase: { nothingFiledOrSold: true, shown: stoppedSummary } },
-  ],
-] as const)(
-  "beside a stopped recovery (%s database), Recover is offered, names the recovery with recoveryStoppedRecover, and sends what Start again sends",
-  async (_shape, mount, body) => {
-    const { app, requests } = await mount();
-    await settled(app);
-    expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(false);
-    await click(app, "recover-backup");
-    await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
-    const [first, second] = stoppedLines(app);
-    expect(first).toBe(recoverStoppedLine);
-    expect(second).toBe(t.recoveryLastActive.replace("{at}", shownTimes.en.last));
-    expect(text(app)).not.toContain("Start again deletes it");
-    await userEvent.click(tick(app));
-    await click(app, "confirm-recover");
-    await expect.poll(() => sends(requests).length).toBe(1);
-    expect(sends(requests)[0]!.body).toEqual(body);
-  },
-);
-
-it("after a failed summary read beside a stopped recovery, Check again from Recover reopens Recover's confirmation", async () => {
-  let reads = 0;
-  const { app } = await wipeFixture({
-    activity: stoppedActivity,
-    summary: () =>
-      reads++ === 0
-        ? Response.json({ error: { code: "server.internal", params: {} } }, { status: 500 })
-        : Response.json(stoppedSummary),
-  });
-  await click(app, "recover-backup");
-  await expect.poll(() => q(app, "check-again")).not.toBeNull();
-  await settled(app);
-  expect(stoppedLines(app)[0]).toBe(recoverStoppedLine);
-  expect(text(app)).not.toContain("Start again deletes it");
-  await click(app, "check-again");
-  await expect.poll(() => q(app, "recover-deletes")).not.toBeNull();
-  expect(q(app, "confirm-recover")).not.toBeNull();
-  expect(q(app, "start-again-deletes")).toBeNull();
-});
-
-it("with the database missing and a recovery not yet settled, Check again from Recover reopens Recover's confirmation", async () => {
-  let statusReads = 0;
-  const { app, requests } = await missingDatabaseFixture({
-    summary: stoppedSummary,
-    intercept(path) {
-      if (path.endsWith("/backup/status"))
-        return Response.json({
-          phase: statusReads++ === 0 ? "selected" : "prepared",
-          proofRequired: true,
-        });
-    },
-  });
-  await click(app, "recover-backup");
-  await expect.poll(() => q(app, "check-again")).not.toBeNull();
-  await settled(app);
-  expect(q(app, "recovery-unreadable")).not.toBeNull();
-  await click(app, "check-again");
-  await expect.poll(() => q(app, "recover-deletes")).not.toBeNull();
-  expect(q(app, "confirm-recover")).not.toBeNull();
-  expect(stoppedLines(app)[0]).toBe(recoverStoppedLine);
-  await userEvent.click(tick(app));
-  await click(app, "confirm-recover");
-  await expect.poll(() => sends(requests).length).toBe(1);
-  expect(sends(requests)[0]!.body).toEqual({
-    ...ids,
-    confirmMissingDatabase: { nothingFiledOrSold: true, shown: stoppedSummary },
-  });
-});
-
 it("a Recover send refused kept-records closes the confirmation, says the setup changed, and offers Recover again", async () => {
   const { app } = await wipeFixture({ startAgain: () => refusedCause("kept-records") });
   await click(app, "recover-backup");
@@ -339,25 +216,6 @@ it("a Recover send refused kept-records closes the confirmation, says the setup 
   expect(formErrors(app)).toContain(t.heldChanged);
   expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(false);
   await expect.poll(() => app.shadowRoot!.activeElement).toBe(q(app, "recover-backup"));
-});
-
-it("Cancel after Recover beside a stopped recovery draws the on-load line again, and Start again then draws its own words", async () => {
-  const { app } = await wipeFixture({
-    activity: stoppedActivity,
-    summary: () => Response.json(stoppedSummary),
-  });
-  await click(app, "recover-backup");
-  await expect.poll(() => q(app, "recover-deletes")).not.toBeNull();
-  await click(app, "cancel-start-again");
-  await expect.poll(() => q(app, "recover-deletes")).toBeNull();
-  await settled(app);
-  expect(stoppedLines(app)[0]).toBe(t.recoveryStopped.replace("{started}", shownTimes.en.started));
-  expect(q<WtButton>(app, "recover-backup")!.disabled).toBe(false);
-  expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
-  await click(app, "start-again");
-  await expect.poll(() => q(app, "start-again-deletes")).not.toBeNull();
-  expect(q(app, "recover-deletes")).toBeNull();
-  expect(stoppedLines(app)[0]).toBe(t.recoveryStopped.replace("{started}", shownTimes.en.started));
 });
 
 /** A box that restarts after the wipe: unreachable while `down`, then answering no setup once wiped. */
@@ -407,7 +265,7 @@ const otherScreens = ["screen-first-owner", "screen-venue", "screen-mode"];
 for (const [locale, lang] of locales)
   it(`after Recover from backup's wipe, Reconnect opens Join or recover (${locale})`, async () => {
     const { options } = restartingBox();
-    const { app } = await wipeFixture(options);
+    const { app, requests } = await wipeFixture(options);
     setLocale(locale);
     await app.updateComplete;
     await confirmWipe(app, "recover", initialOwnerStrings[lang].restarting);
@@ -418,7 +276,7 @@ for (const [locale, lang] of locales)
       say("role.heading", locale),
     );
     for (const name of otherScreens) expect(q(app, name), name).toBeNull();
-    expect(oldRecoveryMounted(app)).toBe(false);
+    expect(oldRecoveryRequests(requests)).toEqual([]);
   });
 
 it("Reconnect while the box is still restarting keeps the choice, and the next Reconnect opens Join or recover", async () => {
@@ -462,21 +320,20 @@ it("after Start again's wipe, Reconnect opens the setup choice screen", async ()
   expect(q(app, "screen-role")).toBeNull();
 });
 
-it("beside a stopped recovery, after Recover, a failed summary read and Check again, the wipe's Reconnect still opens Join or recover", async () => {
+it("after Recover, a failed summary read and Recover again, the wipe's Reconnect still opens Join or recover", async () => {
   const { options } = restartingBox();
   let reads = 0;
   const { app } = await wipeFixture({
     ...options,
-    activity: stoppedActivity,
     summary: () =>
       reads++ === 0
         ? Response.json({ error: { code: "server.internal", params: {} } }, { status: 500 })
-        : Response.json(stoppedSummary),
+        : Response.json(namedSummary),
   });
   await click(app, "recover-backup");
-  await expect.poll(() => q(app, "check-again")).not.toBeNull();
+  await expect.poll(() => formErrors(app)).toContain(t.error);
   await settled(app);
-  await click(app, "check-again");
+  await click(app, "recover-backup");
   await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
   await userEvent.click(tick(app));
   await click(app, "confirm-recover");
@@ -602,7 +459,7 @@ it("from Join or recover, Restore from backup opens the fresh-box restore screen
   const { options } = restartingBox();
   const { app, requests } = await wipeFixture(options);
   await confirmWipe(app, "recover");
-  expect(oldRecoveryMounted(app)).toBe(false);
+  expect(oldRecoveryRequests(requests)).toEqual([]);
   await click(app, "reconnect-first");
   await expect.poll(() => q(app, "screen-role")).not.toBeNull();
   const role = q<LitElement>(app, "screen-role")!;
@@ -610,8 +467,7 @@ it("from Join or recover, Restore from backup opens the fresh-box restore screen
   const choose = role.shadowRoot!.querySelector<WtButton>("[data-test=choose-restore]")!;
   await userEvent.click(choose.shadowRoot!.querySelector("button")!);
   await expect.poll(() => q(app, "screen-restore")).not.toBeNull();
-  expect(oldRecoveryMounted(app)).toBe(false);
-  expect(requests.some((r) => OLD_RECOVERY_ROUTE.test(r.path))).toBe(false);
+  expect(oldRecoveryRequests(requests)).toEqual([]);
 });
 
 it("a Reconnect that finds the setup claimed and then cannot read it still forgets the choice", async () => {

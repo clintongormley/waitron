@@ -104,7 +104,7 @@ conflicting outcome. Do not delete records to get past a refusal.
 **Finish** publishes an exactly checked committed result. It does not activate another identity,
 reset counters or require a new name because the clock has advanced. **Start again** asks for no
 password: anyone who can open the repair page can use it and see what it shows — what the setup
-reached, a stopped recovery's times, and whether the setup database could be read. Pressing it
+reached and whether the setup database could be read. Pressing it
 makes the box check what it would delete, and the page shows that before anything is deleted. The
 box refuses, in the page's words, when the setup already saved the settings the box sells with
 (Continue with the setup password finishes it), when the setup already finished, or when the setup
@@ -131,36 +131,15 @@ so deleting it is not offered. Reconnect to check the saved result." If the atte
 recovery-key record is damaged, the page also says "This setup's recovery-key record is damaged and
 cannot be read." above what Start again deletes, and you can still choose **Cancel**.
 
-The page no longer starts a recovery from backup itself; the next two paragraphs describe one
-begun on the repair page before this version of Waitron.
+Before it deletes anything, the box writes a confirmation record
+(`first-setup-start-again-confirmations/`) when the venue database is missing, when part of it
+cannot be read, or when a stopped recovery is discarded. The record says whose setup it was, that it
+was confirmed on the repair page with nobody signed in, when, and the summary the page confirmed,
+with `database` set to `missing`, `present` or `unreadable`.
 
-While a backup recovery is running on another device, the repair page says so, with when it
-started and when it was last active, and offers only **Reconnect** and **Set up secure
-connection** until it stops. It counts as running while one of its steps is in progress and for
-five minutes after its last activity. The five minutes end early if the recovery fails, and the
-box keeps them in memory only, so a restart ends them too (`runningInMemory` in
-`apps/server/src/first-setup-backup-recovery.ts`).
-
-Once a backup recovery has stopped, the repair page says it started and did not finish and that
-Start again deletes it. **Recover from backup** is offered beside it too, and in its confirmation the
-stopped recovery's line reads "The previous recovery from backup started on … did not complete." With the venue database
-missing, the page shows this once **Start again** or **Recover from backup** is pressed, and either
-deletes the recovery with the attempt after the missing-database confirmation above. With the venue database present,
-the page shows the stopped recovery beside **Start again**, within the limits above. Start again
-then reads the recovery's details again, shows them, and deletes the recovery with the attempt
-once you tick "Delete the old attempt and start again." Before it deletes anything, the box writes
-a confirmation record (`first-setup-start-again-confirmations/`) when the venue database is
-missing, when part of it cannot be read, or when a stopped recovery is discarded. The record says
-whose setup it was, that it was confirmed on the repair page with nobody signed in, when, and the
-summary the page confirmed, with `database` set to `missing`, `present` or `unreadable`. For a Waitron Cloud copy the page adds that the approval in Waitron Cloud closes
-by itself within an hour of when it was given, and that until then Cloud cannot approve a new
-recovery for this box's venue.
-
-Start again keeps the discarded recovery's journal records and its lock files, and deletes the
-rest. If a file cannot be deleted, or the disk fills part-way through, the page says "Deletion
-interrupted. Reload the page to continue.", the box restarts, and the next start tries the deletion again. With the venue
-database missing, a recovery whose records cannot be read is reported as such, and neither Start
-again nor Recover from backup is offered beside it.
+If a file cannot be deleted, or the disk fills part-way through, the page says "Deletion
+interrupted. Reload the page to continue.", the box restarts, and the next start tries the deletion
+again.
 
 **Recover from backup** is offered wherever Start again is, asks for no password either, is
 refused in the same cases, and runs the same deletion. Its confirmation says "Recover from backup

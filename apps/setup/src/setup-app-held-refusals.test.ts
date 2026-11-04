@@ -7,7 +7,7 @@ import { setLocale } from "./i18n/t.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { initial } from "../test/first-setup-browser.js";
-import { click, q, stoppedSummary } from "../test/missing-database-browser.js";
+import { click, namedSummary, q } from "../test/missing-database-browser.js";
 import { heldFixture, refusedCause, settled, tradingEnv } from "../test/held-database-browser.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 
@@ -29,22 +29,8 @@ const formErrors = (app: SetupApp) =>
 const shown = (app: SetupApp) => [text(app), ...formErrors(app)].join("\n");
 const startAgainSends = (requests: { path: string }[]) =>
   requests.filter((r) => r.path.endsWith("/resolution/start-again"));
-const refusedStoppedParts = (t: ReturnType<typeof stringsFor>) =>
-  t.recoveryStoppedRefused.split("{started}");
-const startAgainDeletesIt = (t: ReturnType<typeof stringsFor>) => {
-  const tail = t.recoveryStopped.split("{started}")[1]!;
-  const refusedTail = refusedStoppedParts(t)[1]!;
-  expect(tail.startsWith(refusedTail)).toBe(true);
-  return tail.slice(refusedTail.length).trim();
-};
-function expectStoppedRefused(app: SetupApp, t: ReturnType<typeof stringsFor>) {
-  const stopped = q(app, "recovery-stopped")!.textContent!;
-  for (const part of refusedStoppedParts(t)) expect(stopped).toContain(part);
-  expect(text(app)).not.toContain(startAgainDeletesIt(t));
-}
 function expectNoConfirmation(app: SetupApp, t: ReturnType<typeof stringsFor>) {
   expect(q(app, "start-again-deletes")).toBeNull();
-  expect(text(app)).not.toContain(startAgainDeletesIt(t));
   for (const words of [t.heldLost, t.noInvoiceSent]) expect(text(app)).not.toContain(words);
   expect(q(app, "retire-confirmed")).toBeNull();
   expect(q(app, "confirm-start-again")).toBeNull();
@@ -66,8 +52,7 @@ for (const locale of locales) {
     const { app, requests } = await heldFixture({
       locale,
       // The first read draws the confirmation and the second is the send's own check.
-      summary: () =>
-        summaries++ < 2 ? Response.json(stoppedSummary) : refusedCause("kept-records"),
+      summary: () => (summaries++ < 2 ? Response.json(namedSummary) : refusedCause("kept-records")),
       startAgain: () => refusedCause("kept-records"),
     });
     await confirmAndSend(app, requests);
@@ -81,13 +66,12 @@ for (const locale of locales) {
     expect(formErrors(app)).not.toContain(t.heldChanged);
     expect(q(app, "start-again")).toBeNull();
     expectNoConfirmation(app, t);
-    expectStoppedRefused(app, t);
     expect(startAgainSends(requests)).toHaveLength(1);
   });
 }
 
 for (const locale of locales) {
-  it(`${locale}: a summary refused kept-records beside a stopped recovery: draws the fault and offers no confirmation`, async () => {
+  it(`${locale}: a summary refused kept-records: draws the fault and offers no confirmation`, async () => {
     const t = stringsFor(locale);
     const { app, requests } = await heldFixture({
       locale,
@@ -97,13 +81,12 @@ for (const locale of locales) {
     await expect.poll(() => refusalWords(app)).toBe(t.keptFault);
     await settled(app);
     expectNoConfirmation(app, t);
-    expectStoppedRefused(app, t);
     expect(q(app, "start-again")).toBeNull();
     expect(q(app, "reconnect-first")).not.toBeNull();
     expect(startAgainSends(requests)).toEqual([]);
   });
 
-  it(`${locale}: saved trading settings beside a stopped recovery draw nothing on load; pressing Start again draws the box's words beside the password`, async () => {
+  it(`${locale}: saved trading settings draw nothing on load; pressing Start again draws the box's words beside the password`, async () => {
     const t = stringsFor(locale);
     const { app, requests } = await heldFixture({
       locale,
@@ -120,12 +103,11 @@ for (const locale of locales) {
     expect(text(app)).not.toContain(t.wipeUnavailable);
     expect(q(app, "start-again")).toBeNull();
     expect(q(app, "resume-password")).not.toBeNull();
-    expectStoppedRefused(app, t);
     expect(startAgainSends(requests)).toEqual([]);
   });
 }
 
-it("saved trading settings beside a stopped recovery and a database with rows but no venue's say the same once Start again is pressed", async () => {
+it("saved trading settings and a database with rows but no venue's say the same once Start again is pressed", async () => {
   const t = stringsFor("en-GB");
   const { app } = await heldFixture({
     inspection: () => ({
@@ -174,9 +156,7 @@ for (const locale of locales) {
     await settled(app);
     expect(q(app, "start-again")).toBeNull();
     expect(shown(app)).not.toContain(shellFor(locale)["shell.not_ready"]);
-    expect(shown(app)).not.toContain(t.recoveryDetailsUnread);
     expect(text(app)).not.toContain(t.wipeUnavailable);
-    expectStoppedRefused(app, t);
     expect(q(app, "reconnect-first")).not.toBeNull();
     expect(startAgainSends(requests)).toEqual([]);
   });
@@ -193,7 +173,6 @@ for (const locale of locales) {
     expect(q(app, "start-again")).toBeNull();
     expect(q(app, "resume-password")).not.toBeNull();
     expect(shown(app)).not.toContain(shellFor(locale)["shell.not_ready"]);
-    expect(shown(app)).not.toContain(t.recoveryDetailsUnread);
   });
 }
 

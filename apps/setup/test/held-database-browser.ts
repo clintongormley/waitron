@@ -4,7 +4,7 @@ import "../src/setup-app.js";
 import type { SetupApp } from "../src/setup-app.js";
 import type { FirstSetupInspection } from "../src/api/first-setup-types.js";
 import { wizardApi } from "./first-setup-browser.js";
-import { q, stoppedActivity, stoppedSummary } from "./missing-database-browser.js";
+import { namedSummary, q } from "./missing-database-browser.js";
 import { mountWidget } from "../src/widgets/test-helpers.js";
 
 export const tradingEnv = {
@@ -17,7 +17,7 @@ export const refusedCause = (cause: string) =>
     { error: { code: "setup.start_again_refused", params: { cause } } },
     { status: 409 },
   );
-/** A setup database holding records beside a stopped recovery, drawn signed out. */
+/** A setup database holding records, drawn signed out. */
 export async function heldFixture(
   options: {
     /** Merged into every inspection read, counted from 0. */
@@ -32,9 +32,8 @@ export async function heldFixture(
   const fixture = wizardApi({
     claimed: true,
     intercept(path) {
-      if (path.endsWith("/backup/activity")) return Response.json({ activity: stoppedActivity });
       if (path.endsWith("/start-again/summary"))
-        return options.summary?.() ?? Response.json(stoppedSummary);
+        return options.summary?.() ?? Response.json(namedSummary);
       if (path.endsWith("/resolution/start-again"))
         return options.startAgain?.() ?? Response.json({ restarting: true });
       if (path.endsWith("/resolution"))
@@ -58,7 +57,7 @@ export async function heldFixture(
     { api: fixture.api, browserLanguages: [options.locale ?? "en-GB"] },
     options.theme,
   );
-  await expect.poll(() => q(app, "recovery-stopped")).not.toBeNull();
+  await expect.poll(() => q(app, "start-again")).not.toBeNull();
   await app.updateComplete;
   return { app, host, ...fixture };
 }
