@@ -3114,7 +3114,7 @@ for each provider call path.
 
 Preparation stations' Save editors follow the rule too (A331 batch 4d; A366 slice 4 for the
 station and routing cell editors): Add station, the station editor and the routing cell editor.
-Rest-of-order, MOVED slips, identical dishes, held printing, a station's three late-flag minutes and its ready warning time, its bump mode and its changes after sending are edited in the station editor. Routing
+Rest-of-order, MOVED slips, identical dishes, held printing, waiting for the pass, a station's three late-flag minutes and its ready warning time, its bump mode and its changes after sending are edited in the station editor. Routing
 Confirm and station service operations remain actions.
 
 The setup audit (A331 batch 6, 2026-10-08) found no stored-setting editor to adopt this gate.
@@ -4792,8 +4792,9 @@ this is the default station" in place of the dates. The station choices require
 `venue_service.manage`; a read-only Calendar keeps its department choices.
 
 Prep stations itself has only Stations and Routes. Above its tabs, a warning names, zone by zone,
-the waiting stations no pass screen can fire, with a link to Devices; a failed read shows one line
-in its place. The former Times tab and each station's
+each station no pass screen can fire there — one set to wait for the pass, or one with a dish
+already waiting at the pass — with a line for orders with no service zone last and a link to
+Devices on each line; a failed read shows one line in its place. The former Times tab and each station's
 "When it gets orders" link are retired. Station lists use name order, with the Default badge at
 its alphabetical place and a colour square on every Stations row. Add and Edit use
 `wt-colour-chooser`; a missing creation colour takes the first colour no active station uses,
