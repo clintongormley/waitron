@@ -2043,7 +2043,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 4b, waiting dishes that leave with
-  their own copy of the course, has landed (#PR-4B); it leaves open A1327. Remaining: 4c, Split a table
+  their own copy of the course, has landed (#2454); it leaves open A1327. Remaining: 4c, Split a table
   through the same picker, with A590; pre-bills through A446, which no longer waits for asesor S2.
   [Detail](backlog/till.md#a803-bills-and-tables-one-portion-per-order-line-one-bill-switcher-one-picker)
 
