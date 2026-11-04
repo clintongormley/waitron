@@ -394,8 +394,10 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   series without inventing a local record or filing case. Lookup-only recovery preserves the existing
   filing results. The next candidate retains receipt observations on the till by taxpayer, environment
   and series, through a separate optional reader. Cash sales and their retries have now been exercised
-  while a lookup is pending, failed or incomplete. Device evidence in the full recovery flow and
-  whole-item qualification remain unfinished; this is not a partial publication candidate.
+  while a lookup is pending, failed or incomplete. Archive and stream restore tests now complete
+  without enrolled devices or internet time, then pair a fresh device through the approval routes
+  and issue under the recovered series. Optional evidence reporting and whole-item qualification
+  remain unfinished; this is not a partial publication candidate.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment

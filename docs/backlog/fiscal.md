@@ -513,6 +513,30 @@ with its closer selected for stepdown and shared with ordinary shutdown.
 This is an unpublished checkpoint. Full device/recovery qualification, both whole-item reviews,
 the normal push hook and current-head CI remain before owner review. No partial PR is ready.
 
+### W41s-10a offline restore and fresh-device candidate checkpoint, 4 November 2026
+
+`apps/server/src/device-after-offline-restore.test.ts` adds archive and stream cases using the real
+interactive restore writers and migrated venue directories. The selected backup and recovered
+database contain no device. The internet clock answers unavailable; a simulated browser on another
+machine supplies the second clock. Each case then opens pairing through an administrator session,
+checks the displayed number, approves a fresh device and proves its cookie can read its identity.
+Pairing preserves the recovered allocations, registrations, series and preparation journal. The
+core writer refuses that device's retired standard series, issues `A-0CNQT/1` under the recovered
+series and leaves every retired counter at 123. No global fetch call occurs in these cases.
+
+The shared fixture now offers an interactive entry alongside its existing staged-restart entry.
+The restart entry reconstructs clock state and still refuses without a fresh second clock; existing
+restart assertions remain unchanged. The new cases exercise mounted pairing routes and the core
+invoice writer, without starting an HTTP listener or making a payment through the till API.
+
+Source recovery checks pass 23 cases, including the existing interrupted-restore suite. An
+independently installed copy passes the five focused restore/pairing cases before and after four
+fault controls: retired-series admission, a changed starting counter, a wrong device cookie and
+premature approval. The unchanged fiscal write-path and immutability pair passes 20 cases.
+Optional device-evidence reporting, complete connection-path qualification, both whole-item
+reviews, the normal push hook and current-head CI remain before owner review. No partial PR is
+ready.
+
 ### Task 8 staff refund and held-cancellation qualification, 2 November 2026
 
 `apps/server/src/fiscal-remedy.staff-refund.test.ts` uses a real provisioned venue and the
