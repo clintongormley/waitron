@@ -64,10 +64,10 @@ const suite = useVenueDb({
     cfg = makeCfg(await venueLocationId(db), nodeId);
     const offers = await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
-      const bebidas = await createCategory(tx, { name: "Bebidas" });
+      const drinksCategory = await createCategory(tx, { name: "Bebidas" });
       const p = await createProduct(tx, {
         catalogueId: cat.id,
-        categoryId: bebidas.id,
+        categoryId: drinksCategory.id,
         name: "Café",
         pricingUnit: "each",
         unitPrice: "1.50",

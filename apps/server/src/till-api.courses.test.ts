@@ -211,7 +211,7 @@ beforeAll(async () => {
 });
 
 /** The seeded default station "Cocina", read back through `GET /api/stations`. */
-async function cocinaId(): Promise<string> {
+async function kitchenStationId(): Promise<string> {
   const res = await app.request("/api/stations", { headers: { cookie } });
   expect(res.status).toBe(200);
   const stations = (await res.json()) as { id: string; name: string; isDefault: boolean }[];
@@ -310,7 +310,7 @@ async function billBody(tabId: string, body: object): Promise<string> {
 describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => {
   it("fires every counter course and the loose line while retaining course facts in the queue", async () => {
     const orderId = await placeOrder([SOPA, FILETE, PAN]);
-    const station = await cocinaId();
+    const station = await kitchenStationId();
     const items = await queueItemsByName(orderId, station);
     expect(items.size).toBe(3);
 
@@ -336,7 +336,7 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
 
   it("a HELD item cannot advance (409 ticket.item_held); the waiter releasing its line releases it, and it then advances", async () => {
     const orderId = await tabWithSopaAndFilete();
-    const station = await cocinaId();
+    const station = await kitchenStationId();
     const heldItemId = (await queueItemsByName(orderId, station)).get(FILETE)!.id;
 
     // Before firing: the held item is non-advanceable — the kitchen must not bump food not yet started.
@@ -422,7 +422,7 @@ describe("KDS-2 fire route + station-queue course/firedAt serialisation", () => 
 describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a held line)", () => {
   it("moves the held line to another course (200), then clears it to null, the queue reflecting each", async () => {
     const tabId = await tabWithSopaAndFilete();
-    const station = await cocinaId();
+    const station = await kitchenStationId();
     // The held Principales line (line 2) carries a Principales course snapshot in the queue.
     expect((await queueItemsByName(tabId, station)).get(FILETE)!.course!.id).toBe(priCourseId);
 
@@ -449,7 +449,7 @@ describe("PATCH /api/working-orders/:id/lines/:lineNo/course (A1 re-course a hel
     // An omitted `courseId` means "clear the course": the route coerces it to null
     // (`body.courseId ?? null`) so `undefined` never reaches setLineCourse.
     const tabId = await tabWithSopaAndFilete();
-    const station = await cocinaId();
+    const station = await kitchenStationId();
     expect((await queueItemsByName(tabId, station)).get(FILETE)!.course!.id).toBe(priCourseId);
 
     const res = await app.request(`/api/working-orders/${tabId}/lines/2/course`, {
@@ -499,7 +499,7 @@ describe("POST /api/working-orders/:id/lines/send (A2 send recalled lines again)
 
   it("sends a NAMED recalled line (200) — the queue then shows it fired", async () => {
     const tabId = await tabWithSopaAndFilete();
-    const station = await cocinaId();
+    const station = await kitchenStationId();
     await recallSopa(tabId);
     expect((await queueItemsByName(tabId, station)).get(SOPA)!.firedAt).toBeNull();
 
@@ -514,7 +514,7 @@ describe("POST /api/working-orders/:id/lines/send (A2 send recalled lines again)
 
   it("an OMITTED line list sends every recalled line (200) and leaves the held group's line held", async () => {
     const tabId = await tabWithSopaAndFilete();
-    const station = await cocinaId();
+    const station = await kitchenStationId();
     await recallSopa(tabId);
     expect((await queueItemsByName(tabId, station)).get(SOPA)!.firedAt).toBeNull();
 
@@ -555,7 +555,7 @@ describe("POST /api/working-orders/:id/lines/send (A2 send recalled lines again)
 describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started line)", () => {
   it("recalls a fired-not-started line (200) — the queue then shows it held again", async () => {
     const tabId = await tabWithSopaAndFilete();
-    const station = await cocinaId();
+    const station = await kitchenStationId();
     // SOPA (line 1) was sent in a group released `fire` — the queue shows it fired.
     expect((await queueItemsByName(tabId, station)).get(SOPA)!.firedAt).not.toBeNull();
 
@@ -571,7 +571,7 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
 
   it("refuses a STARTED line (409 ticket.already_started), naming its item id", async () => {
     const tabId = await tabWithSopaAndFilete();
-    const station = await cocinaId();
+    const station = await kitchenStationId();
     const sopaItemId = (await queueItemsByName(tabId, station)).get(SOPA)!.id;
 
     // The kitchen begins the (fired) SOPA line — advance it to `preparing` via the bump route.
@@ -596,7 +596,7 @@ describe("POST /api/working-orders/:id/lines/recall (A4 un-send a not-started li
 
   it("a body naming no lines recalls nothing (200) — the fired line stays fired", async () => {
     const tabId = await tabWithSopaAndFilete();
-    const station = await cocinaId();
+    const station = await kitchenStationId();
 
     const res = await app.request(`/api/working-orders/${tabId}/lines/recall`, {
       method: "POST",
