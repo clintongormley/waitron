@@ -189,6 +189,7 @@ export class OptionListForm extends LitElement {
   #rowPointerStart: EventTarget | null = null;
 
   #scope?: DraftScope<OptionListInput>;
+  #baseline?: OptionListInput;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
@@ -222,6 +223,8 @@ export class OptionListForm extends LitElement {
       });
       this.#leave = coordinator;
       this.#scope = scope;
+      this.#baseline ??= this.#comparisonValue();
+      scope.commit(this.#baseline);
     }
   }
 
@@ -272,6 +275,7 @@ export class OptionListForm extends LitElement {
   }
 
   #reseed(): void {
+    this.#baseline = undefined;
     const value = this.value;
     this.name = value?.name ?? "";
     this.customerName = { ...value?.customerName };
@@ -516,6 +520,7 @@ export class OptionListForm extends LitElement {
   }
 
   commitSaved(submitted: OptionListInput): void {
+    this.#baseline = submitted;
     this.#scope?.commit(submitted);
   }
   closeSaved(submitted: OptionListInput): void {

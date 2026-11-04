@@ -90,6 +90,7 @@ export class OptionLabelForm extends LitElement {
   @state() private dismissed = new Set<string>();
 
   #scope?: DraftScope<Omit<DraftLabel, "id">>;
+  #baseline?: Omit<DraftLabel, "id">;
   /** Opened showing a refusal, so Save starts active: a refusal never disables it. */
   #refusedAtOpen = false;
   #leave?: LeaveCoordinator;
@@ -125,6 +126,8 @@ export class OptionLabelForm extends LitElement {
       });
       this.#leave = coordinator;
       this.#scope = scope;
+      this.#baseline ??= this.#comparisonValue();
+      scope.commit(this.#baseline);
     }
   }
 
@@ -158,6 +161,7 @@ export class OptionLabelForm extends LitElement {
   }
 
   #reseed(): void {
+    this.#baseline = undefined;
     const value = this.value;
     this.name = value?.name ?? "";
     this.customerName = { ...value?.customerName };

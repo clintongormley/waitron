@@ -226,6 +226,7 @@ export class ExtraListForm extends LitElement {
   @state() private serverErrors: Record<string, string> = {};
 
   #scope?: DraftScope<ExtraDraft>;
+  #baseline?: ExtraDraft;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
     !this.busy &&
@@ -259,6 +260,8 @@ export class ExtraListForm extends LitElement {
       });
       this.#leave = coordinator;
       this.#scope = scope;
+      this.#baseline ??= this.#comparisonValue();
+      scope.commit(this.#baseline);
     }
   }
 
@@ -313,6 +316,7 @@ export class ExtraListForm extends LitElement {
   }
 
   #reseed(): void {
+    this.#baseline = undefined;
     const value = this.value;
     this.name = value?.name ?? "";
     this.customerName = { ...value?.customerName };
@@ -700,7 +704,8 @@ export class ExtraListForm extends LitElement {
   }
 
   commitSaved(submitted: ExtraListInput): void {
-    this.#scope?.commit({ value: submitted, invalid: {} });
+    this.#baseline = { value: submitted, invalid: {} };
+    this.#scope?.commit(this.#baseline);
   }
   closeSaved(submitted: ExtraListInput): void {
     this.commitSaved(submitted);

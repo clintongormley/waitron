@@ -49,7 +49,7 @@ const options: OptionList = {
 class ModifierApp extends LitElement {
   readonly leave = new LeaveController(this);
   kind: "extras" | "options" = "extras";
-  value: ExtraList | OptionList = extras;
+  value: ExtraList | OptionList | null = extras;
   open = true;
   cancelled = 0;
   submitted: (ExtraListInput | OptionListInput)[] = [];
@@ -62,13 +62,13 @@ class ModifierApp extends LitElement {
     const languages = { defaultLanguage: "en", languages: ["en", "es"] };
     const submit = (event: CustomEvent<{ value: ExtraListInput | OptionListInput }>) =>
       this.submitted.push(event.detail.value);
-    return html`${this.kind === "extras" ? html`<dashboard-extra-list-form .open=${this.open} .value=${this.value as ExtraList} .languages=${languages} @wt-cancel=${this.cancel} @wt-submit=${submit}></dashboard-extra-list-form>` : html`<dashboard-option-list-form .open=${this.open} .value=${this.value as OptionList} .languages=${languages} @wt-cancel=${this.cancel} @wt-submit=${submit}></dashboard-option-list-form>`}${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
+    return html`${this.kind === "extras" ? html`<dashboard-extra-list-form .open=${this.open} .value=${this.value as ExtraList | null} .languages=${languages} @wt-cancel=${this.cancel} @wt-submit=${submit}></dashboard-extra-list-form>` : html`<dashboard-option-list-form .open=${this.open} .value=${this.value as OptionList | null} .languages=${languages} @wt-cancel=${this.cancel} @wt-submit=${submit}></dashboard-option-list-form>`}${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
 }
 customElements.define("modifier-leave-test-app", ModifierApp);
 async function mount(
   kind: "extras" | "options",
-  value: ExtraList | OptionList = kind === "extras" ? extras : options,
+  value: ExtraList | OptionList | null = kind === "extras" ? extras : options,
 ) {
   const { el: app } = await mountWidget<ModifierApp>("modifier-leave-test-app", { kind, value });
   const form =
@@ -222,7 +222,7 @@ for (const kind of ["extras", "options"] as const) {
   it(`${kind} replacement invalidates its old question while a same-id refresh retains edits`, async () => {
     const { app, form } = await mount(kind);
     await edit(form, "name", "Draft");
-    app.value = { ...app.value, name: "Background name" };
+    app.value = { ...app.value!, name: "Background name" };
     app.requestUpdate();
     await app.updateComplete;
     await form.updateComplete;
@@ -232,7 +232,7 @@ for (const kind of ["extras", "options"] as const) {
     cancel(form);
     const q = await question(app);
     expect(q.open).toBe(true);
-    app.value = { ...app.value, id: "replacement", name: "Replacement" };
+    app.value = { ...app.value!, id: "replacement", name: "Replacement" };
     app.requestUpdate();
     await app.updateComplete;
     await form.updateComplete;
@@ -422,4 +422,266 @@ it("an option label put back after a detached update still asks before Cancel di
   cancel(label);
   expect((await question(app)).open).toBe(true);
   expect(label.open).toBe(true);
+});
+
+type PutBack = "at once" | "after a detached update";
+type Reattachable = LitElement;
+async function putBack(form: Reattachable, how: PutBack) {
+  if (how === "after a detached update") await reattachAfterDetachedUpdate(form);
+  else {
+    const parent = form.parentNode!;
+    const next = form.nextSibling;
+    form.remove();
+    parent.insertBefore(form, next);
+    await form.updateComplete;
+  }
+}
+function field(form: HTMLElement, name: string) {
+  return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`[name="${name}"]`)!;
+}
+function saveOf(form: HTMLElement) {
+  return form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+}
+function expectSaveChanged(form: HTMLElement) {
+  expect(saveOf(form).disabled).toBe(false);
+  expect(saveOf(form).variant).toBe("primary");
+}
+function expectSaveQuiet(form: HTMLElement) {
+  expect(saveOf(form).disabled).toBe(true);
+  expect(saveOf(form).variant).toBe("secondary");
+}
+async function reopen(app: ModifierApp, form: LitElement, value: ExtraList | OptionList | null) {
+  app.open = false;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+  app.value = value;
+  app.open = true;
+  app.requestUpdate();
+  await app.updateComplete;
+  await form.updateComplete;
+}
+for (const kind of ["extras", "options"] as const) {
+  const record = kind === "extras" ? extras : options;
+  const commitSaved = (form: LitElement, submitted: ExtraListInput | OptionListInput) =>
+    kind === "extras"
+      ? (form as HTMLElementTagNameMap["dashboard-extra-list-form"]).commitSaved(
+          submitted as ExtraListInput,
+        )
+      : (form as HTMLElementTagNameMap["dashboard-option-list-form"]).commitSaved(
+          submitted as OptionListInput,
+        );
+  const closeSaved = (form: LitElement, submitted: ExtraListInput | OptionListInput) =>
+    kind === "extras"
+      ? (form as HTMLElementTagNameMap["dashboard-extra-list-form"]).closeSaved(
+          submitted as ExtraListInput,
+        )
+      : (form as HTMLElementTagNameMap["dashboard-option-list-form"]).closeSaved(
+          submitted as OptionListInput,
+        );
+  for (const mode of ["edit", "create"] as const) {
+    const opened = mode === "edit" ? record : null;
+    const openedName = opened?.name ?? "";
+    const savable = async (form: LitElement) => {
+      if (mode === "edit") return;
+      form
+        .shadowRoot!.querySelector('wt-switch[name="active"]')!
+        .dispatchEvent(new CustomEvent("wt-change", { detail: { checked: false } }));
+      await form.updateComplete;
+    };
+    for (const how of ["at once", "after a detached update"] as const) {
+      for (const route of ["cancel", "escape"] as const) {
+        it(`${mode} ${kind}: an edit made before it was taken out still counts when put back ${how}, ${route}`, async () => {
+          const { app, form } = await mount(kind, opened);
+          await edit(form, "name", "Draft list");
+          await putBack(form, how);
+          expect(field(form, "name").value).toBe("Draft list");
+          expect(app.leave.coordinator.isDirty()).toBe(true);
+          expectSaveChanged(form);
+          if (route === "cancel") cancel(form);
+          else {
+            field(form, "name").shadowRoot!.querySelector("input")!.focus();
+            await userEvent.keyboard("{Escape}");
+          }
+          const q = await question(app);
+          expect(q.open).toBe(true);
+          expect(app.cancelled).toBe(0);
+          q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
+          await expect.poll(() => app.cancelled).toBe(1);
+          await form.updateComplete;
+          expect(field(form, "name").value).toBe(openedName);
+          expect(app.leave.coordinator.isDirty()).toBe(false);
+          await reopen(app, form, opened && { ...opened, name: "Stored later" });
+          expect(field(form, "name").value).toBe(opened ? "Stored later" : "");
+          expect(app.leave.coordinator.isDirty()).toBe(false);
+          expectSaveQuiet(form);
+        });
+      }
+      it(`${mode} ${kind}: an edit typed after being put back ${how} is what Save sends`, async () => {
+        const { app, form } = await mount(kind, opened);
+        await edit(form, "name", "Draft list");
+        await putBack(form, how);
+        await edit(form, "name", "Later list");
+        await savable(form);
+        expect(app.leave.coordinator.isDirty()).toBe(true);
+        saveOf(form).click();
+        expect(app.submitted).toHaveLength(1);
+        expect(app.submitted[0]!.name).toBe("Later list");
+      });
+      it(`${mode} ${kind}: the saved value, not the edit, is what counts after a save and being put back ${how}`, async () => {
+        const { app, form } = await mount(kind, opened);
+        await edit(form, "name", "Saved name");
+        await savable(form);
+        saveOf(form).click();
+        commitSaved(form, app.submitted[0]!);
+        await edit(form, "name", "Newer draft");
+        await putBack(form, how);
+        expect(field(form, "name").value).toBe("Newer draft");
+        expect(app.leave.coordinator.isDirty()).toBe(true);
+        expectSaveChanged(form);
+        await edit(form, "name", "Saved name");
+        expect(app.leave.coordinator.isDirty()).toBe(false);
+        expectSaveQuiet(form);
+        cancel(form);
+        await expect.poll(() => app.cancelled).toBe(1);
+        await reopen(app, form, opened);
+        expect(field(form, "name").value).toBe(openedName);
+        expect(app.leave.coordinator.isDirty()).toBe(false);
+        expectSaveQuiet(form);
+      });
+    }
+    it(`${mode} ${kind} closed after a saved write reopens unchanged`, async () => {
+      const { app, form } = await mount(kind, opened);
+      await edit(form, "name", "Saved name");
+      await savable(form);
+      saveOf(form).click();
+      closeSaved(form, app.submitted[0]!);
+      await form.updateComplete;
+      expect(app.leave.coordinator.isDirty()).toBe(false);
+      await reopen(app, form, opened && { ...opened, name: "Stored later" });
+      expect(field(form, "name").value).toBe(opened ? "Stored later" : "");
+      expect(app.leave.coordinator.isDirty()).toBe(false);
+      expectSaveQuiet(form);
+    });
+  }
+}
+async function openLabelForm(
+  form: LitElement,
+  mode: "edit" | "create",
+): Promise<HTMLElementTagNameMap["dashboard-option-label-form"]> {
+  form
+    .shadowRoot!.querySelector<HTMLElement>(
+      mode === "edit" ? "[data-test=open-label-0]" : "[data-test=add-option]",
+    )!
+    .click();
+  await form.updateComplete;
+  const label = form.shadowRoot!.querySelector("dashboard-option-label-form")!;
+  await label.updateComplete;
+  return label;
+}
+// Put back on its own, the option window is no longer modal while the option list's window still
+// is, so an edit after that is sent as the field's own change event.
+async function changeLabelName(
+  label: HTMLElementTagNameMap["dashboard-option-label-form"],
+  value: string,
+) {
+  field(label, "label-name").dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+  await label.updateComplete;
+}
+for (const mode of ["edit", "create"] as const) {
+  const openedName = mode === "edit" ? "Rare" : "";
+  for (const how of ["at once", "after a detached update"] as const) {
+    it(`${mode} option label: an edit made before it was taken out still counts when put back ${how}`, async () => {
+      const { app, form } = await mount("options");
+      const label = await openLabelForm(form, mode);
+      await edit(label, "label-name", "Child draft");
+      await putBack(label, how);
+      expect(field(label, "label-name").value).toBe("Child draft");
+      expect(app.leave.coordinator.isDirty([label])).toBe(true);
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+      expectSaveChanged(label);
+      cancel(label);
+      const q = await question(app);
+      expect(q.open).toBe(true);
+      expect(label.open).toBe(true);
+      q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
+      await expect.poll(() => label.open).toBe(false);
+      await label.updateComplete;
+      expect(app.leave.coordinator.isDirty()).toBe(false);
+      const reopened = await openLabelForm(form, mode);
+      expect(reopened.open).toBe(true);
+      expect(field(reopened, "label-name").value).toBe(openedName);
+      expect(app.leave.coordinator.isDirty()).toBe(false);
+      expectSaveQuiet(reopened);
+    });
+    it(`${mode} option label: an edit made after being put back ${how} is what its Save and the list's send`, async () => {
+      const { app, form } = await mount("options");
+      const label = await openLabelForm(form, mode);
+      await edit(label, "label-name", "Child draft");
+      await putBack(label, how);
+      await changeLabelName(label, "Later option");
+      expect(app.leave.coordinator.isDirty([label])).toBe(true);
+      saveOf(label).click();
+      await expect.poll(() => label.open).toBe(false);
+      expect(app.leave.coordinator.isDirty([label])).toBe(false);
+      saveOf(form).click();
+      const sent = (app.submitted[0] as OptionListInput).labels.map((each) => each.name);
+      expect(sent).toEqual(
+        mode === "edit" ? ["Later option", "Well"] : ["Rare", "Well", "Later option"],
+      );
+    });
+    it(`${mode} option label: an edit undone after being put back ${how} is unchanged again`, async () => {
+      const { app, form } = await mount("options");
+      const label = await openLabelForm(form, mode);
+      await edit(label, "label-name", "Child draft");
+      await putBack(label, how);
+      await changeLabelName(label, openedName);
+      expect(app.leave.coordinator.isDirty([label])).toBe(false);
+      expectSaveQuiet(label);
+    });
+    it(`${mode} option label: taking out the option list with its window open keeps both edits when put back ${how}`, async () => {
+      const { app, form } = await mount("options");
+      await edit(form, "name", "Parent draft");
+      const label = await openLabelForm(form, mode);
+      await edit(label, "label-name", "Child draft");
+      await putBack(form, how);
+      await label.updateComplete;
+      expect(label.open).toBe(true);
+      expect(field(form, "name").value).toBe("Parent draft");
+      expect(field(label, "label-name").value).toBe("Child draft");
+      expect(app.leave.coordinator.isDirty([label])).toBe(true);
+      expectSaveChanged(label);
+      cancel(label);
+      const q = await question(app);
+      expect(q.open).toBe(true);
+      q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!.click();
+      await expect.poll(() => label.open).toBe(false);
+      expect(app.leave.coordinator.isDirty()).toBe(true);
+      await edit(form, "name", "Options");
+      expect(app.leave.coordinator.isDirty()).toBe(false);
+    });
+  }
+  it(`${mode} option label closed after a saved write reopens unchanged`, async () => {
+    const { app, form } = await mount("options");
+    const label = await openLabelForm(form, mode);
+    await edit(label, "label-name", "Saved option");
+    saveOf(label).click();
+    await expect.poll(() => label.open).toBe(false);
+    await label.updateComplete;
+    const reopened = await openLabelForm(form, mode);
+    expect(field(reopened, "label-name").value).toBe(mode === "edit" ? "Saved option" : "");
+    expect(app.leave.coordinator.isDirty([reopened])).toBe(false);
+    expectSaveQuiet(reopened);
+  });
+}
+it("a new option opened after editing another option starts unchanged", async () => {
+  const { app, form } = await mount("options");
+  const label = await openLabelForm(form, "edit");
+  cancel(label);
+  await expect.poll(() => label.open).toBe(false);
+  await label.updateComplete;
+  const reopened = await openLabelForm(form, "create");
+  expect(field(reopened, "label-name").value).toBe("");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expectSaveQuiet(reopened);
 });
