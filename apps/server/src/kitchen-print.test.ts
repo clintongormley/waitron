@@ -69,6 +69,7 @@ import {
   type CorrectionItem,
 } from "./kitchen-print.js";
 import { deletePrinter } from "./printer-delete.js";
+import { deleteCourse } from "./course-delete.js";
 import { JOBS_WAITING_MS } from "./print-job-trouble.js";
 import { decodeTicket, printedCommands, printedLines } from "./testing/decode-ticket.js";
 import { routeProductTo, offerProducts } from "./testing/zone-offers.js";
@@ -3427,9 +3428,16 @@ describe("A773 fire paper: course headings", () => {
     expect(await newGrillHeadings(v, printerId, seen)).toEqual([`${word} 1 · MAIN COURSES`]);
 
     await inTx(v, async (tx) => {
-      await tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, courseId));
+      await deleteCourse(tx, v.cfg, courseId);
       await reprintOrderTickets(tx, v.cfg, tabId);
     });
+    const kept = await asApp(v.cfg, (tx) =>
+      tx
+        .select({ active: kitchenCourses.active })
+        .from(kitchenCourses)
+        .where(eq(kitchenCourses.id, courseId)),
+    );
+    expect(kept).toEqual([{ active: false }]);
     expect(await newGrillHeadings(v, printerId, seen)).toEqual([`${word} 1 · MAIN COURSES`]);
   });
 
@@ -3518,6 +3526,18 @@ describe("A773 fire paper: course headings", () => {
     );
     expect(await newGrillHeadings(v, printerId, seen)).toEqual([
       `${kitchenTicketWords("es").group} 2 · DESSERTS`,
+    ]);
+
+    const mainsRevision = await revisionOf(v, partyId);
+    await inTx(v, (tx) =>
+      fireGroup(tx, v.cfg, partyId, mainsGroup!, {
+        operatorId: OPERATOR,
+        submissionId: randomUUID(),
+        expectedPartyRevision: mainsRevision,
+      }),
+    );
+    expect(await newGrillHeadings(v, printerId, seen)).toEqual([
+      `${kitchenTicketWords("es").group} 1 · MAINS`,
     ]);
   });
 });
