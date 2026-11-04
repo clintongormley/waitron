@@ -550,6 +550,12 @@ Building waits for A947's strip and Cloud's half:
 
 ## Decisions and deliberate limits
 
+**Owner decision 2026-11-04 — a minute name the old box selected but never activated counts as
+used** (A1018 Slice 4's Ruling R3, landed in #2442). The handover manifest marks
+`module-preparation-state.json` transferred, and Slice 5's Task 5.7 merges the old box's retained
+selections into the new box's own preparation file, so a new box never takes such a name. The
+alternative the owner declined: such a name does not count, and the row goes back to source-only.
+
 **SQLite + Litestream replaces PostgreSQL** (owner decision 2026-09-16). The architecture is
 [SQLite + Litestream topologies](../superpowers/specs/2026-09-16-sqlite-litestream-topology-design.md).
 The prototype's S2 result, a handed-over batch re-filing a sale the receiver already filed,
