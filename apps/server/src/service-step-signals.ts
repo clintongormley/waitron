@@ -69,8 +69,8 @@ export async function readTableSteps(
  * Each seated table's department steps and the facts of the party sitting there they are reckoned
  * from, keyed by table; a table in no department is absent. Dishes and orders are the party's
  * family's, Done and drafts the party's own; a family with no order of its own has its dishes'
- * arrival from another table or the counter as its orders, while one of them is still on a shown
- * bill. Six statements for all the parties, none for none.
+ * arrival from another table or the counter as its orders, while the family has any dish on a
+ * shown bill. Six statements for all the parties, none for none.
  */
 export async function readStepFacts(
   tx: Transaction,

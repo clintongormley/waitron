@@ -2386,7 +2386,10 @@ export async function heldPaperStations(
   return byGroup;
 }
 
-/** Paper numbers of held groups with `holdPrintedAt` set, which a held copy takes from its source. */
+/**
+ * Paper numbers of held groups with `holdPrintedAt` set; a held copy takes that time from its source
+ * but has its own number.
+ */
 export async function printedHeldGroups(
   tx: Transaction,
   groupIds: readonly string[],

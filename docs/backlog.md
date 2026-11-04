@@ -1919,9 +1919,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
-- **A1330. A service step's Done does not travel with a moved bill (seen in A803 slice 4b's re-read;
-  the same with the service-step code before that slice's fix).** A step cleared with Done at the old
-  table is back at the new one, already due, so the waiter is asked again for something done.
+- **A1330. A step started by a serving comes back after its bill moves (seen in A803 slice 4b's re-read;
+  the same with the service-step code before that slice's fix).** A course-served or all-served step
+  cleared with Done at the old table is back at the new one, already due, because Done stays with the
+  old party, so the waiter is asked again for something done. A repeating step counts afresh from the
+  arrival instead.
 
 - **A1331. A party seated later that takes in an older party keeps "Take order" (seen in A803 slice
   4b's re-read; the same with the service-step code before that slice's fix).** The first order it
