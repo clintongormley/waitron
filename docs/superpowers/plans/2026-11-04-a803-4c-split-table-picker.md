@@ -163,6 +163,13 @@ implementer reads the task and not this table.
 - Task 12c would have grown past 70 calls with C1's cases, so they are a new Task 12f, and the screen's half
   a new Task 11d.
 
+## Owner answers so far (2026-11-04, questions.md ~22:13 and ~22:15)
+
+- **Question 1:** `table.split_taken` is replaced by the owner's shorter line, below. The other words are still open.
+- **Question 2:** approved ("Q2 ok"): the two checks may go, and the ten cases move to the panel.
+- **Question 3:** keep it as built for now; the watcher is confirming which option the owner meant.
+- **Who lands it:** still open with the watcher. Do not land until it is answered, whatever this plan's header says.
+
 ## Owner questions
 
 Building goes ahead on each default. Questions 1 and 2 hold landing until they are answered, and the lane
@@ -195,7 +202,8 @@ Split a table → T8, ticks Bills 2 and 3 and three dishes of Bill 1.
 | `table.split_anyway_note` | `Split anyway leaves {kept} with an empty bill.` | `Separar igualmente deja {kept} con una cuenta vacía.` | Everything ticked; board 10 |
 | `table.split_anyway_note_paid` | `Split anyway leaves {kept} with nothing to pay.` | `Separar igualmente deja {kept} sin nada que pagar.` | Everything ticked, when the only bills staying are paid: the server adds no empty bill then (D12) |
 | `table.split_changed` | `{bill} changed while you were choosing. Check its row, then choose Split again.` | `{bill} ha cambiado mientras elegías. Revisa su fila y elige Separar de nuevo.` | Bottom of the panel, when a ticked bill changed or a read took a pick off it (D16, D20, D21). Replaces `draft.out_of_date`'s "Reload it" there |
-| `table.split_taken` | `Someone else has unsent dishes on {bills}. Choose Take over draft on its row so what you ticked can go with {table}, or untick the bill to leave it at {kept}.` | `Otra persona tiene platos sin enviar en {bills}. Elige Tomar el pedido en su fila para que lo marcado pueda irse con {table}, o desmarca la cuenta para dejarla en {kept}.` | Bottom of the panel, as soon as a read shows it, while Split is held (D21). Replaces `draft.taken_over`'s "Reload the table" there. «Tomar el pedido» as in `table.take_over` |
+| `table.split_taken` | `Take over unsent items from {who} before splitting.` | `Toma los platos sin enviar de {who} antes de separar.` | Owner's words, 2026-11-04 ~22:13 (questions.md); replaces the longer line. Bottom of the panel, as soon as a read shows it, while Split is held (D21). Replaces `draft.taken_over`'s "Reload the table" there. `{who}` is every holder's `editorName` from the read that marks the bill held, de-duplicated, in bill-number order, through `Intl.ListFormat(currentLocale(), { type: "conjunction" })` ("Ana and Luis") |
+| `table.split_taken_unnamed` | `Take over the unsent items before splitting.` | `Toma los platos sin enviar antes de separar.` | Same place, when any holder's `editorName` is null, which `BillEditState` allows (`bill-editing.ts:309`). Sibling of `table.take_over_title_unnamed`; offered to the owner with the answer on `{who}` |
 | `table.split_bill_gone` | `{bill} has left this table or been paid, so it is not in this split. Check what is ticked, then choose Split again.` | `{bill} ya no está en esta mesa o ya se ha pagado, así que no entra en esta separación. Revisa lo marcado y elige Separar de nuevo.` | Bottom of the panel, on the first press after a read took a ticked bill away (D21). One bill per press |
 | `table.split_read_failed` | `This table's bills could not be read. Choose Back and try again.` | `No se pudieron leer las cuentas de esta mesa. Elige Atrás e inténtalo de nuevo.` | Bottom of the panel when its first read fails; Split stays quiet. A later read that fails says nothing (D14). `action.back` «Atrás» |
 | `table.split_bill_part_paid` | `{amount} paid` | `{amount} pagados` | Bill header beside the label, board 10; `bill_pay.paid_part` «pagados» |
@@ -720,7 +728,8 @@ Changing from B to A later removes one call in `splitTable` and changes those th
   - **What the waiter sees, at once, with no press:** the tick stays, checked or indeterminate; the bill's rows
     give way to the take-over row, `{bill} · {name} has an unsent order` with **Take over draft** (or
     `table.draft_taken_by`'s words); `table.split_taken` at the foot, in `[data-split-refusal]`, announced,
-    naming every such bill, the leaving table and the staying tables; and Split is held, drawn `secondary` and
+    naming each person who holds such a bill (`table.split_taken_unnamed` if any has no name; each bill's own row
+    names the bill); and Split is held, drawn `secondary` and
     disabled. If the everything-ticked question was showing, the panel goes back to the action row.
   - **Take over draft** opens the existing dialog, which says what taking over does and names the person. On
     Take over, `takeOverOn` runs, then its read. The bill keeps its tick and picks, its rows return, its record
@@ -1242,14 +1251,14 @@ The old `split-table-bill` step stays what a waiter sees: **a new step `split-ta
 
 ## Task 11d: a read cannot quietly shorten the split (about 50 calls)
 
-**Files.** Same screen, `.split-table.test.ts`, `i18n/strings.ts` (`table.split_taken`, `table.split_bill_gone`, `table.split_changed`, EN and ES, per Question 1; Task 12c also uses the last).
+**Files.** Same screen, `.split-table.test.ts`, `i18n/strings.ts` (`table.split_taken`, `table.split_taken_unnamed`, `table.split_bill_gone`, `table.split_changed`, EN and ES, per Question 1; Task 12c also uses the last).
 
 This is D21 on the screen. The app's half, through a real read, is Task 12f.
 
 - [ ] **Before running anything,** write in the ledger what the failing case prints: a `split-table` dispatched with the bill left out of `selection`.
 - [ ] **Failing tests**, `.split-table.test.ts`, titled `A803 split: a read and a selected bill: …`, each setting `splitRead` and `partyDrafts` as a read would:
   - A whole bill and a bill with picks each gain someone else's draft: both still in the next `selection` once it is resolved; their ticks `.checked` or `.indeterminate`; no rows; each take-over row drawn.
-  - At once, with nothing pressed: `[data-split-refusal]`, `role="alert"`, holds `table.split_taken` with both bills, the leaving table and the staying tables; Split is `variant="secondary"` and disabled.
+  - At once, with nothing pressed: `[data-split-refusal]`, `role="alert"`, holds `table.split_taken` naming both holders once each ("Ana and Luis"), and with one holder of two bills that one name; with a holder whose `editorName` is null it holds `table.split_taken_unnamed`; Split is `variant="secondary"` and disabled.
   - **Nothing sends:** `userEvent.click` on Split, a `.click()` on its host, and Enter from each stepper dispatch no `split-table`.
   - The everything-ticked question showing when a bill becomes held goes back to the action row, and Split anyway is not on screen.
   - Unticking one of two held bills: the sentence names the other, Split still held. Unticking the last: the sentence goes, Split primary, and the next press's `selection` leaves those bills out. A cleared held bill's tick is disabled, with `table.split_take_over_first`.
