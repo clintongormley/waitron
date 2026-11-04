@@ -5029,6 +5029,12 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 ### Purchasing, recipes, stock and reports
 
+- **A1326. Design what supplier invoices should be — OPEN, needs a design (owner, 2026-11-04).** A
+  basic version is built: the dashboard's Purchases screen adds, edits and deletes them, and they feed
+  the deductible VAT in the modelo 303. The owner treats this as future work. Until the design, a
+  deleted or changed invoice leaves no trace, though it may have fed a VAT return. A1308 leaves the
+  tables as they are and logs nothing.
+
 - **The recipe routes and the recipe screen are unreached.**
   [Detail](backlog/back-office.md#the-recipe-routes-and-the-recipe-screen-are-unreached)
 
