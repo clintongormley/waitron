@@ -9,7 +9,6 @@ import { Socket } from "node:net";
 import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
-import "@waitron/provisioning";
 import { SPARE_SPACE_FILE } from "@waitron/provisioning";
 import { heldSetup } from "../test/held-setup-database.js";
 import { diskSnapshot } from "../test/start-again-deleted.js";
@@ -18,8 +17,6 @@ import { PASSWORD } from "../test/first-fiscal.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { REQUIRE_FULL_DISK, openSmallDisk, type SmallDisk } from "./testing/full-disk.js";
 import { SPARE_SPACE_BYTES } from "./spare-space.js";
-
-vi.mock("@waitron/provisioning", { spy: true });
 
 let opened: ReturnType<typeof openSmallDisk> | undefined;
 let disk: SmallDisk | undefined;

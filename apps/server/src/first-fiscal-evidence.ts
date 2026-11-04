@@ -80,26 +80,6 @@ function wellFormedHistoryEntry(entry: unknown): entry is PublicEvidenceFile["hi
     Number.isSafeInteger(entry.ownerGeneration)
   );
 }
-const PUBLIC_RECORD_LIMIT = 64 * 1024;
-function publicRecordBytes(originals: readonly { name: string; bytes: Uint8Array | null }[]) {
-  return originals.find((entry) => entry.name === "state/module-operation-public.json")?.bytes;
-}
-
-export function readFirstFiscalEvidenceSnapshot(
-  module: string,
-  originals: readonly { name: string; bytes: Uint8Array | null }[],
-): unknown[] {
-  const bytes = publicRecordBytes(originals);
-  if (bytes == null) return [];
-  try {
-    if (bytes.length > PUBLIC_RECORD_LIMIT) throw new AppError("setup.attempt_invalid", {});
-    return parsePublicEvidenceFile(JSON.parse(Buffer.from(bytes).toString("utf8")))
-      .history.filter((entry) => entry.module === module)
-      .map((entry) => entry.current);
-  } catch {
-    throw new AppError("setup.attempt_invalid", {});
-  }
-}
 
 export function createFirstFiscalEvidence(options: EvidenceOptions) {
   const path = join(options.stateDir, "module-operation-public.json");
