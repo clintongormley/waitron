@@ -16,6 +16,7 @@ import {
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import {
   readHandoverOperation,
+  readNodeMode,
   setNodeMode,
   setSingletonRole,
   writeMirrorLink,
@@ -35,7 +36,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePort } from "./testing/free-ports.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
-import { beginHandover } from "./handover-store.js";
+import { advanceHandover, beginHandover } from "./handover-store.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { READ_ONLY_EXEMPTIONS, isReadOnlyExempt } from "./read-only-exemptions.js";
 
@@ -183,6 +184,7 @@ const openStores: VenueDatabase[] = [];
 const venueDirs: string[] = [];
 let mirror: { dir: string; nodeId: string };
 let fenced: { dir: string; nodeId: string };
+let midHandover: { dir: string; nodeId: string; node: NodeDatabase };
 let spare: { dir: string; nodeId: string; node: NodeDatabase; offer: unknown };
 
 async function seededVenue(): Promise<[string, string, Database, NodeDatabase]> {
@@ -242,12 +244,33 @@ beforeAll(async () => {
       operationId: MIRROR_OPERATION_ID,
       scenario: "controlled",
       venue: { country: "ES", taxId: "B12345678", environment: "preproduction" },
+      sourceNodeId: mId,
+      destinationNodeId: ORIGIN_NODE_ID,
+      membership: { term: 1, digest: "a".repeat(64) },
+    },
+    "source",
+  );
+
+  // A mirror partway through taking over as the main box.
+  const [hDir, hId, hDb, hNode] = await seededVenue();
+  await setNodeMode({ venue: hDb, node: hNode }, hId, "mirror");
+  await linkMirror(hNode, hId);
+  const handingStore = { node: hNode, nodeId: hId };
+  await beginHandover(
+    handingStore,
+    {
+      operationId: MIRROR_OPERATION_ID,
+      scenario: "controlled",
+      venue: { country: "ES", taxId: "B12345678", environment: "preproduction" },
       sourceNodeId: ORIGIN_NODE_ID,
-      destinationNodeId: mId,
+      destinationNodeId: hId,
       membership: { term: 1, digest: "a".repeat(64) },
     },
     "destination",
   );
+  await advanceHandover(handingStore, MIRROR_OPERATION_ID, "copy_accepted", {});
+  await advanceHandover(handingStore, MIRROR_OPERATION_ID, "filing_assumed", {});
+  midHandover = { dir: hDir, nodeId: hId, node: hNode };
 
   // A second mirror with no open operation, holding a chart that names the main box.
   const [sDir, sId, sDb, sNode] = await seededVenue();
@@ -388,6 +411,50 @@ describe("each listed route is reached on a real read-only start, and nothing el
         retire: GATED,
         unlisted: GATED,
         statusRead: { status: 200, signerNodeId: mirror.nodeId, state: "prepared" },
+      });
+    } finally {
+      await server.close();
+    }
+  }, 60_000);
+
+  it("a mirror partway through a handover refuses an ordinary promote, and it stays a mirror", async () => {
+    const server = await startServer({
+      ...KEY_ENV,
+      WAITRON_VENUE_DIR: midHandover.dir,
+      WAITRON_NODE_ID: midHandover.nodeId,
+      WAITRON_HTTP_PORT: String(await freePort()),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+    });
+    const base = `http://127.0.0.1:${httpPort()}`;
+    try {
+      await waitForFirstPass(server);
+      const before = await readHandoverOperation(
+        midHandover.node,
+        midHandover.nodeId,
+        MIRROR_OPERATION_ID,
+      );
+      const response = await fetch(`${base}/management-api/promote`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ oldNodeNeutralised: true, breakGlass: "any secret" }),
+      });
+      expect([response.status, await response.json()]).toEqual([
+        409,
+        {
+          error: {
+            code: "handover.operation_in_progress",
+            params: { operationId: MIRROR_OPERATION_ID },
+          },
+        },
+      ]);
+      // A plain-HTTP preparation is still turned away first, and learns no operation's id.
+      expect(await post(base, "/management-api/promote/preparation")).toEqual(PREPARATION_REFUSAL);
+      expect(before).toMatchObject({ state: "filing_assumed" });
+      expect(
+        await readHandoverOperation(midHandover.node, midHandover.nodeId, MIRROR_OPERATION_ID),
+      ).toEqual(before);
+      expect(await readNodeMode(midHandover.node, midHandover.nodeId)).toMatchObject({
+        mode: "mirror",
       });
     } finally {
       await server.close();

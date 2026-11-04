@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { hashPassword, hashPin, persons } from "@waitron/identity";
+import { hashPassword, hashPin, managementSessions, persons } from "@waitron/identity";
 import { generateSync } from "otplib";
+import { advanceHandover, beginHandover } from "./handover-store.js";
 import { mountPromoteApi, type PromoteRunResult } from "./promote-api.js";
 import { enrolAuthenticator, wrongTotpCode, TOTP_KEY_RING } from "./testing/authenticator.js";
 import { writerBesideRequest } from "./testing/watched-scrypt.js";
@@ -60,6 +61,37 @@ async function post(app: Hono, body: unknown): Promise<Response> {
     headers: { "content-type": "application/json" },
   });
 }
+
+describe("POST /management-api/promote — an admin's right password while a handover is open", () => {
+  it("is refused before the sign-in, so no session is ever recorded", async () => {
+    const personId = await seedAdmin();
+    const operationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const store = { node: suite.node, nodeId: NODE };
+    await beginHandover(
+      store,
+      {
+        operationId,
+        scenario: "controlled",
+        venue: { country: "ES", taxId: "B12345678", environment: "preproduction" },
+        sourceNodeId: "99999999-9999-4999-8999-999999999999",
+        destinationNodeId: NODE,
+        membership: { term: 3, digest: "a".repeat(64) },
+      },
+      "destination",
+    );
+    await advanceHandover(store, operationId, "copy_accepted", {});
+    const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
+
+    const res = await post(appWith(run), { personId, password: ADMIN_PASSWORD });
+
+    expect([res.status, await res.json()]).toEqual([
+      409,
+      { error: { code: "handover.operation_in_progress", params: { operationId } } },
+    ]);
+    expect(run).not.toHaveBeenCalled();
+    expect(await suite.db.select().from(managementSessions)).toEqual([]);
+  });
+});
 
 describe("POST /management-api/promote — an admin with an authenticator", () => {
   it("signs in with a correct current code and promotes", async () => {
