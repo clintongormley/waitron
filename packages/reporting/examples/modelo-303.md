@@ -16,23 +16,23 @@ The fake backend keeps this example separate from tax-agency submission.
 
 You have six ordinary invoices and one correction. All amounts below are euros.
 
-| Node | August day | VAT rate | Base | Tax |
-| --- | --- | --- | --- | --- |
-| One | 3 | 21% | 100.00 | 21.00 |
-| One | 10 | 10% | 50.00 | 5.00 |
-| One | 17 | 21% | 200.00 | 42.00 |
-| Two | 5 | 10% | 80.00 | 8.00 |
-| Two | 12 | 21% | 40.00 | 8.40 |
-| Two | 24 | 10% | 30.00 | 3.00 |
-| One, correction of day 3 | 18 | 21% | -5.00 | -1.05 |
+| Node                     | August day | VAT rate | Base   | Tax   |
+| ------------------------ | ---------- | -------- | ------ | ----- |
+| One                      | 3          | 21%      | 100.00 | 21.00 |
+| One                      | 10         | 10%      | 50.00  | 5.00  |
+| One                      | 17         | 21%      | 200.00 | 42.00 |
+| Two                      | 5          | 10%      | 80.00  | 8.00  |
+| Two                      | 12         | 21%      | 40.00  | 8.40  |
+| Two                      | 24         | 10%      | 30.00  | 3.00  |
+| One, correction of day 3 | 18         | 21%      | -5.00  | -1.05 |
 
 Call `computeVatReturn(tx, { year: 2026, period: { kind: "month", month: 8 } })` to
-aggregate the period by the invoices' recorded civil issue dates. Its output VAT, *IVA devengado*, is:
+aggregate the period by the invoices' recorded civil issue dates. Its output VAT, _IVA devengado_, is:
 
-| Rate | Base | Tax |
-| --- | --- | --- |
-| 10% | 160.00 | 16.00 |
-| 21% | 335.00 | 70.35 |
+| Rate  | Base   | Tax   |
+| ----- | ------ | ----- |
+| 10%   | 160.00 | 16.00 |
+| 21%   | 335.00 | 70.35 |
 | Total | 495.00 | 86.35 |
 
 For an operational report, call `computeVatSummaryForPeriod` with business days August 1 to 31
@@ -46,15 +46,15 @@ gross 581.35. Filter by node and you get base/tax/gross of 345.00/66.95/411.95 f
 The deduction period uses each supplier invoice's received date. Keep the recorded tax amount:
 the first invoice below carries 41.99, even though 21% of its base is 42.00.
 
-| Invoice | Issued | Received | Regime | Kind | Rate | Base | Recorded tax |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026/501 | Aug 1 | Aug 4 | General | Ordinary | 21% | 200.00 | 41.99 |
-| F-88 | Aug 6 | Aug 9 | General | Ordinary | 10% | 100.00 | 10.00 |
-| INV-7 | Aug 11 | Aug 14 | General | Capital | 21% | 1000.00 | 210.00 |
-| T-3 | Aug 17 | Aug 20 | Equivalence surcharge | Ordinary | 21% | 50.00 | 10.50 |
+| Invoice  | Issued | Received | Regime                | Kind     | Rate | Base    | Recorded tax |
+| -------- | ------ | -------- | --------------------- | -------- | ---- | ------- | ------------ |
+| 2026/501 | Aug 1  | Aug 4    | General               | Ordinary | 21%  | 200.00  | 41.99        |
+| F-88     | Aug 6  | Aug 9    | General               | Ordinary | 10%  | 100.00  | 10.00        |
+| INV-7    | Aug 11 | Aug 14   | General               | Capital  | 21%  | 1000.00 | 210.00       |
+| T-3      | Aug 17 | Aug 20   | Equivalence surcharge | Ordinary | 21%  | 50.00   | 10.50        |
 
 With the full deduction proportion used by this fixture, the general-regime input VAT,
-*IVA deducible*, has base 1300.00 and tax 261.99. The surcharge invoice is excluded from this
+_IVA deducible_, has base 1300.00 and tax 261.99. The surcharge invoice is excluded from this
 calculation. Ordinary and capital purchases remain separate in `deductible.byRate`.
 
 Your result is `86.35 - 261.99 = -175.64`. July and September have no trade in this dataset,
@@ -70,10 +70,10 @@ example choice. The reporting functions do not select the declaration type for y
 The test checks the monthly file and a quarterly file with period `3T`. Both have 2944 bytes.
 It reads these slices independently of the serializer's field map, with zero-based offsets:
 
-| Slice | Meaning | Monthly bytes |
-| --- | --- | --- |
-| 10–11 | Period | `08` |
-| 1023–1039 | Box 27, output VAT | `00000000000008635` |
+| Slice     | Meaning                       | Monthly bytes       |
+| --------- | ----------------------------- | ------------------- |
+| 10–11     | Period                        | `08`                |
+| 1023–1039 | Box 27, output VAT            | `00000000000008635` |
 | 1346–1362 | Box 46, general-regime result | `N0000000000017564` |
 
 The quarterly period bytes are `3T`; the two amount slices are the same. The `N` prefix encodes
