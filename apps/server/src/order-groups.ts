@@ -768,6 +768,7 @@ export async function copyHeldGroups(
       groupId: orderGroups.id,
       submittedBy: orderGroups.submittedBy,
       holdPrintedAt: orderGroups.holdPrintedAt,
+      createdAt: orderGroups.createdAt,
     })
     .from(workingOrderLines)
     .innerJoin(orderGroups, eq(orderGroups.id, workingOrderLines.groupId))
@@ -790,7 +791,7 @@ export async function copyHeldGroups(
     );
   const sources = new Map<
     string,
-    { submittedBy: string; holdPrintedAt: string | null; lineIds: string[] }
+    { submittedBy: string; holdPrintedAt: string | null; createdAt: string; lineIds: string[] }
   >();
   for (const row of rows) {
     const source = sources.get(row.groupId);
@@ -798,6 +799,7 @@ export async function copyHeldGroups(
       sources.set(row.groupId, {
         submittedBy: row.submittedBy,
         holdPrintedAt: row.holdPrintedAt,
+        createdAt: row.createdAt,
         lineIds: [row.lineId],
       });
     else source.lineIds.push(row.lineId);
@@ -826,6 +828,7 @@ export async function copyHeldGroups(
         requestKind: "next_course",
         holdPrintedAt: source.holdPrintedAt,
         remindAt: null,
+        createdAt: source.createdAt,
       })
       .returning({ id: orderGroups.id });
     const copyId = copy!.id;

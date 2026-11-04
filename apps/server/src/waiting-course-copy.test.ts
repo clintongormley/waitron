@@ -40,6 +40,7 @@ import { recallToDraft } from "./draft-recall.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
+import { readScopedPassBoard } from "./pass-board.js";
 import { moveBill, type MoveTarget } from "./testing/move-bill-fixture.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
@@ -2019,4 +2020,112 @@ describe("A803 waiting copy: races", () => {
       );
     });
   }
+});
+
+describe("A803 waiting copy: how long a group has been held", () => {
+  const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+
+  function backdateGroup(groupId: string, createdAt: string) {
+    return inTx(v, (tx) =>
+      tx.update(orderGroups).set({ createdAt }).where(eq(orderGroups.id, groupId)),
+    );
+  }
+
+  async function shownGroup(partyId: string, groupId: string) {
+    const { groups } = await inTx(v, (tx) => readCurrentOrders(tx, partyId));
+    return groups.find((group) => group.id === groupId)!;
+  }
+
+  async function splitToNewTable(partyId: string, billId: string) {
+    const tableId = await v.table(`Copy ${++tableNumber}`);
+    const joining = { operatorId: OPERATOR, expectedPartyRevision: await revisionOf(v, partyId) };
+    await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, tableId, joining));
+    const splitting = { operatorId: OPERATOR, expectedPartyRevision: await revisionOf(v, partyId) };
+    return inTx(v, (tx) => splitTable(tx, v.cfg, partyId, tableId, billId, splitting));
+  }
+
+  it("Move this bill: the copy shows the time its source was held, and so does a copy of the copy", async () => {
+    const a = await seatWith([{ names: ["Tarta"], release: "hold" }]);
+    const source = (await lineOf(a.billId, "Tarta")).groupId!;
+    const held = minutesAgo(20);
+    await backdateGroup(source, held);
+    const before = await shownGroup(a.partyId, source);
+    expect(before.sentAt).toBe(held);
+
+    const first = await moveWholeBill(a.billId, a.partyId, {
+      tableId: await v.table(`Copy ${++tableNumber}`),
+    });
+
+    const copy = (await lineOf(a.billId, "Tarta")).groupId!;
+    expect(copy).not.toBe(source);
+    const shown = await shownGroup(first.partyId!, copy);
+    expect(shown.sentAt).toBe(held);
+    expect(shown.sentBy).toBe(before.sentBy);
+
+    const second = await moveWholeBill(a.billId, first.partyId!, {
+      tableId: await v.table(`Copy ${++tableNumber}`),
+    });
+
+    const again = (await lineOf(a.billId, "Tarta")).groupId!;
+    expect(again).not.toBe(copy);
+    expect((await shownGroup(second.partyId!, again)).sentAt).toBe(held);
+  });
+
+  it("Split a table: the copy shows the time its source was held", async () => {
+    const a = await seatWith([{ names: ["Tarta"], release: "hold" }]);
+    const source = (await lineOf(a.billId, "Tarta")).groupId!;
+    const held = minutesAgo(20);
+    await backdateGroup(source, held);
+    const before = await shownGroup(a.partyId, source);
+    expect(before.sentAt).toBe(held);
+
+    const split = await splitToNewTable(a.partyId, a.billId);
+
+    const copy = (await lineOf(a.billId, "Tarta")).groupId!;
+    expect(copy).not.toBe(source);
+    const shown = await shownGroup(split.partyId, copy);
+    expect(shown.sentAt).toBe(held);
+    expect(shown.sentBy).toBe(before.sentBy);
+  });
+
+  it("the copy's number and position at the other table still come after the groups there", async () => {
+    const a = await seatWith([{ names: ["Tarta"], release: "hold" }]);
+    await backdateGroup((await lineOf(a.billId, "Tarta")).groupId!, minutesAgo(20));
+    const tableId = await v.table(`Copy ${++tableNumber}`);
+    const { partyId } = await seat(v, tableId);
+    await orderForParty(v, partyId, ["Agua"]);
+
+    await moveWholeBill(a.billId, a.partyId, { tableId });
+
+    const copy = (await lineOf(a.billId, "Tarta")).groupId!;
+    const groups = await groupsOf(partyId);
+    expect(groups.at(-1)!.id).toBe(copy);
+    expect(groups.at(-1)!.displayNumber).toBe(groups.length);
+    const { groups: shown } = await inTx(v, (tx) => readCurrentOrders(tx, partyId));
+    expect(shown.at(-1)!.id).toBe(copy);
+  });
+
+  it("the pass's held column ranks a party by its oldest group, so a copy brings its source's age with it", async () => {
+    const t = await paperTable(false);
+    await backdateGroup(t.g, minutesAgo(20));
+    const older = await seatWith([{ names: ["Flan"], release: "hold" }]);
+    const olderGroup = (await lineOf(older.billId, "Flan")).groupId!;
+    await backdateGroup(olderGroup, minutesAgo(10));
+    const later = await seatWith([{ names: ["Flan"], release: "hold" }]);
+    const laterGroup = (await lineOf(later.billId, "Flan")).groupId!;
+    const heldOrder = async (ids: string[]) => {
+      const board = await inTx(v, (tx) =>
+        readScopedPassBoard(tx, { stationIds: [t.grill.id, t.pastry.id], zoneIds: null }),
+      );
+      return board.held
+        .map((card) => (card.target.kind === "group" ? card.target.groupId : null))
+        .filter((id) => id !== null && ids.includes(id));
+    };
+    expect(await heldOrder([olderGroup, laterGroup])).toEqual([olderGroup, laterGroup]);
+
+    await moveWholeBill(t.bill2, t.partyId, { tableId: await tableOf(later.partyId) });
+
+    const copy = (await lineOf(t.bill2, "Tarta")).groupId!;
+    expect(await heldOrder([olderGroup, laterGroup, copy])).toEqual([laterGroup, copy, olderGroup]);
+  });
 });
