@@ -310,14 +310,7 @@ it("a shown summary carrying held counts is refused setup.request_invalid", asyn
       } as RequestInit)
     ).json();
     const before = await readFile(join(f.stateDir, "first-setup.json"));
-    const recovery = {
-      startedAt: "2026-10-24T13:50:12.000Z",
-      lastActiveAt: "2026-10-24T13:51:12.000Z",
-      lastActiveSource: "memory",
-      failed: false,
-      cloud: false,
-    };
-    const send = (confirm: "confirmMissingDatabase" | "confirmRecoveryDiscard", held: unknown) =>
+    const send = (held: unknown) =>
       fetch(`${origin}/setup-api/first-setup/resolution/start-again`, {
         dispatcher: agent,
         method: "POST",
@@ -327,21 +320,17 @@ it("a shown summary carrying held counts is refused setup.request_invalid", asyn
           revision: inspection.revision,
           ownerGeneration: inspection.ownerGeneration,
           register: { kind: "no-current-master", confirmed: true },
-          [confirm]:
-            confirm === "confirmMissingDatabase"
-              ? { nothingFiledOrSold: true, shown: { reached: "named", held } }
-              : { shown: { reached: "named", recovery, held } },
+          confirmMissingDatabase: { nothingFiledOrSold: true, shown: { reached: "named", held } },
         }),
       } as RequestInit);
     const held = { rows: 20, kept: 3, records: 2, accepted: 1 };
-    for (const confirm of ["confirmMissingDatabase", "confirmRecoveryDiscard"] as const)
-      for (const value of [held, { ...held, extra: 1 }, { ...held, kept: -1 }, null]) {
-        const response = await send(confirm, value);
-        expect(response.status, `${confirm} ${JSON.stringify(value)}`).toBe(400);
-        expect(await response.json()).toMatchObject({
-          error: { code: "setup.request_invalid", params: { field: "body" } },
-        });
-      }
+    for (const value of [held, { ...held, extra: 1 }, { ...held, kept: -1 }, null]) {
+      const response = await send(value);
+      expect(response.status, JSON.stringify(value)).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "setup.request_invalid", params: { field: "body" } },
+      });
+    }
     expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
   } finally {
     await server?.close();

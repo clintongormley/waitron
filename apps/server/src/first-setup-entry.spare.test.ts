@@ -297,32 +297,3 @@ it("the repair app with room keeps the spare", async () => {
   expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(true);
   await entry.dispose();
 });
-
-it("the release runs before the fence", async () => {
-  await stoppedRecovery();
-  plantSpare();
-  const atFence: boolean[] = [];
-  const { firstSetupBackupRecoveryFor: real } = await vi.importActual<typeof backupEntry>(
-    "./first-setup-backup-entry.js",
-  );
-  vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockImplementation((...args) => {
-    const service = real(...args);
-    const holds = service.holdsInMemory.bind(service);
-    // The fence's first step on every write; it seals a lapsed session only after it.
-    service.holdsInMemory = () => {
-      atFence.push(existsSync(join(stateDir, SPARE_SPACE_FILE)));
-      return holds();
-    };
-    return service;
-  });
-  const entry = await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), {
-    ...spareOption(),
-    statfs: freeIs(MiB),
-  });
-  if (entry.kind !== "resolution") throw new Error(`expected the repair app, got ${entry.kind}`);
-  atFence.length = 0;
-  await entry.app.request(`${INSPECTION}/start-again`, { method: "POST" });
-  expect(atFence.length).toBeGreaterThan(0);
-  expect(atFence).toEqual(atFence.map(() => false));
-  await entry.dispose();
-});

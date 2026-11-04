@@ -8,17 +8,11 @@ import {
 import type { SetupDeps } from "./setup-api.js";
 import { parseEmailSettings } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
-import type { Context, Hono, MiddlewareHandler, Next } from "hono";
+import type { Context, Hono } from "hono";
 import { TLSSocket } from "node:tls";
 import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
-import {
-  isCanonicalInstant,
-  VENUE_FIELDS,
-  type StartAgainRecoveryShown,
-  type StartAgainSummary,
-  type VenueRequest,
-} from "@waitron/provisioning";
+import { VENUE_FIELDS, type StartAgainSummary, type VenueRequest } from "@waitron/provisioning";
 import { createErrorBoundary } from "@waitron/server-kit";
 import type { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
@@ -41,7 +35,6 @@ const boundary = createErrorBoundary(
     "setup.attempt_uncertain": 409,
     "setup.start_again_incomplete": 409,
     "setup.workspace_unsupported": 409,
-    "setup.recovery_in_progress": 409,
     "setup.start_again_refused": 409,
   },
   "setup.provision_failed",
@@ -81,25 +74,15 @@ function missingDatabaseConfirmation(value: unknown) {
   if (body.nothingFiledOrSold !== true) invalid();
   return { nothingFiledOrSold: true as const, shown: shownSummary(body.shown) };
 }
-function recoveryDiscardConfirmation(value: unknown) {
-  const shown = shownSummary(exact(value, ["shown"]).shown);
-  if (shown.recovery === undefined) invalid();
-  return { shown };
-}
 function unreadableDatabaseConfirmation(value: unknown) {
   const shown = shownSummary(exact(value, ["shown"]).shown);
   if (shown.databaseUnreadable !== true) invalid();
   return { shown };
 }
 function shownSummary(value: unknown): StartAgainSummary {
-  const shown = exact(
-    value,
-    ["reached"],
-    ["recoveryRecordDamaged", "databaseUnreadable", "recovery"],
-  );
+  const shown = exact(value, ["reached"], ["recoveryRecordDamaged", "databaseUnreadable"]);
   const damaged = Object.hasOwn(shown, "recoveryRecordDamaged");
   const unreadable = Object.hasOwn(shown, "databaseUnreadable");
-  const recovery = Object.hasOwn(shown, "recovery") ? shownRecovery(shown.recovery) : undefined;
   if (
     (damaged && shown.recoveryRecordDamaged !== true) ||
     (unreadable && shown.databaseUnreadable !== true) ||
@@ -110,31 +93,6 @@ function shownSummary(value: unknown): StartAgainSummary {
     reached: shown.reached as StartAgainSummary["reached"],
     ...(damaged && { recoveryRecordDamaged: true as const }),
     ...(unreadable && { databaseUnreadable: true as const }),
-    ...(recovery !== undefined && { recovery }),
-  };
-}
-function shownRecovery(value: unknown): StartAgainRecoveryShown {
-  const recovery = exact(value, [
-    "startedAt",
-    "lastActiveAt",
-    "lastActiveSource",
-    "failed",
-    "cloud",
-  ]);
-  if (
-    !isCanonicalInstant(recovery.startedAt) ||
-    !isCanonicalInstant(recovery.lastActiveAt) ||
-    !["memory", "saved-step"].includes(recovery.lastActiveSource as string) ||
-    typeof recovery.failed !== "boolean" ||
-    typeof recovery.cloud !== "boolean"
-  )
-    invalid();
-  return {
-    startedAt: recovery.startedAt as string,
-    lastActiveAt: recovery.lastActiveAt as string,
-    lastActiveSource: recovery.lastActiveSource as StartAgainRecoveryShown["lastActiveSource"],
-    failed: recovery.failed,
-    cloud: recovery.cloud,
   };
 }
 function assertFirstFiscalRequest(c: Context): void {
@@ -646,84 +604,8 @@ export function mountSetupFirstFiscalApi(
   );
 }
 
-type FencedRecovery = Pick<
-  ReturnType<typeof import("./first-setup-backup-recovery.js").createFirstSetupBackupRecovery>,
-  "runningInMemory" | "holdsInMemory" | "sealLapsed" | "liveness"
->;
-
-/**
- * While a backup recovery runs, the write is refused; otherwise a lapsed recovery is sealed before
- * the write goes on. A request the routes would refuse for its origin or content type is refused
- * here first, so it seals nothing. With no recovery held in memory there is nothing to refuse or
- * seal, and the routes answer alone. Decided synchronously, so nothing can renew between the check
- * and the seal.
- */
-function fenceWrite(c: Context, next: Next, recovery: FencedRecovery, log: Logger) {
-  if (!recovery.holdsInMemory()) return next();
-  c.header("Cache-Control", "no-store");
-  try {
-    assertFirstFiscalRequest(c);
-  } catch (error) {
-    return boundary(c, log, async () => {
-      throw error;
-    });
-  }
-  if (recovery.runningInMemory()) {
-    // `liveness()` answers a running recovery before its first await, so these are this moment's.
-    const activity = recovery.liveness();
-    return boundary(c, log, async () => {
-      const { startedAt, lastActiveAt } = (await activity)!;
-      throw new AppError("setup.recovery_in_progress", { startedAt, lastActiveAt });
-    });
-  }
-  recovery.sealLapsed();
-  return next();
-}
-
-const RESOLUTION_ROOT = "/setup-api/first-setup/resolution";
-
-/** A repair-page write under `/resolution`, other than the recovery's own under `/resolution/backup/`. */
-const resolutionWrite = (c: Context) =>
-  c.req.method === "POST" &&
-  (c.req.path === RESOLUTION_ROOT || c.req.path.startsWith(`${RESOLUTION_ROOT}/`)) &&
-  !c.req.path.startsWith(`${RESOLUTION_ROOT}/backup/`);
-
-export function mountFirstSetupResolutionFence(
-  app: Hono,
-  recovery: FencedRecovery,
-  log: Logger,
-): void {
-  app.use(`${RESOLUTION_ROOT}/*`, (c, next) =>
-    resolutionWrite(c) ? fenceWrite(c, next, recovery, log) : next(),
-  );
-}
-
-/** Writes outside `/resolution/` that this fence also covers; not every write that changes the attempt. */
-const FIRST_SETUP_OWNER_WRITES: readonly string[] = [
-  "/setup-api/first-setup/resume",
-  "/setup-api/first-setup/abandon",
-  "/setup-api/first-setup/recover",
-];
-
-/**
- * `fenceWrite` for the attempt's writes, inside `/resolution/` and out, for a box serving them.
- * While `gateRefuses()`, `/resolution/` writes are left to the setup gate, which refuses them
- * before any change.
- */
-export function firstSetupOwnerWriteFence(
-  recovery: FencedRecovery,
-  log: Logger,
-  gateRefuses: () => boolean,
-): MiddlewareHandler {
-  return (c, next) =>
-    (resolutionWrite(c) && !gateRefuses()) ||
-    (c.req.method === "POST" && FIRST_SETUP_OWNER_WRITES.includes(c.req.path))
-      ? fenceWrite(c, next, recovery, log)
-      : next();
-}
-
 const RESOLUTION = "/setup-api/first-setup/resolution";
-/** The repair page's Start-again steps, each mounted by {@link mountFirstSetupResolutionApi}. */
+/** The repair page's routes: inspection, Continue's password step, and Start again's summary and request. */
 export const START_AGAIN_ROUTES = {
   inspect: { method: "GET", path: RESOLUTION },
   recover: { method: "POST", path: `${RESOLUTION}/recover` },
@@ -1009,7 +891,6 @@ export function mountFirstSetupResolutionApi(
           "ownerGeneration",
           ...(Object.hasOwn(rawBody, "register") ? ["register"] : []),
           ...(Object.hasOwn(rawBody, "confirmMissingDatabase") ? ["confirmMissingDatabase"] : []),
-          ...(Object.hasOwn(rawBody, "confirmRecoveryDiscard") ? ["confirmRecoveryDiscard"] : []),
           ...(Object.hasOwn(rawBody, "confirmUnreadableDatabase")
             ? ["confirmUnreadableDatabase"]
             : []),
@@ -1034,9 +915,6 @@ export function mountFirstSetupResolutionApi(
         const confirmMissingDatabase = Object.hasOwn(body, "confirmMissingDatabase")
           ? missingDatabaseConfirmation(body.confirmMissingDatabase)
           : undefined;
-        const confirmRecoveryDiscard = Object.hasOwn(body, "confirmRecoveryDiscard")
-          ? recoveryDiscardConfirmation(body.confirmRecoveryDiscard)
-          : undefined;
         const confirmUnreadableDatabase = Object.hasOwn(body, "confirmUnreadableDatabase")
           ? unreadableDatabaseConfirmation(body.confirmUnreadableDatabase)
           : undefined;
@@ -1048,7 +926,6 @@ export function mountFirstSetupResolutionApi(
               ownerGeneration: body.ownerGeneration as number,
               register,
               ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
-              ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
               ...(confirmUnreadableDatabase === undefined ? {} : { confirmUnreadableDatabase }),
               ...(Object.hasOwn(body, "recoveryRecordDamagedShown")
                 ? { recoveryRecordDamagedShown: true as const }

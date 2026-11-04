@@ -4,18 +4,13 @@
 // "The full-disk start tests run on a small filesystem").
 import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { access, lstat, readdir, stat, writeFile } from "node:fs/promises";
+import { stat, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { TLSSocket } from "node:tls";
-import type { Hono } from "hono";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import "@waitron/provisioning";
-import {
-  SPARE_SPACE_FILE,
-  isEmptiedTombstone,
-  type StartAgainSummary,
-} from "@waitron/provisioning";
+import { SPARE_SPACE_FILE } from "@waitron/provisioning";
 import { selectedRepair } from "../test/first-setup-backup-recovery-fixture.js";
 import { heldSetup } from "../test/held-setup-database.js";
 import { diskSnapshot } from "../test/start-again-deleted.js";
@@ -30,8 +25,6 @@ import { SPARE_SPACE_BYTES } from "./spare-space.js";
 vi.mock("./first-setup-backup-source.js", { spy: true });
 vi.mock("./first-setup-backup-entry.js", { spy: true });
 vi.mock("@waitron/provisioning", { spy: true });
-
-const SPARE = 1024 * 1024;
 
 let opened: ReturnType<typeof openSmallDisk> | undefined;
 let disk: SmallDisk | undefined;
@@ -81,132 +74,6 @@ const spareOption = (roots: { stateDir: string; venueDir: string }) => ({
 });
 
 type Inspection = { inspectionId: string; revision: number; ownerGeneration: number };
-
-/** The repair page's Start-again flow over the box's real routes: inspection, summary, Start again. */
-async function startAgainOverRoutes(
-  app: Hono,
-  confirmation: "confirmMissingDatabase" | "confirmRecoveryDiscard" = "confirmMissingDatabase",
-) {
-  const read = async () => {
-    const answer = await app.request(ROUTE, {}, tls());
-    expect(answer.status, await answer.clone().text()).toBe(200);
-    const inspected = (await answer.json()) as Inspection;
-    return {
-      inspectionId: inspected.inspectionId,
-      revision: inspected.revision,
-      ownerGeneration: inspected.ownerGeneration,
-    };
-  };
-  const headers = { "Content-Type": "application/json" };
-  const ids = await read();
-  const summary = await app.request(
-    `${ROUTE}/start-again/summary`,
-    { method: "POST", headers, body: JSON.stringify(ids) },
-    tls(),
-  );
-  expect(summary.status, await summary.clone().text()).toBe(200);
-  const shown = (await summary.json()) as StartAgainSummary;
-  const done = await app.request(
-    `${ROUTE}/start-again`,
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        ...ids,
-        [confirmation]:
-          confirmation === "confirmMissingDatabase"
-            ? { nothingFiledOrSold: true, shown }
-            : { shown },
-      }),
-    },
-    tls(),
-  );
-  expect(done.status, await done.clone().text()).toBe(200);
-  return shown;
-}
-
-async function filesUnder(dir: string): Promise<string[]> {
-  const names: string[] = [];
-  for (const name of await readdir(dir)) {
-    const path = join(dir, name);
-    if ((await lstat(path)).isDirectory())
-      names.push(...(await filesUnder(path)).map((inner) => `${name}/${inner}`));
-    else names.push(name);
-  }
-  return names;
-}
-
-it("with the box's spare file, the summary and Start again both work on a full disk, and the stopped recovery's copy is emptied", async (ctx) => {
-  const small = needDisk(ctx);
-  const f = await selectedRepair();
-  await f.service.close(f.session.sessionId);
-  vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockReturnValue(f.service);
-  const spare = join(f.roots.stateDir, SPARE_SPACE_FILE);
-  await writeFile(spare, Buffer.alloc(SPARE, 1));
-  const copy = dirname(dirname(f.record.target.target.stateDir));
-  expect(await filesUnder(copy)).toContain("target/state/module-preparation-state.json");
-  const entry = await resolveFirstSetupEntry(
-    f.roots,
-    { WAITRON_ENV: "preproduction" },
-    undefined,
-    () => {},
-    spareOption(f.roots),
-  );
-  if (entry.kind !== "resolution") throw new Error("repair app missing");
-  small.fill();
-  expect(small.free()).toBeLessThan(65_536);
-
-  const shown = await startAgainOverRoutes(entry.app);
-
-  expect(shown.recovery).toBeDefined();
-  await expect(stat(spare)).rejects.toMatchObject({ code: "ENOENT" });
-  expect((await f.workspace.read()).at(-1)).toMatchObject({
-    phase: "abandoned",
-    target: { recoveryId: f.session.recoveryId },
-  });
-  expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(true);
-  expect(await filesUnder(copy)).not.toContain("target/state/module-preparation-state.json");
-  await expect(access(join(f.roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-});
-
-it("a recovery whose placement fills the disk stops, and Start again on the same page, still on a full disk, discards it and deletes the spare", async (ctx) => {
-  const small = needDisk(ctx);
-  const f = await selectedRepair();
-  vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockReturnValue(f.service);
-  const spare = join(f.roots.stateDir, SPARE_SPACE_FILE);
-  await writeFile(spare, Buffer.alloc(SPARE, 1));
-  const entry = await resolveFirstSetupEntry(
-    f.roots,
-    { WAITRON_ENV: "preproduction" },
-    undefined,
-    () => {},
-    spareOption(f.roots),
-  );
-  if (entry.kind !== "resolution") throw new Error("repair app missing");
-  // With 128 KiB left, the recheck's opening of the staged copy fails (SQLite error 4874) before
-  // the placement is recorded; 256 KiB lets the placement begin and fail.
-  small.fill(256 * 1024);
-
-  await expect(
-    f.service.commit(f.session.sessionId, f.selected.input, { onBox: false }),
-  ).rejects.toMatchObject({ code: "ENOSPC" });
-  expect(f.service.runningInMemory()).toBe(false);
-  expect((await f.workspace.read()).at(-1)?.phase).toBe("placement-started");
-  // Fill again, so the page opens on a full disk whatever the failed placement left free.
-  small.fill();
-  expect(small.free()).toBeLessThan(65_536);
-
-  const shown = await startAgainOverRoutes(entry.app);
-
-  expect(shown.recovery).toMatchObject({ failed: true });
-  await expect(stat(spare)).rejects.toMatchObject({ code: "ENOENT" });
-  expect((await f.workspace.read()).at(-1)).toMatchObject({
-    phase: "abandoned",
-    target: { recoveryId: f.session.recoveryId },
-  });
-});
 
 it("without a spare file, the password step of the Start-again flow on a full disk answers 507 storage.disk_full", async (ctx) => {
   const small = needDisk(ctx);

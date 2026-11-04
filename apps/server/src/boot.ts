@@ -38,7 +38,6 @@ import { createCloudConnection, loadCloudOrigin } from "./cloud-client.js";
 import { createCloudReplacement } from "./cloud-replacement.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { firstSetupBackupRecoveryFor } from "./first-setup-backup-entry.js";
-import { firstSetupOwnerWriteFence } from "./setup-first-fiscal-api.js";
 import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 import { mountCloudApi } from "./cloud-api.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
@@ -49,7 +48,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { serve } from "@hono/node-server";
 import { eq, inArray } from "drizzle-orm";
-import type { Context, Hono, MiddlewareHandler } from "hono";
+import type { Context, Hono } from "hono";
 import {
   installChangeFeed,
   subscribeToChanges,
@@ -1258,9 +1257,6 @@ async function bootServer(
     Promise.reject(new Error("stepdown called on a start that has not provided one"));
   seams.stepdown?.mount(app, (request) => stepDownHere(request));
   const normalSetupRequests = new Set<Promise<void>>();
-  // Ahead of the gate below, so a running backup recovery is named rather than "not ready".
-  let ownerWriteFence: MiddlewareHandler = (_c, next) => next();
-  app.use("/setup-api/first-setup/*", (c, next) => ownerWriteFence(c, next));
   app.use("/setup-api/*", async (c, next) => {
     const repair = c.req.path.startsWith("/setup-api/first-setup/resolution/backup/");
     const publicRead =
@@ -1382,7 +1378,6 @@ async function bootServer(
     });
     const backupRepair = firstSetupBackupRecoveryFor(config, env, firstSetupHost, stdoutLog);
     undoOnFailure.push(() => backupRepair.dispose());
-    ownerWriteFence = firstSetupOwnerWriteFence(backupRepair, stdoutLog, () => backupRepairOnly);
     let repairHandoff: Promise<void> | undefined;
     mountFirstSetupBackupApi(
       app,
