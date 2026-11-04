@@ -3,13 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import {
-  newId,
-  openVenueDatabase,
-  withTransaction,
-  type Database,
-  venueLocationId,
-} from "@waitron/db";
+import { newId, openVenueDatabase, withTransaction, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { persons, sessions, hashSessionToken } from "@waitron/identity";
@@ -38,7 +32,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
 });
 const now = new Date("2026-01-07T09:00:00Z");
-let nodeId: string, locationId: string, personId: string, missingPersonId: string;
+let nodeId: string, personId: string, missingPersonId: string;
 const dirs: string[] = [];
 afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
@@ -51,7 +45,6 @@ beforeEach(async () => {
     invoiceLocales: ["es"],
     operationDescription: "Restaurant",
   });
-  locationId = await venueLocationId(suite.db);
   nodeId = await seedNode(suite.db);
   const deviceId = (await seedDevice(suite.db)).deviceId;
   const people = await suite.db
@@ -84,7 +77,6 @@ beforeEach(async () => {
       source: "order",
       key: "missing-start",
       personId: missingPersonId,
-      locationId,
       kind: "order",
       at: "2026-01-05T12:00:00Z",
       offsetMinutes: 60,

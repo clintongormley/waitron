@@ -105,7 +105,6 @@ async function seedMissing(date = "2026-01-05", open = false) {
       await recordAttendanceFact(tx, {
         source: "order",
         key: `order:${date}`,
-        locationId,
         personId,
         kind: "order",
         at: `${date}T10:00:00Z`,
@@ -711,7 +710,6 @@ describe("missing-attendance delivery worker", () => {
           recordAttendanceFact(tx, {
             source: "order",
             key: "late",
-            locationId,
             personId,
             kind: "order",
             at: "2026-01-05T16:40:00Z",

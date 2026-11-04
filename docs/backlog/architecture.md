@@ -1055,8 +1055,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
   What the landed slices left, by owner:
 
-  - **S18:** the contract's node location ids remain for S18 (S3, #2387). The attendance
-    recorder keeps an unread optional `locationId` for S18 (S13, #2397). The node's id remains
+  - **S18:** the contract's node location ids remain for S18 (S3, #2387). The node's id remains
     for S18f (S16, #2402). `CatalogueApiDeps.venueCfg` (`apps/server/src/catalogue-api.ts`) is
     unread, and no slice plans its removal yet (S18b). Functions in `apps/server`'s
     `order-groups.ts`, `parties.ts`, `till-sale.ts` and `working-order.ts`, and test helpers such

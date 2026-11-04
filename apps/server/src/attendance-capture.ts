@@ -16,7 +16,6 @@ export type AttendanceRecorder = (
   tx: Transaction,
   fact: AttendanceFact & {
     outcome: "pending" | "qualified" | "refused";
-    locationId?: string;
   },
 ) => Promise<void>;
 

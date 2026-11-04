@@ -746,7 +746,6 @@ it("qualifies a captured pending bill at its saved instant when the retained out
       source: "bill-payment",
       key: paymentId,
       personId,
-      locationId,
       kind: "payment",
       at: "2026-01-05T11:00:00Z",
       offsetMinutes: 60,
