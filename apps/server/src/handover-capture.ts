@@ -2,9 +2,13 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { and, asc, eq, sql } from "drizzle-orm";
 import type { KeyRing } from "@waitron/credentials";
-import { withNodeTransaction, type Database, type NodeDatabase } from "@waitron/db";
+import {
+  withNodeTransaction,
+  type Database,
+  type NodeDatabase,
+  type NodeTransaction,
+} from "@waitron/db";
 import {
   parseBinding,
   sha256Hex,
@@ -18,7 +22,7 @@ import { canonicalize, type CanonicalValue } from "@waitron/membership";
 import { collectHandoverSummaries, type WaitronModule } from "@waitron/module";
 import {
   appendHandoverEventTx,
-  nodeHandoverEvents,
+  readHandoverEvent,
   readHandoverOperation,
   readHandoverRestriction,
 } from "@waitron/node-db";
@@ -157,23 +161,12 @@ async function steppedDownBinding(
 }
 
 async function readFinalState(
-  node: Pick<NodeDatabase, "select">,
+  node: NodeDatabase | NodeTransaction,
   nodeId: string,
   operationId: string,
 ): Promise<FinalStateEnvelope | null> {
-  const [row] = await node
-    .select({ envelope: nodeHandoverEvents.envelope })
-    .from(nodeHandoverEvents)
-    .where(
-      and(
-        eq(nodeHandoverEvents.nodeId, nodeId),
-        eq(nodeHandoverEvents.operationId, operationId),
-        eq(nodeHandoverEvents.kind, FINAL_STATE_EVENT),
-      ),
-    )
-    .orderBy(asc(sql`rowid`))
-    .limit(1);
-  if (row === undefined) return null;
+  const row = await readHandoverEvent(node, nodeId, operationId, FINAL_STATE_EVENT);
+  if (row === null) return null;
   // A fault in Waitron: this file's writer always stores the envelope with the event.
   if (row.envelope === null) throw new Error(`the final-state event of ${operationId} is empty`);
   return JSON.parse(row.envelope) as FinalStateEnvelope;

@@ -1,4 +1,4 @@
-import { and, eq, notInArray } from "drizzle-orm";
+import { and, asc, eq, notInArray, sql } from "drizzle-orm";
 import { now, type NodeDatabase, type NodeTransaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
@@ -26,6 +26,8 @@ export type HandoverEventRow = Omit<
   typeof nodeHandoverEvents.$inferInsert,
   "eventId" | "recordedAt"
 >;
+
+export type HandoverEvent = typeof nodeHandoverEvents.$inferSelect;
 
 export type HandoverRestrictionRow = Omit<
   typeof nodeHandoverRestriction.$inferInsert,
@@ -120,6 +122,28 @@ export async function appendHandoverEventTx(
   row: HandoverEventRow,
 ): Promise<void> {
   await tx.insert(nodeHandoverEvents).values(row);
+}
+
+/** The first event of `kind` this box recorded for the operation, or `null`. */
+export async function readHandoverEvent(
+  node: NodeHandle,
+  nodeId: string,
+  operationId: string,
+  kind: string,
+): Promise<HandoverEvent | null> {
+  const [row] = await node
+    .select()
+    .from(nodeHandoverEvents)
+    .where(
+      and(
+        eq(nodeHandoverEvents.nodeId, nodeId),
+        eq(nodeHandoverEvents.operationId, operationId),
+        eq(nodeHandoverEvents.kind, kind),
+      ),
+    )
+    .orderBy(asc(sql`rowid`))
+    .limit(1);
+  return row ?? null;
 }
 
 /**

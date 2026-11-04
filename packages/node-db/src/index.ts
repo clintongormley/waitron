@@ -16,12 +16,14 @@ export {
   advanceHandoverOperationTx,
   appendHandoverEventTx,
   beginHandoverOperationTx,
+  readHandoverEvent,
   readHandoverOperation,
   readHandoverRestriction,
   readOpenHandoverOperation,
   recordHandoverRestrictionTx,
 } from "./handover.js";
 export type {
+  HandoverEvent,
   HandoverEventRow,
   HandoverOperation,
   HandoverOperationRow,

@@ -11,6 +11,7 @@ describe("the public surface", () => {
         "advanceHandoverOperationTx",
         "appendHandoverEventTx",
         "beginHandoverOperationTx",
+        "readHandoverEvent",
         "readHandoverOperation",
         "readHandoverRestriction",
         "readOpenHandoverOperation",

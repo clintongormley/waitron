@@ -1,4 +1,11 @@
 export {
+  insertHandoverActivationTx,
+  readActivationRows,
+  readHandoverActivation,
+} from "./activations.js";
+export type { HandoverActivation, HandoverActivationRow } from "./activations.js";
+export { HANDOVER_CLASSIFICATION } from "./classification.js";
+export {
   HANDOVER_KINDS,
   envelopeDigest,
   sha256Hex,
@@ -15,6 +22,8 @@ export type {
   SchemaEntry,
 } from "./indicator.js";
 export { NODE_LOCAL_MANIFEST } from "./manifest.js";
+export { HANDOVER_MIGRATIONS } from "./migrations.js";
+export { handoverActivations, handoverScenario } from "./schema/index.js";
 export type { NodeLocalItem, NodeLocalManifestRow } from "./manifest.js";
 export { HANDOVER_STATES, initialState, isOpen, nextState } from "./states.js";
 export type { HandoverRole, HandoverState } from "./states.js";
