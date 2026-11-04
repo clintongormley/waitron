@@ -63,7 +63,7 @@ async function post(app: Hono, body: unknown): Promise<Response> {
 }
 
 describe("POST /management-api/promote — an admin's right password while a handover is open", () => {
-  it("is refused before the sign-in, so no session is ever recorded", async () => {
+  it("is refused after the sign-in, and the sign-in's session row is rolled back", async () => {
     const personId = await seedAdmin();
     const operationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     const store = { node: suite.node, nodeId: NODE };

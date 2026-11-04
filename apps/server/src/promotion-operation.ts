@@ -31,6 +31,7 @@ export async function withPromotionModuleOperation<T>(
     readonly totp?: unknown;
   },
   run: (runner: PromotionOperationRunner) => Promise<T>,
+  afterSignIn?: () => Promise<void>,
 ): Promise<T> {
   const { db, nodeId, credentialKeyRing } = deps;
   const modules = [...deps.modules];
@@ -69,7 +70,10 @@ export async function withPromotionModuleOperation<T>(
       { db, node: deps.node, nodeId },
       binding,
       credentials.breakGlass,
-      (authority, commit) => scopedRun(authority, commit),
+      async (authority, commit) => {
+        await afterSignIn?.();
+        return scopedRun(authority, commit);
+      },
     );
   }
 
@@ -78,5 +82,6 @@ export async function withPromotionModuleOperation<T>(
     { binding, permission: "node.promote" },
     credentials,
     (authority) => scopedRun(authority, (consume) => withTransaction(db, consume)),
+    afterSignIn,
   );
 }

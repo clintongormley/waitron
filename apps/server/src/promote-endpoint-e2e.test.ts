@@ -12,7 +12,9 @@ import {
   kitchenStations,
   locations,
   openVenueDatabase,
+  readNodeMembership,
   readStandardSeriesId,
+  readTenant,
   stampDeployment,
   tenants,
   withTransaction,
@@ -21,16 +23,27 @@ import {
   type NodeDatabase,
   type VenueDatabase,
 } from "@waitron/db";
-import { readNodeMode, setNodeMode, writeMirrorLink } from "@waitron/node-db";
+import { sha256Hex, signEnvelope } from "@waitron/handover";
+import {
+  readHandoverOperation,
+  readNodeMode,
+  setNodeMode,
+  writeMirrorLink,
+} from "@waitron/node-db";
 import { loadKeyRing } from "@waitron/credentials";
-import { hashPassword, hashPin, hashSecret, persons } from "@waitron/identity";
+import { hashPassword, hashPin, hashSecret, managementSessions, persons } from "@waitron/identity";
 import {
   assignCatalogueToVenue,
   createCatalogue,
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { generateNodeKeyPair, type Endorsement } from "@waitron/membership";
+import {
+  canonicalize,
+  generateNodeKeyPair,
+  type CanonicalValue,
+  type Endorsement,
+} from "@waitron/membership";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { startServer, type StartedServer } from "./boot.js";
@@ -69,6 +82,23 @@ vi.mock("undici", async (importOriginal) => {
     fetch: vi.fn(() =>
       Promise.reject(new Error("undici fetch disabled in promote-endpoint-e2e.test.ts")),
     ),
+  };
+});
+
+// Holds a real promotion after the route's own checks and before it changes anything.
+const promotionHold = vi.hoisted(() => ({
+  wait: undefined as undefined | (() => Promise<void>),
+}));
+vi.mock("./promote.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./promote.js")>();
+  return {
+    ...actual,
+    promoteMirrorToPrimary: async (
+      ...args: Parameters<typeof actual.promoteMirrorToPrimary>
+    ): ReturnType<typeof actual.promoteMirrorToPrimary> => {
+      await promotionHold.wait?.();
+      return actual.promoteMirrorToPrimary(...args);
+    },
   };
 });
 
@@ -119,7 +149,7 @@ const DEVICE_PROFILE_ID = "66666666-6666-4666-8666-666666666666";
 const DEVICE_COOKIE_HEADER = `${DEVICE_COOKIE}=${DEVICE_ID}.${DEVICE_TOKEN}`;
 
 // One directory per promoting case, so one case's deployment flip never leaks into another.
-const VENUES = ["main", "breakGlass"] as const;
+const VENUES = ["main", "breakGlass", "overlap", "failedPromotion"] as const;
 type VenueName = (typeof VENUES)[number];
 const venueDir = {} as Record<VenueName, string>;
 const stores = {} as Record<VenueName, VenueDatabase>;
@@ -135,7 +165,11 @@ let killSpy: MockInstance<typeof process.kill>;
 async function seedMirror(
   admin: Database,
   node: NodeDatabase,
-): Promise<{ nodeId: string; fixture: ReturnType<typeof allocationFixture> }> {
+): Promise<{
+  nodeId: string;
+  fixture: ReturnType<typeof allocationFixture>;
+  origin: ReturnType<typeof generateNodeKeyPair>;
+}> {
   await admin
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90222222F", legalName: "Promote E2E Cloud SL" })
@@ -210,7 +244,7 @@ async function seedMirror(
 
   await stampDeployment(admin, "production");
   await setNodeMode({ venue: admin, node }, standby.nodeId, "mirror");
-  return { nodeId: standby.nodeId, fixture };
+  return { nodeId: standby.nodeId, fixture, origin };
 }
 
 /** What the promoted primary needs to ring a real cash sale; returns the offer to sell. */
@@ -572,6 +606,190 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       vi.unstubAllEnvs();
       await rm(stateDir, { recursive: true, force: true });
     }
+  }, 90_000);
+});
+
+describe("a real offer beside a real promotion on a real start", () => {
+  const OPERATION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+  /** The offer the main box would send, built before anything changes the held chart. */
+  async function mainBoxOffer(
+    venue: "overlap" | "failedPromotion",
+    seed: Awaited<ReturnType<typeof seedMirror>>,
+  ): Promise<string> {
+    const held = await readNodeMembership(db[venue]);
+    const tenant = await readTenant(db[venue]);
+    return JSON.stringify(
+      signEnvelope(
+        "stepdown",
+        {
+          binding: {
+            operationId: OPERATION_ID,
+            scenario: "controlled",
+            venue: { country: tenant!.country, taxId: tenant!.taxId, environment: "production" },
+            sourceNodeId: MIRROR_ORIGIN_NODE_ID,
+            destinationNodeId: seed.nodeId,
+            membership: {
+              term: held!.body.term,
+              digest: sha256Hex(canonicalize(held as unknown as CanonicalValue)),
+            },
+          },
+          authorisedBy: ADMIN_ID,
+        } as unknown as CanonicalValue,
+        { nodeId: MIRROR_ORIGIN_NODE_ID, privateKey: seed.origin.privateKey },
+      ),
+    );
+  }
+
+  async function sendOffer(
+    base: string,
+    offer: string,
+  ): Promise<{ status: number; code: unknown; state: unknown }> {
+    const response = await fetch(`${base}/api/node/handover/offer`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: offer,
+    });
+    const answer = (await response.json()) as {
+      error?: { code?: unknown };
+      body?: { state?: unknown };
+    };
+    return { status: response.status, code: answer.error?.code, state: answer.body?.state };
+  }
+
+  /** Starts a promotion that stops just past the route's checks; `resolve` lets it go on. */
+  function holdThePromotion(): { reached: Promise<void>; resolve: () => void } {
+    let reached = (): void => undefined;
+    let resolve = (): void => undefined;
+    const reachedPromise = new Promise<void>((done) => {
+      reached = done;
+    });
+    const gate = new Promise<void>((done) => {
+      resolve = done;
+    });
+    promotionHold.wait = async () => {
+      reached();
+      await gate;
+    };
+    return { reached: reachedPromise, resolve };
+  }
+
+  async function withStartedMirror(
+    venue: "overlap" | "failedPromotion",
+    body: (context: {
+      base: string;
+      seed: Awaited<ReturnType<typeof seedMirror>>;
+      offer: string;
+    }) => Promise<void>,
+  ): Promise<void> {
+    const seed = await seedMirror(db[venue], stores[venue].node);
+    await mintBreakGlassSecret({ venue: db[venue], node: stores[venue].node }, seed.nodeId);
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), `waitron-promote-e2e-${venue}-state-`));
+    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
+    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
+    const server = await startServer({
+      ...mirrorEnv(venueDir[venue], port, seed.nodeId, stateDir),
+      ...allocationEnv,
+    });
+    try {
+      await poll(async () => server.health.lastPassAt ?? undefined);
+      await body({
+        base: `http://127.0.0.1:${port}`,
+        seed,
+        offer: await mainBoxOffer(venue, seed),
+      });
+    } finally {
+      promotionHold.wait = undefined;
+      await server.close();
+      vi.unstubAllEnvs();
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  }
+
+  it("an offer arriving just past the promote's check records nothing, and the box promotes with no operation left behind", async () => {
+    await withStartedMirror("overlap", async ({ base, seed, offer }) => {
+      const hold = holdThePromotion();
+      const operation = seed.fixture.request("promote");
+      const promoting = postPromote(base, {
+        moduleOperation: { binding: operation.binding, input: operation.input },
+        oldNodeNeutralised: true,
+        personId: ADMIN_ID,
+        password: ADMIN_PW,
+      });
+      // The race: a promote refused before the hold must print, not hang.
+      await Promise.race([hold.reached, promoting]);
+
+      const offered = await sendOffer(base, offer);
+      hold.resolve();
+      const promoted = await promoting;
+
+      expect({
+        offered,
+        promote: { status: promoted.status, body: await promoted.json() },
+        operation: await readHandoverOperation(stores.overlap.node, seed.nodeId, OPERATION_ID),
+        mode: (await readNodeMode(stores.overlap.node, seed.nodeId)).mode,
+      }).toEqual({
+        offered: { status: 409, code: "handover.promotion_running", state: undefined },
+        promote: { status: 200, body: { alreadyPrimary: false, restarting: true } },
+        operation: null,
+        mode: "primary",
+      });
+
+      expect(await sendOffer(base, offer)).toEqual({
+        status: 409,
+        code: "handover.not_a_spare",
+        state: undefined,
+      });
+      expect(
+        await readHandoverOperation(stores.overlap.node, seed.nodeId, OPERATION_ID),
+      ).toBeNull();
+    });
+  }, 90_000);
+
+  it("a promotion that fails lets a later offer through, and a promote after that is refused and writes no session", async () => {
+    await withStartedMirror("failedPromotion", async ({ base, seed, offer }) => {
+      const hold = holdThePromotion();
+      const credentials = { personId: ADMIN_ID, password: ADMIN_PW };
+      const promoting = postPromote(base, { oldNodeNeutralised: false, ...credentials });
+      await Promise.race([hold.reached, promoting]);
+
+      const offered = await sendOffer(base, offer);
+      hold.resolve();
+      const failed = await promoting;
+      promotionHold.wait = undefined;
+      expect({
+        offered,
+        failed: { status: failed.status, code: (await failed.json()).error.code },
+      }).toEqual({
+        offered: { status: 409, code: "handover.promotion_running", state: undefined },
+        failed: { status: 400, code: "promotion.fence_not_attested" },
+      });
+
+      expect(await sendOffer(base, offer)).toEqual({
+        status: 200,
+        code: undefined,
+        state: "prepared",
+      });
+      expect(
+        await readHandoverOperation(stores.failedPromotion.node, seed.nodeId, OPERATION_ID),
+      ).toMatchObject({ role: "destination", state: "prepared" });
+
+      const sessionsBefore = await db.failedPromotion.select().from(managementSessions);
+      const refused = await postPromote(base, { oldNodeNeutralised: true, ...credentials });
+      expect([refused.status, await refused.json()]).toEqual([
+        409,
+        {
+          error: {
+            code: "handover.operation_in_progress",
+            params: { operationId: OPERATION_ID },
+          },
+        },
+      ]);
+      expect(await db.failedPromotion.select().from(managementSessions)).toEqual(sessionsBefore);
+      expect((await readNodeMode(stores.failedPromotion.node, seed.nodeId)).mode).toBe("mirror");
+    });
   }, 90_000);
 });
 

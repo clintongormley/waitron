@@ -12,6 +12,7 @@ import { createErrorBoundary, readRawJsonBody } from "@waitron/server-kit";
 import { AppError, isUuid } from "@waitron/shared";
 import { currentBinding, peerKeyOf } from "./handover-signing.js";
 import { signedHandoverStatus } from "./handover-status-api.js";
+import { recordOfferInTurn } from "./handover-promotion-turn.js";
 import { beginHandoverFromOffer } from "./handover-store.js";
 import type { Logger } from "./logger.js";
 import type { PeerStatusApiDeps } from "./peer-status-api.js";
@@ -21,6 +22,7 @@ const STATUS = {
   "handover.request_invalid": 400,
   "handover.peer_unknown": 403,
   "handover.not_a_spare": 409,
+  "handover.promotion_running": 409,
   "handover.membership_mismatch": 409,
   "handover.operation_in_progress": 409,
   "handover.operation_conflict": 409,
@@ -90,12 +92,14 @@ export function mountHandoverDestinationApi(app: Hono, deps: PeerStatusApiDeps, 
       if (stored?.fingerprint === bindingFingerprint(binding)) {
         return c.json(await signedHandoverStatus(deps, stored), 200);
       }
-      const { mode } = await readNodeMode(deps.node, deps.nodeId);
-      if (mode !== "mirror") throw new AppError("handover.not_a_spare", {});
-      if (!(await matchesThisBox(deps, binding))) {
-        throw new AppError("handover.membership_mismatch", { operationId });
-      }
-      await beginHandoverFromOffer(deps, binding, "destination", envelope);
+      await recordOfferInTurn(deps.node, operationId, async () => {
+        const { mode } = await readNodeMode(deps.node, deps.nodeId);
+        if (mode !== "mirror") throw new AppError("handover.not_a_spare", {});
+        if (!(await matchesThisBox(deps, binding))) {
+          throw new AppError("handover.membership_mismatch", { operationId });
+        }
+        await beginHandoverFromOffer(deps, binding, "destination", envelope);
+      });
       const recorded = await readHandoverOperation(deps.node, deps.nodeId, operationId);
       // A fault in Waitron: the transaction above recorded this row or found it recorded.
       if (recorded === null) throw new Error(`no handover operation ${operationId} after begin`);

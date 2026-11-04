@@ -14,6 +14,7 @@ import type { HandoverState } from "@waitron/handover";
 import type { WaitronModule } from "@waitron/module";
 import { readOpenHandoverOperation } from "@waitron/node-db";
 import { parseStandbyOperationInput } from "./recovery-module-operation.js";
+import { promotionTurn } from "./handover-promotion-turn.js";
 import { withPromotionModuleOperation } from "./promotion-operation.js";
 import type { FenceAttestation, PromotionOperationRunner } from "./promote.js";
 import { verifyBreakGlass } from "./break-glass.js";
@@ -85,7 +86,6 @@ const BEFORE_ACTIVATION: ReadonlySet<HandoverState> = new Set<HandoverState>([
 export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = () => {}): void {
   const run = createErrorBoundary(STATUS, "promotion.failed");
 
-  // Runs before the sign-in, because a sign-in records a session.
   const refuseWhileTakingOver = async (): Promise<void> => {
     const open = await readOpenHandoverOperation(deps.nodeDb, deps.nodeId);
     if (open?.role === "destination" && BEFORE_ACTIVATION.has(open.state))
@@ -96,7 +96,6 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
     run(c, log, async () => {
       c.header("Cache-Control", "no-store");
       requireNodeOperationHttps(c);
-      await refuseWhileTakingOver();
       const body = await readJsonBody<{
         moduleOperation?: unknown;
         proposal?: unknown;
@@ -124,6 +123,8 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
           preparationContext(body),
           body.proposal,
           { onBox },
+          // No turn: preparing changes no mode, and the promote that follows checks again.
+          refuseWhileTakingOver,
         ),
       );
     }),
@@ -131,83 +132,96 @@ export function mountPromoteApi(app: Hono, deps: PromoteApiDeps, log: Logger = (
 
   app.post("/management-api/promote", (c) =>
     run(c, log, async () => {
-      await refuseWhileTakingOver();
-      const body = await readJsonBody<{
-        oldNodeNeutralised?: unknown;
-        noParallelRecovery?: unknown;
-        personId?: string;
-        password?: string;
-        totp?: string;
-        breakGlass?: string;
-        moduleOperation?: unknown;
-      }>(c);
+      const turn = promotionTurn(deps.nodeDb);
+      const afterSignIn = async (): Promise<void> => {
+        turn.claim();
+        await refuseWhileTakingOver();
+      };
+      try {
+        const body = await readJsonBody<{
+          oldNodeNeutralised?: unknown;
+          noParallelRecovery?: unknown;
+          personId?: string;
+          password?: string;
+          totp?: string;
+          breakGlass?: string;
+          moduleOperation?: unknown;
+        }>(c);
 
-      if (body.moduleOperation !== undefined) {
-        const operation = parseStandbyOperationInput(body.moduleOperation);
-        if (operation === null)
-          throw new AppError("module.operation_invalid", { module: "unknown" });
-        if (deps.nodePreparation !== undefined && body.noParallelRecovery !== undefined) {
-          c.header("Cache-Control", "no-store");
-          requireNodeOperationHttps(c);
-          const result = await deps.nodePreparation.withPromotion(
+        if (body.moduleOperation !== undefined) {
+          const operation = parseStandbyOperationInput(body.moduleOperation);
+          if (operation === null)
+            throw new AppError("module.operation_invalid", { module: "unknown" });
+          if (deps.nodePreparation !== undefined && body.noParallelRecovery !== undefined) {
+            c.header("Cache-Control", "no-store");
+            requireNodeOperationHttps(c);
+            const result = await deps.nodePreparation.withPromotion(
+              operation,
+              body,
+              preparationContext(body),
+              (_modules, runner) =>
+                deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true }, runner),
+              afterSignIn,
+            );
+            return c.json(result);
+          }
+          const result = await withPromotionModuleOperation(
+            {
+              db: deps.appDb,
+              node: deps.nodeDb,
+              nodeId: deps.nodeId,
+              credentialKeyRing: deps.credentialKeyRing,
+              modules: deps.modules ?? [],
+            },
             operation,
             body,
-            preparationContext(body),
-            (_modules, runner) =>
-              deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true }, runner),
+            (runner) => deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true }, runner),
+            afterSignIn,
           );
           return c.json(result);
         }
-        const result = await withPromotionModuleOperation(
-          {
-            db: deps.appDb,
-            node: deps.nodeDb,
-            nodeId: deps.nodeId,
-            credentialKeyRing: deps.credentialKeyRing,
-            modules: deps.modules ?? [],
-          },
-          operation,
-          body,
-          (runner) => deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true }, runner),
-        );
-        return c.json(result);
-      }
 
-      // A present break-glass secret is authoritative: a wrong one is refused here, never downgraded
-      // to the login path.
-      if (typeof body.breakGlass === "string") {
-        if (!(await verifyBreakGlass(deps.nodeDb, deps.nodeId, body.breakGlass))) {
-          throw new AppError("promotion.break_glass_invalid", {});
+        // A present break-glass secret is authoritative: a wrong one is refused here, never downgraded
+        // to the login path.
+        if (typeof body.breakGlass === "string") {
+          if (!(await verifyBreakGlass(deps.nodeDb, deps.nodeId, body.breakGlass))) {
+            throw new AppError("promotion.break_glass_invalid", {});
+          }
+          await afterSignIn();
+        } else if (
+          typeof body.personId === "string" &&
+          isUuid(body.personId) &&
+          typeof body.password === "string" &&
+          (body.totp === undefined || typeof body.totp === "string")
+        ) {
+          const { personId, password, totp } = body;
+          const checked = await checkManagerPassword(deps.appDb, { personId }, password);
+          await withTransaction(deps.appDb, async (tx) => {
+            const session = await loginManagerById(tx, {
+              personId,
+              password,
+              totp,
+              totpKeyRing: deps.credentialKeyRing,
+              checked,
+            });
+            await authorizeManager(tx, {
+              managementSessionId: session.token,
+              permission: "node.promote",
+            });
+            await endManagementSession(tx, session.token);
+            // Inside the transaction, so a refusal here leaves no session row behind.
+            await afterSignIn();
+          });
+        } else {
+          // The same code a wrong password gets, so the response never says which field failed.
+          throw new AppError("password.invalid", {});
         }
-      } else if (
-        typeof body.personId === "string" &&
-        isUuid(body.personId) &&
-        typeof body.password === "string" &&
-        (body.totp === undefined || typeof body.totp === "string")
-      ) {
-        const { personId, password, totp } = body;
-        const checked = await checkManagerPassword(deps.appDb, { personId }, password);
-        await withTransaction(deps.appDb, async (tx) => {
-          const session = await loginManagerById(tx, {
-            personId,
-            password,
-            totp,
-            totpKeyRing: deps.credentialKeyRing,
-            checked,
-          });
-          await authorizeManager(tx, {
-            managementSessionId: session.token,
-            permission: "node.promote",
-          });
-          await endManagementSession(tx, session.token);
-        });
-      } else {
-        // The same code a wrong password gets, so the response never says which field failed.
-        throw new AppError("password.invalid", {});
-      }
 
-      const result = await deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true });
-      return c.json(result);
+        const result = await deps.run({ oldNodeNeutralised: body.oldNodeNeutralised === true });
+        return c.json(result);
+      } finally {
+        turn.release();
+      }
     }),
   );
 }

@@ -145,6 +145,7 @@ export function createNodeOperationPreparation(options: {
     credentials: unknown,
     context: Context,
     run: (authority: OperationAuthority, commit: Commit) => Promise<T>,
+    afterSignIn?: () => Promise<void>,
   ): Promise<T> => {
     const binding = Object.freeze({ ...supplied });
     const heldContext = Object.freeze({ ...context });
@@ -183,7 +184,10 @@ export function createNodeOperationPreparation(options: {
         { db: options.db, node: options.nodeDb, nodeId: node.nodeId },
         binding,
         heldCredentials.breakGlass,
-        authenticated,
+        async (authority, commit) => {
+          await afterSignIn?.();
+          return authenticated(authority, commit);
+        },
       );
     if (options.credentialKeyRing === undefined) return invalid(binding);
     return withAuthenticatedOperation(
@@ -196,6 +200,7 @@ export function createNodeOperationPreparation(options: {
       },
       heldCredentials,
       (authority) => authenticated(authority, (body) => withTransaction(options.db, body)),
+      afterSignIn,
     );
   };
   return {
@@ -245,15 +250,22 @@ export function createNodeOperationPreparation(options: {
       context: Context,
       proposal: unknown,
       client: OperationClient,
+      afterSignIn?: () => Promise<void>,
     ): Promise<unknown> {
       const binding = Object.freeze({ ...suppliedBinding });
       if (!["promote"].includes(binding.action)) return invalid(binding);
       const held = structuredClone(proposal);
-      return invoke(binding, credentials, context, async (authority) => {
-        const contribution = modules.find((module) => module.name === binding.module)?.operations;
-        if (contribution?.recovery === undefined) return invalid(binding);
-        return contribution.recovery({ binding: { ...binding }, authority }, held, client);
-      });
+      return invoke(
+        binding,
+        credentials,
+        context,
+        async (authority) => {
+          const contribution = modules.find((module) => module.name === binding.module)?.operations;
+          if (contribution?.recovery === undefined) return invalid(binding);
+          return contribution.recovery({ binding: { ...binding }, authority }, held, client);
+        },
+        afterSignIn,
+      );
     },
     async withOperation<T>(
       operation: RecoveryOperationInput,
@@ -276,21 +288,27 @@ export function createNodeOperationPreparation(options: {
       credentials: unknown,
       context: Context,
       run: (modules: readonly WaitronModule[], runner: PromotionOperationRunner) => Promise<T>,
+      afterSignIn?: () => Promise<void>,
     ): Promise<T> {
       const binding = Object.freeze({ ...operation.binding });
       const input = structuredClone(operation.input);
       if (binding.action !== "promote") return invalid(binding);
-      return invoke(binding, credentials, context, (authority, commit) =>
-        run(modules, async (current, consume) => {
-          if (current.db !== options.db || !equal(current.node, node)) return invalid(binding);
-          return withPreparedModuleOperations(
-            modules,
-            new Map([[binding.module, { binding, authority, input }]]),
-            node.nodeId,
-            "promote",
-            (ready) => commit((tx) => consume(tx, ready)),
-          );
-        }),
+      return invoke(
+        binding,
+        credentials,
+        context,
+        (authority, commit) =>
+          run(modules, async (current, consume) => {
+            if (current.db !== options.db || !equal(current.node, node)) return invalid(binding);
+            return withPreparedModuleOperations(
+              modules,
+              new Map([[binding.module, { binding, authority, input }]]),
+              node.nodeId,
+              "promote",
+              (ready) => commit((tx) => consume(tx, ready)),
+            );
+          }),
+        afterSignIn,
       );
     },
   };

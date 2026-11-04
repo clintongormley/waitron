@@ -96,6 +96,8 @@ export async function withAuthenticatedOperation<T>(
   },
   credentials: unknown,
   run: (authority: OperationAuthority) => Promise<T>,
+  /** Runs inside the sign-in's transaction, so a throw leaves no session row behind. */
+  afterSignIn?: () => Promise<void>,
 ): Promise<T> {
   if (typeof credentials !== "object" || credentials === null || Array.isArray(credentials))
     throw new AppError("password.invalid", {});
@@ -124,6 +126,7 @@ export async function withAuthenticatedOperation<T>(
         permission,
       });
       await endManagementSession(tx, session.token);
+      await afterSignIn?.();
       return authorised.authorizedBy;
     });
   });

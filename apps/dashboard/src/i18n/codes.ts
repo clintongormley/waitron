@@ -1361,6 +1361,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This box is not a spare, so it cannot take over the venue. Nothing was changed.",
     es: "Este equipo no es un equipo de reserva, así que no puede pasar a llevar el local. No se ha cambiado nada.",
   },
+  "handover.promotion_running": {
+    en: "This box is being made the main box right now, so it did not accept this handover. Nothing was changed. If that does not finish, start the handover again.",
+    es: "Este equipo está pasando a ser el equipo principal en este momento, así que no ha aceptado el traspaso. No se ha cambiado nada. Si eso no termina, vuelve a empezar el traspaso.",
+  },
   "handover.membership_mismatch": {
     en: "The box offering this handover is not the main box on this box's list of the venue's boxes, or the two boxes hold different venue details or different lists, so this box did not accept the handover. Nothing was changed.",
     es: "El equipo que ofrece este traspaso no es el equipo principal en la lista de equipos del local de este equipo, o los dos equipos tienen datos del local o listas distintos, así que este equipo no ha aceptado el traspaso. No se ha cambiado nada.",

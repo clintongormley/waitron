@@ -36,6 +36,7 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { freePort } from "./testing/free-ports.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { mintBreakGlassSecret } from "./break-glass.js";
 import { advanceHandover, beginHandover } from "./handover-store.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { READ_ONLY_EXEMPTIONS, isReadOnlyExempt } from "./read-only-exemptions.js";
@@ -184,7 +185,7 @@ const openStores: VenueDatabase[] = [];
 const venueDirs: string[] = [];
 let mirror: { dir: string; nodeId: string };
 let fenced: { dir: string; nodeId: string };
-let midHandover: { dir: string; nodeId: string; node: NodeDatabase };
+let midHandover: { dir: string; nodeId: string; node: NodeDatabase; breakGlass: string };
 let spare: { dir: string; nodeId: string; node: NodeDatabase; offer: unknown };
 
 async function seededVenue(): Promise<[string, string, Database, NodeDatabase]> {
@@ -270,7 +271,8 @@ beforeAll(async () => {
   );
   await advanceHandover(handingStore, MIRROR_OPERATION_ID, "copy_accepted", {});
   await advanceHandover(handingStore, MIRROR_OPERATION_ID, "filing_assumed", {});
-  midHandover = { dir: hDir, nodeId: hId, node: hNode };
+  const breakGlass = await mintBreakGlassSecret({ venue: hDb, node: hNode }, hId);
+  midHandover = { dir: hDir, nodeId: hId, node: hNode, breakGlass };
 
   // A second mirror with no open operation, holding a chart that names the main box.
   const [sDir, sId, sDb, sNode] = await seededVenue();
@@ -436,7 +438,7 @@ describe("each listed route is reached on a real read-only start, and nothing el
       const response = await fetch(`${base}/management-api/promote`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ oldNodeNeutralised: true, breakGlass: "any secret" }),
+        body: JSON.stringify({ oldNodeNeutralised: true, breakGlass: midHandover.breakGlass }),
       });
       expect([response.status, await response.json()]).toEqual([
         409,
@@ -447,6 +449,17 @@ describe("each listed route is reached on a real read-only start, and nothing el
           },
         },
       ]);
+      // No credentials over plain HTTP: the usual refusal, naming no operation.
+      expect(await post(base, "/management-api/promote")).toEqual({
+        status: 401,
+        code: "password.invalid",
+      });
+      // The real shape of M2: a real start's status read serves a destination's operation.
+      expect(await readStatus(base, MIRROR_OPERATION_ID)).toEqual({
+        status: 200,
+        signerNodeId: midHandover.nodeId,
+        state: "filing_assumed",
+      });
       // A plain-HTTP preparation is still turned away first, and learns no operation's id.
       expect(await post(base, "/management-api/promote/preparation")).toEqual(PREPARATION_REFUSAL);
       expect(before).toMatchObject({ state: "filing_assumed" });

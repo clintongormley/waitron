@@ -3,14 +3,27 @@ import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
-import { CORE_MIGRATIONS, type Database, type NodeDatabase } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  withNodeTransaction,
+  type Database,
+  type NodeDatabase,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { HandoverRole, HandoverScenario, HandoverState } from "@waitron/handover";
-import { NODE_MIGRATIONS, nodeHandoverEvents, nodeHandoverOperations } from "@waitron/node-db";
+import { hashSecret } from "@waitron/identity";
+import type { WaitronModule } from "@waitron/module";
+import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
+import {
+  NODE_MIGRATIONS,
+  nodeHandoverEvents,
+  nodeHandoverOperations,
+  setRecoveryKeyTx,
+} from "@waitron/node-db";
 import type { PromoteApiDeps, PromoteRunResult } from "./promote-api.js";
 
-// A unit test with no database: login, authorisation, `verifyBreakGlass` and `run` are doubled, so
-// it pins only the endpoint's own logic, never the promote functions.
+// Login, authorisation, `verifyBreakGlass` and `run` are doubled, so this pins only the endpoint's own
+// logic, never the promote functions. Only the handover cases hold a real node.db.
 
 const PERSON = "22222222-2222-2222-2222-222222222222";
 const GOOD_SECRET = "correct-break-glass-secret";
@@ -308,23 +321,41 @@ describe("an ordinary promotion while a handover is open on this box", () => {
     { oldNodeNeutralised: true, breakGlass: GOOD_SECRET },
     { oldNodeNeutralised: true, personId: PERSON, password: "pw" },
     { moduleOperation: { binding, input: null }, breakGlass: GOOD_SECRET },
+    { moduleOperation: { binding, input: null }, personId: PERSON, password: "pw" },
     { moduleOperation: { binding, input: null }, noParallelRecovery: true },
   ];
 
   const run = vi.fn(async () => ({ alreadyPrimary: false, restarting: true }));
-  const prepare = vi.fn(async () => ({ prepared: true }));
-  const withPromotion = vi.fn(async () => ({ promoted: true }));
+  type AfterSignIn = (() => Promise<void>) | undefined;
+  // Doubles that sign in and then ask, as `invoke` in node-operation-preparation.ts does.
+  const prepare = vi.fn(async (...args: unknown[]) => {
+    await (args[5] as AfterSignIn)?.();
+    return { prepared: true };
+  });
+  const withPromotion = vi.fn(async (...args: unknown[]) => {
+    await (args[4] as AfterSignIn)?.();
+    return { promoted: true };
+  });
+  const regime = fakeModule("test-regime", {
+    provisioning: {
+      standby: { activate: async () => undefined },
+    } as unknown as WaitronModule["provisioning"],
+  });
   let app: Hono;
   let socket: TLSSocket;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    await withNodeTransaction(suite.node, (tx) =>
+      setRecoveryKeyTx(tx, NODE, hashSecret(GOOD_SECRET), "paper-1"),
+    );
     app = new Hono();
     mountPromoteApi(app, {
       appDb: fakeDb,
       nodeDb: suite.node,
       nodeId: NODE,
       run,
+      modules: [regime],
       credentialKeyRing: TOTP_KEY_RING,
       nodePreparation: { prepare, withPromotion } as unknown as PromoteApiDeps["nodePreparation"],
       requestFromBox: () => false,
@@ -380,7 +411,7 @@ describe("an ordinary promotion while a handover is open on this box", () => {
     };
   }
 
-  /** Each sign-in on the promote route, then the preparation route: all refused, nothing changed. */
+  /** Each signed-in way onto the promote route, then the preparation route: refused, nothing changed. */
   async function expectRefusedNamingOperation(operationId: string): Promise<void> {
     const before = await recorded();
     const refusal = { error: { code: "handover.operation_in_progress", params: { operationId } } };
@@ -394,16 +425,7 @@ describe("an ordinary promotion while a handover is open on this box", () => {
     });
     expect([preparation.status, await preparation.json()]).toEqual([409, refusal]);
 
-    for (const stage of [
-      run,
-      prepare,
-      withPromotion,
-      verifyBreakGlass,
-      checkManagerPassword,
-      loginManagerById,
-    ]) {
-      expect(stage).not.toHaveBeenCalled();
-    }
+    expect(run).not.toHaveBeenCalled();
     expect(await recorded()).toEqual(before);
   }
 

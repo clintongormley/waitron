@@ -189,6 +189,8 @@ declare module "@waitron/shared" {
     "handover.final_copy_changed": { operationId: string };
     /** A handover offer reached a box that is not a mirror, so it has no way to take over. */
     "handover.not_a_spare": Record<string, never>;
+    /** A handover offer reached a box while an ordinary promotion of it was running. */
+    "handover.promotion_running": Record<string, never>;
     /**
      * A handover offer's taxpayer, environment, chart term or chart digest differs from this box's
      * own, this box holds no chart, or its chart does not name the offer's source `serving-primary`.
