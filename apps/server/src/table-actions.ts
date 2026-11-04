@@ -276,19 +276,29 @@ export interface SplitGuestCounts {
   leaving: number | null;
 }
 
+/** Which bills go whole, and which dishes go loose, to the party Split a table starts. */
+export interface SplitSelection {
+  wholeBillIds: string[];
+  loose: { billId: string; lineIds: string[] }[];
+}
+
 /**
  * `tableId` leaves the party and its today's merge ({@link leaveMergesRestoring}), and a new,
- * unnamed party starts on it, taking `billId`, or a new empty bill when none is chosen. The chosen
- * bill must be an open or presented bill of the party. Its held dishes not recalled into a draft
- * move to the new party's own held copy of each of their groups ({@link copyHeldGroups}). A
- * staying party whose family is left with no bill that is not abandoned is given a new empty one.
+ * unnamed party starts on it, taking the selection's whole bills, or a new empty bill when nothing
+ * is selected. Each must be an open or presented bill of the party; each takes its next number at
+ * the new party in its old number order, and keeps its payments. Their held dishes not recalled
+ * into a draft move to one held copy of each of their groups, however many of the bills share it
+ * ({@link copyHeldGroups}); the rest of each bill's dishes group as that bill arrives
+ * ({@link groupArrivingDishes}). A staying party whose family is left with no bill that is not
+ * abandoned is given a new empty one. The answer's `billIds` are the new party's bills in number
+ * order.
  */
 export async function splitTable(
   tx: Transaction,
   cfg: OriginConfig,
   partyId: string,
   tableId: string,
-  billId: string | null,
+  selection: SplitSelection,
   options: {
     expectedPartyRevision: number;
     operatorId: string;
@@ -296,7 +306,7 @@ export async function splitTable(
     expectedEdits: BillEditExpected[];
   },
   attendance?: OrderAttendance,
-): Promise<{ partyId: string; billId: string }> {
+): Promise<{ partyId: string; billIds: string[]; looseSourceIds: string[] }> {
   await checkAndBumpParty(
     tx,
     partyId,
@@ -307,17 +317,17 @@ export async function splitTable(
   const held = await memberTables(tx, partyId);
   if (!held.includes(tableId)) throw new AppError("table.not_joined", { tableId, partyId });
   if (held.length === 1) throw new AppError("table.not_shared", { tableId, partyId });
-  await requireRelocatableBillEditors(
-    tx,
-    billId === null ? [] : [billId],
-    options.operatorId,
-    options.expectedEdits,
-  );
-  let firers: ReadonlyMap<string, Firer> = new Map();
-  let heldLineIds: string[] = [];
-  if (billId !== null) {
-    await refuseUnsplittableBill(tx, partyId, billId);
-    ({ firers, heldLineIds } = await leaveParty(tx, billId, "keep"));
+  const { wholeBillIds } = selection;
+  if (selection.loose.length > 0 || new Set(wholeBillIds).size !== wholeBillIds.length)
+    throw new AppError("management.request_invalid", { field: "selection" });
+  await requireRelocatableBillEditors(tx, wholeBillIds, options.operatorId, options.expectedEdits);
+  for (const billId of wholeBillIds) await refuseUnsplittableBill(tx, partyId, billId);
+  const leaving: { billId: string; firers: ReadonlyMap<string, Firer> }[] = [];
+  const heldLineIds: string[] = [];
+  for (const billId of await inNumberOrder(tx, wholeBillIds)) {
+    const left = await leaveParty(tx, billId, "keep");
+    leaving.push({ billId, firers: left.firers });
+    heldLineIds.push(...left.heldLineIds);
   }
 
   return withMovedSlips(tx, cfg, { parties: [partyId] }, async () => {
@@ -332,29 +342,34 @@ export async function splitTable(
       tableId,
     });
     await inheritKitchenNote(tx, cfg, { partyId }, { partyId: newParty }, "copy");
+    for (const { billId } of leaving) await VENUE_SERVICE.allocateBillNumber(tx, billId, newParty);
     await VENUE_SERVICE.splitPartyAllergies(
       tx,
       partyId,
       newParty,
-      billId === null ? [] : [billId],
+      leaving.map(({ billId }) => billId),
       options.operatorId,
     );
-    let taken: string;
-    if (billId === null) {
-      taken = await insertPartyBill(tx, cfg, newParty);
-    } else {
-      taken = billId;
+    if (leaving.length === 0) await insertPartyBill(tx, cfg, newParty);
+    for (const { billId } of leaving) {
       await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
-      await VENUE_SERVICE.allocateBillNumber(tx, billId, newParty);
-      await moveBillDraftsToParty(tx, billId, newParty, options.expectedEdits[0]!);
-      const activity =
-        attendance === undefined
-          ? undefined
-          : {
-              recorder: attendance.recorder,
-              at: attendance.clock.now().instant.toISOString(),
-            };
-      const { held } = await groupArrivingDishes(
+      await moveBillDraftsToParty(
+        tx,
+        billId,
+        newParty,
+        options.expectedEdits.find((edit) => edit.billId === billId)!,
+      );
+    }
+    const activity =
+      attendance === undefined
+        ? undefined
+        : {
+            recorder: attendance.recorder,
+            at: attendance.clock.now().instant.toISOString(),
+          };
+    const heldGroups: string[] = [];
+    for (const { billId, firers } of leaving) {
+      const { held: groups } = await groupArrivingDishes(
         tx,
         cfg,
         newParty,
@@ -363,12 +378,17 @@ export async function splitTable(
         firers,
         activity,
       );
-      await copyHeldGroups(tx, partyId, newParty, heldLineIds, options.operatorId, activity);
-      await printHoldTickets(tx, cfg, held);
-      await ensureFamilyBill(tx, cfg, partyId);
+      heldGroups.push(...groups);
     }
+    await copyHeldGroups(tx, partyId, newParty, heldLineIds, options.operatorId, activity);
+    await printHoldTickets(tx, cfg, heldGroups);
+    if (leaving.length > 0) await ensureFamilyBill(tx, cfg, partyId);
     await leaveMergesRestoring(tx, [tableId]);
-    return { partyId: newParty, billId: taken };
+    return {
+      partyId: newParty,
+      billIds: await shownBillIds(tx, cfg, newParty),
+      looseSourceIds: [],
+    };
   });
 }
 
@@ -430,14 +450,17 @@ async function shownBillIds(
     .from(workingOrders)
     .where(notAbandonedInFamily(await partyFamily(tx, partyId)));
   if (rows.length === 0) return [await insertPartyBill(tx, cfg, partyId)];
-  const numbers = await VENUE_SERVICE.readBillIdentities(
+  return inNumberOrder(
     tx,
     rows.map((row) => row.id),
   );
+}
+
+/** The bills in number order, unnumbered last, then by id. */
+async function inNumberOrder(tx: Transaction, billIds: readonly string[]): Promise<string[]> {
+  const numbers = await VENUE_SERVICE.readBillIdentities(tx, billIds);
   const numberOf = (id: string) => numbers.get(id)?.number ?? Number.POSITIVE_INFINITY;
-  return rows
-    .map((row) => row.id)
-    .sort((a, b) => numberOf(a) - numberOf(b) || (a < b ? -1 : a > b ? 1 : 0));
+  return [...billIds].sort((a, b) => numberOf(a) - numberOf(b) || (a < b ? -1 : a > b ? 1 : 0));
 }
 
 async function addTable(tx: Transaction, partyId: string, tableId: string): Promise<void> {

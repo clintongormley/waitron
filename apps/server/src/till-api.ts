@@ -3160,13 +3160,13 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         await catchUpFloor(tx);
         await checkZones(tx, session, [{ partyId }]);
         const held = [...(await memberTables(tx, partyId)), tableId.toLowerCase()];
-        return movingRooms(tx, held, undefined, () =>
-          splitTable(
+        return movingRooms(tx, held, undefined, async () => {
+          const split = await splitTable(
             tx,
             sendCfg,
             partyId,
             tableId.toLowerCase(),
-            billId,
+            { wholeBillIds: billId === null ? [] : [billId], loose: [] },
             {
               expectedPartyRevision,
               operatorId: personId,
@@ -3176,8 +3176,9 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             deps.attendance === undefined
               ? undefined
               : { recorder: deps.attendance, clock: deps.clock },
-          ),
-        );
+          );
+          return { partyId: split.partyId, billId: split.billIds[0]! };
+        });
       });
       return c.json(result);
     }),

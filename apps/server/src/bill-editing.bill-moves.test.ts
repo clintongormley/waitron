@@ -19,6 +19,7 @@ import {
   type BillEditState,
 } from "./order-drafts.js";
 import { joinTables, splitTable } from "./table-actions.js";
+import { oneBill } from "./testing/table-action-fixture.js";
 import { moveBill } from "./move-bill.js";
 import { mergeBills } from "./bill-actions.js";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
@@ -297,7 +298,7 @@ describe("split a table carries only its moved bill editor", () => {
   async function split(from: Awaited<ReturnType<typeof setup>>, expectedEdits: BillEditExpected[]) {
     const [row] = await venue.db.select().from(parties).where(eq(parties.id, from.partyId));
     return inTx(venue, (tx) =>
-      splitTable(tx, venue.cfg, from.partyId, from.leaving, from.billId, {
+      splitTable(tx, venue.cfg, from.partyId, from.leaving, oneBill(from.billId), {
         expectedPartyRevision: row!.revision,
         operatorId: venue.operatorId,
         expectedEdits,

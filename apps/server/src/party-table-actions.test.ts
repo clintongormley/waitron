@@ -1,6 +1,6 @@
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -11,10 +11,20 @@ import {
   orderGroupEvents,
   orderGroups,
   partyTables,
+  sales,
   ticketItems,
   workingOrderLines,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitron/venue-service";
+import { readBillEditState } from "./bill-editing.js";
+import { readBillBalance } from "./bill-payments.js";
+import { writeMerge } from "./floor-today-merges.js";
+import { createCourse } from "./kitchen.js";
+import { fireGroup } from "./order-groups.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { readDrafts } from "./order-drafts.js";
@@ -58,7 +68,7 @@ import {
   type PartyVenue,
   floorRow,
 } from "./testing/party-venue.js";
-import { needingMoving } from "./testing/floor-today-venue.js";
+import { mergeOf, needingMoving, plannedZone } from "./testing/floor-today-venue.js";
 import { numbersOf } from "./testing/bill-identities.js";
 import "./errors.js";
 
@@ -1935,5 +1945,602 @@ describe("A803 no main bill (join)", () => {
       ...before,
       { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "A803 Outer 7" },
     ]);
+  });
+});
+
+describe("A803 split", () => {
+  const whole = (...wholeBillIds: string[]) => ({ wholeBillIds, loose: [] });
+
+  /** Ana at `<prefix> 4` and `<prefix> 5`: Bill 1 Burger, Bill 2 Vino, Bill 3 Flan. */
+  async function threeBills(prefix: string) {
+    const [m4, m5] = await tables(prefix, 4, 5);
+    const ana = await seat(v, m4);
+    await joinFree(ana.partyId, m5);
+    await order(v, ana.tabId, "Burger", "Vino", "Flan");
+    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    const b3 = await splitOff(ana.partyId, ana.tabId, [3]);
+    return { ana, m4, m5, b1: ana.tabId, b2, b3 };
+  }
+
+  /** {@link threeBills} with Bill 2's id sorting after Bill 3's, so ids answer against numbers. */
+  async function threeBillsWithIdsAgainstNumbers(prefix: string) {
+    for (let attempt = 1; attempt <= 40; attempt++) {
+      const bills = await threeBills(`${prefix} ${attempt}`);
+      if (bills.b2 > bills.b3) return bills;
+    }
+    throw new Error("no two bills with ids sorting against their numbers in 40 tries");
+  }
+
+  /** Every stored fact of the bill but the lines' group, which a split gives a new one. */
+  async function billFacts(billId: string) {
+    return {
+      row: await billRow(v, billId),
+      lines: (await lineRows(billId)).map((line) => ({ ...line, groupId: null })),
+      payments: await paymentsOf(v, billId),
+      zone: await zoneOf(v, billId),
+    };
+  }
+
+  async function shownBills(partyId: string) {
+    const bills = await act((tx) => readPartyBills(tx, partyId));
+    return bills
+      .filter((bill) => bill.status !== "abandoned")
+      .map((bill) => ({ id: bill.workingOrderId, status: bill.status }));
+  }
+
+  const partyCount = () => v.db.all<{ n: number }>(sql`select count(*) as n from parties`)[0]!.n;
+
+  it("two of three whole bills leave together; the third stays", async () => {
+    const { ana, m4, m5, b1, b2, b3 } = await threeBillsWithIdsAgainstNumbers("A803 Dos");
+    const staying = await billFacts(b1);
+    const leaving = [await billFacts(b2), await billFacts(b3)];
+    const partyBefore = await partyRow(v, ana.partyId);
+    const partiesBefore = partyCount();
+    const splitting = await cmd(ana.partyId);
+
+    const result = await act((tx) =>
+      splitTable(tx, v.cfg, ana.partyId, m5, whole(b3, b2), splitting),
+    );
+
+    expect(result.billIds).toEqual([b2, b3]);
+    expect(await numbersOf(v, result.partyId)).toEqual([
+      [b2, 1, null],
+      [b3, 2, null],
+    ]);
+    expect(await numbersOf(v, ana.partyId)).toEqual([[b1, 1, null]]);
+    expect(partyCount()).toBe(partiesBefore + 1);
+    expect(await partyAt(v, m5)).toBe(result.partyId);
+    expect(await activeTablesOf(v, result.partyId)).toEqual([m5]);
+    expect(await activeTablesOf(v, ana.partyId)).toEqual([m4]);
+    expect(await partyRow(v, ana.partyId)).toEqual({
+      ...partyBefore,
+      revision: splitting.expectedPartyRevision + 1,
+    });
+    expect(await billFacts(b1)).toEqual(staying);
+    expect(await billFacts(b2)).toEqual({
+      ...leaving[0],
+      row: {
+        ...leaving[0]!.row,
+        partyId: result.partyId,
+        revision: leaving[0]!.row.revision + 1,
+      },
+    });
+    expect(await billFacts(b3)).toEqual({
+      ...leaving[1],
+      row: {
+        ...leaving[1]!.row,
+        partyId: result.partyId,
+        revision: leaving[1]!.row.revision + 1,
+      },
+    });
+  });
+
+  it("any bill can stay and any can go, the first included", async () => {
+    const { ana, m4, m5, b1, b2, b3 } = await threeBills("A803 Primera");
+    const splitting = await cmd(ana.partyId);
+
+    const result = await act((tx) =>
+      splitTable(tx, v.cfg, ana.partyId, m5, whole(b1, b3), splitting),
+    );
+
+    expect(result.billIds).toEqual([b1, b3]);
+    expect(await numbersOf(v, result.partyId)).toEqual([
+      [b1, 1, null],
+      [b3, 2, null],
+    ]);
+    expect(await numbersOf(v, ana.partyId)).toEqual([[b2, 2, null]]);
+    expect(await openingBillOfParty(v, ana.partyId)).toBe(b2);
+    expect(await activeTablesOf(v, ana.partyId)).toEqual([m4]);
+  });
+
+  it("nothing selected: the leaving table starts with an empty bill, and staying bills are untouched", async () => {
+    const { ana, m5, b1, b2, b3 } = await threeBills("A803 Nada");
+    const staying = [await billFacts(b1), await billFacts(b2), await billFacts(b3)];
+    const splitting = await cmd(ana.partyId);
+
+    const result = await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, whole(), splitting));
+
+    expect(result.billIds).toEqual([expect.any(String)]);
+    const [empty] = result.billIds;
+    expect(staying.map((bill) => bill.row.id)).not.toContain(empty);
+    expect(await billRow(v, empty!)).toMatchObject({ partyId: result.partyId, status: "open" });
+    expect(await linesOf(v, empty!)).toEqual([]);
+    expect(await numbersOf(v, result.partyId)).toEqual([[empty, 1, null]]);
+    expect([await billFacts(b1), await billFacts(b2), await billFacts(b3)]).toEqual(staying);
+    expect(await numbersOf(v, ana.partyId)).toEqual([
+      [b1, 1, null],
+      [b2, 2, null],
+      [b3, 3, null],
+    ]);
+  });
+
+  it("everything selected: the staying party gets one empty bill", async () => {
+    const { ana, m4, m5, b1, b2, b3 } = await threeBills("A803 Todo");
+    const splitting = await cmd(ana.partyId);
+
+    const result = await act((tx) =>
+      splitTable(tx, v.cfg, ana.partyId, m5, whole(b1, b2, b3), splitting),
+    );
+
+    expect(result.billIds).toEqual([b1, b2, b3]);
+    const shown = await shownBills(ana.partyId);
+    expect(shown).toEqual([{ id: expect.any(String), status: "open" }]);
+    expect([b1, b2, b3]).not.toContain(shown[0]!.id);
+    expect(await linesOf(v, shown[0]!.id)).toEqual([]);
+    expect(await activeTablesOf(v, ana.partyId)).toEqual([m4]);
+    expect(await partyRow(v, ana.partyId)).toMatchObject({
+      revision: splitting.expectedPartyRevision + 1,
+    });
+  });
+
+  it("a staying party keeping only a paid bill gets none, because a paid bill is one of the table's bills", async () => {
+    const { ana, m4, m5, b1, b2, b3 } = await threeBills("A803 Pagada");
+    await pay(v, b1, "12.00");
+    const splitting = await cmd(ana.partyId);
+
+    const result = await act((tx) =>
+      splitTable(tx, v.cfg, ana.partyId, m5, whole(b2, b3), splitting),
+    );
+
+    expect(result.billIds).toEqual([b2, b3]);
+    expect(await shownBills(ana.partyId)).toEqual([{ id: b1, status: "settled" }]);
+    expect(await activeTablesOf(v, ana.partyId)).toEqual([m4]);
+  });
+
+  it("sets both guest counts in the one command", async () => {
+    const { ana, m5, b2, b3 } = await threeBills("A803 Comensales");
+    const splitting = await cmd(ana.partyId);
+
+    const result = await act((tx) =>
+      splitTable(tx, v.cfg, ana.partyId, m5, whole(b2, b3), {
+        ...splitting,
+        guestCounts: { staying: 2, leaving: 5 },
+      }),
+    );
+
+    expect((await partyRow(v, ana.partyId)).guestCount).toBe(2);
+    expect((await partyRow(v, result.partyId)).guestCount).toBe(5);
+    expect((await partyRow(v, ana.partyId)).revision).toBe(splitting.expectedPartyRevision + 1);
+  });
+
+  it("two whole bills sharing a held group get one copy, with both dishes", async () => {
+    const [m4, m5] = await tables("A803 Comparten", 4, 5);
+    const ana = await seat(v, m4);
+    await joinFree(ana.partyId, m5);
+    await order(v, ana.tabId, "Burger");
+    await sendGroups(ana.partyId, [{ names: ["Flan", "Tarta"], release: "hold" }], ana.tabId);
+    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    const b3 = await splitOff(ana.partyId, ana.tabId, [3]);
+    const source = (await lineRows(b2))[0]!.groupId!;
+    expect((await lineRows(b3))[0]!.groupId).toBe(source);
+    const splitting = await cmd(ana.partyId);
+
+    const result = await act((tx) =>
+      splitTable(tx, v.cfg, ana.partyId, m5, whole(b2, b3), splitting),
+    );
+
+    const groups = await groupsOf(result.partyId);
+    expect(groups).toEqual([{ id: expect.any(String), state: "held", position: 1 }]);
+    const copy = groups[0]!.id;
+    expect((await lineRows(b2)).map((line) => line.groupId)).toEqual([copy]);
+    expect((await lineRows(b3)).map((line) => line.groupId)).toEqual([copy]);
+    const moved = await act((tx) =>
+      tx
+        .select({ groupId: orderGroupEvents.groupId, partyId: orderGroupEvents.partyId })
+        .from(orderGroupEvents)
+        .where(
+          and(
+            eq(orderGroupEvents.kind, "lines_moved"),
+            sql`${orderGroupEvents.groupId} in (${source}, ${copy})`,
+          ),
+        ),
+    );
+    expect(moved).toHaveLength(2);
+    expect(moved).toEqual(
+      expect.arrayContaining([
+        { groupId: source, partyId: ana.partyId },
+        { groupId: copy, partyId: result.partyId },
+      ]),
+    );
+    expect((await ticketsOf(b2))[0]!.firedAt).toBeNull();
+    expect((await ticketsOf(b3))[0]!.firedAt).toBeNull();
+
+    const firing = { ...(await cmd(result.partyId)), submissionId: randomUUID() };
+    await act((tx) => fireGroup(tx, v.cfg, result.partyId, copy, firing));
+
+    expect((await ticketsOf(b2))[0]!.firedAt).toEqual(expect.any(String));
+    expect((await ticketsOf(b3))[0]!.firedAt).toEqual(expect.any(String));
+  });
+
+  it("two whole bills with fired dishes make one fired group each, in number order", async () => {
+    const { ana, m5, b2, b3 } = await threeBillsWithIdsAgainstNumbers("A803 Marchados");
+    const splitting = await cmd(ana.partyId);
+
+    const result = await act((tx) =>
+      splitTable(tx, v.cfg, ana.partyId, m5, whole(b3, b2), splitting),
+    );
+
+    const groups = await groupsOf(result.partyId);
+    expect(groups).toEqual([
+      { id: expect.any(String), state: "fired", position: 1 },
+      { id: expect.any(String), state: "fired", position: 2 },
+    ]);
+    expect((await lineRows(b2)).map((line) => line.groupId)).toEqual([groups[0]!.id]);
+    expect((await lineRows(b3)).map((line) => line.groupId)).toEqual([groups[1]!.id]);
+  });
+
+  it("two whole bills each holding a dish on hold outside a group arrive with one held group each", async () => {
+    const [m4, m5] = await tables("A803 Sin grupo", 4, 5);
+    const ana = await seat(v, m4);
+    await joinFree(ana.partyId, m5);
+    await order(v, ana.tabId, "Burger", "Vino", "Agua");
+    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    const b3 = await splitOff(ana.partyId, ana.tabId, [3]);
+    const { id: courseId } = await act((tx) =>
+      createCourse(tx, { name: "A803 Postres sin grupo", displayOrder: 3 }),
+    );
+    for (const [billId, dish] of [
+      [b2, "Flan"],
+      [b3, "Tarta"],
+    ] as const) {
+      await act((tx) =>
+        addTabRound(tx, v.cfg, billId, [
+          { menuItemId: v.item(dish), quantity: "1", courseId, hold: true },
+        ]),
+      );
+    }
+    const splitting = await cmd(ana.partyId);
+
+    const result = await act((tx) =>
+      splitTable(tx, v.cfg, ana.partyId, m5, whole(b2, b3), splitting),
+    );
+
+    expect((await groupsOf(result.partyId)).map((group) => group.state)).toEqual([
+      "fired",
+      "held",
+      "fired",
+      "held",
+    ]);
+  });
+
+  it("two whole bills with held dishes move each bill's own open draft with its own expected edit", async () => {
+    const { ana, m5, b1, b2, b3 } = await threeBills("A803 Borradores");
+    await sendGroups(ana.partyId, [{ names: ["Flan"], release: "hold" }], b2);
+    await sendGroups(ana.partyId, [{ names: ["Tarta"], release: "hold" }], b3);
+    for (const [billId, dish] of [
+      [b1, "Agua"],
+      [b2, "Paella"],
+      [b3, "Caña"],
+    ] as const) {
+      await act((tx) =>
+        saveDraft(tx, v.cfg, ana.partyId, OPERATOR, {
+          billId,
+          draftId: null,
+          revision: 0,
+          lines: [{ menuItemId: v.item(dish), quantity: "1" }],
+        }),
+      );
+    }
+    const edits = [
+      await act((tx) => readBillEditState(tx, b2)),
+      await act((tx) => readBillEditState(tx, b3)),
+    ];
+    const splitting = await cmd(ana.partyId);
+
+    const result = await act((tx) =>
+      splitTable(tx, v.cfg, ana.partyId, m5, whole(b2, b3), splitting),
+    );
+
+    const facts = (drafts: Awaited<ReturnType<typeof readDrafts>>) =>
+      drafts
+        .map((draft) => ({
+          billId: draft.billId,
+          partyId: draft.partyId,
+          revision: draft.revision,
+          items: draft.lines.map((line) => line.menuItemId),
+        }))
+        .sort((a, b) => a.billId.localeCompare(b.billId));
+    expect(facts(await act((tx) => readDrafts(tx, v.cfg, result.partyId)))).toEqual(
+      [
+        { billId: b2, partyId: result.partyId, revision: 1, items: [v.item("Paella")] },
+        { billId: b3, partyId: result.partyId, revision: 1, items: [v.item("Caña")] },
+      ].sort((a, b) => a.billId.localeCompare(b.billId)),
+    );
+    expect(facts(await act((tx) => readDrafts(tx, v.cfg, ana.partyId)))).toEqual([
+      { billId: b1, partyId: ana.partyId, revision: 0, items: [v.item("Agua")] },
+    ]);
+    for (const edit of edits) {
+      expect(await act((tx) => readBillEditState(tx, edit.billId))).toMatchObject({
+        billId: edit.billId,
+        editorId: edit.editorId,
+        draftId: edit.draftId,
+        draftRevision: 1,
+        editorVersion: edit.editorVersion + 1,
+      });
+    }
+  });
+
+  it("a whole part-paid bill goes with its payments", async () => {
+    const [m4, m5] = await tables("A803 Parte", 4, 5);
+    const ana = await seat(v, m4);
+    await joinFree(ana.partyId, m5);
+    await order(v, ana.tabId, "Burger", "Vino", "Agua", "Flan");
+    const b2 = await splitOff(ana.partyId, ana.tabId, [2, 3]);
+    const b3 = await splitOff(ana.partyId, ana.tabId, [4]);
+    await takeBillPayment(
+      { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
+      v.cfg,
+      b2,
+      {
+        submissionId: randomUUID(),
+        kind: "items",
+        lines: [{ lineNo: (await lineRows(b2))[1]!.lineNo }],
+        method: "cash",
+        tendered: "2.00",
+        applied: "2.00",
+        tip: "0.00",
+      },
+      v.operator,
+    );
+    await cashContribution(v, b3, "1.00");
+    const money = async () => ({
+      b2: {
+        payments: await paymentsOf(v, b2),
+        balance: await act((tx) => readBillBalance(tx, b2)),
+      },
+      b3: {
+        payments: await paymentsOf(v, b3),
+        balance: await act((tx) => readBillBalance(tx, b3)),
+      },
+    });
+    const before = await money();
+    expect(before.b2.balance.paidLines).toHaveLength(1);
+    expect(before.b2.payments).toHaveLength(1);
+    expect(before.b3.payments).toHaveLength(1);
+    const splitting = await cmd(ana.partyId);
+
+    const result = await act((tx) =>
+      splitTable(tx, v.cfg, ana.partyId, m5, whole(b2, b3), splitting),
+    );
+
+    expect(result.billIds).toEqual([b2, b3]);
+    expect(await money()).toEqual(before);
+    expect(await billRow(v, b2)).toMatchObject({ partyId: result.partyId, status: "open" });
+    expect(await billRow(v, b3)).toMatchObject({ partyId: result.partyId, status: "open" });
+    const issued = await act((tx) =>
+      tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(inArray(sales.workingOrderId, [ana.tabId, b2, b3])),
+    );
+    expect(issued).toEqual([]);
+  });
+
+  it("the answer and allergy guests are copied once across both", async () => {
+    const { ana, m5, b1, b2, b3 } = await threeBills("A803 Alergias");
+    await act((tx) =>
+      writePartyAllergy(
+        tx,
+        ana.partyId,
+        { answer: "allergies", guests: [{ who: "Window seat", allergens: { milk: {} } }] },
+        OPERATOR,
+      ),
+    );
+    const { guests } = await act((tx) => readPartyAllergy(tx, ana.partyId));
+    const tick = async (billId: string) => ({
+      guestId: guests[0]!.id,
+      workingLineId: (await lineRows(billId))[0]!.id,
+    });
+    const ticks = [await tick(b1), await tick(b2), await tick(b3)];
+    await act((tx) => setAllergyLineTicks(tx, ana.partyId, ticks));
+    const splitting = await cmd(ana.partyId);
+
+    const result = await act((tx) =>
+      splitTable(tx, v.cfg, ana.partyId, m5, whole(b2, b3), splitting),
+    );
+
+    const source = await act((tx) => readPartyAllergy(tx, ana.partyId));
+    const target = await act((tx) => readPartyAllergy(tx, result.partyId));
+    expect(target.answer).toBe("allergies");
+    expect(target.guests.map((guest) => guest.who)).toEqual(["Window seat"]);
+    const copy = target.guests[0]!.id;
+    expect(copy).not.toBe(guests[0]!.id);
+    expect(source.guests.map((guest) => guest.id)).toEqual([guests[0]!.id]);
+    expect(source.ticks).toEqual([{ ...ticks[0], draftLineId: null }]);
+    expect(target.ticks).toHaveLength(2);
+    expect(target.ticks).toEqual(
+      expect.arrayContaining([
+        { guestId: copy, draftLineId: null, workingLineId: ticks[1]!.workingLineId },
+        { guestId: copy, draftLineId: null, workingLineId: ticks[2]!.workingLineId },
+      ]),
+    );
+  });
+
+  it("a split of a joined table leaves the seats and the highest state as a one-bill split does", async () => {
+    const { table } = await plannedZone(
+      v,
+      ["1", "2"].flatMap((twin, row) =>
+        ["a", "b", "c"].map((key, column) => ({
+          key: `${key}${twin}`,
+          label: `A803 Junta ${key}${twin}`,
+          place: { x: column * 10, y: row * 10, width: 8, height: 8 },
+        })),
+      ),
+    );
+    /** A party on three tables pushed together, 14 seats typed: Bills 1 (Burger), 2 (Vino), 3 (Flan). */
+    async function joinedParty(twin: string) {
+      const [a, b, c] = [table[`a${twin}`]!, table[`b${twin}`]!, table[`c${twin}`]!];
+      for (const movingId of [b, c]) {
+        await act((tx) =>
+          writeMerge(tx, v.cfg, { movingId, targetId: a, side: "right", seats: 14, free: true }),
+        );
+      }
+      const ana = await seat(v, a);
+      await order(v, ana.tabId, "Burger", "Vino", "Flan");
+      const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+      const b3 = await splitOff(ana.partyId, ana.tabId, [3]);
+      return { ana, a, b, c, b2, b3 };
+    }
+    /** What the till reads of each table to draw a joined table's highest state, and its seats. */
+    async function floorFacts(tableIds: string[]) {
+      const read = [];
+      for (const tableId of tableIds) {
+        const row = await floorRow(v, tableId);
+        const merge = await mergeOf(v, tableId);
+        read.push({
+          state: row.state,
+          hasOpenTab: row.hasOpenTab,
+          condition: row.condition,
+          timingBand: row.timingBand,
+          pendingDeliveries: row.pendingDeliveries,
+          signals: row.signals,
+          seats: merge?.seats ?? null,
+          members: merge?.members.length ?? 0,
+        });
+      }
+      return read;
+    }
+
+    const one = await joinedParty("1");
+    const two = await joinedParty("2");
+    const splittingOne = await cmd(one.ana.partyId);
+    const splittingTwo = await cmd(two.ana.partyId);
+    const leftOne = await act((tx) =>
+      splitTable(tx, v.cfg, one.ana.partyId, one.c, whole(one.b2), splittingOne),
+    );
+    const leftTwo = await act((tx) =>
+      splitTable(tx, v.cfg, two.ana.partyId, two.c, whole(two.b2, two.b3), splittingTwo),
+    );
+
+    const oneFacts = await floorFacts([one.a, one.b, one.c]);
+    expect(await floorFacts([two.a, two.b, two.c])).toEqual(oneFacts);
+    expect(oneFacts.map((table) => [table.seats, table.members])).toEqual([
+      [14, 2],
+      [14, 2],
+      [null, 0],
+    ]);
+    expect(await activeTablesOf(v, leftOne.partyId)).toEqual([one.c]);
+    expect(await activeTablesOf(v, leftTwo.partyId)).toEqual([two.c]);
+  });
+
+  describe("what it refuses, changing every row not at all", () => {
+    it("refuses a whole id twice", async () => {
+      const { ana, m4, m5, b1, b2, b3 } = await threeBills("A803 Doble");
+      const splitting = await cmd(ana.partyId);
+
+      const error = await refused([ana.partyId], [b1, b2, b3], [m4, m5], () =>
+        act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, whole(b2, b2), splitting)),
+      );
+
+      expect(error).toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "selection" },
+      });
+    });
+
+    it("refuses a loose pick, until loose dishes are built", async () => {
+      const { ana, m4, m5, b1, b2, b3 } = await threeBills("A803 Suelta");
+      const splitting = await cmd(ana.partyId);
+
+      const error = await refused([ana.partyId], [b1, b2, b3], [m4, m5], () =>
+        act((tx) =>
+          splitTable(
+            tx,
+            v.cfg,
+            ana.partyId,
+            m5,
+            { wholeBillIds: [], loose: [{ billId: b2, lineIds: [randomUUID()] }] },
+            { ...splitting, expectedEdits: [] },
+          ),
+        ),
+      );
+
+      expect(error).toMatchObject({
+        code: "management.request_invalid",
+        params: { field: "selection" },
+      });
+    });
+
+    it("refuses a paid bill among them", async () => {
+      const { ana, m4, m5, b1, b2, b3 } = await threeBills("A803 Cobrada");
+      await pay(v, b3, "5.00");
+      const splitting = await cmd(ana.partyId);
+
+      const error = await refused([ana.partyId], [b1, b2, b3], [m4, m5], () =>
+        act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, whole(b2, b3), splitting)),
+      );
+
+      expect(error).toMatchObject({ code: "bill.paid", params: { workingOrderId: b3 } });
+    });
+
+    it("refuses an abandoned bill among them", async () => {
+      const { ana, m4, m5, b1, b2, b3 } = await threeBills("A803 Abandonada");
+      v.db.run(sql`update working_orders set status = 'abandoned' where id = ${b3}`);
+      const splitting = await cmd(ana.partyId);
+
+      const error = await refused([ana.partyId], [b1, b2, b3], [m4, m5], () =>
+        act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, whole(b2, b3), splitting)),
+      );
+
+      expect(error).toMatchObject({ code: "tab.not_open", params: { tabId: b3 } });
+    });
+
+    it("refuses another party's bill among them", async () => {
+      const { ana, m4, m5, b1, b2, b3 } = await threeBills("A803 Ajena");
+      const [m7] = await tables("A803 Ajena otra", 7);
+      const luis = await seat(v, m7!);
+      const splitting = await cmd(ana.partyId);
+
+      const error = await refused(
+        [ana.partyId, luis.partyId],
+        [b1, b2, b3, luis.tabId],
+        [m4, m5, m7!],
+        () => act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, whole(b2, luis.tabId), splitting)),
+      );
+
+      expect(error).toMatchObject({
+        code: "bill.other_party",
+        params: { workingOrderId: luis.tabId },
+      });
+    });
+  });
+
+  it("allergies are copied before the bills arrive: a bill with a dish that fires on arrival arrives without allergy.unanswered", async () => {
+    const [m4, m5] = await tables("A803 Antes", 4, 5);
+    const ana = await seat(v, m4);
+    await joinFree(ana.partyId, m5);
+    await order(v, ana.tabId, "Burger", "Vino");
+    const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
+    await act((tx) =>
+      addTabRound(tx, v.cfg, b2, [{ menuItemId: v.item("Flan"), quantity: "1", hold: true }]),
+    );
+    expect((await ticketsOf(b2)).at(-1)!.firedAt).toBeNull();
+    const splitting = await cmd(ana.partyId);
+
+    const result = await act((tx) => splitTable(tx, v.cfg, ana.partyId, m5, whole(b2), splitting));
+
+    expect(result.billIds).toEqual([b2]);
+    expect((await ticketsOf(b2)).at(-1)!.firedAt).toEqual(expect.any(String));
+    expect((await act((tx) => readPartyAllergy(tx, result.partyId))).answer).toBe("none");
   });
 });

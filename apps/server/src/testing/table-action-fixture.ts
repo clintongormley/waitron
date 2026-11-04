@@ -8,6 +8,7 @@ import {
   joinTables as join,
   moveGuests as move,
   splitTable as split,
+  type SplitSelection,
   type TableActionOptions as Options,
 } from "../table-actions.js";
 import type { OriginConfig, TradingContext } from "../trading-context.js";
@@ -75,30 +76,63 @@ export async function combineParties(
   });
 }
 
+export function oneBill(billId: string): SplitSelection {
+  return { wholeBillIds: [billId], loose: [] };
+}
+
+type SplitOptions = Omit<Parameters<typeof split>[5], "expectedEdits"> & {
+  expectedEdits?: BillEditExpected[];
+};
+
+/** A bill id or null answers the one bill; a selection answers the new party's bills too. */
 export async function splitTable(
   tx: Transaction,
   cfg: OriginConfig,
   partyId: string,
   tableId: string,
-  billId: string | null,
-  options: Omit<Parameters<typeof split>[5], "expectedEdits"> & {
-    expectedEdits?: BillEditExpected[];
-  },
+  chosen: string | null,
+  options: SplitOptions,
   attendance?: OrderAttendance,
-) {
-  return split(
+): Promise<{ partyId: string; billId: string }>;
+export async function splitTable(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+  tableId: string,
+  chosen: SplitSelection,
+  options: SplitOptions,
+  attendance?: OrderAttendance,
+): Promise<{ partyId: string; billId: string; billIds: string[] }>;
+export async function splitTable(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+  tableId: string,
+  chosen: string | null | SplitSelection,
+  options: SplitOptions,
+  attendance?: OrderAttendance,
+): Promise<{ partyId: string; billId: string; billIds?: string[] }> {
+  const selection =
+    chosen === null
+      ? { wholeBillIds: [], loose: [] }
+      : typeof chosen === "string"
+        ? oneBill(chosen)
+        : chosen;
+  const expectedEdits: BillEditExpected[] = [];
+  if (options.expectedEdits === undefined)
+    for (const billId of [...new Set(selection.wholeBillIds)].sort())
+      expectedEdits.push(await readBillEditState(tx, billId));
+  const { partyId: leavingParty, billIds } = await split(
     tx,
     cfg,
     partyId,
     tableId,
-    billId,
-    {
-      ...options,
-      expectedEdits:
-        options.expectedEdits ?? (billId === null ? [] : [await readBillEditState(tx, billId)]),
-    },
+    selection,
+    { ...options, expectedEdits: options.expectedEdits ?? expectedEdits },
     attendance,
   );
+  const answer = { partyId: leavingParty, billId: billIds[0]! };
+  return typeof chosen === "object" && chosen !== null ? { ...answer, billIds } : answer;
 }
 
 export async function observedTableActionBody(
@@ -117,12 +151,16 @@ export async function observedTableActionBody(
     return body;
   const ask = body as Record<string, unknown>;
   return withTransaction(db, async (tx) => {
-    if (match[2] === "split-table")
-      return {
-        expectedEdits:
-          typeof ask.billId === "string" ? [await readBillEditState(tx, ask.billId)] : [],
-        ...ask,
-      };
+    if (match[2] === "split-table") {
+      const expectedEdits: BillEditExpected[] = [];
+      const billIds =
+        typeof ask.billId === "string"
+          ? [ask.billId]
+          : ((ask.selection as SplitSelection | undefined)?.wholeBillIds ?? []);
+      for (const billId of [...billIds].sort())
+        expectedEdits.push(await readBillEditState(tx, billId));
+      return { expectedEdits, ...ask };
+    }
     const tableId = match[2] === "join" ? ask.tableId : ask.toTableId;
     const other = typeof tableId === "string" ? await holderOf(tx, tableId.toLowerCase()) : null;
     return {
